@@ -1,0 +1,11 @@
+<idea-plugin>
+    <id>hr.hrg.jswa.intellij</id>
+    <name>JSWA IntelliJ Bridge</name>
+    <vendor>Davor Hrg</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <platform.lsp.serverSupportProvider implementation="hr.hrg.jswa.intellij.JswaLspServerSupportProvider"/>
+    </extensions>
+</idea-plugin>

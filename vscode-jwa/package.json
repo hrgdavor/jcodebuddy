@@ -1,0 +1,49 @@
+{
+    "name": "jwa-vscode",
+    "displayName": "Java Watch Agent Sidecar",
+    "description": "Interactive Record Builder and JWA Integration",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "activationEvents": [
+        "onLanguage:java"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "jwa.syncBuilder",
+                "title": "Sync Builder"
+            }
+        ],
+        "configuration": {
+            "type": "object",
+            "title": "JWA Configuration",
+            "properties": {
+                "jwa.java.home": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "default": null,
+                    "description": "Path to the Java Home directory. This will be used to launch the JWA Sidecar server."
+                },
+                "jwa.server.jarPath": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "default": null,
+                    "description": "Path to a custom JWA Sidecar JAR file. If not set, the version bundled with the extension will be used."
+                }
+            }
+        }
+    },
+    "dependencies": {
+        "vscode-languageclient": "^8.1.0"
+    }
+}

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>hr.hrg.watch2</groupId>
+    <artifactId>java_watch2-parent</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>java_watch2 Parent</name>
+    <description>Parent POM for Java Watch2 file monitoring utilities</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
+        
+        <!-- Dependency versions -->
+        <directory-watcher.version>0.18.0</directory-watcher.version>
+        <slf4j.version>2.0.9</slf4j.version>
+        <junit.version>4.13.2</junit.version>
+        <jsch.version>0.1.55</jsch.version>
+        <jackson.version>2.15.2</jackson.version>
+        <ecj.version>3.37.0</ecj.version>
+    </properties>
+
+    <modules>
+        <module>watch</module>
+        <module>java-watch-core</module>
+        <module>java-watch-scp</module>
+        <module>java-watch-run</module>
+        <module>jwa-builder-api</module>
+        <module>jwa-builder</module>
+        <module>jwa-sidecar</module>
+        <module>java-watch-agent</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- JavaParser for parsing Java source code -->
+            <dependency>
+                <groupId>com.github.javaparser</groupId>
+                <artifactId>javaparser-core</artifactId>
+                <version>3.28.0</version>
+            </dependency>
+
+            <!-- DirectoryWatcher library for robust file watching -->
+            <dependency>
+                <groupId>io.methvin</groupId>
+                <artifactId>directory-watcher</artifactId>
+                <version>${directory-watcher.version}</version>
+            </dependency>
+            
+            <!-- SLF4J API for logging -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            
+            <!-- SLF4J Simple implementation for logging -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-simple</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- JSch for SSH/SCP functionality -->
+            <dependency>
+                <groupId>com.jcraft</groupId>
+                <artifactId>jsch</artifactId>
+                <version>${jsch.version}</version>
+            </dependency>
+
+            <!-- Jackson for JSON processing -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- Eclipse Compiler for Java (ECJ) -->
+            <dependency>
+                <groupId>org.eclipse.jdt</groupId>
+                <artifactId>ecj</artifactId>
+                <version>${ecj.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>hr.hrg.watch2</groupId>
+                <artifactId>java-watch-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>hr.hrg.watch2</groupId>
+                <artifactId>jwa-builder-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>hr.hrg.watch2</groupId>
+                <artifactId>jwa-builder</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.11.0</version>
+                    <configuration>
+                        <source>21</source>
+                        <target>21</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.5.1</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

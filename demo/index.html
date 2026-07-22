@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hipster Entity — View Materialization Levels</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #232733;
+  --border: #2e3345;
+  --text: #e1e4ed;
+  --text-dim: #8b90a0;
+  --accent: #6c8cff;
+  --accent-dim: #3a4f99;
+  --green: #5ccf7f;
+  --yellow: #e0c46c;
+  --orange: #e09a5c;
+  --red: #e06c6c;
+  --purple: #b07ce0;
+  --cyan: #5cc9cf;
+  --keyword: #c678dd;
+  --type: #e5c07b;
+  --string: #98c379;
+  --method: #61afef;
+  --field-name: #e06c75;
+  --comment: #5c6370;
+  --number: #d19a66;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Header */
+.header {
+  text-align: center;
+  padding: 2.5rem 1rem 1rem;
+}
+.header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: .4rem;
+}
+.header p {
+  color: var(--text-dim);
+  font-size: 1.05rem;
+  max-width: 660px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+/* Level strip (navigation) */
+.level-strip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: .5rem;
+  padding: .75rem 0;
+  flex-wrap: wrap;
+}
+
+.level-strip .level-btn {
+  width: auto;
+  justify-content: center;
+}
+
+.level-btn.intro {
+  border-color: #e09a5c;
+  background: linear-gradient(135deg, #e09a5c, #d47f45);
+  color: #fff;
+}
+
+.level-btn.intro:hover {
+  border-color: #e0b86d;
+}
+
+.level-btn.intro.active {
+  box-shadow: 0 0 20px rgba(224,154,92,.25);
+}
+.level-btn {
+  padding: .55rem 1.1rem;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .25s ease;
+  position: relative;
+  overflow: hidden;
+}
+.level-btn:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+.level-btn.active {
+  border-color: var(--accent);
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-dim), #2a3560);
+  box-shadow: 0 0 20px rgba(108,140,255,.2);
+}
+.level-btn .badge {
+  display: inline-block;
+  width: 20px; height: 20px;
+  line-height: 20px;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: #fff;
+  font-size: .7rem;
+  margin-right: .4rem;
+}
+.level-btn.active .badge {
+  background: var(--accent);
+}
+
+/* Cumulative indicator */
+.cumulative-hint {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: .82rem;
+  padding-bottom: .5rem;
+}
+.cumulative-hint span { color: var(--green); }
+
+/* Main layout */
+.main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1.5rem 3rem;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .main { grid-template-columns: 1fr; }
+}
+
+/* Left info panel */
+.info-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+}
+.info-panel h2 {
+  font-size: 1.25rem;
+  margin-bottom: .3rem;
+}
+.info-panel .level-tag {
+  display: inline-block;
+  font-size: .75rem;
+  font-weight: 700;
+  padding: .2rem .6rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  letter-spacing: .04em;
+}
+.info-panel .desc {
+  color: var(--text-dim);
+  font-size: .9rem;
+  line-height: 1.55;
+  margin-bottom: 1.2rem;
+}
+.artifacts-title {
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+  margin-bottom: .5rem;
+}
+.artifact-list {
+  list-style: none;
+}
+.artifact-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  padding: .35rem 0;
+  font-size: .87rem;
+  line-height: 1.4;
+}
+.artifact-list li .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.artifact-list li.inherited .dot { background: var(--text-dim); opacity: .4; }
+.artifact-list li.inherited { color: var(--text-dim); opacity: .6; }
+.artifact-list li.new .dot { background: var(--green); box-shadow: 0 0 6px rgba(92,207,127,.4); }
+.artifact-list li.new { color: var(--green); }
+
+.use-cases {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.use-cases h4 {
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+  margin-bottom: .4rem;
+}
+.use-case-tag {
+  display: inline-block;
+  font-size: .78rem;
+  padding: .2rem .5rem;
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--text-dim);
+  margin: .15rem .15rem .15rem 0;
+  border: 1px solid var(--border);
+}
+
+/* Code panel */
+.code-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.code-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateY(0);
+  transition: transform .2s ease, opacity .2s ease;
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .6rem 1rem;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.code-header .file-name {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.code-header .file-name .icon { color: var(--accent); }
+.code-header .new-badge {
+  font-size: .7rem;
+  padding: .15rem .45rem;
+  border-radius: 3px;
+  background: rgba(92,207,127,.15);
+  color: var(--green);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+pre {
+  margin: 0;
+  padding: 1rem 1.2rem;
+  overflow-x: auto;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: .82rem;
+  line-height: 1.65;
+  color: var(--text);
+  tab-size: 4;
+}
+
+/* Syntax highlighting spans */
+.kw { color: var(--keyword); }       /* keyword */
+.ty { color: var(--type); }          /* type */
+.mt { color: var(--method); }        /* method */
+.fn { color: var(--field-name); }    /* field name */
+.st { color: var(--string); }        /* string */
+.cm { color: var(--comment); font-style: italic; }
+.nu { color: var(--number); }        /* number */
+.an { color: var(--yellow); }        /* annotation */
+.op { color: var(--text-dim); }      /* operator */
+.hl { background: rgba(108,140,255,.12); display: inline; border-radius: 3px; padding: 1px 0; }
+
+/* Animated highlight for new code */
+.new-line {
+  animation: highlightPulse 1.5s ease;
+}
+@keyframes highlightPulse {
+  0% { background: rgba(92,207,127,.25); }
+  100% { background: transparent; }
+}
+
+/* Source input block */
+.source-section {
+  margin-bottom: .5rem;
+}
+.source-section .code-header { background: rgba(108,140,255,.08); }
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-dim);
+  font-size: .8rem;
+}
+.footer a { color: var(--accent); text-decoration: none; }
+
+/* Transition group */
+.code-panel { transition: opacity .2s ease; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>View Materialization Levels</h1>
+</div>
+
+<div class="level-strip" id="levelStrip"></div>
+
+<!-- Main content -->
+<div class="main">
+  <div class="info-panel" id="infoPanel"></div>
+  <div class="code-panel" id="codePanel"></div>
+</div>
+
+<div class="footer">
+  hipster-entity &mdash; Interface-first Java entity model with generated metadata
+</div>
+
+<script>
+// ─── Data Model ────────────────────────────────────────────────────
+
+const SOURCE_VIEW = `<span class="an">@View</span>(<span class="mt">gen</span> = <span class="ty">GenLevel</span>.<span class="fn">{{LEVEL}}</span>)
+<span class="kw">public interface</span> <span class="ty">PersonSummary</span> <span class="kw">extends</span> <span class="ty">Identifiable</span>&lt;<span class="ty">Long</span>&gt; {
+    <span class="ty">Long</span>    <span class="mt">id</span>();
+    <span class="ty">String</span>  <span class="mt">firstName</span>();
+    <span class="ty">String</span>  <span class="mt">lastName</span>();
+    <span class="ty">Integer</span> <span class="mt">age</span>();
+    <span class="ty">String</span>  <span class="mt">departmentName</span>();
+}`;
+
+const levels = [
+  // ── META ──
+  {
+    name: 'META',
+    index: 0,
+    tagColor: '#6c8cff',
+    title: 'Level 0 — Meta',
+    desc: 'Generates field metadata enum and ViewMeta factory. The lightest level — gives you compile-time field definitions for serialization, database column mapping, and generic adapters. Views are read-only through interface accessors.',
+    artifacts: [
+      { text: 'Field enum implementing FieldDef', isNew: true },
+      { text: 'ViewMeta singleton instance', isNew: true },
+      { text: 'ForName lookup (name → field)', isNew: true },
+    ],
+    useCases: ['Database column mapping', 'JSON serialization', 'Configuration readers', 'Generic adapters'],
+    codeBlocks: [
+      {
+        file: 'PersonSummary_.java',
+        isNew: true,
+        code:
+`<span class="cm">// Generated field metadata enum — one constant per accessor</span>
+<span class="kw">public enum</span> <span class="ty">PersonSummary_</span> <span class="kw">implements</span> <span class="ty">FieldDef</span> {
+
+    <span class="fn">id</span>(<span class="ty">Long</span>.<span class="kw">class</span>),
+    <span class="fn">firstName</span>(<span class="ty">String</span>.<span class="kw">class</span>),
+    <span class="fn">lastName</span>(<span class="ty">String</span>.<span class="kw">class</span>),
+    <span class="fn">age</span>(<span class="ty">Integer</span>.<span class="kw">class</span>),
+    <span class="fn">departmentName</span>(<span class="ty">String</span>.<span class="kw">class</span>);
+
+    <span class="kw">private final</span> <span class="ty">Class</span>&lt;?&gt; javaType;
+
+    <span class="ty">PersonSummary_</span>(<span class="ty">Class</span>&lt;?&gt; javaType) {
+        <span class="kw">this</span>.javaType = javaType;
+    }
+
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Class</span>&lt;?&gt; <span class="mt">javaType</span>() { <span class="kw">return</span> javaType; }
+
+    <span class="cm">// O(1) switch-based reverse lookup</span>
+    <span class="kw">public static</span> <span class="ty">PersonSummary_</span> <span class="mt">forName</span>(<span class="ty">String</span> name) {
+        <span class="kw">return switch</span> (name) {
+            <span class="kw">case</span> <span class="st">"id"</span>             <span class="op">-></span> id;
+            <span class="kw">case</span> <span class="st">"firstName"</span>      <span class="op">-></span> firstName;
+            <span class="kw">case</span> <span class="st">"lastName"</span>       <span class="op">-></span> lastName;
+            <span class="kw">case</span> <span class="st">"age"</span>            <span class="op">-></span> age;
+            <span class="kw">case</span> <span class="st">"departmentName"</span> <span class="op">-></span> departmentName;
+            <span class="kw">default</span>              <span class="op">-></span> <span class="kw">null</span>;
+        };
+    }
+}`
+      },
+      {
+        file: 'PersonSummaryMeta.java',
+        isNew: true,
+        code:
+`<span class="cm">// Generated ViewMeta singleton — bridge to generic utilities</span>
+<span class="kw">public static final</span> <span class="ty">ViewMeta</span>&lt;<span class="ty">PersonSummary</span>, <span class="ty">PersonSummary_</span>&gt; <span class="fn">META</span> =
+    <span class="kw">new</span> <span class="ty">DefaultViewMeta</span>&lt;&gt;(
+        <span class="ty">PersonSummary</span>.<span class="kw">class</span>,
+        <span class="ty">PersonSummary_</span>.<span class="kw">class</span>,
+        <span class="ty">PersonSummary_</span>::<span class="mt">forName</span>,
+        values <span class="op">-></span> <span class="ty">ArrayBackedProxy</span>.<span class="mt">createRead</span>(...)
+    );`
+      }
+    ]
+  },
+
+  // ── RECORD ──
+  {
+    name: 'RECORD',
+    index: 1,
+    tagColor: '#5ccf7f',
+    title: 'Level 1 — Record',
+    desc: 'Adds an immutable record class implementing the view interface. More performant than proxy-backed access. Provides hashCode/equals/toString for free. This is the convergence point — whether you start from an interface or a record, Level 1 gives you the same capabilities.',
+    artifacts: [
+      { text: 'Field enum implementing FieldDef', isNew: false },
+      { text: 'ViewMeta singleton instance', isNew: false },
+      { text: 'Record class implementing view', isNew: true },
+    ],
+    useCases: ['Immutable DTOs', 'Query results', 'Cache entries', 'Event payloads'],
+    codeBlocks: [
+      {
+        file: 'PersonSummary.java  (inner record)',
+        isNew: true,
+        code:
+`<span class="cm">// Generated immutable record — implements all view accessors</span>
+<span class="kw">public record</span> <span class="ty">Record</span>(
+    <span class="ty">Long</span>    <span class="fn">id</span>,
+    <span class="ty">String</span>  <span class="fn">firstName</span>,
+    <span class="ty">String</span>  <span class="fn">lastName</span>,
+    <span class="ty">Integer</span> <span class="fn">age</span>,
+    <span class="ty">String</span>  <span class="fn">departmentName</span>
+) <span class="kw">implements</span> <span class="ty">PersonSummary</span> {}
+
+<span class="cm">// Usage:</span>
+<span class="kw">var</span> person = <span class="kw">new</span> <span class="ty">PersonSummary</span>.<span class="ty">Record</span>(
+    <span class="nu">1L</span>, <span class="st">"Jane"</span>, <span class="st">"Doe"</span>, <span class="nu">28</span>, <span class="st">"Engineering"</span>
+);
+person.<span class="mt">firstName</span>(); <span class="cm">// "Jane"</span>`
+      }
+    ]
+  },
+
+  // ── WRITABLE ──
+  {
+    name: 'WRITABLE',
+    index: 2,
+    tagColor: '#e0c46c',
+    title: 'Level 2 — Writable',
+    desc: 'Adds a Write interface with fluent setter methods extending ViewWriter. Enables mutation through an array-backed proxy — no concrete builder class needed. Ideal for DTOs and form-binding where you want read-write without the weight of a full builder.',
+    artifacts: [
+      { text: 'Field enum implementing FieldDef', isNew: false },
+      { text: 'ViewMeta singleton instance', isNew: false },
+      { text: 'Record class implementing view', isNew: false },
+      { text: 'Write interface (fluent setters)', isNew: true },
+      { text: 'Proxy-backed mutation support', isNew: true },
+    ],
+    useCases: ['Form binding', 'Mutable DTOs', 'Proxy-based write', 'Lightweight mutation'],
+    codeBlocks: [
+      {
+        file: 'PersonSummary.Write  (inner interface)',
+        isNew: true,
+        code:
+`<span class="cm">// Generated write interface — fluent setters via ViewWriter</span>
+<span class="kw">public interface</span> <span class="ty">Write</span>
+        <span class="kw">extends</span> <span class="ty">PersonSummary</span>, <span class="ty">ViewWriter</span> {
+
+    <span class="ty">Write</span> <span class="mt">id</span>(<span class="ty">Long</span> value);
+    <span class="ty">Write</span> <span class="mt">firstName</span>(<span class="ty">String</span> value);
+    <span class="ty">Write</span> <span class="mt">lastName</span>(<span class="ty">String</span> value);
+    <span class="ty">Write</span> <span class="mt">age</span>(<span class="ty">Integer</span> value);
+    <span class="ty">Write</span> <span class="mt">departmentName</span>(<span class="ty">String</span> value);
+}
+
+<span class="cm">// Usage (with array-backed proxy):</span>
+<span class="ty">PersonSummary</span>.<span class="ty">Write</span> w = <span class="ty">META</span>.<span class="mt">createWriter</span>();
+w.<span class="mt">firstName</span>(<span class="st">"Jane"</span>).<span class="mt">lastName</span>(<span class="st">"Doe"</span>).<span class="mt">age</span>(<span class="nu">28</span>);`
+      }
+    ]
+  },
+
+  // ── BUILDER ──
+  {
+    name: 'BUILDER',
+    index: 3,
+    tagColor: '#e09a5c',
+    title: 'Level 3 — Builder',
+    desc: 'Generates a concrete builder class with direct field storage — no proxy indirection. Higher throughput than writable proxies. Fluent setter API, ordinal and name-based access via ViewWriter, and a build() method to produce the immutable record.',
+    artifacts: [
+      { text: 'Field enum implementing FieldDef', isNew: false },
+      { text: 'ViewMeta singleton instance', isNew: false },
+      { text: 'Record class implementing view', isNew: false },
+      { text: 'Write interface (fluent setters)', isNew: false },
+      { text: 'Concrete builder class', isNew: true },
+      { text: 'Direct field storage (no proxy)', isNew: true },
+      { text: 'build() → immutable Record', isNew: true },
+    ],
+    useCases: ['High-throughput construction', 'Fluent API', 'Bulk data loading', 'Test fixtures'],
+    codeBlocks: [
+      {
+        file: 'PersonSummaryBuilder.java',
+        isNew: true,
+        code:
+`<span class="kw">public final class</span> <span class="ty">PersonSummaryBuilder</span>
+        <span class="kw">implements</span> <span class="ty">PersonSummary</span>.<span class="ty">Write</span> {
+
+    <span class="cm">// Direct field storage — no proxy overhead</span>
+    <span class="ty">Long</span>    <span class="fn">id</span>;
+    <span class="ty">String</span>  <span class="fn">firstName</span>;
+    <span class="ty">String</span>  <span class="fn">lastName</span>;
+    <span class="ty">Integer</span> <span class="fn">age</span>;
+    <span class="ty">String</span>  <span class="fn">departmentName</span>;
+
+    <span class="cm">// Typed getters (PersonSummary interface)</span>
+    <span class="kw">public</span> <span class="ty">Long</span>    <span class="mt">id</span>()             { <span class="kw">return</span> id; }
+    <span class="kw">public</span> <span class="ty">String</span>  <span class="mt">firstName</span>()      { <span class="kw">return</span> firstName; }
+    <span class="kw">public</span> <span class="ty">String</span>  <span class="mt">lastName</span>()       { <span class="kw">return</span> lastName; }
+    <span class="kw">public</span> <span class="ty">Integer</span> <span class="mt">age</span>()            { <span class="kw">return</span> age; }
+    <span class="kw">public</span> <span class="ty">String</span>  <span class="mt">departmentName</span>() { <span class="kw">return</span> departmentName; }
+
+    <span class="cm">// Fluent setters (Write interface)</span>
+    <span class="kw">public</span> <span class="ty">PersonSummaryBuilder</span> <span class="mt">id</span>(<span class="ty">Long</span> v)
+        { id <span class="op">=</span> v; <span class="kw">return this</span>; }
+    <span class="kw">public</span> <span class="ty">PersonSummaryBuilder</span> <span class="mt">firstName</span>(<span class="ty">String</span> v)
+        { firstName <span class="op">=</span> v; <span class="kw">return this</span>; }
+    <span class="kw">public</span> <span class="ty">PersonSummaryBuilder</span> <span class="mt">lastName</span>(<span class="ty">String</span> v)
+        { lastName <span class="op">=</span> v; <span class="kw">return this</span>; }
+    <span class="kw">public</span> <span class="ty">PersonSummaryBuilder</span> <span class="mt">age</span>(<span class="ty">Integer</span> v)
+        { age <span class="op">=</span> v; <span class="kw">return this</span>; }
+    <span class="kw">public</span> <span class="ty">PersonSummaryBuilder</span> <span class="mt">departmentName</span>(<span class="ty">String</span> v)
+        { departmentName <span class="op">=</span> v; <span class="kw">return this</span>; }
+
+    <span class="cm">// Build immutable result</span>
+    <span class="kw">public</span> <span class="ty">PersonSummary</span> <span class="mt">build</span>() {
+        <span class="kw">return new</span> <span class="ty">PersonSummary</span>.<span class="ty">Record</span>(
+            id, firstName, lastName, age, departmentName
+        );
+    }
+
+    <span class="cm">// ViewReader — ordinal-indexed access</span>
+    <span class="kw">public</span> <span class="ty">Object</span> <span class="mt">get</span>(<span class="kw">int</span> f) {
+        <span class="kw">return switch</span> (f) {
+            <span class="kw">case</span> <span class="nu">0</span> <span class="op">-></span> id;
+            <span class="kw">case</span> <span class="nu">1</span> <span class="op">-></span> firstName;
+            <span class="kw">case</span> <span class="nu">2</span> <span class="op">-></span> lastName;
+            <span class="kw">case</span> <span class="nu">3</span> <span class="op">-></span> age;
+            <span class="kw">case</span> <span class="nu">4</span> <span class="op">-></span> departmentName;
+            <span class="kw">default</span> <span class="op">-></span> <span class="kw">null</span>;
+        };
+    }
+}`
+      }
+    ]
+  },
+
+  // ── BUILDER_TRACKED ──
+  {
+    name: 'BUILDER_TRACKED',
+    index: 4,
+    tagColor: '#b07ce0',
+    title: 'Level 4 — Builder (Tracked)',
+    desc: 'Generates a tracking builder that records which fields were explicitly set using a compact EEnumSet bit-field. Essential for partial/patch updates where you need to distinguish "set to null" from "not provided". The tracking overhead is minimal — a single long bitmask for up to 64 fields.',
+    artifacts: [
+      { text: 'Field enum implementing FieldDef', isNew: false },
+      { text: 'ViewMeta singleton instance', isNew: false },
+      { text: 'Record class implementing view', isNew: false },
+      { text: 'Write interface (fluent setters)', isNew: false },
+      { text: 'Tracking builder class', isNew: true },
+      { text: 'EEnumSet change tracking', isNew: true },
+      { text: 'isChanged() / changes()', isNew: true },
+    ],
+    useCases: ['PATCH endpoints', 'Partial updates', 'Dirty checking', 'Audit fields'],
+    codeBlocks: [
+      {
+        file: 'PersonSummaryBuilderTracking.java',
+        isNew: true,
+        code:
+`<span class="kw">public class</span> <span class="ty">PersonSummaryBuilderTracking</span>
+        <span class="kw">implements</span> <span class="ty">PersonSummary</span>.<span class="ty">Write</span>,
+                   <span class="ty">ViewChangeTracking</span>&lt;<span class="ty">PersonSummary_</span>,
+                       <span class="ty">EEnumSetBuilder64</span>&lt;<span class="ty">PersonSummary_</span>&gt;&gt; {
+
+    <span class="cm">// Compact bit-field tracks which fields were set</span>
+    <span class="kw">final</span> <span class="ty">EEnumSetBuilder64</span>&lt;<span class="ty">PersonSummary_</span>&gt; <span class="fn">mf</span>;
+
+    <span class="cm">// Same direct field storage as regular builder</span>
+    <span class="ty">Long</span> <span class="fn">id</span>;  <span class="ty">String</span> <span class="fn">firstName</span>;  <span class="ty">String</span> <span class="fn">lastName</span>;
+    <span class="ty">Integer</span> <span class="fn">age</span>;  <span class="ty">String</span> <span class="fn">departmentName</span>;
+
+    <span class="kw">public</span> <span class="ty">PersonSummaryBuilderTracking</span>() {
+        <span class="kw">this</span>.mf = <span class="kw">new</span> <span class="ty">EEnumSetBuilder64</span>&lt;&gt;(
+            <span class="ty">PersonSummary_</span>.<span class="kw">class</span>);
+    }
+
+    <span class="cm">// Setters record the change in the bit-field</span>
+    <span class="kw">public</span> <span class="ty">PersonSummaryBuilderTracking</span> <span class="mt">firstName</span>(<span class="ty">String</span> v) {
+        mf.<span class="mt">addOrdinalChange</span>(<span class="nu">1</span>, firstName, v);
+        firstName <span class="op">=</span> v;
+        <span class="kw">return this</span>;
+    }
+    <span class="cm">// ... other setters follow the same pattern</span>
+
+    <span class="cm">// Query what changed</span>
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="kw">boolean</span> <span class="mt">isChanged</span>() {
+        <span class="kw">return</span> mf.<span class="mt">size</span>() <span class="op">></span> <span class="nu">0</span>;
+    }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">EEnumSetBuilder64</span>&lt;<span class="ty">PersonSummary_</span>&gt; <span class="mt">changes</span>() {
+        <span class="kw">return</span> mf;
+    }
+}
+
+<span class="cm">// Usage — PATCH endpoint:</span>
+<span class="kw">var</span> patch = <span class="kw">new</span> <span class="ty">PersonSummaryBuilderTracking</span>();
+patch.<span class="mt">lastName</span>(<span class="st">"Smith"</span>);
+
+patch.<span class="mt">isChanged</span>();                    <span class="cm">// true</span>
+patch.<span class="mt">changes</span>().<span class="mt">contains</span>(<span class="ty">PersonSummary_</span>.<span class="fn">lastName</span>);  <span class="cm">// true</span>
+patch.<span class="mt">changes</span>().<span class="mt">contains</span>(<span class="ty">PersonSummary_</span>.<span class="fn">age</span>);       <span class="cm">// false</span>`
+      }
+    ]
+  },
+
+  // ── BUILDER_ALL ──
+  {
+    name: 'BUILDER_ALL',
+    index: 5,
+    tagColor: '#e06c6c',
+    title: 'Level 5 — Builder (All)',
+    desc: 'Generates both a regular builder AND a tracking builder. Rarely needed — use when the same view requires both untracked bulk construction (maximum throughput) and tracked partial updates (PATCH semantics) at the same time. Convenience methods toBuilder() and toBuilderTracking() are added to the record.',
+    artifacts: [
+      { text: 'Field enum implementing FieldDef', isNew: false },
+      { text: 'ViewMeta singleton instance', isNew: false },
+      { text: 'Record class implementing view', isNew: false },
+      { text: 'Write interface (fluent setters)', isNew: false },
+      { text: 'Regular builder (untracked)', isNew: true },
+      { text: 'Tracking builder (EEnumSet)', isNew: true },
+      { text: 'toBuilder() convenience', isNew: true },
+      { text: 'toBuilderTracking() convenience', isNew: true },
+    ],
+    useCases: ['Mixed read/write workloads', 'Bulk import + PATCH API', 'Full CRUD entity'],
+    codeBlocks: [
+      {
+        file: 'PersonSummary.java  (convenience methods)',
+        isNew: true,
+        code:
+`<span class="kw">public interface</span> <span class="ty">PersonSummary</span> <span class="kw">extends</span> <span class="ty">Identifiable</span>&lt;<span class="ty">Long</span>&gt; {
+    <span class="ty">Long</span>    <span class="mt">id</span>();
+    <span class="ty">String</span>  <span class="mt">firstName</span>();
+    <span class="ty">String</span>  <span class="mt">lastName</span>();
+    <span class="ty">Integer</span> <span class="mt">age</span>();
+    <span class="ty">String</span>  <span class="mt">departmentName</span>();
+
+    <span class="cm">// Generated convenience — choose your builder</span>
+    <span class="kw">default</span> <span class="ty">PersonSummaryBuilder</span> <span class="mt">toBuilder</span>() {
+        <span class="kw">return new</span> <span class="ty">PersonSummaryBuilder</span>(<span class="kw">this</span>);
+    }
+
+    <span class="kw">default</span> <span class="ty">PersonSummaryBuilderTracking</span> <span class="mt">toBuilderTracking</span>() {
+        <span class="kw">return new</span> <span class="ty">PersonSummaryBuilderTracking</span>(<span class="kw">this</span>);
+    }
+}`
+      },
+      {
+        file: 'Usage example',
+        isNew: false,
+        code:
+`<span class="cm">// Bulk construction — fast, no tracking overhead</span>
+<span class="kw">var</span> builder = <span class="kw">new</span> <span class="ty">PersonSummaryBuilder</span>()
+    .<span class="mt">id</span>(<span class="nu">1L</span>)
+    .<span class="mt">firstName</span>(<span class="st">"Jane"</span>)
+    .<span class="mt">lastName</span>(<span class="st">"Doe"</span>)
+    .<span class="mt">age</span>(<span class="nu">28</span>)
+    .<span class="mt">departmentName</span>(<span class="st">"Engineering"</span>);
+<span class="ty">PersonSummary</span> person = builder.<span class="mt">build</span>();
+
+<span class="cm">// Partial update — only changed fields are tracked</span>
+<span class="kw">var</span> patch = person.<span class="mt">toBuilderTracking</span>();
+patch.<span class="mt">lastName</span>(<span class="st">"Smith"</span>);
+
+<span class="cm">// patch.changes() → {lastName}  — only this goes to the DB</span>
+<span class="mt">updateOnlyChanged</span>(patch);`
+      }
+    ]
+  },
+];
+
+
+// ─── Rendering ─────────────────────────────────────────────────────
+
+let activeTab = 'intro';
+
+function renderStrip() {
+  const strip = document.getElementById('levelStrip');
+  strip.innerHTML = '';
+
+  const introBtn = document.createElement('button');
+  introBtn.className = 'level-btn intro' + (activeTab === 'intro' ? ' active' : '');
+  introBtn.textContent = 'Intro';
+  introBtn.onclick = () => selectIntro();
+  strip.appendChild(introBtn);
+
+  levels.forEach((lv, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'level-btn' + (activeTab === i ? ' active' : '');
+    btn.innerHTML = `<span class="badge">${i}</span> ${lv.name}`;
+    btn.onclick = () => selectLevel(i);
+    strip.appendChild(btn);
+  });
+}
+
+function renderInfo(lv) {
+  const panel = document.getElementById('infoPanel');
+  panel.innerHTML = `
+    <h2>${lv.title}</h2>
+    <span class="level-tag" style="background:${lv.tagColor}22;color:${lv.tagColor};border:1px solid ${lv.tagColor}44">
+      GenLevel.${lv.name}
+    </span>
+    <div class="desc">${lv.desc}</div>
+    <div class="artifacts-title">Generated Artifacts</div>
+    <ul class="artifact-list">
+      ${lv.artifacts.map(a => `
+        <li class="${a.isNew ? 'new' : 'inherited'}">
+          <span class="dot"></span>
+          <span>${a.text}${a.isNew ? '' : ' <small>(inherited)</small>'}</span>
+        </li>
+      `).join('')}
+    </ul>
+    <div class="use-cases">
+      <h4>Typical use cases</h4>
+      ${lv.useCases.map(u => `<span class="use-case-tag">${u}</span>`).join('')}
+    </div>
+  `;
+}
+
+function renderIntro() {
+  const panel = document.getElementById('infoPanel');
+  panel.innerHTML = `
+    <h2>Why view levels matter</h2>
+    <div class="desc">
+      This demo shows how a single interface definition can generate very different runtime shapes depending on the materialization level you choose.
+      Each level adds capabilities, from lightweight metadata-only support to immutable records, writable views, concrete builders, and tracked patch-friendly builders.
+    </div>
+    <div class="desc">
+      Use the tabs to explore the levels in order. The code preview shows the exact generated artifacts and the kinds of types the generator produces at each stage.
+    </div>
+    <div class="artifacts-title">What you’ll learn</div>
+    <ul class="artifact-list">
+      <li><span class="dot new"></span><span>How metadata-only views support adapters and serializers</span></li>
+      <li><span class="dot new"></span><span>Why record generation is the first concrete materialization step</span></li>
+      <li><span class="dot new"></span><span>When writable proxies are enough and when you should choose a builder</span></li>
+      <li><span class="dot new"></span><span>How change-tracking builders unlock PATCH-style update patterns</span></li>
+    </ul>
+  `;
+}
+
+function renderCode(lv) {
+  const panel = document.getElementById('codePanel');
+
+  if (!lv) {
+    const introSource = SOURCE_VIEW.replace('{{LEVEL}}', 'META');
+    panel.innerHTML = `
+      <div class="code-block source-section">
+        <div class="code-header">
+          <span class="file-name"><span class="icon">&#9998;</span> Base interface example</span>
+        </div>
+        <pre>${introSource}</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="file-name"><span class="icon">&#9888;</span> What this demo shows</span>
+        </div>
+        <pre class="cm">This page compares how a single view definition is transformed at each materialization level.
+
+A level can be metadata-only, a concrete immutable record, a writable view, a builder, or a tracking builder.
+
+Select a level tab to see the generated types and artifacts for that stage.</pre>
+      </div>
+    `;
+    return;
+  }
+
+  const sourceHtml = SOURCE_VIEW.replace('{{LEVEL}}', lv.name);
+
+  let html = `
+    <div class="code-block source-section">
+      <div class="code-header">
+        <span class="file-name"><span class="icon">&#9998;</span> PersonSummary.java — Your source</span>
+      </div>
+      <pre>${sourceHtml}</pre>
+    </div>
+  `;
+
+  lv.codeBlocks.forEach(block => {
+    const displayName = escapeHtml(block.file.replace(/\.java$/, ''));
+    html += `
+      <div class="code-block">
+        <div class="code-header">
+          <span class="file-name"><span class="icon">&#9881;</span> ${displayName}</span>
+          ${block.isNew ? '<span class="new-badge">NEW at this level</span>' : ''}
+        </div>
+        <pre>${block.code}</pre>
+      </div>
+    `;
+  });
+
+  panel.innerHTML = html;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function selectIntro() {
+  activeTab = 'intro';
+  renderStrip();
+  renderIntro();
+  renderCode(null);
+}
+
+function selectLevel(i) {
+  activeTab = i;
+  const lv = levels[i];
+  renderInfo(lv);
+  renderStrip();
+  renderCode(lv);
+}
+
+// ─── Controls ──────────────────────────────────────────────────────
+
+function activeIndex() {
+  return typeof activeTab === 'number' ? activeTab : -1;
+}
+
+document.addEventListener('keydown', (e) => {
+  const current = activeIndex();
+
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    if (current < levels.length - 1) {
+      selectLevel(current + 1);
+    } else {
+      selectIntro();
+    }
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    if (current > 0) {
+      selectLevel(current - 1);
+    } else {
+      selectIntro();
+    }
+  }
+});
+
+// ─── Init ──────────────────────────────────────────────────────────
+selectIntro();
+
+</script>
+</body>
+</html>

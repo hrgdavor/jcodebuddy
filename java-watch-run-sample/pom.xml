@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Standalone sample project for testing java-watch-run hot-reload daemon.
+        Run via: run-watch-sample.ps1 (Windows) from the java_watch2 root.
+
+        This pom.xml is used ONLY to resolve and download dependencies into lib/.
+        The daemon (java-watch-run.jar) compiles and runs the sources directly.
+    -->
+    <groupId>hr.hrg.watch2.sample</groupId>
+    <artifactId>java-watch-run-sample</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>java-watch-run-sample</name>
+    <description>Sample project for testing the java-watch-run hot-reload daemon</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+
+    <dependencies>
+        <!-- Jackson for JSON serialization (representative "real" dependency) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.15.2</version>
+        </dependency>
+
+        <!--
+            Stoppable / StopRegistry come from java-watch-run.jar which is on the
+            daemon's classpath at runtime.  We declare it as provided so Maven can
+            resolve it for normal compilation, but it won't be copied to lib/.
+        -->
+        <dependency>
+            <groupId>hr.hrg.watch2</groupId>
+            <artifactId>java-watch-run</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <!-- Flat src/ layout instead of Maven's default src/main/java -->
+        <sourceDirectory>src</sourceDirectory>
+
+        <plugins>
+            <!-- Copies runtime deps to lib/ for the run-watch script to pick up -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-runtime-deps</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.basedir}/lib</outputDirectory>
+                            <includeScope>compile</includeScope>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

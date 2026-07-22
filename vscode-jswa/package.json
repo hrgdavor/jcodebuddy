@@ -1,0 +1,44 @@
+{
+    "name": "jswa-vscode",
+    "displayName": "JSWA (JavaScript Watch) Integration",
+    "description": "Interactive JS/TS Sidecar for Signals and Boilerplate reduction",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "activationEvents": [
+        "onLanguage:javascript",
+        "onLanguage:typescript"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "configuration": {
+            "type": "object",
+            "title": "JSWA Configuration",
+            "properties": {
+                "jswa.bun.path": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "default": null,
+                    "description": "Path to the Bun executable. This will be used to launch the JSWA Sidecar server."
+                },
+                "jswa.server.scriptPath": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "default": null,
+                    "description": "Path to a custom JSWA Sidecar index.ts file. If not set, the version bundled with the extension will be used."
+                }
+            }
+        }
+    },
+    "dependencies": {
+        "vscode-languageclient": "^8.1.0"
+    }
+}

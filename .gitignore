@@ -1,0 +1,42 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/sync_test
+zig-watch-scp/test_create/test.txt
+zig-watch-scp/test_hex
+zig-watch-scp/test_padding
+zig-watch-scp/test_tab
+java-watch-scp/bad.conf
+test_sort
+zig-watch-scp/build_output.txt
+.watch
+agent_log*.txt
+build_error.txt
+vscode-jwa/node_modules
+intellij-jwa/.gradle
+vscode-jswa/node_modules
+build_output.txt
+cross_verify.bin
+intellij-jswa/.gradle

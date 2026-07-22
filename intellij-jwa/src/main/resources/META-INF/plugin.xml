@@ -1,0 +1,12 @@
+<idea-plugin>
+    <id>hr.hrg.watch2.intellij</id>
+    <name>JWA IntelliJ Bridge</name>
+    <vendor>Davor Hrg</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <platform.lsp.serverSupportProvider implementation="hr.hrg.watch2.intellij.JwaLspServerSupportProvider"/>
+    </extensions>
+</idea-plugin>

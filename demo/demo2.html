@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hipster Entity Demo 2 — DB to Interface Graph</title>
+<style>
+:root {
+  --bg: #0b1220;
+  --text: #e7eef8;
+  --muted: #8aa1c2;
+  --accent: #72c5ff;
+  --accent-strong: #44a9ff;
+  --success: #6ce0a2;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  min-height: 100vh;
+  background: radial-gradient(ellipse at top, rgba(86,141,253,0.10), transparent 40%),
+              linear-gradient(180deg, #0b1220, #090f19);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 3rem;
+}
+
+h1 {
+  font-size: clamp(1.6rem, 3.5vw, 2.6rem);
+  text-align: center;
+  letter-spacing: -0.03em;
+}
+
+.desc {
+  max-width: 820px;
+  text-align: center;
+  color: var(--muted);
+  margin: 0.8rem auto 1.6rem;
+  line-height: 1.65;
+  font-size: 0.95rem;
+}
+
+/* ── graph area ── */
+.graph-wrap {
+  position: relative;
+  width: min(1200px, 100%);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 3.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+svg.edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.edge {
+  fill: none;
+  stroke: rgba(114,197,255,0.15);
+  stroke-width: 2;
+  transition: stroke .25s, opacity .25s;
+}
+.edge.active  { stroke: var(--accent); opacity: 1; }
+.edge.dimmed   { opacity: 0.04; }
+.edge-arrow {
+  fill: rgba(114,197,255,0.15);
+  transition: fill .25s, opacity .25s;
+}
+.edge-arrow.active { fill: var(--accent); opacity: 1; }
+.edge-arrow.dimmed { opacity: 0.04; }
+
+/* ── node cards ── */
+.card {
+  border-radius: 20px;
+  background: rgba(15,23,48,0.88);
+  border: 1px solid rgba(255,255,255,0.07);
+  padding: 1.2rem;
+}
+.card h2 {
+  font-size: 0.92rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 0.15rem;
+}
+.card .subtitle {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 0.8rem;
+}
+
+.field-list { list-style: none; }
+
+.field-item {
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.45rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.025);
+  cursor: pointer;
+  transition: background .2s, border-color .2s, transform .15s;
+}
+.field-item:hover,
+.field-item.active {
+  background: rgba(114,197,255,0.10);
+  border-color: rgba(114,197,255,0.40);
+  transform: translateY(-1px);
+}
+
+.field-item .fname {
+  display: block;
+  font-size: 0.92rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+}
+.field-item .fmeta {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+/* ── status panel ── */
+.status {
+  margin-top: 1.4rem;
+  padding: 1rem 1.2rem;
+  border-radius: 18px;
+  background: rgba(7,12,22,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--muted);
+  position: relative;
+  z-index: 1;
+}
+.status strong { color: var(--accent-strong); }
+
+/* ── sample data ── */
+.sample-section {
+  margin-top: 2.2rem;
+  width: 100%;
+  max-width: 1060px;
+}
+.sample-section h2 {
+  font-size: 1.15rem;
+  margin-bottom: 0.8rem;
+  color: var(--accent);
+}
+.sample-area {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.sample-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(15,22,40,0.88);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.sample-table th,
+.sample-table td {
+  padding: 0.85rem 0.95rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.92rem;
+  color: var(--text);
+}
+.sample-table th {
+  background: rgba(255,255,255,0.04);
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+}
+.sample-table tbody tr {
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.sample-table tbody tr:hover,
+.sample-table tbody tr.active {
+  background: rgba(114,197,255,0.10);
+}
+.sample-table td:last-child {
+  min-width: 72px;
+}
+.sample-preview {
+  background: rgba(11,17,30,0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
+  min-height: 250px;
+}
+.sample-preview h3 {
+  margin-bottom: 0.75rem;
+  color: var(--accent);
+  font-size: 1rem;
+}
+.preview-block {
+  margin-bottom: 1rem;
+}
+.preview-block:last-child {
+  margin-bottom: 0;
+}
+.preview-block .label {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.preview-code {
+  display: block;
+  width: 100%;
+  padding: 0.82rem 0.95rem;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.preview-hint {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 820px) {
+  .sample-area { grid-template-columns: 1fr; }
+  .columns { grid-template-columns: 1fr; gap: 1.2rem; }
+  svg.edges { display: none; }
+}
+</style>
+</head>
+<body>
+
+<h1>DB &rarr; Entity Interface &rarr; JDBC Record</h1>
+<p class="desc">Hover any field to trace the mapping from the database column through the entity interface accessor to the JDBC record constructor argument.</p>
+
+<div class="graph-wrap" id="graphWrap">
+  <svg class="edges" id="edgesSvg"></svg>
+
+  <div class="columns" id="cols">
+    <!-- Column 1: DB -->
+    <div class="card" id="cardDb">
+      <h2>Database table</h2>
+      <p class="subtitle">person</p>
+      <ul class="field-list" id="listDb"></ul>
+    </div>
+    <!-- Column 2: Interface -->
+    <div class="card" id="cardIface">
+      <h2>Entity interface</h2>
+      <p class="subtitle">PersonSummary extends PersonEntity</p>
+      <ul class="field-list" id="listIface"></ul>
+    </div>
+    <!-- Column 3: JDBC -->
+    <div class="card" id="cardJdbc">
+      <h2>JDBC utility fills record</h2>
+      <p class="subtitle">PersonRecord implements PersonSummary</p>
+      <ul class="field-list" id="listJdbc"></ul>
+    </div>
+  </div>
+
+  <div class="status" id="status">
+    <strong>Hover a field</strong> to see the full mapping path from the database column to the record constructor.
+  </div>
+</div>
+
+<div class="sample-section">
+  <h2>Sample data</h2>
+  <div class="sample-area">
+    <div id="sampleRows"></div>
+    <div class="sample-preview" id="samplePreview">
+      <h3>Hover a row</h3>
+      <p class="preview-hint">Move over a table row to preview the interface accessor results and JDBC record constructor values for that record.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const FIELDS = [
+  { key: 'id',        col: 'id',         type: 'BIGINT',  javaType: 'Long',   getter: 'getLong' },
+  { key: 'firstName', col: 'first_name', type: 'VARCHAR', javaType: 'String', getter: 'getString' },
+  { key: 'lastName',  col: 'last_name',  type: 'VARCHAR', javaType: 'String', getter: 'getString' },
+  { key: 'email',     col: 'email',      type: 'VARCHAR', javaType: 'String', getter: 'getString' },
+  { key: 'age',       col: 'age',        type: 'INT',     javaType: 'Integer',getter: 'getInt' },
+];
+
+const listDb    = document.getElementById('listDb');
+const listIface = document.getElementById('listIface');
+const listJdbc  = document.getElementById('listJdbc');
+const statusEl  = document.getElementById('status');
+const svg       = document.getElementById('edgesSvg');
+const graphWrap = document.getElementById('graphWrap');
+
+const itemsByField = {};
+
+function build() {
+  FIELDS.forEach(f => {
+    const dbLi = mkItem(f.key, f.col, f.type);
+    listDb.appendChild(dbLi);
+
+    const ifLi = mkItem(f.key, `${f.javaType} ${f.key}()`, 'accessor');
+    listIface.appendChild(ifLi);
+
+    const jdLi = mkItem(f.key, `rs.${f.getter}("${f.col}")`, `→ ${f.key}`);
+    listJdbc.appendChild(jdLi);
+
+    itemsByField[f.key] = { db: dbLi, iface: ifLi, jdbc: jdLi, data: f };
+  });
+}
+
+function mkItem(key, label, meta) {
+  const li = document.createElement('li');
+  li.className = 'field-item';
+  li.dataset.field = key;
+  li.innerHTML = `<span class="fname">${esc(label)}</span><span class="fmeta">${esc(meta)}</span>`;
+  li.addEventListener('mouseenter', () => activate(key));
+  li.addEventListener('mouseleave', deactivate);
+  return li;
+}
+
+function esc(s) { const d = document.createElement('span'); d.textContent = s; return d.innerHTML; }
+
+let active = null;
+
+function activate(key) {
+  active = key;
+  document.querySelectorAll('.field-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.field === key);
+  });
+  drawEdges();
+  const f = itemsByField[key].data;
+  statusEl.innerHTML =
+    `<strong>${f.col}</strong> (${f.type}) → ` +
+    `<strong>${f.javaType} ${f.key}()</strong> → ` +
+    `<strong>rs.${f.getter}("${f.col}")</strong> fills the record component`;
+}
+
+function deactivate() {
+  active = null;
+  document.querySelectorAll('.field-item').forEach(el => el.classList.remove('active'));
+  drawEdges();
+  statusEl.innerHTML = '<strong>Hover a field</strong> to see the full mapping path from the database column to the record constructor.';
+}
+
+/* ── edge drawing ── */
+function drawEdges() {
+  svg.innerHTML = '';
+  const wrapRect = graphWrap.getBoundingClientRect();
+
+  FIELDS.forEach(f => {
+    const entry = itemsByField[f.key];
+    if (!entry) return;
+
+    const isActive = active === f.key;
+    const isDimmed = active && active !== f.key;
+    const cls = isActive ? 'active' : isDimmed ? 'dimmed' : '';
+
+    drawLink(entry.db, entry.iface, wrapRect, cls);
+    drawLink(entry.iface, entry.jdbc, wrapRect, cls);
+  });
+}
+
+function drawLink(fromEl, toEl, wrapRect, cls) {
+  const fr = fromEl.getBoundingClientRect();
+  const tr = toEl.getBoundingClientRect();
+
+  const x1 = fr.right  - wrapRect.left;
+  const y1 = fr.top + fr.height / 2 - wrapRect.top;
+  const x2 = tr.left   - wrapRect.left;
+  const y2 = tr.top + tr.height / 2 - wrapRect.top;
+
+  const dx = (x2 - x1) * 0.45;
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
+  path.setAttribute('class', 'edge ' + cls);
+  svg.appendChild(path);
+
+  // small arrowhead
+  const aSize = 5;
+  const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  arrow.setAttribute('points',
+    `${x2},${y2} ${x2 - aSize * 2},${y2 - aSize} ${x2 - aSize * 2},${y2 + aSize}`);
+  arrow.setAttribute('class', 'edge-arrow ' + cls);
+  svg.appendChild(arrow);
+}
+
+const SAMPLE_DATA = [
+  { id: 1, firstName: 'Alice',  lastName: 'Morgan', email: 'alice@example.com',      age: 29 },
+  { id: 2, firstName: 'Bob',    lastName: 'Chen',   email: 'bob.chen@example.com',   age: 34 },
+  { id: 3, firstName: 'Carol',  lastName: 'Díaz',   email: 'carol.diaz@example.com', age: 41 },
+];
+
+function buildSampleTable() {
+  const container = document.getElementById('sampleRows');
+  const table = document.createElement('table');
+  table.className = 'sample-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>id</th>
+        <th>first_name</th>
+        <th>last_name</th>
+        <th>email</th>
+        <th>age</th>
+      </tr>
+    </thead>
+    <tbody></tbody>`;
+
+  const tbody = table.querySelector('tbody');
+  SAMPLE_DATA.forEach((row, index) => {
+    const tr = document.createElement('tr');
+    tr.dataset.index = index;
+    tr.innerHTML = `
+      <td>${row.id}</td>
+      <td>${esc(row.firstName)}</td>
+      <td>${esc(row.lastName)}</td>
+      <td>${esc(row.email)}</td>
+      <td>${row.age}</td>`;
+
+    tr.addEventListener('mouseenter', () => previewRow(index, tr));
+    tr.addEventListener('mouseleave', () => deactivateRow(tr));
+    tbody.appendChild(tr);
+  });
+
+  container.appendChild(table);
+}
+
+function previewRow(index, rowEl) {
+  document.querySelectorAll('.sample-table tbody tr').forEach(el => el.classList.toggle('active', el === rowEl));
+  const row = SAMPLE_DATA[index];
+  const preview = document.getElementById('samplePreview');
+  const interfaceLines = FIELDS.map(f => {
+    const raw = row[f.key];
+    const value = typeof raw === 'string'
+      ? `"${esc(raw)}"`
+      : `${raw}`;
+    return `person.${f.key}() → ${value}`;
+  }).join('\n');
+
+  const recordArgs = FIELDS.map(f => {
+    const raw = row[f.key];
+    return typeof raw === 'string'
+      ? `"${esc(raw)}"`
+      : `${raw}${f.javaType === 'Long' ? 'L' : ''}`;
+  }).join(', ');
+
+  preview.innerHTML = `
+    <h3>Interface preview</h3>
+    <div class="preview-block">
+      <span class="label">Accessor results</span>
+      <pre class="preview-code">${interfaceLines}</pre>
+    </div>
+    <div class="preview-block">
+      <span class="label">JDBC record</span>
+      <pre class="preview-code">new PersonRecord(${recordArgs})</pre>
+    </div>`;
+}
+
+function deactivateRow(rowEl) {
+  rowEl.classList.remove('active');
+  const preview = document.getElementById('samplePreview');
+  preview.innerHTML = `
+    <h3>Hover a row</h3>
+    <p class="preview-hint">Move over a table row to preview the interface accessor results and JDBC record constructor values for that record.</p>`;
+}
+
+build();
+drawEdges();
+buildSampleTable();
+window.addEventListener('resize', drawEdges);
+</script>
+</body>
+</html>

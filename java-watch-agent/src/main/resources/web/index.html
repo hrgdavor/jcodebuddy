@@ -1,0 +1,48 @@
+<!-- 
+SPDX-License-Identifier: LicenseRef-GPL-3.0-with-Commons-Clause
+Copyright (c) 2026 Davor Hrg
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java Watch Agent Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Java Watch Agent</h1>
+        <div id="status-badge" class="badge">Connecting...</div>
+    </header>
+
+    <main>
+        <section id="actions-section">
+            <h2>Pending Actions</h2>
+            <div id="actions-list" class="grid">
+                <!-- Actions will be injected here -->
+            </div>
+        </section>
+
+        <section id="diff-section" class="hidden">
+            <div class="modal">
+                <div class="modal-content">
+                    <header class="modal-header">
+                        <h2 id="diff-title">Diff</h2>
+                        <button id="close-diff" class="btn-icon">&times;</button>
+                    </header>
+                    <div id="diff-container">
+                        <!-- Diff content will be injected here -->
+                    </div>
+                    <footer class="modal-footer">
+                        <button id="modal-reject" class="btn btn-secondary">Reject</button>
+                        <button id="modal-accept" class="btn btn-primary">Accept & Apply</button>
+                    </footer>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

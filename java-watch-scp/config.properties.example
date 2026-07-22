@@ -1,0 +1,37 @@
+# Example configuration for Java Watch SCP
+# Copy this file and customize for your needs
+
+# Local directory to watch for changes
+source.directory=C:/path/to/watch
+
+# Remote SSH server details
+remote.host=example.com
+remote.port=22
+remote.user=username
+remote_dir=/opt/project/docs
+excludes=**/*.bak, .~*
+
+# trigger_from=./trigger.local
+# trigger_to=/tmp/sync-trigger.txt
+
+# Version File Support
+# Reads a local template, replaces ${timestamp} with current epoch, and uploads.
+# Supports .json and .ini property replacement automatically.
+# version_from=version.json.template
+# version_to=version.json
+remote.password=yourpassword
+
+# Remote destination path (files will be copied here maintaining directory structure)
+remote.basePath=/remote/destination/path
+
+# Remote cleanup: remove files on remote that match patterns but are missing locally (default: false)
+cleanup=false
+
+# Change detection mode (default: hash)
+# - hash: uses Wyhash64 to detect content changes (most accurate)
+# - mtime_size: uses file modification time and size (fastest, lightweight)
+# check=hash
+
+# Disable checksum database (.scpdb) on remote server (default: false)
+# When true, skips downloading/uploading the database and uses direct stat checks.
+# no_db=false
