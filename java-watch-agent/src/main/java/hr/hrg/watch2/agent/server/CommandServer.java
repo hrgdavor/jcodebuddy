@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.agent.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;

@@ -1,6 +1,6 @@
 package hr.hrg.hipster.entity.jackson;
 
-import com.fasterxml.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonGenerator;
 import hr.hrg.hipster.entity.api.EntityBase;
 import hr.hrg.hipster.entity.api.ViewReader;
 import hr.hrg.hipster.entity.api.FieldDef;
@@ -64,7 +64,7 @@ public final class EntityJacksonViewSerializer<V extends EntityBase<?>, F extend
             String name = fieldNames[i];
             Object value = entity.get(i);
 
-            gen.writeFieldName(name);
+            gen.writeName(name);
             if (value == null) {
                 gen.writeNull();
                 continue;
@@ -77,7 +77,7 @@ public final class EntityJacksonViewSerializer<V extends EntityBase<?>, F extend
                 case TYPE_DOUBLE -> gen.writeNumber((Double) value);
                 case TYPE_FLOAT -> gen.writeNumber((Float) value);
                 case TYPE_BOOLEAN -> gen.writeBoolean((Boolean) value);
-                default -> gen.writeObject(value);
+                default -> gen.writePOJO(value);
             }
         }
 

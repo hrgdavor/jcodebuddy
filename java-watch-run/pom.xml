@@ -5,9 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>hr.hrg.watch2</groupId>
-        <artifactId>java_watch2-parent</artifactId>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
         <version>1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>java-watch-run</artifactId>
@@ -16,52 +17,44 @@
 
     <dependencies>
         <dependency>
-            <groupId>hr.hrg.watch2</groupId>
+            <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>java-watch-core</artifactId>
         </dependency>
 
-        <!-- Eclipse Compiler for Java (ECJ) - standalone batch compiler -->
         <dependency>
             <groupId>org.eclipse.jdt</groupId>
             <artifactId>ecj</artifactId>
         </dependency>
 
-        <!-- SLF4J API -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
-        <!-- SLF4J Simple implementation -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
         </dependency>
 
-        <!-- JUnit for testing -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- GraalVM Polyglot API (Espresso embedded JVM) -->
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>polyglot</artifactId>
-            <version>25.0.2</version>
         </dependency>
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>java</artifactId>
-            <version>25.0.2</version>
             <type>pom</type>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Maven Shade Plugin for creating executable JAR -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -73,8 +66,6 @@
                         </goals>
                         <configuration>
                             <filters>
-                                <!-- Strip cryptographic signatures from all JARs; they become
-                                     invalid once repackaged into the uber-jar. -->
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
@@ -95,19 +86,10 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <source>21</source>
-                    <target>21</target>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
 
     <profiles>
-        <!-- Profile to build GraalVM Native Image with Espresso embedded -->
         <profile>
             <id>native</id>
             <build>
@@ -130,7 +112,7 @@
                     <plugin>
                         <groupId>org.graalvm.buildtools</groupId>
                         <artifactId>native-maven-plugin</artifactId>
-                        <version>0.10.1</version>
+                        <version>${native.maven.plugin.version}</version>
                         <extensions>true</extensions>
                         <executions>
                             <execution>

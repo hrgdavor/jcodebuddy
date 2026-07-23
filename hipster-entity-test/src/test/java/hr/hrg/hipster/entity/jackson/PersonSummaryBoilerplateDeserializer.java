@@ -1,10 +1,10 @@
 package hr.hrg.hipster.entity.jackson;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectReader;
 import hr.hrg.hipster.entity.person.PersonSummary;
 import hr.hrg.hipster.entity.person.PersonSummary_;
 
@@ -37,13 +37,13 @@ public final class PersonSummaryBoilerplateDeserializer {
         }
 
         String name;
-        while ((name = p.nextFieldName()) != null) {
+        while ((name = p.nextName()) != null) {
             switch (name) {
                 case "id" -> { JsonToken t = p.nextToken(); id = t == JsonToken.VALUE_NULL ? null : p.getLongValue(); }
-                case "firstName" -> firstName = p.nextTextValue();
-                case "lastName" -> lastName = p.nextTextValue();
+                case "firstName" -> { JsonToken t = p.nextToken(); firstName = t == JsonToken.VALUE_NULL ? null : p.getText(); }
+                case "lastName" -> { JsonToken t = p.nextToken(); lastName = t == JsonToken.VALUE_NULL ? null : p.getText(); }
                 case "age" -> { JsonToken t = p.nextToken(); age = t == JsonToken.VALUE_NULL ? null : Integer.valueOf(p.getIntValue()); }
-                case "departmentName" -> departmentName = p.nextTextValue();
+                case "departmentName" -> { JsonToken t = p.nextToken(); departmentName = t == JsonToken.VALUE_NULL ? null : p.getText(); }
                 case "metadata" -> { JsonToken t = p.nextToken(); metadata = t == JsonToken.VALUE_NULL ? null : METADATA_READER.readValue(p); }
                 default -> { p.nextToken(); p.skipChildren(); }
             }
@@ -74,14 +74,14 @@ final class PersonSummaryBoilerplateDirectArrayDeserializer {
         }
 
         String name;
-        while ((name = p.nextFieldName()) != null) {
+        while ((name = p.nextName()) != null) {
             switch (name) {
-                case "id"             -> { JsonToken t = p.nextToken(); values[0] = t == JsonToken.VALUE_NULL ? null : p.getLongValue(); }
-                case "firstName"      -> values[1] = p.nextTextValue();
-                case "lastName"       -> values[2] = p.nextTextValue();
-                case "age"            -> { JsonToken t = p.nextToken(); values[3] = t == JsonToken.VALUE_NULL ? null : Integer.valueOf(p.getIntValue()); }
-                case "departmentName" -> values[4] = p.nextTextValue();
-                case "metadata"       -> { JsonToken t = p.nextToken(); values[5] = t == JsonToken.VALUE_NULL ? null : METADATA_READER.readValue(p); }
+                case "id" -> { JsonToken t = p.nextToken(); values[0] = t == JsonToken.VALUE_NULL ? null : p.getLongValue(); }
+                case "firstName" -> { JsonToken t = p.nextToken(); values[1] = t == JsonToken.VALUE_NULL ? null : p.getText(); }
+                case "lastName" -> { JsonToken t = p.nextToken(); values[2] = t == JsonToken.VALUE_NULL ? null : p.getText(); }
+                case "age" -> { JsonToken t = p.nextToken(); values[3] = t == JsonToken.VALUE_NULL ? null : Integer.valueOf(p.getIntValue()); }
+                case "departmentName" -> { JsonToken t = p.nextToken(); values[4] = t == JsonToken.VALUE_NULL ? null : p.getText(); }
+                case "metadata" -> { JsonToken t = p.nextToken(); values[5] = t == JsonToken.VALUE_NULL ? null : METADATA_READER.readValue(p); }
                 default -> { p.nextToken(); p.skipChildren(); }
             }
         }
@@ -117,14 +117,14 @@ final class PersonSummaryConcreteBoilerplateDeserializer {
         }
 
         String name;
-        while ((name = p.nextFieldName()) != null) {
+        while ((name = p.nextName()) != null) {
             switch (name) {
-                case "id"             -> { JsonToken t = p.nextToken(); values[0] = t == JsonToken.VALUE_NULL ? null : p.getLongValue(); }
-                case "firstName"      -> values[1] = p.nextTextValue();
-                case "lastName"       -> values[2] = p.nextTextValue();
-                case "age"            -> { JsonToken t = p.nextToken(); values[3] = t == JsonToken.VALUE_NULL ? null : Integer.valueOf(p.getIntValue()); }
-                case "departmentName" -> values[4] = p.nextTextValue();
-                case "metadata"       -> { JsonToken t = p.nextToken(); values[5] = t == JsonToken.VALUE_NULL ? null : METADATA_READER.readValue(p); }
+                case "id" -> { JsonToken t = p.nextToken(); values[0] = t == JsonToken.VALUE_NULL ? null : p.getLongValue(); }
+                case "firstName" -> { JsonToken t = p.nextToken(); values[1] = t == JsonToken.VALUE_NULL ? null : p.getText(); }
+                case "lastName" -> { JsonToken t = p.nextToken(); values[2] = t == JsonToken.VALUE_NULL ? null : p.getText(); }
+                case "age" -> { JsonToken t = p.nextToken(); values[3] = t == JsonToken.VALUE_NULL ? null : Integer.valueOf(p.getIntValue()); }
+                case "departmentName" -> { JsonToken t = p.nextToken(); values[4] = t == JsonToken.VALUE_NULL ? null : p.getText(); }
+                case "metadata" -> { JsonToken t = p.nextToken(); values[5] = t == JsonToken.VALUE_NULL ? null : METADATA_READER.readValue(p); }
                 default -> { p.nextToken(); p.skipChildren(); }
             }
         }
@@ -165,32 +165,42 @@ final class PersonSummaryOrderedPositionalDeserializer {
             throw new IllegalArgumentException("Expected JSON object");
         }
 
+        Long id = null;
+        String firstName = null;
+        String lastName = null;
+        Integer age = null;
+        String departmentName = null;
+        Object metadata = null;
+
         // Field 0: id (Long)
         p.nextToken(); // FIELD_NAME "id" — advance past name without reading it
         JsonToken t = p.nextToken(); // VALUE
-        Long id = t == JsonToken.VALUE_NULL ? null : p.getLongValue();
+        id = t == JsonToken.VALUE_NULL ? null : p.getLongValue();
 
-        // Field 1: firstName (String) — nextTextValue() advances past FIELD_NAME then reads VALUE
+        // Field 1: firstName (String)
         p.nextToken(); // FIELD_NAME "firstName"
-        String firstName = p.nextTextValue(); // → VALUE_STRING or null
+        t = p.nextToken();
+        firstName = t == JsonToken.VALUE_NULL ? null : p.getText();
 
         // Field 2: lastName (String)
         p.nextToken(); // FIELD_NAME "lastName"
-        String lastName = p.nextTextValue();
+        t = p.nextToken();
+        lastName = t == JsonToken.VALUE_NULL ? null : p.getText();
 
         // Field 3: age (Integer)
         p.nextToken(); // FIELD_NAME "age"
         t = p.nextToken(); // VALUE
-        Integer age = t == JsonToken.VALUE_NULL ? null : Integer.valueOf(p.getIntValue());
+        age = t == JsonToken.VALUE_NULL ? null : Integer.valueOf(p.getIntValue());
 
         // Field 4: departmentName (String)
         p.nextToken(); // FIELD_NAME "departmentName"
-        String departmentName = p.nextTextValue();
+        t = p.nextToken();
+        departmentName = t == JsonToken.VALUE_NULL ? null : p.getText();
 
         // Field 5: metadata (Map<String, List<Long>>)
         p.nextToken(); // FIELD_NAME "metadata"
         t = p.nextToken(); // VALUE (null or START_OBJECT)
-        Object metadata = t == JsonToken.VALUE_NULL ? null : METADATA_READER.readValue(p);
+        metadata = t == JsonToken.VALUE_NULL ? null : METADATA_READER.readValue(p);
 
         // Advance to END_OBJECT of the outer record so callers in a streaming array loop
         // see END_OBJECT as currentToken; the caller's p.nextToken() then moves to the

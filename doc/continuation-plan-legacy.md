@@ -1,19 +1,21 @@
+> **Deprecated**: This continuation plan is superseded by the unified JCodeBuddy merge plan. It contains outdated assumptions (Phase 1.0 "completed" work that does not exist on disk). Refer to the current plan at the repo root `README.md` and the unified build structure.
+
 # Code-Buddy Submodule Continuation Plan
 
 **Created:** 2026-07-21 (based on handoff document)  
 **Status:** Phase 1.0 Complete | Starting Phase 2.0  
-**Next Priority:** Wire up java_watch2 generators into code-buddy framework
+**Next Priority:** Wire up java_watch2 generators into jcodebuddy framework
 
 ---
 
 ## Current State Summary
 
 ### ✅ Completed Work (Phase 1.0)
-- **code-buddy Maven module**: Created with proper pom.xml structure
+- **jcodebuddy Maven module**: Created with proper pom.xml structure
 - **CodeGenerator<T> interface**: Minimal API with `generate(CodeContext context)` method
 - **CodeContext interface & impls**: CodeContext, CodeContextImpl, DefaultSourceTree, TypeResolver, TypeDefinition
 - **HelloWorldGenerator demo**: Working example showing pure code generation
-- **Parent POM updated**: Added `<module>code-buddy</module>` to modules list
+- **Parent POM updated**: Added `<module>jcodebuddy</module>` to modules list
 - **Dependencies configured**: hipster-entity-api (provided), jackson-databind, JUnit 5 test scope
 
 ### 🎯 Immediate Goal: Wire Up java_watch2 Codegen Base
@@ -34,9 +36,9 @@ The user explicitly stated:
 ### 📋 Next Steps in Order of Priority
 
 #### Phase 2.0: Refactor java_watch2 Generators for Code-Buddy (Week 1)
-1. **Create `java-watch-agent` submodule** under code-buddy parent:
-   - `code-buddy/java-watch-agent/pom.xml`
-     - Parent: code-buddy
+1. **Create `java-watch-agent` submodule** under jcodebuddy parent:
+   - `jcodebuddy/java-watch-agent/pom.xml`
+     - Parent: jcodebuddy
      - Dependencies: hipster-entity-api, jackson-databind, javaparser-core (3.28.0)
    - **Copy & refactor generators** to use CodeContext interface instead of SimpleToolContext
    - Convert ActionTool → extend plain Java class implementing CodeGenerator
@@ -77,14 +79,14 @@ The user explicitly stated:
 7. **Refactor existing core generators**:
    - ViewProxyFactory from hipster-entity-core → CodeGenerator implementation
    - Builder pattern generator → HybridGenerator example
-   - Move to code-buddy module, keeping hipster-entity modules clean
+   - Move to jcodebuddy module, keeping hipster-entity modules clean
 
 8. **Create migration guide** for users who want to switch from annotation processing:
-   - Explain why code-buddy approach is easier (no compiler restrictions)
+   - Explain why jcodebuddy approach is easier (no compiler restrictions)
    - Show simple Hello World example comparing both approaches
 
 #### Documentation & Testing
-9. **Write README.md** for code-buddy submodule explaining:
+9. **Write README.md** for jcodebuddy submodule explaining:
    - What problem it solves vs Java annotation processing
    - How to add custom generators (extend CodeGenerator, implement generate())
    - Hybrid config+code usage examples
@@ -93,30 +95,30 @@ The user explicitly stated:
 10. **Add comprehensive test suite:**
     - Unit tests for each refactored generator  
     - Integration tests simulating real build scenarios
-    - Benchmarks comparing code-buddy vs annotation processing approach
+    - Benchmarks comparing jcodebuddy vs annotation processing approach
 
 ---
 
 ## File Structure Plan
 
 ```
-code-buddy/
+jcodebuddy/
 ├── pom.xml (already exists)
-├── src/main/java/hr/hrg/hipster/codebuddy/
+├── src/main/java/hr/hrg/hipster/jcodebuddy/
 │   ├── CodeGenerator.java         # Core interface (done)
 │   ├── HelloWorldGenerator.java  # Demo example (done)
 │   
 ├── java-watch-agent/              # NEW: Refactored from java_watch2
 │   └── pom.xml                    # Will have hipster-entity-api dependency
 │
-├── src/main/java/hr/hrg/hipster/codebuddy/context/
+├── src/main/java/hr/hrg/hipster/jcodebuddy/context/
 │   ├── CodeContext.java           # Interface (done)
 │   ├── CodeContextImpl.java       # Default implementation (done)
 │   ├── SourceTree.java            # File read/write utility (done)
 │   ├── TypeResolver.java          # Entity metadata queries (done)
 │   └── TypeDefinition.java        # Type metadata model (done)
 │
-├── src/test/java/hr/hrg/hipster/codebuddy/
+├── src/test/java/hr/hrg/hipster/jcodebuddy/
 │   └── ...
 
 ```
@@ -124,7 +126,7 @@ code-buddy/
 ---
 
 ## Critical Decisions Made Earlier
-- **code-buddy is a standalone Maven module** ✅ (not just feature in existing modules)
+- **jcodebuddy is a standalone Maven module** ✅ (not just feature in existing modules)
 - **Generators extend plain Java classes** ✅ (no annotation processing fight)
 - **Any mix of config + code allowed** ✅ (explicit design goal)
 - **Works as dependency alongside hipster-entity** ✅
@@ -133,10 +135,10 @@ code-buddy/
 
 ## Open Questions for User Input
 1. What configuration format do you prefer for hybrid generators? JSON vs YAML?
-2. Should we expose java_watch2's ToolRegistry pattern in code-buddy?
+2. Should we expose java_watch2's ToolRegistry pattern in jcodebuddy?
 3. Do you want the initial demo to generate a real ViewProxy or stay with HelloWorld?
 4. Timeline expectation: "Week 1-2" seems tight - is this realistic?
 
 ---
 
-**Ready to proceed:** All infrastructure is ready. The next step is creating `java-watch-agent` submodule and refactoring the AccessorGenerator/BuilderGenerator for use in code-buddy framework.
+**Ready to proceed:** All infrastructure is ready. The next step is creating `java-watch-agent` submodule and refactoring the AccessorGenerator/BuilderGenerator for use in jcodebuddy framework.

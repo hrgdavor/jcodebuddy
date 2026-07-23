@@ -5,10 +5,10 @@
 
 ## Executive Summary
 
-This document outlines a **phased implementation plan** to complete pending architecture decisions, advance core features for hipster-entity, and establish the `code-buddy` code generation framework. The plan prioritizes:
+This document outlines a **phased implementation plan** to complete pending architecture decisions, advance core features for hipster-entity, and establish the `jcodebuddy` code generation framework. The plan prioritizes:
 1. **Validation & hardening** of existing implemented primitives  
 2. **Building demo examples** that demonstrate read/write proxy workflows
-3. **Starting code-buddy submodule development** (new high priority)
+3. **Starting jcodebuddy submodule development** (new high priority)
 4. **Completing proposed ADRs** with focused benchmarking and API design
 5. **Documentation updates** to reflect current state vs roadmap items
 
@@ -17,7 +17,7 @@ This document outlines a **phased implementation plan** to complete pending arch
 ## New High Priority: Code-Buddy Submodule Development
 
 ### Overview
-The `code-buddy` submodule will be a standalone Maven module that provides flexible, code-driven code generation capabilities. Unlike traditional Java annotation processing, code-buddy allows users to:
+The `jcodebuddy` submodule will be a standalone Maven module that provides flexible, code-driven code generation capabilities. Unlike traditional Java annotation processing, jcodebuddy allows users to:
 - **Choose configuration vs code explicitly** — any mix of declarative config and imperative code
 - **Extend custom generators easily** without fighting compiler limitations
 - **Integrate as a dependency** alongside hipster-entity modules
@@ -30,7 +30,7 @@ The `code-buddy` submodule will be a standalone Maven module that provides flexi
 - Establish conventions for what can be configured vs coded freely
 
 ### Phase 1.0: Code-Buddy Core Infrastructure (Week 1)
-[ ] Create `code-buddy` Maven module structure under parent project or sibling location
+[ ] Create `jcodebuddy` Maven module structure under parent project or sibling location
 [ ] Design and implement minimal `CodeGenerator` interface with:
     - `generate(CodeContext context)` method that receives full build state as objects
     - Support for both configuration-based and code-based generation modes
@@ -42,10 +42,10 @@ The `code-buddy` submodule will be a standalone Maven module that provides flexi
 [ ] Write basic unit tests for the generator interface and context API
 
 **Files to create:**
-- `code-buddy/` directory (Maven module)
-- `code-buddy/pom.xml`
-- `code-buddy/src/main/java/hr/hrg/hipster/codebuddy/*Generator.java`
-- `code-buddy/src/main/java/hr/hrg/hipster/codebuddy/context/*Context.java`
+- `jcodebuddy/` directory (Maven module)
+- `jcodebuddy/pom.xml`
+- `jcodebuddy/src/main/java/hr/hrg/hipster/jcodebuddy/*Generator.java`
+- `jcodebuddy/src/main/java/hr/hrg/hipster/jcodebuddy/context/*Context.java`
 
 ### Phase 1.1: Demonstrate Flexibility (Week 2)
 [ ] Write a generator that combines config (JSON/YAML) and code freely in same method
@@ -54,29 +54,29 @@ The `code-buddy` submodule will be a standalone Maven module that provides flexi
 [ ] Document the "configuration vs code" boundary clearly with examples
 
 **Files to create:**
-- `code-buddy/demo/*.java` — examples of hybrid config/code generators
-- Updated README for code-buddy explaining its philosophy and use cases
+- `jcodebuddy/demo/*.java` — examples of hybrid config/code generators
+- Updated README for jcodebuddy explaining its philosophy and use cases
 
 ### Phase 1.2: Integration Testing (Week 3)
-[ ] Create test harness that runs code-buddy as a Maven dependency in a separate project
+[ ] Create test harness that runs jcodebuddy as a Maven dependency in a separate project
 [ ] Verify that custom generators can be picked up via SPI or annotation scanning
 [ ] Test that generated artifacts are written to correct output directories
 [ ] Benchmark generation speed and memory usage against annotation processing baseline
 
 **Files to create:**
-- `code-buddy/src/test/java/hr/hrg/hipster/codebuddy/*IntegrationTest.java`
+- `jcodebuddy/src/test/java/hr/hrg/hipster/jcodebuddy/*IntegrationTest.java`
 - Maven profiles for running integration tests with different generator configurations
 
 ### Phase 2.0: Integrate with Main Project (Week 4)
-[ ] Add code-buddy as a sibling Maven module to hipster-entity in parent POM
-[ ] Wire up existing core generators (e.g., view proxy factory) to use code-buddy framework
-[ ] Demonstrate that code-buddy can replace complex annotation processing setups
-[ ] Document migration path from annotation processors to code-buddy generators
+[ ] Add jcodebuddy as a sibling Maven module to hipster-entity in parent POM
+[ ] Wire up existing core generators (e.g., view proxy factory) to use jcodebuddy framework
+[ ] Demonstrate that jcodebuddy can replace complex annotation processing setups
+[ ] Document migration path from annotation processors to jcodebuddy generators
 
 **Files to create:**
-- Parent `pom.xml` update including code-buddy module
+- Parent `pom.xml` update including jcodebuddy module
 - Migration guide in documentation  
-- Examples showing "before (annotations) vs after (code-buddy)
+- Examples showing "before (annotations) vs after (jcodebuddy)
 
 ### 1.1 Proxy Method Dispatch Tests
 [ ] Add tests for `ArrayBackedViewProxyFactory` with strict error handling
@@ -245,22 +245,22 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 
 ### 3.1 Wire Up Core Generators
 [ ] Take existing hipster-entity core generators (view proxy factory, builder generator, etc.)
-[ ] Refactor them to implement `CodeGenerator` interface using code-buddy framework
+[ ] Refactor them to implement `CodeGenerator` interface using jcodebuddy framework
 [ ] Demonstrate that they can now be configured via code instead of annotation processing descriptors
 [ ] Document the refactoring process and benefits gained
 
 **Files to create:**
-- Refactored generator implementations in `code-buddy/src/main/java/hr/hrg/hipster/codebuddy/generators/*`
+- Refactored generator implementations in `jcodebuddy/src/main/java/hr/hrg/hipster/jcodebuddy/generators/*`
 - Migration examples showing old vs new usage
 
 ### 3.2 Add Generator Marketplace Support
 [ ] Design SPI mechanism for discovering custom generators at runtime
-[ ] Create module descriptor (e.g., `META-INF/services/hr.hrg.hipster.codebuddy.CodeGenerator`) or annotation-based discovery
+[ ] Create module descriptor (e.g., `META-INF/services/hr.hrg.hipster.jcodebuddy.CodeGenerator`) or annotation-based discovery
 [ ] Document how to write a generator that ships as a separate Maven dependency
 [ ] Provide sample marketplace entries (e.g., "JSON DTO Generator", "SQL Query Builder")
 
 **Files to create:**
-- SPI registration utilities in code-buddy
+- SPI registration utilities in jcodebuddy
 - Sample marketplace generator implementations
 
 ### Phase 4: Documentation Updates & Cleanup (Week 9-10)
@@ -292,9 +292,9 @@ After completing this plan, hipster-entity will have:
 
 ```
 java-hipster-entity/
-├── code-buddy/                  # NEW: Code generation framework (Week 1+)
+├── jcodebuddy/                  # NEW: Code generation framework (Week 1+)
 │   ├── pom.xml
-│   └── src/main/java/hr/hrg/hipster/codebuddy/
+│   └── src/main/java/hr/hrg/hipster/jcodebuddy/
 │       ├── CodeGenerator.java   # Core interface
 │       ├── context/             # Build state and source manipulation API
 │       └── generators/           # Example generators using config+code mix

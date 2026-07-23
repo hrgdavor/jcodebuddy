@@ -37,6 +37,7 @@ build_error.txt
 vscode-jwa/node_modules
 intellij-jwa/.gradle
 vscode-jswa/node_modules
+jswa-core/node_modules
 build_output.txt
 cross_verify.bin
 intellij-jswa/.gradle

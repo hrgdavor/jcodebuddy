@@ -5,16 +5,42 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>hr.hrg.codebuddy</groupId>
-        <artifactId>codebuddy-parent</artifactId>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
         <version>1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>project-automation</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
 
     <name>project-automation</name>
     <description>Dev-time orchestrator: contains project-specific generators, watchers, and LSP sidecar wiring.</description>
 
+    <dependencies>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>hipster-entity-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>java-watch-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jwa-builder</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>hipster-entity-tooling</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+        </dependency>
+    </dependencies>
 </project>

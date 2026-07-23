@@ -1,7 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
@@ -89,7 +89,7 @@ public class EntityMetadataGenerator {
             }
 
             Map<String,String> typeByView = new LinkedHashMap<>();
-            for (Iterator<Map.Entry<String, JsonNode>> it = fieldNode.path("typeByView").fields(); it.hasNext(); ) {
+            for (Iterator<Map.Entry<String, JsonNode>> it = fieldNode.path("typeByView").propertyStream().iterator(); it.hasNext(); ) {
                 Map.Entry<String, JsonNode> entry = it.next();
                 typeByView.put(entry.getKey(), parseTypeText(entry.getValue()));
             }

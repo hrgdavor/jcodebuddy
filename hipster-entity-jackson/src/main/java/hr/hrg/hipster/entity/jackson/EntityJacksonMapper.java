@@ -1,9 +1,8 @@
 package hr.hrg.hipster.entity.jackson;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.ObjectMapper;
 import hr.hrg.hipster.entity.api.EntityBase;
 import hr.hrg.hipster.entity.api.ViewReader;
 import hr.hrg.hipster.entity.api.FieldDef;
@@ -19,7 +18,7 @@ import java.io.IOException;
  */
 public final class EntityJacksonMapper {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private EntityJacksonMapper() {
     }
@@ -53,7 +52,7 @@ public final class EntityJacksonMapper {
         return new EntityJacksonViewModule<>(meta);
     }
 
-    public static <V extends EntityBase<?>, F extends Enum<F> & FieldDef> void registerModule(com.fasterxml.jackson.databind.ObjectMapper mapper, ViewMeta<V, F> meta) {
-        mapper.registerModule(module(meta));
+    public static <V extends EntityBase<?>, F extends Enum<F> & FieldDef> tools.jackson.databind.ObjectMapper registerModule(tools.jackson.databind.ObjectMapper mapper, ViewMeta<V, F> meta) {
+        return mapper.rebuild().addModule(module(meta)).build();
     }
 }

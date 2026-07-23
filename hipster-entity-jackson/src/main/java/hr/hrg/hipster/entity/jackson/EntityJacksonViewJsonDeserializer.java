@@ -1,8 +1,9 @@
 package hr.hrg.hipster.entity.jackson;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
 import hr.hrg.hipster.entity.api.EntityBase;
 import hr.hrg.hipster.entity.api.FieldDef;
 import hr.hrg.hipster.entity.api.ViewMeta;
@@ -10,7 +11,7 @@ import hr.hrg.hipster.entity.api.ViewMeta;
 import java.io.IOException;
 
 public final class EntityJacksonViewJsonDeserializer<V extends EntityBase<?>, F extends Enum<F> & FieldDef>
-        extends JsonDeserializer<V> {
+        extends ValueDeserializer<V> {
 
     /** Pre-built, reused across all Jackson-driven deserializations of this view type. */
     private final EntityJacksonViewDeserializer<V, F> deserializer;
@@ -20,7 +21,11 @@ public final class EntityJacksonViewJsonDeserializer<V extends EntityBase<?>, F 
     }
 
     @Override
-    public V deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
-        return deserializer.deserialize(p);
+    public V deserialize(JsonParser p, DeserializationContext ctxt) {
+        try {
+            return deserializer.deserialize(p);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

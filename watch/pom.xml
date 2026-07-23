@@ -5,9 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>hr.hrg.watch2</groupId>
-        <artifactId>java_watch2-parent</artifactId>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
         <version>1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>watch</artifactId>
@@ -17,19 +18,16 @@
     <description>File watcher that copies files to another location on change using DirectoryWatcher</description>
 
     <dependencies>
-        <!-- DirectoryWatcher library for robust file watching -->
         <dependency>
             <groupId>io.methvin</groupId>
             <artifactId>directory-watcher</artifactId>
         </dependency>
-        
-        <!-- SLF4J API for logging -->
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
-        
-        <!-- SLF4J Simple implementation for logging -->
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>

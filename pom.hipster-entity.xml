@@ -38,7 +38,7 @@
     <modules>
         <module>hipster-entity-api</module>
         <module>hipster-entity-core</module>
-        <module>code-buddy</module>
+        <module>jcodebuddy</module>
         <module>hipster-entity-jackson</module>
         <module>hipster-entity-example</module>
         <module>hipster-entity-test</module>

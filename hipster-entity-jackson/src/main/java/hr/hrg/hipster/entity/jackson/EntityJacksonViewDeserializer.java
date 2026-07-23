@@ -1,10 +1,9 @@
 package hr.hrg.hipster.entity.jackson;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.core.ObjectCodec;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectReader;
 import hr.hrg.hipster.entity.api.EntityBase;
 import hr.hrg.hipster.entity.api.FieldDef;
 import hr.hrg.hipster.entity.api.FieldNameMapper;
@@ -43,7 +42,9 @@ public final class EntityJacksonViewDeserializer<V extends EntityBase<?>, F exte
         Object read(JsonParser p) throws IOException;
     }
 
-    private static ValueReader readerFor(Type type) {
+    private final ObjectMapper mapper;
+
+    private static ValueReader readerFor(Type type, ObjectMapper mapper) {
         if (type == String.class) {
             return JsonParser::getText;
         }
@@ -70,15 +71,7 @@ public final class EntityJacksonViewDeserializer<V extends EntityBase<?>, F exte
             public Object read(JsonParser p) throws IOException {
                 ObjectReader reader = cachedReader;
                 if (reader == null) {
-                    ObjectCodec codec = p.getCodec();
-                    if (codec instanceof ObjectMapper om) {
-                        reader = om.readerFor(om.getTypeFactory().constructType(type));
-                    } else if (codec instanceof ObjectReader or) {
-                        reader = or.forType(type);
-                    } else {
-                        ObjectMapper om = new ObjectMapper();
-                        reader = om.readerFor(om.getTypeFactory().constructType(type));
-                    }
+                    reader = mapper.readerFor(mapper.getTypeFactory().constructType(type));
                     cachedReader = reader;
                 }
                 return reader.readValue(p);
@@ -93,20 +86,19 @@ public final class EntityJacksonViewDeserializer<V extends EntityBase<?>, F exte
     private final String[] internedNames;
     private FieldNameMapper<F> forName;
 
-    /**
-     * Builds the reader cache eagerly for the given view metadata.
-     * Construct once per view type and reuse across all parse calls.
-     *
-     * @param meta view metadata supplying field types, name mapper, and view factory
-     */
     public EntityJacksonViewDeserializer(ViewMeta<V, F> meta) {
+        this(meta, new ObjectMapper());
+    }
+
+    public EntityJacksonViewDeserializer(ViewMeta<V, F> meta, ObjectMapper mapper) {
+        this.mapper = mapper;
         this.meta = meta;
         this.forName = meta.forName();
         this.fieldCount = meta.fieldCount();
         this.readers = new ValueReader[fieldCount];
         this.internedNames = new String[fieldCount];
         for (int i = 0; i < fieldCount; i++) {
-            readers[i] = readerFor(meta.fieldTypeAt(i));
+            readers[i] = readerFor(meta.fieldTypeAt(i), mapper);
             internedNames[i] = meta.fieldNameAt(i).intern();
         }
     }
@@ -132,7 +124,7 @@ public final class EntityJacksonViewDeserializer<V extends EntityBase<?>, F exte
         }
 
         String name;
-        while ((name = p.nextFieldName()) != null) {
+        while ((name = p.nextName()) != null) {
             JsonToken valueToken = p.nextToken(); // advance to value; capture to avoid redundant currentToken() call
             int ord = findOrdinal(name);
             if (ord >= 0) {

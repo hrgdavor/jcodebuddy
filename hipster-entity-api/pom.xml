@@ -4,10 +4,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>hr.hrg.hipster.entity</groupId>
-        <artifactId>hipster-entity</artifactId>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
-        <version>1.0.0</version>
     </parent>
 
     <artifactId>hipster-entity-api</artifactId>
@@ -16,4 +16,12 @@
     <name>hipster-entity-api</name>
     <description>API module containing base entity interfaces and shared annotations.</description>
 
+    <profiles>
+        <profile>
+            <id>junit5</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+    </profiles>
 </project>

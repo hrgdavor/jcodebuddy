@@ -1,9 +1,9 @@
 package hr.hrg.hipster.entity.jackson;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.ObjectMapper;
 import hr.hrg.hipster.entity.api.DefaultViewMeta;
 import hr.hrg.hipster.entity.api.ViewMeta;
 import hr.hrg.hipster.entity.api.ViewReader;
@@ -54,7 +54,7 @@ public class EntityJacksonJmhBenchmark {
         public void setup() throws IOException {
             defaultMapper = new ObjectMapper();
             moduleMapper = new ObjectMapper();
-            EntityJacksonMapper.registerModule(moduleMapper, PersonSummary_.META);
+            moduleMapper = EntityJacksonMapper.registerModule(moduleMapper, PersonSummary_.META);
 
             Object[] values = new Object[PersonSummary_.values().length];
             values[PersonSummary_.id.ordinal()] = 42L;
@@ -119,16 +119,16 @@ public class EntityJacksonJmhBenchmark {
     @Benchmark
     public String serializeViewThroughEntityJacksonViewSerializer(BenchmarkState state) throws IOException {
         StringWriter w = new StringWriter();
-        JsonGenerator gen = state.defaultMapper.getFactory().createGenerator(w);
-        state.entityViewSerializer.serialize(state.viewReader, gen);
-        gen.close();
-        return w.toString();
-    }
+            JsonGenerator gen = state.defaultMapper.tokenStreamFactory().createGenerator(w);
+            state.entityViewSerializer.serialize(state.viewReader, gen);
+            gen.close();
+            return w.toString();
+        }
 
     @Benchmark
     public String serializeViewThroughPersonSummaryGeneratedSerializer(BenchmarkState state) throws IOException {
         StringWriter w = new StringWriter();
-        JsonGenerator gen = state.defaultMapper.getFactory().createGenerator(w);
+        JsonGenerator gen = state.defaultMapper.tokenStreamFactory().createGenerator(w);
         state.personSummarySerializer.serialize(state.viewReader, gen);
         gen.close();
         return w.toString();
@@ -286,29 +286,29 @@ public class EntityJacksonJmhBenchmark {
         public void serialize(ViewReader src, JsonGenerator gen) throws IOException {
             gen.writeStartObject();
 
-            gen.writeFieldName("id");
+            gen.writeName("id");
             Object id = src.get(PersonSummary_.id.ordinal());
             if (id == null) gen.writeNull(); else gen.writeNumber((Long) id);
 
-            gen.writeFieldName("firstName");
+            gen.writeName("firstName");
             Object firstName = src.get(PersonSummary_.firstName.ordinal());
             if (firstName == null) gen.writeNull(); else gen.writeString((String) firstName);
 
-            gen.writeFieldName("lastName");
+            gen.writeName("lastName");
             Object lastName = src.get(PersonSummary_.lastName.ordinal());
             if (lastName == null) gen.writeNull(); else gen.writeString((String) lastName);
 
-            gen.writeFieldName("age");
+            gen.writeName("age");
             Object age = src.get(PersonSummary_.age.ordinal());
             if (age == null) gen.writeNull(); else gen.writeNumber((Integer) age);
 
-            gen.writeFieldName("departmentName");
+            gen.writeName("departmentName");
             Object departmentName = src.get(PersonSummary_.departmentName.ordinal());
             if (departmentName == null) gen.writeNull(); else gen.writeString((String) departmentName);
 
-            gen.writeFieldName("metadata");
+            gen.writeName("metadata");
             Object metadata = src.get(PersonSummary_.metadata.ordinal());
-            if (metadata == null) gen.writeNull(); else gen.writeObject(metadata);
+            if (metadata == null) gen.writeNull(); else gen.writePOJO(metadata);
 
             gen.writeEndObject();
         }

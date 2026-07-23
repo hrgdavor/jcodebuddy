@@ -1,6 +1,6 @@
 package hr.hrg.hipster.entity.jackson;
 
-import com.fasterxml.jackson.core.JsonParser;
+import tools.jackson.core.JsonParser;
 import hr.hrg.hipster.entity.person.PersonSummary;
 import hr.hrg.hipster.entity.person.PersonSummary_;
 import org.junit.jupiter.api.Test;
@@ -31,7 +31,7 @@ class EntityJacksonMapperTest {
                 writer);
         String json = writer.toString();
 
-        try (JsonParser parser = new com.fasterxml.jackson.databind.ObjectMapper().createParser(json)) {
+        try (JsonParser parser = new tools.jackson.databind.ObjectMapper().createParser(json)) {
             PersonSummary deserialized = EntityJacksonMapper.fromJson(PersonSummary_.META, parser);
             assertEquals(source.firstName(),      deserialized.firstName());
             assertEquals(source.lastName(),       deserialized.lastName());
@@ -51,7 +51,7 @@ class EntityJacksonMapperTest {
                 writer);
         String json = writer.toString();
 
-        try (JsonParser parser = new com.fasterxml.jackson.databind.ObjectMapper().createParser(json)) {
+        try (JsonParser parser = new tools.jackson.databind.ObjectMapper().createParser(json)) {
             PersonSummary deserialized = EntityJacksonMapper.fromJson(PersonSummary_.META, parser);
             assertEquals(source.firstName(),      deserialized.firstName());
             assertEquals(source.lastName(),       deserialized.lastName());
@@ -65,8 +65,8 @@ class EntityJacksonMapperTest {
     void registerViewModuleIntoObjectMapper() throws Exception {
         PersonSummary source = personSummary(42L, "Alice", "Smith", 34, "Engineering");
 
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        EntityJacksonMapper.registerModule(mapper, PersonSummary_.META);
+        tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
+        mapper = EntityJacksonMapper.registerModule(mapper, PersonSummary_.META);
 
         String json = mapper.writeValueAsString(source);
         PersonSummary deserialized = mapper.readValue(json, PersonSummary.class);
@@ -88,7 +88,7 @@ class EntityJacksonMapperTest {
                 writer);
         String json = writer.toString();
 
-        try (JsonParser parser = new com.fasterxml.jackson.databind.ObjectMapper().createParser(json)) {
+        try (JsonParser parser = new tools.jackson.databind.ObjectMapper().createParser(json)) {
             PersonSummary deserialized = new PersonSummaryBoilerplateDeserializer().deserialize(parser);
             assertEquals(source.firstName(),      deserialized.firstName());
             assertEquals(source.lastName(),       deserialized.lastName());

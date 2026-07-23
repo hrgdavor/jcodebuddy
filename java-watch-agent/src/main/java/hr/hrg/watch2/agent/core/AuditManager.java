@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.agent.core;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
 
 import hr.hrg.wyhash.Wyhash64;
 
