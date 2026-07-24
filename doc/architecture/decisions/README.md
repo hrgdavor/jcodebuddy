@@ -1,6 +1,6 @@
 # Architecture Decisions Index
 
-This folder contains individual decision records for the hipster-entity project architecture.
+This folder contains individual decision records for the JCodeBuddy project architecture. The hipster-entity subsystem decisions (DEC-001 through DEC-018) are complemented by the watch & project-automation subsystem decisions (DEC-W001 through DEC-W005) in the sibling [decisions-watch](decisions-watch/) folder.
 
 **Status categories:**
 - `Accepted`: agreed direction used in current work
@@ -10,6 +10,8 @@ This folder contains individual decision records for the hipster-entity project 
 - `Rejected`: explicitly not adopted
 
 ## Decisions
+
+### hipster-entity subsystem (DEC-001 — DEC-018)
 
 | ID                    | Title                                                                   | Status   | Date       |
 | --------------------- | ----------------------------------------------------------------------- | -------- | ---------- |
@@ -50,6 +52,21 @@ This folder contains individual decision records for the hipster-entity project 
 | [DEC-018](DEC-018.md) | **Generator freeze marker semantics**                                   | Proposed | 2026-04-13 |
 |                       | Notes: Defines `@GeneratedFrozen`, comment freeze markers, and frozen-file preservation policy |          |            |
 
+### Watch & project-automation subsystem (DEC-W001 — DEC-W005)
+
+| ID                    | Title                                                                   | Status   | Date       |
+| --------------------- | ----------------------------------------------------------------------- | -------- | ---------- |
+| [DEC-W001](DEC-W001.md) | **File-watching architecture (debounced batch delivery)**            | Accepted | 2026-07-24 |
+|                       | Notes: `ManagedFileWatcher` and `BatchedFileWatcher` in `java-watch-core` |      |            |
+| [DEC-W002](DEC-W002.md) | **Hot-swap daemon architecture for java-watch-run**                  | Accepted | 2026-07-24 |
+|                       | Notes: Incremental ECJ compilation, URLClassLoader reload, native profile |      |            |
+| [DEC-W003](DEC-W003.md) | **Dev-time-only orchestrator boundary (project-automation)**         | Accepted | 2026-07-24 |
+|                       | Notes: `project-automation` must NOT be a transitive dependency of any runtime module | | |
+| [DEC-W004](DEC-W004.md) | **Agent daemon architecture (java-watch-agent)**                      | Accepted | 2026-07-24 |
+|                       | Notes: `ToolRegistry`, `ToolSetAgent`, `ProjectWatcher`, `CommandServer`, `InteractiveSession` | | |
+| [DEC-W005](DEC-W005.md) | **Code generation interface contract (CodeGenerator/CodeContext)**   | Accepted | 2026-07-24 |
+|                       | Notes: Unified `CodeGenerator<T>` interface with optional type resolution |        |            |
+
 ## Template
 
 New decisions should follow this template:
@@ -70,6 +87,11 @@ Why this decision is needed.
 ## Decision
 What is being decided.
 
+## Alternatives considered
+- Option A
+- Option B
+- Option C
+
 ## Consequences
 - Positive effects
 - Negative effects
@@ -85,6 +107,7 @@ What is being decided.
 
 ## Related documents
 
-- [Brainstorm folder](../../brainstorm/) â€” Exploratory design work and candidate decisions
-- [Roadmap tracking](../../roadmap/) â€” Implementation status and progress
-- [Entity interface design](../README.md) â€” Core architecture principles
+- [Brainstorm folder](../../brainstorm/) — Exploratory design work and candidate decisions
+- [Roadmap tracking](../../roadmap/) — Implementation status and progress
+- [Module map](../module-map.md) — Module layout, dependency layers, and critical boundaries
+- [ADR-GUIDE](../ADR-GUIDE.md) — ADR authoring guide
