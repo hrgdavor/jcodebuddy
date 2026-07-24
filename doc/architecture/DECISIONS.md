@@ -38,5 +38,7 @@ Architecture decisions are organized individually in the [decisions](decisions/)
 | [DEC-W003](decisions-watch/DEC-W003.md) | Dev-time-only orchestrator boundary (project-automation)       | Accepted |
 | [DEC-W004](decisions-watch/DEC-W004.md) | Agent daemon architecture (java-watch-agent)                   | Accepted |
 | [DEC-W005](decisions-watch/DEC-W005.md) | Code generation interface contract (CodeGenerator/CodeContext) | Accepted |
+| [DEC-W006](decisions-watch/DEC-W006.md) | Metadata cache with per-hash invalidation and cross-module reference tracking | Proposed |
+| [DEC-W007](decisions-watch/DEC-W007.md) | Unified source metadata model for generators and runtime | Proposed |
 
 See individual decision files in [decisions/](decisions/) and [decisions-watch/](decisions-watch/) for complete details.
