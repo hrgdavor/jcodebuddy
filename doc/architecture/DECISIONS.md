@@ -31,12 +31,12 @@ Architecture decisions are organized individually in the [decisions](decisions/)
 
 ### Watch & project-automation subsystem
 
-| Decision                        | Title                                 | Status   |
-| ------------------------------- | ------------------------------------- | -------- |
-| [DEC-W001](decisions-watch/DEC-W001.md) | File-watching architecture (debounced batch delivery) | Accepted |
-| [DEC-W002](decisions-watch/DEC-W002.md) | Hot-swap daemon architecture for java-watch-run | Accepted |
-| [DEC-W003](decisions-watch/DEC-W003.md) | Dev-time-only orchestrator boundary (project-automation) | Accepted |
-| [DEC-W004](decisions-watch/DEC-W004.md) | Agent daemon architecture (java-watch-agent) | Accepted |
+| Decision                                | Title                                                          | Status   |
+| --------------------------------------- | -------------------------------------------------------------- | -------- |
+| [DEC-W001](decisions-watch/DEC-W001.md) | File-watching architecture (debounced batch delivery)          | Accepted |
+| [DEC-W002](decisions-watch/DEC-W002.md) | Hot-swap daemon architecture for java-watch-run                | Accepted |
+| [DEC-W003](decisions-watch/DEC-W003.md) | Dev-time-only orchestrator boundary (project-automation)       | Accepted |
+| [DEC-W004](decisions-watch/DEC-W004.md) | Agent daemon architecture (java-watch-agent)                   | Accepted |
 | [DEC-W005](decisions-watch/DEC-W005.md) | Code generation interface contract (CodeGenerator/CodeContext) | Accepted |
 
 See individual decision files in [decisions/](decisions/) and [decisions-watch/](decisions-watch/) for complete details.
