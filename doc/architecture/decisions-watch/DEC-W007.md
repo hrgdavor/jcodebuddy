@@ -120,6 +120,17 @@ for (MethodMeta method : clazz.methods()) {
 
 The unified model is the unit stored in the metadata cache (DEC-W006). The cache key is the file wayhash. The value is a `SourceMetadata` tree. Generators and runtime code read from the cache through typed accessors rather than deserializing the full tree when they need only a subset.
 
+### Runtime analysis and querying
+
+The `SourceMetadata` tree is not only a source for generators; it is also a substrate for runtime analysis of the project's code structure. Several complementary approaches are under consideration:
+
+- **Lucene / full-text index** — index method names, field names, annotations, and type signatures to support fast textual queries (e.g., "find all classes with a method named `handle`", "find all classes annotated with `@Entity`"). Lucene is a natural fit because the metadata is already tree-structured and can be flattened into searchable documents.
+- **Knowledge graph** — model types, methods, fields, and their cross-module references as a graph. Nodes represent classes/methods/fields; edges represent `extends`, `implements`, `calls`, `returns`, `annotates`, and cross-module `links`. A graph database (e.g., Neo4j) or an in-memory graph (e.g., TinkerPop) enables structural queries: "trace all callers of `UserService.findById`", "find all fields of type `java.time.LocalDate` across modules", "detect cycles in the interface hierarchy".
+- **Embeddings and vector search** — generate embedding vectors for method bodies, class names, or type signatures and store them in a vector index (e.g., HNSW via Lucene or a dedicated vector DB). This enables semantic queries: "find methods semantically similar to `validateAndPersist`", "find classes that behave like a repository", "suggest boilerplate generators by example". Embeddings can be produced offline (e.g., by an LLM) or at generation time.
+- **LLM analysis** — feed `SourceMetadata` trees (or projections thereof) to an LLM for code-summarization, documentation generation, architectural review, or test-generation prompts. Because the metadata is structured and wayhash-keyed, LLM analysis can be cached and invalidated together with the source file.
+
+These approaches are not mutually exclusive. A practical stack might combine a Lucene index for fast textual lookup, a knowledge graph for structural reasoning, and an LLM layer for semantic synthesis. The metadata cache (DEC-W006) acts as the single source of truth; the analysis layer indexes or consumes from the cache rather than re-parsing source.
+
 ## Alternatives considered
 
 - **Separate generator-only and runtime-only models with a one-time conversion step** — rejected because the conversion step becomes a maintenance burden and source of drift; any schema change must be duplicated.
@@ -134,8 +145,8 @@ The unified model is the unit stored in the metadata cache (DEC-W006). The cache
 - Positive: The metadata cache (DEC-W006) stores one `SourceMetadata` tree per wayhash, which all consumers reuse.
 - Positive: Runtime `TypeResolver` gains method and modifier visibility without breaking existing field-only consumers.
 - Negative: The unified model is larger than the current entity-only model; serialization and cache size must be monitored.
-- Negative: All existing generator code that walks JavaParser AST directly must migrate to the tree model or accept a deprecation path.
-- Follow-up: Define the serialization format for `SourceMetadata` (protobuf, flatbuffers, or compact binary) and the on-disk layout (directory-per-wayhash or log-structured).
+- Generators continue to use JavaParser AST for source manipulation, while the metadata model provides a rich structural overview for decision-making. Utility code must exist to map metadata items back to AST positions when deeper inspection is required.
+- Follow-up: Define the serialization format for `SourceMetadata`. **Apache Fury/Fory** is the preferred candidate for serialization and deserialization of metadata because it provides zero-copy, schema-evolution-safe, cross-language binary serialization with low overhead. Protobuf and flatbuffers remain fallback options if Fury integration is not feasible.
 - Follow-up: Add cache hit-rate and eviction-rate metrics to the agent daemon observability layer.
 - Follow-up: Migrate `EntityMetadataGenerator` to produce `EntityMeta`/`ViewMeta` as projections from `SourceMetadata` and validate JSON compatibility.
 
@@ -146,10 +157,12 @@ The unified model is the unit stored in the metadata cache (DEC-W006). The cache
 - Hot-swap of cache format versions — format changes require full cache invalidation for the affected module.
 - Integration with build-system caches (Maven local repository, Gradle build cache) — those are complementary but separate concerns.
 - Full Java AST equivalence — `SourceMetadata` is a semantic model, not a 1:1 AST mirror; syntax-level details (comments, formatting) are intentionally omitted.
+- Runtime analysis index (Lucene, knowledge graph, vector search, LLM) — those are complementary layers built on top of the metadata cache; the initial scope covers only metadata production and storage, not querying or analysis infrastructure.
 
 ## Acceptance criteria
 
 - `SourceMetadata` MUST represent file, import section, class, field, method, and parameter levels with modifiers, annotations, and type descriptors.
+- `SourceMetadata` MUST be serializable and deserializable with Apache Fury/Fory as the primary format, with protobuf/flatbuffers as fallback.
 - `TypeDescriptor` MUST support parameterized types, arrays, primitives, and type-use annotations.
 - `RuntimeTypeView` MUST expose fields, fieldTypes, methods, and modifiers in a form compatible with existing `TypeDefinition` consumers.
 - `TypeResolver.resolve()` MUST return `RuntimeTypeView` for known types and `null` for unknown types.
