@@ -37,6 +37,43 @@ Introduce a **unified source metadata model** in `hipster-entity-tooling` that d
 
 Both projections are derived from the same `SourceMetadata` instance, so they are always consistent.
 
+### Cache entry shape
+
+Each source file produces one `CacheEntry` record keyed by wayhash:
+
+```java
+public record CacheEntry(
+    byte[] hash,
+    String fullClassName,
+    String relativePath,
+    SourceMetadata metadata  // nullable: null during inventory phase
+) {}
+```
+
+`CacheEntry` lives in `hipster-entity-tooling.meta` alongside `EntityMeta`, `ViewMeta`, etc. The cache stores `CacheEntry` records keyed by wayhash. The `metadata` field is nullable: it is `null` during the inventory phase and populated later during enrichment.
+
+### Two-phase metadata population
+
+The cache supports two-phase population to avoid blocking the initial project-state snapshot on expensive parsing:
+
+1. **Inventory phase (single-threaded, fast):**
+   - Scan all source files in the module.
+   - Compute wayhash for each file.
+   - Write `CacheEntry(hash, fullClassName, relativePath, metadata=null)` to cache.
+   - Update module index.
+   - This phase must not invoke JavaParser or any expensive metadata generation.
+
+2. **Enrichment phase (multi-threaded):**
+   - Iterate over cache entries with `metadata == null`.
+   - Distribute entries across worker threads.
+   - Each thread parses source with JavaParser, builds `SourceMetadata` tree, and writes back to the existing `CacheEntry`.
+   - Index entries are updated atomically after metadata is written.
+
+**Contract for consumers:** All cache read APIs must handle `metadata == null` gracefully:
+- `get(hash)` returns a `CacheEntry` with `metadata == null`.
+- `get(hash, TypeMeta.class, "class:com.example.Foo")` returns `null` if `metadata` is absent.
+- Generators that require metadata must check for null and either skip or trigger enrichment.
+
 ### Metadata hierarchy
 
 Each `SourceMetadata` instance represents one compilation unit and contains:
@@ -47,14 +84,36 @@ Each `SourceMetadata` instance represents one compilation unit and contains:
 | Import section           | `ImportSectionMeta` | imports (static, wildcard, on-demand)                                                          |
 | Class / interface / enum | `TypeMeta`          | modifiers, annotations, type parameters, superclass, interfaces, nested types, fields, methods |
 | Field                    | `FieldMeta`         | modifiers, annotations, type descriptor, initializer                                           |
-| Method                   | `MethodMeta`        | modifiers, annotations, return type descriptor, type parameters, parameters, body summary      |
+| Record component         | `RecordComponentMeta` | name, type descriptor, annotations (sibling of `FieldMeta`)                                  |
+| Method                   | `MethodMeta`        | modifiers, annotations, return type descriptor, type parameters, parameters, called method signatures, range |
 | Parameter                | `ParameterMeta`     | modifiers, annotations, type descriptor, varargs, index                                        |
 
-All type references use the `TypeDescriptor` record (already present in `hipster-entity-tooling.meta`) extended with type-use annotation support.
+All type references use the `TypeDescriptor` record (moved to `hipster-entity-api.meta`) extended with type-use annotation support. Every descriptor that can carry Java modifiers includes a `Set<Modifier>` and a list of `AnnotationMeta`. Modern Java features are supported explicitly:
+
+- `List<String> permits` on `TypeMeta` for sealed class hierarchies.
+- `PatternMeta` for switch-expression analysis.
+- Type-use annotations on `TypeDescriptor` via `List<AnnotationMeta> annotations`.
+
+### Source-position Range
+
+Every descriptor (`FileMeta`, `ImportSectionMeta`, `TypeMeta`, `FieldMeta`, `RecordComponentMeta`, `MethodMeta`, `ParameterMeta`) includes a source-position range for mapping metadata back to AST positions:
+
+```java
+public record Range(int startLine, int endLine, int startColumn, int endColumn) {}
+```
+
+Line/column pairs are used because JavaParser natively provides line numbers, and line/column is standard for error reporting and IDE integration.
 
 ### Modifier and annotation coverage
 
-Every descriptor that can carry Java modifiers includes a `Set<Modifier>` (public, protected, private, abstract, static, final, sealed, non-sealed, etc.) and a list of `AnnotationMeta` (name + member values). This is mandatory at class, field, method, and parameter levels.
+Every descriptor carries `Set<Modifier>` (public, protected, private, abstract, static, final, sealed, non-sealed, etc.) and a list of `AnnotationMeta` (name + member values):
+
+```java
+public record AnnotationMeta(String qualifiedName, List<MemberValue> values) {}
+public record MemberValue(String name, String value) {}
+```
+
+`value` is the raw member value as a string for schema stability. The parsing layer resolves primitives, arrays, and nested annotations into this flat form.
 
 ### Generic / deep typing
 
@@ -110,47 +169,207 @@ for (MethodMeta method : clazz.methods()) {
 }
 ```
 
+### MetadataTypeResolver bridge
+
+`MetadataTypeResolver` bridges the existing `TypeResolver` API with the new metadata cache. It lives in `project-automation` as a sibling to `TypeResolver`:
+
+```java
+// In project-automation
+public interface MetadataTypeResolver extends TypeResolver {
+    void index(SourceMetadata metadata);
+}
+```
+
+It indexes all `TypeMeta` instances from cached `SourceMetadata` trees and returns `RuntimeTypeView` on `resolve()`. The existing `TypeDefinition`-based `TypeResolver` is deprecated in favor of this.
+
+`project-automation` depends on both `hipster-entity-api` and `hipster-entity-tooling`. `hipster-entity-api` must not depend on `hipster-entity-tooling` to avoid circular dependencies.
+
 ### Relationship to existing models
 
 - `EntityMeta`, `ViewMeta`, `EntityFieldMeta`, and `Property` are **projections** built on top of `SourceMetadata` by `EntityMetadataGenerator`. They are not replaced; they are reimplemented as adapters that walk the unified tree.
 - The JSON output of `EntityMetadataGenerator` remains byte-for-byte compatible with existing consumers. The internal parsing logic changes from ad-hoc JavaParser walks to tree construction followed by projection.
-- `TypeDescriptor` moves from `hipster-entity-tooling.meta` to a shared package (`hipster-entity-api.meta`) so that both runtime and generator code can reference it without a tooling dependency.
+- `TypeDescriptor` moves from `hipster-entity-tooling.meta` to `hipster-entity-api.meta` so that both runtime and generator code can reference it without a tooling dependency.
 
 ### Cache integration
 
-The unified model is the unit stored in the metadata cache (DEC-W006). The cache key is the file wayhash. The value is a `SourceMetadata` tree. Generators and runtime code read from the cache through typed accessors rather than deserializing the full tree when they need only a subset.
+The unified model is the unit stored in the metadata cache (DEC-W006). The cache key is the file wayhash. The value is a `CacheEntry` containing the full `SourceMetadata` tree plus `fullClassName` and `relativePath`. Generators and runtime code read from the cache through typed accessors rather than deserializing the full tree when they need only a subset.
 
-### Runtime analysis and querying
+Typed accessors are defined as:
 
-The `SourceMetadata` tree is not only a source for generators; it is also a substrate for runtime analysis of the project's code structure. Several complementary approaches are under consideration:
+```java
+<T extends MetadataNode> T get(byte[] hash, Class<T> type, String path);
+SourceMetadata get(byte[] hash);
+```
 
-- **Lucene / full-text index** — index method names, field names, annotations, and type signatures to support fast textual queries (e.g., "find all classes with a method named `handle`", "find all classes annotated with `@Entity`"). Lucene is a natural fit because the metadata is already tree-structured and can be flattened into searchable documents.
-- **Knowledge graph** — model types, methods, fields, and their cross-module references as a graph. Nodes represent classes/methods/fields; edges represent `extends`, `implements`, `calls`, `returns`, `annotates`, and cross-module `links`. A graph database (e.g., Neo4j) or an in-memory graph (e.g., TinkerPop) enables structural queries: "trace all callers of `UserService.findById`", "find all fields of type `java.time.LocalDate` across modules", "detect cycles in the interface hierarchy".
-- **Embeddings and vector search** — generate embedding vectors for method bodies, class names, or type signatures and store them in a vector index (e.g., HNSW via Lucene or a dedicated vector DB). This enables semantic queries: "find methods semantically similar to `validateAndPersist`", "find classes that behave like a repository", "suggest boilerplate generators by example". Embeddings can be produced offline (e.g., by an LLM) or at generation time.
-- **LLM analysis** — feed `SourceMetadata` trees (or projections thereof) to an LLM for code-summarization, documentation generation, architectural review, or test-generation prompts. Because the metadata is structured and wayhash-keyed, LLM analysis can be cached and invalidated together with the source file.
+`MetadataNode` is a marker interface implemented by all descriptors (`FileMeta`, `TypeMeta`, etc.). The cache returns the exact descriptor type, not a generic `Object` or `JsonNode`.
 
-These approaches are not mutually exclusive. A practical stack might combine a Lucene index for fast textual lookup, a knowledge graph for structural reasoning, and an LLM layer for semantic synthesis. The metadata cache (DEC-W006) acts as the single source of truth; the analysis layer indexes or consumes from the cache rather than re-parsing source.
+`get(hash, level, path)` returns the node at the specified path within the entry, or `null` if `metadata` is absent or the path is absent. `put(hash, level, path, value)` writes into the tree at the specified path within the entry, creating the tree if absent.
 
-## Alternatives considered
+### Java module vs Maven module
+
+`FileMeta` module fields are split to avoid conflating Java 9+ module declarations with Maven coordinates:
+
+- `String javaModule` — the `module` name from `module-info.java`, or `null` if not present.
+- `String mavenModule` — the Maven coordinate (`groupId:artifactId`), injected by the watcher layer, not parsed from source.
+
+### Serialization schema versioning
+
+Apache Fury/Fory is the preferred serialization format, with protobuf and flatbuffers as fallbacks. Schema evolution is required:
+
+```java
+public interface MetadataSerializer {
+    byte[] serialize(SourceMetadata metadata);
+    SourceMetadata deserialize(byte[] bytes, int expectedVersion) throws MetadataSchemaException;
+}
+```
+
+`int schemaVersion` on `SourceMetadata` enables fallback for incompatible on-disk formats. Fury's built-in schema evolution is primary; the version field enables graceful degradation.
+
+### Migration path for EntityMetadataGenerator
+
+The migration from ad-hoc JavaParser walks to `SourceMetadata` projection occurs in four phases:
+
+1. **Dual-write phase:** `EntityMetadataGenerator` writes both the legacy JSON and the new `SourceMetadata` tree to the cache. Existing JSON consumers are unaffected.
+2. **Validation phase:** Run both paths in parallel and assert byte-for-byte JSON compatibility.
+3. **Cutover phase:** Once validated, `EntityMetadataGenerator` reads `SourceMetadata` from cache and projects to JSON. Direct JavaParser walks are removed.
+4. **Cleanup phase:** Deprecate and remove legacy JSON output paths.
+
+### Cross-module references
+
+References to types, fields, or methods in other modules are stored as qualified links that include the producing file's relative path:
+
+```
+<moduleKey>::<relativePath>#<memberPath>@<hash>
+```
+
+- `moduleKey` identifies the producing Maven module (e.g., `com.example:core`).
+- `relativePath` is the path from the project root to the source file (e.g., `core/src/main/java/com/example/Foo.java`).
+- `memberPath` is the hierarchical path within the file. Format:
+  - Class: `class:<simpleName>`
+  - Field: `class:<simpleName>.field:<name>`
+  - Method: `class:<simpleName>.method:<name>(<paramTypeList>)`
+  - Parameter: `class:<simpleName>.method:<name>(<paramTypeList>).param:<index>`
+- `hash` is the **wayhash** of the producing file at the time the reference was recorded.
+
+Including `relativePath` disambiguates references because class names are not unique within a module. It also allows stale-link detection even when class names collide.
+
+### Per-module index for searchability
+
+Each module maintains a single `index.fury` file that maps:
+- `relativePath` → `hash`
+- `fullClassName` → `hash` (stored as a list to handle collisions)
+- `hash` → `CacheEntry`
+
+The index is updated atomically when entries are written or invalidated. Cleanup uses the index to determine which hashes are absent from the current project state.
+
+### Data flow (cache lifecycle)
+
+#### Inventory phase (fast, single-threaded)
+
+```
+Scan project source files
+       |
+       v
+For each file:
+  Compute wayhash of source bytes
+  Build CacheEntry(hash, fullClassName, relativePath, metadata=null)
+  Write CacheEntry to cache directory: <module>/.cache/<hash>.fury
+  Update module index: relativePath -> hash, fullClassName -> hash, hash -> CacheEntry
+```
+
+#### Enrichment phase (parallel, multi-threaded)
+
+```
+Iterate over cache entries with metadata == null
+       |
+       v
+Distribute entries across worker threads
+       |
+       v
+Each thread:
+  Read source bytes for assigned entries
+  Parse source with JavaParser
+  Build SourceMetadata tree
+  Write back to existing CacheEntry (atomic update)
+  Update module index atomically
+```
+
+#### Read path (consumer)
+
+```
+Generator reads CacheEntry via MetadataCache
+  - get(hash) -> CacheEntry (metadata may be null)
+  - If metadata == null:
+      - Return empty/default result
+      - OR trigger async enrichment
+      - OR block until enriched (policy decision)
+  - If metadata != null:
+      - get(hash, TypeMeta.class, "class:com.example.Foo") -> specific TypeMeta
+      - link(fromHash, toModule, toRelativePath, toMemberPath) -> record cross-module ref
+```
+
+#### Cleanup (on full recompile / overflow)
+
+```
+Current project state (set of relativePaths)
+       |
+       v
+For each hash in module index:
+  - If hash not in current state AND older than retention window -> evict
+  - If hash not in current state but within retention window -> keep (branch-switch reuse)
+  - If hash in current state -> keep
+```
+
+### Module ownership and dependencies
+
+| Component | Module | Depends on |
+|-----------|--------|------------|
+| `CacheEntry`, `SourceMetadata`, descriptors | `hipster-entity-tooling` | `hipster-entity-api` |
+| `TypeDescriptor`, `AnnotationMeta`, `Range` | `hipster-entity-api` | - |
+| `MetadataTypeResolver`, `MetadataSerializer`, `MetadataCache` interface, `MetadataNode` | `project-automation` | `hipster-entity-api` |
+| `MetadataCache` implementation, `index.fury` handling | `project-automation` | `hipster-entity-tooling` |
+| `EntityMetadataGenerator` migration | `hipster-entity-tooling` | `hipster-entity-api`, `project-automation` |
+
+`hipster-entity-api` must not depend on `hipster-entity-tooling`. `project-automation` depends on both modules and is the correct owner for `MetadataTypeResolver`.
+
+### MethodMeta body summary semantics
+
+"Body summary" is replaced with `List<String> calledMethodSignatures` — a list of method signatures called from the method body. This is deterministic, hashable, and useful for dependency tracking. Only direct calls from the method body are included; inherited or interface method calls are excluded because they require full hierarchy resolution and are less safe for caching.
+
+### Alternatives considered
 
 - **Separate generator-only and runtime-only models with a one-time conversion step** — rejected because the conversion step becomes a maintenance burden and source of drift; any schema change must be duplicated.
 - **Use Java reflection as the runtime model and JavaParser AST as the generator model** — rejected because reflection is unavailable at generation time for uncompiled source, and AST shapes are too low-level for runtime consumers.
 - **JSON as the interchange format between generator and runtime** — rejected because JSON loses type safety and requires schema versioning; a Java record model is simpler and type-safe across the same JVM.
 - **Keep the current ad-hoc `EntityMetadataGenerator` parsing and add method metadata only** — rejected because it would continue the pattern of special-casing entity interfaces while leaving plain classes and other generators without method/parameter metadata.
 
-## Consequences
+### Consequences
 
 - Positive: A single source of truth for source metadata; generators and runtime code share the same parsed representation.
 - Positive: Method, parameter, modifier, and annotation metadata is available to all generators without per-generator JavaParser boilerplate.
-- Positive: The metadata cache (DEC-W006) stores one `SourceMetadata` tree per wayhash, which all consumers reuse.
+- Positive: The metadata cache (DEC-W006) stores one `CacheEntry` per wayhash, which all consumers reuse.
 - Positive: Runtime `TypeResolver` gains method and modifier visibility without breaking existing field-only consumers.
+- Positive: Two-phase population enables fast project-state snapshots, parallel metadata generation, and graceful degradation when metadata is not yet available.
 - Negative: The unified model is larger than the current entity-only model; serialization and cache size must be monitored.
+- Negative: Cross-module links require `relativePath` disambiguation, adding path length to each link.
+- Negative: The cache must handle `metadata == null` gracefully in all read paths.
 - Generators continue to use JavaParser AST for source manipulation, while the metadata model provides a rich structural overview for decision-making. Utility code must exist to map metadata items back to AST positions when deeper inspection is required.
 - Follow-up: Define the serialization format for `SourceMetadata`. **Apache Fury/Fory** is the preferred candidate for serialization and deserialization of metadata because it provides zero-copy, schema-evolution-safe, cross-language binary serialization with low overhead. Protobuf and flatbuffers remain fallback options if Fury integration is not feasible.
 - Follow-up: Add cache hit-rate and eviction-rate metrics to the agent daemon observability layer.
 - Follow-up: Migrate `EntityMetadataGenerator` to produce `EntityMeta`/`ViewMeta` as projections from `SourceMetadata` and validate JSON compatibility.
 
-## Out of scope
+### Future extensions
+
+The `SourceMetadata` tree is not only a source for generators; it is also a substrate for runtime analysis of the project's code structure. Several complementary approaches are under consideration:
+
+- **Lucene / full-text index** — index method names, field names, annotations, and type signatures to support fast textual queries.
+- **Knowledge graph** — model types, methods, fields, and their cross-module references as a graph for structural queries.
+- **Embeddings and vector search** — generate embedding vectors for method bodies and class names for semantic queries.
+- **LLM analysis** — feed `SourceMetadata` trees to an LLM for code-summarization, documentation generation, and test-generation prompts.
+
+These approaches depend on the metadata model defined here but are not part of this decision.
+
+### Out of scope
 
 - Remote or distributed cache — the initial scope is local disk, per-module, per-JVM.
 - Cache encryption or access control — this is a developer-time artifact, not a runtime dependency.
@@ -159,13 +378,49 @@ These approaches are not mutually exclusive. A practical stack might combine a L
 - Full Java AST equivalence — `SourceMetadata` is a semantic model, not a 1:1 AST mirror; syntax-level details (comments, formatting) are intentionally omitted.
 - Runtime analysis index (Lucene, knowledge graph, vector search, LLM) — those are complementary layers built on top of the metadata cache; the initial scope covers only metadata production and storage, not querying or analysis infrastructure.
 
-## Acceptance criteria
+### Acceptance criteria
 
-- `SourceMetadata` MUST represent file, import section, class, field, method, and parameter levels with modifiers, annotations, and type descriptors.
+- `SourceMetadata` MUST represent file, import section, class, field, method, record component, and parameter levels with modifiers, annotations, type descriptors, and source-position ranges.
 - `SourceMetadata` MUST be serializable and deserializable with Apache Fury/Fory as the primary format, with protobuf/flatbuffers as fallback.
 - `TypeDescriptor` MUST support parameterized types, arrays, primitives, and type-use annotations.
+- `CacheEntry` MUST store `hash`, `fullClassName`, `relativePath`, and nullable `metadata` keyed by wayhash.
+- The cache MUST support two-phase population: inventory (fast, no parsing) followed by enrichment (parallel parsing).
+- Cross-module references MUST use `<moduleKey>::<relativePath>#<memberPath>@<hash>` format.
+- Each module MUST maintain a per-module index mapping `relativePath` → `hash`, `fullClassName` → `hash`, `hash` → `CacheEntry`.
 - `RuntimeTypeView` MUST expose fields, fieldTypes, methods, and modifiers in a form compatible with existing `TypeDefinition` consumers.
 - `TypeResolver.resolve()` MUST return `RuntimeTypeView` for known types and `null` for unknown types.
+- `CodeContext` MUST provide `getSourceMetadata()` returning the `SourceMetadata` for the current file context.
 - Generators MUST be able to navigate `SourceMetadata` to access class, method, and parameter metadata without parsing Java source directly.
 - The metadata cache MUST store and retrieve `SourceMetadata` keyed by file wayhash.
 - Existing `EntityMetadataGenerator` JSON output MUST remain byte-for-byte compatible after migration to the unified model.
+
+### Edge cases and failure modes
+
+| Edge case | Behavior |
+|-----------|----------|
+| Duplicate class names in same module | Index keyed by `fullClassName` must handle collisions. The index stores `fullClassName` → list of hashes; lookup requires `relativePath` disambiguation. |
+| File deleted then restored within retention window | Cache hit on restored file if wayhash is still present. Cleanup does not evict. |
+| Corrupted `index.fury` | Rebuild index by scanning all `<hash>.fury` files in the module cache directory. Recovery mode, not happy path. |
+| Concurrent cache writes | Per-module cache directory and index. Writers use atomic rename. Index updates are single-writer per module (the watcher daemon). Enrichment threads write to distinct `CacheEntry` files, so they do not conflict. |
+| Non-Java resources | `CacheEntry.fullClassName` is `null`. `SourceMetadata` is empty or contains only `FileMeta` with package/module info. Optional future extension. |
+| Java 9+ `module-info.java` | Parsed as a special `TypeMeta` with `kind=MODULE`. `javaModule` is set on `FileMeta`. |
+| Schema version mismatch | `MetadataSerializer.deserialize` checks `schemaVersion`. If incompatible, throw `MetadataSchemaException` and fall back to re-parsing source. |
+| Metadata absent (`metadata == null`) | All cache read APIs return `null` or empty results instead of throwing. Generators that require metadata must check for null and either skip, return defaults, or trigger enrichment. |
+| Enrichment thread failure | If a worker thread fails to parse a file, the `CacheEntry` remains with `metadata == null`. The enrichment scheduler retries failed entries in the next cycle. |
+| Stale index after enrichment | After a thread writes enriched metadata, the index must be updated atomically. If the index update fails, the entry exists on disk but is unreachable by lookup; cleanup on the next full recompile will either find it via directory scan or leave it for manual recovery. |
+
+### Validation plan
+
+1. **Unit tests:** `CacheEntry` serialization/deserialization round-trip with Fury preserves all fields including `hash`, `fullClassName`, `relativePath`, and nullable `metadata`.
+2. **Index tests:** Lookup by `relativePath`, `fullClassName`, and `hash` returns the correct `CacheEntry`. Collision test: two classes with same simple name but different paths resolve to different entries.
+3. **Cross-module link tests:** A link in module A pointing to module B `relativePath` is recognized as stale when module B's file wayhash changes.
+4. **Cleanup tests:** Files removed from project state are retained within retention window and evicted after it. Restored files within retention window hit cache.
+5. **Migration tests:** `EntityMetadataGenerator` dual-write produces identical JSON to legacy path. After cutover, JSON output is byte-for-byte compatible.
+6. **TypeResolver tests:** `MetadataTypeResolver.index()` populates correctly. `resolve("com.example.Foo")` returns `RuntimeTypeView` with fields, methods, and modifiers.
+7. **Two-phase population tests:**
+   - After inventory phase, all source files have `CacheEntry` records with `metadata == null`.
+   - Index contains all entries; lookups by path and classname work before enrichment.
+   - After enrichment phase, all `CacheEntry` records have non-null `metadata`.
+   - Partial enrichment (some threads fail) leaves only failed entries with `metadata == null`; all others are populated.
+8. **Concurrent enrichment tests:** Multiple threads enrich distinct entries simultaneously. No data corruption or lost updates. Index updates are atomic.
+9. **Absent-metadata consumer tests:** Generators that call `get(hash, TypeMeta.class, path)` on an unenriched entry receive `null` and handle it without throwing.

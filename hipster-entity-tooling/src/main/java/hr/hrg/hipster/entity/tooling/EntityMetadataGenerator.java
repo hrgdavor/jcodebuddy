@@ -17,7 +17,7 @@ import hr.hrg.hipster.entity.tooling.meta.EntityFieldMeta;
 import hr.hrg.hipster.entity.tooling.meta.EntityMeta;
 import hr.hrg.hipster.entity.tooling.meta.InterfaceInfo;
 import hr.hrg.hipster.entity.tooling.meta.Property;
-import hr.hrg.hipster.entity.tooling.meta.TypeDescriptor;
+import hr.hrg.hipster.entity.api.meta.TypeDescriptor;
 import hr.hrg.hipster.entity.tooling.meta.ViewAttributes;
 import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
 
@@ -132,7 +132,7 @@ public class EntityMetadataGenerator {
             } else {
                 typeName = classLiteral(type);
             }
-            return new TypeDescriptor(typeName, List.of(), array, primitive);
+            return new TypeDescriptor(typeName, List.of(), array, primitive, List.of());
         }
 
         String raw = type.substring(0, genericStart).trim();
@@ -144,7 +144,7 @@ public class EntityMetadataGenerator {
             args.add(parseTypeDescriptor(g));
         }
 
-        return new TypeDescriptor(classLiteral(raw), args, array, false);
+        return new TypeDescriptor(classLiteral(raw), args, array, false, List.of());
     }
 
     private static void appendJsonType(StringBuilder sb, TypeDescriptor td, boolean trailingComma, int indent) {

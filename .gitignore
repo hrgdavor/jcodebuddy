@@ -41,3 +41,4 @@ jswa-core/node_modules
 build_output.txt
 cross_verify.bin
 intellij-jswa/.gradle
+.kilo/plans

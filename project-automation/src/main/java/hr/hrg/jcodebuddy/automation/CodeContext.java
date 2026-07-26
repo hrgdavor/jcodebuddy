@@ -13,4 +13,6 @@ public interface CodeContext {
     String getIndent();
 
     TypeResolver getTypeResolver();
+
+    SourceMetadata getSourceMetadata();
 }
