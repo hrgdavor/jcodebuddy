@@ -13,13 +13,9 @@ import java.io.*;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
 import java.net.StandardSocketOptions;
-import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.LinkedHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -157,18 +153,7 @@ public class UnixSocketTransport {
             Object req = fory.deserialize(payload);
             JsonRpcRequest jReq = mapper.convertValue(req, JsonRpcRequest.class);
             JsonRpcResponse res = dispatcher.dispatch(jReq);
-            Map<String, Object> resMap = new java.util.LinkedHashMap<>();
-            resMap.put("jsonrpc", res.jsonrpc);
-            resMap.put("id", res.id);
-            if (res.error != null) {
-                Map<String, Object> errMap = new java.util.LinkedHashMap<>();
-                errMap.put("code", res.error.code);
-                errMap.put("message", res.error.message);
-                resMap.put("error", errMap);
-            } else {
-                resMap.put("result", res.result);
-            }
-            byte[] outBytes = fory.serialize(resMap);
+            byte[] outBytes = fory.serialize(res);
             dos.writeInt(outBytes.length);
             dos.write(outBytes);
             dos.flush();

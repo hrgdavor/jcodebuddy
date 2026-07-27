@@ -84,13 +84,13 @@ Fory.builder()
 
 ## Open Questions / Possible Long-Term Solutions
 
-| Option | Effort | Trade-off |
-|--------|--------|-----------|
-| **Keep Map-based serialization** | Low | Works but loses type safety; response shape is not encoded in the type system |
-| **Implement custom `Serializer<JsonRpcResponse>`** | Medium | Restores type safety but adds boilerplate; need to maintain parity across client/server |
-| **Use Fory with explicit schema/metadata sharing** | Medium | May resolve null-handling; requires `metaShareEnabled` and consistent class registration |
-| **Switch to protobuf/FlatBuffers** | High | More robust but breaks JSON compatibility and adds build-time schema steps |
-| **Upgrade Fory version** | Low-Medium | 1.3.0 is recent; a newer patch may fix the `DeferedLazySerializer` NPE |
+| Option                                             | Effort     | Trade-off                                                                                |
+| -------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
+| **Keep Map-based serialization**                   | Low        | Works but loses type safety; response shape is not encoded in the type system            |
+| **Implement custom `Serializer<JsonRpcResponse>`** | Medium     | Restores type safety but adds boilerplate; need to maintain parity across client/server  |
+| **Use Fory with explicit schema/metadata sharing** | Medium     | May resolve null-handling; requires `metaShareEnabled` and consistent class registration |
+| **Switch to protobuf/FlatBuffers**                 | High       | More robust but breaks JSON compatibility and adds build-time schema steps               |
+| **Upgrade Fory version**                           | Low-Medium | 1.3.0 is recent; a newer patch may fix the `DeferedLazySerializer` NPE                   |
 
 ## Impact
 

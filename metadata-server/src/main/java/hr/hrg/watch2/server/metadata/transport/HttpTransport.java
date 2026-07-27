@@ -12,7 +12,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.util.Map;
-import java.util.LinkedHashMap;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -89,18 +88,7 @@ public class HttpTransport {
                 Object req = fory.deserialize(body);
                 JsonRpcRequest jReq = mapper.convertValue(req, JsonRpcRequest.class);
                 JsonRpcResponse res = dispatcher.dispatch(jReq);
-                Map<String, Object> resMap = new LinkedHashMap<>();
-                resMap.put("jsonrpc", res.jsonrpc);
-                resMap.put("id", res.id);
-                if (res.error != null) {
-                    Map<String, Object> errMap = new LinkedHashMap<>();
-                    errMap.put("code", res.error.code);
-                    errMap.put("message", res.error.message);
-                    resMap.put("error", errMap);
-                } else {
-                    resMap.put("result", res.result);
-                }
-                byte[] out = fory.serialize(resMap);
+                byte[] out = fory.serialize(res);
                 exchange.getResponseHeaders().set("Content-Type", "application/x-fory");
                 exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
                 exchange.sendResponseHeaders(200, out.length);
