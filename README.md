@@ -2,7 +2,7 @@
 
 **Project Overview**
 
-**JCodeBuddy** is a sophisticated development orchestration framework for Java that automates the synchronization between project structure and source code. Unlike traditional annotation processing, which is isolated and happens during the compilation phase, JCodeBuddy utilizes **JavaParser** to enable **cooperative code generation**. This allows generators to work together, sharing state and context to produce complex, interrelated code structures.
+**JCodeBuddy** is a development buddy(companion) for Java that automates the synchronization between project structure and source code. Unlike traditional annotation processing, which is isolated and happens during the compilation phase, JCodeBuddy utilizes **JavaParser** to enable **cooperative code generation**. This allows code generators to work together, sharing state and context to produce code structures in cooperation with the developer.
 
 To ensure a seamless developer experience, the framework integrates **real-time file watching**. This creates a "live" development loop where changes to the project structure or configuration are immediately detected and reflected in the codebase via the cooperative generators.
 
