@@ -6,6 +6,14 @@
 
 To ensure a seamless developer experience, the framework integrates **real-time file watching**. This creates a "live" development loop where changes to the project structure or configuration are immediately detected and reflected in the codebase via the cooperative generators.
 
+## Project Scope & Current State
+
+JCodeBuddy is designed as a **project automation and boilerplate generation** engine for Java. Its primary purpose is to eliminate repetitive coding tasks by generating and synchronizing code structures based on project configuration.
+
+The project is currently in **early development**. What was originally intended as separate ecosystem projects — namely the **`hipster-entity`** (entity/DTO generation) and **`hipster-ioc`** (dependency injection container) modules — are temporarily integrated into this repository for faster iteration. Both modules are designed to use JCodeBuddy as their development-assistance engine, leveraging the cooperative code generation and live-watch capabilities to drive their own scaffolding and infrastructure code.
+
+Once the core framework stabilizes, these modules will be extracted back into dedicated repositories.
+
 ## `project-automation` Architectural Convention
 
 The project recommends a **multi-module Maven structure** to incentivize modularity and maintain a clear separation of concerns:
