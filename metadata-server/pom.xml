@@ -11,44 +11,24 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>project-automation</artifactId>
+    <artifactId>metadata-server</artifactId>
     <packaging>jar</packaging>
 
-    <name>project-automation</name>
-    <description>Dev-time orchestrator: contains project-specific generators, watchers, and LSP sidecar wiring.</description>
+    <name>metadata-server</name>
+    <description>Metadata cache access via JSON-RPC and Apache Fory over HTTP/Unix sockets</description>
 
     <dependencies>
         <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>hipster-entity-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>java-watch-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>jwa-builder</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>hipster-entity-tooling</artifactId>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.github.javaparser</groupId>
-            <artifactId>javaparser-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>metadata-server</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>metadata-mcp-server</artifactId>
+            <groupId>org.apache.fory</groupId>
+            <artifactId>fory-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -61,4 +41,25 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>junit5</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+    </profiles>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

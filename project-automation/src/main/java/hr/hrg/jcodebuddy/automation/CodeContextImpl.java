@@ -14,4 +14,34 @@ public record CodeContextImpl(Path root, Path file, int line, String indent, Typ
     public CodeContextImpl(Path root, Path file, int line) {
         this(root, file, line, "    ");
     }
+
+    @Override
+    public Path getRootPath() {
+        return root;
+    }
+
+    @Override
+    public Path getFilePath() {
+        return file;
+    }
+
+    @Override
+    public int getLine() {
+        return line;
+    }
+
+    @Override
+    public String getIndent() {
+        return indent;
+    }
+
+    @Override
+    public TypeResolver getTypeResolver() {
+        return typeResolver;
+    }
+
+    @Override
+    public SourceMetadata getSourceMetadata() {
+        return sourceMetadata;
+    }
 }
