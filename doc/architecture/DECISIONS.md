@@ -40,5 +40,6 @@ Architecture decisions are organized individually in the [decisions](decisions/)
 | [DEC-W005](decisions-watch/DEC-W005.md) | Code generation interface contract (CodeGenerator/CodeContext) | Accepted |
 | [DEC-W006](decisions-watch/DEC-W006.md) | Metadata cache with per-hash invalidation and cross-module reference tracking | Proposed |
 | [DEC-W007](decisions-watch/DEC-W007.md) | Unified source metadata model for generators and runtime | Proposed |
+| [DEC-W008](decisions-watch/DEC-W008.md) | Metadata parsing without cache as manual-mode fallback and dependency-free tool path | Proposed |
 
 See individual decision files in [decisions/](decisions/) and [decisions-watch/](decisions-watch/) for complete details.

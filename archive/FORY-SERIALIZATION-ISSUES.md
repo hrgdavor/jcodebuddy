@@ -82,27 +82,51 @@ Fory.builder()
 - `withNumberCompressed(true)` — reduces payload size for numeric IDs
 - `withRefTracking(false)` — disables object reference tracking which can introduce lazy serializers
 
+## Resolution: Explicit Type Registration
+
+The root cause was that Fory's `DeferedLazySerializer` was being invoked for types it hadn't been explicitly told about. The fix was straightforward: **register all custom types explicitly on the `Fory` instance** before serializing them.
+
+### The Fix
+
+Both `HttpTransport` and `UnixSocketTransport` already had the registration calls in their constructors:
+
+```java
+this.fory = Fory.builder().withNumberCompressed(true).withRefTracking(false).build();
+this.fory.register(JsonRpcRequest.class);
+this.fory.register(JsonRpcResponse.class);
+this.fory.register(JsonRpcError.class);
+this.fory.register(MetadataProvider.CacheEntry.class);
+```
+
+The `fory.register(Class)` call tells Fory to build a proper serializer for the type upfront, bypassing the `DeferedLazySerializer` path entirely. However, the `LinkedHashMap` workaround was still being used in the serialization code despite the registrations being in place.
+
+**Changes made:**
+
+1. **`HttpTransport.java`** (`ForyHandler.handle`): Replaced the `LinkedHashMap` workaround with direct `fory.serialize(res)` — the type was already registered.
+2. **`UnixSocketTransport.java`** (`handleFory`): Same change — replaced the `LinkedHashMap` workaround with direct `fory.serialize(res)`.
+3. Removed unused imports (`LinkedHashMap` from HttpTransport, `Map` and `LinkedHashMap` from UnixSocketTransport).
+
+### Key Insight
+
+`fory.register(ClassName.class)` is not optional — it is **required** for custom types with nullable fields. Without explicit registration, Fory falls back to `DeferedLazySerializer` which does not handle `null` fields gracefully. The `LinkedHashMap` workaround was a valid temporary mitigation but is no longer needed once registration is in place.
+
+## Impact
+
+- **Functionality:** All transports are operational (JSON + Fory over HTTP, JSON over Unix sockets).
+- **Performance:** Direct serialization of `JsonRpcResponse` is now used, restoring Fory's zero-copy benefits for custom types.
+- **Maintenance:** The `LinkedHashMap` boilerplate (~10 lines per response) has been removed. No manual sync needed when RPC fields change.
+
 ## Open Questions / Possible Long-Term Solutions
 
 | Option                                             | Effort     | Trade-off                                                                                |
 | -------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
-| **Keep Map-based serialization**                   | Low        | Works but loses type safety; response shape is not encoded in the type system            |
 | **Implement custom `Serializer<JsonRpcResponse>`** | Medium     | Restores type safety but adds boilerplate; need to maintain parity across client/server  |
 | **Use Fory with explicit schema/metadata sharing** | Medium     | May resolve null-handling; requires `metaShareEnabled` and consistent class registration |
 | **Switch to protobuf/FlatBuffers**                 | High       | More robust but breaks JSON compatibility and adds build-time schema steps               |
 | **Upgrade Fory version**                           | Low-Medium | 1.3.0 is recent; a newer patch may fix the `DeferedLazySerializer` NPE                   |
 
-## Impact
-
-- **Functionality:** All transports are operational (JSON + Fory over HTTP, JSON over Unix sockets).
-- **Performance:** Fory serialization via `LinkedHashMap` is still faster than Jackson JSON for binary transport, but we lose some of the zero-copy benefits.
-- **Maintenance:** The `LinkedHashMap` workaround adds ~10 lines of boilerplate per response. Must be kept in sync if new RPC error fields are added.
-
 ## Recommendation
 
-If Fory serialization of custom types is a hard requirement, the next concrete step should be to:
-
-1. Try enabling `withMetaShare(true)` + `withScopedMetaShare(true)` on both client and server Fory instances.
-2. If that fails, implement a minimal `Serializer<JsonRpcResponse>` and register it explicitly via `registerSerializerAndType(JsonRpcResponse.class, Serializer.class)`.
-
-Otherwise, if the Map-based workaround is acceptable, document it in the architecture decisions and move on.
+The explicit type registration approach (`fory.register()`) resolved the issue completely. No further action is required unless:
+1. New custom types are added — they must be registered on the `Fory` instance.
+2. A future Fory version fixes the `DeferedLazySerializer` NPE, at which point registration may become optional.

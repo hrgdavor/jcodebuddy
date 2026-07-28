@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-07-24
 - Owners: project
-- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [hipster-entity-tooling](../README.md), [hipster-entity-api](../README.md), [project-automation](../README.md)
+- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [DEC-W008: Metadata parsing without cache](DEC-W008.md), [DEC-W009: In-RAM metadata relations storage](DEC-W009.md), [hipster-entity-tooling](../README.md), [hipster-entity-api](../README.md), [project-automation](../README.md)
 - Supersedes: -
 - Superseded by: -
 
@@ -39,14 +39,15 @@ Both projections are derived from the same `SourceMetadata` instance, so they ar
 
 ### Cache entry shape
 
-Each source file produces one `CacheEntry` record keyed by wayhash:
+Each source file produces one `CacheEntry` record keyed by wayhash. The `SourceMetadata` tree inside a `CacheEntry` MUST contain only information that can be derived from parsing the file's own source bytes alone. Information that requires reading other files (e.g., resolved type definitions from imported classes, annotation processor inventories, RPC method registries) MUST NOT be stored in `SourceMetadata`.
 
 ```java
 public record CacheEntry(
     byte[] hash,
     String fullClassName,
     String relativePath,
-    SourceMetadata metadata  // nullable: null during inventory phase
+    SourceMetadata metadata,  // nullable: null during inventory phase; file-local only
+    byte[] dependencyHash     // hash of all files whose metadata contributed to correlation data; null if no correlation data exists
 ) {}
 ```
 
@@ -59,14 +60,14 @@ The cache supports two-phase population to avoid blocking the initial project-st
 1. **Inventory phase (single-threaded, fast):**
    - Scan all source files in the module.
    - Compute wayhash for each file.
-   - Write `CacheEntry(hash, fullClassName, relativePath, metadata=null)` to cache.
+   - Write `CacheEntry(hash, fullClassName, relativePath, metadata=null, dependencyHash=null)` to cache.
    - Update module index.
    - This phase must not invoke JavaParser or any expensive metadata generation.
 
 2. **Enrichment phase (multi-threaded):**
    - Iterate over cache entries with `metadata == null`.
    - Distribute entries across worker threads.
-   - Each thread parses source with JavaParser, builds `SourceMetadata` tree, and writes back to the existing `CacheEntry`.
+   - Each thread parses source with JavaParser, builds `SourceMetadata` tree, and writes back to the existing `CacheEntry` with `dependencyHash=null`.
    - Index entries are updated atomically after metadata is written.
 
 **Contract for consumers:** All cache read APIs must handle `metadata == null` gracefully:
@@ -204,6 +205,14 @@ SourceMetadata get(byte[] hash);
 `MetadataNode` is a marker interface implemented by all descriptors (`FileMeta`, `TypeMeta`, etc.). The cache returns the exact descriptor type, not a generic `Object` or `JsonNode`.
 
 `get(hash, level, path)` returns the node at the specified path within the entry, or `null` if `metadata` is absent or the path is absent. `put(hash, level, path, value)` writes into the tree at the specified path within the entry, creating the tree if absent.
+
+### Correlation metadata stored outside cache entries
+
+`SourceMetadata` contains only information derivable from the file's own source bytes. Any metadata that requires reading other files — annotation collector indexes, RPC method inventories, cross-file dependency graphs — MUST be stored as correlation metadata outside the `CacheEntry`.
+
+Correlation metadata is keyed by a `dependencyHash`, which is a wayhash computed from the sorted concatenation of all constituent file wayhashes. When any constituent file changes, its wayhash changes, the `dependencyHash` changes, and the correlation metadata is recognized as stale and recalculated.
+
+Correlation metadata MUST be calculated on the fly and is unlikely to be cached persistently. It MAY be held in an in-memory index with fast rebuild capability. The in-memory index SHOULD use an arena allocator to minimize heap allocations and allow efficient invalidation of entire subtrees when a file's wayhash changes.
 
 ### Java module vs Maven module
 

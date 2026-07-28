@@ -65,6 +65,7 @@
         <module>hipster-ioc-test</module>
         <module>metadata-server</module>
         <module>metadata-mcp-server</module>
+        <module>metadata-arena</module>
     </modules>
 
     <dependencyManagement>
