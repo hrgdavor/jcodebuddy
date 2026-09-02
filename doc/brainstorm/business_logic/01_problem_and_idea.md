@@ -28,13 +28,30 @@ Worse, **two calls may both touch the same entity** (e.g. `Order.total`
 is updated by both the promotion step and the shipping step). With
 direct calls, you only see the final value — the contributions are lost.
 
+And worst of all for review: the reviewer cannot easily separate
+**"the minimum the process must do to be correct"** (validate,
+compute, persist) from **"the peripheral things around it"** (emails,
+webhooks, next-step triggers, audit). PRs end up mixing both kinds of
+change, and a fix to an email template looks indistinguishable from a
+fix to the discount calculation.
+
 ## The idea
 
 Make every function in the process **pure** w.r.t. the outside world.
 Functions only **describe** the effects they intend into a shared
-**Processing Unit** that travels with the call graph. Real side-effects
-are performed once, at the end, by a single dispatcher that consumes the
-unit.
+**Processing Unit** that travels with the call graph.
+
+Separate the work into **two clearly-marked categories**:
+
+- **Core steps** — the minimum necessary to produce the business
+  outcome. Reviewers can read these in isolation to understand *what
+  this process does to the world*.
+- **Side-effect steps** — peripheral effects (notifications, next-step
+  triggers, audit, telemetry) that happen *around* the core. Clearly
+  marked, easily skippable in review, and dispatchable independently.
+
+Real side-effects are performed once, at the end, by one or more
+dispatchers consuming the unit's slots.
 
 When multiple functions affect the same entity, the unit keeps every
 contribution (or merges under an explicit rule). Between well-defined
@@ -57,6 +74,7 @@ points in the graph, snapshots are captured so the contributions are
 **Keep** what is genuinely useful:
 
 - clear separation between "decide" and "act",
+- **separation between core business outcome and peripheral effects**,
 - replayable history of decisions,
 - composable, branching, recursive call graphs,
 - declarative description of intended effects.

@@ -10,7 +10,7 @@ This file is the heart of the concept.
 
 ## Aggregation, not last-write-wins
 
-When two functions in the call graph both want to change
+When two core steps in the call graph both want to change
 `Order#42.total`, the unit does **not** silently let the later call
 overwrite the earlier one. There are three options, configurable per
 process:
@@ -30,8 +30,8 @@ process:
 
 Between well-defined points in the call graph — typically **between
 named sub-steps** of a `@BusinessProcess` method, or around each call
-to a `@PureStep` method — the unit records a **snapshot** of every
-entity it has been told about.
+to a `@CoreStep` / `@SideEffectStep` method — the unit records a
+**snapshot** of every entity it has been told about.
 
 A snapshot is a tiny value object:
 
@@ -41,26 +41,30 @@ record EntitySnapshot<E>(
     String entityType,
     int stepIndex,           // monotonic counter inside the process
     String stepName,         // method or logical step name
+    StepCategory category,   // CORE / SIDE_EFFECT / AUDIT
     E state,                 // the entity state at this point
     StackTraceElement[] stack // captured at the snapshot point
 ) {}
 ```
 
 The unit keeps a list of these (one per snapshot point per entity).
-The debug collector groups them per entity and produces a per-step diff.
+The debug collector groups them per entity and produces a per-step
+diff.
 
 ## Example diff
 
 ```
 Entity: Order#42 (type=Order)
-Step 1  validateOrder         : total = 100.00, discount = 0, shipping = 0
-Step 3  applyPromotion(P10)  : total =  90.00, discount = 10
-Step 5  applyShipping(STD)   : total =  97.50, shipping = 7.50
-Step 8  recomputeTotals      : total =  97.50  (unchanged from Step 5)
+Step 1  CORE    validateOrder         : total = 100.00, discount = 0, shipping = 0
+Step 3  CORE    applyPromotion(P10)   : total =  90.00, discount = 10
+Step 5  CORE    applyShipping(STD)    : total =  97.50, shipping = 7.50
+Step 8  CORE    recomputeTotals       : total =  97.50  (unchanged from Step 5)
+Step 9  SIDE    sendReceiptEmail      : (no entity change; email queued)
+Step 10 SIDE    enqueueOrderWebhook   : (no entity change; webhook queued)
 ```
 
-A reviewer sees the full chain of contributions at a glance. A debugger
-can jump to any step.
+A reviewer sees the full chain of contributions at a glance, and the
+core / side-effect boundary is visible in the diff itself.
 
 ## When snapshots are recorded
 
@@ -68,7 +72,8 @@ Snapshots are not recorded after every line of code. They are recorded
 at **call-graph boundaries** that the developer marks, or that the
 generator infers from method boundaries:
 
-- at the entry and exit of every `@PureStep` method,
+- at the entry and exit of every `@CoreStep` / `@SideEffectStep`
+  method,
 - at every `if` / `for` branch the developer annotates,
 - around recursive calls.
 

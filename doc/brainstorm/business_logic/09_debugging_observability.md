@@ -11,13 +11,16 @@ re-running in a debugger.
 
 The primary debugging tool is the **per-entity, per-step diff** built
 from the snapshots recorded at call-graph boundaries (see
-[05_aggregation_and_snapshots.md](05_aggregation_and_snapshots.md)).
+[06_aggregation_and_snapshots.md](06_aggregation_and_snapshots.md)).
+The diff itself carries the **core / side-effect / audit category**
+of each step, so a debugger can filter to one category.
 
 ```
 Entity: Order#42 (type=Order)
-Step 1  validateOrder         : total = 100.00, discount = 0, shipping = 0
-Step 3  applyPromotion(P10)  : total =  90.00, discount = 10
-Step 5  applyShipping(STD)   : total =  97.50, shipping = 7.50
+Step 1  CORE    validateOrder         : total = 100.00, discount = 0, shipping = 0
+Step 3  CORE    applyPromotion(P10)   : total =  90.00, discount = 10
+Step 5  CORE    applyShipping(STD)    : total =  97.50, shipping = 7.50
+Step 9  SIDE    sendReceiptEmail      : (no entity change; email queued)
 ```
 
 ## Stack traces
@@ -62,3 +65,5 @@ ways:
 > sidecar, MCP server). -->`
 > `<!-- TODO/EXPLORE: structured-logging correlation between captured
 > log output and entity diffs. -->`
+> `<!-- TODO/EXPLORE: split diff views per category (core vs side-effect
+> vs audit) so a debugger can focus on one. -->`

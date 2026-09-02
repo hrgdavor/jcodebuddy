@@ -13,11 +13,32 @@ grouped by area.
 - `<!-- TODO/EXPLORE: explicit comparison write-up once prototype
 > exists. -->`
 
+## Core vs side-effect separation
+
+- `<!-- TODO/EXPLORE: should the categorization be enforced at compile
+> time, e.g. the unit's `coreWrites()` accessor is only callable from
+> a `@CoreStep` method, `sideEffects()` only from a `@SideEffectStep`,
+> etc.? Or should it be a review-time / runtime convention only? -->`
+- `<!-- TODO/EXPLORE: should diff views be split per category (core
+> entity diff vs side-effect diff) so a debugger can focus on one? -->`
+- `<!-- TODO/EXPLORE: should `next-step triggers` be a distinct
+> third slot (separate from generic notifications), so they can be
+> reviewed and dispatched under their own policy? -->`
+- `<!-- TODO/EXPLORE: should `@AuditStep` exist at all, or is "audit"
+> just another kind of side-effect with its own slot? -->`
+- `<!-- TODO/EXPLORE: PR templates that auto-collapse side-effect
+> blocks by default. -->`
+- `<!-- TODO/EXPLORE: review bot that flags a side-effect change in a
+> PR without a corresponding core change (or vice-versa) as
+> suspicious. -->`
+
 ## Processing Unit
 
-- `<!-- TODO/EXPLORE: exact merging rules for concurrent sub-units. -->`
+- `<!-- TODO/EXPLORE: exact merging rules for concurrent sub-units, and
+> how merging preserves the core / side-effect split. -->`
 - `<!-- TODO/EXPLORE: should the unit be a generated class per process,
-> with sealed write slots, or a single generic class with type tokens? -->`
+> with sealed write / side-effect slots, or a single generic class
+> with type tokens? -->`
 - `<!-- TODO/EXPLORE: should the unit itself be partitioned for batch
 > processing (one sub-unit per item) and merged before commit? -->`
 
@@ -71,6 +92,8 @@ grouped by area.
 > sidecar, MCP server). -->`
 - `<!-- TODO/EXPLORE: structured-logging correlation between captured
 > log output and entity diffs. -->`
+- `<!-- TODO/EXPLORE: split diff views per category (core vs side-effect
+> vs audit) so a debugger can focus on one. -->`
 
 ## Persistence / WAL
 
@@ -82,6 +105,8 @@ grouped by area.
 > entity writes, and how the unit records them. -->`
 - `<!-- TODO/EXPLORE: benchmark snapshot cost vs benefit; pick a default
 > strategy. -->`
+- `<!-- TODO/EXPLORE: separate WALs for core vs side effects, or one
+> WAL with slot markers? -->`
 
 ## Test scaffolding
 
@@ -90,7 +115,8 @@ grouped by area.
 
 ## Generator specifics
 
-- `<!-- TODO/EXPLORE: how unit write slots are namespaced and typed. -->`
+- `<!-- TODO/EXPLORE: how unit write / side-effect slots are namespaced
+> and typed. -->`
 - `<!-- TODO/EXPLORE: how multi-module projects split generated code
 > between `app` and `project-automation`. -->`
 - `<!-- TODO/EXPLORE: how this concept plays with `hipster-entity` and
