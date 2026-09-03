@@ -60,6 +60,13 @@ Everything else is generated cooperatively with other generators
 - **Composes with other generators** – the entity generator emits
   entity types and their change markers, the pipeline generator wires
   them into the core slot.
+- **Source-visible, IDE-navigable** – per project-wide rule
+  ([`../../architecture/decisions/DEC-019.md`](../../architecture/decisions/DEC-019.md))
+  every connection the generator emits is **ordinary Java source
+  that is committed to git** and navigable with a basic IDE. The
+  annotations are *markers only*; the dispatcher, the loop-guard
+  scaffolding, and the slot wiring are real methods in real files,
+  not runtime-discovered beans.
 - **Live-reload friendly** – changing a pure function does not
   invalidate the generated dispatcher; the watcher only re-emits the
   unit wiring.

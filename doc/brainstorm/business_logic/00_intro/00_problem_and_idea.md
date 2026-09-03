@@ -69,7 +69,10 @@ points in the graph, snapshots are captured so the contributions are
 - injected services that do real work,
 - event handlers that mutate other aggregates,
 - DB-assigned identifiers,
-- "magic" side-effects inside framework-managed callbacks.
+- "magic" side-effects inside framework-managed callbacks,
+- and — by project-wide rule — any wiring that is not materialized
+  as committed, IDE-navigable Java source. See
+  [`../../architecture/decisions/DEC-019.md`](../../architecture/decisions/DEC-019.md).
 
 **Keep** what is genuinely useful:
 
