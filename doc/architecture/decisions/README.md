@@ -51,6 +51,12 @@ This folder contains individual decision records for the JCodeBuddy project arch
 |                       | Notes: Root entity identity is now explicit; `ViewReader` no longer declares `id()` |          |            |
 | [DEC-018](DEC-018.md) | **Generator freeze marker semantics**                                   | Proposed | 2026-04-13 |
 |                       | Notes: Defines `@GeneratedFrozen`, comment freeze markers, and frozen-file preservation policy |          |            |
+| [DEC-019](DEC-019.md) | **Source-Visible, IDE-Navigable Wiring**                              | Accepted | 2026-09-03 |
+|                       | Notes: Annotations are markers; every connection is materialized as committed source; applies to REST / JSON-RPC dispatchers (no `Map<String, Method>` + `Method.invoke`) | | |
+| [DEC-020](DEC-020.md) | **Cooperative codegen — preserve user-tweaked generated blocks**      | Proposed | 2026-09-03 |
+|                       | Notes: Default is **implicit block detection** by structural shape (case arm, builder method, scaffold method); no mandatory `// generator:begin/end` markers; single-line optional hint comment allowed; user opts into regen by deleting the block; reporting mode flags preserved-vs-canonical diffs; complements DEC-018 freeze and DEC-019 source-visible | | |
+| [DEC-021](DEC-021.md) | **Generator class-file header — short id, JSON5 config, per-file options** | Proposed | 2026-09-03 |
+|                       | Notes: Two `//` line comments above the imports — `// {@link <fqn>} <one-line description>.` plus `// {<json5>}`; JSON5 subset pinned to specific Jackson `JsonReadFeature`s (single-quoted strings, unquoted field names, trailing commas, leading decimal, leading plus, non-numeric numbers, backslash escape); mandatory `enabled` knob is the per-file equivalent of DEC-018 freeze; user edits a value to customise that file only | | |
 
 ### Watch & project-automation subsystem (DEC-W001 — DEC-W005)
 
