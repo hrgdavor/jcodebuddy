@@ -1,6 +1,6 @@
 # JCodeBuddy Cooperative Codegen Integration
 
-> Back to [README](README.md).
+> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../../README.md).
 
 This concept is deliberately shaped to be **easy for JCodeBuddy to
 generate**, so that what developers actually read stays small and
@@ -28,15 +28,25 @@ JCodeBuddy's `project-automation` module produces:
    next-step-trigger publisher, …).
 4. Snapshot / diff hooks at method boundaries, gated by the active
    profile, with category tagging (CORE / SIDE_EFFECT / AUDIT).
-5. Bulk entry points (`recalcOrders(Collection<Long>)`).
-6. Tests scaffolding (golden snapshots per slot, conflict assertions).
+5. The **fixed-point loop guard** for `@CoreChangeOnChange` steps,
+   including the pass counter, per-entity write fingerprint, and
+   `LoopDetectedException` with per-step contribution chain.
+6. Bulk entry points (`recalcOrders(Collection<Long>)`).
+7. Tests scaffolding (golden snapshots per slot, conflict assertions,
+   loop-convergence assertions).
 
 ## What the developer writes
 
 Just the call graph. The developer writes pure functions tagged with
-`@CoreStep`, `@SideEffectStep`, or `@AuditStep`, each describing its
-effects into the unit. Everything else is generated cooperatively
-with other generators (entity generators, IOC wiring, etc.).
+one of the three operation-type annotations (see
+[`10_concept/15_operation_types.md`](10_concept/15_operation_types.md)):
+- `@CoreChange` for steps that only write core data,
+- `@CoreChangeOnChange` for steps that react to current core writes
+  (the loop guard is wired in automatically),
+- `@NotificationOnly` for steps that only emit side effects.
+
+Everything else is generated cooperatively with other generators
+(entity generators, IOC wiring, etc.).
 
 ## Why this is "codebuddy-friendly"
 
@@ -44,6 +54,9 @@ with other generators (entity generators, IOC wiring, etc.).
   types (`ProcessingUnit`, `EntityWrite`, `SideEffect`, `AuditEntry`).
 - **Slot-aware** – the generator can emit separate dispatcher code
   per slot, knowing exactly what each slot's effects mean.
+- **Type-aware** – the generator can emit the loop-guard scaffolding
+  based on which methods are annotated `@CoreChangeOnChange` and
+  which are pure `@CoreChange` / `@NotificationOnly`.
 - **Composes with other generators** – the entity generator emits
   entity types and their change markers, the pipeline generator wires
   them into the core slot.
@@ -61,6 +74,9 @@ with other generators (entity generators, IOC wiring, etc.).
 - `<!-- TODO/EXPLORE: review bot that flags a side-effect change in a
 > PR without a corresponding core change (or vice-versa) as
 > suspicious. -->`
+- `<!-- TODO/EXPLORE: review bot that flags a `@CoreChange` that
+> reads from `unit.coreWrites()` and should be re-typed as
+> `@CoreChangeOnChange`. -->`
 
 ## Generator specifics (open)
 

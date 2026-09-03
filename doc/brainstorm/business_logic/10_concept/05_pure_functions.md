@@ -1,6 +1,6 @@
 # Pure Functions in the Call Graph
 
-> Back to [README](README.md).
+> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../../README.md).
 
 Every function on the call graph is **pure** with respect to the outside
 world. It reads inputs and the unit, mutates the unit, and returns
@@ -10,7 +10,7 @@ values. It never calls `emailService.send(...)`, `orders.update(...)`,
 ## Contract
 
 ```java
-@CoreStep
+@CoreChange
 OrderTotals recomputeTotals(ProcessingUnit<OrderContext> unit, OrderView order) {
     var discount = unit.promotions().appliedTo(order);
     var shipping = unit.shipping().quoteFor(order);
@@ -49,22 +49,35 @@ What this guarantees:
 > function may receive. Should they all be carried inside the unit, or
 > passed alongside it? -->`
 
-## Step categories: `@CoreStep` vs `@SideEffectStep` vs `@AuditStep`
+## Step categories: `@CoreChange` / `@CoreChangeOnChange` / `@NotificationOnly`
 
-Pure functions are *categorized*. The category determines:
+Pure functions are *categorized* into the three operation types
+defined in
+[`15_operation_types.md`](15_operation_types.md):
 
-- which slot of the unit they may write to,
-- which dispatcher consumes their contributions,
-- how they are surfaced in review.
+- `@CoreChange` — type 1: writes core data, independent of current
+  changes in the unit.
+- `@CoreChangeOnChange` — type 2: writes core data based on current
+  changes in the unit; protected by a loop guard.
+- `@NotificationOnly` — type 3: emits notifications / external
+  effects only; runs once after the core loop has converged.
 
-| Annotation        | May write to                | Consumed by               | Review weight |
-| ----------------- | --------------------------- | ------------------------- | ------------- |
-| `@CoreStep`       | `unit.coreWrites()`         | core dispatcher           | **high**      |
-| `@SideEffectStep` | `unit.sideEffects()`        | side-effect dispatcher    | medium        |
-| `@AuditStep`      | `unit.audit()`              | audit sink / dispatcher   | low           |
+The category determines:
+
+- which slot of the unit the step may write to,
+- which dispatcher consumes the step's contributions,
+- how the step is surfaced in review.
+
+| Annotation              | May write to                | Consumed by               | Review weight |
+| ----------------------- | --------------------------- | ------------------------- | ------------- |
+| `@CoreChange`           | `unit.coreWrites()`         | core dispatcher           | **high**      |
+| `@CoreChangeOnChange`   | `unit.coreWrites()`         | core dispatcher (in loop) | **high**      |
+| `@NotificationOnly`     | `unit.sideEffects()` / `unit.audit()` | side-effect dispatcher | medium        |
 
 The categories are explained in detail in
-[04_core_vs_sideeffect_steps.md](04_core_vs_sideeffect_steps.md).
+[`10_core_vs_sideeffect.md`](10_core_vs_sideeffect.md), and the
+concrete mechanical definition is in
+[`15_operation_types.md`](15_operation_types.md).
 
 ## The "must add side-effect information" rule
 
@@ -88,18 +101,18 @@ change goes into the unit, and every step declares its category.
 OrderResult recalcOrder(ProcessingUnit<OrderContext> unit, long orderId) {
     var order = unit.orders().load(orderId);          // pure read into unit
 
-    if (!validateOrder(unit, order)) {                // @CoreStep
+    if (!validateOrder(unit, order)) {                // @CoreChange
         return OrderResult.rejected(orderId);
     }
 
-    var totals = recomputeTotals(unit, order);        // @CoreStep
-    applyPromotion(unit, order, totals);              // @CoreStep
-    applyShipping(unit, order, totals);               // @CoreStep
+    var totals = recomputeTotals(unit, order);        // @CoreChange
+    applyPromotion(unit, order, totals);              // @CoreChange
+    applyShipping(unit, order, totals);               // @CoreChange
 
     // ---- side effects (separate block in review) ----
-    sendReceiptEmail(unit, order, totals);            // @SideEffectStep
-    enqueueOrderUpdatedWebhook(unit, order);          // @SideEffectStep
-    triggerNextWorkflowStep(unit, order);             // @SideEffectStep
+    sendReceiptEmail(unit, order, totals);            // @NotificationOnly
+    enqueueOrderUpdatedWebhook(unit, order);          // @NotificationOnly
+    triggerNextWorkflowStep(unit, order);             // @NotificationOnly
 
     return OrderResult.ready(orderId, totals);
 }

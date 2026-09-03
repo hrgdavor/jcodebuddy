@@ -40,6 +40,13 @@ This concept organizes business logic so that:
   object passed through the call graph. It holds core entity writes,
   side-effect descriptions (notifications, next-step triggers), audit
   entries, generated identifiers, and debug snapshots.
+- **Every step is exactly one of three operation types** — see
+  [`10_concept/05_operation_types.md`](10_concept/05_operation_types.md):
+  - `@CoreChange` — only changes core data, no dependency on current changes.
+  - `@CoreChangeOnChange` — changes core data based on current changes;
+    protected by a **loop guard** that detects and stops infinite oscillation.
+  - `@NotificationOnly` — only generates notifications / external effects;
+    runs once after the core loop has converged.
 - **Conflicting mutations to the same entity are aggregated and diffable.**
   When two functions both want to change `Order.total`, both contributions
   are kept (or merged under a defined rule) and a snapshot of *before* /
@@ -73,23 +80,29 @@ node on the graph is pure, every intended effect is materialized in the
 Processing Unit, and the reviewer can read the **core** in isolation to
 understand the business outcome.
 
-## Contents
+## Folder layout
 
-| File                                                              | Topic                                                                                  |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [`01_problem_and_idea.md`](01_problem_and_idea.md)                | Why the call graph is non-linear, why effects must be deferred to a unit.              |
-| [`02_processing_unit.md`](02_processing_unit.md)                  | The `ProcessingUnit` object: structure, ownership, lifecycle.                           |
-| [`03_pure_functions.md`](03_pure_functions.md)                    | Contract of pure functions; how they receive the unit and contribute effects.          |
-| [`04_core_vs_sideeffect_steps.md`](04_core_vs_sideeffect_steps.md) | Separation of minimum core process from peripheral side-effects (emails, triggers). |
-| [`05_entity_writes.md`](05_entity_writes.md)                      | `EntityWrite` marker (insert/update/delete), identifier ownership, array propagation.   |
-| [`06_aggregation_and_snapshots.md`](06_aggregation_and_snapshots.md) | When two functions change the same entity, how snapshots & diffs capture it.        |
-| [`07_execution_model.md`](07_execution_model.md)                  | Call-graph execution, composition, branching, recursion.                                |
-| [`08_testability.md`](08_testability.md)                          | Testing pure functions by asserting on the unit, with no mocks.                        |
-| [`09_debugging_observability.md`](09_debugging_observability.md)  | Snapshot / diff view, log capture, stack-trace correlation.                             |
-| [`09_data_oriented_design.md`](09_data_oriented_design.md)        | Why the whole model is data-oriented and what that unlocks.                             |
-| [`10_memory_performance_wal.md`](10_memory_performance_wal.md)    | Memory considerations and using the unit as a WAL record.                              |
-| [`11_jcodebuddy_integration.md`](11_jcodebuddy_integration.md)    | How JCodeBuddy cooperative codegen makes this easy to write and maintain.               |
-| [`12_open_questions.md`](12_open_questions.md)                    | Open questions and `TODO/EXPLORE` placeholders.                                        |
+The concept is split into stable, named **folders** rather than a flat
+sequence of numbered files. Folder numbers are spaced (`00_…`, `10_…`,
+`20_…`, …) so a new sub-topic can be added inside a folder without
+renaming anything; only its **local** number changes within that
+folder. The hierarchy itself is what is supposed to stay stable across
+edits.
+
+| Folder                                             | Topic                                                                        |
+| -------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`00_intro/`](00_intro/README.md)                  | Problem, idea, the call-graph mental model, high-level diagram.                |
+| [`10_concept/`](10_concept/README.md)              | Core abstractions: Processing Unit, pure functions, the three operation types. |
+| [`20_writes/`](20_writes/README.md)                | `EntityWrite`, identifiers, aggregation, snapshots.                            |
+| [`30_runtime/`](30_runtime/README.md)             | Execution model, testability, debugging / observability.                       |
+| [`40_engineering/`](40_engineering/README.md)     | Data-oriented design, memory / performance, WAL, JCodeBuddy integration.       |
+| [`90_open_questions/`](90_open_questions/README.md) | All `TODO/EXPLORE` placeholders, grouped.                                      |
+
+> **Editing rule:** when you add a new sub-topic, pick the folder that
+> owns the area and use the next free local number. **Do not**
+> renumber the top-level folders, the other files inside a folder, or
+> the cross-folder structure. The cross-file links are written so this
+> rule keeps working.
 
 ## Key Concepts at a Glance
 
@@ -100,8 +113,19 @@ understand the business outcome.
 - **Core step vs side-effect step** — pure functions are *categorized*:
   core steps produce the business outcome; side-effect steps produce
   notifications, next-step triggers, audit, telemetry.
+- **The three operation types** — every pure function must be exactly
+  one of `@CoreChange` (writes core data, no dependency on current
+  changes), `@CoreChangeOnChange` (writes core data based on current
+  changes, **guarded by a fixed-point loop**), or `@NotificationOnly`
+  (emits notifications/external effects only, runs once after the core
+  loop has converged). See
+  [`10_concept/05_operation_types.md`](10_concept/05_operation_types.md).
 - **`EntityWrite<E>`** — sealed `Insert / Update / Delete` marker, so
   identifiers stay in code rather than being assigned by the database.
+- **Loop guard** — the unit detects infinite oscillation between
+  `@CoreChangeOnChange` steps via per-entity write fingerprints and a
+  bounded `maxPasses` limit, and fails loudly with a
+  `LoopDetectedException` and the per-step contribution chain.
 - **Snapshot / diff** — between well-defined points in the call graph,
   the state of every entity affected by the unit is captured before and
   after, so multi-step mutations to the same entity are **diffable**
@@ -130,6 +154,10 @@ understand the business outcome.
 | **Pure function**     | A function that only reads inputs and mutates the unit; no I/O, no DB.  |
 | **Core step**         | A pure function that produces the minimum business outcome (state).    |
 | **Side-effect step**  | A pure function that produces peripheral effects (email, webhook, …).  |
+| **`@CoreChange`**     | Type-1 step: writes core data, independent of current changes in the unit. |
+| **`@CoreChangeOnChange`** | Type-2 step: writes core data based on current changes; protected by a loop guard. |
+| **`@NotificationOnly`** | Type-3 step: emits notifications / external effects only; runs once after the core loop converges. |
+| **Loop guard**        | Fixed-point mechanism that detects oscillation between type-2 steps via per-entity write fingerprints and a bounded pass count. |
 | **EntityWrite**       | Sealed `Insert / Update / Delete` marker on an entity change.           |
 | **Snapshot**          | Captured state of an entity at a point in the call graph.               |
 | **Diff**              | Per-step or per-segment before/after comparison of an entity.           |

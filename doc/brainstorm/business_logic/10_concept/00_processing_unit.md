@@ -1,6 +1,6 @@
 # The Processing Unit
 
-> Back to [README](README.md).
+> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../../README.md).
 
 The **`ProcessingUnit`** is the single object that travels through the
 call graph and accumulates every side-effect description the process
@@ -47,7 +47,7 @@ The split between `coreWrites`, `sideEffects`, and `auditEntries` is
 **deliberate**, not cosmetic:
 
 - A reviewer can read only `coreWrites` to understand the business
-  outcome (see [04_core_vs_sideeffect_steps.md](04_core_vs_sideeffect_steps.md)).
+  outcome (see [`10_core_vs_sideeffect.md`](10_core_vs_sideeffect.md)).
 - A "core commit" can be performed by one dispatcher; side-effects
   can be delivered later, on a different node, after retry, etc.
 - A "dry-run" mode can commit core only and discard side-effects —
@@ -79,7 +79,7 @@ The single object is what makes the process **reviewable and replayable**:
 - A debugger can inspect the unit at any point in the graph.
 - A test can assert on the unit's contents at any point, with no mocks.
 - A WAL can serialize the unit's effect descriptions and replay them
-  later (see [10_memory_performance_wal.md](10_memory_performance_wal.md)).
+  later (see [`40_engineering/05_memory_performance_wal.md`](40_engineering/05_memory_performance_wal.md)).
 
 ## Type safety
 

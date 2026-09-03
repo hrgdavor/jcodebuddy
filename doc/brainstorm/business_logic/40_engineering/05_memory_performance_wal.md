@@ -1,6 +1,6 @@
 # Memory, Performance, and the Unit as WAL
 
-> Back to [README](README.md).
+> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../../README.md).
 
 The notes call out: *"Look for optimizing memory usage in these cases,
 and performance."*
@@ -33,22 +33,28 @@ affected entities, naive snapshots cost O(K·E). Strategies:
 ## Outcomes / unit as WAL
 
 Because every observable effect the process intends is described in the
-unit, **the unit itself is a perfect WAL entry**:
+unit — **both core writes and side effects** — **the unit itself is a
+perfect WAL entry**:
 
 - serialize the unit at commit,
-- apply it to the database asynchronously,
+- apply core writes to the database asynchronously (or synchronously
+  for transactional flows),
+- deliver side effects via the side-effect dispatcher (often
+  async, often retriable, often idempotent),
 - in-memory caches remain consistent with the unit's contents,
 - DB eventually catches up.
 
 ```
-[ pure call graph ] --unit--> [ UnitLog (mmap) ] --async--> [ DB ]
-                              |
+[ pure call graph ] --unit--> [ UnitLog (mmap) ] --async--> [ core writes to DB ]
+                              |                         \--> [ side effects delivered ]
                               v
                          [ Debug diff view ]
 ```
 
 The unit becomes the unifying primitive between in-process logic,
-persistence, and observability.
+persistence, and observability, while the **slot split** lets core
+and side effects flow through different downstream pipelines without
+the call graph knowing about it.
 
 ## Idempotency
 
@@ -65,3 +71,5 @@ notifications skipped or sent depending on idempotency keys).
 - `<!-- TODO/EXPLORE: integration with `metadata-arena` for off-heap
 > unit buffers and WAL. -->`
 - `<!-- TODO/EXPLORE: idempotency and replay. -->`
+- `<!-- TODO/EXPLORE: separate WALs for core vs side effects, or one
+> WAL with slot markers? -->`

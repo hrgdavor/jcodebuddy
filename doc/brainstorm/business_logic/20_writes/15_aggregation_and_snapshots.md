@@ -1,6 +1,6 @@
 # Aggregation and Snapshots
 
-> Back to [README](README.md).
+> Up: [20_writes/README.md](README.md). Back to [business_logic/README.md](../../README.md).
 
 > *"multiple functions could affect same entity and final effect will be
 > aggregate, but in such scenario it should be attempted to snapshot those
@@ -30,8 +30,11 @@ process:
 
 Between well-defined points in the call graph — typically **between
 named sub-steps** of a `@BusinessProcess` method, or around each call
-to a `@CoreStep` / `@SideEffectStep` method — the unit records a
-**snapshot** of every entity it has been told about.
+to a `@CoreChange` / `@CoreChangeOnChange` / `@NotificationOnly`
+method (see
+[`10_concept/15_operation_types.md`](10_concept/15_operation_types.md))
+— the unit records a **snapshot** of every entity it has been told
+about.
 
 A snapshot is a tiny value object:
 
@@ -72,8 +75,8 @@ Snapshots are not recorded after every line of code. They are recorded
 at **call-graph boundaries** that the developer marks, or that the
 generator infers from method boundaries:
 
-- at the entry and exit of every `@CoreStep` / `@SideEffectStep`
-  method,
+- at the entry and exit of every `@CoreChange` / `@CoreChangeOnChange`
+  / `@NotificationOnly` method,
 - at every `if` / `for` branch the developer annotates,
 - around recursive calls.
 

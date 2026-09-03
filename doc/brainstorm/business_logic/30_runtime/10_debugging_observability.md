@@ -1,6 +1,6 @@
 # Debugging and Observability
 
-> Back to [README](README.md).
+> Up: [30_runtime/README.md](README.md). Back to [business_logic/README.md](../../README.md).
 
 Goal: when a function deep in the call graph mutates an entity, and
 several functions later another function mutates the same entity, we
@@ -11,9 +11,10 @@ re-running in a debugger.
 
 The primary debugging tool is the **per-entity, per-step diff** built
 from the snapshots recorded at call-graph boundaries (see
-[06_aggregation_and_snapshots.md](06_aggregation_and_snapshots.md)).
-The diff itself carries the **core / side-effect / audit category**
-of each step, so a debugger can filter to one category.
+[`20_writes/15_aggregation_and_snapshots.md`](20_writes/15_aggregation_and_snapshots.md)).
+The diff itself carries the **operation type** (`@CoreChange` /
+`@CoreChangeOnChange` / `@NotificationOnly`) of each step, so a
+debugger can filter to one category.
 
 ```
 Entity: Order#42 (type=Order)

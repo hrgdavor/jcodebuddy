@@ -1,6 +1,6 @@
 # Core Steps vs Side-Effect Steps
 
-> Back to [README](README.md).
+> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../../README.md).
 
 ## Why separate them
 
@@ -48,24 +48,24 @@ The concept therefore makes the separation **first-class**:
 OrderResult recalcOrder(ProcessingUnit<OrderContext> unit, long orderId) {
 
     // ============== CORE ==============
-    var order = unit.orders().load(orderId);                       // @CoreStep
-    if (!validateOrder(unit, order)) {                             // @CoreStep
+    var order = unit.orders().load(orderId);                       // @CoreChange
+    if (!validateOrder(unit, order)) {                             // @CoreChange
         return OrderResult.rejected(orderId);
     }
-    var totals = recomputeTotals(unit, order);                     // @CoreStep
-    applyPromotion(unit, order, totals);                           // @CoreStep
-    applyShipping(unit, order, totals);                            // @CoreStep
+    var totals = recomputeTotals(unit, order);                     // @CoreChange
+    applyPromotion(unit, order, totals);                           // @CoreChange
+    applyShipping(unit, order, totals);                            // @CoreChange
     unit.coreWrites().update(order.id(), order.withTotals(totals));// aggregate
     // =================================
 
     // ============== SIDE EFFECTS ==============
-    sendReceiptEmail(unit, order, totals);          // @SideEffectStep
-    enqueueOrderUpdatedWebhook(unit, order);        // @SideEffectStep
-    triggerNextWorkflowStep(unit, order);           // @SideEffectStep
+    sendReceiptEmail(unit, order, totals);          // @NotificationOnly
+    enqueueOrderUpdatedWebhook(unit, order);        // @NotificationOnly
+    triggerNextWorkflowStep(unit, order);           // @NotificationOnly
     // ===========================================
 
     // ============== AUDIT ==============
-    unit.audit().record("order.recalculated", order.id(), totals); // @AuditStep
+    unit.audit().record("order.recalculated", order.id(), totals); // @NotificationOnly (audit-kind)
     // ===================================
 
     return OrderResult.ready(orderId, totals);
@@ -77,12 +77,15 @@ OrderResult recalcOrder(ProcessingUnit<OrderContext> unit, long orderId) {
 The `ProcessingUnit` exposes its slots grouped, so reviewers can see at
 a glance which slots are core vs peripheral:
 
-- `unit.coreWrites()` — entity writes from `@CoreStep`s.
+- `unit.coreWrites()` — entity writes from `@CoreChange` /
+  `@CoreChangeOnChange` steps (the type-1 and type-2 operations in
+  [`15_operation_types.md`](15_operation_types.md)).
 - `unit.sideEffects()` — notifications, webhooks, next-step triggers
-  from `@SideEffectStep`s.
-- `unit.audit()` — observation entries from `@AuditStep`s.
+  from `@NotificationOnly` steps (the type-3 operations).
+- `unit.audit()` — observation entries also produced by
+  `@NotificationOnly` steps.
 
-See [02_processing_unit.md](02_processing_unit.md) for the full unit
+See [`00_processing_unit.md`](00_processing_unit.md) for the full unit
 shape.
 
 ## Dispatch modes
@@ -115,7 +118,7 @@ serialized into the WAL alongside other side effects, and delivered
 through the side-effect dispatcher.
 
 ```java
-@SideEffectStep
+@NotificationOnly
 void triggerNextWorkflowStep(ProcessingUnit<OrderContext> unit, OrderView order) {
     unit.sideEffects().queue(NextStepTrigger.of(
         "shipment.create",
@@ -133,7 +136,8 @@ void triggerNextWorkflowStep(ProcessingUnit<OrderContext> unit, OrderView order)
 - A "core diff" view shows only entity writes; a "side-effect diff"
   shows only notifications and triggers.
 - Documentation / process diagrams can be generated from the
-  `@CoreStep` list alone, ignoring side-effects.
+  `@CoreChange` + `@CoreChangeOnChange` list alone, ignoring
+  `@NotificationOnly` steps.
 - A reviewer can collapse the side-effect block in their editor / PR
   view and read just the core.
 
@@ -141,8 +145,9 @@ void triggerNextWorkflowStep(ProcessingUnit<OrderContext> unit, OrderView order)
 
 > `<!-- TODO/EXPLORE: should the categorization be enforced at compile
 > time, e.g. the unit's `coreWrites()` accessor is only callable from
-> a `@CoreStep` method, `sideEffects()` only from a `@SideEffectStep`,
-> etc.? Or should it be a review-time / runtime convention only? -->`
+> a `@CoreChange` / `@CoreChangeOnChange` method, `sideEffects()`
+> only from a `@NotificationOnly`, etc.? Or should it be a review-time
+> / runtime convention only? -->`
 
 ## Interaction with snapshots (open)
 
@@ -154,6 +159,3 @@ void triggerNextWorkflowStep(ProcessingUnit<OrderContext> unit, OrderView order)
 > `<!-- TODO/EXPLORE: should `next-step triggers` be a distinct
 > third slot (separate from generic notifications), so they can be
 > reviewed and dispatched under their own policy? -->`
-
-> `<!-- TODO/EXPLORE: should `@AuditStep` exist at all, or is "audit"
-> just another kind of side-effect with its own slot? -->`
