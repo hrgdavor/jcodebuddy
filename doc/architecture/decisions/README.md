@@ -57,6 +57,8 @@ This folder contains individual decision records for the JCodeBuddy project arch
 |                       | Notes: Default is **implicit block detection** by structural shape (case arm, builder method, scaffold method); no mandatory `// generator:begin/end` markers; single-line optional hint comment allowed; user opts into regen by deleting the block; reporting mode flags preserved-vs-canonical diffs; complements DEC-018 freeze and DEC-019 source-visible | | |
 | [DEC-021](DEC-021.md) | **Generator class-file header — short id, JSON5 config, per-file options** | Proposed | 2026-09-03 |
 |                       | Notes: Two `//` line comments above the imports — `// {@link <fqn>} <one-line description>.` plus `// {<json5>}`; JSON5 subset pinned to specific Jackson `JsonReadFeature`s (single-quoted strings, unquoted field names, trailing commas, leading decimal, leading plus, non-numeric numbers, backslash escape); mandatory `enabled` knob is the per-file equivalent of DEC-018 freeze; user edits a value to customise that file only | | |
+| [DEC-022](DEC-022.md) | **Refactor-sensitivity rules for generated code and divergence reporting** | Proposed | 2026-09-07 |
+|                       | Notes: Defines when generated names must track source renames (implicit derivation, wired through navigable `{@link}` / `@see` references) vs when they must be explicit API names (refactor-insensitive, e.g. JSON-RPC case labels); mandates divergence reporting when IDE refactor makes generated output differ from canonical; divergence format includes kind, cause, current vs canonical, and suggested action; each generator must publish a naming-contract table in its README | | |
 
 ### Watch & project-automation subsystem (DEC-W001 — DEC-W005)
 

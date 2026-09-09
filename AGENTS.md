@@ -104,6 +104,25 @@ code or documentation for this repository:
   (source-visible wiring): the `{@link …}` reference in the
   first line is the generator-side fulfilment of the same
   navigability rule.
+- **Refactor-sensitivity rules for generated code and divergence
+  reporting.** When a generator derives a name from a source
+  identifier (type name, method name, field name), that name is
+  **refactor-sensitive**: the generator must wire the
+  relationship through navigable Java (`{@link}`, `@see`,
+  `@GeneratedFrom`) so a standard IDE rename refactor can reach
+  it, and must publish a naming-contract table in its README.
+  When a name is an explicit API label (JSON-RPC method name,
+  workflow trigger name, audit event name), it is
+  **refactor-insensitive**: the IDE rename refactor must NOT
+  touch it, and the generator must not derive it from a Java
+  identifier that the IDE might rename. After every regen pass
+  the generator must report any divergence between what is in
+  the file and what it would emit today, with a uniform
+  diagnostic format (kind, location, cause, current, canonical,
+  action). The full decision and examples are in
+  [`doc/architecture/decisions/DEC-022.md`](doc/architecture/decisions/DEC-022.md).
+  This complements DEC-020 (cooperative blocks), DEC-021
+  (class-file header), and DEC-019 (source-visible wiring).
 
 ### What this does *not* mean
 
