@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-07-28
 - Owners: project
-- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [DEC-W007: Unified source metadata model](DEC-W007.md), [metadata-server](../README.md), [metadata-mcp-server](../README.md), [project-automation](../README.md), [hipster-entity-tooling](../README.md)
+- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [DEC-W007: Unified source metadata model](DEC-W007.md)
 - Supersedes: -
 - Superseded by: -
 

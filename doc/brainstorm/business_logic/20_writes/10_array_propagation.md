@@ -1,6 +1,6 @@
 # Arrays of Entities — Marker Propagation
 
-> Up: [20_writes/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [20_writes/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 When a top-level entity owns a collection (e.g. `Order.lines`), changes
 to elements must force a change marker on the **owner** so the core
@@ -26,3 +26,4 @@ This means:
 > (`List<List<Item>>`, maps, sets, primitive arrays), and for cases
 > where only structural changes vs only element changes must be
 > distinguished. -->`
+

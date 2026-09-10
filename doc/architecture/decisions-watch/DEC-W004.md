@@ -43,3 +43,4 @@ The `java-watch-agent` module is the AI agent daemon that scaffolds, watches, an
 - `CommandServer` MUST expose a REST endpoint for listing pending actions
 - `InteractiveSession` MUST support at least: list, apply, and reject actions
 - `ContextualAnalyzer` MUST support `@Watch` annotation discovery
+

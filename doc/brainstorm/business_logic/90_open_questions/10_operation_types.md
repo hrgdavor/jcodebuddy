@@ -1,6 +1,6 @@
 # Operation-Types Open Questions
 
-> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 - `<!-- TODO/EXPLORE: how should `maxPasses` be configured per process,
 > per type, and per entity? Should the limit be on the number of
@@ -19,3 +19,4 @@
 > declares which entities / fields it reads from and writes to, the
 > unit topologically schedules reactive steps until no edges fire).
 > Trade off ergonomics vs determinism. -->`
+

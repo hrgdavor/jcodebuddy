@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-24
 - Owners: project
-- Related docs: [Module map](../module-map.md), [java-watch-core](../README.md)
+- Related docs: [Module map](../module-map.md)
 - Supersedes: -
 - Superseded by: -
 
@@ -41,3 +41,4 @@ Consumers receive an immutable `ChangeSet` containing `changed()`, `deleted()`, 
 - `BatchedFileWatcher` MUST set `fullRecompile()` to `true` on `OVERFLOW` events
 - `ManagedFileWatcher` MUST ignore `DELETE` events
 - Both watchers MUST use trailing-edge debounce semantics
+

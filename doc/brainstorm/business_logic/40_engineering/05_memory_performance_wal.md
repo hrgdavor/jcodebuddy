@@ -1,6 +1,6 @@
 # Memory, Performance, and the Unit as WAL
 
-> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 The notes call out: *"Look for optimizing memory usage in these cases,
 and performance."*
@@ -73,3 +73,4 @@ notifications skipped or sent depending on idempotency keys).
 - `<!-- TODO/EXPLORE: idempotency and replay. -->`
 - `<!-- TODO/EXPLORE: separate WALs for core vs side effects, or one
 > WAL with slot markers? -->`
+

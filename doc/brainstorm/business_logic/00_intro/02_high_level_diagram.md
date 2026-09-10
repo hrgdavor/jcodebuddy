@@ -1,6 +1,6 @@
 # High-Level Diagram
 
-> Up: [00_intro/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [00_intro/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 ```
    recalcOrder(orderId)                           (pure orchestration)
@@ -34,3 +34,4 @@
 - The same unit is suitable for: live debugging (snapshot / diff
   view), tests (assert on the unit, no mocks), replay (WAL), and
   operational tooling (review, audit, telemetry).
+

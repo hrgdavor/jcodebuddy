@@ -146,7 +146,7 @@ edits.
   project does not act like those frameworks — it does not hide
   program flow behind runtime classpath scanning, reflection or proxy
   magic. See
-  [`doc/architecture/decisions/DEC-019.md`](../../architecture/decisions/DEC-019.md)
+  DEC-019
   for the project-wide rule ("source-visible, IDE-navigable
   wiring"): annotations are markers, every declared connection is
   materialized as committed Java source, and the committed source

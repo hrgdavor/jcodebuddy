@@ -1,6 +1,6 @@
 # Persistence / WAL Open Questions
 
-> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 - `<!-- TODO/EXPLORE: unit-to-SQL mapping strategy. -->`
 - `<!-- TODO/EXPLORE: integration with `metadata-arena` for off-heap
@@ -12,3 +12,4 @@
 > strategy. -->`
 - `<!-- TODO/EXPLORE: separate WALs for core vs side effects, or one
 > WAL with slot markers? -->`
+

@@ -36,4 +36,4 @@ If you want the full implementation details, see the architecture guide for `Enu
 - [Getting Started](getting-started.md)
 - [Core Concepts](core-concepts.md)
 - [Materialization Guide](materialization-guide.md)
-- [Architecture docs](../../doc/architecture/README.md)
+

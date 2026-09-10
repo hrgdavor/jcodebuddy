@@ -40,3 +40,4 @@ The `java-watch-run` module provides a long-running daemon that compiles Java so
 - Full recompile MUST fire when `ChangeSet.fullRecompile()` is `true`
 - Daemon MUST NOT crash on compilation errors; it MUST log errors and continue watching
 - Native profile MUST build a self-contained binary with `--no-fallback`
+

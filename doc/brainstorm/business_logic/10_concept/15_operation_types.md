@@ -1,6 +1,6 @@
 # The Three Operation Types
 
-> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../README.md).
 > See also
 > [`10_core_vs_sideeffect.md`](10_core_vs_sideeffect.md) for the
 > broader core-vs-side-effect split that frames these three types.
@@ -272,3 +272,4 @@ body stays linear and reviewable.
 > `<!-- TODO/EXPLORE: how do we visually / textually render the
 > per-pass change chain when `LoopDetected` fires, so the
 > developer can see exactly which two steps were oscillating? -->`
+

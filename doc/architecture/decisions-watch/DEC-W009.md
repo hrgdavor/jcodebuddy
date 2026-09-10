@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-07-28
 - Owners: project
-- Related docs: [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [DEC-W007: Unified source metadata model](DEC-W007.md), [DEC-W008: Metadata parsing without cache](DEC-W008.md), [metadata-server](../README.md), [rpc-dispatcher](../README.md)
+- Related docs: [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [DEC-W007: Unified source metadata model](DEC-W007.md), [DEC-W008: Metadata parsing without cache](DEC-W008.md)
 - Supersedes: -
 - Superseded by: -
 

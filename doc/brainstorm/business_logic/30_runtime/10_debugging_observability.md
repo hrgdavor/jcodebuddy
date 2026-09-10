@@ -1,6 +1,6 @@
 # Debugging and Observability
 
-> Up: [30_runtime/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [30_runtime/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 Goal: when a function deep in the call graph mutates an entity, and
 several functions later another function mutates the same entity, we
@@ -68,3 +68,4 @@ ways:
 > log output and entity diffs. -->`
 > `<!-- TODO/EXPLORE: split diff views per category (core vs side-effect
 > vs audit) so a debugger can focus on one. -->`
+

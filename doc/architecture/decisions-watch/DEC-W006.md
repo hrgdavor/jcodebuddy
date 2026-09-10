@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-07-24
 - Owners: project
-- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W007: Unified source metadata model](DEC-W007.md), [DEC-W008: Metadata parsing without cache](DEC-W008.md), [DEC-W009: In-RAM metadata relations storage](DEC-W009.md), [java-watch-core](../README.md), [java-watch-run](../README.md), [project-automation](../README.md)
+- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W007: Unified source metadata model](DEC-W007.md), [DEC-W008: Metadata parsing without cache](DEC-W008.md), [DEC-W009: In-RAM metadata relations storage](DEC-W009.md)
 - Supersedes: -
 - Superseded by: -
 
@@ -185,3 +185,4 @@ Out-of-module annotations (e.g., an `@RpcMethod` annotation whose defining class
 - Branch switches that remove and restore files MUST NOT force full recalculation of restored files if their hash is still within the retention window.
 - The cache MUST support two-phase population: inventory (fast, `metadata=null`) followed by enrichment (parallel parsing).
 - The cache MUST handle `metadata == null` gracefully in all read APIs.
+

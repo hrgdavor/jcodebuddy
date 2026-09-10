@@ -1,6 +1,6 @@
 # Architecture Decisions Index
 
-This folder contains individual decision records for the JCodeBuddy project architecture. The hipster-entity subsystem decisions (DEC-001 through DEC-018) are complemented by the watch & project-automation subsystem decisions (DEC-W001 through DEC-W005) in the sibling [decisions-watch](decisions-watch/) folder.
+This folder contains individual decision records for the JCodeBuddy project architecture.
 
 **Status categories:**
 - `Accepted`: agreed direction used in current work
@@ -117,5 +117,4 @@ What is being decided.
 
 - [Brainstorm folder](../../brainstorm/) — Exploratory design work and candidate decisions
 - [Roadmap tracking](../../roadmap/) — Implementation status and progress
-- [Module map](../module-map.md) — Module layout, dependency layers, and critical boundaries
 - [ADR-GUIDE](../ADR-GUIDE.md) — ADR authoring guide

@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-24
 - Owners: project
-- Related docs: [Module map](../module-map.md), [project-automation](../README.md)
+- Related docs: [Module map](../module-map.md)
 - Supersedes: -
 - Superseded by: -
 
@@ -58,3 +58,4 @@ public interface CodeContext {
 - `TypeResolver.resolve()` MUST return `null` for unknown types
 - `TypeResolver.empty()` MUST return a no-op resolver that returns `null` for all queries
 - `CodeContextImpl` MUST be the default implementation
+

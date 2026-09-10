@@ -1,6 +1,6 @@
 # Data-Oriented Design
 
-> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 The whole concept leans data-oriented:
 
@@ -22,3 +22,4 @@ This is friendly to:
 - diffing units in code review (they're plain data),
 - partial commits (core now, side effects later) without changing
   the call graph.
+

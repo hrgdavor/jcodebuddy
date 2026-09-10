@@ -1,6 +1,6 @@
 # Entity Writes
 
-> Up: [20_writes/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [20_writes/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 This file covers the "side-effect information" type used for entity
 mutations inside the unit, and the rules that make those mutations
@@ -44,3 +44,4 @@ row versus update an existing one. The marker is the explicit answer:
   [`15_aggregation_and_snapshots.md`](15_aggregation_and_snapshots.md)).
 - `Update` + `Delete` for the same id → **conflict** unless the
   process ordered them intentionally.
+

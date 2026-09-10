@@ -1,6 +1,6 @@
 # Execution Model
 
-> Up: [30_runtime/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [30_runtime/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 The execution model is **not** a linear pipeline. It is a **call graph**
 of pure functions, branching, recursive, and conditional as the
@@ -83,3 +83,4 @@ for (var orderId : orderIds) {
 - `<!-- TODO/EXPLORE: ordering guarantees when units from concurrent
 > sub-graphs are merged. -->`
 - `<!-- TODO/EXPLORE: snapshot consistency in concurrent sub-graphs. -->`
+

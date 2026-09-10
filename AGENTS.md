@@ -8,7 +8,7 @@
 ## 1. Source-Visible, IDE-Navigable Wiring (mandatory)
 
 > **Status:** accepted project-wide rule, codified in
-> [`doc/architecture/decisions/DEC-019.md`](doc/architecture/decisions/DEC-019.md).
+> [`doc-hipster-entity/architecture/decisions/DEC-019.md`](doc-hipster-entity/architecture/decisions/DEC-019.md).
 > **Applies to:** all JCodeBuddy codegen, all `project-automation`
 > modules, and every pattern documented under `doc/brainstorm/`.
 
@@ -55,7 +55,7 @@ code or documentation for this repository:
   invoked with `Method.invoke`. The accepted shapes and the two
   acceptance tests are spelled out in DEC-019 § "Transport routing
   — REST and JSON-RPC dispatchers". See
-  [`doc/architecture/decisions/DEC-019.md`](doc/architecture/decisions/DEC-019.md).
+  [`doc-hipster-entity/architecture/decisions/DEC-019.md`](doc-hipster-entity/architecture/decisions/DEC-019.md).
 - **Cooperative codegen — preserve user-tweaked generated blocks.**
   When you generate code that lives next to hand-written code
   (entity builders, dispatcher cases, loop-guard scaffolding,
@@ -74,9 +74,9 @@ code or documentation for this repository:
   block; use it only when a block cannot be recognised by shape.
   The full decision, three-state model, reporting mode, and
   robustness patterns are in
-  [`doc/architecture/decisions/DEC-020.md`](doc/architecture/decisions/DEC-020.md)
+  [`doc-hipster-entity/architecture/decisions/DEC-020.md`](doc-hipster-entity/architecture/decisions/DEC-020.md)
   with a practical reference in
-  [`doc/brainstorm/cooperative-codegen-preserve-user-tweaks.md`](doc/brainstorm/cooperative-codegen-preserve-user-tweaks.md).
+  [`doc-hipster-entity/brainstorm/cooperative-codegen-preserve-user-tweaks.md`](doc-hipster-entity/brainstorm/cooperative-codegen-preserve-user-tweaks.md).
   This complements DEC-018 (whole-file freeze markers) and DEC-019
   (source-visible wiring) without contradicting them.
 - **Generator class-file header — short id, JSON5 config,
@@ -97,9 +97,9 @@ code or documentation for this repository:
   `true`) is the per-file equivalent of DEC-018's whole-file
   freeze — set it to `false` to take a file fully under manual
   control. The full decision, exact format, and patterns are in
-  [`doc/architecture/decisions/DEC-021.md`](doc/architecture/decisions/DEC-021.md)
+  [`doc-hipster-entity/architecture/decisions/DEC-021.md`](doc-hipster-entity/architecture/decisions/DEC-021.md)
   with a practical reference in
-  [`doc/brainstorm/generator-class-body-header.md`](doc/brainstorm/generator-class-body-header.md).
+  [`doc-hipster-entity/brainstorm/generator-class-body-header.md`](doc-hipster-entity/brainstorm/generator-class-body-header.md).
   This complements DEC-020 (cooperative blocks) and DEC-019
   (source-visible wiring): the `{@link …}` reference in the
   first line is the generator-side fulfilment of the same
@@ -120,7 +120,7 @@ code or documentation for this repository:
   the file and what it would emit today, with a uniform
   diagnostic format (kind, location, cause, current, canonical,
   action). The full decision and examples are in
-  [`doc/architecture/decisions/DEC-022.md`](doc/architecture/decisions/DEC-022.md).
+  [`doc-hipster-entity/architecture/decisions/DEC-022.md`](doc-hipster-entity/architecture/decisions/DEC-022.md).
   This complements DEC-020 (cooperative blocks), DEC-021
   (class-file header), and DEC-019 (source-visible wiring).
 
@@ -136,14 +136,14 @@ code or documentation for this repository:
 
 ### Where this comes from
 
-- [`doc/architecture/decisions/DEC-019.md`](doc/architecture/decisions/DEC-019.md) —
+- [`doc-hipster-entity/architecture/decisions/DEC-019.md`](doc-hipster-entity/architecture/decisions/DEC-019.md) —
   the canonical decision.
 - [`hipster-ioc/doc/architecture-and-design.md`](hipster-ioc/doc/architecture-and-design.md) —
   the original "Spring / Dagger problem" rationale.
-- [`doc/brainstorm/annotation-processing-vs-generated-metadata.md`](doc/brainstorm/annotation-processing-vs-generated-metadata.md) —
+- [`doc-hipster-entity/brainstorm/annotation-processing-vs-generated-metadata.md`](doc-hipster-entity/brainstorm/annotation-processing-vs-generated-metadata.md) —
   why generated metadata and materialized code are preferred over
   reflection.
-- [`doc/brainstorm/dec-009-source-visible-generation-strategy.md`](doc/brainstorm/dec-009-source-visible-generation-strategy.md) —
+- [`doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md`](doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md) —
   the source-visible generation strategy.
 - [`doc/brainstorm/business_logic/`](doc/brainstorm/business_logic/) —
   the business-logic concept, which depends on this rule (its
@@ -162,7 +162,7 @@ with pointers, not a new policy.
 - **Cooperative codegen, not annotation processing.** Prefer
   generating committed source that coexists with hand-written
   code, rather than a processor that only runs at compile time.
-  See [`doc/brainstorm/dec-009-source-visible-generation-strategy.md`](doc/brainstorm/dec-009-source-visible-generation-strategy.md).
+  See [`doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md`](doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md).
 - **JavaParser as the AST of choice.** Read, write, and reformat
   source through `com.github.javaparser` so generated code and
   parsed code share the same representation. See

@@ -1,6 +1,6 @@
 # Generator-Specifics Open Questions
 
-> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 - `<!-- TODO/EXPLORE: how unit write / side-effect slots are namespaced
 > and typed. -->`
@@ -13,3 +13,4 @@
 - `<!-- TODO/EXPLORE: review bot that flags a `@CoreChange` that
 > reads from `unit.coreWrites()` and should be re-typed as
 > `@CoreChangeOnChange`. -->`
+

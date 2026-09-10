@@ -1,6 +1,6 @@
 # Mental Model
 
-> Up: [00_intro/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [00_intro/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 The mental model in three sentences:
 
@@ -46,3 +46,4 @@ Because the unit is the only thing the call graph produces, the
 process is **reviewable** (read the orchestration method, see every
 effect that will happen) and **replayable** (serialize the unit, hand
 it to the dispatcher again).
+

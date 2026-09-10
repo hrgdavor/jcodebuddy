@@ -1,6 +1,6 @@
 # JCodeBuddy Cooperative Codegen Integration
 
-> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [40_engineering/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 This concept is deliberately shaped to be **easy for JCodeBuddy to
 generate**, so that what developers actually read stays small and
@@ -61,7 +61,7 @@ Everything else is generated cooperatively with other generators
   entity types and their change markers, the pipeline generator wires
   them into the core slot.
 - **Source-visible, IDE-navigable** – per project-wide rule
-  ([`../../architecture/decisions/DEC-019.md`](../../architecture/decisions/DEC-019.md))
+  (DEC-019)
   every connection the generator emits is **ordinary Java source
   that is committed to git** and navigable with a basic IDE. The
   annotations are *markers only*; the dispatcher, the loop-guard
@@ -95,3 +95,4 @@ Everything else is generated cooperatively with other generators
 > `hipster-ioc` once extracted. -->`
 - `<!-- TODO/EXPLORE: lightweight annotation set for "snapshot point",
 > "rejection", "id allocator scope", etc. -->`
+

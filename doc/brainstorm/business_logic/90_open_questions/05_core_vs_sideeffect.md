@@ -1,6 +1,6 @@
 # Core vs Side-Effect Open Questions
 
-> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [90_open_questions/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 - `<!-- TODO/EXPLORE: should the categorization be enforced at compile
 > time, e.g. the unit's `coreWrites()` accessor is only callable from
@@ -20,3 +20,4 @@
 - `<!-- TODO/EXPLORE: review bot that flags a side-effect change in a
 > PR without a corresponding core change (or vice-versa) as
 > suspicious. -->`
+

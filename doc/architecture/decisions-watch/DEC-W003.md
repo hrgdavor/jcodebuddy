@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-24
 - Owners: project
-- Related docs: [Module map](../module-map.md), [README.md](../README.md)
+- Related docs: [Module map](../module-map.md)
 - Supersedes: -
 - Superseded by: -
 
@@ -40,3 +40,4 @@ The module is the sole location for automation code and configuration. No produc
 - `project-automation` MUST compile-scope only (no runtime/shaded dependencies leaking to consumers)
 - All generators and automation configuration MUST reside in this module
 - No code that is part of the published application MUST be in `project-automation`
+

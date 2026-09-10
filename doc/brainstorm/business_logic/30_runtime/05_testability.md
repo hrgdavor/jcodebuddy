@@ -1,6 +1,6 @@
 # Testability
 
-> Up: [30_runtime/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [30_runtime/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 The key insight: **if a pure function only describes effects into the
 unit, the test asserts on the unit** instead of mocking the effects.
@@ -58,3 +58,4 @@ The golden file can be split per category so reviewers can approve a
 
 > `<!-- TODO/EXPLORE: golden-file format (JSON, custom text), where to
 > store the files, and how to make diffs reviewer-friendly. -->`
+

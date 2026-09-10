@@ -6,17 +6,17 @@ The project favors explicit metadata and predictable contracts over reflection-h
 
 ## Quick start
 
-- [Why hipster-entity](doc/user/why-hipster-entity.md)
-- [Getting Started](doc/user/getting-started.md)
-- [Core Concepts](doc/user/core-concepts.md)
-- [Materialization Guide](doc/user/materialization-guide.md)
+- [Why hipster-entity](doc-hipster-entity/user/why-hipster-entity.md)
+- [Getting Started](doc-hipster-entity/user/getting-started.md)
+- [Core Concepts](doc-hipster-entity/user/core-concepts.md)
+- [Materialization Guide](doc-hipster-entity/user/materialization-guide.md)
 
 ## Documentation
 
-- [User documentation](doc/user/README.md)
-- [Project docs index](doc/README.md)
-- [Architecture decisions](doc/architecture/DECISIONS.md)
-- [Roadmap](doc/roadmap/README.md)
+- [User documentation](doc-hipster-entity/user/README.md)
+- [Project docs index](doc-hipster-entity/README.md)
+- [Architecture decisions](doc-hipster-entity/architecture/DECISIONS.md)
+- [Roadmap](doc-hipster-entity/roadmap/README.md)
 
 ## For contributors
 

@@ -1,6 +1,6 @@
 # Aggregation and Snapshots
 
-> Up: [20_writes/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [20_writes/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 > *"multiple functions could affect same entity and final effect will be
 > aggregate, but in such scenario it should be attempted to snapshot those
@@ -106,3 +106,4 @@ Snapshots are pure data. They can be:
 Because snapshots are derived from the unit's effect descriptions and
 the recorded calls, replaying a WAL produces the same snapshots —
 which makes replay-based debugging reliable.
+

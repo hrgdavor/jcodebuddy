@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-07-24
 - Owners: project
-- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [DEC-W008: Metadata parsing without cache](DEC-W008.md), [DEC-W009: In-RAM metadata relations storage](DEC-W009.md), [hipster-entity-tooling](../README.md), [hipster-entity-api](../README.md), [project-automation](../README.md)
+- Related docs: [DEC-W005: Code generation interface contract](DEC-W005.md), [DEC-W006: Metadata cache with per-hash invalidation](DEC-W006.md), [DEC-W008: Metadata parsing without cache](DEC-W008.md), [DEC-W009: In-RAM metadata relations storage](DEC-W009.md)
 - Supersedes: -
 - Superseded by: -
 
@@ -433,3 +433,4 @@ These approaches depend on the metadata model defined here but are not part of t
    - Partial enrichment (some threads fail) leaves only failed entries with `metadata == null`; all others are populated.
 8. **Concurrent enrichment tests:** Multiple threads enrich distinct entries simultaneously. No data corruption or lost updates. Index updates are atomic.
 9. **Absent-metadata consumer tests:** Generators that call `get(hash, TypeMeta.class, path)` on an unenriched entry receive `null` and handle it without throwing.
+

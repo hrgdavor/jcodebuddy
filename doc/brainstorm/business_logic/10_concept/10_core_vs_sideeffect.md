@@ -1,6 +1,6 @@
 # Core Steps vs Side-Effect Steps
 
-> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 ## Why separate them
 
@@ -159,3 +159,4 @@ void triggerNextWorkflowStep(ProcessingUnit<OrderContext> unit, OrderView order)
 > `<!-- TODO/EXPLORE: should `next-step triggers` be a distinct
 > third slot (separate from generic notifications), so they can be
 > reviewed and dispatched under their own policy? -->`
+

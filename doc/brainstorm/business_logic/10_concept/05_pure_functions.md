@@ -1,6 +1,6 @@
 # Pure Functions in the Call Graph
 
-> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [10_concept/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 Every function on the call graph is **pure** with respect to the outside
 world. It reads inputs and the unit, mutates the unit, and returns
@@ -120,3 +120,4 @@ OrderResult recalcOrder(ProcessingUnit<OrderContext> unit, long orderId) {
 
 A reviewer can collapse the side-effect block and read only the core
 to understand the business outcome.
+

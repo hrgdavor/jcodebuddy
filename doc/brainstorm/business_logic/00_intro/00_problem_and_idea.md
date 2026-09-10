@@ -1,6 +1,6 @@
 # Problem and Idea
 
-> Up: [00_intro/README.md](README.md). Back to [business_logic/README.md](../../README.md).
+> Up: [00_intro/README.md](README.md). Back to [business_logic/README.md](../README.md).
 
 ## The actual shape of a business process
 
@@ -72,7 +72,7 @@ points in the graph, snapshots are captured so the contributions are
 - "magic" side-effects inside framework-managed callbacks,
 - and — by project-wide rule — any wiring that is not materialized
   as committed, IDE-navigable Java source. See
-  [`../../architecture/decisions/DEC-019.md`](../../architecture/decisions/DEC-019.md).
+  DEC-019.
 
 **Keep** what is genuinely useful:
 
@@ -81,3 +81,4 @@ points in the graph, snapshots are captured so the contributions are
 - replayable history of decisions,
 - composable, branching, recursive call graphs,
 - declarative description of intended effects.
+
