@@ -10,8 +10,11 @@ Level 0 can be jumpstarted from either a plain interface or a record:
 - start with `interface` only → metadata is generated for the interface view
 - start with `record` only → metadata is generated for the record view
 
-Both paths converge at Level 1 (`RECORD`), where the interface becomes the stable contract and the record provides the concrete materialization.
+Both paths can converge at Level 1 (`RECORD`), where the interface becomes the stable contract and the record provides the concrete materialization. The record is **recommended** — it is immutable and safe for sharing — but it is **not required** when starting from an interface.
+
 If you start from a record, this migration can often happen in place because the generated interface method names follow the same naming pattern as the original record components.
+
+When starting from an interface only, you may stop at the interface (or a generated builder) without ever materializing a record. This is valid whenever the view is used transiently — for example, to shape complex parameters for a method call that will likely be caught by escape analysis and inlined. In such cases a builder (see the `BUILDER` boilerplate level) is sufficient, and forcing a record adds unnecessary allocation and coupling.
 
 <!-- INCLUDE:~iface/Person.java#DOCS -->
 ```java
@@ -57,7 +60,9 @@ This generated metadata enum intentionally breaks standard naming conventions to
 
 ## RECORD
 
-Regardless if starting with `record` or `interface + record` the setup is the same in this step. Interface defines the contract, record gives performant immutable materialization for using the data. 
+When a record is present, the setup is the same regardless of whether you started from a `record` or an `interface + record`. The interface defines the contract, and the record gives performant immutable materialization for using the data.
+
+A record is **recommended** — it is immutable and safe for sharing — but it is **not mandatory**. Starting from an interface alone is a supported path: the interface is the contract, and you may stop there, or progress to a generated `BUILDER` instead of a record. This is appropriate for transient, short-lived views (e.g. shaping complex parameters for a method call that escape analysis may inline), where a builder is sufficient and forcing a record would only add allocation overhead. 
 
 ```java
 interface Person{
@@ -250,6 +255,8 @@ public static class Person.Update implements Person, ViewWriter<Long, Person, Pe
 4. Use Level 3 when projection flexiblity is high and generated class explosion is undesirable.
 5. Use Level 4 for highest-performance runtime in fixed schema scenarios.
 
+> **Record is recommended, not required.** A record is the preferred concrete form for a view — it is immutable and safe for sharing — but it is not mandatory. When starting from an interface only, you may stop at the interface or a generated builder without ever materializing a record. This is valid for transient, short-lived views (e.g. shaping complex parameters for a method call that escape analysis may inline), where a builder is sufficient and forcing a record would only add allocation overhead and coupling.
+
 ## Reference
 
 - [Entity API docs](../README.md)
@@ -337,6 +344,8 @@ public class PersonSummary.Update implements PersonSummary, ViewWriter<Long, Per
 2. Use Level 2 for flexible, metadata-driven mappings and when you want to minimize generated class count.
 3. Move to Level 3 for the highest performance and static analysis benefits.
 4. Ensure `ViewWriter` and `Identifiable` contract consistency across levels (`id()` on root entities, not on all readers).
+
+> **Record is recommended, not required.** A record is the preferred concrete form for a view — it is immutable and safe for sharing — but it is not mandatory. Starting from an interface only is a supported path: the interface is the contract, and you may stop there, or progress to a generated `BUILDER` instead of a record. This is appropriate for transient, short-lived views (e.g. shaping complex parameters for a method call that escape analysis may inline), where a builder is sufficient and forcing a record would only add allocation overhead and coupling.
 
 ## References
 
