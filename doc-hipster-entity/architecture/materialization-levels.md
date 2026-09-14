@@ -1,5 +1,19 @@
 # Materialization levels for hipster-entity views
 
+> Remember: this project does not use get/set java beans notation for a POJO or an Entity, but goes with  Java Record where field name ang getter are same, and setter is also same name but with single parameter and void return.
+
+
+
+| Usage                         | Interface | record | builder | builder-tracking | meta      |
+| ----------------------------- | --------- | ------ | ------- | ---------------- | --------- |
+| RPC param                     |           | record |         |                  | ?metadata |
+| complex method param          |           |        | builder |                  |           |
+| entity                        | interface | record |         | builder-tracking | metadata  |
+| POJO inside entity (doc part) | interface | record |         | builder-tracking | metadata  |
+| EntityDTO                     | interface |        |         |                  | ?metadata |
+| EntityForm                    | interface |        |         |                  | ?metadata |
+
+> ?metadata - is optional if codebase does not need the metadata in runtime. If serialization/deserialization is delegated to a framework that uses reflection anyway, or if it is materialized into source, then you do not need metadata for runtime.
 
 ## MINIMAL
 
