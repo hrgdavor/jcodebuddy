@@ -39,7 +39,8 @@ This concept organizes business logic so that:
 - **The Processing Unit accumulates side-effects.** It is a single, explicit
   object passed through the call graph. It holds core entity writes,
   side-effect descriptions (notifications, next-step triggers), audit
-  entries, generated identifiers, and debug snapshots.
+  entries, generated identifiers, debug snapshots, and the **traceId** for
+  end-to-end tracking of user actions through the entire operation.
 - **Every step is exactly one of three operation types** — see
   [`10_concept/05_operation_types.md`](10_concept/05_operation_types.md):
   - `@CoreChange` — only changes core data, no dependency on current changes.
@@ -159,6 +160,7 @@ edits.
 | Term                  | Meaning                                                                 |
 | --------------------- | ----------------------------------------------------------------------- |
 | **Processing Unit**   | The shared object that accumulates side-effect descriptions.            |
+| **Trace ID**          | A unique identifier passed through the call graph that tracks a user action from the initial request through all business logic steps, data mutations, and external trigger deliveries. Stored in the Processing Unit and propagated to audit entries, notifications, and external callbacks. |
 | **Pure function**     | A function that only reads inputs and mutates the unit; no I/O, no DB.  |
 | **Core step**         | A pure function that produces the minimum business outcome (state).    |
 | **Side-effect step**  | A pure function that produces peripheral effects (email, webhook, …).  |
