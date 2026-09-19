@@ -1,6 +1,7 @@
 # hipster-entity — Combined Plan to First Usable Implementation
 
-**Status:** finalized — decisions closed in two rounds (§ 4 and § 4.7); **scope complete, no deferred features except S3/X1**
+**Status:** finalized — decisions closed in three rounds (§ 4, § 4.7, and the execution review
+recorded at the close of § 4.7); **scope complete, no deferred features except S3/X1**
 **Combines:** `plans__m1/plan.ds.md`, `plans__m1/plan.copilot.md`,
 `plans__m1/plan.kilo.md`, `plans__m1/plan.dsflash.md`
 **Scope:** `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`,
@@ -283,10 +284,19 @@ the subsections they change (§ 4.3/X2 + X3, § 4.5/G1 + G6, § 4.6/R1.4, § 4.1
 then added two more — **DR-7** (the R1 ledger is marker-scoped; a marker-less existing enum is
 bootstrapped fresh, § 4.5/G7) and **DR-8** (view discovery excludes the framework surface and the
 generator's own nested output, § 4.5/G8) — and applied a set of factual corrections in place.
+An **execution review** then corrected one binding decision — **DR-4**: `S` is the `EEnumSet`
+*interface*, never the `final` class `EEnumSet64` (§ 4.7/DR-4, § 6.2/1.7) — rewrote § 6.2/1.4 and
+§ 6.2/1.6, and applied a second set of factual corrections in place (§ 4.7).
 **No task in this plan requires an unfixed authoring decision mid-flight.** One honest
 qualification: tasks **6.1/6.4** (nested/deep tracking) and **7.13** (compaction) each *author a new
 standalone DEC* before their implementation starts, so those three tasks contain a scheduled design
-step rather than an open question. Nothing else is deferred to a mid-flight choice.
+step rather than an open question. **Those DECs are self-accepted for this plan:** a DEC counts as
+"accepted" once it is written, committed, and cross-referenced from
+`architecture/decisions/README.md` (and, where § 9/4.8 requires it, from `roadmap/README.md`), with
+its content matching the rule this plan has already fixed — no separate human sign-off is required,
+and an executor must not stall on that gate. The same reading covers the "diff reviewed" wording in
+§ 15's S1 row: the review is the executor's own documented comparison of the diff against S1.
+Nothing else is deferred to a mid-flight choice.
 
 | # | Question | Final rule |
 |---|---|---|
@@ -324,8 +334,9 @@ generator change shows up as a reviewable diff. Generate into `src/main/java`, n
 `target/generated-sources`. Confirmed feasible: the working tree is clean
 (`git status --porcelain` is empty), so the regeneration diff is isolated. **Correction
 [verified]:** the `plans__*` directories are **tracked** files — `git ls-files` lists
-`plans__p1/plan.dsflash.md` and all four `plans__m1/*`, and `.gitignore` contains only
-`.kilo/plans` — not ignored as an earlier draft of this section claimed. The isolation argument is
+`plans__p1/plan.dsflash.md` and all four `plans__m1/*`, and the only plans-related pattern in
+`.gitignore` is `.kilo/plans` (the file also carries the usual Maven/IDE/OS entries) — they are
+**not** ignored, as an earlier draft of this section claimed. The isolation argument is
 unaffected, but Phase 4 must not expect `git status` to stay silent about the plan documents
 themselves.
 
@@ -408,8 +419,19 @@ state holder, so:
 
 ```java
 @Override public EEnumSetBuilder64<PersonSummary_> changesBuilder() { return mf; }
-@Override public EEnumSet64<PersonSummary_>        changes()       { return mf.toImmutable(); }
+@Override public EEnumSet<PersonSummary_>          changes()       { return mf.toImmutable(); }
 ```
+
+**`S` is the `EEnumSet` interface, never the final class `EEnumSet64` (corrected by the execution
+review, § 4.7/DR-4).** `EEnumSetBuilder64.toImmutable()` is declared to return `EEnumSet<E>` and
+returns the cached `EEnumSetEmpty` singleton when the set is empty
+**[verified, `EEnumSetBuilder64.java:302-305`, `EEnumSetEmpty.java:6`]**. `EEnumSet64` is `final`
+and is a *sibling* of `EEnumSetEmpty`, not its supertype, so an `EEnumSet64<View_> changes()` cannot
+compile, and casting would throw `ClassCastException` on a fresh (empty) tracking view — failing
+§ 6.4 test 8, the first test of this suite. Narrowing `toImmutable()`'s return type is not an escape
+either: § 6.2/1.10 requires the empty case to stay allocation-free through `EEnumSetEmpty.of(...)`.
+`EEnumSet` is therefore the correct `S` — both implementations satisfy it, and a caller that wants
+the concrete type uses `changesBuilder()`.
 
 Only `changesBuilder()` can mutate; `changes()` is a snapshot taken at call time, so
 `changesBuilder().clear()` followed by `changes().isEmpty()` is `false`→`true`, and
@@ -682,7 +704,10 @@ samples), `paymentMethod/entity/` with a sealed hierarchy and four subclasses, a
   `firstName`/`lastName`. The samples duplicate each other, not `entity/Person`. The decision is
   unchanged — deleting either still breaks the INCLUDE directives — but the justification is
   "live documentation sources required by `materialization-levels.md`", not "different fields". The decision is therefore: **keep both files exactly as they are, and keep them out of
-  the generator's scan** — the `@View(gen = GenLevel.META)` on `person/iface/Person.java` is
+  the generator's scan** — the `@View(gen = hr.hrg.hipster.entity.api.GenLevel.META)` on
+  `person/iface/Person.java` (the file writes the **fully-qualified** form, the only live `@View(gen
+  = …)` instance in the tree, so § 8.1/3.2's parser must accept it and not only a bare `GenLevel.X`)
+  is
   tutorial narrative for the "record → interface" walkthrough, and that interface is
   package-private, so it could not carry a public generated enum in any case. § 9/4.7 rewrites
   `materialization-levels.md` around the six `GenLevel` values and **must preserve both INCLUDE
@@ -1183,7 +1208,7 @@ table); their full rules live in § 4.5/G7 and § 4.5/G8.
 | DR-1 | Does an `addons` declaration propagate to views derived from the declaring interface? | **No — resolved per view.** `addons` applies to the interface that declares it and to nothing else; a subtype must declare `addons` itself. A declaration on a non-view interface (a marker) has no effect and is reported as the DEC-022 diagnostic `addon_on_non_view`. The `packages` knob filters **generation**, not **indexing**, so a cross-package addon or supertype stays resolvable. | § 4.5/G6 (contribution, propagation and generation rows, plus the Phase 4 consequence list), § 4.3/X3, § 9/4.1, § 9/4.9 |
 | DR-2 | How is a tombstoned field kept out of generated writes? | **`FieldDef.retired()`** — a fifth `default` accessor in X2, `default boolean retired() { return false; }`. A tombstone emits `retired()` → `true`; builder setters, `set(int)`/`set(String)` arms, JDBC binder/`INSERT`/`UPDATE` and mapper sources **skip retired fields**; readers stay tolerant. | § 4.3/X2, § 4.6/R1.4, § 6.1/1.2, § 4.5/G5, § 12.1/7.2–7.4, § 6.4 test 25 |
 | DR-3 | Who owns the `DEFAULT` resolution rule? | **One shared `GenLevelResolver`** in `hipster-entity-tooling`, called by both the validator (§ 6.3/1.12) and the generator (§ 8.1/3.3). No `DEFAULT` → `META` shortcut anywhere. | § 4.5/G1, § 6.3/1.12, § 8.1/3.3 |
-| DR-4 | What is `S` in `ViewChangeTracking<E,S>` once `changes()` is the immutable accessor? | Generated and example tracking builders use **`EEnumSet64<View_>`** (`changes()` → `mf.toImmutable()`, `changesBuilder()` → `mf`); the array base implements `ViewChangeTracking<F, EEnumSet<F>>`; the § 6.4 parity fixture uses `EEnumSet64` too. The example's `implements` clause is **re-typed**, not merely renamed. | § 4.1/S5, § 6.2/1.7, § 6.4, § 8.6/3.14, § 13 |
+| DR-4 | What is `S` in `ViewChangeTracking<E,S>` once `changes()` is the immutable accessor? | **`EEnumSet<View_>` — the interface, not `EEnumSet64`** (corrected by the execution review; the earlier answer named `EEnumSet64`, which cannot compile). `toImmutable()` returns `EEnumSet<E>` and yields the cached `EEnumSetEmpty` singleton when empty, and `EEnumSet64` is `final` and a sibling of `EEnumSetEmpty`, so `EEnumSet64` is unachievable and a cast would throw on a fresh view; narrowing `toImmutable()` is barred by § 6.2/1.10's allocation-free empty case. Generated and example tracking builders declare `ViewChangeTracking<View_, EEnumSet<View_>>` (`changes()` → `mf.toImmutable()`, `changesBuilder()` → the live `EEnumSetBuilder64<View_>`); the array base implements `ViewChangeTracking<F, EEnumSet<F>>`, which is what its `changesSnapshot()` already returns; the § 6.4 parity fixture uses `EEnumSet<…>` too. The example's `implements` clause is **re-typed**, not merely renamed. | § 4.1/S5, § 6.2/1.7, § 6.4, § 8.6/3.14, § 13 |
 | DR-5 | What happens to the stale hand-written enums under `example/`? | `example/PersonAuditable_.java` and `example/PaymentMethodAuditable_.java` are **deleted** in Phase 4 (wrong shape, superseded, unreferenced); `example/Auditable` and the two `*Property` enums stay hand-written. | § 9/4.1, § 4.5/G6 |
 | DR-6 | Where are the new binding rules recorded? | **Each gets its own standalone DEC**: R1 (§ 9/4.8), field-enum compaction (§ 12.4/7.13), nested/deep tracking (§ 11/6.1). R1 still *uses* DEC-021's header/marker mechanism, but its order contract is not recorded by amending DEC-021. | § 9/4.8, § 12.4/7.13, § 11/6.1 |
 | DR-7 | Does R1's append-only/tombstone rule apply to an existing enum that does not yet carry the `entityFieldEnum` marker (the legacy example enums)? | **No — the ledger is marker-scoped.** Preserve and tombstone only in enums that already carry `entityFieldEnum:true`; a marker-less existing enum is **bootstrapped as a fresh ledger**, its stale constants are **dropped** (the leaked `toBuilder`/`toBuilderTracking`/`changes`) and reported as `enum_constant_removed` with action `bootstrap`. Adding the marker by hand is the sole opt-in that forces tombstoning. A malformed header counts as marked (fail safe). | § 4.5/G7, § 4.6/R1.1 + R1.2 + R1.3 + R1.4, § 8.3/3.7a, § 9/4.1 |
@@ -1203,6 +1228,34 @@ the **same** `name`/`email` fields and `record/Person.java` is a record (§ 4.3/
 already pinned **centrally** (§ 15); the `javax.tools` compile harness **already exists** inside
 `EntityMetadataGeneratorTest` (§ 0.5); and § 16's "stale validator message" belongs to § 6.3/1.12,
 not § 9/4.7.
+
+The **execution review** then corrected one *binding* decision and two task specifications in place,
+because the earlier text could not be executed as written. **DR-4** (above) now types `S` as the
+`EEnumSet` interface: `EEnumSetBuilder64.toImmutable()` is declared `EEnumSet<E>` and returns the
+cached `EEnumSetEmpty` singleton when the set is empty, while `EEnumSet64` is `final` and a
+*sibling* of `EEnumSetEmpty` — so the previously specified `EEnumSet64<View_>` was unachievable, a
+cast would have thrown `ClassCastException` on a fresh tracking view (failing § 6.4 test 8, the
+first test of the S5 suite), and narrowing `toImmutable()` is barred by § 6.2/1.10's allocation-free
+empty case. § 4.1/S5, § 6.2/1.7, § 6.4, § 8.6/3.14 and § 13 carry the corrected type. **§ 6.2/1.4**
+keeps `ForNameOrdinal` in the new constructor and factory signature — it is the only route from
+`set(String,Object)` to an ordinal, and D5 / test 18 pin the `-1` contract it produces — and now
+*corrects* the arity check instead of claiming the tracking array lacks one: it has one
+(`EntityUpdateTrackingArray.java:24-26`, same message as `EntityReadArray`), and what it lacks is a
+check against the enum universe, which the new `F[] universe` parameter makes possible. **§ 6.2/1.6**
+now states how the array path feeds the `ChangeRecorder`, which the earlier draft left implicit:
+`set(int,Object)` overwrites `values[ordinal]` before marking, and `mark(int)` carries no
+previous value, so the write must go through `addOrdinalChange(ordinal, previous, value)`.
+
+Four further factual corrections are applied in place: `discriminatorField` support **is** exercised
+by `FieldBoilerplateGeneratorTest.java:35-36,48-49` (§ 9/4.3); `mvn` on `PATH` is a wrapper script,
+`D:\programs\cmd\mvn.bat`, that delegates to `mvnd`, and a green run has been observed to return exit
+code `0` as well as the documented `1` (§ 0.1a, § 0.4); the plans-related entry in `.gitignore` is
+`.kilo/plans` among many others (§ 4.1/S2); and the only live `@View(gen = …)` in the tree is
+written in its **fully-qualified** form, so § 8.1/3.2's parser must accept that form and not only a
+bare `GenLevel.X` (§ 4.3/X3). § 12.3/7.10 now pins `jakarta.validation-api` to the version the local
+repository holds, so the offline build keeps working. Finally, § 4 above now states that a DEC
+counts as accepted when it is written, committed and indexed — the gates in tasks 6.1 and 7.13 are
+self-accepted design steps, not a wait for sign-off.
 
 ---
 
@@ -1225,13 +1278,16 @@ not § 9/4.7.
   compilation itself succeeds. Symptom palette: `release version 25 not supported` (compiler on the
   wrong JDK) and the class-file message above (fork on the wrong JDK).
 - [ ] **0.1a Name the recorded Maven.** Two launchers are installed and they behave differently:
-  `mvn` on `PATH` resolves to **mvnd 1.0.0-m4 / Maven 4.0.0-alpha-4** (daemon `java.home` pinned to
-  jdk-25 by `~/.m2/mvnd.properties`), and an **Apache Maven 3.9.0** sits at
-  `D:\programs\mvn\bin\mvn.cmd`. Record which one § 0.4's command uses. Two consequences:
+  `mvn` on `PATH` is `D:\programs\cmd\mvn.bat`, a two-line wrapper around
+  `mvnd --raw-streams %*` (`D:\programs\mvnd\bin\mvnd.exe`) — i.e. **mvnd 1.0.0-m4 / Maven
+  4.0.0-alpha-4**, with the daemon's `java.home` pinned to jdk-25 by `~/.m2/mvnd.properties`. An
+  **Apache Maven 3.9.0** sits at `D:\programs\mvn\bin\mvn.cmd`. Record which one § 0.4's command
+  uses. Two consequences:
   Phase 0.2's POM-validation failure **does not reproduce under Maven 4** (verified green), only
-  under 3.9; and `mvnd -v` prints its version and then exits **non-zero**
-  (`Environment mismatch … NoSuchFieldException: fs`), so a raw `$LASTEXITCODE` gate around mvnd
-  reports failure on success — gate on the build outcome, not on the launcher's exit code.
+  under 3.9; and the mvnd wrapper has been observed both to print its version and exit **non-zero**
+  (`Environment mismatch … NoSuchFieldException: fs`) **and** to return `0` on a green run, so a
+  raw `$LASTEXITCODE` gate is unreliable in both directions — gate on the build outcome, not on the
+  launcher's exit code.
 - [ ] **0.2 Fix root reactor POM validation.** Add `<dependencyManagement>` entries for
   `hr.hrg.jcodebuddy:metadata-server:${project.version}` and
   `hr.hrg.jcodebuddy:metadata-mcp-server:${project.version}` — **[verified]** both are missing,
@@ -1270,11 +1326,14 @@ not § 9/4.7.
   `mvn -o -pl hipster-entity-api,hipster-entity-core,hipster-entity-tooling,hipster-entity-jackson,hipster-entity-test,hipster-entity-example -am test`
   is BUILD SUCCESS with counts `api` 0, `core` 42, `tooling` 22, `jackson` 0, `test` 4,
   `example` 0 — 68 tests total. Re-record the numbers if § 0.1a's recorded launcher or JDK differs.
-  **Re-verified during review of this plan** on the same tree and launcher (mvnd 1.0.0-m4 /
-  Maven 4.0.0-alpha-4, daemon `java.home` = `C:\Program Files\Java\jdk-25`): BUILD SUCCESS, the
-  same 42 / 22 / 4 per-module counts. The `mvnd` process reported **exit code 1 while the build
-  was green**, which is exactly the § 0.1a launcher quirk — gate on the build outcome, never on
-  `$LASTEXITCODE`.
+  **Re-verified during plan review** on the same tree and launcher (mvnd 1.0.0-m4 /
+  Maven 4.0.0-alpha-4, daemon `java.home` = `C:\Program Files\Java\jdk-25`, with `JAVA_HOME` set to
+  the same jdk-25): BUILD SUCCESS, all six modules SUCCESS, the same `42 / 22 / 4` per-module
+  counts. Two notes for whoever re-records it. The `mvnd` wrapper has been seen to report **exit
+  code 1 while the build was green** (§ 0.1a), but the review's run returned `0` — gate on the
+  build outcome, never on `$LASTEXITCODE`. And the `test` count of 4 is the number surefire *runs*:
+  the module also contains a fifth `@Test` in `PersonSummaryFileBenchmarkRunner`, which surefire's
+  default includes do not match, so a count taken from annotations reads 5 and looks like drift.
 - [ ] **0.5 Add a test-compilation gate before any generator work.**
   `hipster-entity-tooling`, starting as `GeneratedSourceCompilesTest`: write a fixture source
   root to a JUnit `@TempDir`, run `EntityMetadataGenerator.generate(...)`, assert the emitted
@@ -1329,15 +1388,20 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
 
 - [ ] **1.4 Fix the tracking-array constructor (highest-value commit in the plan).**
   Change the factory to take the field universe, which `ViewMeta` already exposes, instead of
-  reflecting a `Class`:
+  reflecting a `Class`, **without dropping the `ForNameOrdinal`** that the name-based write path
+  needs:
 
   ```java
-  protected EntityUpdateTrackingArray(F[] universe, int fieldCount, Object[] values)
+  protected EntityUpdateTrackingArray(ForNameOrdinal forNameOrdinal, F[] universe, int fieldCount, Object[] values)
   public static <T, F extends Enum<F> & FieldDef>
-      EntityUpdateTrackingArray<T, F> create(F[] universe, Object... values)
+      EntityUpdateTrackingArray<T, F> create(ForNameOrdinal forNameOrdinal, F[] universe, Object... values)
   ```
 
-  then `new EEnumSetBuilder64<>(universe)` in both variants. Keep the **current** factory
+  `F[] universe` is the **new** parameter that fixes the `null` enum class; `ForNameOrdinal` is
+  **kept** — it is the only route from `set(String,Object)` to an ordinal
+  (`EntityUpdateTrackingArray.java:19,78`), and D5 / § 6.4 test 18 pin the `-1` contract it
+  produces. The factory derives `fieldCount` as `universe.length`.
+  Then `new EEnumSetBuilder64<>(universe)` in both variants. Keep the **current** factory
   `create(ForNameOrdinal, int, Object...)` as a **deprecated delegating overload** if anything
   outside this plan still calls it. Correction to an earlier draft of this task: there is no
   `create(Class<F>, int, Object...)` in the code today — that signature appears only in
@@ -1349,15 +1413,30 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
   **[verified — note the count comes from the *universe* enum `Enum64`/`E96`, not from the
   `FieldDef` enum `E64`/`E96`]** — so changing the constructors to take `F[] universe`
   **breaks the harness in the same commit** and no factory overload can prevent that. Update those
-  two setup methods in the same commit (as the risk register already requires), and pass the
-  **`FieldDef`** enum's constant array (`E64.values()` / `E96.values()`) instead of the
-  `ForNameOrdinal`. Add the arity check that `EntityReadArray` already has but the tracking
-  array lacks.
+  two setup methods in the same commit (as the risk register already requires): pass the
+  **`FieldDef`** enum's constant array (`E64.values()` / `E96.values()`) **alongside** the existing
+  `forNameOrdinal64` / `forNameOrdinal96`, which are added to, not replaced by, the universe
+  argument. **Correct the arity check rather than add one (execution review):** the tracking array
+  *already* checks `fieldCount != values.length` and throws the same `IllegalArgumentException` the
+  read array throws **[verified, `EntityUpdateTrackingArray.java:24-26`]**; what it lacks is a check
+  against the **enum universe** — `EntityReadArray` derives the expected length from
+  `getEnumConstants()` **[verified, `EntityReadArray.java:11`]**, while the tracking array trusts the
+  caller's `fieldCount`. Now that the universe is a parameter, assert `universe.length == fieldCount`
+  as well, so a mis-sized array cannot be constructed at all.
 - [ ] **1.5** `EEnumSetBuilder64` / `EEnumSetBuilderLarge`: add an `E[] universe` constructor;
   keep the `Class<E>` constructor delegating to it.
 - [ ] **1.6** New `ChangeRecorder` (previous-value store), plus move `addOrdinalChange` out of
   the `default` interface method into both concrete builders so they can hold the recorder as
   state. Preserve the DEC-012 order exactly: compare → record → set bit.
+  **The array path must feed the recorder explicitly (added by the execution review):** `mark(int)`
+  carries no old/new value, and `EntityUpdateTrackingArray.set(int,Object)` overwrites
+  `values[ordinal]` **before** it marks **[verified, `EntityUpdateTrackingArray.java:67-73`]**, so
+  the code as it stands cannot populate `previousValue(ord)` — which § 6.4 tests 6/14 and the
+  proxy's `previousValue`/`diff` forwarding require. Route the array's write through
+  `changes.addOrdinalChange(ordinal, previous, value)` instead of `mark(ordinal)` — the
+  `Objects.equals` guard at `:68` stays in front of it, so the verified no-op rule is unchanged —
+  or add a `mark(int ordinal, Object previous, Object next)` overload beside `mark(int)`. Tasks 1.7
+  and § 6.4 tests 6/14 depend on this being stated rather than inferred.
 - [ ] **1.7** Widen `ViewChangeTracking` to the real contract — **in place, in
   `hr.hrg.hipster.entity.core`** (S3 deferred; no module move, no file delete) — with the S5
   two-accessor shape: `isChanged()`, `changes()` (immutable snapshot), `changesBuilder()` (live
@@ -1386,22 +1465,33 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
   hand-written `PersonSummaryBuilderTracking` keeps compiling against the widened interface apart
   from the accessor renames **and the type-argument change** it needs anyway.
 
-  **The `S` type argument must change too (§ 4.7/DR-4).** Because `changes()` is now the
-  *immutable* `S`, an implementor whose `changes()` used to return a mutable builder can no longer
-  name that builder as `S`. Concretely:
+  **The `S` type argument must change too (§ 4.7/DR-4) — to the `EEnumSet` interface, not
+  `EEnumSet64`.** Because `changes()` is now the *immutable* `S`, an implementor whose `changes()`
+  used to return a mutable builder can no longer name that builder as `S`. Concretely:
   - `PersonSummaryBuilderTracking` becomes
-    `implements PersonSummary.Write, ViewChangeTracking<PersonSummary_, EEnumSet64<PersonSummary_>>`,
-    with `EEnumSet64<PersonSummary_> changes() { return mf.toImmutable(); }` and
+    `implements PersonSummary.Write, ViewChangeTracking<PersonSummary_, EEnumSet<PersonSummary_>>`,
+    with `EEnumSet<PersonSummary_> changes() { return mf.toImmutable(); }` and
     `EEnumSetBuilder64<PersonSummary_> changesBuilder() { return mf; }`. Three lines plus the
     `implements` clause — the type argument is a real edit, not a rename, and § 13's
     same-commit rule covers it.
+  - **Why the interface and never `EEnumSet64` (corrected by the execution review):**
+    `toImmutable()` is declared `EEnumSet<E>` and returns the cached `EEnumSetEmpty` singleton when
+    the set is empty **[verified, `EEnumSetBuilder64.java:302-305`; `EEnumSetEmpty.java:6`]**;
+    `EEnumSet64` is `final` **[verified, `EEnumSet64.java:7`]** and is a *sibling* of
+    `EEnumSetEmpty`, not a supertype of it. An `EEnumSet64<…> changes()` therefore cannot compile,
+    and a cast would throw `ClassCastException` on a fresh (empty) tracking view — i.e. it would
+    fail § 6.4 test 8, the first test of the S5 suite. Narrowing `toImmutable()`'s return type is
+    not a way out either: § 6.2/1.10 requires the empty case to stay allocation-free through
+    `EEnumSetEmpty.of(...)`. A caller that needs the concrete `EEnumSet64` uses `changesBuilder()`
+    and `toImmutable()` explicitly.
   - `EntityUpdateTrackingArray` — which gains the interface in this task — implements
-    `ViewChangeTracking<F, EEnumSet<F>>`, since its `changes()` returns the immutable set. The
-    array base uses the interface type; the generated and example builders use the concrete
-    `EEnumSet64<View_>` that § 8.6/3.14 imports.
-  - the § 6.4 parity fixture must use `EEnumSet64<…>` as `S` for the same reason: a fixture typed
-    on `EEnumSetBuilder64` would silently reintroduce the mutable-snapshot confusion S5 exists to
-    remove.
+    `ViewChangeTracking<F, EEnumSet<F>>`, since its `changes()` returns the immutable set, which is
+    exactly what today's `changesSnapshot()` already returns **[verified,
+    `EntityUpdateTrackingArray.java:48`]**. The array base uses the interface type; so do the
+    generated and example builders.
+  - the § 6.4 parity fixture must use `EEnumSet<…>` as `S` for the same reason: a fixture typed on
+    `EEnumSetBuilder64` would silently reintroduce the mutable-snapshot confusion S5 exists to
+    remove, and one typed on `EEnumSet64` would not compile at all.
 - [ ] **1.8** `clear()` / `clearChanges()` must also clear the recorder. Document the semantics
   precisely: they reset the **change set**, not the **comparison baseline**. To re-baseline,
   rebuild the tracking builder from the persisted row. If that is insufficient, add an explicit
@@ -1492,7 +1582,7 @@ acceptance test for D1 and must pass twice, once against a generated tracking bu
 type handed to `createUpdatable` must itself declare the tracking methods, or steps 8–13 will not
 compile on the proxy side. The example's `PersonSummary` does not extend `ViewChangeTracking`
 (only its builder implements it), so the test needs a dedicated fixture, e.g.
-`interface TrackedPersonSummary extends PersonSummary, ViewChangeTracking<PersonSummary_, EEnumSet64<PersonSummary_>>`,
+`interface TrackedPersonSummary extends PersonSummary, ViewChangeTracking<PersonSummary_, EEnumSet<PersonSummary_>>`,
 and `createUpdatable(TrackedPersonSummary.class, array, NAME_MAPPER)`. Both materializations must
 then be driven through the *same* fixture view type so the assertions are literally identical.
 Also fix the fixture's field enum in place: `id` stays writable on the builder path, so the
@@ -1793,16 +1883,17 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
 
 - [ ] **3.14** Emit `<View>BuilderTracking` to the final interface from § 6.2 — which stays in
   `hr.hrg.hipster.entity.core` (S3 deferred), so the generated file imports
-  `hr.hrg.hipster.entity.core.{ViewChangeTracking, EEnumSetBuilder64, EEnumSet64}` and the
+  `hr.hrg.hipster.entity.core.{ViewChangeTracking, EEnumSetBuilder64, EEnumSet}` and the
   consuming POM needs `hipster-entity-core` — with the S5 two-accessor pair
   (`changes()` → `mf.toImmutable()`, `changesBuilder()` → `mf`), choosing `EEnumSetBuilder64`
   vs `EEnumSetBuilderLarge` **at generation time** from the known field count. Keep the runtime
   `.create()` selection only for the array/proxy route. Because the generated class *is* the
   tracking state holder, both accessors derive from the one `mf` field (§ 4.1 S5) — never emit a
   second field or a snapshot cache. The emitted class declares
-  `implements View<…>.Write, ViewChangeTracking<View_, EEnumSet64<View_>>` — `S` is the
-  **immutable** `EEnumSet64<View_>`, because `changes()` is the snapshot and `changesBuilder()`
-  is the live `EEnumSetBuilder64<View_>` (§ 4.7/DR-4). Mirrors the hand-written example's imports
+  `implements View<…>.Write, ViewChangeTracking<View_, EEnumSet<View_>>` — `S` is the
+  **immutable** `EEnumSet<View_>` that `mf.toImmutable()` actually returns, because `changes()` is
+  the snapshot and `changesBuilder()` is the live `EEnumSetBuilder64<View_>` (§ 4.7/DR-4, which
+  corrected this from the non-compiling `EEnumSet64`). Mirrors the hand-written example's imports
   **[verified, `PersonSummaryBuilderTracking.java:6-7`]** exactly.
 - [ ] **3.15** Emit the setter body in exactly the verified order:
   `mf.addOrdinalChange(<ordinal literal>, field, value); field = value; return this;` — the
@@ -1947,7 +2038,9 @@ output, never against a hand-written file.
   parameterised `UPDATE` it would send.
 - [ ] **4.3** Drive `paymentMethod/PaymentMethodController` from generated code using the
   polymorphic `PaymentMethod_` / `CreditCardPaymentMethod_` enums — `discriminatorField` support
-  already exists in `FieldBoilerplateGenerator` but is exercised nowhere. Depends on 4.9.
+  already exists in `FieldBoilerplateGenerator` but is exercised **only** by the tooling's own
+  boilerplate test (`FieldBoilerplateGeneratorTest.java:35-36`, asserted `:48-49`), never by
+  generated view output; this task is what exercises it end to end. Depends on 4.9.
 - [ ] **4.4** Add a tracking-enabled fixture to `hipster-entity-test` (nothing there uses
   tracking today **[verified]**), with the proxy-parity assertions from § 6.4 mirrored at the
   view level.
@@ -2163,9 +2256,11 @@ parallelized freely. All generated code obeys **G5** (§ 4.5).
   constraint referring to another field — emit a DEC-022 diagnostic instead of silently dropping
   it.
   **Dependency note:** this is the one Phase 7 feature that may add a compile dependency
-  (`jakarta.validation-api`). It must be `provided`/optional in the tooling and only added to a
-  consuming project's POM when it actually wants validation — the library modules must not gain a
-  hard validation dependency.
+  (`jakarta.validation-api`). Pin it to the coordinate the local repository already holds —
+  `jakarta.validation:jakarta.validation-api:3.0.2` is present (so is `2.0.2`), which keeps the
+  offline `mvn -o` build working; an unpinned or newer version would force a network fetch. It must
+  be `provided`/optional in the tooling and only added to a consuming project's POM when it
+  actually wants validation — the library modules must not gain a hard validation dependency.
 - [ ] **7.11** Alternative for cases annotations cannot express: generate a standalone
   `<View>Validator` with a concrete `validate(View)` body and explicit violation messages (G5's
   naming and dispatch rules). Per constraint, choose annotation-vs-validator and document why.
@@ -2239,7 +2334,8 @@ Ordering constraints that are **not** negotiable:
 - The example is regenerated **in the same commit** as any API change it consumes. This is
   certain to be needed for S5: `PersonSummaryBuilderTracking.java:77` returns the live `mf` from
   `changes()` today and must become `changesBuilder()`, with `changes()` added alongside it — and
-  its `implements` clause re-typed from `EEnumSetBuilder64<…>` to `EEnumSet64<…>` (§ 4.7/DR-4).
+  its `implements` clause re-typed from `EEnumSetBuilder64<…>` to `EEnumSet<…>` (§ 4.7/DR-4, which
+  corrected that type argument from `EEnumSet64`).
 - Per S5, the `changes()`/`changesBuilder()` pair and the underlying array renames
   (`changesSnapshot()`→`changes()`, `getChanges()`→`changesBuilder()`, delete `getChanges64()`
   **and** `getChangesLarge()`) land in **one commit with no aliases**, so there is no window in
@@ -2320,7 +2416,7 @@ table exists so the resolution is auditable.
 | JavaParser AST/API churn | Medium | High | Keep it pinned where it already is — centrally: root `pom.xml:21` `<javaparser.version>3.28.0</javaparser.version>` + `dependencyManagement` `pom.xml:74-76`; `hipster-entity-tooling/pom.xml:29-32` deliberately declares no version (pre-execution correction). Add AST snapshot tests. |
 | Deep nested tracking is attempted before single-level tracking is solid | Medium | High | Phase 6 is sequenced after Phases 1–5 and its DEC is task 6.1; the nested index is built on the final S5 contract, not alongside it. |
 | A consumer cannot take a `hipster-entity-core` dependency and so cannot implement tracking | Low | Medium | Accepted consequence of deferring S3, not an oversight. Documented in the getting-started guide (§ 9/4.6), and the fix is the § 4.4 layering refactor — mechanical and non-blocking. Generated output shape is unaffected. |
-| S1 removes setters the example currently uses, so regeneration is not a pure no-op | Certain | Low | Expected, not a surprise: § 4.1 S1 names the four call sites. Land it in Phase 4 with the diff reviewed as an intentional write-surface reduction. |
+| S1 removes setters the example currently uses, so regeneration is not a pure no-op | Certain | Low | Expected, not a surprise: § 4.1 S1 names the four call sites. Land it in Phase 4 with the diff compared against S1 and documented as an intentional write-surface reduction — that is the executor's own review, not a separate sign-off (see § 4's DEC-acceptance note). |
 | The generator rediscovers its own emitted nested `Write`/tracking surfaces, so regeneration is not a fixed point (and `Write_.java` collides) | Medium | High | **G8** (§ 4.5, task 3.2a): discovery excludes `ViewReader`/`ViewWriter`/`ViewChangeTracking` surfaces and never descends into nested types of a view file; the G8 fixture asserts one `_` enum per view and a byte-identical second pass. |
 | R1's never-delete rule applied to a marker-less legacy enum turns leaked pre-R1 constants into tombstones (and grows the record and `fieldCount`) | High | Medium | **G7** (§ 4.5, § 8.3/3.7a): the ledger is marker-scoped — a marker-less existing enum is bootstrapped fresh, the drop is reported as `enum_constant_removed` with action `bootstrap`, and a malformed header fails safe toward "marked". |
 | `@View` on an interface that derives from no marker is silently ignored, so an expected view emits nothing | Medium | Low | Fixed by **G8 rule 0** (§ 4.5, task 3.2a): the predicate is marker-derivation **or** `@View`; the G8 fixture covers the `@View`-only case (`PersonCreateForm`). |
