@@ -59,9 +59,9 @@ plans disagreed are marked.
 | `hipster-entity-api` | solid | `View`/`FieldSource`/`FieldKind` annotations, `EntityBase`, `Identifiable`, `FieldDef`, `FieldNameMapper`, `ForNameOrdinal`, `ViewMeta`/`DefaultViewMeta`, `ViewReader`/`ViewWriter`/`ViewReadProxy`, `GenLevel`, `TypeUtils`, `meta/TypeDescriptor` | `FieldSource` runtime exposure; `ViewWriter` has no `get(String)`/`supports(String)` |
 | `hipster-entity-core` | solid, one blocking bug | `EntityReadArray`, `EntityUpdateArray`, `EntityUpdateTrackingArray{64,Large}`, `ArrayBackedViewProxyFactory`, full `EEnumSet*` family, `EEnumSetBuilder{64,Large}`, `ViewChangeTracking` | Tracking array cannot be **constructed at all** (§ 2.4); no previous-value storage; no tests for the tracking array |
 | `hipster-entity-jackson` | partial | `EntityJacksonViewSerializer` (metadata-driven, writes a `ViewReader`), `EntityJacksonViewDeserializer` (zero-alloc parse loop, benchmarked), `EntityJacksonViewModule`, `EntityJacksonMapper` | `EntityJacksonViewJsonSerializer`/`JsonDeserializer` are thin wrappers; **no patch/change-set serializer exists**; no tests inside the module |
-| `hipster-entity-tooling` | partial | `EntityMetadataGenerator` (JavaParser scan → `*.metadata.json` + one `_` enum per view), `FieldBoilerplateGenerator`, meta model, five validation rules | `GenLevel` is **never parsed**; only `META` is emitted; `default` methods leak into field enums; obsolete `read`/`write` handling; validator inert (§ 2.5) |
-| `hipster-entity-test` | minimal | `PersonEntity`, `PersonSummary`, and the **only correct hand-written `FieldDef` + `META` enum in the repo** | No proxy, tracking, or builder integration tests |
-| `hipster-entity-example` | demo only | Hand-written `Person*` + `PaymentMethod*` views, records, `Write` interfaces, builders, tracking builder, all `_` enums | All of it is hand-written; the `_` enums are **broken** (§ 2.4); no runnable demo |
+| `hipster-entity-tooling` | partial | `EntityMetadataGenerator` (JavaParser scan → `*.metadata.json` + one `_` enum per view), `FieldBoilerplateGenerator`, meta model, four validation rules (`MarkerEntityRule`, `ViewInterfaceRule`, `ViewAnnotationRule`, `AuditableRule`) | `GenLevel` is **never parsed**; only `META` is emitted; `default` methods leak into field enums; obsolete `read`/`write` handling; validator inert (§ 2.5) |
+| `hipster-entity-test` | minimal | `PersonEntity`, `PersonSummary`, and a reference-correct hand-written `FieldDef` + `META` enum — **not the only one in the repo**, as an earlier draft claimed: `hipster-entity-example/.../paymentMethod/entity/PaymentMethod_.java` is the second correct-shaped enum, and it is the one that carries `discriminatorField` + permitted subtypes (`PaymentMethod_.type`, lines 70-77) **[verified]** | No proxy, tracking, or builder integration tests |
+| `hipster-entity-example` | demo only | Hand-written `Person*` + `PaymentMethod*` views, records, `Write` interfaces, builders, tracking builder, all `_` enums | All of it is hand-written; every `_` enum is broken **except** `paymentMethod/entity/PaymentMethod_.java` (correct `FieldDef` + `META`, raw `Class<?>` types) (§ 2.4); no runnable demo |
 
 **[verified]** The six modules are listed in the root `pom.xml` at lines 56–61, alongside
 `project-automation` (62) and the `metadata-*` modules (66–68). Root
@@ -75,10 +75,14 @@ asserts the opposite for the *reactor*: a POM-validation failure for
 `plan.kilo` asserts nothing about the build.
 
 **[verified]** `metadata-server` and `metadata-mcp-server` appear in `<modules>` and in the
-reactor's inter-module `<dependencyManagement>` block for every other module, but **no
-`<dependencyManagement>` entry exists for either** (root `pom.xml` lines 218–311 manage
-`watch`, `java-watch-*`, `jwa-*`, `hipster-entity-*`, `project-automation`, `hipster-ioc-*`,
-`fory-core`, `mcp`). The dsflash diagnosis is therefore the credible one for the *reactor*:
+reactor's inter-module `<dependencyManagement>` block, but **no `<dependencyManagement>` entry
+exists for either** — and they are the two modules that are actually referenced *versionless* by a
+sibling (`project-automation/pom.xml:45,49`; `metadata-mcp-server/pom.xml:21`), which is why § 0.2
+must add exactly these two. **Corrected by the pre-execution review:** the generalized form of this
+claim ("every other module is managed") is wrong — three further modules also lack an entry
+(`java-watch-run-sample`, `hipster-entity-example`, `metadata-arena`; five missing in total, while
+root `pom.xml:216-300` manages the other 17 project modules plus the third-party set). None of
+those three is referenced versionless today, so no POM change is required for them. The dsflash diagnosis is therefore the credible one for the *reactor*:
 per-module builds can succeed while a root-level `mvn -pl …` invocation fails POM validation
 before it compiles anything. **[unverified]** The exact `JAVA_HOME` on this machine, and
 whether the per-module test counts (core 42, tooling 22, test 4) still hold.
@@ -104,8 +108,9 @@ in prose; run one command and write the number down.
   attributes exist, so the rule rejects every valid `@View(gen = …)`. It is referenced only
   from tests, which is why nobody noticed.
 - **[verified]** `changes()` has no notion of a previous value. `EEnumSetBuilder.addOrdinalChange`
-  (`EEnumSetBuilder.java:34-40`) is a `default` interface method that compares, sets the bit,
-  and returns — it records nothing. `ViewChangeTracking` (`core/ViewChangeTracking.java`) is
+  (`EEnumSetBuilder.java:34-40`) is a `default` interface method that compares, sets the bit
+  (`addOrdinal(ordinal)` at `:38`), and returns — it stores **no previous value**, which is the
+  gap D2 closes; it is not a no-op — the change *bit* is recorded. `ViewChangeTracking` (`core/ViewChangeTracking.java`) is
   literally two methods in six lines.
 
 ### 2.4 The two artifacts that prove the rest is not wired
@@ -204,13 +209,22 @@ complete). The release is usable when **all** of the following hold:
    format; generated files carry the DEC-021 two-line header. **Field enums are append-only
    (R1, § 4.6):** new fields append after existing constants, a reorder fails the
    `EntityFieldEnumOrderRule` check, and a removed accessor's constant is retained and
-   `@Deprecated` rather than deleted.
+   `@Deprecated` rather than deleted. The rule is **marker-scoped (G7, § 4.5):** an existing enum
+   that does not yet carry `entityFieldEnum:true` is bootstrapped as a fresh ledger and its stale
+   constants are dropped and reported, not tombstoned — which is how the legacy example enums lose
+   their leaked `toBuilder`/`toBuilderTracking`/`changes` constants in Phase 4.
 7. **The example's entity packages are generated, not hand-written** — X3's scope, i.e.
    `person.entity` and `paymentMethod.entity`; the `example/` leftovers and the doc-sample
    packages stay hand-written by design (§ 4.3/X3, § 4.7/DR-5) — and a runnable `PersonDemo.main`
    prints a one-field diff. Any remaining diff between generator output and the old hand-written
-   files is documented as intentional. The `paymentMethod` sealed hierarchy is regenerated too,
-   so `discriminatorField`/permitted-subtype support is exercised by generated code.
+   files is documented as intentional. The `paymentMethod` sealed hierarchy is regenerated too —
+   the **four concrete** subclasses and their enums/META (`discriminatorValue`), while the base
+   marker enum `paymentMethod/entity/PaymentMethod_.java` **stays hand-written** and supplies the
+   discriminator field + permitted subtypes (§ 9/4.9, G8 rule 0), since a marker is not a
+   discovered view — so the polymorphic wiring is exercised end to end by generated code. The
+   `person.entity` framework surface `PersonSummary.Write` is **excluded from discovery** and its
+   orphan `Write_.java` is deleted rather than regenerated (**G8**, § 4.5); the enums still on the
+   pre-R1 hand-written shape are bootstrapped fresh rather than tombstoned (**G7**, § 4.5).
 8. **Deep change tracking works.** A change N levels down inside a nested tracked view, and
    inside a `List<Tracked>`, is reportable, and a deep change set serializes to a nested
    patch document. Shallow tracking is unchanged and still free when nothing is nested
@@ -261,12 +275,18 @@ settled and binding. The table records all seven original questions for audit; e
 carries a final rule. § 4.1 holds the full rationale for the largest, § 4.2 for the remaining
 five, and § 4.3 for the decisions the plans never asked but execution requires.
 
-**§ 4.7 is a second decision round.** A readiness review of this plan found six items still open —
+**§ 4.7 records two decision rounds.** A readiness review of this plan found six items still open —
 addon scope, tombstone writability, ownership of the `DEFAULT` resolution, the S5 type parameter,
 the `example/` leftovers, and the DEC containers. All six are resolved in **§ 4.7** (DR-1…DR-6);
 the subsections they change (§ 4.3/X2 + X3, § 4.5/G1 + G6, § 4.6/R1.4, § 4.1/S5, § 9/4.1,
-§ 9/4.8) were edited in place, so each rule lives in exactly one place. **No task in this plan
-requires an authoring decision mid-flight.**
+§ 9/4.8) were edited in place, so each rule lives in exactly one place. A **pre-execution review**
+then added two more — **DR-7** (the R1 ledger is marker-scoped; a marker-less existing enum is
+bootstrapped fresh, § 4.5/G7) and **DR-8** (view discovery excludes the framework surface and the
+generator's own nested output, § 4.5/G8) — and applied a set of factual corrections in place.
+**No task in this plan requires an unfixed authoring decision mid-flight.** One honest
+qualification: tasks **6.1/6.4** (nested/deep tracking) and **7.13** (compaction) each *author a new
+standalone DEC* before their implementation starts, so those three tasks contain a scheduled design
+step rather than an open question. Nothing else is deferred to a mid-flight choice.
 
 | # | Question | Final rule |
 |---|---|---|
@@ -427,8 +447,14 @@ underlying primitives rather than introducing a second convention:
 Do **not** keep deprecated overloads or aliases for any of these. The plan's usual rule is to
 keep old signatures as delegating overloads (see § 6.2/1.4 for the `EEnumSetBuilder`
 constructors, where the JMH harness genuinely calls them) — that rule does **not** apply here,
-because the only in-repo callers are the tracking arrays, the proxy handler, and the one
-hand-written example, all of which this plan already rewrites.
+because every in-repo caller is already in scope for rewriting. The set of callers is: the
+tracking arrays, the proxy handler, the one hand-written example, **and the JMH benchmark —
+which an earlier draft of this section wrongly omitted.** The pre-execution review found eight
+call sites in `EEnumSetTrackingJmhBenchmark.java`: `getChanges64()` (`:266`), `getChanges()`
+(`:272`, `:284`), `getChangesLarge()` (`:278`), `changesSnapshot()` (`:309`, `:314`, `:319`,
+`:324`). Tasks § 6.2/1.5 and § 6.2/1.7 must update those eight sites in the same commit (the
+benchmark is already in scope via § 6.4's "extend `EEnumSetTrackingJmhBenchmark` to the new
+signature"); nothing else in the repo calls them.
 
 **The test that makes this binding.** Consistency of the final result is only real if it is
 asserted, so § 6.4 adds a state-sharing test that must hold identically for
@@ -648,9 +674,14 @@ samples), `paymentMethod/entity/` with a sealed hierarchy and four subclasses, a
   `person/iface/Person.java` and `person/record/Person.java` are **live documentation sources**:
   `architecture/materialization-levels.md:33,44` include them via
   `<!-- INCLUDE:~iface/Person.java#DOCS -->` and `<!-- INCLUDE:~record/Person.java#DOCS -->`,
-  extracted by `scripts/update-doc-includes.js`. They are **not** duplicates of `entity/Person`
-  (different fields — `name`/`email` vs `firstName`/`lastName`), and deleting them breaks those
-  includes. The decision is therefore: **keep both files exactly as they are, and keep them out of
+  extracted by `scripts/update-doc-includes.js`. **Correction (pre-execution review):** the claim
+  that the samples differ from `entity/Person` by field set (`name`/`email` vs
+  `firstName`/`lastName`) is only half right — `iface/Person.java` and `record/Person.java`
+  declare the **same** fields (`name()`, `email()`; `record/Person.java:4-7` is a package-private
+  **record**, not an interface), and it is `entity/Person.java:9-10` that carries
+  `firstName`/`lastName`. The samples duplicate each other, not `entity/Person`. The decision is
+  unchanged — deleting either still breaks the INCLUDE directives — but the justification is
+  "live documentation sources required by `materialization-levels.md`", not "different fields". The decision is therefore: **keep both files exactly as they are, and keep them out of
   the generator's scan** — the `@View(gen = GenLevel.META)` on `person/iface/Person.java` is
   tutorial narrative for the "record → interface" walkthrough, and that interface is
   package-private, so it could not carry a public generated enum in any case. § 9/4.7 rewrites
@@ -699,10 +730,13 @@ Everything else that was ever deferred is now planned: nested/deep tracking (**P
 JDBC adapters (**7.1**), mappers (**7.2**), validation (**7.3**), compaction (**7.4**), the
 watcher (**7.5**), and the `paymentMethod` regeneration (**4.9**).
 
-### 4.5 Specification gaps closed — the last six items an implementer would otherwise guess
+### 4.5 Specification gaps closed — the eight items an implementer would otherwise guess
 
-Everything else in this plan is a concrete edit. These six were left implicit; they are now
-fixed so that no task requires an authoring decision mid-flight.
+Everything else in this plan is a concrete edit. **G1–G6** were left implicit by the input plans
+and closed in the second decision round; **G7 and G8** were added by the pre-execution review
+(§ 4.7/DR-7 and DR-8). All eight are now fixed, so no task in Phases 0–5 requires an authoring
+decision mid-flight; the only scheduled design steps are the DECs that tasks 6.1/6.4 and 7.13
+author for themselves (see § 4 intro).
 
 **G1 — `GenLevel.DEFAULT` resolves by interface shape, never upward.**
 
@@ -836,7 +870,7 @@ every implementer invents a different one. Final rule:
 | **Propagation** | **Per view — no propagation (§ 4.7/DR-1).** An `addons` declaration applies to the interface that carries it and to nothing else: a subtype does **not** inherit the addon's fields. A view that physically carries the addon's columns must declare `addons = …` itself. Rationale: the addon is a property of one materialization, so a view's field list stays something a reader can derive from that view's own source; a subtype's positional array is then free to differ from its parent's, which R1 already permits because addon fields append at the end of *the declaring view's* run. `@View(addons = …)` on a non-view interface (a marker — `person.entity.Person`, `paymentMethod.entity.PaymentMethod`) has **no effect**: it is reported as the DEC-022 diagnostic `addon_on_non_view` and removed in Phase 4 (§ 9/4.1, § 9/4.9). A view cannot opt out of an addon it declared; removing the declaration is the R1.4 field-removal path. |
 | **Collisions** | An addon accessor whose name already exists on the declaring view (own or inherited) is skipped, the view's own declaration wins, and a DEC-022 diagnostic is emitted. Never a duplicate enum constant — that would not compile. This is the common case: `PersonAuditable` inherits `id`/`firstName`/`lastName` from `Person`, so declaring it as an addon on `PersonDetails` appends only `createdAt`/`updatedAt`. |
 | **Writability** | Addon fields follow X2's defaults like any other field: unannotated means `COLUMN`, i.e. writable under S1. A read-only audit field is expressed by annotating the accessor **on the addon interface**; no special case is added for fields named `createdAt`/`updatedAt`. |
-| **Generation of the addon itself** | Unchanged and orthogonal: view discovery is structural (`EntityMetadataGenerator.java:328-333` treats every interface deriving from the marker as a view), and `@View` supplies `gen`/`discriminatorField`/`addons` — it does **not** decide whether an enum is emitted. An addon that derives from a marker is generated as a view in its own right (`PersonAuditable` is); an addon that does not is a field source only and gets no enum. Under X3's `packages` generation filter this is scoped to the generated packages: `person.entity.PersonAuditable` is generated as a view in its own right, while `PaymentMethodAuditable` — which derives from the `example.Auditable` marker but lives in a package outside the filter — is indexed and resolvable as an addon yet gets no emitted enum. |
+| **Generation of the addon itself** | Unchanged and orthogonal: view discovery is **marker-derivation *or* `@View`** — rule 0 of **G8** (§ 4.5), of which only the marker half exists in `EntityMetadataGenerator.java:328-333` today — and `@View` separately supplies `gen`/`discriminatorField`/`addons`. Being a view is what decides whether an enum is emitted; the **`addons` attribute** does not. An addon that derives from a marker is generated as a view in its own right (`PersonAuditable` is); an addon that does not is a field source only and gets no enum. Under X3's `packages` generation filter this is scoped to the generated packages: `person.entity.PersonAuditable` is generated as a view in its own right, while `PaymentMethodAuditable` — which derives from the `example.Auditable` marker but lives in a package outside the filter — is indexed and resolvable as an addon yet gets no emitted enum. |
 | **Removal** | Dropping an addon declaration from the declaring view is a field removal, so R1.4 applies: the constants become `@Deprecated` tombstones reporting `retired()` (§ 4.7/DR-2), never deletions. |
 | **Diagnostics** | An `addons` entry that cannot be resolved to an interface, an addon declaration on a **non-view** interface (`addon_on_non_view`, § 4.7/DR-1), and an addon accessor that collides, are DEC-022 diagnostics surfaced by the same `DivergenceReporter` path as the other field-set divergences (§ 8.7/3.20) — never a silent skip. |
 
@@ -876,6 +910,106 @@ Add a generator fixture test (a view plus a two-accessor addon) that asserts the
 collision diagnostic, **and that a derived view does not receive the addon's fields** — that last
 assertion is what makes the per-view rule binding.
 
+**G7 — The R1 ledger exists only for enums that already carry the marker (§ 4.7/DR-7).**
+
+R1's append-only preservation and R1.4's tombstone rule protect a *committed ordinal contract*.
+They apply to exactly those field enums that **already carry the `entityFieldEnum:true` marker**
+(R1.2) in their DEC-021 header. An existing enum **without** the marker has no such contract — it
+is pre-R1, hand-written source — and is therefore **bootstrapped as a fresh ledger**:
+
+1. the constant list is rebuilt from the view's resolved field list, in ordinal order;
+2. constants that no longer correspond to any field **are dropped**, not tombstoned;
+3. the DEC-021 header (including `entityFieldEnum:true`) is written in the same pass, so the
+   *next* generation of that file is protected by R1.
+
+This is the bootstrap path, and it is what makes Phase 4 possible: the example's enums are
+marker-less and bug-contaminated — `PersonSummary_.java:14-15`, `PersonDto_.java` and `Write_.java`
+carry the spurious `toBuilder`/`toBuilderTracking` constants (the § 2.3 `default`-method leak) and
+`PersonUpdatableView_.java:13` carries a spurious `changes` constant. G7 is why § 9/4.1 can expect
+all of them to *disappear* (DoD #3) instead of surviving as deprecated tombstones with nullable
+record components and an inflated `fieldCount` — which is what a literal reading of § 8.3/3.7a
+would otherwise produce.
+
+Consequences, stated so they are not re-litigated:
+
+- **The first generation of any file is always a fresh ledger** — there is nothing to preserve.
+  The append-only rule first binds on the *second* pass, once the marker is present. A brand-new
+  view never produces a tombstone, which is what § 4.6/R1.4 already claims.
+- **Opting a hand-written enum into R1 is manual.** A consumer who already persists positional
+  arrays but has not adopted R1 adds `entityFieldEnum:true` to the header **by hand** before the
+  first generation pass; that puts the enum under R1 and forces tombstoning instead of dropping.
+  The generator never infers a ledger from a pre-existing file.
+- **`allowReorder: true` is not required for the bootstrap path.** Dropping a constant from an
+  enum that never carried the marker is not a reorder of a committed ledger. The drop is still
+  reported as a DEC-022 divergence (`enum_constant_removed`, action `bootstrap: dropped pre-R1
+  constant`) so it appears in the regeneration report instead of happening silently.
+- **A malformed or unparseable header is not "unmarked".** Per R1.2 a malformed marker is a
+  diagnostic; the safe failure mode is to treat the file as **marked** and refuse to drop
+  constants, never to treat it as bootstrap and delete a live ordinal.
+
+**G8 — View discovery: the predicate, the framework surface, and the generator's own nested output (§ 4.7/DR-8).**
+
+View discovery today is marker-only — every interface transitively derived from a package's marker
+is a view (`EntityMetadataGenerator.java:328-333`) — and the scan covers every source under the
+source root, including the generator's own committed output (S2 puts generated source in
+`src/main/java`). Three rules are needed, or the generator will miss a view the rest of the plan
+expects and will rediscover its own framework surface:
+
+0. **The view predicate.** A type is a view iff (a) it derives transitively from the package's
+   marker, **or** (b) it carries a `@View` annotation — and is neither the marker itself (§ 9/4.1)
+   nor a surface excluded by rules 1–2 below. **This is a correction to the earlier draft**, which
+   described discovery as marker-only while simultaneously listing `PersonCreateForm` among the
+   views and expecting a newly generated `PersonCreateForm_`: `PersonCreateForm` carries `@View()`
+   but extends nothing marker-derived (verified — `person/entity/PersonCreateForm.java`), so the
+   marker-only predicate excludes it, and only predicate (b) reproduces § 9/4.1's arithmetic
+   ("seven views, of which five carry `@View`"). The `@View` seed is **new work in task 3.2a**:
+   it is also why the tree contains the marker-derived `Write_.java` but no `PersonCreateForm_.java`
+   today. `@View` on the marker itself stays inert, and X3's `packages` filter still decides which
+   discovered views are *generated* (so `person/iface/Person`'s `@View(gen = META)` seeds a view
+   that is filtered out and emits nothing).
+   **One emission per view, even when two markers apply.** A view can derive from two markers —
+   the example's `PersonAuditable extends Person, Auditable<Long>` does, and both are
+   `EntityBase`-derived markers (`person.entity` and `example/`). The view belongs to the marker
+   whose package the `packages` filter admits, and is emitted **once**; a marker sitting in a
+   filtered-out package contributes indexing only (so its accessors still resolve — X3) and
+   generates nothing, not even for views in admitted packages. This keeps Phase 4's output
+   deterministic and prevents a duplicate write of the same `_` enum from two marker loops; the
+   G8 fixture asserts a single emission for a two-marker view.
+
+The two consequences that must be ruled on explicitly:
+
+1. **The framework surfaces are not views.** An interface that extends `ViewReader`, `ViewWriter` or
+   `ViewChangeTracking` is a write/tracking *surface*, and gets **no** `_` enum, `META`, record or
+   builder, even though it also derives from a marker. The live witness is the example's
+   `person/entity/PersonSummary.Write extends PersonSummary, ViewWriter` — discovered as a view
+   today, which is why the orphan `Write_.java` exists with exactly `PersonSummary_`'s constants
+   (the bogus ones included). The same applies to a helper that derives from a marker but declares
+   no accessors of its own: it is indexed for resolution (X3) and emits nothing.
+2. **Never descend into a type the generator emitted.** A nested `Write`/tracking surface inside a
+   generated view file must not become a discovery input on the next pass. Discovery skips nested
+   type declarations inside an interface that is itself a view. Combined with (1) this makes
+   regeneration a fixed point: the pass that emits the nested `Write` for `PersonSummary` is not
+   followed by a pass that re-emits it or generates a `Write_` for it. This is also what prevents
+   `Write` nesting inside `Write` (which § 8.5/3.12 would otherwise recurse into) and the
+   `Write_.java` simple-name collision at `EntityMetadataGenerator.java:344-346`.
+
+Consequence for Phase 4 (§ 9/4.1), stated so the expected file list is unambiguous:
+`person.entity` has **seven discovered views plus one excluded framework surface** —
+`PersonAuditable`, `PersonCreateForm` (seeded by rule 0(b)), `PersonDetails`, `PersonDto`,
+`PersonSummary`, `PersonUpdatableView`, `PersonUpdateForm` (seven), with `PersonSummary.Write`
+excluded by rule 1 and `Person` excluded as the marker. Of those seven, five carry `@View`
+(`PersonAuditable`, `PersonCreateForm`, `PersonDto`, `PersonSummary`, `PersonUpdateForm`) — which
+is exactly § 9/4.1's count, now derived rather than asserted.
+`Write_.java` is a stale artifact of the pre-G8 discovery rule and is **deleted** in Phase 4 (grep
+confirms only its own self-declarations reference it) — not regenerated, not tombstoned, because
+its source interface is no longer a view. The `paymentMethod` family is unaffected: none of its
+four subclasses extends a write/tracking surface.
+
+Add a discovery fixture test: one marker-derived view, one `@View`-annotated interface that derives
+from nothing, one nested `Write`, and one marker-derived interface that extends `ViewWriter`;
+assert that an `_` enum is emitted for each of the two rule-0 views, none for the surfaces, and that
+a second generation pass is byte-identical.
+
 ### 4.6 R1 — Field enums are append-only ordinal ledgers (new binding rule)
 
 This rule is **binding on every phase** and supersedes the weaker wording of D7 wherever the two
@@ -891,6 +1025,12 @@ once assigned, is permanent.
 > A general JavaParser-based checker (`EntityFieldEnumOrderRule`, §4.6/R1.3) can read a commit or
 > a PR diff and **fails the build** if the enum order was shuffled. The checker is **opt-in** and
 > applies only to enums that carry the **codebuddy marker** (§4.6/R1.2).
+
+The same marker scopes the **generator's** behaviour, not just the checker's: an enum that already
+carries `entityFieldEnum:true` is preserved and tombstoned, while an existing enum that does not is
+bootstrapped as a fresh ledger (**G7**, § 4.5). "Once an entity's field enum has been generated"
+therefore means *once the generator's own output carries the marker* — not "once a file with that
+name exists".
 
 **R1.2 — The marker: opt-in, and it rides the existing DEC-021 header.**
 
@@ -913,6 +1053,14 @@ public enum PersonSummary_ implements FieldDef {
 - **Opt-in is by absence:** an enum without the marker is ignored by the checker entirely. This
   covers hand-written enums, third-party enums, and the tooling's own internal property enums —
   the checker must not flag any of them.
+- **The same marker scopes the generator's preservation behaviour (G7, § 4.7/DR-7).** The
+  generator preserves constant order and emits tombstones only in an enum that already carries
+  `entityFieldEnum:true`; an existing marker-less enum is bootstrapped as a fresh ledger and its
+  stale constants are dropped (reported as `enum_constant_removed`, action `bootstrap`). This is
+  what the legacy example enums in § 9/4.1 take, and why their leaked
+  `toBuilder`/`toBuilderTracking`/`changes` constants disappear rather than becoming tombstones.
+  The full rule, including the hand-edit opt-in for a consumer with an existing persisted layout,
+  is § 4.5/G7.
 - The marker must be **read from the parsed comment**, not by string-matching the file: parse the
   `CompilationUnit`, locate the header comment above the `package` declaration, and decode the
   JSON5 subset (the seven `JsonReadFeature`s of DEC-021 § 4). A malformed marker is a diagnostic,
@@ -935,11 +1083,17 @@ than becoming a parallel tool.
 | **Comparison** | Parse both revisions with JavaParser; extract the marked enum's constant names in declaration order; assert the **old list is a subsequence of the new list, in the same order**. Do not compare raw text — comments and formatting must not affect the verdict. |
 | **A reorder** | Hard error. Message names the enum FQN, the offending constant, its old index and its new index: `kind=enum_order_shuffled, location, cause, current, canonical, action` — the DEC-022 diagnostic format (§ 8.7/3.20). |
 | **A removal** | Hard error by default: removing a constant shifts every following ordinal, which is exactly the corruption R1 exists to prevent. The fix is to keep the constant and mark it `@Deprecated` (see R1.4), not to delete it. |
+| **Marker added in the target revision (bootstrap, G7)** | If the enum is **unmarked in the baseline** revision, the checker skips it for that comparison — opt-in by absence (R1.2). The bootstrap commit is the revision that *establishes* the ledger; the next commit is the first one the checker guards. Without this row the bootstrap commit would be reported as a mass removal. |
 | **An addition** | Allowed, and only at the end. An addition in the middle is reported as a reorder, because that is what it is from the bitmask's point of view. |
 | **Exit code** | Non-zero on any violation, so it can gate a build and a PR check. Warnings (e.g. `allowReorder` present) go to stderr without failing. |
 | **CLI** | At minimum `--repo <path> --baseline <ref> [--target <ref>] [--diff <file>] [--strict]`. Wire it into the `hipster-entity-tooling` entry point alongside `EntityMetadataGenerator.main` **[verified, `EntityMetadataGenerator.java:186`]**. |
 
 **R1.4 — Removed fields: keep the ordinal as a tombstone.**
+
+**Marker scope first (G7, § 4.7/DR-7):** tombstoning applies only to an enum that already carries
+`entityFieldEnum:true`. A marker-less existing enum has no committed ledger and is bootstrapped
+fresh — its stale constants are dropped, not tombstoned — so the legacy example constants named in
+§ 9/4.1 do not become tombstones. Everything below describes a marker-carrying enum.
 
 When a view loses an accessor, the generator **must not** delete the corresponding enum constant.
 It keeps it, in place, as a **tombstone**, and emits a DEPRECATED divergence entry:
@@ -1015,12 +1169,14 @@ R1 governs **where a new constant may be placed**. An implementer must not let D
 block whose *position* is semantic, and the generator's own comparison must therefore be
 order-sensitive even though every other block's is not.
 
-### 4.7 Second decision round — the six items a readiness review left open
+### 4.7 Decision rounds — the eight items a readiness review left open
 
 These were the only remaining places where an implementer would have had to make an authoring
 decision, and the first of them (DR-1) was the one case where the plan itself asked the reader to
-choose. All six are now binding, and each was applied **in place** in the subsection it changes,
-so this table is an audit index rather than a second source of truth.
+choose. **All eight are now binding**, and each was applied **in place** in the subsection it
+changes, so this table is an audit index rather than a second source of truth. DR-7 and DR-8 were
+added by the **pre-execution review** (which also corrected the factual claims listed after the
+table); their full rules live in § 4.5/G7 and § 4.5/G8.
 
 | # | Question | Final rule | Applied in |
 |---|---|---|---|
@@ -1030,11 +1186,23 @@ so this table is an audit index rather than a second source of truth.
 | DR-4 | What is `S` in `ViewChangeTracking<E,S>` once `changes()` is the immutable accessor? | Generated and example tracking builders use **`EEnumSet64<View_>`** (`changes()` → `mf.toImmutable()`, `changesBuilder()` → `mf`); the array base implements `ViewChangeTracking<F, EEnumSet<F>>`; the § 6.4 parity fixture uses `EEnumSet64` too. The example's `implements` clause is **re-typed**, not merely renamed. | § 4.1/S5, § 6.2/1.7, § 6.4, § 8.6/3.14, § 13 |
 | DR-5 | What happens to the stale hand-written enums under `example/`? | `example/PersonAuditable_.java` and `example/PaymentMethodAuditable_.java` are **deleted** in Phase 4 (wrong shape, superseded, unreferenced); `example/Auditable` and the two `*Property` enums stay hand-written. | § 9/4.1, § 4.5/G6 |
 | DR-6 | Where are the new binding rules recorded? | **Each gets its own standalone DEC**: R1 (§ 9/4.8), field-enum compaction (§ 12.4/7.13), nested/deep tracking (§ 11/6.1). R1 still *uses* DEC-021's header/marker mechanism, but its order contract is not recorded by amending DEC-021. | § 9/4.8, § 12.4/7.13, § 11/6.1 |
+| DR-7 | Does R1's append-only/tombstone rule apply to an existing enum that does not yet carry the `entityFieldEnum` marker (the legacy example enums)? | **No — the ledger is marker-scoped.** Preserve and tombstone only in enums that already carry `entityFieldEnum:true`; a marker-less existing enum is **bootstrapped as a fresh ledger**, its stale constants are **dropped** (the leaked `toBuilder`/`toBuilderTracking`/`changes`) and reported as `enum_constant_removed` with action `bootstrap`. Adding the marker by hand is the sole opt-in that forces tombstoning. A malformed header counts as marked (fail safe). | § 4.5/G7, § 4.6/R1.1 + R1.2 + R1.3 + R1.4, § 8.3/3.7a, § 9/4.1 |
+| DR-8 | What makes a view, and may the generator rediscover its own nested output? | **Predicate: marker-derivation *or* `@View`, minus the marker and minus the framework surfaces.** The `@View` seed is new (task 3.2a) and is what makes `PersonCreateForm` a view and `PersonCreateForm_` a real output; interfaces extending `ViewReader`/`ViewWriter`/`ViewChangeTracking` are **not** views, and discovery never descends into nested types of a view file, so exactly one `_` enum is emitted per view and regeneration is a fixed point. The orphan `Write_.java` is **deleted** in Phase 4, not regenerated. | § 4.5/G8 (+ G6), § 8.1/3.2a, § 8.7/3.19, § 9/4.1 |
 
-Three factual corrections from the same review are applied in place rather than logged here:
+Three factual corrections from the second decision round are applied in place rather than logged here:
 S2's claim that `plans__*` is git-ignored (**they are tracked**), G3's claim that `TrackingStrict`
 re-injects `EEnumSetBuilder64.Strict` (**it does not**), and the JMH harness's `Enum64` vs `E64`
 argument in § 6.2/1.4 and the risk register. DoD #7 was narrowed to X3's example scope.
+
+The **pre-execution review** added DR-7/DR-8 above and applied a further set of factual corrections
+in place, so the evidence base matches the tree: the tooling has **four** validation rules, not five
+(§ 2.1); **five** modules lack a `dependencyManagement` entry, not two, though only the two
+metadata modules are referenced versionless (§ 2.2, § 0.2); the **JMH benchmark is a caller** of the
+renamed/deleted accessors — eight sites (§ 4.1/S5, § 13); the two doc-sample `Person` files declare
+the **same** `name`/`email` fields and `record/Person.java` is a record (§ 4.3/X3); JavaParser is
+already pinned **centrally** (§ 15); the `javax.tools` compile harness **already exists** inside
+`EntityMetadataGeneratorTest` (§ 0.5); and § 16's "stale validator message" belongs to § 6.3/1.12,
+not § 9/4.7.
 
 ---
 
@@ -1066,8 +1234,10 @@ argument in § 6.2/1.4 and the risk register. DoD #7 was narrowed to X3's exampl
   reports failure on success — gate on the build outcome, not on the launcher's exit code.
 - [ ] **0.2 Fix root reactor POM validation.** Add `<dependencyManagement>` entries for
   `hr.hrg.jcodebuddy:metadata-server:${project.version}` and
-  `hr.hrg.jcodebuddy:metadata-mcp-server:${project.version}` — **[verified]** both are missing
-  while every sibling module is managed. **[verified]** the failure reproduces on **Apache Maven
+  `hr.hrg.jcodebuddy:metadata-mcp-server:${project.version}` — **[verified]** both are missing,
+  and they are the only two modules referenced *versionless* by a sibling (see § 2.2, which also
+  records the pre-execution correction: five modules lack an entry in total, but only these two
+  are referenced versionless, so only these two need adding). **[verified]** the failure reproduces on **Apache Maven
   3.9.0** (three `dependencies.dependency.version … is missing` errors: `project-automation` ×2 at
   `pom.xml:45,49`, `metadata-mcp-server` ×1 at `pom.xml:21`) and **not** on mvnd/Maven
   4.0.0-alpha-4, where the same reactor parses and `mvn -o validate` is green — Maven 4 resolves
@@ -1111,6 +1281,11 @@ argument in § 6.2/1.4 and the risk register. DoD #7 was narrowed to X3's exampl
   file set, then compile the emitted sources with `javax.tools.JavaCompiler` against the real
   `api` + `core` classpath and assert **zero diagnostics**. This test is what closes the
   doc—code gap permanently and it must grow with each level.
+  **Correction (pre-execution review):** a `javax.tools` compile harness already exists inside
+  `EntityMetadataGeneratorTest.compileSources` (`:318-343`, driven by `:272-298`, classpath =
+  `hipster-entity-api/target/classes` + `hipster-entity-core/target/classes`). Task 0.5
+  **factors that harness out** into the named `GeneratedSourceCompilesTest` and grows it; it does
+  not write a compiler harness from scratch.
 - [ ] **0.6 Re-read § 4 before starting Phase 1.** All decisions are finalized there: S1, S2, S4,
   S5 (§ 4.1 — note **S3 is deferred**, the contract stays in `core`), D2—D5/D7 (§ 4.2), and the
   execution resolutions X1—X4 (§ 4.3, where **X1 is superseded** — no module move). Nothing is
@@ -1477,6 +1652,20 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
   `addons` parses to a `List<String>` of simple names, resolved against the package's
   `interfaceMap`; an unresolvable addon name is a DEC-022 diagnostic, not a silent skip. Its
   **emission** semantics are fixed by **G6** (§ 4.5) — parse it here, apply it in § 8.3.
+- [ ] **3.2a Fix the two halves of view discovery** (G8, § 4.7/DR-8).
+  **Add the missing seed:** the predicate is marker-derivation **or** a `@View` annotation
+  (G8 rule 0). Today only `EntityMetadataGenerator.java:328-333`'s marker walk exists, so
+  `person/entity/PersonCreateForm` — annotated but extending nothing marker-derived — is silently
+  not a view, and the `PersonCreateForm_` that § 9/4.1 expects would never be emitted. The marker
+  itself stays excluded; X3's `packages` filter still decides what is generated.
+  **Then exclude the surfaces:** an interface extending `ViewReader`/`ViewWriter`/
+  `ViewChangeTracking` is not a view and emits **no** `_` enum, `META`, record or builder, and
+  discovery never descends into nested type declarations inside a view file. Without the
+  exclusion, `PersonSummary.Write` is discovered as a view — it is today, which is why the orphan
+  `Write_.java` exists with exactly `PersonSummary_`'s constants — and 3.12's emitted nested
+  `Write` would be rediscovered on the next pass, nesting `Write` inside `Write` and colliding on
+  the simple-name-derived `Write_.java`. Land the discovery fixture test from § 4.5/G8 (extended
+  with the `@View`-seeded non-marker view) in the same commit.
 - [ ] **3.3** Make the `DEFAULT` resolution rule explicit and implement it exactly as **G1**
   (§ 4.5) specifies — precedence `RECORD` (nested record with matching component order) →
   `BUILDER` (nested `Write`) → `META`; never tracked. Implement it **once**, in the shared
@@ -1533,13 +1722,23 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
   `fieldEnumMode` path; keep `propertyEnumMode` only for the tooling's own `Property` model.
 - [ ] **3.7a Make the field enum append-only (R1, § 4.6) — this is a generator correctness
   requirement, not a style preference.** When regenerating an enum that already exists:
+  - **check the marker first (G7, § 4.7/DR-7):** if the existing enum does **not** carry
+    `entityFieldEnum:true`, it has no committed ledger — rebuild the constant list from the
+    resolved field list, **drop** constants with no matching field (report
+    `enum_constant_removed`, action `bootstrap`), and emit the DEC-021 header including the
+    marker in the same write. **Only a marker-carrying enum is preserved and tombstoned below.**
+    This is the path Phase 4's legacy example enums take, which is why their leaked
+    `toBuilder`/`toBuilderTracking`/`changes` constants disappear instead of surviving as
+    tombstones with record components and an inflated `fieldCount`. A malformed header is treated
+    as marked (fail safe), never as bootstrap;
   - read the existing constants in order; the new constant list **starts** with that exact list
     (no reordering, ever — the generator's enum comparison is the one place where DEC-020's
     "recognize by shape, re-emit canonically" logic must be **order-sensitive**);
   - append constants for fields present in the interface but not yet in the enum, in
     declaration order, **after** all existing ones;
   - for an accessor that has disappeared, **keep its constant in place as a tombstone**,
-    annotated `@Deprecated` with a short reason comment (R1.4) — never delete it. The tombstone
+    annotated `@Deprecated` with a short reason comment (R1.4) — never delete it on a
+    marker-carrying enum (the bootstrap bullet above is the only path that drops a constant). The tombstone
     keeps its slot in the positional array and its nullable component in the record, so
     `values.length == fieldValues().length` and `create()`'s positional mapping are untouched;
     it gets **no** builder setter and **no** `Write` method. This path is only reachable when an
@@ -1644,7 +1843,13 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
   discouraged.
   **Exception for the field enum (R1):** for the constant list, "append only genuinely new
   fields" means **literally at the end** — never re-insert a constant into its "canonical"
-  position, and never drop a constant the interface no longer declares. See § 8.3/3.7a.
+  position, and, on a marker-carrying enum, never drop a constant the interface no longer
+  declares. See § 8.3/3.7a; a marker-less enum takes the bootstrap path there instead.
+  **Discovery exception (G8, § 4.7/DR-8):** recognition happens *after* discovery, so an
+  interface extending `ViewWriter`/`ViewReader`/`ViewChangeTracking`, and any nested type of a
+  view file, is never a generation target — its members survive as part of the enclosing view's
+  file rather than being recognized as some view's own output. `CooperativeCodegen` must not
+  re-introduce through recognition what `3.2a` excluded from discovery.
 - [ ] **3.20** New `DivergenceReporter` (DEC-022): after each pass, emit
   `kind, location, cause, current, canonical, action`. The two diagnostics that must exist
   first are "field in the enum but not in the interface" and "field in the interface but not
@@ -1693,19 +1898,29 @@ output, never against a hand-written file.
 
 - [ ] **4.1** Regenerate `hipster-entity-example` from the generator. Any diff against the old
   hand-written files becomes either a generator bug or an intentional documented divergence.
-  **Derive the affected file list from the scan, not from the `@View` annotations** — view
-  discovery is structural: `EntityMetadataGenerator.java:328-333` treats *every* interface
-  deriving from the marker as a view, so in `person.entity` the views are `PersonAuditable`,
+  **Derive the affected file list from the scan, not from the `@View` annotations alone** — the
+  view predicate is **marker-derivation *or* a `@View` annotation** (G8 rule 0, § 4.5;
+  `EntityMetadataGenerator.java:328-333` implements only the marker half today, task 3.2a adds
+  the other), so in `person.entity` the views are `PersonAuditable`,
   `PersonCreateForm`, `PersonDetails`, `PersonDto`, `PersonSummary`, `PersonUpdatableView` and
-  `PersonUpdateForm` — seven of them, of which only five carry `@View` (`Person` itself carries
-  it but is the **marker**, so it is not a view and never gets a `_` enum). The hand-written
+  `PersonUpdateForm` — seven of them, of which five carry `@View` (`PersonAuditable`,
+  `PersonCreateForm`, `PersonDto`, `PersonSummary`, `PersonUpdateForm`; `PersonDetails` and
+  `PersonUpdatableView` carry none and are found by marker-derivation). `Person` itself carries
+  `@View` but is the **marker**, so it is not a view and never gets a `_` enum; and
+  `PersonSummary.Write` also derives from the marker but is a **framework surface excluded by
+  G8 rule 1** (§ 4.7/DR-8) — which is why it is not counted here even though the pre-G8 generator
+  did treat it as a view. The hand-written
   artifacts in scope are therefore at least
   `PersonSummary_`, `PersonAuditable_`, `PersonDetails_`, `PersonDto_`, `PersonUpdatableView_`,
-  `PersonUpdateForm_`, `Write_`, `PersonSummaryBuilder`, `PersonSummaryBuilderTracking`, plus
-  newly generated `PersonCreateForm_` (the `Person` marker itself gets **no** enum — the same
+  `PersonUpdateForm_`, `PersonSummaryBuilder`, `PersonSummaryBuilderTracking`, plus
+  newly generated `PersonCreateForm_` — new precisely because the `@View` seed did not exist
+  before task 3.2a (the `Person` marker itself gets **no** enum — the same
   paragraph establishes that it is not a view, so an earlier draft's "newly generated `Person_`"
   was self-contradictory and is retracted here); delete each hand-written file **only once
-  the generated version passes the same tests**. Two *locations* are deliberately **not**
+  the generated version passes the same tests**. **`Write_.java` is the exception: it is
+  deleted outright, not regenerated** — its source interface is excluded from discovery by G8
+  (§ 4.7/DR-8), so no generated counterpart can exist; grep confirms only its own self-declarations
+  reference it. Two *locations* are deliberately **not**
   regenerated and stay hand-written: nothing under
   `hipster-entity-example/.../example/` — it lies outside the X3 `packages` filter — and nothing
   in the doc-sample packages `person/iface` + `person/record` (X3, § 4.3). Within `example/`,
@@ -1714,11 +1929,13 @@ output, never against a hand-written file.
   are wrong-shaped (`getPropertyType()`, no `FieldDef`) and unreferenced (see § 4.5/G6 for what,
   if anything, replaces each). Confirm with `grep` that nothing references them before deleting;
   both are unreferenced today **[verified]**.
-  Expect five classes of intentional diff: the S1 write-surface reduction (§ 4.1 S1); the addon
+  Expect **six** classes of intentional diff: the S1 write-surface reduction (§ 4.1 S1); the addon
   field-set change under per-view resolution — `PersonAuditable_` gains `createdAt`/`updatedAt`
   **structurally** from `Auditable<Long>`, `PersonDetails_` gains them from its own `addons`
-  declaration, and the other views gain nothing (§ 4.5/G6, § 4.7/DR-1); the disappearance of the
-  spurious `changes` constant that `PersonUpdatableView_.java:13` carries today (3.5); the
+  declaration, and the other views gain nothing (§ 4.5/G6, § 4.7/DR-1); the drop of the pre-R1
+  leaked constants under the bootstrap rule — `toBuilder`/`toBuilderTracking` in `PersonSummary_`
+  and `PersonDto_`, and the spurious `changes` constant that `PersonUpdatableView_.java:13`
+  carries today (3.5, **G7** § 4.5); the deletion of the orphan `Write_` (**G8** § 4.5); the
   deletion of the two stale `example/` enums; and the DEC-021 header plus `entityFieldEnum:true`
   marker on every enum (3.8).
   Also in this task: remove the inert `@View(addons = …)` declaration from
@@ -1778,14 +1995,23 @@ output, never against a hand-written file.
   header/marker mechanism** but is **not** recorded by amending DEC-021, so the order contract can
   be found without reading the generator-header decision. Cross-reference it from DEC-012 and from
   `ordinal-array-contract.md` (§ 7.1).
-- [ ] **4.9** Regenerate the **`paymentMethod` sealed hierarchy** (in scope, per § 3): the five
-  `*PaymentMethod` views and their `_` enums plus `PaymentMethod_.discriminatorField` /
+- [ ] **4.9** Regenerate the **`paymentMethod` sealed hierarchy** (in scope, per § 3): the **four
+  concrete** `*PaymentMethod` views and their `_` enums plus the `discriminatorValue` /
   permitted-subtype wiring, then drive `PaymentMethodController` from the generated code as in
   4.3. This is the only place `discriminatorField`/permitted subtypes are exercised by generated
   output, so it is the acceptance test for polymorphic generation. Keep the step **after** 4.1 so
   the single-entity regeneration path is already proven. **[verified]** the fixture is
   `PaymentMethod` (a `sealed interface … permits BankTransferPaymentMethod, PayPalPaymentMethod,
-  CryptoPaymentMethod, CreditCardPaymentMethod`, with `type()` as the discriminator). **Not an
+  CryptoPaymentMethod, CreditCardPaymentMethod`, with `type()` as the discriminator).
+  **Reconciled with G8 rule 0 (pre-execution review):** `paymentMethod.entity.PaymentMethod` is the
+  **marker**, and the marker is excluded from discovery, so there are **four** generated view enums
+  (one per subclass), not five. The base `PaymentMethod_.java` is **not** generated — it stays the
+  hand-written enum it already is, and it is the correct-shaped half of the polymorphic wiring:
+  `PaymentMethod_.type` is the discriminator field and lines 72-77 list the permitted subtypes
+  **[verified]**. Generation supplies each subclass's `discriminatorValue` and META, which is what
+  DoD #7's "exercised by generated code" means; the base enum is the documented hand-off. (An
+  earlier draft's "five views and their `_` enums" counted the marker as a view and is corrected
+  here — DoD #7 is qualified the same way.) **Not an
   addon exercise (§ 4.7/DR-1):** `paymentMethod.entity.PaymentMethod` is the marker, so its
   `@View(addons = {PaymentMethodAuditable.class})` is inert and is removed here;
   `PaymentMethodAuditable` does not even extend `PaymentMethod` (it extends only
@@ -1986,7 +2212,7 @@ library module gained a hard JDBC or validation dependency.
 | 0 | JDK-25 pin for compiler **and** test fork, recorded Maven launcher, reactor POM, `-pl` scoping script, baseline, compile-the-output harness | ≈ ½ d | one recorded command green from root |
 | 1 | tracking ctor NPE, contract widened + `ChangeRecorder` in `core`, **R1 checker + marker**, validator repair, tests 1–25 | 4–6 d | § 6.4 tests 1–25 green, 8–12 on both materializations, 20–25 for append-only |
 | 2 | ordinal-array contract docs (incl. R1 for adapter authors), JSON change serializer, Jackson setup doc | 2–3 d | one-field JSON patch from both paths |
-| 3 | `GenLevel` parsing, levels META→BUILDER_ALL, **append-only enum generation + marker emission**, cooperative blocks, headers, divergence, `exec-maven-plugin` | 5–8 d | `GeneratedSourceCompilesTest` green for all six levels |
+| 3 | `GenLevel` parsing, **discovery exclusion (G8/3.2a)**, levels META→BUILDER_ALL, **append-only enum generation + marker emission + marker-scoped bootstrap (G7/3.7a)**, cooperative blocks, headers, divergence, `exec-maven-plugin` | 5–8 d | `GeneratedSourceCompilesTest` green for all six levels |
 | 4 | example regeneration incl. X3 layout work, the S1 write-surface reduction, the DR-1 addon scope change (incl. deleting the two stale `example/` enums), `PersonDemo`, doc corrections, UTF-8 transcode of the DEC corpus | 2–3 d | demo prints a one-field diff; no doc claims a missing level |
 | 5 | Jackson round-trip + polymorphism coverage | 1–2 d | round-trip tests green |
 | 6 | **nested/deep change tracking**: DEC, `ChangePath`/`changesDeep()`, nested index, collections, generator wiring, deep patch | 7–11 d | 3-level fixture and a `List<Tracked>` produce a correct nested patch |
@@ -2015,16 +2241,28 @@ Ordering constraints that are **not** negotiable:
   `changes()` today and must become `changesBuilder()`, with `changes()` added alongside it — and
   its `implements` clause re-typed from `EEnumSetBuilder64<…>` to `EEnumSet64<…>` (§ 4.7/DR-4).
 - Per S5, the `changes()`/`changesBuilder()` pair and the underlying array renames
-  (`changesSnapshot()`→`changes()`, `getChanges()`→`changesBuilder()`, delete `getChanges64()`)
-  land in **one commit with no aliases**, so there is no window in which both naming schemes
-  exist.
+  (`changesSnapshot()`→`changes()`, `getChanges()`→`changesBuilder()`, delete `getChanges64()`
+  **and** `getChangesLarge()`) land in **one commit with no aliases**, so there is no window in
+  which both naming schemes exist. That commit must also update the eight benchmark call sites
+  the earlier draft had missed — `EEnumSetTrackingJmhBenchmark.java:266,272,278,284,309,314,319,324`
+  (§ 4.1/S5) — or the module stops compiling.
+- **G7's marker-scoped bootstrap rule (§ 4.5/G7, § 8.3/3.7a) lands before Phase 4 regenerates the
+  example.** Regenerating the legacy marker-less enums without it would tombstone the leaked
+  `toBuilder`/`toBuilderTracking`/`changes` constants, add nullable record components for them and
+  inflate `fieldCount` — the opposite of what § 9/4.1 expects and of DoD #3.
+- **G8's discovery rules — the predicate *and* the exclusion (§ 4.5/G8, task 3.2a) — land before
+  Phase 4 regenerates the example.** Without the exclusion, `PersonSummary.Write` is regenerated as
+  a view in its own right, the nested `Write` that 3.12 emits is rediscovered on the next pass,
+  `Write` nests inside `Write`, and the simple-name-derived `Write_.java` collides; without the
+  `@View` seed there is no `PersonCreateForm_` at all, and § 9/4.1's file list is wrong.
 - **No module-layering work in this release** (S3/X1 deferred). If a task appears to require
   moving `ViewChangeTracking` or the `EEnumSet*` interfaces between `api` and `core`, it is out of
   scope — take the `core` dependency instead.
 - **R1 (§ 4.6) gates ordering everywhere the enum is touched:** the generator appends
   (§ 8.3/3.7a) and the checker verifies (§ 6.3/1.14–1.16). No task may reorder a constant list,
-  and no task may treat "the enum now differs from the interface" as a reason to delete a
-  constant. The checker's marker must be emitted (§ 8.3/3.8) before the checker can be exercised
+  and, **on a marker-carrying enum**, no task may treat "the enum now differs from the interface"
+  as a reason to delete a constant (a marker-less enum takes G7's bootstrap path instead). The
+  checker's marker must be emitted (§ 8.3/3.8) before the checker can be exercised
   against real generated output, and the checker must exist before Phase 4 regenerates the
   example — otherwise the first regeneration has no order guard at all.
 - **The DEC corpus is transcoded to UTF-8 (4.10) before the decision index is edited (4.8).**
@@ -2079,10 +2317,13 @@ table exists so the resolution is auditable.
 | `ChangeRecorder` retains large object graphs | Medium | Medium | Shallow-reference semantics documented and tested; `clear()` releases; JMH on/off axis; per-view opt-out if warranted. |
 | Generator scope creep (cooperative blocks, divergence reporting) delays the usable slice | High | Medium | Phase 3 is ordered so `META → BUILDER_TRACKED` is usable *before* DEC-020/021 sophistication lands. |
 | Documentation keeps drifting ahead of the code | High | Medium | The compile-the-output test (0.5) makes doc—code drift a build failure, and the Phase 4 corrections are part of the DoD, not optional. |
-| JavaParser AST/API churn | Medium | High | Pin the JavaParser version in `hipster-entity-tooling/pom.xml`; add AST snapshot tests. |
+| JavaParser AST/API churn | Medium | High | Keep it pinned where it already is — centrally: root `pom.xml:21` `<javaparser.version>3.28.0</javaparser.version>` + `dependencyManagement` `pom.xml:74-76`; `hipster-entity-tooling/pom.xml:29-32` deliberately declares no version (pre-execution correction). Add AST snapshot tests. |
 | Deep nested tracking is attempted before single-level tracking is solid | Medium | High | Phase 6 is sequenced after Phases 1–5 and its DEC is task 6.1; the nested index is built on the final S5 contract, not alongside it. |
 | A consumer cannot take a `hipster-entity-core` dependency and so cannot implement tracking | Low | Medium | Accepted consequence of deferring S3, not an oversight. Documented in the getting-started guide (§ 9/4.6), and the fix is the § 4.4 layering refactor — mechanical and non-blocking. Generated output shape is unaffected. |
 | S1 removes setters the example currently uses, so regeneration is not a pure no-op | Certain | Low | Expected, not a surprise: § 4.1 S1 names the four call sites. Land it in Phase 4 with the diff reviewed as an intentional write-surface reduction. |
+| The generator rediscovers its own emitted nested `Write`/tracking surfaces, so regeneration is not a fixed point (and `Write_.java` collides) | Medium | High | **G8** (§ 4.5, task 3.2a): discovery excludes `ViewReader`/`ViewWriter`/`ViewChangeTracking` surfaces and never descends into nested types of a view file; the G8 fixture asserts one `_` enum per view and a byte-identical second pass. |
+| R1's never-delete rule applied to a marker-less legacy enum turns leaked pre-R1 constants into tombstones (and grows the record and `fieldCount`) | High | Medium | **G7** (§ 4.5, § 8.3/3.7a): the ledger is marker-scoped — a marker-less existing enum is bootstrapped fresh, the drop is reported as `enum_constant_removed` with action `bootstrap`, and a malformed header fails safe toward "marked". |
+| `@View` on an interface that derives from no marker is silently ignored, so an expected view emits nothing | Medium | Low | Fixed by **G8 rule 0** (§ 4.5, task 3.2a): the predicate is marker-derivation **or** `@View`; the G8 fixture covers the `@View`-only case (`PersonCreateForm`). |
 
 ---
 
@@ -2110,14 +2351,19 @@ in § 4.7**.
    from the first regeneration rather than being retrofitted.
 6. **Phase 0.5 + § 8.1–8.3:** parse `GenLevel`, emit a correct `FieldDef` + `META` enum with the
    DEC-021 header **including the `entityFieldEnum:true` marker** (§ 8.3/3.8), implement the
-   append-only regeneration (§ 8.3/3.7a), and prove the emitted source compiles.
+   append-only regeneration (§ 8.3/3.7a) **together with G7's marker-scoped bootstrap rule**
+   (§ 4.5/G7), land **G8's discovery exclusion** (task 3.2a, § 4.5/G8), and prove the emitted
+   source compiles.
 7. **§ 6.4 test 19 (D7):** land the `DefaultViewMeta` contract check — non-empty enum plus a
    total, lossless name map — before Phase 4 regenerates the example. (Ordinal *order* is not
    checkable here and is not claimed to be; R1 enforces it at build time. Do not implement the
    vacuous `fieldValues[i].ordinal() == i` form.) This also requires adding the test source root
    and JUnit dependencies to `hipster-entity-api`, which has neither today.
 8. **§ 9/4.7 first two doc defects:** the duplicated ladder in `materialization-levels.md` and the
-   stale validator message are the two that mislead newcomers today. Run the **4.10** UTF-8
+   wrong Maven coordinates in `user/getting-started.md:9-11` (`hr.hrg` / `0.1.0`; the real
+   coordinates are `hr.hrg.jcodebuddy` / `1.0-SNAPSHOT`, and no POM contains `0.1.0`) are the two
+   that mislead newcomers today. (The stale validator message belongs to § 6.3/1.12, not § 9/4.7 —
+   pre-execution cross-reference correction.) Run the **4.10** UTF-8
    transcode as soon as anything has to read `DEC-020.md`/`DEC-021.md`/`decisions/README.md` —
    they are cp1252-contaminated, and 4.8 must edit the index.
 9. **Then Phases 6–7 (§ 11–12)** once Phases 1–5 are green. Phase 6 is on the critical path to
