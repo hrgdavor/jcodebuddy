@@ -1,6 +1,6 @@
 # hipster-entity — Combined Plan to First Usable Implementation
 
-**Status:** proposed (synthesis) — **scope complete, no deferred features except S3/X1**
+**Status:** finalized — decisions closed in two rounds (§ 4 and § 4.7); **scope complete, no deferred features except S3/X1**
 **Combines:** `plans__m1/plan.ds.md`, `plans__m1/plan.copilot.md`,
 `plans__m1/plan.kilo.md`, `plans__m1/plan.dsflash.md`
 **Scope:** `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`,
@@ -205,10 +205,12 @@ complete). The release is usable when **all** of the following hold:
    (R1, § 4.6):** new fields append after existing constants, a reorder fails the
    `EntityFieldEnumOrderRule` check, and a removed accessor's constant is retained and
    `@Deprecated` rather than deleted.
-7. **The example is generated, not hand-written**, and a runnable `PersonDemo.main` prints a
-   one-field diff. Any remaining diff between generator output and the old hand-written files
-   is documented as intentional. The `paymentMethod` sealed hierarchy is regenerated too, so
-   `discriminatorField`/permitted-subtype support is exercised by generated code.
+7. **The example's entity packages are generated, not hand-written** — X3's scope, i.e.
+   `person.entity` and `paymentMethod.entity`; the `example/` leftovers and the doc-sample
+   packages stay hand-written by design (§ 4.3/X3, § 4.7/DR-5) — and a runnable `PersonDemo.main`
+   prints a one-field diff. Any remaining diff between generator output and the old hand-written
+   files is documented as intentional. The `paymentMethod` sealed hierarchy is regenerated too,
+   so `discriminatorField`/permitted-subtype support is exercised by generated code.
 8. **Deep change tracking works.** A change N levels down inside a nested tracked view, and
    inside a `List<Tracked>`, is reportable, and a deep change set serializes to a nested
    patch document. Shallow tracking is unchanged and still free when nothing is nested
@@ -259,6 +261,13 @@ settled and binding. The table records all seven original questions for audit; e
 carries a final rule. § 4.1 holds the full rationale for the largest, § 4.2 for the remaining
 five, and § 4.3 for the decisions the plans never asked but execution requires.
 
+**§ 4.7 is a second decision round.** A readiness review of this plan found six items still open —
+addon scope, tombstone writability, ownership of the `DEFAULT` resolution, the S5 type parameter,
+the `example/` leftovers, and the DEC containers. All six are resolved in **§ 4.7** (DR-1…DR-6);
+the subsections they change (§ 4.3/X2 + X3, § 4.5/G1 + G6, § 4.6/R1.4, § 4.1/S5, § 9/4.1,
+§ 9/4.8) were edited in place, so each rule lives in exactly one place. **No task in this plan
+requires an authoring decision mid-flight.**
+
 | # | Question | Final rule |
 |---|---|---|
 | D1 | `changes()` mutable or immutable? | **S5** (§ 4.1). Both, under names that state the variant: `changes()` = immutable snapshot, `changesBuilder()` = live mutable builder. One shared state. No aliases. |
@@ -292,9 +301,13 @@ this, and § 9/4.1 (example regeneration) must show it in the diff.
 **S2 — Generated source is committed.** Required by `AGENTS.md` § 1 / DEC-019: the committed
 source is the source of truth. The example module becomes the regression artifact, and any
 generator change shows up as a reviewable diff. Generate into `src/main/java`, not
-`target/generated-sources`. Confirmed feasible: the working tree is completely clean on `main`
-(`git status --porcelain` is empty; the `plans__*` directories are **ignored**, not untracked),
-so the regeneration diff will be isolated.
+`target/generated-sources`. Confirmed feasible: the working tree is clean
+(`git status --porcelain` is empty), so the regeneration diff is isolated. **Correction
+[verified]:** the `plans__*` directories are **tracked** files — `git ls-files` lists
+`plans__p1/plan.dsflash.md` and all four `plans__m1/*`, and `.gitignore` contains only
+`.kilo/plans` — not ignored as an earlier draft of this section claimed. The isolation argument is
+unaffected, but Phase 4 must not expect `git status` to stay silent about the plan documents
+themselves.
 
 **S3 — DEFERRED: the tracking contract stays in `hipster-entity-core`.**
 
@@ -572,6 +585,8 @@ These are **decided**, not proposed. Each item states the final rule and the edi
 ### 4.3 Execution resolutions — decisions the input plans never raised
 
 Four things surfaced during finalization that any implementation would otherwise have to guess.
+(A later review round added six more — see § 4.7; **X2 and X3 below were amended in place** by
+§ 4.7/DR-2 and § 4.7/DR-1 respectively.)
 
 **X1 — SUPERSEDED / DEFERRED: no `EEnumSet*` interface move in this release.**
 
@@ -602,11 +617,15 @@ D6 says the generator emits setters only for `COLUMN` fields, so writability mus
 
 - **Rule:** add to `FieldDef` — `default FieldKind fieldKind() { return FieldKind.COLUMN; }`,
   `default String column() { return null; }`, `default String relation() { return null; }`,
-  `default String expression() { return null; }`. Defaults keep every existing hand-written and
-  generated enum compiling, and a field with no annotation is `COLUMN` — i.e. writable, which
-  preserves today's behaviour for unannotated views.
-- **Generator obligation:** emit overrides for the four accessors only when the source field
-  actually carries `@FieldSource`, so the generated enum stays small.
+  `default String expression() { return null; }`, and
+  `default boolean retired() { return false; }` (§ 4.7/DR-2). Defaults keep every existing
+  hand-written and generated enum compiling, and a field with no annotation is `COLUMN` — i.e.
+  writable, which preserves today's behaviour for unannotated views. `retired()` is `true` only on
+  an R1.4 tombstone; it is the write-side gate that `FieldKind` alone cannot express, because a
+  tombstone has no accessor left to carry `@FieldSource` and therefore defaults to `COLUMN`.
+- **Generator obligation:** emit overrides for the four `@FieldSource`-derived accessors only when
+  the source field actually carries `@FieldSource`, so the generated enum stays small; `retired()`
+  is emitted (as `true`) only on a tombstone constant (§ 4.6/R1.4).
 - Note the name collision to avoid: `FieldKind.COLUMN` must not be confused with the
   `@FieldSource.column()` *label*; the former decides writability, the latter names the SQL
   column.
@@ -639,8 +658,14 @@ samples), `paymentMethod/entity/` with a sealed hierarchy and four subclasses, a
   directives**, so the samples keep compiling as documentation.
   **Mechanism (do not leave this to the generator to guess):** the example module's generation
   config (§ 8.8/3.23) passes an explicit package filter — `person.entity` and
-  `paymentMethod.entity` — as a `packages` knob, so the scan never visits the samples. Document
-  that knob alongside `genLevels`/`cooperative`/`strict` in
+  `paymentMethod.entity` — as a `packages` knob. **Clarified in § 4.7/DR-1: `packages` filters
+  *generation*, not *indexing*.** Every source file under the source root is still parsed into
+  `interfaceMap`, so cross-package supertypes and addons stay resolvable — `PersonAuditable`
+  inherits `createdAt`/`updatedAt` from `example.Auditable`, and an addon must be resolvable even
+  when it is declared outside the generated packages. Only view discovery and output are
+  restricted: no `_` enum, record, builder or `META` is emitted for a package outside the filter,
+  which is what keeps the doc samples and the `example/` package untouched. Document that knob,
+  with this distinction, alongside `genLevels`/`cooperative`/`strict` in
   `hipster-entity-tooling/README.md` (§ 8.7/3.22).
 - **Why:** the split-package layout would otherwise produce duplicate or conflicting generated
   files; stating the scope as "the entity packages only" is prerequisite work for Phase 4 that the
@@ -690,6 +715,14 @@ define the rule, so the generator must. The binding rule, in strict precedence o
 2. Else if the view declares a nested `Write` interface → `BUILDER`.
 3. Else → `META`.
 
+**Single owner of the rule (§ 4.7/DR-3).** The rule lives in exactly one place: a new
+`GenLevelResolver` in `hipster-entity-tooling` (next to `EntityMetadataGenerator`), called by
+**both** the generator's `parseViewAnnotation`/`ViewMeta` construction (§ 8.1/3.3) and
+`ViewAnnotationRule` (§ 6.3/1.12). The validator must **not** carry its own "`DEFAULT` means
+`META`" shortcut: that would let validation and generation disagree about a view whose shape
+resolves to `RECORD` or `BUILDER`, which is exactly the class of bug this plan exists to remove,
+and it would leave the plan documenting two rules for one concept.
+
 Rationale: `DEFAULT` means "do not add anything the author did not ask for, but do not leave the
 declared interface unimplemented". This is safe and testable, and it deliberately **never**
 returns `BUILDER_TRACKED`/`BUILDER_ALL` — a view that wants tracking must say so, because
@@ -725,8 +758,15 @@ public default PersonSummaryBuilderTracking toBuilderTracking(){ return new Pers
 
 **G3 — `TrackingStrict` is preserved, not generated.**
 
-The example carries a hand-written `TrackingStrict extends PersonSummaryBuilderTracking` that
-re-injects `EEnumSetBuilder64.Strict` **[verified, `PersonSummaryBuilderTracking.java:55-59`]**.
+The example carries a hand-written `TrackingStrict extends PersonSummaryBuilderTracking`
+**[verified, `PersonSummaryBuilderTracking.java:55-59`]**. **Correction [verified]:** it does
+*not* re-inject `EEnumSetBuilder64.Strict` — its no-arg constructor passes a plain
+`new EEnumSetBuilder64<>(PersonSummary_.class)` (`:57`), so today it is behaviourally identical to
+its parent. That strengthens rather than weakens the rule below: the class is a user-authored
+extension point, and the generator's only job is to leave it alone. (`EEnumSetBuilder64.Strict`
+and `EEnumSetBuilderLarge.Strict` do exist and do re-check equality inside `addOrdinalChange`;
+wiring the example's `TrackingStrict` to one is a possible Phase 4 example improvement, not a
+generator capability, and is **not** required by this plan.)
 
 - **Rule:** the generator **never emits** `TrackingStrict` — `@View` has no attribute to request
   it (`gen()`, `discriminatorField()`, `addons()` only **[verified, `View.java:13-16`]**), and
@@ -776,7 +816,7 @@ each of them inventing its own convention.
 | **Ordinal access** | Everything positional goes through `ViewMeta`/`FieldDef` (`meta.fieldNameAt(i)`, `meta.fieldTypeAt(i)`, `meta.fieldCount()`); everything by name goes through `forName` (DEC-016 — never a per-call `HashMap`). |
 | **Nullability** | A reader must tolerate `null` in any slot (S4), including a tombstone slot (R1.4) and a `DERIVED`/`JOINED` field an adapter cannot fill. A binder writes `null` as SQL `NULL`, not as a type error. |
 | **Column names** | `@FieldSource.column()` when non-empty, else the accessor name — `FieldSource` already documents "Defaults to the method name when empty" **[verified, `FieldSource.java:21-22`]**. This resolution lives in X2's `FieldDef.column()` default, so adapter code never re-implements it. |
-| **Writability** | Generated setters/binders exist only for `FieldKind.COLUMN` (S1). A `DERIVED`/`JOINED` field is read-only and an `UPDATE` must never include it. |
+| **Writability** | Generated setters/binders exist only for fields that are `FieldKind.COLUMN` **and not `retired()`** (S1, § 4.6/R1.4, § 4.7/DR-2). A `DERIVED`/`JOINED` field is read-only, and an `INSERT`/`UPDATE`/binder must never include it or a tombstone. |
 | **No new runtime module** | Adapters/mappers/validators are **generated source**, committed per S2. They may use `hipster-entity-core` for the positional-array primitives — the same dependency S3's deferral already accepts. A generated JDBC adapter uses the JDK's `java.sql` only; **no JDBC driver and no connection-pool dependency enters any library POM.** |
 | **Failures are diagnostics, not silence** | Where a mapping or constraint cannot be expressed (divergent types, an unsupported constraint annotation), emit the DEC-022 diagnostic and generate nothing for that field — never a lossy cast and never a silently dropped field. |
 
@@ -791,24 +831,50 @@ every implementer invents a different one. Final rule:
 
 | Concern | Rule |
 |---|---|
-| **What an addon contributes** | The addon interface's accessors are **merged into the view's field list**. That is the only reading under which the attribute has any effect; an addon that contributes nothing would be indistinguishable from a typo. |
-| **Where the fields go** | Appended **after** all of the view's own and inherited accessors, in the addon's declaration order, with multiple addons in their listed order. This is the only placement compatible with R1 (§ 4.6): ordinals are append-only, so an addon field may never be inserted into the middle of an existing field run. Concretely, `PersonSummary_.{id, firstName, lastName, age, departmentName, metadata}` stays at ordinals 0–5 and the addon's `createdAt`/`updatedAt` land at 6 and 7. |
-| **Propagation** | An `addons` declaration on an interface in the view's `extends` chain — including the marker itself — **applies to the derived view too**. `@View(addons = {PersonAuditable.class})` sits on `Person`, so every view derived from `Person` (`PersonSummary`, `PersonDetails`, `PersonDto`, …) carries the audit fields, not just `Person_` itself. Rationale: the annotation states a property of the entity, not of one materialization, and a `Person` row physically has the columns; a derived view that silently dropped them would produce a positional array that does not describe the same row. A view cannot opt out of an inherited addon — the addon must be removed at its declaration site, which is then an R1.4 field removal. *(If the alternative — addons resolved per view with no propagation — is preferred instead, say so explicitly here; the failure mode this task exists to prevent is leaving the choice implicit.)* |
-| **Collisions** | An addon accessor whose name already exists on the view (own or inherited) is skipped, the view's own declaration wins, and a DEC-022 diagnostic is emitted. Never a duplicate enum constant — that would not compile. This is the common case: `PersonAuditable` inherits `id`/`firstName`/`lastName` from `Person`, so only `createdAt`/`updatedAt` are actually appended. |
+| **What an addon contributes** | The addon interface's accessors — its own declarations plus whatever its parents resolve to among the **indexed** sources (see X3's generation-vs-indexing split) — are **merged into the view's field list**. That is the only reading under which the attribute has any effect; an addon that contributes nothing would be indistinguishable from a typo. |
+| **Where the fields go** | Appended **after** all of the declaring view's own and inherited accessors, in the addon's declaration order, with multiple addons in their listed order. This is the only placement compatible with R1 (§ 4.6): ordinals are append-only, so an addon field may never be inserted into the middle of an existing field run. Concretely, the example's declaring view is `PersonDetails`: its own run `{id, firstName, lastName, email, phoneNumber}` stays at ordinals 0–4 and the addon's `createdAt`/`updatedAt` land at 5 and 6. `PersonSummary_.{id, firstName, lastName, age, departmentName, metadata}` stays at 0–5 because it declares no addon (§ 4.7/DR-1). |
+| **Propagation** | **Per view — no propagation (§ 4.7/DR-1).** An `addons` declaration applies to the interface that carries it and to nothing else: a subtype does **not** inherit the addon's fields. A view that physically carries the addon's columns must declare `addons = …` itself. Rationale: the addon is a property of one materialization, so a view's field list stays something a reader can derive from that view's own source; a subtype's positional array is then free to differ from its parent's, which R1 already permits because addon fields append at the end of *the declaring view's* run. `@View(addons = …)` on a non-view interface (a marker — `person.entity.Person`, `paymentMethod.entity.PaymentMethod`) has **no effect**: it is reported as the DEC-022 diagnostic `addon_on_non_view` and removed in Phase 4 (§ 9/4.1, § 9/4.9). A view cannot opt out of an addon it declared; removing the declaration is the R1.4 field-removal path. |
+| **Collisions** | An addon accessor whose name already exists on the declaring view (own or inherited) is skipped, the view's own declaration wins, and a DEC-022 diagnostic is emitted. Never a duplicate enum constant — that would not compile. This is the common case: `PersonAuditable` inherits `id`/`firstName`/`lastName` from `Person`, so declaring it as an addon on `PersonDetails` appends only `createdAt`/`updatedAt`. |
 | **Writability** | Addon fields follow X2's defaults like any other field: unannotated means `COLUMN`, i.e. writable under S1. A read-only audit field is expressed by annotating the accessor **on the addon interface**; no special case is added for fields named `createdAt`/`updatedAt`. |
-| **Generation of the addon itself** | Unchanged and orthogonal: view discovery is structural (`EntityMetadataGenerator.java:328-333` treats every interface deriving from the marker as a view), and `@View` supplies `gen`/`discriminatorField`/`addons` — it does **not** decide whether an enum is emitted. An addon that derives from a marker is generated as a view in its own right (`PersonAuditable` is); an addon that does not is a field source only and gets no enum. |
-| **Removal** | Dropping an addon is a field removal, so R1.4 applies: the constants become `@Deprecated` tombstones, never deletions. |
-| **Diagnostics** | An `addons` entry that cannot be resolved to an interface, and an addon accessor that collides, are DEC-022 diagnostics surfaced by the same `DivergenceReporter` path as the other field-set divergences (§ 8.7/3.20) — never a silent skip. |
+| **Generation of the addon itself** | Unchanged and orthogonal: view discovery is structural (`EntityMetadataGenerator.java:328-333` treats every interface deriving from the marker as a view), and `@View` supplies `gen`/`discriminatorField`/`addons` — it does **not** decide whether an enum is emitted. An addon that derives from a marker is generated as a view in its own right (`PersonAuditable` is); an addon that does not is a field source only and gets no enum. Under X3's `packages` generation filter this is scoped to the generated packages: `person.entity.PersonAuditable` is generated as a view in its own right, while `PaymentMethodAuditable` — which derives from the `example.Auditable` marker but lives in a package outside the filter — is indexed and resolvable as an addon yet gets no emitted enum. |
+| **Removal** | Dropping an addon declaration from the declaring view is a field removal, so R1.4 applies: the constants become `@Deprecated` tombstones reporting `retired()` (§ 4.7/DR-2), never deletions. |
+| **Diagnostics** | An `addons` entry that cannot be resolved to an interface, an addon declaration on a **non-view** interface (`addon_on_non_view`, § 4.7/DR-1), and an addon accessor that collides, are DEC-022 diagnostics surfaced by the same `DivergenceReporter` path as the other field-set divergences (§ 8.7/3.20) — never a silent skip. |
 
-Consequence for Phase 4, stated so it is not mistaken for a generator bug: the hand-written
-`person/entity/PersonAuditable_.java` (34 lines) currently **omits** the addon's `createdAt()` /
-`updatedAt()` accessors that `Auditable<ID>` declares (`example/Auditable.java:8-9`). The
-regenerated enums will **gain** those two fields — for `Person_`, `PersonSummary_`,
-`PersonAuditable_` and the `PaymentMethod` family — appended after the existing constants, so no
-existing ordinal moves. That diff is the fix, not a regression, and it must be reviewed as an
-intentional field-set change in § 9/4.1/4.9. Add a generator fixture test (a view plus a
-two-accessor addon) that asserts the merged order, the collision diagnostic, and propagation to a
-derived view.
+Consequence for Phase 4, stated so it is not mistaken for a generator bug, and **rewritten for
+per-view resolution (§ 4.7/DR-1)**:
+
+- `person/entity/PersonAuditable_.java` (34 lines) currently **omits** `createdAt()` /
+  `updatedAt()`. It gains them because `PersonAuditable extends Person, Auditable<Long>` and
+  **inherited accessors are already collected** — `EntityMetadataGenerator.collectViewProperties`
+  walks the `extends` chain, and the hand-written `PersonDetails_` proves it
+  (`id`/`firstName`/`lastName`/`email`/`phoneNumber`). This is the *structural* path
+  (`example/Auditable.java:8-9`) and is **unaffected** by the addon decision.
+- `PersonSummary_`, `PersonDto_`, `PersonCreateForm_`, `PersonUpdateForm_` and
+  `PersonUpdatableView_` gain **nothing** from addons: they do not extend `Auditable`, no longer
+  inherit the marker's declaration, and must not be expected to carry audit columns. Ordinals
+  0–5 of `PersonSummary_` stay exactly as `§ 4.5` describes.
+- `PersonDetails_` is the example's **deliberate addon use**: it declares
+  `@View(addons = {PersonAuditable.class})` (it does not extend `Auditable`), so `createdAt` /
+  `updatedAt` are appended after its existing `id`/`firstName`/`lastName`/`email`/`phoneNumber`
+  run (ordinals 5 and 6), while the addon's `id`/`firstName`/`lastName` collide with its own and
+  are skipped with the collision diagnostic. The feature is therefore exercised by real generated
+  code, and no existing ordinal moves.
+- The two **markers** drop their inert declarations: `person/entity/Person.java:7` and
+  `paymentMethod/entity/PaymentMethod.java:13` carry `@View(addons = …)` on interfaces that are
+  not views (they get no `_` enum), so under per-view resolution they do nothing. Phase 4 removes
+  both and the generator reports `addon_on_non_view` while they are still present. The
+  `paymentMethod` family consequently exercises `discriminatorField`/permitted subtypes
+  (§ 9/4.9), not addons.
+- `example/PersonAuditable_.java` and `example/PaymentMethodAuditable_.java` are **deleted** in
+  Phase 4 (§ 4.7/DR-5): both are stale, wrong-shaped (`getPropertyType()`, no `FieldDef`) and
+  unreferenced **[verified]**. `PersonAuditable_` is superseded by the generated
+  `person.entity.PersonAuditable_`; `PaymentMethodAuditable_` describes an interface that is not a
+  view of the `PaymentMethod` entity at all (it extends only `Auditable<Long>`), so nothing
+  replaces it and no generated file references it.
+
+Add a generator fixture test (a view plus a two-accessor addon) that asserts the merged order, the
+collision diagnostic, **and that a derived view does not receive the addon's fields** — that last
+assertion is what makes the per-view rule binding.
 
 ### 4.6 R1 — Field enums are append-only ordinal ledgers (new binding rule)
 
@@ -827,6 +893,10 @@ once assigned, is permanent.
 > applies only to enums that carry the **codebuddy marker** (§4.6/R1.2).
 
 **R1.2 — The marker: opt-in, and it rides the existing DEC-021 header.**
+
+*(The R1 rule itself is recorded in its own **standalone** DEC — § 4.7/DR-6, § 9/4.8. It reuses
+DEC-021's header/JSON5 mechanism but is **not** an amendment of DEC-021, so the order contract can
+be found without reading the generator-header decision.)*
 
 The generator already emits a two-line `//` header above `package` (DEC-021, § 8.3/3.8). The
 marker is an **additional key in that JSON5 config blob** — no new comment syntax, no
@@ -893,6 +963,15 @@ than left to the implementer:
   renumbering — there is no automatic compaction in this release.
 - **The builder and `Write` interface do not** get a setter for it — tombstoning only ever applies
   to a field that was writable, and per S1 a field with no accessor is not writable.
+- **A tombstone is marked `retired()` and skipped by every writer (§ 4.7/DR-2).** The generator
+  emits `retired()` → `true` on the tombstone constant (new `FieldDef` accessor, § 4.3/X2), and
+  every generated writer — the `Write`/builder setters, the `set(int)`/`set(String)` arms, the
+  JDBC binder and the `INSERT`/`UPDATE` fragments (§ 12.1/7.2–7.3), and the mapper's source field
+  list (§ 12.2) — **skips `retired()` fields**. `FieldKind` alone cannot express this: X2 defaults
+  an unannotated constant to `COLUMN`, and a tombstone has no accessor left to carry
+  `@FieldSource`, so without `retired()` the retired column would silently reappear in generated
+  SQL. Readers stay tolerant — the slot still exists and may be `null` (a row without the column)
+  or non-null (a row that still has it): `retired()` gates **writes only**.
 - **Why the record keeps the slot rather than the simpler "drop the component" alternative:**
   dropping it would break `create()`'s verified 1:1 positional mapping
   (`new Record(values[0], values[1], …)`, § 8.4/3.10) and would make `create()` branch on
@@ -909,8 +988,9 @@ than left to the implementer:
   not deferred: § 3's scope table and § 4.4 both list it, and tasks 7.13–7.16 implement and
   document it. What stays out of scope is *automatic* compaction as part of a normal generation
   pass — it is a deliberate, separately invoked operation that may only run when no persisted
-  array, patch, or snapshot survives. It requires its own DEC section **before 7.14 starts**
-  (task 7.13), by the same DEC-per-decision convention § 9/4.8 applies to R1. This bullet
+  array, patch, or snapshot survives. It requires its own **standalone DEC** before 7.14 starts
+  (task 7.13) — the DEC-per-decision convention § 9/4.8 applies to R1, recorded as a separate
+  record rather than an amendment of DEC-012/DEC-021 (§ 4.7/DR-6). This bullet
   previously read "a documented future migration, not a feature … record it in § 4.4", which
   contradicted Phase 7.4; that wording is retracted.
 
@@ -934,6 +1014,27 @@ R1 governs **where a new constant may be placed**. An implementer must not let D
 "recognize by shape, then re-emit canonically" logic reorder enum constants — the enum is the one
 block whose *position* is semantic, and the generator's own comparison must therefore be
 order-sensitive even though every other block's is not.
+
+### 4.7 Second decision round — the six items a readiness review left open
+
+These were the only remaining places where an implementer would have had to make an authoring
+decision, and the first of them (DR-1) was the one case where the plan itself asked the reader to
+choose. All six are now binding, and each was applied **in place** in the subsection it changes,
+so this table is an audit index rather than a second source of truth.
+
+| # | Question | Final rule | Applied in |
+|---|---|---|---|
+| DR-1 | Does an `addons` declaration propagate to views derived from the declaring interface? | **No — resolved per view.** `addons` applies to the interface that declares it and to nothing else; a subtype must declare `addons` itself. A declaration on a non-view interface (a marker) has no effect and is reported as the DEC-022 diagnostic `addon_on_non_view`. The `packages` knob filters **generation**, not **indexing**, so a cross-package addon or supertype stays resolvable. | § 4.5/G6 (contribution, propagation and generation rows, plus the Phase 4 consequence list), § 4.3/X3, § 9/4.1, § 9/4.9 |
+| DR-2 | How is a tombstoned field kept out of generated writes? | **`FieldDef.retired()`** — a fifth `default` accessor in X2, `default boolean retired() { return false; }`. A tombstone emits `retired()` → `true`; builder setters, `set(int)`/`set(String)` arms, JDBC binder/`INSERT`/`UPDATE` and mapper sources **skip retired fields**; readers stay tolerant. | § 4.3/X2, § 4.6/R1.4, § 6.1/1.2, § 4.5/G5, § 12.1/7.2–7.4, § 6.4 test 25 |
+| DR-3 | Who owns the `DEFAULT` resolution rule? | **One shared `GenLevelResolver`** in `hipster-entity-tooling`, called by both the validator (§ 6.3/1.12) and the generator (§ 8.1/3.3). No `DEFAULT` → `META` shortcut anywhere. | § 4.5/G1, § 6.3/1.12, § 8.1/3.3 |
+| DR-4 | What is `S` in `ViewChangeTracking<E,S>` once `changes()` is the immutable accessor? | Generated and example tracking builders use **`EEnumSet64<View_>`** (`changes()` → `mf.toImmutable()`, `changesBuilder()` → `mf`); the array base implements `ViewChangeTracking<F, EEnumSet<F>>`; the § 6.4 parity fixture uses `EEnumSet64` too. The example's `implements` clause is **re-typed**, not merely renamed. | § 4.1/S5, § 6.2/1.7, § 6.4, § 8.6/3.14, § 13 |
+| DR-5 | What happens to the stale hand-written enums under `example/`? | `example/PersonAuditable_.java` and `example/PaymentMethodAuditable_.java` are **deleted** in Phase 4 (wrong shape, superseded, unreferenced); `example/Auditable` and the two `*Property` enums stay hand-written. | § 9/4.1, § 4.5/G6 |
+| DR-6 | Where are the new binding rules recorded? | **Each gets its own standalone DEC**: R1 (§ 9/4.8), field-enum compaction (§ 12.4/7.13), nested/deep tracking (§ 11/6.1). R1 still *uses* DEC-021's header/marker mechanism, but its order contract is not recorded by amending DEC-021. | § 9/4.8, § 12.4/7.13, § 11/6.1 |
+
+Three factual corrections from the same review are applied in place rather than logged here:
+S2's claim that `plans__*` is git-ignored (**they are tracked**), G3's claim that `TrackingStrict`
+re-injects `EEnumSetBuilder64.Strict` (**it does not**), and the JMH harness's `Enum64` vs `E64`
+argument in § 6.2/1.4 and the risk register. DoD #7 was narrowed to X3's example scope.
 
 ---
 
@@ -1035,14 +1136,16 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
 - [ ] **1.1** `ViewWriter`: add non-abstract `default Object get(String)` and
   `default boolean supports(String)` so existing generated classes keep compiling; the
   generator needs the writability probe for S1/D6.
-- [ ] **1.2** Add the four accessors to `FieldDef` (X2) with defaults that preserve current
-  behaviour — `FieldSource` is **already** `@Retention(RetentionPolicy.RUNTIME)`
+- [ ] **1.2** Add the five accessors to `FieldDef` (X2, § 4.7/DR-2) with defaults that preserve
+  current behaviour — `FieldSource` is **already** `@Retention(RetentionPolicy.RUNTIME)`
   **[verified, `FieldSource.java:15`]**, so the retention is a no-op and the real work here is
   `FieldDef` —
   `default FieldKind fieldKind() { return FieldKind.COLUMN; }`,
   `default String column() { return null; }`, `default String relation() { return null; }`,
-  `default String expression() { return null; }`. A field with no annotation is therefore
-  `COLUMN`, i.e. writable, which is exactly today's behaviour.
+  `default String expression() { return null; }`,
+  `default boolean retired() { return false; }`. A field with no annotation is therefore
+  `COLUMN`, i.e. writable, which is exactly today's behaviour; `retired()` is `true` only on an
+  R1.4 tombstone, where it is the write-side gate that `FieldKind` cannot express.
 - [ ] **1.3** Realize the `View` write-mode contract from `@FieldSource` alone (S1/D6): no new
   annotation attribute. `FieldKind` decides writability; `column()`/`relation()`/`expression()`
   are labels and must not be confused with it.
@@ -1067,10 +1170,12 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
   The real compatibility constraint is the **constructor**, not the factory: the JMH harness
   calls the package-private constructors directly —
   `hipster-entity-core/src/test/.../EEnumSetTrackingJmhBenchmark.java:98` (`EntityUpdateTrackingArray64`)
-  and `:115` (`EntityUpdateTrackingArrayLarge`), each as `new …(forNameOrdinal, E64.values().length, values)` —
-  so changing the constructors to take `F[] universe` **breaks the harness in the same commit**
-  and no factory overload can prevent that. Update those two setup methods in the same commit
-  (as the risk register already requires), and pass the enum's constant array instead of the
+  and `:115` (`EntityUpdateTrackingArrayLarge`), each as `new …(forNameOrdinal, Enum64.values().length, values)`
+  **[verified — note the count comes from the *universe* enum `Enum64`/`E96`, not from the
+  `FieldDef` enum `E64`/`E96`]** — so changing the constructors to take `F[] universe`
+  **breaks the harness in the same commit** and no factory overload can prevent that. Update those
+  two setup methods in the same commit (as the risk register already requires), and pass the
+  **`FieldDef`** enum's constant array (`E64.values()` / `E96.values()`) instead of the
   `ForNameOrdinal`. Add the arity check that `EntityReadArray` already has but the tracking
   array lacks.
 - [ ] **1.5** `EEnumSetBuilder64` / `EEnumSetBuilderLarge`: add an `E[] universe` constructor;
@@ -1104,7 +1209,24 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
   is **no** bound-tightening ripple into `EEnumSetBuilder64`, the JMH harness, or any implementor.
   `EEnumSetBuilder64`/`Large` already satisfy `S extends EEnumSetRead<E>`, so the existing
   hand-written `PersonSummaryBuilderTracking` keeps compiling against the widened interface apart
-  from the accessor renames it needs anyway.
+  from the accessor renames **and the type-argument change** it needs anyway.
+
+  **The `S` type argument must change too (§ 4.7/DR-4).** Because `changes()` is now the
+  *immutable* `S`, an implementor whose `changes()` used to return a mutable builder can no longer
+  name that builder as `S`. Concretely:
+  - `PersonSummaryBuilderTracking` becomes
+    `implements PersonSummary.Write, ViewChangeTracking<PersonSummary_, EEnumSet64<PersonSummary_>>`,
+    with `EEnumSet64<PersonSummary_> changes() { return mf.toImmutable(); }` and
+    `EEnumSetBuilder64<PersonSummary_> changesBuilder() { return mf; }`. Three lines plus the
+    `implements` clause — the type argument is a real edit, not a rename, and § 13's
+    same-commit rule covers it.
+  - `EntityUpdateTrackingArray` — which gains the interface in this task — implements
+    `ViewChangeTracking<F, EEnumSet<F>>`, since its `changes()` returns the immutable set. The
+    array base uses the interface type; the generated and example builders use the concrete
+    `EEnumSet64<View_>` that § 8.6/3.14 imports.
+  - the § 6.4 parity fixture must use `EEnumSet64<…>` as `S` for the same reason: a fixture typed
+    on `EEnumSetBuilder64` would silently reintroduce the mutable-snapshot confusion S5 exists to
+    remove.
 - [ ] **1.8** `clear()` / `clearChanges()` must also clear the recorder. Document the semantics
   precisely: they reset the **change set**, not the **comparison baseline**. To re-baseline,
   rebuild the tracking builder from the persisted row. If that is insufficient, add an explicit
@@ -1139,12 +1261,15 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
 
 ### 6.3 `hipster-entity-tooling` — repair the validator
 
-- [ ] **1.12** Rewrite `ViewAnnotationRule`: parse `gen` (default `DEFAULT` → resolve to
-  `META`), `discriminatorField`, and `addons`; drop the string-`contains` check; reject a
-  `GenLevel` incompatible with the declared shape (e.g. `BUILDER_TRACKED` on a view with no
-  writable fields). Update `ViewAnnotationRuleTest`, `EntityRulesValidatorTest`, and the
-  `EntityMetadataGeneratorTest` fixtures, which all still use the non-existent
-  `@View(read = …, write = …)` form.
+- [ ] **1.12** Rewrite `ViewAnnotationRule`: parse `gen`, `discriminatorField`, and `addons`;
+  drop the string-`contains` check; reject a `GenLevel` incompatible with the declared shape
+  (e.g. `BUILDER_TRACKED` on a view with no writable fields). Resolve `gen = DEFAULT` **through
+  the shared `GenLevelResolver`** that § 8.1/3.3 also calls (G1, § 4.7/DR-3) — the validator must
+  not carry its own `DEFAULT` → `META` shortcut, or validation and generation can disagree about
+  a view whose shape resolves to `RECORD`/`BUILDER`. Also report `addons` on a non-view interface
+  as the `addon_on_non_view` diagnostic (§ 4.5/G6, § 4.7/DR-1). Update `ViewAnnotationRuleTest`,
+  `EntityRulesValidatorTest`, and the `EntityMetadataGeneratorTest` fixtures, which all still use
+  the non-existent `@View(read = …, write = …)` form.
 - [ ] **1.13** Wire the validator into `EntityMetadataGenerator.generate(...)`: collect
   `ValidationIssue`s and fail (or warn behind a `strict` flag) **before** writing files.
 - [ ] **1.14** New `EnumConstantOrderChecker` in
@@ -1192,7 +1317,7 @@ acceptance test for D1 and must pass twice, once against a generated tracking bu
 type handed to `createUpdatable` must itself declare the tracking methods, or steps 8–13 will not
 compile on the proxy side. The example's `PersonSummary` does not extend `ViewChangeTracking`
 (only its builder implements it), so the test needs a dedicated fixture, e.g.
-`interface TrackedPersonSummary extends PersonSummary, ViewChangeTracking<PersonSummary_, EEnumSetBuilder64<PersonSummary_>>`,
+`interface TrackedPersonSummary extends PersonSummary, ViewChangeTracking<PersonSummary_, EEnumSet64<PersonSummary_>>`,
 and `createUpdatable(TrackedPersonSummary.class, array, NAME_MAPPER)`. Both materializations must
 then be driven through the *same* fixture view type so the assertions are literally identical.
 Also fix the fixture's field enum in place: `id` stays writable on the builder path, so the
@@ -1269,8 +1394,10 @@ implies:** `hipster-entity-api` has **no test source root and no JUnit dependenc
 25. **removed-accessor tombstone (R1.4):** given an interface that drops an accessor, the
     generator keeps the constant in place and `@Deprecated`, and asserts that
     `fieldCount`/`values.length` are unchanged, every later ordinal is unchanged, the record
-    keeps a nullable component for the tombstone, no builder setter or `Write` method is emitted
-    for it, and `forName` still resolves the retired name.
+    keeps a nullable component for the tombstone, the constant reports `retired() == true`
+    (§ 4.7/DR-2), no builder setter or `Write` method is emitted for it, it appears in no JDBC
+    binder/`INSERT`/`UPDATE` output (§ 12.1/7.2–7.4), and `forName` still resolves the retired
+    name.
 
 `hipster-entity-core` JMH: extend `EEnumSetTrackingJmhBenchmark` to the new signature and add a
 `previousValue` on/off axis, so the cost of the recorder is measured rather than assumed.
@@ -1295,12 +1422,14 @@ a DERIVED/JOINED field still occupies its ordinal; an adapter may leave it null
 column order comes from ViewMeta, never from SELECT *
 the ordinal list is APPEND-ONLY: new fields get new ordinals at the end (R1, § 4.6)
   a retired field keeps its ordinal and its slot; its constant is @Deprecated, not deleted
+  a retired field reports retired() == true: writers skip it, readers still accept its slot
 ```
 
 - [ ] **2.1** `doc-hipster-entity/user/patterns/ordinal-array-contract.md` (new) — the contract
   above, the `QueryProjection → Object[] → META.create()` flow, and an explicit statement of the
   **R1 append-only rule** with what it means for an adapter author: ordinals never move, a
-  retired field's slot still exists and may be null, and `fieldCount` only ever grows.
+  retired field's slot still exists and may be null, its constant reports `retired()` and is
+  skipped by every writer, and `fieldCount` only ever grows.
 - [ ] **2.2** `doc-hipster-entity/user/patterns/jdbc-row-adapter.md` (new) — a ~30-line
   reflection-free `Object[] fromResultSet(ResultSet, FieldDef[])` reference adapter driven by
   `meta.fieldTypeAt(i)`.
@@ -1350,8 +1479,9 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
   **emission** semantics are fixed by **G6** (§ 4.5) — parse it here, apply it in § 8.3.
 - [ ] **3.3** Make the `DEFAULT` resolution rule explicit and implement it exactly as **G1**
   (§ 4.5) specifies — precedence `RECORD` (nested record with matching component order) →
-  `BUILDER` (nested `Write`) → `META`; never tracked. A mismatched nested record emits the
-  DEC-022 divergence diagnostic and falls back to `META`.
+  `BUILDER` (nested `Write`) → `META`; never tracked. Implement it **once**, in the shared
+  `GenLevelResolver` that § 6.3/1.12's validator also calls (§ 4.7/DR-3). A mismatched nested
+  record emits the DEC-022 divergence diagnostic and falls back to `META`.
 - [ ] **3.4** Carry `gen` through the tooling's `ViewMeta` into the JSON (`"gen": "META"` in
   `toJson`, parsed back in `fromJson`). Round-tripping must stay lossless — there is an
   existing `fromJson` test.
@@ -1470,7 +1600,10 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
   vs `EEnumSetBuilderLarge` **at generation time** from the known field count. Keep the runtime
   `.create()` selection only for the array/proxy route. Because the generated class *is* the
   tracking state holder, both accessors derive from the one `mf` field (§ 4.1 S5) — never emit a
-  second field or a snapshot cache. Mirrors the hand-written example's imports
+  second field or a snapshot cache. The emitted class declares
+  `implements View<…>.Write, ViewChangeTracking<View_, EEnumSet64<View_>>` — `S` is the
+  **immutable** `EEnumSet64<View_>`, because `changes()` is the snapshot and `changesBuilder()`
+  is the live `EEnumSetBuilder64<View_>` (§ 4.7/DR-4). Mirrors the hand-written example's imports
   **[verified, `PersonSummaryBuilderTracking.java:6-7`]** exactly.
 - [ ] **3.15** Emit the setter body in exactly the verified order:
   `mf.addOrdinalChange(<ordinal literal>, field, value); field = value; return this;` — the
@@ -1536,8 +1669,10 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
 
 - [ ] **3.23** Build integration via **`exec-maven-plugin` bound to `generate-sources`** (G4,
   § 4.5), invoking the generator's entry point with `sourceRoot`/`outputDir` and the `genLevels` /
-  `cooperative` / `strict` / **`packages`** knobs as CLI or system properties (the `packages`
-  filter is what keeps the example's documentation samples out of the scan — X3, § 4.3).
+  `cooperative` / `strict` / **`packages`** knobs as **CLI flags** (`<arguments>` in the plugin
+  config), not `-D` system properties, so one flag surface serves both the Maven build and a
+  manual run (the `packages` filter restricts **generation**, not indexing — X3, § 4.3;
+  § 4.7/DR-1).
   Generated sources are added to the
   compile source roots. **Not** a new `hipster-entity-maven-plugin` module.
 - [ ] **3.24** NOT HERE — MOVED: the `project-automation` watcher is **in scope as Phase 7.5**
@@ -1567,16 +1702,29 @@ output, never against a hand-written file.
   artifacts in scope are therefore at least
   `PersonSummary_`, `PersonAuditable_`, `PersonDetails_`, `PersonDto_`, `PersonUpdatableView_`,
   `PersonUpdateForm_`, `Write_`, `PersonSummaryBuilder`, `PersonSummaryBuilderTracking`, plus
-  newly generated `Person_` and `PersonCreateForm_`; delete each hand-written file **only once
+  newly generated `PersonCreateForm_` (the `Person` marker itself gets **no** enum — the same
+  paragraph establishes that it is not a view, so an earlier draft's "newly generated `Person_`"
+  was self-contradictory and is retracted here); delete each hand-written file **only once
   the generated version passes the same tests**. Two *locations* are deliberately **not**
   regenerated and stay hand-written: nothing under
-  `hipster-entity-example/.../example/` (`Auditable`, `PersonAuditable_`,
-  `PaymentMethodAuditable_`, the two `*Property` enums) — it lies outside the X3 `packages`
-  filter — and nothing in the doc-sample packages `person/iface` + `person/record` (X3, § 4.3).
-  Expect four classes of intentional diff: the S1 write-surface reduction (§ 4.1 S1), the G6
-  addon-field gain (§ 4.5), the disappearance of the spurious `changes` constant that
-  `PersonUpdatableView_.java:13` carries today (3.5), and the DEC-021 header plus
-  `entityFieldEnum:true` marker on every enum (3.8).
+  `hipster-entity-example/.../example/` — it lies outside the X3 `packages` filter — and nothing
+  in the doc-sample packages `person/iface` + `person/record` (X3, § 4.3). Within `example/`,
+  `Auditable` (the field source) and the two `*Property` enums **stay**; the two stale field enums
+  `PersonAuditable_.java` and `PaymentMethodAuditable_.java` are **deleted** (§ 4.7/DR-5) — both
+  are wrong-shaped (`getPropertyType()`, no `FieldDef`) and unreferenced (see § 4.5/G6 for what,
+  if anything, replaces each). Confirm with `grep` that nothing references them before deleting;
+  both are unreferenced today **[verified]**.
+  Expect five classes of intentional diff: the S1 write-surface reduction (§ 4.1 S1); the addon
+  field-set change under per-view resolution — `PersonAuditable_` gains `createdAt`/`updatedAt`
+  **structurally** from `Auditable<Long>`, `PersonDetails_` gains them from its own `addons`
+  declaration, and the other views gain nothing (§ 4.5/G6, § 4.7/DR-1); the disappearance of the
+  spurious `changes` constant that `PersonUpdatableView_.java:13` carries today (3.5); the
+  deletion of the two stale `example/` enums; and the DEC-021 header plus `entityFieldEnum:true`
+  marker on every enum (3.8).
+  Also in this task: remove the inert `@View(addons = …)` declaration from
+  `person/entity/Person.java:7` (the `paymentMethod` marker's inert declaration is removed in
+  4.9), and add `@View(addons = {PersonAuditable.class})` to `PersonDetails` so the addon path is
+  exercised by real generated code (§ 4.5/G6).
 - [ ] **4.2** Replace the empty `PersonController` with a real `PersonDemo.main` (no
   framework): row array → read proxy → JSON → tracking patch → printed diff → the
   parameterised `UPDATE` it would send.
@@ -1622,12 +1770,14 @@ output, never against a hand-written file.
     `enumClass` that never arrived is precisely the `null` in § 2.4 — so § 6.2/1.4 restores what
     DEC-012 believed it had. Amend the note rather than leaving it as evidence against the code.
 - [ ] **4.8** Update `roadmap/README.md`'s checklist and cross-reference the decisions landed
-  in Phase 1 (DEC-012 amendment, and the new DEC if D3/D4 proceed). **Add a DEC for R1**
-  (§ 4.6): the append-only field-enum rule, the `entityFieldEnum` marker, the checker contract
-  (baseline source, subsequence comparison, exit code), and the retired-field policy. R1 governs
-  a persisted data layout, so per the project's DEC-per-decision convention it must be
-  traceable — extend DEC-012/DEC-021 or add a new record, but do not leave it as a plan-only
-  rule. Cross-reference it from `ordinal-array-contract.md` (§ 7.1).
+  in Phase 1 (DEC-012 amendment, and the new DEC if D3/D4 proceed). **Add a new standalone DEC
+  for R1** (§ 4.6, § 4.7/DR-6): the append-only field-enum rule, the `entityFieldEnum` marker, the
+  checker contract (baseline source, subsequence comparison, exit code), and the retired-field
+  policy including `FieldDef.retired()`. R1 governs a persisted data layout, so per the project's
+  DEC-per-decision convention it gets its own traceable record — it **rides DEC-021's
+  header/marker mechanism** but is **not** recorded by amending DEC-021, so the order contract can
+  be found without reading the generator-header decision. Cross-reference it from DEC-012 and from
+  `ordinal-array-contract.md` (§ 7.1).
 - [ ] **4.9** Regenerate the **`paymentMethod` sealed hierarchy** (in scope, per § 3): the five
   `*PaymentMethod` views and their `_` enums plus `PaymentMethod_.discriminatorField` /
   permitted-subtype wiring, then drive `PaymentMethodController` from the generated code as in
@@ -1635,8 +1785,13 @@ output, never against a hand-written file.
   output, so it is the acceptance test for polymorphic generation. Keep the step **after** 4.1 so
   the single-entity regeneration path is already proven. **[verified]** the fixture is
   `PaymentMethod` (a `sealed interface … permits BankTransferPaymentMethod, PayPalPaymentMethod,
-  CryptoPaymentMethod, CreditCardPaymentMethod`, with `type()` as the discriminator) plus
-  `PaymentMethodAuditable` as its G6 addon, so this task also exercises the addon-field gain.
+  CryptoPaymentMethod, CreditCardPaymentMethod`, with `type()` as the discriminator). **Not an
+  addon exercise (§ 4.7/DR-1):** `paymentMethod.entity.PaymentMethod` is the marker, so its
+  `@View(addons = {PaymentMethodAuditable.class})` is inert and is removed here;
+  `PaymentMethodAuditable` does not even extend `PaymentMethod` (it extends only
+  `Auditable<Long>`), so it is not a view of this entity and gets no generated enum. This task
+  exercises the sealed/discriminator path only — the addon path is exercised by `PersonDetails`
+  (4.1) and by the tooling fixture test (§ 4.5/G6).
 - [ ] **4.10 Transcode the three non-UTF-8 DEC files** — `architecture/decisions/README.md`,
   `DEC-020.md`, `DEC-021.md` — to UTF-8, **without content changes**. Reproduce with a strict
   decode, which fails today:
@@ -1678,7 +1833,7 @@ reference was reassigned". It cannot express "the reference is unchanged but its
 changed". **Model choice is already fixed as pull (D4, § 4.2)** — the DEC records a decision
 rather than reopening one.
 
-- [ ] **6.1** New **DEC** (number per the project's sequence): pull over push (D4); the
+- [ ] **6.1** New **standalone DEC** (number per the project's sequence, § 4.7/DR-6): pull over push (D4); the
   `ChangePath` shape; the shallow-vs-deep accessor contract; and the collection semantics of
   task 6.4. Must be accepted before 6.2 starts.
 - [ ] **6.2** **Contract**, in `hipster-entity-core` alongside `ViewChangeTracking` (S3/X1 out of
@@ -1741,15 +1896,17 @@ parallelized freely. All generated code obeys **G5** (§ 4.5).
   ordering assumption. Tolerates `null` in every slot (S4, tombstones, unfillable
   `DERIVED`/`JOINED`).
 - [ ] **7.2** Generated binder per view: `void bind(PreparedStatement, int startIndex, View)`
-  writing only `FieldKind.COLUMN` fields (S1), in **ordinal order** so `PreparedStatement` plans
-  stay stable and cacheable. Column names resolve through X2's `FieldDef.column()` — the
-  annotation's `column()` when set, else the accessor name **[verified, `FieldSource.java:21-22`]**.
+  writing only fields that are `FieldKind.COLUMN` **and not `retired()`** (S1, § 4.6/R1.4,
+  § 4.7/DR-2), in **ordinal order** so `PreparedStatement` plans stay stable and cacheable.
+  Column names resolve through X2's `FieldDef.column()` — the annotation's `column()` when set,
+  else the accessor name **[verified, `FieldSource.java:21-22`]**.
 - [ ] **7.3** Generated `INSERT` / `UPDATE` fragment builders using `@FieldSource.column()`
   labels, parameterised. An `UPDATE` may be generated from a **change set** (§ 7.2/2.4) so a
   partial update touches only changed columns — the natural consumer of Phase 1's tracking.
 - [ ] **7.4** Tests: a fake `ResultSet` round-trips a fixture row through reader → view → binder →
-  fake `PreparedStatement`, asserting ordinals, null handling, and that a `DERIVED` field never
-  appears in the binder output. No test requires a real database or a driver dependency.
+  fake `PreparedStatement`, asserting ordinals, null handling, and that a `DERIVED` field and a
+  `retired()` tombstone never appear in the binder output (a tombstone slot is still *read* when
+  the row carries it — § 4.6/R1.4). No test requires a real database or a driver dependency.
 
 ### 12.2 Mapper generation between views (kilo P-1)
 
@@ -1793,10 +1950,12 @@ parallelized freely. All generated code obeys **G5** (§ 4.5).
 
 - [ ] **7.13** A deliberate **compaction mode**: drops `@Deprecated` tombstone constants and
   renumbers the remaining ordinals densely. It is not a default behaviour and must never run as
-  part of a normal generation pass. **It needs its own DEC before 7.14 starts** (extend DEC-012
-  or DEC-021, or add a new record — the same choice § 9/4.8 gives for R1): compaction is the one
-  operation in this plan that deliberately mutates a persisted ordinal layout, so it must be
-  traceable as a decision and not survive only as a plan bullet.
+  part of a normal generation pass. **It needs its own new standalone DEC before 7.14 starts**
+  (§ 4.7/DR-6): compaction is the one operation in this plan that deliberately mutates a persisted
+  ordinal layout, so it gets its own record rather than an amendment of DEC-012/DEC-021, and it
+  must not survive only as a plan bullet. The record also states which classes of persisted
+  artifact the operator must have drained, and how `retired()` constants disappear from the enum,
+  from `allFields`, and from the generated binders.
 - [ ] **7.14** **Safety gate:** compaction refuses to run unless explicitly requested *and* the
   operator acknowledges that no persisted positional array, JSON patch, or snapshot survives —
   a real migration. It emits a report of every ordinal that moved, and it must be invoked with
@@ -1828,7 +1987,7 @@ library module gained a hard JDBC or validation dependency.
 | 1 | tracking ctor NPE, contract widened + `ChangeRecorder` in `core`, **R1 checker + marker**, validator repair, tests 1–25 | 4–6 d | § 6.4 tests 1–25 green, 8–12 on both materializations, 20–25 for append-only |
 | 2 | ordinal-array contract docs (incl. R1 for adapter authors), JSON change serializer, Jackson setup doc | 2–3 d | one-field JSON patch from both paths |
 | 3 | `GenLevel` parsing, levels META→BUILDER_ALL, **append-only enum generation + marker emission**, cooperative blocks, headers, divergence, `exec-maven-plugin` | 5–8 d | `GeneratedSourceCompilesTest` green for all six levels |
-| 4 | example regeneration incl. X3 layout work, the S1 write-surface reduction and the G6 addon-field gain, `PersonDemo`, doc corrections, UTF-8 transcode of the DEC corpus | 2–3 d | demo prints a one-field diff; no doc claims a missing level |
+| 4 | example regeneration incl. X3 layout work, the S1 write-surface reduction, the DR-1 addon scope change (incl. deleting the two stale `example/` enums), `PersonDemo`, doc corrections, UTF-8 transcode of the DEC corpus | 2–3 d | demo prints a one-field diff; no doc claims a missing level |
 | 5 | Jackson round-trip + polymorphism coverage | 1–2 d | round-trip tests green |
 | 6 | **nested/deep change tracking**: DEC, `ChangePath`/`changesDeep()`, nested index, collections, generator wiring, deep patch | 7–11 d | 3-level fixture and a `List<Tracked>` produce a correct nested patch |
 | 7 | **adapters & codegen extras**: JDBC row/binder, mappers, validation, compaction, watcher | 7–11 d | generated adapter round-trips a fixture row; mapper/validator/compaction tests green |
@@ -1853,7 +2012,8 @@ Ordering constraints that are **not** negotiable:
   regenerate a level without a compiling assertion.
 - The example is regenerated **in the same commit** as any API change it consumes. This is
   certain to be needed for S5: `PersonSummaryBuilderTracking.java:77` returns the live `mf` from
-  `changes()` today and must become `changesBuilder()`, with `changes()` added alongside it.
+  `changes()` today and must become `changesBuilder()`, with `changes()` added alongside it — and
+  its `implements` clause re-typed from `EEnumSetBuilder64<…>` to `EEnumSet64<…>` (§ 4.7/DR-4).
 - Per S5, the `changes()`/`changesBuilder()` pair and the underlying array renames
   (`changesSnapshot()`→`changes()`, `getChanges()`→`changesBuilder()`, delete `getChanges64()`)
   land in **one commit with no aliases**, so there is no window in which both naming schemes
@@ -1910,7 +2070,7 @@ table exists so the resolution is auditable.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | The reactor build is red for reasons unrelated to hipster-entity (metadata modules) | High | High | Phase 0.2's `dependencyManagement` entries fix the validation failure, and the `-pl` module list in the 0.3 run script keeps day-to-day work scoped to the six modules so progress is never blocked by an unrelated module. |
-| `EEnumSet*` API changes ripple into the JMH harness and the example | High | Medium | Keep the current `create(ForNameOrdinal, int, Object...)` factory as a delegating overload, but note the **constructors** are what the harness calls (`EEnumSetTrackingJmhBenchmark.java:98,115`) — update those two setup methods in the same commit, since no factory overload can absorb a constructor change; regenerate the example in the same commit. |
+| `EEnumSet*` API changes ripple into the JMH harness and the example | High | Medium | Keep the current `create(ForNameOrdinal, int, Object...)` factory as a delegating overload, but note the **constructors** are what the harness calls (`EEnumSetTrackingJmhBenchmark.java:98,115`) — update those two setup methods in the same commit, since no factory overload can absorb a constructor change; regenerate the example in the same commit. **[verified]** those two lines pass `forNameOrdinalNN` plus `Enum64.values().length` / `E96.values().length`, so the new `F[] universe` parameter must receive the **`FieldDef`** enum's constants (`E64.values()` / `E96.values()`) — a different enum from the `Enum64`/`E96` universe used for the count in the same benchmark. |
 | Generated output overwrites hand-edits | High | Medium | Shape-based cooperative detection (3.19) + `enabled:false` (3.8); ambiguous cases fall back to overwrite + a diagnostic rather than guessing. |
 | Cooperative shape-detection false positives | Medium | High | Start with strict shape matching only; treat ambiguity as "not recognized" and report. |
 | Ordinal reordering silently corrupts persisted patches | Medium | High | Freeze the § 7.1 contract as append-only (R1); construction-time **non-empty + lossless name-map** check in `DefaultViewMeta` (order itself is not checkable there — see D7, § 4.2); keep `allFields` JSON as the migration record. |
@@ -1928,7 +2088,8 @@ table exists so the resolution is auditable.
 
 ## 16. Immediate next actions (first week, in order)
 
-No step below is blocked on a decision — **all of § 4 is finalized**.
+No step below is blocked on a decision — **all of § 4 is finalized, including the six items closed
+in § 4.7**.
 
 1. **Phase 0.1–0.4:** pin `JAVA_HOME` to JDK 25 for the forked tests (0.1), name the recorded
    Maven launcher (0.1a), add the missing `dependencyManagement` entries (0.2), wrap the explicit
