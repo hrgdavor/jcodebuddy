@@ -95,18 +95,31 @@ public class ViewAnnotationRule implements EntityRule {
         }
     }
 
-    /** The package marker is the interface the entity's other views derive from. */
+    /**
+     * The package marker is the interface the entity's other views derive from.
+     *
+     * <p>Two shapes, matching the generator's authoritative predicate
+     * ({@code EntityMetadataGenerator.isMarkerEntityOrRoot}, G8 rule 0): an interface that extends
+     * {@code EntityBase}/{@code Identifiable} itself, and one that is a marker by convention and
+     * reaches {@code EntityBase} through nothing but other markers.</p>
+     *
+     * <p><strong>An interface with no {@code extends} clause at all is NOT a marker.</strong> The
+     * first version of this method returned {@code true} for that case, which made every
+     * {@code @View}-seeded rootless view (`PersonCreateForm`, and any adopter's first view) look like
+     * a marker — and so silenced exactly the {@code addon_on_non_view} diagnostic the method exists to
+     * produce. The generator does not treat such an interface as a marker either: it is a view, seeded
+     * by its annotation.</p>
+     */
     private static boolean isMarker(ClassOrInterfaceDeclaration decl, String pkg) {
-        // A marker is an interface named <Entity> or <Entity>Entity that itself extends nothing but
-        // EntityBase; the generator's MarkerEntityRule owns the authoritative definition, and this
-        // rule only needs the conservative "extends only EntityBase/Identifiable" reading.
-        if (decl.getExtendedTypes().isEmpty()) {
-            return true;
-        }
-        return decl.getExtendedTypes().stream().allMatch(type -> {
+        for (var type : decl.getExtendedTypes()) {
             String name = type.getNameAsString();
-            return name.equals("EntityBase") || name.equals("Identifiable");
-        });
+            int dot = name.lastIndexOf('.');
+            String simple = dot >= 0 ? name.substring(dot + 1) : name;
+            if (simple.equals("EntityBase") || simple.equals("Identifiable")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isSurface(ClassOrInterfaceDeclaration decl) {

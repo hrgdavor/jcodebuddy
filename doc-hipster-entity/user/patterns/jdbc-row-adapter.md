@@ -285,7 +285,7 @@ The tooling contains a **draft** generator that emits a per-view adapter, `<View
   There is no loop over `ViewMeta`, no `fieldTypeAt(i)` dispatch, and no reflection.
 - **No `Map<String, Method>`.** Nothing is looked up by name at runtime. The generated method body
   *is* the wiring, so an IDE can navigate from the adapter to the accessor and back.
-- **Ordinals are compiled in.** The generated adapter does not need `meta.forName()` or
+- **Ordinals are compiled in.** The generated adapter does not need `forName.forName()` or
   `field.ordinal()` in its row loop, because the generator already resolved both — exactly as the
   generated deserializer hardcodes `values[0]`, `values[1]`, … . `forName` remains the sanctioned
   route for the *generic* adapter and for any name-driven path.

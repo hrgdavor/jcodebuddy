@@ -35,7 +35,7 @@ unnecessary hash operations per second.
 | Do | Don't |
 |----|-------|
 | Pre-build `readers[]` once per instance | Rebuild `readers[]` every call |
-| `meta.forName(name)` in parse loop | `HashMap.get(name)` in parse loop |
+| `forName.forName(name)` in parse loop | `HashMap.get(name)` in parse loop |
 | Capture `field.ordinal()` once | Call `forName` twice for the same field |
 | `private static final TypeReference<…> REF = new TypeReference<>(){}` | `new TypeReference<>(){}` inside any method |
 | `p.skipChildren()` for unknown fields | `throw` for unknown fields |
@@ -71,7 +71,7 @@ public final class MyViewDeserializer<V, F extends Enum<F> & FieldDef> {
             String name = p.getCurrentName();
             p.nextToken();
 
-            F field = meta.forName(name);       // ← generated switch, O(1), zero alloc
+            F field = forName.forName(name);       // ← generated switch, O(1), zero alloc
             if (field != null) {
                 int ord = field.ordinal();       // ← capture once; never call forName again
                 values[ord] = readers[ord].read(p);
@@ -88,7 +88,7 @@ public final class MyViewDeserializer<V, F extends Enum<F> & FieldDef> {
 **Key points:**
 
 - `readers[]` is created in the constructor — **once per `MyViewDeserializer` instance**.
-- `meta.forName(name)` is the only name→ordinal dispatch. No map, no iteration.
+- `forName.forName(name)` is the only name→ordinal dispatch. No map, no iteration.
 - `field.ordinal()` is assigned to a local `int ord`. It is used twice (read + store) but the
   call to `forName` happens exactly once.
 
@@ -158,19 +158,19 @@ for (int i = 0; i < fieldCount; i++) {
 Integer ordinal = fieldNameToOrdinal.get(name);
 ```
 
-**Fix:** Use `meta.forName(name)` in the loop and pre-build `readers[]` in the constructor.
+**Fix:** Use `forName.forName(name)` in the loop and pre-build `readers[]` in the constructor.
 
 ### ❌ Calling `forName` twice
 
 ```java
 // WRONG — forName called twice for the same field
-values[meta.forName(name).ordinal()] = readers[meta.forName(name).ordinal()].read(p);
+values[forName.forName(name).ordinal()] = readers[forName.forName(name).ordinal()].read(p);
 ```
 
 **Fix:**
 
 ```java
-F field = meta.forName(name);
+F field = forName.forName(name);
 int ord = field.ordinal();
 values[ord] = readers[ord].read(p);
 ```
@@ -187,7 +187,7 @@ for (int i = 0; i < fieldCount; i++) {
 }
 ```
 
-**Fix:** Same as above — `meta.forName(name)` is the O(1) alternative.
+**Fix:** Same as above — `forName.forName(name)` is the O(1) alternative.
 
 ### ❌ `readValueAs` with inline `TypeReference`
 
@@ -206,7 +206,7 @@ Before submitting or generating deserializer or field-mapping code, verify:
 
 - [ ] No `new HashMap` (or `new LinkedHashMap`, `new TreeMap`, etc.) appears inside a method that
       is called per entity.
-- [ ] `meta.forName(name)` is called **at most once** per field token in the parse loop.
+- [ ] `forName.forName(name)` is called **at most once** per field token in the parse loop.
 - [ ] The result of `forName(name)` is stored in a local variable before `ordinal()` is called.
 - [ ] `readers[]` / `writers[]` are fields of the deserializer class, not local variables.
 - [ ] All `TypeReference` usages are `private static final` constants.

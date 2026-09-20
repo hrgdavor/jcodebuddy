@@ -23,12 +23,23 @@ Jackson, JavaParser, or the generator.
 | [`EntityUpdateTrackingArrayLarge`](src/main/java/hr/hrg/hipster/entity/core/EntityUpdateTrackingArrayLarge.java) | the > 64-field variant: `long[]` bitmask |
 
 Use the factory rather than a constructor — it picks the variant from the
-field count:
+field count. The first argument is a `ForNameOrdinal`, **not** the field enum:
+the enum's `forName` returns a constant, while this factory needs
+`int forNameOrdinal(String)`. The generated `META` implements that interface, so
+pass it:
 
 ```java
+// META is the ForNameOrdinal: `int forNameOrdinal(String)`, which is what
+// set(String, Object) needs. `PersonSummary_::forName` does NOT compile here —
+// it returns PersonSummary_, not int.
 EntityUpdateTrackingArray<PersonSummary, PersonSummary_> array =
-        EntityUpdateTrackingArray.create(PersonSummary_::forName, PersonSummary_.values(), rowValues);
+        EntityUpdateTrackingArray.create(PersonSummary_.META, PersonSummary_.values(), rowValues);
 ```
+
+The `universe` argument (`PersonSummary_.values()` here) is what makes the array
+know its own field enum: it is the fix for the `NullPointerException` that every
+proxy-backed tracking construction used to throw, when the factory had no route
+to the enum class at all.
 
 ### The `EEnumSet` family
 

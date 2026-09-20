@@ -89,22 +89,49 @@ kept reproducible.
 
 ```text
 java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir> [--packages a.b,c.d] [--adapters]
-                                    [--java-out <dir>] [--mapper <Src>:<Tgt>[:<ClassName>]]
+                                    [--java-out <dir>] [--mapper <Src>:<Tgt>[:<ClassName>]] [--validate[=MODE]]
 ```
 
 | Flag | Meaning |
 |---|---|
 | *(positional 1)* | the source root, or a single `.java` file (the tool then searches upward for `src/main/java` or `src/test/java`) |
-| *(positional 2)* | the output directory for the metadata JSON |
+| *(positional 2)* | the output directory for the metadata JSON, one `<Marker>.metadata.json` per entity |
 | `--packages a.b,c.d` | restrict **generation** to these packages. It does **not** restrict indexing: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omitting the flag generates everything (the historical behaviour) |
 | `--adapters` | **[DRAFT/EXPLORATION, opt-in]** also emit `<View>RowAdapter` / `<View>Binder` next to each view. Off unless given; no other flag, property or profile enables it |
 | `--java-out <dir>` | write generated `.java` there instead of into the positional output directory. This is what lets the Maven binding regenerate committed source **in place** while keeping the metadata JSON in `target/` |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two **views**. Repeatable. Defaults: class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
+| `--validate[=OFF\|REPORT\|STRICT]` | run the entity rules over the source root **before** writing anything. Bare `--validate` means `REPORT`: print every issue and continue. `STRICT` refuses to write until they are fixed, so a violating tree is never half-regenerated. `OFF` is the default for a library caller, so introducing validation cannot change an unrelated build. Warnings (the R1 `allowReorder` escape hatch) do not fail a pass unless `STRICT` |
 
 Flags may appear anywhere after the two positionals, and `--packages=a.b`
 is accepted as well as `--packages a.b`. That matters because the Maven
 `exec-maven-plugin` binding and a manual run share **one flag surface**
 (§ 8.8/3.23): the knobs are CLI arguments, not `-D` system properties.
+
+### Entity rules (`validate`)
+
+```text
+java -jar hipster-entity-tooling.jar validate [<source-root>] [--strict]
+```
+
+Four rules plus the R1 ledger rule, registered literally in `EntityRulesValidator` (no discovery
+mechanism — the list is an array, so an IDE's find-usages shows exactly what runs):
+
+| Rule | Reports |
+|---|---|
+| `MarkerEntityRule` | a marker named `*Entity` that extends `EntityBase` and **declares an accessor** — that accessor would appear in every view's field list |
+| `ViewInterfaceRule` | `view_does_not_derive_from_marker` (an interface named like a view that reaches no marker, so the generator silently emits nothing) and `view_name_convention` (a view whose name ends in none of `Summary`/`Details`/`Update`/`Form`/`Dto`) |
+| `ViewAnnotationRule` | `@View` on a non-interface, `addon_on_non_view`, unknown `gen` levels, a builder level with no accessor |
+| `AuditableRule` | an `Auditable` interface outside an entity module or package |
+| `EntityFieldEnumOrderRule` | `empty_field_enum`, an undecodable DEC-021 header, and the R1 `allowReorder` warning |
+
+Exit codes: **0** clean (or warnings only), **1** a violation, **2** usage error. `--strict` promotes
+the `allowReorder` warning to a failure, as R1.3 requires.
+
+The rules need the **whole source set**, not one file at a time: "is this interface a view?" is a
+question about inheritance. That is why `EntityRule` has a second entry point (`validateAll`) and why
+pointing the validator at a *module root* rather than a source root reports other modules' test
+fixtures as defects — pass `src/main/java` (or run it through a generation pass, which derives the
+same root).
 
 When the first positional is a `.java` file, generated Java boilerplate
 is written back into the source tree using the underscore-suffix

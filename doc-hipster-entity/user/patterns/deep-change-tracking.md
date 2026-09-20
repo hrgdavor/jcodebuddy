@@ -4,7 +4,7 @@
 
 Answer the question shallow change tracking cannot: **a nested value changed, and no field of the
 view you are holding was written.** This page is the practical companion to
-[DEC-024](../architecture/decisions/DEC-024.md) — the decision record is the normative text, and
+[DEC-024](../../architecture/decisions/DEC-024.md) — the decision record is the normative text, and
 this is the recipe.
 
 ## When this applies
@@ -133,7 +133,7 @@ never reach it.
 ### The identity requirement
 
 **Reorder detection requires a stable identity per entry, so the element type must be
-`Identifiable<ID>` ([DEC-017](../architecture/decisions/DEC-017.md)).**
+`Identifiable<ID>` ([DEC-017](../../architecture/decisions/DEC-017.md)).**
 
 The reason is not stylistic. "Moved" means *same entry, different index*. Without an identity there
 is no way to tell a move from a remove-plus-add, and comparing entries by `equals` answers a
@@ -241,7 +241,7 @@ Notes that matter when you consume it:
   confused with a document member;
 - an add, a remove and a move are **separate operations**, never a single "replace the list";
 - a field the view does not have is **skipped**; nothing is resolved through a name→ordinal map
-  ([DEC-016](../architecture/decisions/DEC-016.md));
+  ([DEC-016](../../architecture/decisions/DEC-016.md));
 - `"fallback": true` and a `"diagnostics"` array appear whenever identity matching was not possible.
 
 The shallow serializer (`EntityJacksonMapper.toJsonChanges`) is unchanged and still the right answer
@@ -266,14 +266,14 @@ when a whole field was reassigned. The two documents are complements, not versio
 
 ## See also
 
-- [DEC-024 — Deep (nested) change tracking — pull over push](../architecture/decisions/DEC-024.md) —
+- [DEC-024 — Deep (nested) change tracking — pull over push](../../architecture/decisions/DEC-024.md) —
   the normative record, including the rejected alternatives and the acceptance criteria.
-- [DEC-012 — Update-array and change-tracking semantics](../architecture/decisions/DEC-012.md) — the
+- [DEC-012 — Update-array and change-tracking semantics](../../architecture/decisions/DEC-012.md) — the
   shallow contract and the no-op rule, plus the revision that removed the previous-value half (which
   is what retires the shallow-reference hazard by construction).
-- [DEC-017 — `Identifiable<ID>` as opt-in identity mixin](../architecture/decisions/DEC-017.md) — the
+- [DEC-017 — `Identifiable<ID>` as opt-in identity mixin](../../architecture/decisions/DEC-017.md) — the
   mixin reorder detection depends on.
-- [DEC-016 — field-name-to-ordinal dispatch](../architecture/decisions/DEC-016.md) — why no
+- [DEC-016 — field-name-to-ordinal dispatch](../../architecture/decisions/DEC-016.md) — why no
   name→ordinal map is built anywhere in this path.
 - [The Ordinal Array Contract](ordinal-array-contract.md) — the positional storage this walks over.
 - [Jackson Setup](jackson-setup.md) — the shallow change-set shape next to the deep patch.

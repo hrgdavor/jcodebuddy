@@ -58,6 +58,51 @@ public final class DefaultViewMeta<V, F extends Enum<F> & FieldDef> implements V
         this.discriminatorField = discriminatorField;
         this.discriminatorValue = discriminatorValue == null ? "" : discriminatorValue;
         this.permittedSubtypes = permittedSubtypes == null ? new Class<?>[0] : permittedSubtypes.clone();
+        checkFieldContract();
+    }
+
+    /**
+     * The checkable half of the ordinal contract (plan.dsflash § 4.2/D7 and § 6.4 test 19).
+     *
+     * <p>What this can assert is deliberately narrow, and the narrowness is the point. The plan
+     * originally specified {@code fieldValues[i].ordinal() == i}, which is a <strong>tautology</strong>:
+     * {@code fieldValues} <em>is</em> {@code getEnumConstants()} and {@link Enum#ordinal()} is final and
+     * declaration-ordered, so no enum can ever fail it and no test can exercise it. Ordinal
+     * <em>order</em> is therefore not checkable here and is not claimed to be — the append-only rule
+     * (R1, DEC-023) is enforced at build time by {@code EnumConstantOrderChecker}, and its runtime
+     * witness is {@code allFields} in the metadata JSON.</p>
+     *
+     * <p>What <em>does</em> fail in practice, and is asserted here:</p>
+     * <ol>
+     *   <li>an empty field enum — a view with no fields cannot be positionally materialized at all;</li>
+     *   <li>a name map that is not total and lossless ({@code forName.forName(f.name()) != f}) — the
+     *       shape of a generated {@code forName} switch that lost an arm, a typo'd {@code case "..."},
+     *       or a renamed constant with a stale {@code NAME_MAPPER}. Every one of those silently
+     *       mis-resolves a field for the rest of the process, which is exactly the failure R1 exists
+     *       to prevent.</li>
+     * </ol>
+     *
+     * <p>The failure is a fail-fast {@link IllegalStateException} naming the enum and the offending
+     * constant, because the alternative is a positional array whose slots mean something other than
+     * what the enum says — a persisted-layout corruption rather than a crash.</p>
+     */
+    private void checkFieldContract() {
+        if (fieldValues.length == 0) {
+            throw new IllegalStateException("empty_field_enum: field enum " + fieldType.getName()
+                    + " declares no constants, so a positional array cannot describe a view. "
+                    + "A FieldDef enum must declare at least the identity field.");
+        }
+        for (F field : fieldValues) {
+            F resolved = forName.forName(field.name());
+            if (resolved != field) {
+                throw new IllegalStateException("name_map_not_lossless: forName(NAME_MAPPER) of "
+                        + fieldType.getName() + " resolved \"" + field.name() + "\" to "
+                        + (resolved == null ? "null" : resolved.name())
+                        + " instead of " + field.name() + ". A lost forName arm, a typo'd case label "
+                        + "or a renamed constant with a stale mapper all look like this, and each one "
+                        + "silently mis-resolves that field downstream.");
+            }
+        }
     }
 
     @Override

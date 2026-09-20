@@ -11,13 +11,15 @@ import java.lang.reflect.Type;
  * <ul>
  *   <li>{@link #viewType()} — the view interface class</li>
  *   <li>{@link #fieldType()} — the companion field enum class (implements {@link FieldDef})</li>
- *   <li>{@link #forName(String)} — reverse lookup from field name to enum constant</li>
+ *   <li>{@link #forName()} — the generated name&nbsp;→&nbsp;constant mapper; call
+ *       {@code meta.forName().forName(name)} to resolve one field name</li>
  *   <li>{@link #create(Object[])} — constructs the view from a positional values array</li>
  * </ul>
  *
  * <h3>Naming contract (inherited from {@link FieldDef})</h3>
  * <p>Field names are {@code enum.name()} — identical to the accessor method name on the view
- * interface. No mapping exists. {@link #forName(String)} is the inverse of {@code enum.name()}.</p>
+ * interface. No mapping exists. {@link #forName()} returns the generated mapper that is the inverse
+ * of {@code enum.name()}.</p>
  *
  * @param <V> the view interface type
  * @param <F> the companion field enum type, must implement {@link FieldDef}
@@ -56,10 +58,14 @@ public interface ViewMeta<V, F extends Enum<F> & FieldDef> extends ForNameOrdina
      * <p><strong>⚠ MANDATORY RULE (DEC-016):</strong> Do <em>not</em> build a
      * {@code HashMap<String,Integer>} (or any other dynamic name→ordinal structure) in place of
      * this method. Per-call map construction allocates, hashes every field name on setup, and
-     * hashes every incoming token on lookup — all entirely unnecessary. The correct pattern is:
+     * hashes every incoming token on lookup — all entirely unnecessary. Capture the mapper
+     * <em>once per deserializer instance</em> and call it per token:
      * <pre>{@code
+     * // in the constructor — once per instance, not per call:
+     * this.forName = meta.forName();
+     *
      * // called PER TOKEN in the parse loop:
-     * F field = meta.forName(name);       // O(1) switch — zero allocation
+     * F field = forName.forName(name);    // O(1) switch — zero allocation
      * if (field != null) {
      *     int ord = field.ordinal();      // capture once; use for both array indices below
      *     values[ord] = readers[ord].read(p);
@@ -69,10 +75,9 @@ public interface ViewMeta<V, F extends Enum<F> & FieldDef> extends ForNameOrdina
      * }</pre>
      * where {@code readers[]} is pre-built <em>once per deserializer instance</em>, not per call.
      * See the full implementation guide at
-     * {@code doc/user/field-lookup-guide.md} and decision record DEC-016.</p>
+     * {@code doc-hipster-entity/architecture/field-lookup-guide.md} and decision record DEC-016.</p>
      *
-     * @param name the field name (== {@code enum.name()})
-     * @return the matching constant, or {@code null}
+     * @return the name&nbsp;→&nbsp;constant mapper; {@code null} for an unknown name
      */
     FieldNameMapper<F> forName();
 

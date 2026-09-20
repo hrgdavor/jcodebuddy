@@ -1,5 +1,11 @@
 # Entity Metadata Generator
 
+> **⚠ HISTORICAL SKETCH — the `@View` contract below is obsolete.** This document predates the
+> annotation's implementation. The real `@View` declares exactly `gen()`, `discriminatorField()` and
+> `addons()` (`hr.hrg.hipster.entity.api.View`); the `read`/`write` options described here never
+> existed, and read/write is expressed per field with `@FieldSource(kind = …)`. The body is kept as
+> the record of the design discussion, not as guidance.
+
 This document describes the new entity metadata JSON generator in `hipster-entity-tooling`.
 
 ## Purpose

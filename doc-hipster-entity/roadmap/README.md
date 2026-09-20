@@ -4,13 +4,33 @@ This document tracks roadmap progress, current work, and changes in direction fo
 
 ## 1. Roadmap Checklist
 
-- [ ] Core entity interface contract (marker interface, per-package semantics)
-- [ ] View interface hierarchy rules (summary/details/update patterns)
+The unchecked rows here are **open work**, and the two that are only partly done say so — an earlier
+revision of this list showed `Mapper generation from TypeDescriptor deep flags` as open while
+`ViewMapperGenerator` already existed, and `API/core/module responsibility split enforced by generator`
+as open with no note that the split is deliberately deferred (plan.dsflash § 4.4/S3-X1).
+
+- [ ] Core entity interface contract (marker interface, per-package semantics) — the contract and its
+  validator rule (`view_does_not_derive_from_marker`, `marker_declares_domain_method`) landed; what
+  remains is deciding whether the conventions should be enforceable rather than advisory
+- [ ] View interface hierarchy rules (summary/details/update patterns) — same: the naming rule is
+  implemented and reported, not yet a hard failure in the example's build (`--validate`, not
+  `--validate=STRICT`)
 - [ ] Type divergence analyzer + converter manifest generation
 - [ ] Projection + DTO marker pattern for SQL/NoSQL direct JSON output
-- [ ] Mapper generation from `TypeDescriptor` deep flags
 - [ ] Annotation metadata exposure in generated view enums (FieldAnnotation)
-- [ ] API/core/module responsibility split enforced by generator
+- [ ] API/core module responsibility split enforced by generator — **deliberately deferred**: S3/X1 keep
+  the tracking contract in `hipster-entity-core` for this release, so a generated tracking builder
+  depends on `core` (plan.dsflash § 4.4). Not a gap, a recorded scope decision.
+- [x] **Generated view-to-view mappers landed** — `ViewMapperGenerator` emits a
+  statically-dispatched `static <Target> map(<Source>)` into the target's package, requested with
+  `--mapper <Src>:<Tgt>[:<ClassName>]`, with a widening-only conversion table, a `null` plus a
+  diagnostic for anything else, and both missing-field directions reported (plan.dsflash § 12.2).
+  This is the row this checklist used to record as `Mapper generation from TypeDescriptor deep flags`;
+  the `TypeDescriptor` deep-flag input is the part that is still open.
+- [x] **Entity rules are wired and runnable** — `validate [<root>] [--strict]` as a subcommand and
+  `--validate[=OFF|REPORT|STRICT]` on a generation pass; `ViewInterfaceRule` and `MarkerEntityRule`
+  rewritten against the real conventions after running them over the example exposed 20 issues about
+  19 correct interfaces. This closes plan.dsflash § 6.3/1.13.
 - [x] **R1 ordinal-ledger contract landed** — a generated field enum's constant order is a persisted
   ordinal layout: constants are appended, never re-inserted, and a removed field is tombstoned
   (`@Deprecated` + `FieldDef.retired()` → `true`) rather than deleted. Scoped by the
@@ -64,16 +84,18 @@ This document tracks roadmap progress, current work, and changes in direction fo
 | `DEC-013` | Optional per-view impl. selection factory  | Proposed        | Optional module; needs override precedence, fallback policy, and provider ordering contract |
 | `DEC-014` | EnumSet concrete dispatch strategy         | Accepted        | Implemented with JMH benchmarks; strategy is optional for update tracking hot paths        |
 | `DEC-015` | Generated field metadata method lookup     | Accepted        | Switch-only method-name lookup for field enums, verified by JMH sensor benchmarks          |
+| `DEC-016` | Field-name-to-ordinal dispatch (`forName`) | Accepted        | The generated `switch` is the only sanctioned name→ordinal path; a per-call `HashMap` is forbidden. `ViewMeta.forName()` returns the mapper — call `meta.forName().forName(name)` |
+| `DEC-017` | `Identifiable<ID>` as opt-in identity mixin | Accepted       | Identity is opt-in; deep collection reorder detection requires it and falls back with a diagnostic without it |
+| `DEC-018` | Generator freeze marker semantics          | Proposed        | The whole-file freeze. `enabled:false` in DEC-021's header is its per-file equivalent and is **not yet honoured** — see the implementation-status note in DEC-021 § 6 |
 | `DEC-019` | Source-visible, IDE-navigable wiring      | Accepted        | Annotations are markers; every connection is materialized as committed, navigable source    |
-| `DEC-020` | Cooperative codegen (preserve user blocks)| Proposed        | Recognise prior output by structural shape, preserve it verbatim; opt back into regen by deleting the block |
-| `DEC-021` | Generator class-file header               | Proposed        | Two `//` header lines above `package`; pinned JSON5 config with `enabled`, `entityFieldEnum`, `allowReorder` |
-| `DEC-022` | Refactor-sensitivity and divergence reporting | Proposed    | Naming contract per generator; uniform `kind, location, cause, current, canonical, action` divergence format |
-| `DEC-023` | R1 — field enums are append-only ordinal ledgers | Proposed | Constant order is a persisted ordinal layout; append-only, tombstone instead of delete; `EnumConstantOrderChecker` CLI gates the build. Cross-referenced from the amended `DEC-012` |
-| `DEC-024` | Deep (nested) change tracking — pull over push | Proposed | `changesDeep()` pulls into nested tracked views without touching the parent's bitset; `ChangePath(field, listIndex, next)`; a `List` of tracked views reports add/remove/reorder as `ListDelta` distinctly from per-index deltas, identity (DEC-017) required for reorder detection and a diagnostic + fallback without it; deep JSON patch is RFC 6902-like and builds no name→ordinal map (DEC-016). Procedure in `user/patterns/deep-change-tracking.md` |
-| `DEC-025` | Field-enum compaction is a deliberate, acknowledged ordinal migration | Proposed | The only operation that may shorten a ledger, reachable only via `enum-compact`; needs both `--allow-reorder` and `--acknowledge-drained-data`, drops only recognisable tombstones, and prints every moved ordinal as the migration record |
+| `DEC-020` | Cooperative codegen (preserve user blocks)| **Accepted**    | Recognise prior output by structural shape, preserve it verbatim; opt back into regen by deleting the block |
+| `DEC-021` | Generator class-file header               | **Accepted**    | Two `//` header lines above `package`; pinned JSON5 config with `enabled`, `entityFieldEnum`, `allowReorder` |
+| `DEC-022` | Refactor-sensitivity and divergence reporting | **Accepted** | Naming contract per generator; uniform `kind, location, cause, current, canonical, action` divergence format |
+| `DEC-023` | R1 — field enums are append-only ordinal ledgers | **Accepted** | Constant order is a persisted ordinal layout; append-only, tombstone instead of delete; `EnumConstantOrderChecker` CLI gates the build. Cross-referenced from the amended `DEC-012` |
+| `DEC-024` | Deep (nested) change tracking — pull over push | **Accepted** | `changesDeep()` pulls into nested tracked views without touching the parent's bitset; `ChangePath(field, listIndex, next)`; a `List` of tracked views reports add/remove/reorder as `ListDelta` distinctly from per-index deltas, identity (DEC-017) required for reorder detection and a diagnostic + fallback without it; deep JSON patch is RFC 6902-like and builds no name→ordinal map (DEC-016). Procedure in `user/patterns/deep-change-tracking.md` |
+| `DEC-025` | Field-enum compaction is a deliberate, acknowledged ordinal migration | **Accepted** | The only operation that may shorten a ledger, reachable only via `enum-compact`; needs both `--allow-reorder` and `--acknowledge-drained-data`, drops only recognisable tombstones, and prints every moved ordinal as the migration record |
 
 ## 4. Direction change log
-jdk1.8.0_231/jre/bin/keytool -import -trustcacerts -alias myserver -file /opt/server.crt -keystore jdk1.8.0_231/jre/lib/security/cacerts
 
 - `2026-03-30`: moved docs into `doc/brainstorm`, `doc/architecture`, `doc/roadmap`.
 - `2026-03-30`: added projection/JSON streaming path section to brainstorm.

@@ -7,8 +7,9 @@
 
 A view's materialization is chosen by the `gen` attribute of `@View`.
 The value is one of the constants of
-`hr.hrg.hipster.entity.api.GenLevel`, and the ladder is **cumulative**:
-a higher level also emits everything the lower levels emit.
+`hr.hrg.hipster.entity.api.GenLevel`. From `BUILDER` upwards the ladder is
+**cumulative** — a higher level also emits everything the lower levels emit —
+with **one deliberate exception**: `WRITABLE` emits no record (see below).
 
 ## The ladder
 
@@ -17,16 +18,38 @@ a higher level also emits everything the lower levels emit.
 | `DEFAULT` | nothing on its own | resolved to `META`, `RECORD` or `BUILDER` by the view's shape (below) |
 | `META` | the field enum `<View>_` implementing `FieldDef` + a `ViewMeta` | the entry point; read-only through interface accessors |
 | `RECORD` | a record implementing the view | `META` + the immutable concrete materialization |
-| `WRITABLE` | a nested `Write` interface extending the view and `ViewWriter` | `META` + `RECORD` + a writable contract for proxy/builder-backed writes |
-| `BUILDER` | `<View>Builder` | everything above + a concrete mutable builder with typed setters and `build()` |
-| `BUILDER_TRACKED` | `<View>BuilderTracking` | everything above + field-level change tracking |
+| `WRITABLE` | a nested `Write` interface extending the view and `ViewWriter` | `META` + a writable contract, materialized through the array-backed updatable proxy — **not** a record |
+| `BUILDER` | `<View>Builder` | `META` + `RECORD` + the write contract + a concrete mutable builder with typed setters and `build()` |
+| `BUILDER_TRACKED` | `<View>BuilderTracking` | everything `BUILDER` emits + field-level change tracking |
 | `BUILDER_ALL` | both `<View>Builder` **and** `<View>BuilderTracking` | everything above; no tracking is traded away |
 
 The order of the enum constants is exactly
 `DEFAULT < META < RECORD < WRITABLE < BUILDER < BUILDER_TRACKED < BUILDER_ALL`.
 
-Because the ladder is cumulative, the two top levels differ only in
-*how many* builders you get:
+### `WRITABLE` is the one non-cumulative level: it emits no record
+
+`RECORD` is an *immutable concrete materialization*; `WRITABLE`'s whole point is
+the opposite, so emitting the record as well would give one view two concrete
+implementations at the same level — exactly what the level exists to avoid. The
+generator states the exclusion directly:
+
+```java
+// EntityMetadataGenerator — the level is the decision, not a cumulative default
+boolean wantsRecord = gen != GenLevel.META && gen != GenLevel.WRITABLE;
+```
+
+At `WRITABLE`, `META.create(values)` therefore returns the **array-backed
+updatable proxy** (`ArrayBackedViewProxyFactory.createUpdatable`) instead of a
+record. Two consequences worth knowing:
+
+- `create(values)` at `WRITABLE` returns a *mutable* view, not a snapshot — copy
+  through the write contract if you need one to be safe to retain;
+- if the view declares a **nested `record`**, `create()` reuses that record
+  rather than emitting a top-level one. That is not the level ladder emitting a
+  record; it is the view asking for one, which is DEC-020's shape recognition.
+
+Because the ladder is cumulative from `BUILDER` up, the two top levels differ
+only in *how many* builders you get:
 
 - `BUILDER_TRACKED` emits the **tracking** builder **and the plain
   builder** — the plain one is not dropped, because a tracked view that

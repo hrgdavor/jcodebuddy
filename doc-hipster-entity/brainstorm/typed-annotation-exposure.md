@@ -1,5 +1,10 @@
 # Typed Annotation Exposure in Generated Boilerplate
 
+> **⚠ HISTORICAL SKETCH.** The `@View(read = …, write = …)` snippets below predate the annotation's
+> implementation and name options that never existed. The real `@View` declares exactly `gen()`,
+> `discriminatorField()` and `addons()`; read/write comes from `@FieldSource(kind = …)` per accessor.
+> The body is kept as the record of the typing discussion, not as guidance.
+
 ## Problem
 
 The string+map approach (`FieldAnnotation(String, Map<String,Object>)`) loses type safety the moment a consumer reads an attribute. Callers must cast values, use string keys, and have no compile-time guarantees about attribute presence or type.

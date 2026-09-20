@@ -5,8 +5,8 @@ rem
 rem It builds the modules the demo needs (offline, JDK 25) and then runs
 rem hr.hrg.hipster.entityexample.person.PersonDemo, which walks:
 rem
-rem   row array -> read view -> JSON -> tracking builder -> printed diff
-rem             -> change-set patch -> the parameterised UPDATE it would send
+rem   row array -> read view -> JSON -> tracking builder -> changed fields
+rem             -> change-set JSON -> the changed columns a partial write would touch
 rem
 rem The classpath is derived from the module output directories plus the two
 rem Jackson artifacts the root POM pins. It is deliberately explicit rather

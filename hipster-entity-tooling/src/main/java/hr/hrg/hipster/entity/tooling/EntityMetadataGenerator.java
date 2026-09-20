@@ -276,6 +276,142 @@ public class EntityMetadataGenerator {
         mapperRequests = requests == null ? new ArrayList<>() : new ArrayList<>(requests);
     }
 
+    /**
+     * How the entity-rules validator participates in a generation pass (plan.dsflash § 6.3/1.13).
+     *
+     * <p>Task 1.13 says <em>"wire the validator into {@code EntityMetadataGenerator.generate(...)}:
+     * collect {@code ValidationIssues} and fail (or warn behind a {@code strict} flag) before writing
+     * files"</em>. That task was recorded as done while {@link
+     * hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator} was in fact instantiated only from
+     * tests: nothing in {@code src/main} constructed it, there was no {@code validate} subcommand, and
+     * the four rules (plus the enum-order rule) therefore had no way to report anything about a real
+     * tree. Running them by hand over the committed example produced <strong>20 issues</strong> that no
+     * build had ever shown.</p>
+     *
+     * <p>The plan left the failure policy as a choice between "fail" and "warn behind a strict flag".
+     * The choice made here is the one that makes validation real without making the existing example
+     * unbuildable while its advisory rules are reconciled:</p>
+     * <ul>
+     *   <li>{@link Policy#OFF} — the rules do not run. This is the default for a <em>library</em>
+     *       caller that did not ask for validation, and for the generator's own unit tests, so
+     *       introducing validation cannot change unrelated fixtures.</li>
+     *   <li>{@link Policy#REPORT} — the rules run, every issue is printed once, and generation
+     *       continues. This is what the example's Maven binding uses: it makes the validator's output
+     *       part of every build log, which is how a newly broken rule becomes visible.</li>
+     *   <li>{@link Policy#STRICT} — the rules run and the pass fails <em>before</em> any file is
+     *       written, so a violating tree is never half-regenerated. This is the mode an adopting project
+     *       gates its build with, and the mode the {@code validate} subcommand exits non-zero on.</li>
+     * </ul>
+     *
+     * <p>Validation is deliberately a policy rather than a hard failure: the rules encode naming and
+     * package conventions that a project may legitimately not want, and a generator that refused to run
+     * because a view is named {@code PersonSummary} rather than {@code PersonSummaryEntity} would be
+     * the framework dictating style. {@link Policy#REPORT} gives the diagnostics; {@link Policy#STRICT}
+     * is the opt-in gate.</p>
+     */
+    public enum Policy {
+        OFF, REPORT, STRICT
+    }
+
+    private static Policy validationPolicy = Policy.OFF;
+
+    private static List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue>
+            lastValidationIssues = List.of();
+
+    /** Selects the validation policy; null means {@link Policy#OFF}. */
+    public static void setValidationPolicy(Policy policy) {
+        validationPolicy = policy == null ? Policy.OFF : policy;
+    }
+
+    /** The selected validation policy. */
+    public static Policy validationPolicy() {
+        return validationPolicy;
+    }
+
+    /**
+     * The issues the last validation pass found, in file order — the assertion hook for tests and for
+     * a caller that wants to inspect rather than print. Empty when validation was off or clean.
+     */
+    public static List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue>
+            lastValidationIssues() {
+        return lastValidationIssues;
+    }
+
+    /**
+     * Runs the entity rules over {@code sourceRoot} according to {@link #validationPolicy}, records the
+     * issues, prints them, and fails the pass when the policy is {@link Policy#STRICT}.
+     *
+     * <p>Called at the <em>start</em> of generation, before the first file is written: a strict failure
+     * must not leave a half-regenerated tree behind, and a report is more useful next to the source
+     * root it describes than at the end of a long log.</p>
+     */
+    private static void runValidation(Path sourceRoot) throws IOException {
+        lastValidationIssues = List.of();
+        if (validationPolicy == Policy.OFF) {
+            return;
+        }
+        List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue> issues =
+                new hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator().validate(sourceRoot);
+        lastValidationIssues = issues;
+
+        if (issues.isEmpty()) {
+            System.out.println("Validation: no issues in " + sourceRoot);
+            return;
+        }
+        System.out.println("Validation: " + issues.size() + " issue(s) in " + sourceRoot
+                + " (policy " + validationPolicy + ")");
+        for (hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue issue : issues) {
+            // One line per issue, `file :: message`, so the report is greppable in a build log and
+            // stable enough for the docs' own example to be checked against it.
+            System.out.println("  validation: " + sourceRoot.relativize(issue.file) + " :: " + issue.message);
+        }
+        // STRICT fails on a violation but not on a warning: `allowReorder` is an escape hatch a
+        // project sets on purpose, and R1.3 says warnings go to stderr without failing, while
+        // `--strict` (the CLI's flag) is what promotes them.
+        if (validationPolicy == Policy.STRICT && !blockingIssues(issues).isEmpty()) {
+            throw new ValidationFailedException(blockingIssues(issues));
+        }
+    }
+
+    /** The issues that fail a strict pass: every violation, plus warnings when the caller asked. */
+    private static List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue>
+            blockingIssues(List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue> issues) {
+        return issues.stream()
+                .filter(issue -> strictWarnings || !issue.isWarning())
+                .toList();
+    }
+
+    /**
+     * Whether the advisory kinds ({@link
+     * hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue#isWarning()}) are
+     * promoted to failures. Set by the {@code validate --strict} CLI form and by
+     * {@code --validate=STRICT}; R1.3 requires {@code allowReorder} to be visible without failing the
+     * build until someone says it should.
+     */
+    private static boolean strictWarnings = false;
+
+    /**
+     * Signal that the entity rules rejected the tree. A named exception rather than a bare
+     * {@link IllegalStateException} so the Maven binding's failure message says which layer refused,
+     * and so a caller can catch exactly this and still read {@link #lastValidationIssues()}.
+     */
+    public static class ValidationFailedException extends IOException {
+        private final transient List<
+                hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue> issues;
+
+        public ValidationFailedException(List<
+                hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue> issues) {
+            super("entity validation failed with " + issues.size() + " issue(s); the first is: "
+                    + (issues.isEmpty() ? "-" : issues.get(0)));
+            this.issues = List.copyOf(issues);
+        }
+
+        public List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue>
+                issues() {
+            return issues;
+        }
+    }
+
     public static void main(String[] args) throws IOException {
         // Sub-command dispatch. The generator remains the default so every existing invocation
         // keeps working; `enum-order` is the R1 checker CLI (§ 6.3/1.16), wired next to the
@@ -290,9 +426,20 @@ public class EntityMetadataGenerator {
             String[] rest = java.util.Arrays.copyOfRange(args, 1, args.length);
             System.exit(hr.hrg.hipster.entity.tooling.validation.EnumCompactionCli.run(rest));
         }
+        if (args.length > 0 && "validate".equals(args[0])) {
+            // § 6.3/1.13, as a subcommand: the entity rules as a gate an adopting project can run
+            // from a pre-commit hook or a build step. It exits 0 on a clean tree and 1 when any rule
+            // reports, so it composes with `&&` the way the other two subcommands do.
+            String[] rest = java.util.Arrays.copyOfRange(args, 1, args.length);
+            System.exit(runValidateSubcommand(rest));
+        }
 
         // CLI flags may appear anywhere after the two positional arguments (§ 8.8/3.23), so one
         // flag surface serves both the Maven build and a manual run.
+        // A flag belongs to one invocation, never to the process: a second pass in the same JVM (a
+        // test, a watcher run) must not inherit the first pass's mode.
+        validationPolicy = Policy.OFF;
+        strictWarnings = false;
         List<String> positional = new ArrayList<>();
         List<String> packages = new ArrayList<>();
         List<String> mappers = new ArrayList<>();
@@ -313,6 +460,19 @@ public class EntityMetadataGenerator {
                 }
             } else if ("--adapters".equals(arg)) {
                 generateAdapters = true;
+            } else if ("--validate".equals(arg)) {
+                validationPolicy = Policy.REPORT;
+            } else if (arg.startsWith("--validate=")) {
+                // `--validate=strict` is the gate form; `--validate=off` exists so a project can pass
+                // one flag surface everywhere and still switch the rules off in one profile.
+                String mode = arg.substring("--validate=".length()).trim().toUpperCase(java.util.Locale.ROOT);
+                try {
+                    validationPolicy = Policy.valueOf(mode);
+                    strictWarnings = validationPolicy == Policy.STRICT;
+                } catch (IllegalArgumentException e) {
+                    System.err.println("Unknown --validate mode '" + mode + "'; expected OFF, REPORT or STRICT.");
+                    System.exit(1);
+                }
             } else if ("--mapper".equals(arg) && i + 1 < args.length) {
                 mappers.add(args[++i]);
             } else if (arg.startsWith("--mapper=")) {
@@ -350,10 +510,20 @@ public class EntityMetadataGenerator {
         } else if (javaOutputOverride != null) {
             // § 8.8/3.23: the Maven binding regenerates the committed source in place and keeps the
             // metadata JSON in `target/`, so a build never drops untracked files into src/main/java.
-            System.out.println("Writing generated java to: " + javaOutputOverride);
-            generate(sourceRoot, outputDir, javaOutputOverride);
+            try {
+                System.out.println("Writing generated java to: " + javaOutputOverride);
+                generate(sourceRoot, outputDir, javaOutputOverride);
+            } finally {
+                // Reset the policy so a second pass in the same JVM (a test, a watcher run) does not
+                // inherit the first pass's mode. Flags belong to one invocation, not to the process.
+                validationPolicy = Policy.OFF;
+            }
         } else {
-            generate(sourceRoot, outputDir);
+            try {
+                generate(sourceRoot, outputDir);
+            } finally {
+                validationPolicy = Policy.OFF;
+            }
         }
     }
 
@@ -368,6 +538,13 @@ public class EntityMetadataGenerator {
         System.err.println("  --java-out <dir>      write generated .java here instead of <output-dir>");
         System.err.println("  --mapper <Src>:<Tgt>[:<ClassName>]");
         System.err.println("                        also emit a statically-dispatched mapper between two views");
+        System.err.println("  --validate[=MODE]     run the entity rules before writing (MODE: OFF, REPORT, STRICT).");
+        System.err.println("                        Bare --validate means REPORT: print and continue. STRICT refuses");
+        System.err.println("                        to write anything until the reported issues are fixed.");
+        System.err.println();
+        System.err.println("Entity rules:");
+        System.err.println("  java -jar hipster-entity-tooling.jar validate [<source-root>] [--strict]");
+        System.err.println("  Exits 0 on a clean tree, 1 when a rule reports, 2 on a usage error.");
         System.err.println();
         System.err.println("R1 order checker:");
         System.err.println("  java -jar hipster-entity-tooling.jar enum-order --repo <path> --baseline <ref> [--target <ref>] [--strict]");
@@ -507,12 +684,64 @@ public class EntityMetadataGenerator {
     }
 
     public static void generate(Path sourceRoot, Path outputDir, Path javaOutputRoot) throws IOException {
+        // § 6.3/1.13: validate BEFORE the first write. A STRICT failure must not leave a
+        // half-regenerated tree behind, and REPORT mode's output is most useful next to the source
+        // root it describes rather than at the end of the pass.
+        runValidation(sourceRoot);
         DivergenceReporter divergences = new DivergenceReporter();
         try {
             generate(sourceRoot, outputDir, javaOutputRoot, divergences);
         } finally {
             reportDivergences(divergences);
         }
+    }
+
+    /**
+     * The {@code validate} subcommand (§ 6.3/1.13): run the entity rules over a source root and exit
+     * non-zero when any of them reports.
+     *
+     * <pre>{@code
+     * java -cp hipster-entity-tooling.jar hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+     *      validate [<source-root>] [--strict]
+     * }</pre>
+     *
+     * <p>{@code --strict} promotes the advisory kinds (the R1 {@code allowReorder} escape hatch) to
+     * failures. The default source root is the working directory, matching the other two subcommands'
+     * {@code --repo} default.</p>
+     *
+     * @return the process exit code: 0 clean, 1 issues found, 2 usage error
+     */
+    public static int runValidateSubcommand(String[] args) throws IOException {
+        Path sourceRoot = Path.of(".");
+        boolean strict = false;
+        for (String arg : args) {
+            if ("--strict".equals(arg)) {
+                strict = true;
+            } else if (arg.startsWith("--")) {
+                System.err.println("Unknown validate option: " + arg);
+                printUsage();
+                return 2;
+            } else {
+                sourceRoot = Path.of(arg);
+            }
+        }
+        strictWarnings = strict;
+        List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue> issues =
+                new hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator().validate(sourceRoot);
+        lastValidationIssues = issues;
+        if (issues.isEmpty()) {
+            System.out.println("Validation: no issues in " + sourceRoot);
+            return 0;
+        }
+        System.out.println("Validation: " + issues.size() + " issue(s) in " + sourceRoot
+                + (strict ? " (strict)" : ""));
+        for (hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue issue : issues) {
+            System.out.println("  validation: " + issue.file + " :: " + issue.message);
+        }
+        // Without `--strict` an advisory-only report is not a failure (R1.3: an `allowReorder` escape
+        // hatch goes to the log without failing), which is what makes this subcommand usable in a
+        // pre-commit hook before a project has settled every ledger.
+        return blockingIssues(issues).isEmpty() ? 0 : 1;
     }
 
     /**

@@ -92,6 +92,15 @@ This is useful for:
 
 ## Notes
 
-- The example uses `@View(read = TRUE, write = FALSE)` on concrete views.
+- The concrete views carry `@View` — most of them the bare marker form, and
+  `@View(gen = GenLevel.…)` or `@View(discriminatorField = …)` where the level or
+  the discriminator matters. There is **no** `@View(read = …, write = …)`: the
+  annotation's attributes are exactly `gen`, `discriminatorField` and `addons`
+  (`View.java`), and the write surface is decided per field by
+  `@FieldSource(kind = …)` (rule S1), not by a view-level flag.
+- The `PaymentMethod` base interface is the package's **marker**, not a view: it
+  carries no `@View` and the hand-written `PaymentMethod_` enum is where the
+  `type` discriminator constant and the permitted subtypes live. The four
+  concrete subclasses are the generated views.
 - Concrete views inherit the shared base fields and add type-specific fields.
 - The `type` discriminator is defined on the base view so a serializer/deserializer can identify the correct concrete view class.

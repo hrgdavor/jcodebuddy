@@ -86,6 +86,14 @@
                                 <argument>${project.basedir}/src/main/java</argument>
                                 <argument>--packages</argument>
                                 <argument>hr.hrg.hipster.entityexample.person.entity,hr.hrg.hipster.entityexample.paymentMethod.entity</argument>
+                                <!-- Task 1.13: run the entity rules on every generation pass. REPORT
+                                     (the bare flag) prints each issue to the build log and continues,
+                                     so the validator's output is visible in every build without making
+                                     the example unbuildable while a project's own conventions differ
+                                     from the tooling's advisory ones. A project that wants the gate
+                                     passes the STRICT mode (or runs the `validate` subcommand) and the
+                                     pass then refuses to write until the issues are fixed. -->
+                                <argument>--validate</argument>
                                 <!-- NO SQL-generation flag here, deliberately. SQL generation (the
                                      generated `<View>RowAdapter` / `<View>Binder` pair) is a
                                      draft/exploration in the tooling and is strictly OPT-IN: it runs

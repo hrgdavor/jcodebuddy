@@ -1,6 +1,30 @@
 # hipster-entity — Combined Plan to First Usable Implementation
 
-**Status:** finalized — decisions closed in five rounds (§ 4, § 4.7, the execution review, the
+> ## ⚠ EXECUTED — this document is a RECORD, not a to-do list
+>
+> **Every task in Phases 0–7 was executed.** The checkbox markers in this document were *not* ticked
+> during execution — status was tracked in
+> [`plan.dsflash.notes.md`](plan.dsflash.notes.md) (*Plan scope status*) and
+> [`plan.dsflash.followup.notes.md`](plan.dsflash.followup.notes.md) (*Objective status*) instead — so
+> **an unchecked `- [ ]` below means "the task was written here", not "the task is outstanding".**
+> Reading the 98 unchecked boxes as a backlog is the single most misleading thing about this file, and
+> it is why this banner exists.
+>
+> Where a task ended up different from this text, the deviation is recorded as `D-n`/`F-n` in the two
+> notes files, and the task's own paragraph carries an in-place note naming it. The three you are most
+> likely to hit:
+>
+> | Task text says | What was actually built | Record |
+> |---|---|---|
+> | § 4.2/D2 — keep previous values, add `ChangeRecorder`, `previousValue()`, `diff()` | **Reversed.** No previous value is kept and no such API exists; comparison is the caller's, over the baseline instance, and `changedValues()` replaces `diff()` | notes D-16, DEC-012's revision section |
+> | § 12.1 — generate JDBC adapters as part of the release | **Re-scoped.** A draft/exploration behind `--adapters` only, off by default, and the example ships no `*RowAdapter`/`*Binder` | notes D-17 |
+> | § 6.3/1.13 — "wire the validator into `generate(...)`" | **Not done during execution** (recorded as done in the notes). Fixed afterwards: `--validate[=OFF\|REPORT\|STRICT]` and a `validate` subcommand now exist, the view-convention rule was rewritten against the real tree, and the example's binding runs it | follow-up § 6.3/1.13 note, `GateParityTest`, `ViewInterfaceRuleTest` |
+>
+> The one item deliberately **out of scope** remains S3/X1 (the `api`/`core` module-layering refactor,
+> § 4.4). Everything else is in the tree and covered by the recorded gate:
+> `scripts/mvn-jdk25.cmd` → six modules, `clean test`, BUILD SUCCESS.
+
+**Status:** executed — decisions closed in five rounds (§ 4, § 4.7, the execution review, the
 gate review and the execution-readiness review recorded at the close of § 4.7); **scope complete,
 no deferred features except S3/X1**
 **Combines:** `plans__m1/plan.ds.md`, `plans__m1/plan.copilot.md`,
@@ -1701,6 +1725,34 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
   the generator must agree on every shape.
 - [ ] **1.13** Wire the validator into `EntityMetadataGenerator.generate(...)`: collect
   `ValidationIssue`s and fail (or warn behind a `strict` flag) **before** writing files.
+  **⚠ NOT DONE during the execution round, although `plan.dsflash.notes.md` records 1.13 as done.**
+  `EntityRulesValidator` was instantiated **only from tests**: nothing under `src/main` constructed
+  it, there was no `validate` subcommand, and the rules therefore had no way to report anything about
+  a real tree. Run by hand over the committed example it produced **20 issues about 19 correct
+  interfaces plus one stale annotation** — the evidence that no build had ever run it.
+  **Fixed afterwards** (this is the state of the tree now): `EntityMetadataGenerator` gained
+  `--validate[=OFF|REPORT|STRICT]` and a `validate [<root>] [--strict]` subcommand, both running the
+  rules **before** the first write; `EntityRule` gained `validateAll` so a rule can see the whole
+  source set; `MarkerEntityRule` lost its incorrect name and package requirements; `ValidationIssue`
+  now carries a kind and a warning flag so `--strict` can promote advisories; and the example's own
+  Maven binding passes `--validate`, so every build prints the report. Tests: `ViewInterfaceRuleTest`,
+  `EntityRulesValidatorTest`, `DefaultViewMetaContractTest` (5) and `GateParityTest` (6).
+  **The policy choice the task left open is now made and documented**: REPORT is the default for a
+  build, STRICT is the adopter's gate, OFF is the library default so no unrelated fixture changes
+  behaviour.
+  **One rule was withdrawn rather than shipped, and that is the more important half of this note.**
+  `ViewInterfaceRule`'s naming check (a view's name must end in Summary/Details/Update/Form/Dto) was
+  implemented, run over the committed example, and produced **six findings about six correct views**:
+  the four `*PaymentMethod` subclasses of the polymorphic family, `PersonAuditable` (an addon
+  field-source that is a view in its own right) and the doc-sample `person/iface/Person` that the
+  generator deliberately excludes from `packages`. Deciding whether an interface is a view the
+  generator will generate needs the generator's own discovery result, which a source-level rule does
+  not have; the rule now reports only `view_does_not_derive_from_marker` (named like a view, reaches
+  no `EntityBase`, carries no `@View`) and the naming convention is documented as a convention the
+  validator does **not** enforce. The three-version history is in the rule's javadoc — it is the
+  clearest available record of why "report the obvious violation" is not obvious in a tree where a
+  marker, a view, an addon and a documentation sample can all carry the same annotation.
+  Verified: the example's pass now reports **no issues**, and the whole gate is green.
 - [ ] **1.14** New `EnumConstantOrderChecker` in
   `hipster-entity-tooling/.../validation/` (R1.3, § 4.6): parses a Java file with JavaParser,
   finds the enum carrying the `entityFieldEnum:true` marker, and returns its constant names in
@@ -1709,10 +1761,15 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
   and the subsequence comparison `old` ⊆? `new` preserving order. No git dependency in this
   class — it takes two parsed enums, so it is unit-testable in isolation.
 - [ ] **1.15** New `EntityFieldEnumOrderRule implements EntityRule` (R1.3), registered in
-  `EntityRulesValidator`'s rule list **[verified, `EntityRulesValidator.java:33-40`]** alongside
+  `EntityRulesValidator`'s rule list **[verified, `EntityRulesValidator.java:35-40`]** alongside
   `MarkerEntityRule`/`ViewInterfaceRule`/`ViewAnnotationRule`/`AuditableRule`. It compares the
   working tree against a baseline git ref, reports `enum_order_shuffled` / `enum_constant_removed`
   in the DEC-022 format, and **skips every enum without the marker** (opt-in by absence).
+  **As built, the cross-revision half lives in `compareRevisions(baselineSource, targetSource)`**,
+  which the CLI drives with two revision sources; the in-place rule checks what one file can decide
+  (the marker is present, the enum is non-empty, `allowReorder` is reported as a warning). That split
+  is deliberate — it keeps git out of the rule — and it is why `--strict` had to be wired into the
+  CLI for the `allowReorder` warning to be promotable.
 - [ ] **1.16** CLI for the checker (R1.3): `--repo --baseline [--target] [--diff] [--strict]`,
   reachable from the tooling entry point next to `EntityMetadataGenerator.main`
   **[verified]**, exiting non-zero on violation so it can gate a build and a PR. Document the
@@ -1771,8 +1828,12 @@ parity sequence must exercise ordinals ≥ 1 (see DoD #4).
     setters, i.e. with § 8.6/3.15 in **Phase 3**; before that it passes vacuously against an empty
     generated file set. It is therefore asserted at the Phase 3 exit gate, not Phase 1's.
 
-**D2 tests — previous values and `diff()`** (each also counts against the DEC-012 acceptance
-criterion "no-op same-value assignment MUST be clearly documented and tested"):
+**D2 tests — RETIRED with the decision (see the banner on § 4.2/D2 and notes D-16).**
+The four tests below were written against `previousValue`/`hasPreviousValue`/`diff()` and a recorder;
+none of those APIs exists, so tests 14–17 are **not part of any gate**. What replaced them is the
+caller-side comparison, and its contract is pinned in three places instead: the DEC-012 no-op rule
+(§ 6.4 test 3 and the example's no-op write), the state-sharing test's snapshot semantics (tests 8–12),
+and `DeepChangeTrackingParityTest` for the deep half. Kept verbatim as the historical record:
 
 14. `previousValue(ord)` after a change returns the pre-write value; `hasPreviousValue(ord)` is
     `false` before any change and for an untouched field;
@@ -1881,15 +1942,30 @@ the ordinal list is APPEND-ONLY: new fields get new ordinals at the end (R1, § 
 
 ### 7.2 JSON changes (the visible payoff of tracking)
 
+> **⚠ SUPERSEDED BY NOTES D-16 — the `includePrevious` half of this section was removed before
+> release.** A tracking view keeps **no previous value**, so there is nothing to pair with the current
+> one: `EntityJacksonChangeSerializer` emits a **JSON Merge Patch of current values only**, the
+> three-argument `toJsonChanges(meta, tracking, writer)` is the whole API, and an audit-style
+> old&nbsp;→&nbsp;new document is the caller's own comparison of the baseline instance it holds.
+> `FieldChange` carries `(field, current)` and `changedValues()` replaces `diff()`. The tasks below are
+> kept as the historical record; **read the two `includePrevious` mentions as retired** — no such
+> overload, flag or `{"previous":…,"current":…}` shape exists in the tree. Binding record:
+> `plan.dsflash.notes.md` D-16 and DEC-012's revision section.
+
 - [ ] **2.4** New `EntityJacksonChangeSerializer`: takes a `ViewChangeTracking` + `ViewMeta`,
   emits only the marked fields; with `includePrevious` enabled, wraps each as
   `{"previous": …, "current": …}`. Field names come from `meta.fieldNameAt(ordinal)` — **no
   `HashMap` name→index lookup** (DEC-016). Per S4, an absent field is not written at all
   (no explicit `null` emission); nulls appear only inside a changed field's
   previous/current pair.
+  **As built:** only the marked fields are emitted, names come from `meta.fieldNameAt(ordinal)` with
+  no name→index map, an absent field is not written, and a *changed* field whose value is `null` **is**
+  written as an explicit `null`. There is no `includePrevious` mode (see the banner).
 - [ ] **2.5** `EntityJacksonMapper.toJsonChanges(ViewMeta, ViewChangeTracking, Writer)` plus
   the `includePrevious` overload; register the same shape in `EntityJacksonViewModule` so
   `ObjectMapper` users get it for free.
+  **As built:** `toJsonChanges(ViewMeta, ViewChangeTracking, Writer)` exists and the shape is
+  registered in the module; the `includePrevious` overload does not exist and must not be re-added.
 - [ ] **2.6** Document the ObjectMapper registration path in
   `doc-hipster-entity/user/patterns/jackson-setup.md` with the real Jackson 3.x
   (`tools.jackson.*`) coordinates the POMs already use. Note that the write/read round trip is
@@ -1968,8 +2044,12 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
   `PersonUpdatableView.changes()` — an abstract method, so the `default` filter does not catch
   it. Fix both in this task: exclude the framework accessors by declaration origin (a method
   whose erased signature matches `ViewReader`/`ViewWriter`/`ViewChangeTracking` —
-  `isChanged`, `changes`, `changesBuilder`, `diff`, `clearChanges`, `previousValue`,
-  `hasPreviousValue`, `get`, `set`), not by name-matching against a hand-kept list. Add a
+  `isChanged`, `changes`, `changesBuilder`, `changedValues`, `currentValue`, `clearChanges`,
+  `changesDeep`, `nestedTrackers`, `shallowPaths`, `get`, `set`) — not by name-matching against a
+  hand-kept list. **Note the two corrections to this list as written**: `diff` and
+  `previousValue`/`hasPreviousValue` are named in older drafts of this task, and none of the three
+  exists (the tracker keeps no previous value — notes D-16); the live members are the ones listed
+  here, and the rule matches them by declaration origin rather than by name where it can. Add a
   regression fixture that is a view extending both `ViewWriter` and the tracking contract, and
   assert its field enum contains only real fields. Do this before Phase 4, or the regenerated
   `PersonUpdatableView_` will carry a `changes` field, `values.length` will exceed the view's
@@ -2624,7 +2704,7 @@ table exists so the resolution is auditable.
 | Ordinal reordering silently corrupts persisted patches | Medium | High | Freeze the § 7.1 contract as append-only (R1); construction-time **non-empty + lossless name-map** check in `DefaultViewMeta` (order itself is not checkable there — see D7, § 4.2); keep `allFields` JSON as the migration record. |
 | A field-enum reorder reaches `main` because the checker is opt-in or not wired into CI | Medium | High | R1.2/R1.3: the generator emits the `entityFieldEnum:true` marker on every field enum it produces, so opt-out has to be deliberate. Wire the checker CLI into the build and the PR check as part of § 6.3/1.16, and assert the *unmarked-enum-is-ignored* case (test 24) so the opt-in boundary is itself tested. |
 | A retired accessor's constant is "cleaned up" by a well-meaning later pass | Medium | Medium | R1.4 + § 8.7/3.20: the generator must never delete a constant, reports `enum_constant_removed` if one is missing, and the tooling README states why the deprecated constant stays. Covered by test 25. |
-| `ChangeRecorder` retains large object graphs | Medium | Medium | Shallow-reference semantics documented and tested; `clear()` releases; JMH on/off axis; per-view opt-out if warranted. |
+| ~~`ChangeRecorder` retains large object graphs~~ | — | — | **RETIRED — the component does not exist.** D2 was reversed (notes D-16): a tracking view keeps no previous value, so there is no recorder, no `Object[] previous`, and nothing to retain. The risk this row described was removed by removing the feature; it is kept struck-through so a later reader does not go looking for the mitigation. The remaining tracking-state cost is the ordinal bitset alone, measured by § 6.4's JMH axis. |
 | Generator scope creep (cooperative blocks, divergence reporting) delays the usable slice | High | Medium | Phase 3 is ordered so `META → BUILDER_TRACKED` is usable *before* DEC-020/021 sophistication lands. |
 | Documentation keeps drifting ahead of the code | High | Medium | The compile-the-output test (0.5) makes doc—code drift a build failure, and the Phase 4 corrections are part of the DoD, not optional. |
 | JavaParser AST/API churn | Medium | High | Keep it pinned where it already is — centrally: root `pom.xml:21` `<javaparser.version>3.28.0</javaparser.version>` + `dependencyManagement` `pom.xml:74-76`; `hipster-entity-tooling/pom.xml:29-32` deliberately declares no version (pre-execution correction). Add AST snapshot tests. |
@@ -2649,12 +2729,14 @@ in § 4.7 and the gate-review corrections recorded there (GR-1–GR-6)**.
 2. **§ 6.2/1.4:** fix the `null` enum-class NPE in both tracking-array variants, with
    `EntityUpdateTrackingArrayTest` tests 1–3. This is the single highest-value commit in the
    plan — it turns an untestable path into a testable one with no other dependency.
-3. **§ 6.2/1.7–1.8 (S5+D2):** widen `ViewChangeTracking` **in place in `core`** — delete nothing,
-   move nothing — add `changes()`/`changesBuilder()`, `previousValue`, `diff()`, and
-   `ChangeRecorder`; rename the array accessors with no aliases; then bring
-   `PersonSummaryBuilderTracking` up to that signature **by hand** and get § 6.4 tests 8–12 and
-   14–17 green on both materializations (test 13 is asserted at the Phase 3 gate — GR-1). Only then is
-   the target for the generator stable.
+3. **§ 6.2/1.7–1.8 (S5):** widen `ViewChangeTracking` **in place in `core`** — delete nothing,
+   move nothing — add `changes()`/`changesBuilder()`, rename the array accessors with no aliases;
+   then bring `PersonSummaryBuilderTracking` up to that signature **by hand** and get § 6.4 tests
+   8–12 green on both materializations (test 13 is asserted at the Phase 3 gate — GR-1). Only then is
+   the target for the generator stable. **This step originally also said to add `previousValue`,
+   `diff()` and a `ChangeRecorder`; that half is SUPERSEDED — do not implement it** (notes D-16: no
+   previous value is kept, `changedValues()` replaces `diff()`, and the comparison is the caller's).
+   § 6.4 tests 14–17 are retired with it.
 4. **§ 6.3/1.12–1.13:** repair `ViewAnnotationRule` and wire the validator into the generator.
 5. **§ 6.3/1.14–1.17 (R1):** land `EnumConstantOrderChecker` +
    `EntityFieldEnumOrderRule` + its CLI, with § 6.4 tests 20–24. Do this **before** any generator

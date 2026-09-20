@@ -139,12 +139,49 @@ What the pieces mean:
   list matches the field order is also what makes `GenLevel.DEFAULT`
   resolve to `RECORD`.
 
-**Naming rules the validator enforces.** A view's name should end in
-`Summary`, `Details`, `Update`, `Form` or `Dto`, and every view must
-extend an interface whose name ends in `Entity` (your marker can be
-named `PersonEntity`, or you can follow the example and let the marker
-be an `EntityBase` subtype). `ViewInterfaceRule` reports a violation
-otherwise.
+**Naming convention (and what the validator does with it).** A view's name
+should end in `Summary`, `Details`, `Update`, `Form` or `Dto` (a trailing
+`Entity` is allowed, so `PersonSummaryEntity` counts). The name is how every
+generated artifact is derived — `PersonSummary_`, `PersonSummaryBuilder`,
+`PersonSummaryBuilderTracking` — so a name outside the set produces files nobody
+can predict.
+
+The convention is documented and the generator relies on it, but **the validator
+does not enforce it**. It was tried and withdrawn: run over this repository's own
+example it reported six findings about six correct views — the four
+`*PaymentMethod` subclasses of the polymorphic family, `PersonAuditable` (an
+addon field-source that is a view in its own right), and the doc-sample
+`person/iface/Person` that the generator deliberately excludes from its
+`packages` filter. A suffix rule needs to know which interfaces the generator
+actually treats as views, and a source-level rule cannot know that; a rule that
+reports correct classes is a rule people stop reading.
+
+What the validator *does* report:
+
+- `view_does_not_derive_from_marker` — an interface named like a view that
+  neither reaches `EntityBase` nor carries `@View`. The generator emits nothing
+  for it, so it is either a missing marker or a name collision, and both are
+  worth one line;
+- `marker_declares_domain_method` — a marker that declares an accessor, which
+  would then appear in every view's field list;
+- the `@View` shape and addon diagnostics in `ViewAnnotationRule`, and the R1
+  ledger diagnostics in `EntityFieldEnumOrderRule`.
+
+A **marker** is the interface the package's views derive from: the one that
+reaches `EntityBase` without passing through another marker. It is not required
+to be named `PersonEntity` — the example's is `Person`.
+
+**Validation is a step you can run.** The same rules are available as a gate:
+
+```text
+java -cp hipster-entity-tooling.jar hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+     validate src/main/java --strict
+```
+
+It exits `0` on a clean tree, `1` when a rule reports, and `2` on a usage error.
+A generation pass can run the same rules with `--validate` (report and continue)
+or `--validate=STRICT` (refuse to write anything until the issues are fixed) —
+see step 3.
 
 **Addons.** A shared interface of extra accessors can be merged into a
 view with `@View(addons = {SomeInterface.class})`. The addon's fields are
@@ -157,25 +194,33 @@ does not propagate to subtypes. See the example's `PersonDetails`
 ## 3. Run the generator
 
 `EntityMetadataGenerator` is the entry point. It takes a source root (or
-a single `.java` file) and an output directory, plus two optional flags:
+a single `.java` file) and an output directory, plus the flags below:
 
 ```text
 java -cp hipster-entity-tooling.jar hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
-     src/main/java target/generated-metadata --packages com.example.person.entity
+     src/main/java target/entity-metadata \
+     --java-out src/main/java \
+     --packages com.example.person.entity
 ```
 
 | Argument | Meaning |
 |---|---|
 | positional 1 | the source root, or a single `.java` file — for a file, the tool searches upward for `src/main/java` or `src/test/java` to derive the root |
 | positional 2 | the output directory for the metadata JSON |
+| `--java-out <dir>` | **where the generated `.java` goes.** Without it, generated source is written into positional 2 — the *metadata* directory — which is almost never what you want. Passing your source root here is what makes the generated files land next to the view, and it is what the example's Maven binding does |
 | `--packages a.b,c.d` | restrict **generation** to these packages. Indexing is *not* restricted: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omit it to generate everything |
+| `--validate[=OFF\|REPORT\|STRICT]` | run the entity rules before writing anything. Bare `--validate` = `REPORT` (print the issues, keep going); `STRICT` refuses to write until they are fixed; `OFF` is the default for a library caller |
+| `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two views. Repeatable; defaults to class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
 | `--adapters` | **[draft/exploration, opt-in]** also emit the JDBC `<View>RowAdapter` and `<View>Binder` classes. Off unless given; not a supported generator — see [the JDBC pattern](patterns/jdbc-row-adapter.md) |
 
-Generated **Java** goes back into the source tree next to the view, using
-the underscore-suffix convention: `PersonSummary` produces
-`PersonSummary_.java` in the same package. Commit it — the committed
-source is the source of truth (DEC-019), and a developer with a stock IDE
-must be able to follow the program without running the generator.
+Generated **Java** goes back into the source tree next to the view when
+`--java-out` points there, using the underscore-suffix convention:
+`PersonSummary` produces `PersonSummary_.java` in the same package. Commit it —
+the committed source is the source of truth (DEC-019), and a developer with a
+stock IDE must be able to follow the program without running the generator.
+
+The metadata JSON is named after the entity's marker and written to positional 2
+— `<Marker>.metadata.json` (so `Person.metadata.json`), not one file per view.
 
 Flags may appear anywhere after the two positionals, and
 `--packages=a.b` is accepted too.
@@ -194,28 +239,37 @@ so one flag surface serves both the build and a manual run.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 public enum PersonSummary_ implements FieldDef {
 
-    id(java.lang.Long.class),
-    firstName(java.lang.String.class),
-    lastName(java.lang.String.class),
+    id(java.lang.Long.class) {
+        @Override public String column() { return "id"; }
+    },
+    firstName(java.lang.String.class) {
+        @Override public String column() { return "firstName"; }
+    },
+    lastName(java.lang.String.class) {
+        @Override public String column() { return "lastName"; }
+    },
     age(java.lang.Integer.class) {
+        // DERIVED: no column() override — a non-COLUMN field keeps the null default,
+        // because there is no column that could hold it.
         @Override public FieldKind fieldKind() { return FieldKind.DERIVED; }
-        @Override public String column() { return "age"; }
         @Override public String expression() { return "YEAR(NOW()) - YEAR(birthDate)"; }
     },
     departmentName(java.lang.String.class) {
+        // JOINED: likewise no column().
         @Override public FieldKind fieldKind() { return FieldKind.JOINED; }
-        @Override public String column() { return "departmentName"; }
         @Override public String relation() { return "department.name"; }
     },
     metadata(TypeUtils.parameterizedType(java.util.Map.class, java.lang.String.class,
-             TypeUtils.parameterizedType(java.util.List.class, java.lang.Long.class)));
+             TypeUtils.parameterizedType(java.util.List.class, java.lang.Long.class))) {
+        @Override public String column() { return "metadata"; }
+    };
 
     // javaType(), forName(String), NAME_MAPPER, and:
     public static final ViewMeta<PersonSummary, PersonSummary_> META = ...;
 }
 ```
 
-Three things to notice:
+Four things to notice:
 
 - **The constant name is the field name.** `PersonSummary_.firstName` is
   the constant for `PersonSummary.firstName()`. This intentionally
@@ -224,6 +278,15 @@ Three things to notice:
   relationship between the view and the generated artifacts navigable to
   an IDE, and the JSON5 line carries the per-file knobs, including
   `entityFieldEnum:true` (see step 7).
+- **`column()` is emitted for `COLUMN` fields only, and it is resolved, not
+  copied.** The generator answers with `@FieldSource(column = …)` when the
+  accessor carries one and the **accessor name** otherwise, so adapter code never
+  has to re-implement the fallback. A `DERIVED` or `JOINED` field gets **no**
+  override: it is not a column, so the interface default (`null`) is the honest
+  answer — an adapter driven by `column()` therefore never tries to write it. An
+  earlier revision of this page showed `column()` overrides on `age` and
+  `departmentName`, which is the opposite of the rule and of the emitted
+  example.
 - **The constant order is a contract.** `values[field.ordinal()]` is
   that field, in every persisted array. Constants are append-only.
 

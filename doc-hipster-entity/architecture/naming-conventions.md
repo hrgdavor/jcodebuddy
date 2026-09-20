@@ -33,13 +33,16 @@ public enum PersonSummaryField implements FieldDef {
 
 ## 3. Builder/update naming
 
-- Builder interface: `<View>Builder` (e.g. `PersonSummaryBuilder`).
-- Updater interface: use `Update` not `Mutable` — e.g. `PersonUpdateView`, `ViewWriter<ID, E, F>`.
+- Builder: `<View>Builder` (e.g. `PersonSummaryBuilder`); the tracking variant is
+  `<View>BuilderTracking`, and the generator emits both for `BUILDER_ALL`.
+- Updater interface: use `Update` not `Mutable` — e.g. `PersonUpdateForm`, and the write surface
+  `ViewWriter` (no type parameters).
   - `update` is the preferred verb in Java libraries (Spring Data, JOOQ, QueryDSL) and avoids the ambiguity of "mutable".
-  - use `update` for state-change intent; use builder for construction/immutable paths that imeplent te `Update` interface.
-- Internal array classes:
-  - `EntityUpdateArray<ID, T, F>` (write-through values)
-  - `EntityUpdateTrackingArray<ID, T, F>` (change-tracking)
+  - use `update` for state-change intent; use builder for construction/immutable paths that implement the `Update` interface.
+- Internal array classes — note the type parameters are `<T, F extends Enum<F> & FieldDef>`, with no
+  `ID` parameter and no three-parameter form:
+  - `EntityUpdateArray<T, F>` (write-through values)
+  - `EntityUpdateTrackingArray<T, F>` (change-tracking)
   - `EntityUpdateTrackingArray64` / `EntityUpdateTrackingArrayLarge` (specializations).
 
 ## 4. Identity naming

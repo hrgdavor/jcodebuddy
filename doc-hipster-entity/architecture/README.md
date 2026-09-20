@@ -79,19 +79,26 @@ public interface PersonSummary extends PersonEntity { String firstName(); String
 public interface PersonDetails extends PersonSummary { String email(); String phoneNumber(); }
 
 // API shapes
-@View(read = BooleanOption.TRUE, write = BooleanOption.FALSE)
+@View(gen = GenLevel.RECORD)
 public interface PersonDto extends PersonSummary {}
 
-@View(read = BooleanOption.FALSE, write = BooleanOption.TRUE)
+@View
 public interface PersonCreateForm {
     String firstName();
     String lastName();
     String email();
 }
 
-@View(read = BooleanOption.FALSE, write = BooleanOption.TRUE)
+@View(gen = GenLevel.BUILDER)
 public interface PersonUpdateForm extends PersonCreateForm, PersonEntity {}
 ```
+
+> **Correction:** this example used to write `@View(read = BooleanOption.TRUE, write = BooleanOption.FALSE)`.
+> Those attributes do not exist. `@View` declares exactly `gen()`, `discriminatorField()` and
+> `addons()` (`hr.hrg.hipster.entity.api.View`); the old `read`/`write` pair is what the pre-fix
+> validator string-matched for, which is why it rejected every real `@View`. Read/write is now
+> expressed per field with `@FieldSource(kind = …)` — an unannotated accessor is `COLUMN`, i.e.
+> writable — and the materialization is chosen with `gen`.
 
 ## 4. Benefits
 

@@ -16,6 +16,24 @@
     <name>hipster-entity-api</name>
     <description>API module containing base entity interfaces and shared annotations.</description>
 
+    <dependencies>
+        <!-- The D7 ordinal/name-map contract check lives on DefaultViewMeta, in THIS module
+             (plan.dsflash § 6.4 test 19). Before it landed `hipster-entity-api` had no test source
+             root and no test-scoped JUnit at all, so the Phase 1 exit gate named a test that could
+             not exist here, and the check was covered only indirectly by tooling tests that happen
+             to construct a DefaultViewMeta. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <profiles>
         <profile>
             <id>junit5</id>

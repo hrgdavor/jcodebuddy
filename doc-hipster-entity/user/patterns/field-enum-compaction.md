@@ -4,8 +4,8 @@
 > certain that every positional array, change-set patch and snapshot built on the current layout is
 > gone, stop — this procedure destroys them silently.
 >
-> Normative rules: [DEC-023](../architecture/decisions/DEC-023.md) (field enums are append-only
-> ordinal ledgers) and [DEC-025](../architecture/decisions/DEC-025.md) (compaction is a deliberate,
+> Normative rules: [DEC-023](../../architecture/decisions/DEC-023.md) (field enums are append-only
+> ordinal ledgers) and [DEC-025](../../architecture/decisions/DEC-025.md) (compaction is a deliberate,
 > acknowledged migration). Background: [the ordinal array contract](ordinal-array-contract.md).
 
 ## The short version

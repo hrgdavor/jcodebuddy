@@ -62,11 +62,23 @@ public class EntityRulesValidatorTest {
         List<EntityRulesValidator.ValidationIssue> issues = validator.validate(tempDir);
 
         Assertions.assertFalse(issues.isEmpty());
-        Assertions.assertTrue(issues.stream().anyMatch(i -> i.message.contains("should extend an entity marker interface")));
+        Assertions.assertTrue(issues.stream()
+                        .anyMatch(i -> i.message.contains("view_does_not_derive_from_marker")),
+                "an interface named like a view but reachable from no marker is a finding; got " + issues);
     }
 
+    /**
+     * Renamed from {@code shouldRejectViewNameConvention}. The naming rule is no longer part of the
+     * validator's output: run against the committed example it produced six findings about six correct
+     * views (the polymorphic {@code *PaymentMethod} family, {@code PersonAuditable}, and a doc sample the
+     * generator deliberately does not generate). A suffix rule needs to know which interfaces the
+     * generator actually treats as views, and a per-file rule cannot know that — the full account is in
+     * {@link hr.hrg.hipster.entity.tooling.validation.ViewInterfaceRule}'s javadoc.
+     *
+     * <p>What remains checkable, and is asserted here, is the annotated case being <em>accepted</em>.</p>
+     */
     @Test
-    public void shouldRejectViewNameConvention() throws Exception {
+    public void shouldAcceptAnAnnotatedViewOverAMarker() throws Exception {
         Path tempDir = Files.createTempDirectory("entity-view-name");
         Path entityFile = tempDir.resolve("PersonEntity.java");
         Path viewFile = tempDir.resolve("PersonDisplay.java");
@@ -75,6 +87,8 @@ public class EntityRulesValidatorTest {
                 "import hr.hrg.hipster.entity.api.EntityBase;\n" +
                 "public interface PersonEntity extends EntityBase<String> {}\n";
         String viewContent = "package hr.hrg.hipster.entity.person;\n" +
+                "import hr.hrg.hipster.entity.api.View;\n" +
+                "@View\n" +
                 "public interface PersonDisplay extends PersonEntity { String firstName(); }\n";
 
         Files.writeString(entityFile, entityContent);
@@ -83,8 +97,9 @@ public class EntityRulesValidatorTest {
         EntityRulesValidator validator = new EntityRulesValidator();
         List<EntityRulesValidator.ValidationIssue> issues = validator.validate(tempDir);
 
-        Assertions.assertFalse(issues.isEmpty());
-        Assertions.assertTrue(issues.stream().anyMatch(i -> i.message.contains("name should follow EntitySummary/EntityDetails/EntityUpdate")));
+        Assertions.assertTrue(issues.isEmpty(),
+                "an annotated view over a marker is valid whatever it is named; naming is not enforced "
+                        + "by this validator. Got " + issues);
     }
 
     /**

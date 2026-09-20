@@ -47,11 +47,18 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 
 | Command | What it does |
 |---|---|
-| `scripts/mvn-jdk25.cmd` (Windows) / `scripts/mvn-jdk25.sh` (POSIX) | `mvn -o -pl <six hipster-entity modules> -am test` — the recorded gate |
-| `scripts/mvn-jdk25.cmd hipster-entity test` | the same run with an explicit goal |
+| `scripts/mvn-jdk25.cmd` (Windows) / `scripts/mvn-jdk25.sh` (POSIX) | `mvn -o -pl <six hipster-entity modules> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate |
+| `scripts/mvn-jdk25.cmd hipster-entity test` | the same module set with an explicit goal (no implicit `clean`) |
 | `scripts/mvn-jdk25.cmd hipster-entity install` | install the six modules into the local repository |
 | `scripts/mvn-jdk25.cmd -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned |
-| `scripts/run-demo.cmd` | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → printed diff → parameterised `UPDATE`) |
+| `scripts/run-demo.cmd` | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
+
+`clean` in the recorded gate is not optional: without it the build can be satisfied by a previous
+revision's class files, which is how a source that did not compile once reported `BUILD SUCCESS`
+(notes F-47). The `-Dmaven.compiler.useIncrementalCompilation=false` is the other half of the same
+fix — it stops the compiler plugin from deciding within a run that a module is up to date. Both
+launchers are kept behaviourally identical by `GateParityTest`, which asserts the shared module list,
+the `clean test` default, the refusal below, and both flags.
 
 Override `JCODEBUDDY_JDK25`, `JCODEBUDDY_MVN` or `JCODEBUDDY_HE_MODULES` to point at another JDK,
 another Maven launcher, or another module set. Two cmd.exe details are worth knowing before editing
@@ -74,3 +81,29 @@ fix in the message.
 Entity-specific generators, the R1 field-enum order contract and its checker CLI are documented in
 [`hipster-entity-tooling/README.md`](hipster-entity-tooling/README.md); the architecture decisions
 behind them are under [`doc-hipster-entity/architecture/decisions/`](doc-hipster-entity/architecture/decisions/).
+
+### The gate is local — there is no CI
+
+This repository has **no CI workflow**, so the recorded gate above is the only thing that runs the
+tests, and nothing runs it unless a developer does. Two further checks are worth running by hand
+before a commit that touches entities, because neither can be a build-time gate:
+
+```text
+# the entity rules: naming conventions, marker shape, the R1 ledger
+#   exit 0 clean, 1 a violation, 2 a usage error
+java -cp hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+     validate hipster-entity-example/src/main/java --strict
+
+# the R1 append-only field-enum contract against a baseline revision
+java -cp hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+     enum-order --repo . --baseline origin/main --strict
+```
+
+The example's Maven binding runs the first set on every build with `--validate` (report and continue),
+so its output is in the build log; `--validate=STRICT` is how a project makes it refuse to write.
+Adding either to a real CI pipeline is a repository-policy decision, not a code change — the commands
+above are the whole interface.
+
+`ExampleRegenerationTest` is the other half of the safety net: it regenerates the example in place in a
+temp copy and asserts the result is byte-identical to what is committed, so a generator change cannot
+silently rewrite committed source. A red one means **regenerate and commit**, not "fix the test".

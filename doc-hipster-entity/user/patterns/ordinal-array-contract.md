@@ -200,7 +200,7 @@ public enum PersonSummary_ implements FieldDef {
 ```
 
 Breaking this has a specific, unpleasant symptom: the proxy resolves the accessor `firstName()` to
-the name `"firstName"`, `meta.forName("firstName")` returns `null`, and every accessor call fails
+the name `"firstName"`, `forName.forName("firstName")` returns `null`, and every accessor call fails
 at runtime even though the code compiled. It is a runtime mismatch, not a compile error — which
 is why the generator emits the constant name from the accessor name directly.
 
@@ -210,7 +210,7 @@ When an adapter has a field **name** (a result-set column label, a JSON token, a
 its ordinal, the only sanctioned route is:
 
 ```java
-F field = meta.forName(name);      // generated switch — O(1), zero allocation
+F field = forName.forName(name);      // generated switch — O(1), zero allocation
 if (field != null) {
     int ordinal = field.ordinal(); // capture once
     values[ordinal] = /* … */;
@@ -219,7 +219,7 @@ if (field != null) {
 }
 ```
 
-`meta.forName(name)` is backed by a **generated `switch` statement** returning the enum constant,
+`forName.forName(name)` is backed by a **generated `switch` statement** returning the enum constant,
 so it is O(1), allocation-free, and inlinable. It is the only permitted name→ordinal mechanism.
 
 ### DEC-016 — a per-call `HashMap` is forbidden
@@ -246,7 +246,7 @@ for (int i = 0; i < meta.fieldCount(); i++) {
 Integer ordinal = byName.get(name);
 
 // ✅ CORRECT — generated switch, zero allocation
-F field = meta.forName(name);
+F field = forName.forName(name);
 if (field != null) {
     values[field.ordinal()] = value;
 }
@@ -305,7 +305,7 @@ producing the same artifact by different routes. That is the point: one contract
 - [ ] I do not renumber, compact, or drop ordinals.
 - [ ] Every field name I use comes from `enum.name()` / `meta.fieldNameAt(i)` /
       `FieldDef.column()`, never from a hand-written string.
-- [ ] I resolve names through `meta.forName(name)` and never build a per-call `HashMap`.
+- [ ] I resolve names through `forName.forName(name)` and never build a per-call `HashMap`.
 - [ ] Any `readers[]`/`writers[]` structure is built once per adapter instance, not per row.
 - [ ] I have a test that asserts every accessor of the materialized view, plus the array length.
 

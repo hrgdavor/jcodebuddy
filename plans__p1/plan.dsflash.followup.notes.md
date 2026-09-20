@@ -2,8 +2,19 @@
 
 Companion to [`plan.dsflash.followup.md`](plan.dsflash.followup.md) and
 [`plan.dsflash.notes.md`](plan.dsflash.notes.md). Same conventions: `N-n` notes, `D-n` deliberate
-deviations, `F-n` findings whose premise was wrong. This round executed the follow-up plan's § 1.2,
-§ 2.1-§ 2.3, § 3.1, § 3.2 and § 5.3; the remaining items are listed at the end with their state.
+deviations, `F-n` findings whose premise was wrong.
+
+**Status: COMPLETE — every item in the follow-up plan's § 1–§ 5 was executed.** The rounds are
+recorded below in order (§ 9 round 1, rounds 2–5 in this file), and the item-by-item state is in
+*Objective status* at the end. An earlier revision of this header said "this round executed § 1.2,
+§ 2.1–§ 2.3, § 3.1, § 3.2 and § 5.3; the remaining items are listed at the end with their state",
+which was true after round 1 and is now stale — that sentence is what a reader would have trusted
+instead of the table that follows it.
+
+The round also went **past** the plan's own four-emitter count: § 1.1's per-member reconciliation
+reached six whole-file emitters, not four (F-61), and two test helpers that generated into a fresh
+temp root per call — which made every "re-emission is a fixed point" assertion vacuous — were fixed
+(F-62).
 
 ---
 

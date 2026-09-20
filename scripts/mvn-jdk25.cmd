@@ -33,6 +33,12 @@ rem                        file sandbox because it writes its daemon registry
 rem                        outside the workspace)
 rem   JCODEBUDDY_HE_MODULES - comma separated module list for the
 rem                        "hipster-entity" shortcut
+rem
+rem Both the free-form and the shortcut invocation pass
+rem -Dmaven.compiler.useIncrementalCompilation=false, and the DEFAULT invocation adds `clean test`
+rem (see :he_default). The POSIX sibling scripts/mvn-jdk25.sh is kept in step with this file by
+rem GateParityTest, because D-21's `clean` half was applied to this file only and the .sh silently
+rem kept running a bare `mvn`.
 rem ---------------------------------------------------------------------------
 setlocal
 
@@ -58,7 +64,7 @@ rem No arguments at all -> the recorded hipster-entity test command (0.3/0.4).
 if "%~1"=="" goto :he
 if "%~1"=="hipster-entity" goto :he
 
-call "%JCODEBUDDY_MVN%" %*
+call "%JCODEBUDDY_MVN%" -Dmaven.compiler.useIncrementalCompilation=false %*
 exit /b %ERRORLEVEL%
 
 :he
@@ -100,10 +106,15 @@ if errorlevel 1 (
     echo [mvn-jdk25]   Refusing to run rather than silently building the whole reactor. 1>&2
     exit /b 2
 )
-call "%JCODEBUDDY_MVN%" -o -pl %HE_MODULES% -am %HE_ARGS%
+call "%JCODEBUDDY_MVN%" -o -pl %HE_MODULES% -am -Dmaven.compiler.useIncrementalCompilation=false %HE_ARGS%
 exit /b %ERRORLEVEL%
 
 rem Refuses (-D token without `=`) by returning 1; a faithfully forwarded argument list returns 0.
+rem
+rem Both invocations below also pass -Dmaven.compiler.useIncrementalCompilation=false. `clean` alone
+rem removes the stale-class hazard at the start of a run, but the incremental check can still decide a
+rem module's sources are up to date *within* one run and skip the compile; F-47's broken source must
+rem fail this gate without any manual intervention, so the incremental path is disabled outright.
 :he_check
 if "%~1"=="" exit /b 0
 set "HE_TOKEN=%~1"
@@ -128,5 +139,5 @@ rem
 rem Only the DEFAULT invocation cleans: an explicit goal list is the caller's request
 rem (`run-demo.cmd` passes `-DskipTests=true package` and reuses the built classes), so this
 rem does not quietly turn every invocation into a full rebuild.
-call "%JCODEBUDDY_MVN%" -o -pl %HE_MODULES% -am clean test
+call "%JCODEBUDDY_MVN%" -o -pl %HE_MODULES% -am -Dmaven.compiler.useIncrementalCompilation=false clean test
 exit /b %ERRORLEVEL%
