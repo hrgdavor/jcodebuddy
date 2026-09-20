@@ -12,7 +12,7 @@ public class JavaParserTool {
 
     public static ClassOrInterfaceDeclaration findFirstInterface(Path javaFile) throws Exception {
         String source = Files.readString(javaFile);
-        ParseResult<CompilationUnit> result = new JavaParser().parse(source);
+        ParseResult<CompilationUnit> result = hr.hrg.hipster.entity.tooling.SourceReader.parser().parse(source);
         CompilationUnit cu = result.getResult().orElseThrow(() -> new IllegalStateException("No compilation unit parsed for " + javaFile));
         return cu.findFirst(ClassOrInterfaceDeclaration.class, ClassOrInterfaceDeclaration::isInterface)
                 .orElseThrow(() -> new IllegalStateException("No interface found in " + javaFile));

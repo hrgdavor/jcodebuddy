@@ -3,7 +3,6 @@ package hr.hrg.hipster.entity.jackson;
 import tools.jackson.core.JsonParser;
 import tools.jackson.core.JsonToken;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.ObjectReader;
 import hr.hrg.hipster.entity.api.EntityBase;
 import hr.hrg.hipster.entity.api.FieldDef;
 import hr.hrg.hipster.entity.api.FieldNameMapper;
@@ -63,18 +62,29 @@ public final class EntityJacksonViewDeserializer<V extends EntityBase<?>, F exte
         if (type == Float.class || type == float.class) {
             return p -> Float.valueOf(p.getFloatValue());
         }
-        // Fallback for complex types: ObjectReader cached per-field to avoid repeated type resolution.
+        // Fallback for complex types: the resolved JavaType is cached per field to avoid repeated
+        // type resolution.
+        //
+        // The read must go through JsonParser.readValueAs, NOT ObjectReader.readValue(JsonParser).
+        // This deserializer parses a view that is itself nested inside an enclosing JSON document
+        // and has already advanced the parser onto the field's value token, so the value it reads is
+        // followed by more of the outer object. ObjectReader.readValue(JsonParser) treats the token
+        // after the value as a trailing token and — with FAIL_ON_TRAILING_TOKENS enabled by default —
+        // fails with "Trailing token (JsonToken.END_OBJECT) found after value (bound as java.util.Map)".
+        // That path was never exercised before because the only complex fixture field
+        // (`PersonSummary.metadata`) was always null in the existing tests; it is a real defect for
+        // any view with a non-null collection or object field.
         return new ValueReader() {
-            private volatile ObjectReader cachedReader;
+            private volatile tools.jackson.databind.JavaType cachedType;
 
             @Override
             public Object read(JsonParser p) throws IOException {
-                ObjectReader reader = cachedReader;
-                if (reader == null) {
-                    reader = mapper.readerFor(mapper.getTypeFactory().constructType(type));
-                    cachedReader = reader;
+                tools.jackson.databind.JavaType javaType = cachedType;
+                if (javaType == null) {
+                    javaType = mapper.getTypeFactory().constructType(type);
+                    cachedType = javaType;
                 }
-                return reader.readValue(p);
+                return p.readValueAs(javaType);
             }
         };
     }

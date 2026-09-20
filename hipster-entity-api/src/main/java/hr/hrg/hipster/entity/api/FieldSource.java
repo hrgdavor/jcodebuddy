@@ -18,7 +18,13 @@ public @interface FieldSource {
     /** Classification of this field's data origin. */
     FieldKind kind() default FieldKind.COLUMN;
 
-    /** Database column name. Defaults to the method name when empty. */
+    /**
+     * Database column name. Defaults to the method name when empty.
+     * <p>
+     * The "defaults to the method name" resolution is performed by
+     * {@link FieldDef#column()}, not by this annotation, so generated code resolves the
+     * column name in exactly one place.
+     */
     String column() default "";
 
     /** Relation path for JOINED fields (e.g. "department.name"). Ignored for COLUMN/DERIVED. */

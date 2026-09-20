@@ -32,6 +32,14 @@ public final class DefaultViewMeta<V, F extends Enum<F> & FieldDef> implements V
         this(viewType, fieldDefType, forName, creator, null, "", new Class<?>[0]);
     }
 
+    /**
+     * Full constructor.
+     *
+     * <p>{@code discriminatorField} is the view's <em>own</em> field enum type. A concrete member of
+     * a polymorphic family deliberately passes {@code null} here: it shares its root's discriminator
+     * field, and the root's hand-written enum is where that constant lives (§ 9/4.9). What a
+     * generated subclass supplies is its {@code discriminatorValue}.</p>
+     */
     public DefaultViewMeta(
             Class<V> viewType,
             Class<F> fieldType,

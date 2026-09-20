@@ -41,8 +41,24 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-params</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- § 12.3/7.10: `provided`, deliberately. The generator only needs the annotation TYPES to
+             recognise a constraint and carry it through; it never validates anything, and a
+             consuming library must not gain a hard validation dependency from using the toolchain.
+             A project that wants Bean Validation adds this itself, at the version it already uses.
+             Pinned to 3.0.2 because the local repository holds it, so `mvn -o` keeps working. -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <version>3.0.2</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

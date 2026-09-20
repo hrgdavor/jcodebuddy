@@ -13,9 +13,14 @@ public final class EntityUpdateTrackingArrayLarge<T, F extends Enum<F> & FieldDe
 
     private final EEnumSetBuilderLarge<F> changes;
 
-    EntityUpdateTrackingArrayLarge(ForNameOrdinal forNameOrdinal, int fieldCount, Object[] values) {
-        super(forNameOrdinal, fieldCount, values);
-        this.changes = new EEnumSetBuilderLarge<>(null); // Replace null with appropriate field type if needed
+    EntityUpdateTrackingArrayLarge(ForNameOrdinal forNameOrdinal, F[] universe, int fieldCount, Object[] values) {
+        this(forNameOrdinal, universe, fieldCount, values, java.util.Map.of());
+    }
+
+    EntityUpdateTrackingArrayLarge(ForNameOrdinal forNameOrdinal, F[] universe, int fieldCount, Object[] values,
+                                   java.util.Map<Integer, ListChangeTracker> collectionTrackers) {
+        super(forNameOrdinal, universe, fieldCount, values, collectionTrackers);
+        this.changes = new EEnumSetBuilderLarge<>(universe);
     }
 
     @Override
@@ -31,20 +36,11 @@ public final class EntityUpdateTrackingArrayLarge<T, F extends Enum<F> & FieldDe
     @Override
     public void clear() {
         changes.clear();
+        clearCollectionChanges();
     }
 
     @Override
-    public EEnumSet<F> changesSnapshot() {
-        return changes.toImmutable();
-    }
-
-    @Override
-    public EEnumSetBuilder<F> getChanges() {
-        return changes;
-    }
-
-    /** Direct access to the concrete builder — no interface overhead. */
-    public EEnumSetBuilderLarge<F> getChangesLarge() {
+    public EEnumSetBuilder<F> changesBuilder() {
         return changes;
     }
 }

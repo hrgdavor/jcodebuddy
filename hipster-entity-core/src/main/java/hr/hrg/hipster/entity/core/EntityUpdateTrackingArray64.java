@@ -13,9 +13,14 @@ public final class EntityUpdateTrackingArray64<T, F extends Enum<F> & FieldDef>
 
     private final EEnumSetBuilder64<F> changes;
 
-    EntityUpdateTrackingArray64(ForNameOrdinal forNameOrdinal, int fieldCount, Object[] values) {
-        super(forNameOrdinal, fieldCount, values);
-        this.changes = new EEnumSetBuilder64<>(null); // Replace null with appropriate field type if needed
+    EntityUpdateTrackingArray64(ForNameOrdinal forNameOrdinal, F[] universe, int fieldCount, Object[] values) {
+        this(forNameOrdinal, universe, fieldCount, values, java.util.Map.of());
+    }
+
+    EntityUpdateTrackingArray64(ForNameOrdinal forNameOrdinal, F[] universe, int fieldCount, Object[] values,
+                                java.util.Map<Integer, ListChangeTracker> collectionTrackers) {
+        super(forNameOrdinal, universe, fieldCount, values, collectionTrackers);
+        this.changes = new EEnumSetBuilder64<>(universe);
     }
 
     @Override
@@ -31,20 +36,11 @@ public final class EntityUpdateTrackingArray64<T, F extends Enum<F> & FieldDef>
     @Override
     public void clear() {
         changes.clear();
+        clearCollectionChanges();
     }
 
     @Override
-    public EEnumSet<F> changesSnapshot() {
-        return changes.toImmutable();
-    }
-
-    @Override
-    public EEnumSetBuilder<F> getChanges() {
-        return changes;
-    }
-
-    /** Direct access to the concrete builder — no interface overhead. */
-    public EEnumSetBuilder64<F> getChanges64() {
+    public EEnumSetBuilder<F> changesBuilder() {
         return changes;
     }
 }

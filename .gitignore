@@ -42,3 +42,9 @@ build_output.txt
 cross_verify.bin
 intellij-jswa/.gradle
 .kilo/plans
+
+# Local scratch: regeneration probes and hand-run generator output (see
+# plans__p1/plan.dsflash.followup.md 4.3 -- untidy, not dangerous: the R1 checker's file set
+# comes from git ls-tree, so an untracked copy is never compared).
+/tmp/
+hipster-entity-example/tmp/

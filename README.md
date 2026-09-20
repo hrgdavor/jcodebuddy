@@ -38,3 +38,39 @@ To solve the "recursion problem" (the fact that JCodeBuddy uses itself to be bui
 
 ### Dev-Time Only Guarantee
 `project-automation` classes and dependencies do **not** participate when the project is packaged. The runtime application (the `app` module and friends) depends only on the released JCodeBuddy framework libraries. The `project-automation` module is the developer's customization layer that tells JCodeBuddy *what* to build, *when* to build it, and *how* to watch for changes.
+
+## Building and Testing
+
+The reactor requires **JDK 25** on *both* the Maven JVM and the forked test JVM — the root POM pins
+`maven.compiler.release=25`, and `.mvn/jvm.config` cannot select a JDK (it only passes JVM options to
+the Maven process). The committed launchers set `JAVA_HOME` for you:
+
+| Command | What it does |
+|---|---|
+| `scripts/mvn-jdk25.cmd` (Windows) / `scripts/mvn-jdk25.sh` (POSIX) | `mvn -o -pl <six hipster-entity modules> -am test` — the recorded gate |
+| `scripts/mvn-jdk25.cmd hipster-entity test` | the same run with an explicit goal |
+| `scripts/mvn-jdk25.cmd hipster-entity install` | install the six modules into the local repository |
+| `scripts/mvn-jdk25.cmd -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned |
+| `scripts/run-demo.cmd` | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → printed diff → parameterised `UPDATE`) |
+
+Override `JCODEBUDDY_JDK25`, `JCODEBUDDY_MVN` or `JCODEBUDDY_HE_MODULES` to point at another JDK,
+another Maven launcher, or another module set. Two cmd.exe details are worth knowing before editing
+the `.cmd`: a Maven property argument must be **quoted** (`"...\mvn-jdk25.cmd hipster-entity test "-Dtest=SomeTest""`)
+because cmd splits an unquoted argument at `=` and `.`, and the file must stay **ASCII + CRLF** or
+cmd mis-parses it.
+
+The `hipster-entity` shortcut **refuses to run** when any property argument lacks an `=` (exit 2,
+with the quoted forms in the message), because that is what a property split by cmd.exe looks like.
+That is deliberate: the fragments used to be forwarded as malformed arguments, Maven then dropped the
+`-pl` list, and the "gate" silently became a build of the whole 23-module reactor — so a failure in an
+unrelated module (`java-watch-scp`, `metadata-server`) looked like a failure of the recorded gate.
+Quote **every** property you pass through the shortcut, including boolean ones
+(`"-DskipTests=true"`), or invoke Maven directly with the same `-pl` list.
+
+One consequence worth knowing: an unquoted `-Dtest=X` on the shortcut used to reach Maven as
+`-Dtest X`, which Maven reported as `Unknown lifecycle phase "X"`. It is now refused earlier, with the
+fix in the message.
+
+Entity-specific generators, the R1 field-enum order contract and its checker CLI are documented in
+[`hipster-entity-tooling/README.md`](hipster-entity-tooling/README.md); the architecture decisions
+behind them are under [`doc-hipster-entity/architecture/decisions/`](doc-hipster-entity/architecture/decisions/).

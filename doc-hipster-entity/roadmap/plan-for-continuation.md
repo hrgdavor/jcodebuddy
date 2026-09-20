@@ -1,3 +1,35 @@
+> ## ⚠ SUPERSEDED — do not use this document as a plan
+>
+> This document is **stale and superseded**. It was generated on
+> 2026-07-21 from an earlier analysis of the tree, and several of its
+> premises are wrong today. It is kept only as a historical record; the
+> body below the banner is unmaintained and must not be read as current
+> guidance.
+>
+> Concrete defects, so a reader is not misled:
+>
+> - It plans a `jcodebuddy` Maven module and path layout
+>   (`jcodebuddy/pom.xml`, `jcodebuddy/src/main/java/hr/hrg/hipster/jcodebuddy/…`).
+>   **No module by that name exists.** The dev-time orchestrator module
+>   in this repository is
+>   [`project-automation/`](../../project-automation/), and the
+>   entity code generator lives in
+>   [`hipster-entity-tooling/`](../../hipster-entity-tooling/).
+> - It contains a literal tooling artifact at the end of the file
+>   (`</new_content>}</new_content>}`), which is not part of any plan.
+> - Its ADR list stops at the decisions known in July 2026. It knows
+>   nothing about DEC-019/020/021/022 (source-visible wiring,
+>   cooperative codegen, the generator class-file header,
+>   refactor-sensitivity) or DEC-023 (R1 — field enums are append-only
+>   ordinal ledgers).
+>
+> **The current plan** is the combined execution plan
+> [`plans__p1/plan.dsflash.md`](../../plans__p1/plan.dsflash.md),
+> whose execution findings are recorded in
+> [`plans__p1/plan.dsflash.notes.md`](../../plans__p1/plan.dsflash.notes.md).
+> Current implementation status is tracked in
+> [`roadmap/README.md`](README.md).
+
 # Plan for Continuing Work on hipster-entity
 
 **Generated:** 2026-07-21  

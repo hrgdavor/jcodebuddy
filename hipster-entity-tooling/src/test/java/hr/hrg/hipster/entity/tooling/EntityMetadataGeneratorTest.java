@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 public class EntityMetadataGeneratorTest {
 
@@ -265,43 +266,53 @@ public class EntityMetadataGeneratorTest {
         Path generatedEnum = packageDir.resolve("PersonSummary_.java");
         Assertions.assertTrue(Files.exists(generatedEnum), "Generated property enum should be written back into the source tree");
         String generatedSource = Files.readString(generatedEnum);
-        Assertions.assertTrue(generatedSource.contains("return switch (name)"), "Generated property enum should use a switch expression for forName lookup");
-        Assertions.assertTrue(generatedSource.contains("case \"id\" -> id;"), "Generated property enum should include a switch case for id");
+        Assertions.assertTrue(generatedSource.contains("switch (name)"), "Generated enum should use a switch for forName lookup");
+        Assertions.assertTrue(generatedSource.contains("case \"id\""), "Generated enum should include a switch case for id");
     }
 
     @Test
     public void generateAndCompileExamplePersonBoilerplate() throws Exception {
-        Path moduleRoot = findModuleRoot();
-        Path repoRoot = moduleRoot.getFileName().toString().equals("hipster-entity-tooling")
-                ? moduleRoot.getParent()
-                : moduleRoot;
+        Path repoRoot = CompileHarness.findRepoRoot();
 
         Path exampleSourceRoot = repoRoot.resolve("hipster-entity-example").resolve("src").resolve("main").resolve("java");
         Assertions.assertTrue(Files.exists(exampleSourceRoot), "Example source root must exist");
 
         Path outputRoot = Files.createTempDirectory("person-boilerplate-compile");
-        EntityMetadataGenerator.generate(exampleSourceRoot, outputRoot);
+        // The example's production generation configuration: § 4.3/X3 scopes generation to the two
+        // entity packages, which is what keeps the documentation-sample packages
+        // (`person.iface` + `person.record`) and the `example/` package out of scope. Indexing is
+        // NOT filtered, so cross-package supertypes and addons still resolve.
+        EntityMetadataGenerator.setGenerationPackages(List.of(
+                "hr.hrg.hipster.entityexample.person.entity",
+                "hr.hrg.hipster.entityexample.paymentMethod.entity"));
+        EntityMetadataGenerator.setGenerateAdapters(true);
+        try {
+            EntityMetadataGenerator.generate(exampleSourceRoot, outputRoot);
+        } finally {
+            EntityMetadataGenerator.setGenerationPackages(List.of());
+            EntityMetadataGenerator.setGenerateAdapters(false);
+        }
 
-        List<Path> generatedSources = Files.walk(outputRoot)
-                .filter(p -> p.toString().endsWith(".java"))
-                .toList();
+        List<Path> generatedSources = CompileHarness.javaSourcesUnder(outputRoot);
         Assertions.assertFalse(generatedSources.isEmpty(), "Generated source files should exist");
 
-        List<Path> exampleSources = Files.walk(exampleSourceRoot)
-                .filter(p -> p.toString().endsWith(".java"))
-                .filter(p -> !p.getFileName().toString().endsWith("_.java"))
-                .toList();
-        Assertions.assertFalse(exampleSources.isEmpty(), "Example source files should exist");
-
-        Path compileOutput = Files.createTempDirectory("person-boilerplate-classes");
-        boolean compiled = compileSources(repoRoot, generatedSources, exampleSources, compileOutput);
-        Assertions.assertTrue(compiled, "Generated example boilerplate should compile successfully");
+        // Since Phase 4.1 the example's entity packages ARE generator output, so the generated tree
+        // and the committed tree hold the same files. The compile therefore uses the committed
+        // source root — which now contains both the hand-written view interfaces the generated META
+        // references and the generated materializations — rather than re-deriving an exclusion list
+        // for artifacts that no longer exist. The earlier version of this test excluded the stale
+        // hand-written `*_` enums and builders; those are gone, and `ExampleRegenerationTest`
+        // asserts that a fresh pass over the committed tree is a byte-identical no-op.
+        CompileHarness.compileOrFail(repoRoot, "example boilerplate",
+                CompileHarness.javaSourcesUnder(exampleSourceRoot), List.of());
 
         Path summaryEnum = outputRoot.resolve("hr/hrg/hipster/entityexample/person/entity/PersonSummary_.java");
         Assertions.assertTrue(Files.exists(summaryEnum), "PersonSummary_ enum should be generated in the example output");
         String summarySource = Files.readString(summaryEnum);
         Assertions.assertTrue(summarySource.contains("switch (name)"), "Generated PersonSummary_ should use a switch-based forName lookup");
-        Assertions.assertTrue(summarySource.contains("case \"id\" -> id;"), "Generated PersonSummary_ should include a switch case for id");
+        Assertions.assertTrue(summarySource.contains("case \"id\""), "Generated PersonSummary_ should include a switch case for id");
+        Assertions.assertTrue(summarySource.contains("implements FieldDef"),
+                "the regenerated example enum is a META-shape FieldDef enum (§ 2.4)");
     }
 
     private Path findModuleRoot() {
@@ -313,32 +324,5 @@ public class EntityMetadataGeneratorTest {
             throw new IllegalStateException("Cannot locate module root from current working directory");
         }
         return current;
-    }
-
-    private boolean compileSources(Path repoRoot, List<Path> generatedSources, List<Path> exampleSources, Path outputDir) throws IOException {
-        javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
-        Assertions.assertNotNull(compiler, "Java compiler must be available in the test runtime");
-
-        try (javax.tools.StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
-            List<Path> allSources = new java.util.ArrayList<>(generatedSources);
-            allSources.addAll(exampleSources);
-            Iterable<? extends javax.tools.JavaFileObject> compilationUnits = fileManager.getJavaFileObjectsFromFiles(
-                    allSources.stream().map(Path::toFile).toList());
-
-            String pathSeparator = System.getProperty("path.separator");
-            String explicitClasspath = String.join(pathSeparator,
-                    repoRoot.resolve("hipster-entity-api/target/classes").toString(),
-                    repoRoot.resolve("hipster-entity-core/target/classes").toString());
-
-            javax.tools.JavaCompiler.CompilationTask task = compiler.getTask(
-                    null,
-                    fileManager,
-                    null,
-                    java.util.List.of("-d", outputDir.toString(), "-classpath", explicitClasspath),
-                    null,
-                    compilationUnits);
-
-            return task.call();
-        }
     }
 }

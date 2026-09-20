@@ -56,21 +56,45 @@ class EEnumSetBasicFunctionTest {
         assertEquals(1, builder.size());
     }
 
+    /**
+     * The change set is a plain ordinal set — and deliberately nothing more.
+     *
+     * <p>An earlier revision had an {@code addOrdinalChange(ordinal, previous, next)} helper that both
+     * compared the two values and remembered the previous one. Both halves of that are gone by
+     * design: the comparison now sits at the write site (a generated tracking setter, or
+     * {@code EntityUpdateTrackingArray#set}) and the tracker keeps no value at all. What is left is a
+     * set, asserted here, with the no-op-on-equal rule asserted where the comparison now happens
+     * ({@code EntityUpdateTrackingArrayTest#equalValueSetLeavesTheChangeSetEmpty}).</p>
+     */
     @Test
-    void addOrdinalChangeReturnsFalseWhenValuesAreEqual() {
+    void theChangeSetIsAPlainOrdinalSet() {
         EEnumSetBuilder<EnumTestUtil.Enum64> builder = EEnumSetBuilder.create(EnumTestUtil.Enum64.class);
 
-        assertFalse(builder.addOrdinalChange(EnumTestUtil.Enum64.E05.ordinal(), "same", "same"));
+        assertTrue(builder.addOrdinal(EnumTestUtil.Enum64.E05.ordinal()));
+        assertFalse(builder.addOrdinal(EnumTestUtil.Enum64.E05.ordinal()),
+                "marking the same ordinal twice is a no-op");
+        assertTrue(builder.has(EnumTestUtil.Enum64.E05));
+        assertEquals(1, builder.size());
+
+        assertTrue(builder.removeOrdinal(EnumTestUtil.Enum64.E05.ordinal()));
         assertFalse(builder.has(EnumTestUtil.Enum64.E05));
+        assertEquals(0, builder.size());
     }
 
     @Test
-    void addOrdinalChangeReturnsTrueWhenValueChangesEvenIfOrdinalAlreadyPresent() {
+    void theChangeSetCarriesNoValuesOfItsOwn() {
         EEnumSetBuilder<EnumTestUtil.Enum64> builder = EEnumSetBuilder.create(EnumTestUtil.Enum64.class);
 
-        assertTrue(builder.addOrdinalChange(EnumTestUtil.Enum64.E05.ordinal(), "old", "new"));
-        assertTrue(builder.addOrdinalChange(EnumTestUtil.Enum64.E05.ordinal(), "old2", "new2"));
-        assertTrue(builder.has(EnumTestUtil.Enum64.E05));
+        builder.addOrdinal(EnumTestUtil.Enum64.E05.ordinal());
+
+        // The only public surface is the set. There is no accessor that could hand back a value the
+        // field held before the write — that value belongs to the caller's baseline instance.
+        assertThrows(NoSuchMethodException.class,
+                () -> EEnumSetBuilder.class.getMethod("previousValue", int.class));
+        assertThrows(NoSuchMethodException.class,
+                () -> EEnumSetBuilder.class.getMethod("hasPreviousValue", int.class));
+        assertThrows(NoSuchMethodException.class,
+                () -> EEnumSetBuilder.class.getMethod("addOrdinalChange", int.class, Object.class, Object.class));
     }
 
     @Test

@@ -36,8 +36,6 @@ public interface PersonSummary extends Person {
         Write id(Long value);
         Write firstName(String value);
         Write lastName(String value);
-        Write age(Integer value);
-        Write departmentName(String value);
         Write metadata(Map<String, List<Long>> value);        
     }
 

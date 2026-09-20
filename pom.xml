@@ -105,6 +105,15 @@
                 <version>${junit5.version}</version>
                 <scope>test</scope>
             </dependency>
+            <!-- Parameterized tests: the generator's level matrix asserts one row per GenLevel, so
+                 a newly added level is covered by construction rather than by remembering to add a
+                 test case. Not part of the junit-jupiter aggregate below, hence its own entry. -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
+                <version>${junit5.version}</version>
+                <scope>test</scope>
+            </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
@@ -296,6 +305,19 @@
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>hipster-ioc-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- Referenced versionless by project-automation and metadata-mcp-server.
+                 Without these entries Maven 3.9 fails POM validation before compiling
+                 anything; Maven 4 resolves versionless reactor dependencies itself. -->
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>metadata-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>metadata-mcp-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

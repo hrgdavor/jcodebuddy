@@ -15,6 +15,7 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.Throughput)
@@ -95,7 +96,7 @@ public class EEnumSetTrackingJmhBenchmark{
             Object[] values = new Object[E64.values().length];
             values[0] = 1;
             for (int i = 1; i < values.length; i++) values[i] = i;
-            concrete = new EntityUpdateTrackingArray64<>(forNameOrdinal64, Enum64.values().length, values);
+            concrete = new EntityUpdateTrackingArray64<>(forNameOrdinal64, E64.values(), E64.values().length, values);
             generic = concrete;
             ordinal = 31;
         }
@@ -112,7 +113,7 @@ public class EEnumSetTrackingJmhBenchmark{
             Object[] values = new Object[E96.values().length];
             values[0] = 1;
             for (int i = 1; i < values.length; i++) values[i] = i;
-            concrete = new EntityUpdateTrackingArrayLarge<>(forNameOrdinal96, E96.values().length, values);
+            concrete = new EntityUpdateTrackingArrayLarge<>(forNameOrdinal96, E96.values(), E96.values().length, values);
             generic = concrete;
             ordinal = 72;
         }
@@ -164,7 +165,7 @@ public class EEnumSetTrackingJmhBenchmark{
             Object[] values = new Object[E64.values().length];
             values[0] = 1;
             for (int i = 1; i < values.length; i++) values[i] = i;
-            concrete = new EntityUpdateTrackingArray64<>(forNameOrdinal64, E64.values().length, values);
+            concrete = new EntityUpdateTrackingArray64<>(forNameOrdinal64, E64.values(), E64.values().length, values);
             generic = concrete;
         }
 
@@ -185,7 +186,7 @@ public class EEnumSetTrackingJmhBenchmark{
             Object[] values = new Object[E96.values().length];
             values[0] = 1;
             for (int i = 1; i < values.length; i++) values[i] = i;
-            concrete = new EntityUpdateTrackingArrayLarge<>(forNameOrdinal96, E96.values().length, values);
+            concrete = new EntityUpdateTrackingArrayLarge<>(forNameOrdinal96, E96.values(), E96.values().length, values);
             generic = concrete;
         }
 
@@ -193,6 +194,119 @@ public class EEnumSetTrackingJmhBenchmark{
         public void fill() {
             concrete.clear();
             for (int i = 0; i < 96; i += 2) concrete.mark(i);
+        }
+    }
+
+    // ------------------------------------------------------------------ the D4 pull axis (task 6.9)
+
+    /**
+     * The two nesting fields of the pull axis. {@code CHILD} is the field whose declared type is
+     * itself a tracking view — the one the nested-change index exists for. {@code NAME} is a plain
+     * scalar, so the outer walk has a real leaf to report as well.
+     */
+    enum Nest implements FieldDef {
+        id, name, child;
+
+        @Override
+        public Class<?> javaType() {
+            return Object.class;
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    static final ForNameOrdinal forNameNest = new ForNameOrdinalImpl(Nest.class);
+
+    private static int nestOrdinal(Nest field) {
+        return field.ordinal();
+    }
+
+    /**
+     * One node of the pull axis. {@code nested} is a second node, so {@code NODE} is two levels of
+     * nesting and its {@code changesDeep()} has to cross the nested-change index.
+     */
+    static final class PullNode implements ViewChangeTracking<Nest, EEnumSet<Nest>> {
+        final EntityUpdateTrackingArray<Object, Nest> array;
+
+        PullNode(PullNode child) {
+            Object[] values = {1L, "v-node", child};
+            this.array = EntityUpdateTrackingArray.create(forNameNest, Nest.values(), values);
+        }
+
+        @Override
+        public boolean isChanged() {
+            return array.isChanged();
+        }
+
+        @Override
+        public EEnumSet<Nest> changes() {
+            return array.changes();
+        }
+
+        @Override
+        public EEnumSetBuilder<Nest> changesBuilder() {
+            return array.changesBuilder();
+        }
+
+        @Override
+        public void clearChanges() {
+            array.clearChanges();
+        }
+
+        @Override
+        public Object currentValue(Nest field) {
+            return array.currentValue(field);
+        }
+
+        @Override
+        public List<ChangePath> changesDeep() {
+            return array.changesDeep();
+        }
+    }
+
+    /**
+     * The "no nested change" case of D4: the outer node has changed, the nested child has not. Pull
+     * must be free here — the walk enters the child, finds nothing and stops, and it must not touch
+     * the parent's bitset. A regression against the shallow baseline shows up as this benchmark
+     * getting slower than {@code markUnmark64AbstractTracker}, not as a wrong answer.
+     */
+    @State(Scope.Thread)
+    public static class PullNoNestedChangeState {
+        PullNode node;
+
+        @Setup(Level.Iteration)
+        public void setup() {
+            PullNode leaf = new PullNode(null);
+            node = new PullNode(leaf);
+        }
+
+        @Setup(Level.Invocation)
+        public void fill() {
+            node.clearChanges();
+            node.array.set(nestOrdinal(Nest.name), "changed");
+        }
+    }
+
+    /**
+     * The "deep nested change" case: the change is two levels down, so the walk descends the whole
+     * chain and reports a path. This is the cost the pull model accepts in exchange for children
+     * staying reusable.
+     */
+    @State(Scope.Thread)
+    public static class PullDeepNestedChangeState {
+        PullNode node;
+        PullNode leaf;
+
+        @Setup(Level.Iteration)
+        public void setup() {
+            leaf = new PullNode(null);
+            node = new PullNode(leaf);
+        }
+
+        @Setup(Level.Invocation)
+        public void fill() {
+            node.clearChanges();
+            node.array.set(nestOrdinal(Nest.name), "outer-changed");
+            leaf.array.set(nestOrdinal(Nest.name), "leaf-changed");
         }
     }
 
@@ -263,25 +377,25 @@ public class EEnumSetTrackingJmhBenchmark{
     @Benchmark
     public int clear64ConcreteTracker(PrefilledTracking64State state) {
         state.concrete.clear();
-        return state.concrete.getChanges64().size();
+        return state.concrete.changesBuilder().size();
     }
 
     @Benchmark
     public int clear64AbstractTracker(PrefilledTracking64State state) {
         state.generic.clear();
-        return state.generic.getChanges().size();
+        return state.generic.changesBuilder().size();
     }
 
     @Benchmark
     public int clear96ConcreteTracker(PrefilledTracking96State state) {
         state.concrete.clear();
-        return state.concrete.getChangesLarge().size();
+        return state.concrete.changesBuilder().size();
     }
 
     @Benchmark
     public int clear96AbstractTracker(PrefilledTracking96State state) {
         state.generic.clear();
-        return state.generic.getChanges().size();
+        return state.generic.changesBuilder().size();
     }
 
     @Benchmark
@@ -306,21 +420,57 @@ public class EEnumSetTrackingJmhBenchmark{
 
     @Benchmark
     public EEnumSet<E64> snapshot64ConcreteTracker(PrefilledTracking64State state) {
-        return state.concrete.changesSnapshot();
+        return state.concrete.changes();
     }
 
     @Benchmark
     public EEnumSet<E64> snapshot64AbstractTracker(PrefilledTracking64State state) {
-        return state.generic.changesSnapshot();
+        return state.generic.changes();
     }
 
     @Benchmark
     public EEnumSet<E96> snapshot96ConcreteTracker(PrefilledTracking96State state) {
-        return state.concrete.changesSnapshot();
+        return state.concrete.changes();
     }
 
     @Benchmark
     public EEnumSet<E96> snapshot96AbstractTracker(PrefilledTracking96State state) {
-        return state.generic.changesSnapshot();
+        return state.generic.changes();
+    }
+
+    // ------------------------------------------------------------------ D4 pull: the cost it accepts
+
+    /**
+     * Pull on a view whose nested child did <strong>not</strong> change. The expectation the plan
+     * states is that this is free: D4 would only be reopened if pull turned out materially worse
+     * here. The benchmark is the measurement, not a verdict — run it with
+     * {@code java -jar target/benchmarks.jar EEnumSetTrackingJmhBenchmark.pullNoNestedChange} and
+     * compare it against the shallow tracking benchmarks above.
+     */
+    @Benchmark
+    public int pullNoNestedChange(PullNoNestedChangeState state) {
+        return state.node.changesDeep().size();
+    }
+
+    /**
+     * Pull on a view with a change two levels down: the walk descends the whole chain. This is the
+     * upper bound of the model's cost, and the number a reader should compare the previous benchmark
+     * against to see what a nested change actually costs.
+     */
+    @Benchmark
+    public int pullDeepNestedChange(PullDeepNestedChangeState state) {
+        return state.node.changesDeep().size();
+    }
+
+    /** The shallow half of the same two states, so the deep axis has a baseline next to it. */
+    @Benchmark
+    public int shallowOnlyNoNestedChange(PullNoNestedChangeState state) {
+        return state.node.array.changes().size();
+    }
+
+    /** The shallow half of the deep state: one bit, however deep the real change is. */
+    @Benchmark
+    public int shallowOnlyDeepNestedChange(PullDeepNestedChangeState state) {
+        return state.node.array.changes().size();
     }
 }

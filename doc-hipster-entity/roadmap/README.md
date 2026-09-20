@@ -11,6 +11,30 @@ This document tracks roadmap progress, current work, and changes in direction fo
 - [ ] Mapper generation from `TypeDescriptor` deep flags
 - [ ] Annotation metadata exposure in generated view enums (FieldAnnotation)
 - [ ] API/core/module responsibility split enforced by generator
+- [x] **R1 ordinal-ledger contract landed** — a generated field enum's constant order is a persisted
+  ordinal layout: constants are appended, never re-inserted, and a removed field is tombstoned
+  (`@Deprecated` + `FieldDef.retired()` → `true`) rather than deleted. Scoped by the
+  `entityFieldEnum:true` marker in DEC-021's header; enforced by `EnumConstantOrderChecker` /
+  `EntityFieldEnumOrderRule` / `EnumConstantOrderCli` in `hipster-entity-tooling`. Recorded as
+  [DEC-023](../architecture/decisions/DEC-023.md) and cross-referenced from the amended
+  [DEC-012](../architecture/decisions/DEC-012.md).
+- [x] **DEC-012 reconciled to Accepted and amended** — both indexes and the record now agree;
+  the stale "Accepted notes" factory signature was corrected to the implemented
+  `create(ForNameOrdinal, F[] universe, Object... values)`, and the record now points at DEC-023.
+- [x] **Generator class-file header + refactor-sensitivity rules landed** — DEC-021
+  (`{@link}` + JSON5 config header, `entityFieldEnum`/`allowReorder`/`enabled` knobs) and DEC-022
+  (naming contract, uniform divergence format) are implemented and documented.
+- [x] **Module READMEs and the new-project guide landed** — `hipster-entity-core/README.md`,
+  `hipster-entity-tooling/README.md` (naming-contract table + R1 order contract),
+  `hipster-entity-test/README.md`, and
+  [user/getting-started-new-project.md](../user/getting-started-new-project.md).
+- [x] **Deep (nested) change tracking landed on the array path** — `changesDeep()` pulls into nested
+  tracked views (`ChangePath`), a `List` of tracked views reports add/remove/reorder as `ListDelta`
+  distinctly from per-index deltas, the leaf is reachable through the array-backed proxy exactly as
+  on the builder path, and Jackson emits the deep result as an RFC 6902-like patch. Recorded as
+  [DEC-024](../architecture/decisions/DEC-024.md) with its procedure in
+  [user/patterns/deep-change-tracking.md](../user/patterns/deep-change-tracking.md). The
+  **generator** wiring (task 6.5) and a patch applier are not part of this delivery.
 
 ## 2. Milestone status
 
@@ -36,16 +60,33 @@ This document tracks roadmap progress, current work, and changes in direction fo
 | `DEC-009` | Source-visible generation strategy         | Proposed        | Needs freeze semantics, patching rules, and sidecar workflow                                |
 | `DEC-010` | Proxy-backed entity/view bridge            | Proposed        | Needs dispatch rules, strict diagnostics defaults, and proxy vs generated benchmarks        |
 | `DEC-011` | Automatic builder interface generation     | Proposed        | Needs canonical builder interface contract and compatibility test kit                       |
-| `DEC-012` | Update-array and change-tracking semantics | Proposed        | Needs touched/dirty/null semantics and merge-mode contract                                  |
+| `DEC-012` | Update-array and change-tracking semantics | Accepted        | Ruled: no-op-on-equal-assignment compared at the write site, explicit-null-sets-the-bit, and **no previous value kept** (`changedValues()` replaces `diff()`; the revision in the record supersedes D2); factory signature amended; R1 fields the append-only enum rule (see DEC-023) |
 | `DEC-013` | Optional per-view impl. selection factory  | Proposed        | Optional module; needs override precedence, fallback policy, and provider ordering contract |
 | `DEC-014` | EnumSet concrete dispatch strategy         | Accepted        | Implemented with JMH benchmarks; strategy is optional for update tracking hot paths        |
 | `DEC-015` | Generated field metadata method lookup     | Accepted        | Switch-only method-name lookup for field enums, verified by JMH sensor benchmarks          |
+| `DEC-019` | Source-visible, IDE-navigable wiring      | Accepted        | Annotations are markers; every connection is materialized as committed, navigable source    |
+| `DEC-020` | Cooperative codegen (preserve user blocks)| Proposed        | Recognise prior output by structural shape, preserve it verbatim; opt back into regen by deleting the block |
+| `DEC-021` | Generator class-file header               | Proposed        | Two `//` header lines above `package`; pinned JSON5 config with `enabled`, `entityFieldEnum`, `allowReorder` |
+| `DEC-022` | Refactor-sensitivity and divergence reporting | Proposed    | Naming contract per generator; uniform `kind, location, cause, current, canonical, action` divergence format |
+| `DEC-023` | R1 — field enums are append-only ordinal ledgers | Proposed | Constant order is a persisted ordinal layout; append-only, tombstone instead of delete; `EnumConstantOrderChecker` CLI gates the build. Cross-referenced from the amended `DEC-012` |
+| `DEC-024` | Deep (nested) change tracking — pull over push | Proposed | `changesDeep()` pulls into nested tracked views without touching the parent's bitset; `ChangePath(field, listIndex, next)`; a `List` of tracked views reports add/remove/reorder as `ListDelta` distinctly from per-index deltas, identity (DEC-017) required for reorder detection and a diagnostic + fallback without it; deep JSON patch is RFC 6902-like and builds no name→ordinal map (DEC-016). Procedure in `user/patterns/deep-change-tracking.md` |
+| `DEC-025` | Field-enum compaction is a deliberate, acknowledged ordinal migration | Proposed | The only operation that may shorten a ledger, reachable only via `enum-compact`; needs both `--allow-reorder` and `--acknowledge-drained-data`, drops only recognisable tombstones, and prints every moved ordinal as the migration record |
 
 ## 4. Direction change log
 jdk1.8.0_231/jre/bin/keytool -import -trustcacerts -alias myserver -file /opt/server.crt -keystore jdk1.8.0_231/jre/lib/security/cacerts
 
 - `2026-03-30`: moved docs into `doc/brainstorm`, `doc/architecture`, `doc/roadmap`.
 - `2026-03-30`: added projection/JSON streaming path section to brainstorm.
+- `2026-09-20`: `DEC-012` reconciled to **Accepted** in the record and in both indexes; its stale
+  "Accepted notes" factory signature corrected; the R1 append-only field-enum rule recorded as the
+  standalone **`DEC-023`** and cross-referenced from `DEC-012`.
+- `2026-09-20`: the deliberate ordinal migration recorded as the standalone **`DEC-025`** — R1's
+  escape valve for reclaiming retired ordinals — with its procedure in
+  `user/patterns/field-enum-compaction.md`, and implemented as the `enum-compact` subcommand.
+- `2026-09-20`: nested/deep change tracking recorded as the standalone **`DEC-024`** — pull
+  propagation, `ChangePath`, the collection add/remove/reorder semantics and their identity
+  requirement, and the deep JSON patch — with its procedure in
+  `user/patterns/deep-change-tracking.md`.
 
 ## 4.1 Array-backed view proxy implementation plan
 

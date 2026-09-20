@@ -35,7 +35,8 @@ public class EntityRulesValidator {
                 new MarkerEntityRule(),
                 new ViewInterfaceRule(),
                 new ViewAnnotationRule(),
-                new AuditableRule()
+                new AuditableRule(),
+                new EntityFieldEnumOrderRule()
         );
     }
 
@@ -47,7 +48,7 @@ public class EntityRulesValidator {
                 .forEach(file -> {
                     try {
                         String source = Files.readString(file);
-                        ParseResult<CompilationUnit> parse = new JavaParser().parse(source);
+                        ParseResult<CompilationUnit> parse = hr.hrg.hipster.entity.tooling.SourceReader.parser().parse(source);
                         CompilationUnit cu = parse.getResult().orElse(null);
                         if (cu == null) {
                             issues.add(new ValidationIssue(file, "Could not parse Java source"));

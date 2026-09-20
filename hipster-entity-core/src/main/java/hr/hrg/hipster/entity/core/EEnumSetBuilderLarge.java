@@ -10,19 +10,33 @@ public class EEnumSetBuilderLarge<E extends Enum<E>> implements EEnumSetBuilder<
     private final long[] bits;
     private int size;
 
-    public EEnumSetBuilderLarge(Class<E> enumClass) {
-        this.enumClass = enumClass;
-        this.universe = (E[]) enumClass.getEnumConstants();
+    /**
+     * Primary constructor; see {@link EEnumSetBuilder64#EEnumSetBuilder64(Enum[])} for why the
+     * universe array is what reaches the builder and the enum class is derived from it.
+     */
+    public EEnumSetBuilderLarge(E[] universe) {
+        if (universe == null) {
+            throw new IllegalArgumentException("EEnumSetBuilderLarge requires a field universe, not null");
+        }
+        this.universe = universe;
+        this.enumClass = (Class<E>) universe.getClass().getComponentType();
         this.bits = new long[(universe.length + 63) / 64];
     }
 
-    public EEnumSetBuilderLarge(Class<E> enumClass, long[] sourceBits, int size) {
-        this.enumClass = enumClass;
-        this.universe = (E[]) enumClass.getEnumConstants();
-        this.bits = new long[(universe.length + 63) / 64];
+    /** Kept for existing callers: an explicit enum class is equivalent to its constant array. */
+    public EEnumSetBuilderLarge(Class<E> enumClass) {
+        this((E[]) enumClass.getEnumConstants());
+    }
+
+    public EEnumSetBuilderLarge(E[] universe, long[] sourceBits, int size) {
+        this(universe);
         int limit = Math.min(this.bits.length, sourceBits.length);
         for (int i = 0; i < limit; i++) this.bits[i] = sourceBits[i];
         this.size = size;
+    }
+
+    public EEnumSetBuilderLarge(Class<E> enumClass, long[] sourceBits, int size) {
+        this((E[]) enumClass.getEnumConstants(), sourceBits, size);
     }
 
     @Override
@@ -337,17 +351,14 @@ public class EEnumSetBuilderLarge<E extends Enum<E>> implements EEnumSetBuilder<
         return new EEnumSetLarge<>(enumClass, bits, size);
     }
 
+    /** See {@link EEnumSetBuilder64.Strict} for why this variant exists and is not used here. */
     public static class Strict<E extends Enum<E>> extends EEnumSetBuilderLarge<E>   {
-        public Strict(Class<E> enumClass) {
-            super(enumClass);
+        public Strict(E[] universe) {
+            super(universe);
         }
 
-        @Override
-        public boolean addOrdinalChange(int ordinal, Object OldValue, Object NewValue) {
-            if (Objects.equals(OldValue, NewValue)) {
-                return false;
-            }
-            return super.addOrdinalChange(ordinal, OldValue, NewValue);
+        public Strict(Class<E> enumClass) {
+            super(enumClass);
         }
     }
 

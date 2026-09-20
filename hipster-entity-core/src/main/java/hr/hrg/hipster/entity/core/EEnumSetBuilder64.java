@@ -10,22 +10,38 @@ public class EEnumSetBuilder64<E extends Enum<E>> implements EEnumSetBuilder<E> 
     private long bits0;
     private int size;
 
-    public EEnumSetBuilder64(Class<E> enumClass) {
-        this.enumClass = enumClass;
-        this.universe = (E[]) enumClass.getEnumConstants();
+    /**
+     * Primary constructor. The enum universe is the parameter that reaches the builder, so
+     * {@link #getEnumClass()} is never {@code null} on a constructed builder — the defect
+     * plan.dsflash § 2.4 records is exactly that the tracking array used to pass {@code null}
+     * here. The enum class is derived from the array rather than being a second parameter
+     * (plan.dsflash § 6.2/1.5) because {@code E[]} and {@code Class<E>} are redundant and
+     * necessarily agree.
+     */
+    public EEnumSetBuilder64(E[] universe) {
+        if (universe == null) {
+            throw new IllegalArgumentException("EEnumSetBuilder64 requires a field universe, not null");
+        }
         if (universe.length > 64) {
             throw new IllegalArgumentException("EEnumSetBuilder64 requires enum with at most 64 values, got " + universe.length);
         }
+        this.universe = universe;
+        this.enumClass = (Class<E>) universe.getClass().getComponentType();
+    }
+
+    /** Kept for existing callers: an explicit enum class is equivalent to its constant array. */
+    public EEnumSetBuilder64(Class<E> enumClass) {
+        this((E[]) enumClass.getEnumConstants());
+    }
+
+    public EEnumSetBuilder64(E[] universe, long bits0, int size) {
+        this(universe);
+        this.bits0 = bits0;
+        this.size = size;
     }
 
     public EEnumSetBuilder64(Class<E> enumClass, long bits0, int size) {
-        this.enumClass = enumClass;
-        this.universe = (E[]) enumClass.getEnumConstants();
-        if (universe.length > 64) {
-            throw new IllegalArgumentException("EEnumSetBuilder64 requires enum with at most 64 values, got " + universe.length);
-        }
-        this.bits0 = bits0;
-        this.size = size;
+        this((E[]) enumClass.getEnumConstants(), bits0, size);
     }
 
     @Override
@@ -304,17 +320,20 @@ public class EEnumSetBuilder64<E extends Enum<E>> implements EEnumSetBuilder<E> 
         return new EEnumSet64<>(enumClass, bits0, size);
     }
 
+    /**
+     * Belt-and-braces variant kept as a user-facing extension point: the DEC-012 no-op rule is
+     * enforced at the write site (compare, then {@code addOrdinal}), and this subclass is the place
+     * a caller can substitute its own set behaviour without touching the generated writers. Nothing
+     * in this repository instantiates it — the hand-written example's {@code TrackingStrict} does
+     * not (plan.dsflash G3, § 4.5).
+     */
     public static class Strict<E extends Enum<E>> extends EEnumSetBuilder64<E>   {
-        public Strict(Class<E> enumClass) {
-            super(enumClass);
+        public Strict(E[] universe) {
+            super(universe);
         }
 
-        @Override
-        public boolean addOrdinalChange(int ordinal, Object OldValue, Object NewValue) {
-            if (Objects.equals(OldValue, NewValue)) {
-                return false;
-            }
-            return super.addOrdinalChange(ordinal, OldValue, NewValue);
+        public Strict(Class<E> enumClass) {
+            super(enumClass);
         }
     }
 }

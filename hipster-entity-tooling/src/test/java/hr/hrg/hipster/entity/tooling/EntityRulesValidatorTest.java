@@ -37,8 +37,8 @@ public class EntityRulesValidatorTest {
                 "public interface PersonEntity extends EntityBase<String> {}\n";
         String viewContent = "package hr.hrg.hipster.entity.person;\n" +
                 "import hr.hrg.hipster.entity.api.View;\n" +
-                "import hr.hrg.hipster.entity.api.BooleanOption;\n" +
-                "@View(read = BooleanOption.TRUE, write = BooleanOption.FALSE)\n" +
+                "import hr.hrg.hipster.entity.api.GenLevel;\n" +
+                "@View(gen = GenLevel.META)\n" +
                 "public interface PersonSummary extends PersonEntity { String firstName(); }\n";
 
         Files.writeString(entityFile, entityContent);
@@ -87,8 +87,14 @@ public class EntityRulesValidatorTest {
         Assertions.assertTrue(issues.stream().anyMatch(i -> i.message.contains("name should follow EntitySummary/EntityDetails/EntityUpdate")));
     }
 
+    /**
+     * Replaces {@code shouldRejectViewAnnotationMissingReadWrite}, which asserted the opposite of
+     * the truth: it required the validator to reject a bare {@code @View}, i.e. every valid view.
+     * The real attribute contract is {@code gen}/{@code discriminatorField}/{@code addons},
+     * covered exhaustively by {@code ViewAnnotationRuleTest} and {@code ViewAnnotationReaderTest}.
+     */
     @Test
-    public void shouldRejectViewAnnotationMissingReadWrite() throws Exception {
+    public void shouldAcceptBareViewAnnotation() throws Exception {
         Path tempDir = Files.createTempDirectory("entity-view-annotation");
         Path file = tempDir.resolve("PersonSummary.java");
         String content = "package hr.hrg.hipster.entity.person;\n" +
@@ -100,7 +106,7 @@ public class EntityRulesValidatorTest {
         EntityRulesValidator validator = new EntityRulesValidator();
         List<EntityRulesValidator.ValidationIssue> issues = validator.validate(tempDir);
 
-        Assertions.assertFalse(issues.isEmpty());
-        Assertions.assertTrue(issues.stream().anyMatch(i -> i.message.contains("@View must declare read and/or write modes")));
+        Assertions.assertTrue(issues.isEmpty(),
+                "a bare @View is a valid view declaration; got " + issues);
     }
 }

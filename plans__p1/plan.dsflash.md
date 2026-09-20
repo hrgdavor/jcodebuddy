@@ -307,7 +307,7 @@ Nothing else is deferred to a mid-flight choice.
 | # | Question | Final rule |
 |---|---|---|
 | D1 | `changes()` mutable or immutable? | **S5** (§ 4.1). Both, under names that state the variant: `changes()` = immutable snapshot, `changesBuilder()` = live mutable builder. One shared state. No aliases. |
-| D2 | Must `previousValue(ord)` exist? | **Yes** (§ 4.2). New `ChangeRecorder` in `hipster-entity-core`, where the contract already lives (S3 deferred). Previous values are **shallow references** — documented and pinned by test. |
+| D2 | Must `previousValue(ord)` exist? | **~~Yes~~ SUPERSEDED — NO.** The plan's original answer ("**Yes** (§ 4.2), new `ChangeRecorder` … previous values are **shallow references**") was reversed by direct instruction after Phase 7: a tracking view must not hold old values and no previous-value API may exist. The comparison is the caller's, over the baseline instance it still holds. See `doc-hipster-entity/architecture/decisions/DEC-012.md` § "Revision — no previous value is kept (supersedes D2)" and `plan.dsflash.notes.md` D-16. Everything else in § 4.2 — the no-op rule, the bitmask, explicit null — is unchanged. |
 | D3 | Single level, or recursion into nested views? | **Both, sequenced** (§ 4.2). Single-level tracking lands in Phases 1–3; nested/deep tracking is **in scope as Phase 6** (§ 11), gated by its own DEC (task 6.1) — the DEC gates the implementation, not the release. |
 | D4 | Push or pull for nested propagation? | **Pull** (`changesDeep()` walks children) (§ 4.2). **Implemented in Phase 6** (§ 11); no impact on Phases 1–3. |
 | D5 | `set(String,Object)` on an unknown field: `-1` or throw? | **Keep the split** (§ 4.2): array and generated builder return `-1`, proxy throws `IllegalArgumentException`. Documented in the user guide. |
@@ -513,6 +513,13 @@ that returns a *copy* from `changesBuilder()` would pass steps 1–2 and fail st
 These are **decided**, not proposed. Each item states the final rule and the edits it implies.
 
 **D2 — Previous values: YES, via `ChangeRecorder`, shallow semantics.**
+**SUPERSEDED — the final rule is NO.** A tracking view must not hold old values and no
+previous-value API may exist; a mutable is built from another mutable or an immutable, the caller owns
+both sides, and a consumer that wants an old -> new comparison is handed both and compares them. The
+text below is kept as the historical record of what was implemented and then removed. The binding
+record is `doc-hipster-entity/architecture/decisions/DEC-012.md` § "Revision — no previous value is
+kept (supersedes D2)" and `plan.dsflash.notes.md` D-16; `ChangeRecorder` no longer exists, `diff()` is
+`changedValues()`, and `FieldChange` carries `(field, current)`.
 
 - **Rule:** `ViewChangeTracking` gains `previousValue(int)`, `hasPreviousValue(int)`, and
   `default List<FieldChange<E>> diff()`, backed by a new `ChangeRecorder` in
@@ -2221,6 +2228,10 @@ assertion, § 8.6/3.15) and the **generator half of § 6.4 test 25** (the tombst
 - [ ] **4.2** Replace the empty `PersonController` with a real `PersonDemo.main` (no
   framework): row array → read proxy → JSON → tracking patch → printed diff → the
   parameterised `UPDATE` it would send.
+  **Re-scoped by D-17:** the last leg is out — the demo builds no SQL. SQL generation is the draft
+  exploration of § 12.1 (opt-in `--adapters`) and the example does not enable it, so the demo ends
+  with the change set and the *changed columns* a partial write would touch
+  (`plan.dsflash.notes.md` D-17). Everything before that leg is unchanged.
 - [ ] **4.3** Drive `paymentMethod/PaymentMethodController` from generated code using the
   polymorphic `PaymentMethod_` / `CreditCardPaymentMethod_` enums — `discriminatorField` support
   already exists in `FieldBoilerplateGenerator` but is exercised **only** by the tooling's own
@@ -2394,6 +2405,16 @@ None blocks any earlier phase, and none depends on another, so they can be reord
 parallelized freely. All generated code obeys **G5** (§ 4.5).
 
 ### 12.1 SQL / JDBC adapter generation (kilo P-3)
+
+**STATUS: DRAFT / EXPLORATION, AND STRICTLY OPT-IN — re-scoped by direct instruction after Phase 7.**
+The generator exists and its tests pass, but it is not a supported generator: it runs only under the
+tooling's `--adapters` flag, the default pass emits none of it, the example project does not enable it
+(its 24 generated `*RowAdapter`/`*Binder` classes were removed), and no committed project depends on
+the emitted shape. **Any future SQL support must keep that shape — an explicit request, never a
+default.** The binding record is `plan.dsflash.notes.md` D-17 and `hipster-entity-tooling/README.md`;
+`plans_dsflash`-style guidance for the *hand-written* adapter stays valid in
+`doc-hipster-entity/user/patterns/jdbc-row-adapter.md`. The tasks below are kept as the historical
+specification of what the draft implements.
 
 - [ ] **7.1** Generated positional reader per view: `Object[] fromResultSet(ResultSet, ViewMeta)`
   driven by `meta.fieldTypeAt(i)` and `meta.fieldNameAt(i)` — **no reflection**, no `SELECT *`

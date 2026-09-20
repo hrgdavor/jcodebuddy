@@ -25,7 +25,86 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>hipster-entity-api</artifactId>
         </dependency>
+        <!-- The runnable PersonDemo (plan.dsflash § 9/4.2) shows the JSON side end to end, so the
+             example takes the Jackson module. It is a real dependency of the demo, not of any
+             library module: no library POM gains a Jackson entry from this. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>hipster-entity-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- Build-time only: the entity generator runs during `generate-sources` (plan.dsflash
+             § 8.8/3.23, § 4.5/G4). It is `provided` because nothing in the example's runtime or
+             tests needs the tooling, and the tooling must never become a runtime dependency of an
+             application — see AGENTS.md §2. It brings the pinned JavaParser and Jackson artifacts
+             along for the exec:java classpath. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>hipster-entity-tooling</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- The generator's entry point is invoked through exec-maven-plugin with its ordinary
+                 CLI flags — not -D system properties — so a Maven build and a manual run share one
+                 flag surface (§ 8.8/3.23). Generated .java is regenerated IN PLACE under
+                 src/main/java (the committed source is the source of truth, AGENTS.md §1), while the
+                 metadata JSON report goes to target/ so a build never adds untracked files to a
+                 source tree. `skip` defaults to false; set -Djcodebuddy.entity.codegen.skip=true to
+                 bypass generation.
+
+                 This is deliberately NOT a new hipster-entity-maven-plugin module (§ 8.8/3.23). -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>hipster-entity-generate</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${jcodebuddy.entity.codegen.skip}</skip>
+                            <mainClass>hr.hrg.hipster.entity.tooling.EntityMetadataGenerator</mainClass>
+                            <!-- exec:java's default classpath scope is RUNTIME, which excludes
+                                 `provided` dependencies — and the tooling must stay `provided` so it
+                                 never becomes a transitive runtime dependency of an application
+                                 (AGENTS.md §2). Compile scope is what puts the generator and its
+                                 JavaParser/Jackson classpath in front of exec:java. -->
+                            <classpathScope>compile</classpathScope>
+                            <arguments>
+                                <argument>${project.basedir}/src/main/java</argument>
+                                <argument>${project.basedir}/target/entity-metadata</argument>
+                                <argument>--java-out</argument>
+                                <argument>${project.basedir}/src/main/java</argument>
+                                <argument>--packages</argument>
+                                <argument>hr.hrg.hipster.entityexample.person.entity,hr.hrg.hipster.entityexample.paymentMethod.entity</argument>
+                                <!-- NO SQL-generation flag here, deliberately. SQL generation (the
+                                     generated `<View>RowAdapter` / `<View>Binder` pair) is a
+                                     draft/exploration in the tooling and is strictly OPT-IN: it runs
+                                     only when a project asks for it with the tooling's adapter flag,
+                                     and this example does not. The same rule applies to whatever SQL
+                                     support comes later: it may never be part of the default pass.
+                                     See hipster-entity-tooling/README.md and
+                                     doc-hipster-entity/user/patterns/jdbc-row-adapter.md. -->
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <properties>
+        <jcodebuddy.entity.codegen.skip>false</jcodebuddy.entity.codegen.skip>
+    </properties>
 
     <profiles>
         <profile>

@@ -43,4 +43,74 @@ public interface FieldDef {
      * @return the field ordinal; never negative
      */
     int ordinal();
+
+    // ------------------------------------------------------------------
+    // @FieldSource-derived accessors (DEC-019 / plan.dsflash X2).
+    //
+    // Every method below has a default that reproduces the behaviour of a field
+    // with no @FieldSource annotation, so every existing hand-written and generated
+    // enum keeps compiling unchanged. A generated enum overrides a method here only
+    // when the source accessor actually carries @FieldSource.
+    // ------------------------------------------------------------------
+
+    /**
+     * Classification of this field's data origin, which is what decides writability
+     * (plan.dsflash S1: only {@link FieldKind#COLUMN} fields get setters).
+     * <p>
+     * An unannotated field is {@code COLUMN}, i.e. writable — the behaviour that
+     * predates this accessor.
+     */
+    default FieldKind fieldKind() {
+        return FieldKind.COLUMN;
+    }
+
+    /**
+     * The database column name for this field, or {@code null} when the field is not a column.
+     * <p>
+     * The annotation's own {@code column()} is a label that "defaults to the method name when
+     * empty"; that resolution lives here so generated adapters never re-implement it: an
+     * implementation that carries {@code @FieldSource(column = "x")} returns {@code "x"}, one
+     * that carries {@code @FieldSource} with an empty column returns the field name, and a
+     * field with no annotation (or a non-COLUMN field) returns {@code null}.
+     *
+     * @return the SQL column name, or {@code null} when this field has none
+     */
+    default String column() {
+        return null;
+    }
+
+    /**
+     * Relation path for a {@link FieldKind#JOINED} field (e.g. {@code "department.name"}).
+     *
+     * @return the relation path, or {@code null} when this field is not a joined field
+     */
+    default String relation() {
+        return null;
+    }
+
+    /**
+     * Expression or description for a {@link FieldKind#DERIVED} field (e.g. a SQL fragment).
+     *
+     * @return the expression, or {@code null} when this field is not a derived field
+     */
+    default String expression() {
+        return null;
+    }
+
+    /**
+     * Whether this constant is a <em>retired</em> field — an R1.4 tombstone kept only to
+     * preserve ordinals after its accessor disappeared from the view.
+     * <p>
+     * This is the write-side gate that {@link #fieldKind()} cannot express: a tombstone has
+     * no accessor left to carry {@code @FieldSource} and therefore defaults to
+     * {@code COLUMN}, so without this flag a retired column would silently reappear in
+     * generated SQL. Every generated writer skips a retired field; readers stay tolerant,
+     * because the ordinal slot still exists and may hold either {@code null} (a row that no
+     * longer carries the column) or a value (a row that still does).
+     *
+     * @return {@code true} only on an R1.4 tombstone constant
+     */
+    default boolean retired() {
+        return false;
+    }
 }

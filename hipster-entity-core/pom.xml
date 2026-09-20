@@ -81,6 +81,26 @@
             <build>
                 <plugins>
                     <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <!-- JDK 23 and later do NOT run annotation processors discovered on the
+                                 classpath unless processing is requested explicitly, so `-proc:full`
+                                 is what makes `jmh-generator-annprocess` generate the harness at all.
+                                 Without it the benchmark sources compile, the build stays green, and
+                                 the `*_jmhTest` classes silently do not exist — which is how task 6.9
+                                 was reported "compiles and registered" while no benchmark could
+                                 actually be run.
+
+                                 Scoped to this profile on purpose: the JDK default is the right
+                                 default for every other module, and a processor-free compile is
+                                 faster. -->
+                            <compilerArgs>
+                                <arg>-proc:full</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                    <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>${exec.maven.plugin.version}</version>

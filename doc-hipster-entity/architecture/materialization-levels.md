@@ -1,34 +1,89 @@
 # Materialization levels for hipster-entity views
 
-> Remember: this project does not use get/set java beans notation for a POJO or an Entity, but goes with  Java Record where field name ang getter are same, and setter is also same name but with single parameter and void return.
+> Remember: this project does not use get/set java beans notation for a
+> POJO or an Entity, but goes with Java Record where field name and
+> getter are the same, and the setter is also the same name but with a
+> single parameter and void return.
 
+A view's materialization is chosen by the `gen` attribute of `@View`.
+The value is one of the constants of
+`hr.hrg.hipster.entity.api.GenLevel`, and the ladder is **cumulative**:
+a higher level also emits everything the lower levels emit.
 
+## The ladder
 
-| Usage                         | Interface | record | builder | builder-tracking | meta      |
-| ----------------------------- | --------- | ------ | ------- | ---------------- | --------- |
-| RPC param                     |           | record |         |                  | ?metadata |
-| complex method param          |           |        | builder |                  |           |
-| entity                        | interface | record |         | builder-tracking | metadata  |
-| POJO inside entity (doc part) | interface | record |         | builder-tracking | metadata  |
-| EntityDTO                     | interface |        |         |                  | ?metadata |
-| EntityForm                    | interface |        |         |                  | ?metadata |
+| `GenLevel` | Emits | Cumulative effect |
+|---|---|---|
+| `DEFAULT` | nothing on its own | resolved to `META`, `RECORD` or `BUILDER` by the view's shape (below) |
+| `META` | the field enum `<View>_` implementing `FieldDef` + a `ViewMeta` | the entry point; read-only through interface accessors |
+| `RECORD` | a record implementing the view | `META` + the immutable concrete materialization |
+| `WRITABLE` | a nested `Write` interface extending the view and `ViewWriter` | `META` + `RECORD` + a writable contract for proxy/builder-backed writes |
+| `BUILDER` | `<View>Builder` | everything above + a concrete mutable builder with typed setters and `build()` |
+| `BUILDER_TRACKED` | `<View>BuilderTracking` | everything above + field-level change tracking |
+| `BUILDER_ALL` | both `<View>Builder` **and** `<View>BuilderTracking` | everything above; no tracking is traded away |
 
-> ?metadata - is optional if codebase does not need the metadata in runtime. If serialization/deserialization is delegated to a framework that uses reflection anyway, or if it is materialized into source, then you do not need metadata for runtime.
+The order of the enum constants is exactly
+`DEFAULT < META < RECORD < WRITABLE < BUILDER < BUILDER_TRACKED < BUILDER_ALL`.
 
-## MINIMAL
+Because the ladder is cumulative, the two top levels differ only in
+*how many* builders you get:
 
-As soon as the `@View` annotation is added, an enum is created with fields and a `ViewMeta` instance.
-For a `Person` view, that yields a generated metadata enum such as `Person_`.
+- `BUILDER_TRACKED` emits the **tracking** builder **and the plain
+  builder** — the plain one is not dropped, because a tracked view that
+  needs a bulk construction path must not lose it.
+- `BUILDER_ALL` emits **both** as well; it is the explicit way to say
+  "I want the choice", and it is what the example's `PersonSummary`
+  declares (`@View(gen = GenLevel.BUILDER_ALL)`).
 
-Level 0 can be jumpstarted from either a plain interface or a record:
+An implementer must not "optimize" `BUILDER_TRACKED` by skipping the
+untracked builder: the ladder is asserted by
+`AllLevelsCompileTest.theLadderIsCumulative`.
+
+## `DEFAULT` resolves from the view's shape
+
+`DEFAULT` is not `META` by definition — it is resolved by
+`GenLevelResolver` in `hipster-entity-tooling`, which is the **single
+owner** of the rule and is called by both the validator and the
+generator, so validation and generation cannot disagree. In strict
+precedence order:
+
+1. If the view declares a **nested `record`** whose component list
+   matches the view's resolved field order → `RECORD`.
+2. Else if the view declares a **nested `Write` interface** →
+   `BUILDER`.
+3. Else → `META`.
+
+`DEFAULT` never resolves to `BUILDER_TRACKED` or `BUILDER_ALL`: a view
+that wants tracking must say so, because tracking changes the public
+surface (`changes()` / `changesBuilder()`).
+
+## `META` — field enum and `ViewMeta`
+
+As soon as a type is a view, an enum is generated with one constant per
+field, plus a `ViewMeta` instance. For a `Person` view that yields a
+generated metadata enum such as `Person_`.
+
+A view can be declared as an interface or as a record:
+
 - start with `interface` only → metadata is generated for the interface view
 - start with `record` only → metadata is generated for the record view
 
-Both paths can converge at Level 1 (`RECORD`), where the interface becomes the stable contract and the record provides the concrete materialization. The record is **recommended** — it is immutable and safe for sharing — but it is **not required** when starting from an interface.
+Both paths converge at `RECORD`, where the interface becomes the stable
+contract and the record provides the concrete materialization. The record
+is **recommended** — it is immutable and safe for sharing — but it is
+**not required** when starting from an interface.
 
-If you start from a record, this migration can often happen in place because the generated interface method names follow the same naming pattern as the original record components.
+If you start from a record, this migration can often happen in place
+because the generated interface method names follow the same naming
+pattern as the original record components.
 
-When starting from an interface only, you may stop at the interface (or a generated builder) without ever materializing a record. This is valid whenever the view is used transiently — for example, to shape complex parameters for a method call that will likely be caught by escape analysis and inlined. In such cases a builder (see the `BUILDER` boilerplate level) is sufficient, and forcing a record adds unnecessary allocation and coupling.
+When starting from an interface only, you may stop at the interface (or
+a generated builder) without ever materializing a record. This is valid
+whenever the view is used transiently — for example, to shape complex
+parameters for a method call that will likely be caught by escape
+analysis and inlined. In such cases a builder (level `BUILDER`) is
+sufficient, and forcing a record adds unnecessary allocation and
+coupling.
 
 <!-- INCLUDE:~iface/Person.java#DOCS -->
 ```java
@@ -39,7 +94,7 @@ interface Person{
 }
 ```
 
-Start point V2 (record) 
+Start point V2 (record)
 
 <!-- INCLUDE:~record/Person.java#DOCS -->
 ```java
@@ -50,7 +105,7 @@ record Person(
 //and this is
 ```
 
-same meta class is added in both cases
+The same metadata enum is produced in both cases:
 
 ```java
 enum Person_ implements FieldDef{
@@ -58,25 +113,27 @@ enum Person_ implements FieldDef{
     email(String.class),
     ;
     
-    private final Type propertyType;
-    private PersonSummary_(Type propertyType) {
-        this.propertyType = propertyType;
+    private final Type javaType;
+    private Person_(Type javaType) {
+        this.javaType = javaType;
     }
     @Override
     public Type javaType() {
-        return propertyType;
+        return javaType;
     }
 }
 ```
 
-This generated metadata enum intentionally breaks standard naming conventions to ensure each member’s name and case exactly match the entity's field names.
+This generated metadata enum intentionally breaks standard naming
+conventions so that each constant's name and case exactly match the
+entity's field names. The constant name **is** the field name — see the
+naming contract in
+[`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md).
 
+## `RECORD` — interface + record
 
-## RECORD
-
-When a record is present, the setup is the same regardless of whether you started from a `record` or an `interface + record`. The interface defines the contract, and the record gives performant immutable materialization for using the data.
-
-A record is **recommended** — it is immutable and safe for sharing — but it is **not mandatory**. Starting from an interface alone is a supported path: the interface is the contract, and you may stop there, or progress to a generated `BUILDER` instead of a record. This is appropriate for transient, short-lived views (e.g. shaping complex parameters for a method call that escape analysis may inline), where a builder is sufficient and forcing a record would only add allocation overhead. 
+The interface defines the contract, and the record gives performant
+immutable materialization for using the data.
 
 ```java
 interface Person{
@@ -87,284 +144,142 @@ interface Person{
         String name, 
         String email){}
 }
-
 ```
 
-Bolerplate gen levels that define what boilerplate is added (and can be reliably recreated if needed).
-Each generation level is cumulative: higher levels also include the capabilities of all lower levels.
+The generated `ViewMeta.create(Object[])` builds that record
+positionally, so the record's component order must match the field
+enum's declared order. That order is a persisted contract: see
+[R1 — field enums are append-only ordinal ledgers](#r1--field-enums-are-append-only-ordinal-ledgers).
 
-- META - required enum `Person_` is generated as soon as you opt-in to using hipster-entity by addng `@View` annotation
-- RECORD - record + interface
-- WRITABLE - generates write interface inside View interface (enough to support write with proxy)
-- BUILDER - generates `PersonBuilder`
-- BUILDER_TRACKED - generate `PersonBuilderTracking`
-- BUILDER_ALL - generates `PersonBuilder`, `PersonBuilderTracking`
+## `WRITABLE` — the `Write` interface
 
-
-Deserializing/reading (return value true/false if field exists, or enum: NO_CHNAGE, CHANGE, NOT_FOUND)
-
-- JSON  - set(String, Object)
-- JDBC  - set(int, Object)
-- MONGO - set(String, Object)
-- Proxy - set(String, Object) - **!! questionable** use, when we can go step further and generate impl of interface
-- BIN   - set(int, Object) - binary format for Fory, or MQ, requires adding enums to back validation
-
-User facing API may not need set(F extends Enum<F>, Object) as it is better to generate methods (implement Entity interface)
-
-
-In case of git conflicts, just merge using yours/their and rebuild boilerplate, not worying about resolving.
-
-Read is added automatically
-- record - the record is used itself that can be later moved in-place to inner type of Interface with same signature
-- interface - without record for DTOs and Forms
-- interface + record
-
-sketch
-
-- L0 - record (readable)
-- L1 - interface - transient only using interface for shaping
-  - EntityForm - reads into tracking array backed proxy, to copy data to Entity, allowing mapping non direct proeprties
-  - EntityDTO - read from database into array backed proxy, allowing augmentation and derived data directly inquery
-- L2 - materialized backing store implementing updatable so no proxy needed
-  - EntityForm - same as L1
-  - EntityDTO - same as L1
-- L3 - materialized as record
-- L4 - materilaized builder
-
-
-
-Transient view 
-At T1 starts with Entity_ field enum and ViewMeta
-
-- T1 interface only - for EntityForm, EntityDTO that only define shape
-- T2 interface only - update interface -  for EntityForm, EntityDTO that only define shape and can make user defined addon
-
-Document view (inside document, not top level entity)
-At D0 starts with Entity_ field enum and ViewMeta
-
-- D0 record `@View`
-- D1 interface + inner record `@View`
-- D2 - read/write
-
-Entity view (Uses Identifiable)
-
-- E1 - read
-- E2 - read/write `@View` with `write != MINIMAL`
-
-
-
-matrix
-- **read metadata boilerplate** - starting minimum when `@View`
-- interface 
-- record + `@View` OR inerface + record + `@View(read=RECORD)` 
-- **write interface boilerplate** 
-- (interface, inerface + record) + `@View(write=PROXY)`
-- updateable - materialization L1 (no need for proxy) `@View(write=UPDATEABLE)`
-- Builder - materialization L2 (concrete builder impl, includes updateable, fastest) `@View(write=BUILDER)`
-
-
-
-
-
-This document defines a graded strategy for view materialization, from metadata-only through concrete implementations and generated paths.
-
-## Background
-
-`hipster-entity` is interface-first. View contracts are declared as interfaces (e.g., `Person`, `OrderDetails`) and can be materialized in different ways:
-- Metadata-only with enums and `ViewMeta`
-- Immutable record/DTO snapshot
-- Mutable `ViewWriter` object
-- Array-backed proxy
-- Generated concrete implementation
-
-The following levels are designed to provide a clear progression for use cases.
-
-## Level 0: Record-structured baseline (no interface)
-
-- Start with a simple record/POJO as the domain object (e.g., `Person`).
-- The record name is the intended root contract name, before interface extraction.
-- No multiple view variants yet; this is the minimal implementation form.
-- Example:
+A view at `WRITABLE` gains a nested `Write` interface extending the view
+and `ViewWriter`. This is enough to support writes through the
+array-backed proxy:
 
 ```java
-public record Person(
-    Long id,
-    String firstName,
-    String lastName,
-    Integer age,
-    String departmentName,
-    Map<String, List<Long>> metadata
-) {}
-```
-
-- This is the most lightweight path and serves as a direct data holder for non-view-heavy use cases.
-
-## Level 1: Interface extraction from record (single view)
-
-- Replace the record's type with an interface (e.g., `Person`).
-- Keep the prior record implementation as `Person.Record` inner class.
-- Example:
-
-```java
-public interface Person implements EntityBase<Long>, Identifiable<Long>{
-    Long id();
-    String firstName();
-    String lastName();
-    Integer age();
-    String departmentName();
-    Map<String, List<Long>> metadata();
-
-    // boilerplate maintained inner class, tools add to it if interface changes
-    public record Record(
-        Long id,
-        String firstName,
-        String lastName,
-        Integer age,
-        String departmentName,
-        Map<String, List<Long>> metadata
-    ) implements Person {}
-}
-
-// can be without id
-public interface Person implements EntityBase<Void>{
-    String firstName();
-    // ...
+public interface Write extends Person, ViewWriter {
+    Write name(String value);
+    Write email(String value);
 }
 ```
 
-- `PersonField` boilerplate generated by the tooling, and also contains `ViewMeta` inside 
-- For read-oriented snapshots and simple schema-based serialization
-- No `ViewWriter` semantics
+Only `FieldKind.COLUMN` fields are writable (S1): a `DERIVED` or
+`JOINED` field stays readable and keeps its ordinal, but gets no setter.
 
-## Level 2: Explicit updatable materialization (`ViewWriter` path)
+## `BUILDER` — a concrete builder
 
-- Explicit class implementing `ViewWriter` + view interface
+`BUILDER` emits `<View>Builder`: private mutable fields for every field,
+copying `get(int)` / `set(int,Object)` / `set(String,Object)` accessors,
+typed fluent setters for the writable fields only, and `build()`
+returning the materialization. The name-based `set(String, Object)`
+returns the ordinal it wrote, or `-1` for an unknown name; the
+user-facing proxy is the layer that turns `-1` into an exception (D5).
 
-```java
-public static class Person.Update implements Person, ViewWriter<Long, Person, PersonField> {
-    // fields, getters, set(field,value), etc.
-}
-```
+## `BUILDER_TRACKED` — the tracking builder
 
-- Proxy-free, direct field storage and method dispatch
-- Clear semantics for mutable/patch workflows
+`BUILDER_TRACKED` emits `<View>BuilderTracking` (and, per the cumulative
+rule, the plain builder too). It implements
+`ViewChangeTracking<<View>_, EEnumSet<<View>_>>`:
 
-## Level 3: Array-backed proxy (`ArrayBackedViewProxyFactory`)
+- one `EEnumSetBuilder64` / `EEnumSetBuilderLarge` holding the marked
+  ordinals — a plain ordinal set, with no value state at all;
+- `changes()` as the immutable snapshot and `changesBuilder()` as the
+  live mutable set — two views over the same state;
+- a mandatory copy constructor from a baseline view: the baseline stays
+  the **caller's** object, and it is what the caller compares against when
+  it needs an old&nbsp;→&nbsp;new pair, because the tracker keeps no
+  previous value to compare with;
+- no setter for a `DERIVED` field.
 
-- Uses `EntityReadArray` / `EntityUpdateTrackingArray` + proxy dispatch
-- Uses metadata from field enums and `FieldNameMapper`
-- Good for dynamic projections and minimal concrete class count
+See [FAQ](../user/faq.md) for the full accessor list and the write-site
+comparison, and
+[The Ordinal Array Contract](../user/patterns/ordinal-array-contract.md)
+for the array path.
 
-## Level 4: Generated concrete implementations
+## `BUILDER_ALL` — both builders
 
-- Generated class per view (e.g., `PersonSummaryImpl`)
-- Highest throughput and static typing for hot paths
-- Compatible with `ViewMeta` and upstream view contracts
+`BUILDER_ALL` emits `<View>Builder` and `<View>BuilderTracking`
+side by side, so a project can use the lightweight plain builder for
+bulk construction and the tracked builder for patch-aware updates
+without choosing one at generation time.
 
-## Guidelines
+## How the level relates to the usage matrix
 
-1. Start with Level 0 for generative tooling and validation.
-2. Use Level 1 for immutable snapshot workloads.
-3. Use Level 2 for mutable/patch workflows that avoid proxy overhead.
-4. Use Level 3 when projection flexiblity is high and generated class explosion is undesirable.
-5. Use Level 4 for highest-performance runtime in fixed schema scenarios.
+| Usage | Interface | record | builder | builder-tracking | meta |
+| --- | --- | --- | --- | --- | --- |
+| RPC param | | record | | | optional metadata |
+| complex method param | | | builder | | |
+| entity | interface | record | | builder-tracking | metadata |
+| POJO inside entity (doc part) | interface | record | | builder-tracking | metadata |
+| EntityDTO | interface | | | | optional metadata |
+| EntityForm | interface | | | | optional metadata |
 
-> **Record is recommended, not required.** A record is the preferred concrete form for a view — it is immutable and safe for sharing — but it is not mandatory. When starting from an interface only, you may stop at the interface or a generated builder without ever materializing a record. This is valid for transient, short-lived views (e.g. shaping complex parameters for a method call that escape analysis may inline), where a builder is sufficient and forcing a record would only add allocation overhead and coupling.
+> "optional metadata" — metadata is not needed at runtime if
+> serialization/deserialization is delegated to a framework that uses
+> reflection anyway, or if the shape is materialized into source.
+
+## Reading and writing paths
+
+Deserializing/reading into a materialized view is expressed as
+`set(...)` returning whether the field exists (or an enum: `NO_CHANGE`,
+`CHANGE`, `NOT_FOUND`):
+
+| Source | Shape |
+|---|---|
+| JSON | `set(String, Object)` |
+| JDBC | `set(int, Object)` |
+| MONGO | `set(String, Object)` |
+| Proxy | `set(String, Object)` — useful when generating a concrete impl is not desirable |
+| BIN | `set(int, Object)` — binary formats (Fory, MQ) that require enum-backed validation |
+
+The user-facing API rarely needs `set(F extends Enum<F>, Object)`: it is
+better to generate the typed setters (the generated classes implement
+the view interface).
+
+Reading is added automatically:
+
+- **record** — the record itself is used, and it can later be moved
+  in-place to a nested type of the interface with the same signature;
+- **interface** — no record, for DTOs and Forms;
+- **interface + record**.
+
+In case of git conflicts, merge using yours/their and rebuild the
+boilerplate rather than resolving generated bodies by hand.
+
+## R1 — field enums are append-only ordinal ledgers
+
+The field enum's **constant order is a persisted ordinal layout**:
+`values[field.ordinal()]` is that field, in every persisted array,
+patch and snapshot. Therefore:
+
+- a new constant is always **appended at the end** — never re-inserted
+  into a "canonical" position;
+- a removed field's constant is **tombstoned**, not deleted: it stays in
+  place, is marked `@Deprecated`, and its `FieldDef.retired()` override
+  returns `true`. Writers skip retired constants; readers stay tolerant
+  of the slot.
+
+The rule is scoped by the `entityFieldEnum:true` marker in the
+[DEC-021](decisions/DEC-021.md) class-file header. In this repository the
+checker is
+[`hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker`](../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java),
+driven by
+[`EntityFieldEnumOrderRule`](../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityFieldEnumOrderRule.java)
+and
+[`EnumConstantOrderCli`](../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderCli.java);
+the runnable invocation is documented in
+[`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md).
 
 ## Reference
 
 - [Entity API docs](../README.md)
 - [Naming conventions](naming-conventions.md)
+- [`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md) —
+  the naming contract and the R1 order contract
 - [DEC-017 identifiable mixin](decisions/DEC-017.md)
-- Example: `PersonSummary.Update` in `hipster-entity-example`
-
-```java
-public record PersonSummaryRecord(Long id, String firstName, String lastName, Integer age,
-        String departmentName, Map<String, List<Long>> metadata) implements PersonSummary {}
-```
-
-## Level 1: Entity Meta for generic operations 
-
-- Allows more complex tooling and generic operations for CRUD etc.
-- `EntityMeta`, field enum (`PersonSummaryField`/`PersonSummaryProperty`), and `ViewMeta` exist.
-- This is enough for most generator and adapter tooling, and for some query compilation paths.
-- this is sufficient for ArrayBased Proxy variants
-
-## Level 2: explicit updatable materialization (`ViewWriter` path)
-
-- ViewWriter interface canbe declared
-- `PersonSummary.Update` class implements `PersonSummary` and `ViewWriter`.
-- Proxy-free, direct field storage with set/get methods.
-- Best for mutable/patch workflows and where method call semantics must match change-tracking API.
-
-## Level 3: array-backed proxy (`ArrayBackedViewProxyFactory`)
-
-- Uses `EntityReadArray` / `EntityUpdateTrackingArray` + `ArrayBackedViewProxyFactory`.
-- Good for dynamic projection adaptation, fewer generated classes, and metadata-managed semantics.
-- `id` and other accessors are resolved via `FieldNameMapper` and field enum ordinals.
-
-## Level 4: generated concrete implementations
-
-- Fully generated class per view (e.g. `PersonSummaryImpl` or `PersonSummaryRecord`) implementing interfaces without proxies.
-- Best performance for high-throughput scenarios.
-- Still retains compatibility with `ViewMeta`, `FieldDef`, and `ViewWriter` contracts.
-
-```java
-public class PersonSummary.Update implements PersonSummary, ViewWriter<Long, PersonSummary, PersonSummaryField> {
-    Long id;
-    String firstName;
-    String lastName;
-    Integer age;
-    String departmentName;
-    Map<String, List<Long>> metadata;
-
-    @Override public Long id() { return id; }
-    // other getters
-
-    @Override
-    public Object get(PersonSummaryField field) { ... }
-    @Override
-    public Object set(PersonSummaryField field, Object value) { ... }
-}
-```
-
-### Why this is enough to avoid proxy
-
-- This level provides a concrete object with local fields and direct method dispatch; no proxy or reflective handler path is needed.
-- It is ideal when the cost of a dedicated class is acceptable and method dispatch is latency-critical.
-- It also avoids runtime `InvocationHandler` overhead and makes debugging straightforward.
-
-### When to use
-
-- Hot loops where the indirection of proxy dispatch is measurable.
-- Narrow, domain-specific models where codegen can produce stable, easy-to-audit classes.
-- Integration with existing builders/mappers where a mutable/patch object is desired.
-
-## Level 2: array-backed proxy (`ArrayBackedViewProxyFactory`)
-
-- Uses `EntityReadArray` / `EntityUpdateTrackingArray` + `ArrayBackedViewProxyFactory`.
-- Good for dynamic projection adaptation, fewer generated classes, and metadata-managed semantics.
-- `id` and other accessors are resolved via `FieldNameMapper` and field enum ordinals.
-
-## Level 3: generated concrete implementations
-
-- Fully generated class per view (e.g. `PersonSummaryImpl` or `PersonSummaryRecord`) implementing interfaces without proxies.
-- Best performance for high-throughput scenarios.
-- Still retains compatibility with `ViewMeta`, `FieldDef`, and `ViewWriter` contracts.
-
-## Guidelines for leveling
-
-1. Start with Level 1 when you need explicit, stable identity and mutation semantics.
-2. Use Level 2 for flexible, metadata-driven mappings and when you want to minimize generated class count.
-3. Move to Level 3 for the highest performance and static analysis benefits.
-4. Ensure `ViewWriter` and `Identifiable` contract consistency across levels (`id()` on root entities, not on all readers).
-
-> **Record is recommended, not required.** A record is the preferred concrete form for a view — it is immutable and safe for sharing — but it is not mandatory. Starting from an interface only is a supported path: the interface is the contract, and you may stop there, or progress to a generated `BUILDER` instead of a record. This is appropriate for transient, short-lived views (e.g. shaping complex parameters for a method call that escape analysis may inline), where a builder is sufficient and forcing a record would only add allocation overhead and coupling.
-
-## References
-
-- [Entity API docs](../README.md)
-- [Naming conventions](naming-conventions.md)
-- [DEC-017 identifiable identity mixin](decisions/DEC-017.md)
-- `hipster-entity-example` includes Level 1 `PersonSummary.Update` and Level 2 `PersonSummaryField` proxy paths.
-
+- [DEC-021 generator class-file header](decisions/DEC-021.md)
+- [DEC-023 R1 — field enums are append-only ordinal ledgers](decisions/DEC-023.md)
+- [User: Materialization Guide](../user/materialization-guide.md) — the
+  same ladder from the user's point of view
+- Example: `PersonSummary` at `BUILDER_ALL` in `hipster-entity-example`

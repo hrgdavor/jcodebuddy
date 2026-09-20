@@ -1,8 +1,15 @@
 package hr.hrg.hipster.entity.core;
 
-import java.util.EnumSet;
-import java.util.Objects;
-
+/**
+ * The mutable change set of a tracked view: which field ordinals are marked as changed.
+ *
+ * <p>It is a plain set of ordinals. It deliberately carries <strong>no value state at all</strong> —
+ * not the value a field holds now (that is the view's, reachable through
+ * {@link ViewChangeTracking#currentValue}) and not the value it held before (that is the caller's
+ * baseline instance, which the library never copies). Writers compare the value they are about to
+ * assign with the one the field currently holds and call {@link #addOrdinal(int)} only when the two
+ * differ, which is the DEC-012 no-op rule expressed at the write site.</p>
+ */
 public interface EEnumSetBuilder<E extends Enum<E>> extends EEnumSetRead<E> {
 
     static <E extends Enum<E>> EEnumSetBuilder<E> create(Class<E> enumClass) {
@@ -20,24 +27,6 @@ public interface EEnumSetBuilder<E extends Enum<E>> extends EEnumSetRead<E> {
     // explicit ordinal-based operations
     boolean addOrdinal(int ordinal);
     boolean removeOrdinal(int ordinal);
-
-    /**
-     * Marks the ordinal as changed only when the old and new values differ.
-     * Returns true if the supplied values are different, false when they are equal.
-     * If the values differ, the ordinal is added to the set if needed.
-     *
-     * @param ordinal the ordinal field to mark
-     * @param OldValue the previous value
-     * @param NewValue the new value
-     * @return true when the value changed, false when the values are equal
-     */
-    default public boolean addOrdinalChange(int ordinal, Object OldValue, Object NewValue) {
-        if (Objects.equals(OldValue, NewValue)) {
-            return false;
-        }
-        addOrdinal(ordinal);
-        return true;
-    }
 
     // explicit enum-value operations
     boolean add(E value);
