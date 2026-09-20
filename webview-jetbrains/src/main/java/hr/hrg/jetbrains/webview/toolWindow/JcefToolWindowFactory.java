@@ -14,6 +14,7 @@ import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
+import com.intellij.ui.jcef.JBCefBrowserBase;
 import com.intellij.ui.jcef.JBCefApp;
 import com.intellij.ui.jcef.JBCefBrowser;
 import org.cef.browser.CefBrowser;
@@ -44,10 +45,9 @@ public class JcefToolWindowFactory implements ToolWindowFactory, DumbAware {
         }
 
         JBCefBrowser browser = JBCefBrowser.createBuilder()
-                .setOffScreenRendering(false)
+                .setEnableOpenDevToolsMenuItem(true)
                 .build();
-        browser.getComponent().putClientProperty("JBCefBrowser.devTools", true);
-        browser.getComponent().putClientProperty("JBCefBrowser", browser);
+        browser.getComponent().putClientProperty(JBCefBrowserBase.JBCEFBROWSER_INSTANCE_PROP, browser);
 
         new JcefBridgeNew(project, browser);
 
@@ -206,7 +206,7 @@ public class JcefToolWindowFactory implements ToolWindowFactory, DumbAware {
         JComponent component = content.getComponent();
         if (component == null)
             return;
-        JBCefBrowser browser = (JBCefBrowser) component.getClientProperty("JBCefBrowser");
+        JBCefBrowser browser = (JBCefBrowser) component.getClientProperty(JBCefBrowserBase.JBCEFBROWSER_INSTANCE_PROP);
         if (browser != null) {
             PluginStateService.getInstance(project).setLastUrl(url);
             browser.loadURL(url);
