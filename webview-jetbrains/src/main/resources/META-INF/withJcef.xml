@@ -1,0 +1,5 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow factoryClass="hr.hrg.jetbrains.webview.toolWindow.JcefToolWindowFactory" id="WebView Explorer" anchor="right" icon="AllIcons.General.Web" secondary="true"/>
+    </extensions>
+</idea-plugin>
