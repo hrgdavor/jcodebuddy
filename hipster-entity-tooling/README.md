@@ -90,22 +90,55 @@ kept reproducible.
 ```text
 java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir> [--packages a.b,c.d] [--adapters]
                                     [--java-out <dir>] [--mapper <Src>:<Tgt>[:<ClassName>]] [--validate[=MODE]]
+                                    [--run-record <file>] [--version]
 ```
 
 | Flag | Meaning |
 |---|---|
 | *(positional 1)* | the source root, or a single `.java` file (the tool then searches upward for `src/main/java` or `src/test/java`) |
-| *(positional 2)* | the output directory for the metadata JSON, one `<Marker>.metadata.json` per entity |
+| *(positional 2)* | the output directory for the metadata JSON, one `<Marker>.metadata.json` per entity. It **must not be under a `.jcodebuddy/` directory** when generated Java would land there — see the layout guard below |
 | `--packages a.b,c.d` | restrict **generation** to these packages. It does **not** restrict indexing: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omitting the flag generates everything (the historical behaviour) |
 | `--adapters` | **[DRAFT/EXPLORATION, opt-in]** also emit `<View>RowAdapter` / `<View>Binder` next to each view. Off unless given; no other flag, property or profile enables it |
-| `--java-out <dir>` | write generated `.java` there instead of into the positional output directory. This is what lets the Maven binding regenerate committed source **in place** while keeping the metadata JSON in `target/` |
+| `--java-out <dir>` | write generated `.java` there instead of into the positional output directory. This is what lets the Maven binding regenerate committed source **in place** while keeping the metadata JSON in `.jcodebuddy/metadata/entity` |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two **views**. Repeatable. Defaults: class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
 | `--validate[=OFF\|REPORT\|STRICT]` | run the entity rules over the source root **before** writing anything. Bare `--validate` means `REPORT`: print every issue and continue. `STRICT` refuses to write until they are fixed, so a violating tree is never half-regenerated. `OFF` is the default for a library caller, so introducing validation cannot change an unrelated build. Warnings (the R1 `allowReorder` escape hatch) do not fail a pass unless `STRICT` |
+| `--run-record <file>` | also write what this pass ran with — generator revision, the artifact its classes came from, resolved roots, flags, validation count, divergences, and `status` (`ok` / `failed`) — as JSON. Opt-in, so a library caller and the existing tests are unaffected. The example's binding writes `.jcodebuddy/metadata/entity/generation.json` |
+| `--version` | print the generator identity (name, revision, and the artifact the classes came from) plus its flag surface, then stop. This is the first thing to run when a build appears to have mis-generated a tree |
 
 Flags may appear anywhere after the two positionals, and `--packages=a.b`
 is accepted as well as `--packages a.b`. That matters because the Maven
 `exec-maven-plugin` binding and a manual run share **one flag surface**
 (§ 8.8/3.23): the knobs are CLI arguments, not `-D` system properties.
+
+### The layout guard, and the stale-artifact trap it closes
+
+Generated `.java` is **refused** when it would be written under a `.jcodebuddy/`
+directory: that path is a module's metadata root (entity JSON for tooling
+consumers, indexes, caches), never a source tree — DEC-026 and `AGENTS.md` § 2.
+The guard fires before the first write, at every entry point.
+
+In practice it fires for one specific mistake. A module binds the generator to
+`generate-sources` through `exec-maven-plugin`; that phase runs **before**
+`compile`, so a reactor invocation that stops there — and any invocation without
+`-am` — has not built this module, and Maven resolves the `provided` dependency to
+whatever is installed in the local repository. An outdated artifact does not know
+`--java-out`, treats it and `--packages` as positional arguments, and writes
+generated Java into positional 2, i.e. the metadata directory, while reporting
+`BUILD SUCCESS`.
+
+Two guards close that, and they are complementary:
+
+- [`GeneratorPreflight`](src/main/java/hr/hrg/hipster/entity/tooling/GeneratorPreflight.java)
+  is a class that exists **only in a current tooling build**. A binding runs it in
+  an execution *before* the generator, so an outdated artifact fails the build on
+  the missing class, before anything is written. A flag could not do this job: an
+  old artifact does not know it and swallows it as another positional argument.
+- `EntityMetadataGenerator.rejectJavaOutputUnderJcodebuddy` refuses the write at
+  the generator end, which also covers a manual run and
+  `EntityRegenerationWatcher`.
+
+`hipster-entity-example/codebuddy.md` § 6.1 is the full account, and
+`scripts/gen.cmd` is the one-command regeneration path that always works.
 
 ### Entity rules (`validate`)
 

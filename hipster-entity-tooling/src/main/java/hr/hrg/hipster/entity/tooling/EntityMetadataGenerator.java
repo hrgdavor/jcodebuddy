@@ -47,6 +47,147 @@ import java.util.stream.Collectors;
 public class EntityMetadataGenerator {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    // ── identity, and the flag surface a build binding depends on ────────────
+
+    /** The generator's stable name, used by the identity banner, {@code --version} and the run record. */
+    public static final String GENERATOR_NAME = "hipster-entity-generator";
+
+    /**
+     * The output directory that must never receive generated {@code .java} (DEC-026, {@code AGENTS.md}
+     * § 2): a {@code .jcodebuddy/} directory is a module's <em>metadata</em> root — entity JSON for
+     * tooling consumers, indexes, caches — and the main output, generated source, belongs in the
+     * normal source tree.
+     */
+    public static final String JCODEBUDDY_DIR = ".jcodebuddy";
+
+    /** Every CLI flag this build understands; {@code --version} prints it. */
+    public static final List<String> SUPPORTED_FLAGS = List.of(
+            "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper",
+            "--adapters", "--run-record", "--version");
+
+    /**
+     * The flags a build binding is expected to be able to pass.
+     *
+     * <p>A build wired to this generator passes these; an <em>older</em> tooling artifact silently
+     * ignores the ones it does not know (they become positional arguments) and writes generated
+     * Java into positional 2 — which is exactly the metadata directory. {@link GeneratorPreflight}
+     * asserts this list against the artifact on the classpath, so that failure mode becomes a build
+     * failure instead of a silent mis-generation.</p>
+     */
+    public static final List<String> BINDING_FLAGS = List.of(
+            "--java-out", "--packages", "--validate", "--run-record");
+
+    /** Whether this build understands {@code flag} — the preflight's whole assertion. */
+    public static boolean supportsFlag(String flag) {
+        return SUPPORTED_FLAGS.contains(flag);
+    }
+
+    /**
+     * Where the running generator's classes came from: a jar path, or a module's
+     * {@code target/classes}.
+     *
+     * <p>This is the fact that identifies a stale artifact. A build that reports
+     * {@code from .../.m2/repository/...} is running an installed revision, which is not necessarily
+     * the revision in the working tree; {@code from .../hipster-entity-tooling/target/classes} is the
+     * reactor's own output.</p>
+     */
+    public static String generatorClasspath() {
+        try {
+            java.security.CodeSource source =
+                    EntityMetadataGenerator.class.getProtectionDomain().getCodeSource();
+            if (source != null && source.getLocation() != null) {
+                return source.getLocation().toString();
+            }
+        } catch (RuntimeException unreadable) {
+            // A security manager or a stripped class loader: report "unknown" rather than fail a pass
+            // over a diagnostic.
+        }
+        return "unknown";
+    }
+
+    /**
+     * The tooling revision: the jar manifest's {@code Implementation-Version}, or the timestamp of the
+     * class file when there is no manifest.
+     *
+     * <p>The fallback matters because the reactor's own output is a {@code target/classes}
+     * <em>directory</em>, which has no manifest at all — and "which revision is this?" is exactly the
+     * question a mis-generated tree raises. A timestamp is enough to spot a directory left over from
+     * an earlier build.</p>
+     */
+    public static String generatorVersion() {
+        Package module = EntityMetadataGenerator.class.getPackage();
+        String version = module == null ? null : module.getImplementationVersion();
+        if (version != null && !version.isBlank()) {
+            return version;
+        }
+        return "unversioned classes dated " + generatorClassTimestamp();
+    }
+
+    /**
+     * The class file's last-modified time as an ISO instant, or the artifact's when the classes came
+     * from a jar, or {@code "unknown"}.
+     */
+    private static String generatorClassTimestamp() {
+        try {
+            java.net.URL own = EntityMetadataGenerator.class
+                    .getResource("EntityMetadataGenerator.class");
+            if (own != null && "file".equals(own.getProtocol())) {
+                return Files.getLastModifiedTime(Path.of(own.toURI())).toInstant().toString();
+            }
+        } catch (Exception unreadable) {
+            // A jar entry, or a loader that will not resolve the resource: fall through.
+        }
+        try {
+            java.security.CodeSource source =
+                    EntityMetadataGenerator.class.getProtectionDomain().getCodeSource();
+            if (source != null && source.getLocation() != null) {
+                Path artifact = Path.of(source.getLocation().toURI());
+                if (Files.isRegularFile(artifact)) {
+                    return Files.getLastModifiedTime(artifact).toInstant().toString();
+                }
+            }
+        } catch (Exception unreadable) {
+            // Nothing resolvable to a timestamp: "unknown" is the honest answer, and the classpath
+            // still names the artifact.
+        }
+        return "unknown";
+    }
+
+    /** The one-line identity banner: name, version, and where the classes came from. */
+    public static String generatorIdentity() {
+        return GENERATOR_NAME + " " + generatorVersion() + " from " + generatorClasspath();
+    }
+
+    /**
+     * Refuses to write generated {@code .java} under a {@link #JCODEBUDDY_DIR} directory.
+     *
+     * <p>Called before the first write of every pass, so every entry point is covered — the CLI, the
+     * Maven binding, and {@code EntityRegenerationWatcher}. The rule it enforces is the layout rule,
+     * not a preference: {@code .jcodebuddy/} holds the module's auxiliary metadata, and generated
+     * source is ordinary committed Java that belongs next to the view it came from.</p>
+     *
+     * <p>In practice this fires when the generator on the classpath ignores {@code --java-out} and
+     * the invocation has no other place to put source — i.e. when a build resolved an outdated
+     * tooling artifact. The message says both things, because which one it is decides the fix.</p>
+     */
+    static void rejectJavaOutputUnderJcodebuddy(Path javaOutputRoot) throws IOException {
+        if (javaOutputRoot == null) {
+            return;
+        }
+        for (Path part : javaOutputRoot.toAbsolutePath().normalize()) {
+            if (JCODEBUDDY_DIR.equals(part.toString())) {
+                throw new IOException("refusing to write generated .java into " + javaOutputRoot
+                        + ": a " + JCODEBUDDY_DIR + "/ directory is a module's metadata root and never"
+                        + " holds generated source (DEC-026, AGENTS.md section 2). Pass --java-out with"
+                        + " the source root, as the Maven binding does. If this happened during a build,"
+                        + " the tooling on the classpath is older than the binding: it does not know"
+                        + " --java-out and writes generated Java into positional 2. Refresh it with"
+                        + " `scripts\\mvn-jdk25.cmd hipster-entity install`, or run a phase that compiles"
+                        + " it in the same reactor (package or test).");
+            }
+        }
+    }
+
     public static EntityMeta fromJson(String json) throws java.io.IOException {
         JsonNode root = OBJECT_MAPPER.readTree(json);
 
@@ -444,9 +585,17 @@ public class EntityMetadataGenerator {
         List<String> packages = new ArrayList<>();
         List<String> mappers = new ArrayList<>();
         Path javaOutputOverride = null;
+        Path runRecord = null;
+        long startedAt = System.currentTimeMillis();
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
-            if ("--packages".equals(arg) && i + 1 < args.length) {
+            if ("--version".equals(arg)) {
+                // Identity without side effects: no pass, no write, no exit call (a `--version` that
+                // killed the JVM would take Maven with it when run through exec:java).
+                System.out.println(generatorIdentity());
+                System.out.println("flags: " + String.join(" ", SUPPORTED_FLAGS));
+                return;
+            } else if ("--packages".equals(arg) && i + 1 < args.length) {
                 for (String pkg : args[++i].split(",")) {
                     if (!pkg.isBlank()) {
                         packages.add(pkg.trim());
@@ -477,11 +626,17 @@ public class EntityMetadataGenerator {
                 mappers.add(args[++i]);
             } else if (arg.startsWith("--mapper=")) {
                 mappers.add(arg.substring("--mapper=".length()));
+            } else if ("--run-record".equals(arg) && i + 1 < args.length) {
+                // Opt-in, so a library caller and every test are unaffected: a record of what this
+                // pass ran with, in the same JSON metadata tree the rest of the tooling reads.
+                runRecord = Path.of(args[++i]);
+            } else if (arg.startsWith("--run-record=")) {
+                runRecord = Path.of(arg.substring("--run-record=".length()));
             } else if ("--java-out".equals(arg) && i + 1 < args.length) {
                 // Where generated .java goes, independently of where the metadata JSON goes. The
                 // two differ in the Maven binding (§ 8.8/3.23): source is regenerated in place under
-                // src/main/java, while the JSON report belongs in target/ so a build never adds
-                // untracked files to a source tree.
+                // src/main/java, while the JSON belongs in the module's `.jcodebuddy/metadata/entity`
+                // (DEC-026), so a build never drops generated source into the metadata tree.
                 javaOutputOverride = Path.of(args[++i]);
             } else if (arg.startsWith("--java-out=")) {
                 javaOutputOverride = Path.of(arg.substring("--java-out=".length()));
@@ -500,31 +655,93 @@ public class EntityMetadataGenerator {
         Path inputPath = Path.of(positional.get(0));
         Path outputDir = Path.of(positional.get(1));
         Path sourceRoot = deriveSourceRoot(inputPath);
+        // Where generated .java goes: the source root for a single-file input, --java-out when given,
+        // and positional 2 otherwise (the historical default the guard below exists to catch).
+        Path javaOutputRoot = inputPath.toString().endsWith(".java")
+                ? sourceRoot
+                : (javaOutputOverride != null ? javaOutputOverride : outputDir);
+        // Identity first, on every run: when a build misbehaves, the first question is which
+        // generator revision ran, and this line answers it without a second invocation.
+        System.out.println(generatorIdentity());
         System.out.println("Using source root: " + sourceRoot);
         if (!generationPackages.isEmpty()) {
             System.out.println("Generating only for packages: " + generationPackages);
         }
-        if (inputPath.toString().endsWith(".java")) {
-            // For single file inputs, generate java boilerplate back into the source tree
-            generate(sourceRoot, outputDir, sourceRoot);
-        } else if (javaOutputOverride != null) {
+        if (javaOutputOverride != null && !inputPath.toString().endsWith(".java")) {
             // § 8.8/3.23: the Maven binding regenerates the committed source in place and keeps the
-            // metadata JSON in `target/`, so a build never drops untracked files into src/main/java.
-            try {
-                System.out.println("Writing generated java to: " + javaOutputOverride);
-                generate(sourceRoot, outputDir, javaOutputOverride);
-            } finally {
-                // Reset the policy so a second pass in the same JVM (a test, a watcher run) does not
-                // inherit the first pass's mode. Flags belong to one invocation, not to the process.
-                validationPolicy = Policy.OFF;
-            }
-        } else {
-            try {
-                generate(sourceRoot, outputDir);
-            } finally {
-                validationPolicy = Policy.OFF;
-            }
+            // metadata JSON in `.jcodebuddy/metadata/entity`, so a build never drops untracked files
+            // into src/main/java.
+            System.out.println("Writing generated java to: " + javaOutputOverride);
         }
+        try {
+            generate(sourceRoot, outputDir, javaOutputRoot);
+            writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
+                    mappers, startedAt, args);
+        } catch (IOException | RuntimeException failure) {
+            // A failed pass is the run a reader most wants a record of, so the record is written
+            // before the failure is rethrown.
+            writeRunRecord(runRecord, "failed", failure, sourceRoot, outputDir, javaOutputRoot, packages,
+                    mappers, startedAt, args);
+            throw failure;
+        } finally {
+            // Reset the policy so a second pass in the same JVM (a test, a watcher run) does not
+            // inherit the first pass's mode. Flags belong to one invocation, not to the process —
+            // which goes for the generator's other process-global knobs too, since a caller that
+            // invoked main() in-process must not have its own configuration overwritten afterwards.
+            validationPolicy = Policy.OFF;
+            strictWarnings = false;
+            setGenerationPackages(List.of());
+            setMapperRequests(List.of());
+            setGenerateAdapters(false);
+        }
+    }
+
+    /**
+     * Writes the opt-in run record ({@code --run-record <file>}).
+     *
+     * <p>It is the answer to "what generated this tree, with which flags, from which artifact, and
+     * what did it report?" — the question a reviewer asks of a regenerated diff, and the one a
+     * stale-artifact build cannot answer after the fact. It lands in the module's metadata tree
+     * alongside the entity JSON, because that is what the tree is for: machine-readable facts for
+     * tooling, not source.</p>
+     *
+     * <p>Written on success <em>and</em> on failure, and a no-op when the flag is absent, so a
+     * library caller and every existing test is unaffected by its existence.</p>
+     */
+    private static void writeRunRecord(Path recordFile, String status, Exception failure, Path sourceRoot,
+                                       Path outputDir, Path javaOutputRoot, List<String> packages,
+                                       List<String> mappers, long startedAt, String[] args)
+            throws IOException {
+        if (recordFile == null) {
+            return;
+        }
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("generator", GENERATOR_NAME);
+        record.put("version", generatorVersion());
+        record.put("classpath", generatorClasspath());
+        record.put("status", status);
+        record.put("startedAt", java.time.Instant.ofEpochMilli(startedAt).toString());
+        record.put("durationMs", System.currentTimeMillis() - startedAt);
+        record.put("sourceRoot", sourceRoot == null ? null : sourceRoot.toString());
+        record.put("reportDir", outputDir == null ? null : outputDir.toString());
+        record.put("javaOut", javaOutputRoot == null ? null : javaOutputRoot.toString());
+        record.put("packages", packages);
+        record.put("mappers", mappers);
+        record.put("adapters", generateAdapters);
+        record.put("validate", validationPolicy.name());
+        record.put("args", List.of(args));
+        if (failure == null) {
+            record.put("validationIssues", lastValidationIssues.size());
+            record.put("divergences", lastDivergences.entries());
+        } else {
+            // No divergence report exists for a pass that threw, but the reason must not be lost.
+            record.put("failure", failure.getClass().getName() + ": " + failure.getMessage());
+        }
+        Path parent = recordFile.toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(recordFile, OBJECT_MAPPER.writeValueAsString(record) + "\n");
     }
 
     private static void printUsage() {
@@ -541,6 +758,13 @@ public class EntityMetadataGenerator {
         System.err.println("  --validate[=MODE]     run the entity rules before writing (MODE: OFF, REPORT, STRICT).");
         System.err.println("                        Bare --validate means REPORT: print and continue. STRICT refuses");
         System.err.println("                        to write anything until the reported issues are fixed.");
+        System.err.println("  --run-record <file>   also write what this pass ran with (revision, flags, counts)");
+        System.err.println("                        as JSON. The build binding writes .jcodebuddy/metadata/entity/");
+        System.err.println("                        generation.json.");
+        System.err.println("  --version             print the generator identity and its flag surface, then stop.");
+        System.err.println();
+        System.err.println("Generated .java is never written under a .jcodebuddy/ directory: that is the");
+        System.err.println("module's metadata root, not a source tree (DEC-026). Pass --java-out.");
         System.err.println();
         System.err.println("Entity rules:");
         System.err.println("  java -jar hipster-entity-tooling.jar validate [<source-root>] [--strict]");
@@ -861,6 +1085,9 @@ public class EntityMetadataGenerator {
 
     private static void generateInternal(Path sourceRoot, Path outputDir, Path javaOutputRoot,
                                          DivergenceReporter divergences) throws IOException {
+        // Before the first write, and before anything is parsed: generated source must never land in
+        // a module's metadata root, whatever entry point asked for it.
+        rejectJavaOutputUnderJcodebuddy(javaOutputRoot);
         Map<String, InterfaceInfo> interfaceMap = new HashMap<>();
 
         // Pass 1: parse every file. Reading an interface is deferred to pass 2 because a property's

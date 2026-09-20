@@ -12,7 +12,7 @@ purpose so it is obvious what may be committed and what must not be:
     ├── README.md      this file — tracked, because it is what tells the next reader what the tree means
     ├── context/       tracked   module-scoped specs and invariants for its generators
     ├── metadata/      derived   machine-written reports and caches
-    │   ├── entity/    <Entity>.metadata.json, written by the hipster-entity generator
+    │   ├── entity/    <Entity>.metadata.json and generation.json, written by the hipster-entity generator
     │   ├── watch/     the watch agent's metadata.db plus its audit/ trail
     │   └── project/   whole-project metadata indexes (index.fury and friends)
     ├── reports/       tracked   human-read run records worth keeping

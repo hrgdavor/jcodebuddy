@@ -61,12 +61,44 @@
                  `.jcodebuddy/README.md`. `skip` defaults to false; set
                  -Djcodebuddy.entity.codegen.skip=true to bypass generation.
 
+                 TWO executions, in this order, and the first one is the point:
+
+                 1. `hipster-entity-preflight` runs GeneratorPreflight, a class that exists only in a
+                    CURRENT tooling build. This phase runs before `compile`, so a reactor invocation
+                    that stops at `generate-sources` — or any invocation without `-am` — has not built
+                    the tooling module at all, and Maven then resolves the `provided` dependency to
+                    whatever is installed in ~/.m2. An older artifact does not know the java-out flag,
+                    treats it and the packages flag as positional arguments, and writes generated
+                    Java into positional 2: `.jcodebuddy/metadata/entity`. The build would then report
+                    SUCCESS, the committed sources would not be regenerated, and the debris would be
+                    git-ignored — silent and plausible. With this execution an outdated artifact fails
+                    the build on the missing class, before anything is written. See `codebuddy.md`
+                    § 6.1; `scripts/gen.cmd` is the one-command way to regenerate.
+                 2. `hipster-entity-generate` runs the generator, which additionally refuses — at any
+                    entry point, not just this binding — to write generated .java under a
+                    `.jcodebuddy/` directory, and records what it ran with in
+                    `.jcodebuddy/metadata/entity/generation.json`.
+
                  This is deliberately NOT a new hipster-entity-maven-plugin module (§ 8.8/3.23). -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.6.3</version>
                 <executions>
+                    <execution>
+                        <id>hipster-entity-preflight</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${jcodebuddy.entity.codegen.skip}</skip>
+                            <mainClass>hr.hrg.hipster.entity.tooling.GeneratorPreflight</mainClass>
+                            <!-- Same reason as the generator below: exec:java defaults to the runtime
+                                 scope, which excludes `provided` dependencies. -->
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
                     <execution>
                         <id>hipster-entity-generate</id>
                         <phase>generate-sources</phase>
@@ -97,6 +129,12 @@
                                      passes the STRICT mode (or runs the `validate` subcommand) and the
                                      pass then refuses to write until the issues are fixed. -->
                                 <argument>--validate</argument>
+                                <!-- The run record: what this pass ran with, next to the entity JSON in
+                                     the metadata tree. Machine-readable, ignored by git, and the only
+                                     place "which generator revision produced this tree" survives the
+                                     build that produced it. -->
+                                <argument>--run-record</argument>
+                                <argument>${project.basedir}/.jcodebuddy/metadata/entity/generation.json</argument>
                                 <!-- NO SQL-generation flag here, deliberately. SQL generation (the
                                      generated `<View>RowAdapter` / `<View>Binder` pair) is a
                                      draft/exploration in the tooling and is strictly OPT-IN: it runs

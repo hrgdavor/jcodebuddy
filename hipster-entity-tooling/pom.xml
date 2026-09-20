@@ -78,6 +78,14 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>hr.hrg.hipster.entity.tooling.EntityMetadataGenerator</mainClass>
+                                    <!-- The identity banner and the run record name the revision; without
+                                         a version entry a packaged jar can report only its timestamp, and
+                                         "which tooling ran?" is the first question a mis-generated build
+                                         raises (hipster-entity-example/codebuddy.md section 6.1). -->
+                                    <manifestEntries>
+                                        <Implementation-Title>${project.artifactId}</Implementation-Title>
+                                        <Implementation-Version>${project.version}</Implementation-Version>
+                                    </manifestEntries>
                                 </transformer>
                             </transformers>
                         </configuration>

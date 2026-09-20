@@ -6,7 +6,7 @@ tree is visible without carrying the data.
 
 | Subdir | Written by | Contents |
 |---|---|---|
-| `entity/` | `EntityMetadataGenerator` (the `exec-maven-plugin` binding in this module's `pom.xml`) | one `<Entity>.metadata.json` per entity/view |
+| `entity/` | `EntityMetadataGenerator` (the `exec-maven-plugin` binding in this module's `pom.xml`) | one `<Entity>.metadata.json` per entity/view, plus `generation.json` — the run record of the last pass (revision, artifact, roots, flags, counts) |
 | `watch/` | the watch agent's `MetadataCache` and `AuditManager` | `metadata.db` checksum cache, plus `audit/<toolSet>/<timestamp>_<action>/{manifest.json,summary.md,before/,after/}` |
 | `project/` | whole-project metadata passes | `index.fury` and related index files |
 
