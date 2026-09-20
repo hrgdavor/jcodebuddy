@@ -1,7 +1,8 @@
 # hipster-entity — Combined Plan to First Usable Implementation
 
-**Status:** finalized — decisions closed in four rounds (§ 4, § 4.7, the execution review and the
-gate review recorded at the close of § 4.7); **scope complete, no deferred features except S3/X1**
+**Status:** finalized — decisions closed in five rounds (§ 4, § 4.7, the execution review, the
+gate review and the execution-readiness review recorded at the close of § 4.7); **scope complete,
+no deferred features except S3/X1**
 **Combines:** `plans__m1/plan.ds.md`, `plans__m1/plan.copilot.md`,
 `plans__m1/plan.kilo.md`, `plans__m1/plan.dsflash.md`
 **Scope:** `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`,
@@ -718,7 +719,8 @@ samples), `paymentMethod/entity/` with a sealed hierarchy and four subclasses, a
   `person/iface/Person.java` (the file writes the **fully-qualified** form, which is one of the two
   live `@View(gen = …)` instances in the tree — the other is the bare
   `@View(gen = GenLevel.BUILDER_ALL)` on `person/entity/PersonSummary.java:13` — so § 8.1/3.2's
-  parser must accept **both** forms; gate review, GR-5)
+  parser must accept **both `gen` spellings**, and G9 (§ 4.5) widens the requirement to **all four
+  annotation shapes**; gate review, GR-5 + execution-readiness review, DR-9)
   is
   tutorial narrative for the "record → interface" walkthrough, and that interface is
   package-private, so it could not carry a public generated enum in any case. § 9/4.7 rewrites
@@ -767,11 +769,13 @@ Everything else that was ever deferred is now planned: nested/deep tracking (**P
 JDBC adapters (**7.1**), mappers (**7.2**), validation (**7.3**), compaction (**7.4**), the
 watcher (**7.5**), and the `paymentMethod` regeneration (**4.9**).
 
-### 4.5 Specification gaps closed — the eight items an implementer would otherwise guess
+### 4.5 Specification gaps closed — the nine items an implementer would otherwise guess
 
 Everything else in this plan is a concrete edit. **G1–G6** were left implicit by the input plans
 and closed in the second decision round; **G7 and G8** were added by the pre-execution review
-(§ 4.7/DR-7 and DR-8). All eight are now fixed, so no task in Phases 0–5 requires an authoring
+(§ 4.7/DR-7 and DR-8); **G9** was added by the execution-readiness review (§ 4.7/DR-9) because the
+`@View` census and the parse spec covered only the parenthesized annotation forms. All nine are now
+fixed, so no task in Phases 0–5 requires an authoring
 decision mid-flight; the only scheduled design steps are the DECs that tasks 6.1/6.4 and 7.13
 author for themselves (see § 4 intro).
 
@@ -994,7 +998,9 @@ source root, including the generator's own committed output (S2 puts generated s
 expects and will rediscover its own framework surface:
 
 0. **The view predicate.** A type is a view iff (a) it derives transitively from the package's
-   marker, **or** (b) it carries a `@View` annotation — and is neither the marker itself (§ 9/4.1)
+   marker, **or** (b) it carries a `@View` annotation **in any syntactic form** — marker, empty, or
+   with pairs; the check is shape-blind, `getAnnotationByName("View").isPresent()`, never a cast to
+   `NormalAnnotationExpr` (G9, § 4.5) — and is neither the marker itself (§ 9/4.1)
    nor a surface excluded by rules 1–2 below. **This is a correction to the earlier draft**, which
    described discovery as marker-only while simultaneously listing `PersonCreateForm` among the
    views and expecting a newly generated `PersonCreateForm_`: `PersonCreateForm` carries `@View()`
@@ -1048,6 +1054,61 @@ Add a discovery fixture test: one marker-derived view, one `@View`-annotated int
 from nothing, one nested `Write`, and one marker-derived interface that extends `ViewWriter`;
 assert that an `_` enum is emitted for each of the two rule-0 views, none for the surfaces, and that
 a second generation pass is byte-identical.
+
+**G9 — The `@View` syntactic-form contract: one reader, four shapes, no shape-restricted parsing (§ 4.7/DR-9).**
+
+The earlier census counted only the two `@View(gen = …)` spellings, and § 8.1/3.2 specified the parse
+as "read … from `NormalAnnotationExpr.getPairs()`". Both are too narrow: the tree carries **four**
+syntactic shapes of the annotation, and two live views depend on the one shape that a
+`NormalAnnotationExpr`-restricted parser drops. This is the census, verified against the working tree
+(scope to the working tree — GR-6, § 4.1/S2):
+
+| JavaParser shape | Live witness | Parsed result | Diagnostic |
+|---|---|---|---|
+| `MarkerAnnotationExpr` — bare `@View` | `person/entity/PersonDto.java:5`, `person/entity/PersonUpdateForm.java:5` | `gen = DEFAULT`, `discriminatorField = ""`, `addons = []` | none — but these are **2 of the 5** `@View`-carrying views in `person.entity`, and § 9/4.1 expects `PersonDto_` and `PersonUpdateForm_` as generated output |
+| `NormalAnnotationExpr`, no pairs — `@View()` | `person/entity/PersonAuditable.java:6`, `person/entity/PersonCreateForm.java:5`, `paymentMethod/entity/BankTransferPaymentMethod.java:5`, `PayPalPaymentMethod.java:5`, `CreditCardPaymentMethod.java:6`, `CryptoPaymentMethod.java:6` | identical to the marker form | none |
+| `NormalAnnotationExpr`, with pairs — `@View(gen = …, addons = {…})` | `person/entity/PersonSummary.java:13` (bare `GenLevel.BUILDER_ALL`), `person/iface/Person.java:7` (fully-qualified `hr.hrg.hipster.entity.api.GenLevel.META`), `person/entity/Person.java:7` + `paymentMethod/entity/PaymentMethod.java:13` (`addons` on the two markers) | pairs parsed | `addon_on_non_view` on the two markers (G6, § 4.7/DR-1); both stay inert |
+| `SingleMemberAnnotationExpr` — `@View(true)` | **no live site**; it survives only in the legacy parser's comments (`EntityMetadataGenerator.java:449`, `:454`) | `gen = DEFAULT` | `unsupported_view_annotation_form` — the real `@View` has no `value()` member, so no such source can compile |
+
+Binding rules:
+
+1. **Discovery is shape-blind.** Predicate (b) of G8 rule 0 means exactly
+   `decl.getAnnotationByName("View").isPresent()` — any shape, with or without elements, public or
+   package-private. Discovery never casts an `AnnotationExpr` to a subtype. `person/iface/Person` is
+   package-private and is excluded by X3's `packages` knob, **not** by anything in the parser, so the
+   two mechanisms must not be conflated.
+2. **One shared reader, introduced with its first consumer.** `ViewAnnotationReader.parse(AnnotationExpr)`
+   (equivalently: the refactored `parseViewAnnotation`) is the only place a shape is inspected, and it
+   is called by **both** the validator (§ 6.3/1.12) and the generator (§ 8.1/3.2) — the same
+   one-owner discipline as DR-3. It lands **with task 1.12 in Phase 1**, because the validator is its
+   first consumer, and § 8.1/3.2 then reuses it; this mirrors how `GenLevelResolver` lands with 1.12 and
+   is reused by § 8.1/3.3. It returns `DEFAULT` when `gen` is absent, and **`GenLevelResolver` alone**
+   resolves `DEFAULT` into `RECORD`/`BUILDER`/`META`.
+3. **`gen` spellings all live, resolved by last segment.** Simple (`GenLevel.X`), fully-qualified
+   (`hr.hrg.hipster.entity.api.GenLevel.X`), or absent (marker/empty form). Resolution compares the
+   **last identifier segment** of the value expression against `GenLevel`'s constant names — no class
+   loading, no import-table lookup. An unknown constant is the DEC-022 diagnostic `unknown_gen_level`
+   and falls back to `DEFAULT`: never a crash, and never a silent `META`.
+4. **`addons` spellings.** `{A.class, B.class}` (the only form in the tree), `{}`, or absent; strip a
+   trailing `.class` and any package prefix, yielding simple names resolved against the package's
+   `interfaceMap` (X3: indexing is not filtered, generation is). Unresolvable → `unresolved_addon`
+   (G6) — never a silent skip.
+5. **`discriminatorField`.** String literal; absent → `""`. The example supplies its discriminator
+   through the hand-written `PaymentMethod_.` base enum and the four generated subclasses (§ 9/4.9),
+   so no view in this tree needs the attribute to be non-default — the parser must still read it.
+6. **No propagation, no nested seeding.** A subtype does not become a view by inheriting a
+   `@View`-annotated supertype (Java annotations are not inherited on interfaces), and `@View` on a
+   nested type declaration never seeds a view (G8 rule 2). Both already hold in the tree:
+   `PersonUpdateForm extends PersonCreateForm` carries its **own** bare `@View`, while
+   `PersonUpdatableView extends PersonUpdateForm` carries none and is marker-derived; the nested
+   `PersonSummary.Write` is never a discovery root.
+
+Acceptance tests, in the same commit that lands the reader (extend the G8 discovery fixture in task
+3.2a and grow the § 0.5 compile harness): one fixture per shape above; an unknown `gen` constant; an
+unresolvable addon; a `@View` on a nested type (must not seed a second view); and a **real-tree**
+assertion that `person.entity` discovery yields seven views of which five carry `@View`, with
+`PersonDto` and `PersonUpdateForm` present **because of the marker form** — precisely the case a
+`NormalAnnotationExpr`-only parser drops.
 
 ### 4.6 R1 — Field enums are append-only ordinal ledgers (new binding rule)
 
@@ -1208,14 +1269,15 @@ R1 governs **where a new constant may be placed**. An implementer must not let D
 block whose *position* is semantic, and the generator's own comparison must therefore be
 order-sensitive even though every other block's is not.
 
-### 4.7 Decision rounds — the eight items a readiness review left open
+### 4.7 Decision rounds — the items a readiness review left open, plus the later review rounds
 
 These were the only remaining places where an implementer would have had to make an authoring
 decision, and the first of them (DR-1) was the one case where the plan itself asked the reader to
-choose. **All eight are now binding**, and each was applied **in place** in the subsection it
+choose. **DR-1–DR-8 are now binding**, and each was applied **in place** in the subsection it
 changes, so this table is an audit index rather than a second source of truth. DR-7 and DR-8 were
 added by the **pre-execution review** (which also corrected the factual claims listed after the
-table); their full rules live in § 4.5/G7 and § 4.5/G8.
+table); their full rules live in § 4.5/G7 and § 4.5/G8. **DR-9** was added by the
+**execution-readiness review** that followed the gate review; its full rule lives in § 4.5/G9.
 
 | # | Question | Final rule | Applied in |
 |---|---|---|---|
@@ -1227,6 +1289,7 @@ table); their full rules live in § 4.5/G7 and § 4.5/G8.
 | DR-6 | Where are the new binding rules recorded? | **Each gets its own standalone DEC**: R1 (§ 9/4.8), field-enum compaction (§ 12.4/7.13), nested/deep tracking (§ 11/6.1). R1 still *uses* DEC-021's header/marker mechanism, but its order contract is not recorded by amending DEC-021. | § 9/4.8, § 12.4/7.13, § 11/6.1 |
 | DR-7 | Does R1's append-only/tombstone rule apply to an existing enum that does not yet carry the `entityFieldEnum` marker (the legacy example enums)? | **No — the ledger is marker-scoped.** Preserve and tombstone only in enums that already carry `entityFieldEnum:true`; a marker-less existing enum is **bootstrapped as a fresh ledger**, its stale constants are **dropped** (the leaked `toBuilder`/`toBuilderTracking`/`changes`) and reported as `enum_constant_removed` with action `bootstrap`. Adding the marker by hand is the sole opt-in that forces tombstoning. A malformed header counts as marked (fail safe). | § 4.5/G7, § 4.6/R1.1 + R1.2 + R1.3 + R1.4, § 8.3/3.7a, § 9/4.1 |
 | DR-8 | What makes a view, and may the generator rediscover its own nested output? | **Predicate: marker-derivation *or* `@View`, minus the marker and minus the framework surfaces.** The `@View` seed is new (task 3.2a) and is what makes `PersonCreateForm` a view and `PersonCreateForm_` a real output; interfaces extending `ViewReader`/`ViewWriter`/`ViewChangeTracking` are **not** views, and discovery never descends into nested types of a view file, so exactly one `_` enum is emitted per view and regeneration is a fixed point. The orphan `Write_.java` is **deleted** in Phase 4, not regenerated. | § 4.5/G8 (+ G6), § 8.1/3.2a, § 8.7/3.19, § 9/4.1 |
+| DR-9 | Which `@View` syntactic forms must the parser accept, and where is that fixed? | **All four shapes the tree contains** — bare marker `@View` (`PersonDto.java:5`, `PersonUpdateForm.java:5`), empty `@View()`, pairs `@View(gen = …, addons = {…})`, and the retired single-member `@View(true)` — behind one **shape-blind** discovery check and one shared `ViewAnnotationReader` used by both the validator and the generator. `gen` resolves by last identifier segment (simple or fully-qualified); an unknown constant emits `unknown_gen_level` and falls back to `DEFAULT`; no propagation to subtypes and no nested seeding. A `NormalAnnotationExpr`-only parser silently drops `PersonDto_` and `PersonUpdateForm_`, i.e. the two views § 9/4.1 expects. | § 4.5/G9, § 8.1/3.2 + 3.2a, § 6.3/1.12 |
 
 Three factual corrections from the second decision round are applied in place rather than logged here:
 S2's claim that `plans__*` is git-ignored (**they are tracked**), G3's claim that `TrackingStrict`
@@ -1324,6 +1387,20 @@ dependencies are `project-automation/pom.xml:47,51` (§ 2.2, § 0.2) and `metada
 
 With GR-1–GR-6 applied, the claim in § 4 that no task requires an unfixed authoring decision mid-flight
 holds as written.
+
+An **execution-readiness review** — run after the gate review and before implementation started —
+added one further gap, **G9/DR-9** (§ 4.5/G9): the `@View` census in GR-5 and the parse spec in
+§ 8.1/3.2 covered only the parenthesized forms, while the tree carries **four** shapes. The bare
+`@View` marker form is live on `person/entity/PersonDto.java:5` and
+`person/entity/PersonUpdateForm.java:5`, which are 2 of the 5 `@View`-carrying views that § 9/4.1
+expects to generate, so a `NormalAnnotationExpr`-restricted parser would have silently dropped
+`PersonDto_` and `PersonUpdateForm_`. GR-5's "two forms" wording therefore means *two `gen`
+spellings*, not two shapes. The same review restored an accurate reading of GR-6's line citations:
+Maven 3.9 reports the three `dependencies.dependency.version … is missing` errors against the
+enclosing `<dependency>` tags at `project-automation/pom.xml:45,49` and
+`metadata-mcp-server/pom.xml:21`, while `47,51` / `23` are the `<artifactId>` lines § 2.2 cites for
+the versionless references; both pairs are correct for what they describe, and § 0.2 must not be read
+as locating the errors at 47/51/23.
 
 ---
 
@@ -1602,7 +1679,9 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
 
 ### 6.3 `hipster-entity-tooling` — repair the validator
 
-- [ ] **1.12** Rewrite `ViewAnnotationRule`: parse `gen`, `discriminatorField`, and `addons`;
+- [ ] **1.12** Rewrite `ViewAnnotationRule`: parse `gen`, `discriminatorField`, and `addons`
+  **through the shape-blind `ViewAnnotationReader` this task introduces** (G9, § 4.5,
+  § 4.7/DR-9 — Phase 1 is where the reader lands; § 8.1/3.2 reuses it);
   drop the string-`contains` check; reject a `GenLevel` incompatible with the declared shape
   (e.g. `BUILDER_TRACKED` on a view with no writable fields). Resolve `gen = DEFAULT` **through
   the shared `GenLevelResolver`** that § 8.1/3.3 also calls (G1, § 4.7/DR-3) — the validator must
@@ -1610,7 +1689,9 @@ constructor fix — lives in § 6.2 because it is a `core` change.)
   a view whose shape resolves to `RECORD`/`BUILDER`. Also report `addons` on a non-view interface
   as the `addon_on_non_view` diagnostic (§ 4.5/G6, § 4.7/DR-1). Update `ViewAnnotationRuleTest`,
   `EntityRulesValidatorTest`, and the `EntityMetadataGeneratorTest` fixtures, which all still use
-  the non-existent `@View(read = …, write = …)` form.
+  the non-existent `@View(read = …, write = …)` form — and cover G9's shapes in
+  `ViewAnnotationRuleTest` (bare `@View`, `@View()`, and both `gen` spellings), since the rule and
+  the generator must agree on every shape.
 - [ ] **1.13** Wire the validator into `EntityMetadataGenerator.generate(...)`: collect
   `ValidationIssue`s and fail (or warn behind a `strict` flag) **before** writing files.
 - [ ] **1.14** New `EnumConstantOrderChecker` in
@@ -1826,8 +1907,15 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
 
 - [ ] **3.1** `meta/ViewAttributes` → `record ViewAttributes(GenLevel gen, String discriminatorField, List<String> addons)`.
 - [ ] **3.2** Rewrite `parseViewAnnotation` (`EntityMetadataGenerator.java:438-467`) to read
-  `gen`, `discriminatorField`, `addons` from `NormalAnnotationExpr.getPairs()`, mapping
-  `GenLevel.X` by simple-name comparison (no class loading), defaulting to `GenLevel.DEFAULT`.
+  `gen`, `discriminatorField`, `addons` **through the shared, shape-blind `ViewAnnotationReader` of
+  G9** (§ 4.5, § 4.7/DR-9) — never by casting to `NormalAnnotationExpr`, because the bare `@View`
+  marker form is live on `person/entity/PersonDto.java:5` and `person/entity/PersonUpdateForm.java:5`
+  and a shape-restricted parser silently drops those two views and the `PersonDto_` /
+  `PersonUpdateForm_` enums § 9/4.1 expects. Accept every shape in G9's table (marker, empty, pairs;
+  the retired `@View(true)` form gets the `unsupported_view_annotation_form` diagnostic), map `gen`
+  by last-identifier-segment comparison (no class loading) for **both** the simple `GenLevel.X` and
+  the fully-qualified spelling, default to `GenLevel.DEFAULT`, and emit `unknown_gen_level` on an
+  unrecognized constant.
   `addons` parses to a `List<String>` of simple names, resolved against the package's
   `interfaceMap`; an unresolvable addon name is a DEC-022 diagnostic, not a silent skip. Its
   **emission** semantics are fixed by **G6** (§ 4.5) — parse it here, apply it in § 8.3.
@@ -1844,7 +1932,12 @@ grows `GeneratedSourceCompilesTest` from Phase 0.5.
   `Write_.java` exists with exactly `PersonSummary_`'s constants — and 3.12's emitted nested
   `Write` would be rediscovered on the next pass, nesting `Write` inside `Write` and colliding on
   the simple-name-derived `Write_.java`. Land the discovery fixture test from § 4.5/G8 (extended
-  with the `@View`-seeded non-marker view) in the same commit.
+  with the `@View`-seeded non-marker view) in the same commit, and land **G9's shape matrix**
+  (§ 4.5) with it: one fixture per `@View` shape (bare `@View`, `@View()`, `@View(gen = …)` simple
+  and fully-qualified, the retired `@View(true)`), an unknown `gen` constant, an unresolvable
+  addon, a `@View` on a nested type that must not seed a second view, and the real-tree assertion
+  that `person.entity` discovery yields seven views of which five carry `@View` — with `PersonDto`
+  and `PersonUpdateForm` present **because of the marker form**.
 - [ ] **3.3** Make the `DEFAULT` resolution rule explicit and implement it exactly as **G1**
   (§ 4.5) specifies — precedence `RECORD` (nested record with matching component order) →
   `BUILDER` (nested `Write`) → `META`; never tracked. Implement it **once**, in the shared
@@ -2446,6 +2539,11 @@ Ordering constraints that are **not** negotiable:
   a view in its own right, the nested `Write` that 3.12 emits is rediscovered on the next pass,
   `Write` nests inside `Write`, and the simple-name-derived `Write_.java` collides; without the
   `@View` seed there is no `PersonCreateForm_` at all, and § 9/4.1's file list is wrong.
+- **G9's shape contract (§ 4.5, tasks 1.12 + 3.2a) lands before Phase 4 regenerates the example.**
+  `person/entity/PersonDto` and `person/entity/PersonUpdateForm` carry the **bare `@View` marker
+  form**; a parser restricted to `NormalAnnotationExpr` drops both, so the regenerated file list
+  silently loses `PersonDto_` and `PersonUpdateForm_` — two of the five `@View`-carrying views
+  § 9/4.1 counts. Discovery must be shape-blind and the parse must go through the one shared reader.
 - **No module-layering work in this release** (S3/X1 deferred). If a task appears to require
   moving `ViewChangeTracking` or the `EEnumSet*` interfaces between `api` and `core`, it is out of
   scope — take the `core` dependency instead.
