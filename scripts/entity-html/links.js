@@ -124,16 +124,16 @@ export function buildPage(options) {
   const stats = { views: 0, fields: 0, links: 0, checked: 0, stale: 0 };
   const markers = [];
 
-  // A document that names files by index id is unusable without the table, and there is no honest
-  // fallback: an id rendered as if it were a path is a page of dead links that looks like it worked.
-  // Reported and stopped, rather than rendered wrong.
+  // A document that names files by FQN is unusable without the table, and there is no honest fallback:
+  // an FQN rendered as if it were a path is a page of dead links that looks like it worked. Reported and
+  // stopped, rather than rendered wrong.
   const indexMissing = metadata.needsIndex && !metadata.index.usable;
   if (indexMissing) {
     divergences.push(new Divergence('html_index_missing', metadata.directory,
-      'the metadata names source files by index id, and the module index could not be read',
-      metadata.index.problem ?? 'the index table is missing or unreadable',
-      join(scan.linkBase, '.jcodebuddy', 'index', 'files.json'),
-      'rerun a generator pass (scripts/gen.cmd) so the index and the documents are written together; '
+      'the metadata names source files by fully qualified type name, and the class index could not be read',
+      metadata.index.problem ?? 'the class index table is missing or unreadable',
+      join(scan.linkBase, '.jcodebuddy', 'index', 'classes.json'),
+      'rerun a generator pass (scripts/gen.cmd) so the class index and the documents are written together; '
       + 'the index is written before the documents precisely so this cannot happen'));
   }
 

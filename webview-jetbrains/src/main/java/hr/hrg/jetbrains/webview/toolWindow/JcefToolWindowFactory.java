@@ -1,217 +1,67 @@
 package hr.hrg.jetbrains.webview.toolWindow;
 
-import com.intellij.ide.BrowserUtil;
-import com.intellij.icons.AllIcons;
-import com.intellij.openapi.actionSystem.*;
-import com.intellij.openapi.options.ShowSettingsUtil;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.DumbAware;
-import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.ui.SimpleToolWindowPanel;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
-import com.intellij.openapi.wm.ToolWindowManager;
-import com.intellij.ui.components.JBTextField;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
-import com.intellij.ui.jcef.JBCefBrowserBase;
 import com.intellij.ui.jcef.JBCefApp;
-import com.intellij.ui.jcef.JBCefBrowser;
-import org.cef.browser.CefBrowser;
-import org.cef.browser.CefFrame;
-import org.cef.handler.CefLoadHandlerAdapter;
-import org.jetbrains.annotations.NotNull;
-import hr.hrg.jetbrains.webview.actions.ToggleToolWindowAction;
 import hr.hrg.jetbrains.webview.services.PluginStateService;
-import hr.hrg.jetbrains.webview.settings.WebViewSettingsConfigurable;
+import org.jetbrains.annotations.NotNull;
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
-import java.io.File;
-import java.nio.file.Path;
-import java.util.Collections;
+/**
+ * Creates the WebView Explorer tool window: one {@link WebViewPanel}, registered with
+ * {@link WebViewService} so nothing else has to search for it.
+ */
+public final class JcefToolWindowFactory implements ToolWindowFactory, DumbAware {
 
-public class JcefToolWindowFactory implements ToolWindowFactory, DumbAware {
+    private static final Logger LOG = Logger.getInstance(JcefToolWindowFactory.class);
+
+    public JcefToolWindowFactory() {
+        // No-arg constructor, which the platform instantiates tool-window factories with. Note that a
+        // missing runtime dependency on com.intellij.modules.jcef makes the platform report this
+        // constructor as "not found" - see plan.reimplement.md finding F8.
+    }
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         if (!JBCefApp.isSupported()) {
-            JLabel label = new JLabel("JCEF is not supported on this runtime.");
-            label.setHorizontalAlignment(SwingConstants.CENTER);
-            Content content = ContentFactory.getInstance().createContent(label, "", false);
-            toolWindow.getContentManager().addContent(content);
+            addFallbackContent(toolWindow, new UnsupportedBrowserPanel());
             return;
         }
 
-        JBCefBrowser browser = JBCefBrowser.createBuilder()
-                .setEnableOpenDevToolsMenuItem(true)
-                .build();
-        browser.getComponent().putClientProperty(JBCefBrowserBase.JBCEFBROWSER_INSTANCE_PROP, browser);
-
-        new JcefBridgeNew(project, browser);
-
-        // Address Bar
-        JBTextField addressBar = new JBTextField();
-        addressBar.addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-                    String url = addressBar.getText();
-                    if (!url.isEmpty()) {
-                        if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-                            // Try to see if it's a local file
-                            File file = new File(url);
-                            if (file.exists()) {
-                                url = file.toURI().toString();
-                            } else if (!url.contains("://")) {
-                                url = "https://" + url;
-                            }
-                        }
-                        browser.loadURL(url);
-                    }
-                }
-            }
-        });
-
-        browser.getJBCefClient().addLoadHandler(new CefLoadHandlerAdapter() {
-            @Override
-            public void onLoadEnd(CefBrowser cefBrowser, CefFrame frame, int httpStatusCode) {
-                if (frame.isMain()) {
-                    String url = cefBrowser.getURL();
-                    SwingUtilities.invokeLater(() -> addressBar.setText(url));
-                    PluginStateService.getInstance(project).setLastUrl(url);
-                }
-            }
-        }, browser.getCefBrowser());
-
-        // Actions
-        DefaultActionGroup actionGroup = new DefaultActionGroup();
-
-        actionGroup.add(new DumbAwareAction("Back", "Go back", AllIcons.Actions.Back) {
-            @Override
-            public void actionPerformed(@NotNull AnActionEvent e) {
-                if (browser.getCefBrowser().canGoBack()) {
-                    browser.getCefBrowser().goBack();
-                }
-            }
-
-            @Override
-            public void update(@NotNull AnActionEvent e) {
-                e.getPresentation().setEnabled(browser.getCefBrowser().canGoBack());
-            }
-
-            @Override
-            public @NotNull ActionUpdateThread getActionUpdateThread() {
-                return ActionUpdateThread.EDT;
-            }
-        });
-
-        actionGroup.add(new DumbAwareAction("Forward", "Go forward", AllIcons.Actions.Forward) {
-            @Override
-            public void actionPerformed(@NotNull AnActionEvent e) {
-                if (browser.getCefBrowser().canGoForward()) {
-                    browser.getCefBrowser().goForward();
-                }
-            }
-
-            @Override
-            public void update(@NotNull AnActionEvent e) {
-                e.getPresentation().setEnabled(browser.getCefBrowser().canGoForward());
-            }
-
-            @Override
-            public @NotNull ActionUpdateThread getActionUpdateThread() {
-                return ActionUpdateThread.EDT;
-            }
-        });
-
-        actionGroup.add(new DumbAwareAction("Refresh", "Reload the page", AllIcons.Actions.Refresh) {
-            @Override
-            public void actionPerformed(@NotNull AnActionEvent e) {
-                browser.getCefBrowser().reload();
-            }
-
-            @Override
-            public @NotNull ActionUpdateThread getActionUpdateThread() {
-                return ActionUpdateThread.BGT;
-            }
-        });
-
-        actionGroup.add(new DumbAwareAction("Settings", "Open settings", AllIcons.General.Settings) {
-            @Override
-            public void actionPerformed(@NotNull AnActionEvent e) {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, WebViewSettingsConfigurable.class);
-            }
-
-            @Override
-            public @NotNull ActionUpdateThread getActionUpdateThread() {
-                return ActionUpdateThread.BGT;
-            }
-        });
-
-        ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar("JcefToolWindowToolbar", actionGroup,
-                true);
-        toolbar.setTargetComponent(addressBar);
-
-        // Toolbar Panel
-        JPanel toolbarPanel = new JPanel(new BorderLayout());
-        toolbarPanel.add(toolbar.getComponent(), BorderLayout.WEST);
-        toolbarPanel.add(addressBar, BorderLayout.CENTER);
-
-        SimpleToolWindowPanel panel = new SimpleToolWindowPanel(true, true);
-        panel.putClientProperty("JBCefBrowser", browser);
-        panel.setToolbar(toolbarPanel);
-        panel.setContent(browser.getComponent());
-
-        // Initial load
-        String lastUrl = PluginStateService.getInstance(project).getLastUrl();
-        if (lastUrl != null && !lastUrl.isEmpty()) {
-            browser.loadURL(lastUrl);
-        } else {
-            loadContent(project, browser);
+        WebViewPanel panel;
+        try {
+            // The panel consumes any URL that was requested before this tool window existed, so that
+            // "Open in WebView Explorer" on a file shows the file and not the splash page.
+            panel = new WebViewPanel(project, WebViewService.getInstance(project).ready());
+        } catch (RuntimeException | LinkageError e) {
+            // A LinkageError is what a missing platform module looks like from here; catching it turns
+            // a dead tool window into one that explains itself.
+            LOG.warn("WebView Explorer could not create its browser", e);
+            addFallbackContent(toolWindow, new UnsupportedBrowserPanel(e));
+            return;
         }
 
-        // Add to tool window
-        Content content = ContentFactory.getInstance().createContent(panel, "", false);
-        content.setDisposer(browser);
+        Content content = ContentFactory.getInstance().createContent(panel.getComponent(), "", false);
+        // The content disposes the panel, which disposes the browser and the JS query with it.
+        content.setDisposer(panel);
         toolWindow.getContentManager().addContent(content);
+
+        // One decision, in one place: deliver the URL that was requested before this tool window
+        // existed, or fall back to the last URL (or the splash page). Previously the factory delivered
+        // the parked URL and then loaded the fallback on top of it, so "Open in WebView Explorer" on a
+        // file showed the splash page and never rendered the file.
+        String lastUrl = PluginStateService.getInstance(project).getLastUrl();
+        String fallback = lastUrl == null || lastUrl.isBlank() ? SplashPage.URL : lastUrl;
+        WebViewService.getInstance(project).register(panel, fallback);
+        panel.applyIdeStyling();
     }
 
-    private void loadContent(Project project, JBCefBrowser browser) {
-        String html = "<!DOCTYPE html>\n" +
-                "<html>\n" +
-                "<head>\n" +
-                "    <title>WebView Explorer</title>\n" +
-                "    <style>\n" +
-                "        body { font-family: sans-serif; padding: 20px; }\n" +
-                "    </style>\n" +
-                "</head>\n" +
-                "<body>\n" +
-                "    <h2>WebView Explorer</h2>\n" +
-                "    <p>WebView Explorer. Use context menu to open a html file here. The file can use javascript to trigger opening a file</p>\n"
-                +
-                "</body>\n" +
-                "</html>";
-        browser.loadHTML(html);
-    }
-
-    public static void reloadWithFile(Project project, String url) {
-        ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow(ToggleToolWindowAction.TOOL_WINDOW_ID);
-        if (toolWindow == null)
-            return;
-        Content content = toolWindow.getContentManager().getContent(0);
-        if (content == null)
-            return;
-        JComponent component = content.getComponent();
-        if (component == null)
-            return;
-        JBCefBrowser browser = (JBCefBrowser) component.getClientProperty(JBCefBrowserBase.JBCEFBROWSER_INSTANCE_PROP);
-        if (browser != null) {
-            PluginStateService.getInstance(project).setLastUrl(url);
-            browser.loadURL(url);
-            toolWindow.activate(null);
-        }
+    private static void addFallbackContent(@NotNull ToolWindow toolWindow, @NotNull UnsupportedBrowserPanel panel) {
+        Content content = ContentFactory.getInstance().createContent(panel.getComponent(), "", false);
+        toolWindow.getContentManager().addContent(content);
     }
 }

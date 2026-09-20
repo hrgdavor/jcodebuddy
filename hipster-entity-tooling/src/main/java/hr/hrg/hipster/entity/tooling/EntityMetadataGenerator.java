@@ -15,6 +15,7 @@ import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 
+import hr.hrg.hipster.entity.tooling.index.ClassIndex;
 import hr.hrg.hipster.entity.tooling.meta.EntityFieldMeta;
 import hr.hrg.hipster.entity.tooling.meta.EntityMeta;
 import hr.hrg.hipster.entity.tooling.meta.FieldConstraint;
@@ -45,7 +46,14 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 public class EntityMetadataGenerator {
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    /**
+     * The shared JSON reader.
+     *
+     * <p>Public because the class index parses its own table with the same reader ({@link ClassIndex} lives
+     * in its own package): two spellings of "how JSON is read" is how the table and the documents would
+     * drift apart on the first value that needs unescaping.</p>
+     */
+    public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     // ── identity, and the flag surface a runner depends on ───────────────────
 
@@ -193,41 +201,55 @@ public class EntityMetadataGenerator {
     }
 
     /**
-     * Reads a marker document written before the module index existed.
+     * Reads a marker document written before the class index existed.
      *
      * <p>Kept as its own entry point because it is what a Java consumer that has a document but no index
-     * can call: the ids stay <strong>unresolved</strong> — the model's path fields are {@code null} —
-     * rather than the reader inventing a path it cannot know. {@link #fromJson(String, Map)} resolves
-     * them when the caller has the table.</p>
+     * can call: the references stay <strong>unresolved</strong> — the model's path fields are
+     * {@code null} — rather than the reader inventing a path it cannot know.
+     * {@link #fromJson(String, Map)} resolves them when the caller has the table.</p>
      */
     public static EntityMeta fromJson(String json) throws java.io.IOException {
         return fromJson(json, null);
     }
 
     /**
-     * Reads a marker document (DEC-028).
+     * Reads a marker document (DEC-029).
      *
-     * <p><strong>Paths in the model, ids in the JSON</strong>: that is the single conversion point, and
+     * <p><strong>Paths in the model, FQNs in the JSON</strong>: that is the single conversion point, and
      * the reason {@code Property.sourcePath} and friends keep their meaning for every existing Java
-     * caller and test. A document is no longer self-contained — it names files by the id the module's
-     * central index assigned them — so a caller that wants paths passes {@code idToPath} (the
-     * {@code files} object of {@code .jcodebuddy/index/files.json}, which the document's
-     * {@code fileIndex} pointer locates). Without it the ids are left unresolved rather than guessed.</p>
+     * caller and test. A type is named in the document by its fully qualified name, which resolves
+     * through the module's class index — so a caller that wants paths passes {@code classIndex} (the
+     * {@code classes} object of {@code .jcodebuddy/index/classes.json}, which the document's
+     * {@code classIndex} pointer locates, or the raw {@code FQN → path} map). Without it the references
+     * are left unresolved rather than guessed.</p>
      *
      * <p><strong>Legacy documents still parse.</strong> {@code markerSourcePath}/{@code sourcePath}
-     * (plain relative paths) are accepted wherever the id keys are absent, so a document written before
-     * this change reads exactly as it did. A document never carries both spellings of the same fact, so
-     * there is no precedence rule to remember — the id key is read when it is there, the path key
+     * (plain relative paths) are accepted wherever the FQN keys are absent, so a document written before
+     * this change reads exactly as it did; and a document written while {@code files.json} existed
+     * carries the DEC-028 readable ids and {@code fileIndex}, which the caller can pass as a second map
+     * ({@link #fromJson(String, Map, Map)}). A document never carries two spellings of the same fact, so
+     * there is no precedence rule to remember — the FQN key is read when it is there, the id or path key
      * otherwise.</p>
      */
-    public static EntityMeta fromJson(String json, Map<String, String> idToPath) throws java.io.IOException {
+    public static EntityMeta fromJson(String json, Map<String, String> fqnToPath) throws java.io.IOException {
+        return fromJson(json, fqnToPath, Map.of());
+    }
+
+    /**
+     * {@link #fromJson(String, Map)} that also resolves the DEC-028 readable ids of a legacy document.
+     *
+     * @param fqnToPath        FQN → module-relative path, from the class index
+     * @param legacyIdToPath   readable id → module-relative path, from a DEC-028 {@code files.json}
+     */
+    public static EntityMeta fromJson(String json, Map<String, String> fqnToPath,
+                                      Map<String, String> legacyIdToPath) throws java.io.IOException {
         JsonNode root = OBJECT_MAPPER.readTree(json);
 
         String entityName = root.path("entityName").asText();
         String packageName = root.path("package").asText();
         String markerInterface = root.path("markerInterface").asText();
         String idType = root.path("idType").asText();
-        String markerSourcePath = sourcePath(root, "markerFile", idToPath, "markerSourcePath");
+        String markerSourcePath = sourcePath(root, "markerFile", fqnToPath, legacyIdToPath, "markerSourcePath");
         int markerLine = root.path("markerLine").asInt(-1);
 
         List<ViewMeta> views = new ArrayList<>();
@@ -270,7 +292,7 @@ public class EntityMetadataGenerator {
                 }
                 properties.add(new Property(name, type, fieldKind, column, relation, expression,
                         lineNumber, constraints, typeImports,
-                        sourcePath(propNode, "file", idToPath, "sourcePath")));
+                        sourcePath(propNode, "file", fqnToPath, legacyIdToPath, "sourcePath")));
             }
 
             List<hr.hrg.hipster.entity.tooling.meta.ArtifactMeta> artifacts = new ArrayList<>();
@@ -279,7 +301,7 @@ public class EntityMetadataGenerator {
                         artifactNode.path("id").asInt(-1),
                         artifactNode.path("name").asText(),
                         artifactNode.path("kind").asText(),
-                        sourcePath(artifactNode, "file", idToPath, null),
+                        sourcePath(artifactNode, "file", fqnToPath, legacyIdToPath, null),
                         artifactNode.path("line").asInt(-1),
                         artifactNode.path("generated").asBoolean(false),
                         artifactNode.path("own").asBoolean(true),
@@ -315,7 +337,8 @@ public class EntityMetadataGenerator {
             }
 
             views.add(new ViewMeta(viewName, extendsTypes, gen, discriminatorField, addons, properties,
-                    viewLineNumber, sourcePath(viewNode, "file", idToPath, "sourcePath"), artifacts, fields));
+                    viewLineNumber, sourcePath(viewNode, "file", fqnToPath, legacyIdToPath, "sourcePath"),
+                    artifacts, fields));
         }
 
         List<EntityFieldMeta> allFields = new ArrayList<>();
@@ -340,7 +363,7 @@ public class EntityMetadataGenerator {
             }
 
             allFields.add(new EntityFieldMeta(name, type, fieldKind, column, relation, expression, lineNumber, fieldViews, typeByView,
-                    sourcePath(fieldNode, "file", idToPath, "sourcePath")));
+                    sourcePath(fieldNode, "file", fqnToPath, legacyIdToPath, "sourcePath")));
         }
 
         return new EntityMeta(entityName, packageName, markerInterface, idType, views, allFields,
@@ -348,22 +371,36 @@ public class EntityMetadataGenerator {
     }
 
     /**
-     * The path a node's file key names: the id resolved through {@code idToPath} when the document was
-     * written by this revision, or the literal path key when it was written before ids existed.
+     * The path a node's file key names (DEC-029).
      *
-     * <p>One method rather than five, because "which of the two spellings is this document using?" has
-     * exactly one right answer and it must be the same one everywhere — {@code markerSourcePath} and
-     * {@code sourcePath} were the old keys, {@code markerFile} and {@code file} are the new ones, and a
-     * reader that answered differently at two call sites would resolve one file and not another.</p>
+     * <p>Three spellings are accepted, because they are three revisions of one fact and a reader that
+     * answered differently at two call sites would resolve one file and not another:</p>
+     * <ol>
+     *   <li>{@code file}/{@code markerFile} — a fully qualified type name, resolved through the class
+     *       index (the current spelling);</li>
+     *   <li>the same key — the DEC-028 readable id, resolved through a {@code files.json} table, for a
+     *       document written while that table existed;</li>
+     *   <li>{@code sourcePath}/{@code markerSourcePath} — a plain module-relative path, as documents
+     *       carried before any index existed.</li>
+     * </ol>
+     *
+     * <p>A key that is present but unresolvable yields {@code null} rather than the key: rendering an
+     * FQN as if it were a path is the failure {@code html_index_missing} exists to prevent.</p>
      */
-    private static String sourcePath(JsonNode node, String idKey, Map<String, String> idToPath,
-                                     String legacyPathKey) {
-        if (node.hasNonNull(idKey)) {
-            String id = node.path(idKey).asText(null);
-            if (id == null || id.isBlank()) {
+    private static String sourcePath(JsonNode node, String key, Map<String, String> fqnToPath,
+                                     Map<String, String> legacyIdToPath, String legacyPathKey) {
+        if (node.hasNonNull(key)) {
+            String value = node.path(key).asText(null);
+            if (value == null || value.isBlank()) {
                 return null;
             }
-            return idToPath == null ? null : idToPath.get(id);
+            if (fqnToPath != null && fqnToPath.containsKey(value)) {
+                return fqnToPath.get(value);
+            }
+            if (legacyIdToPath != null && legacyIdToPath.containsKey(value)) {
+                return legacyIdToPath.get(value);
+            }
+            return null;
         }
         return legacyPathKey == null ? null : node.path(legacyPathKey).asText(null);
     }
@@ -1298,12 +1335,24 @@ public class EntityMetadataGenerator {
         // both the walk below and a reader of the JSON need the same answer.
         Path moduleRoot = resolveModuleRoot(sourceRoot, outputDir);
 
-        // The module's central file index (DEC-028): the ONE place a source path is written, and the one
-        // place a file id is assigned. Every document this pass writes names its files by an id that
-        // resolves here, which is what keeps a path from being repeated once per location — and it is
-        // why the index has to be complete before the first document is written, i.e. why the writes
-        // moved to the end of the pass (§ 4.5).
-        ModuleFileIndex fileIndex = ModuleFileIndex.forPass(outputDir, moduleRoot, sourceRoot);
+        // The module's class index (DEC-029): one row per type the module compiles, keyed by its fully
+        // qualified name, carrying the declaring file's path and content identity and the type's kind and
+        // modifiers. Every document this pass writes names its files by an FQN that resolves here, which
+        // is what keeps a path from being repeated once per location — and it is why the index has to be
+        // complete before the first document is written, i.e. why the writes moved to the end of the pass
+        // (§ 4.5). The previous table is read first so a row whose content did not change keeps the
+        // instant its checksum was calculated at, and so the pass can report what changed for free.
+        // A missing table is the normal state of a first pass, not a diagnostic: the previous table is an
+        // optimisation (it carries the timestamp of content that did not change), and its absence only
+        // means every row is stamped now. A table that is *present but unusable* is different — it means a
+        // stale or unknown revision is on disk — and that is reported below.
+        Path classIndexFile = ClassIndex.Readers.defaultIndexFile(moduleRoot);
+        List<String> indexProblems = new ArrayList<>();
+        ClassIndex previousIndex = Files.isRegularFile(classIndexFile)
+                ? ClassIndex.read(classIndexFile, outputDir, moduleRoot, sourceRoot, indexProblems)
+                : null;
+        ClassIndex classIndex = ClassIndex.forPass(outputDir, moduleRoot, sourceRoot)
+                .merge(previousIndex);
         // The detail the emission loop produces per view, keyed by the view's qualified name. Each view
         // is emitted exactly once for the whole pass (the `alreadyFound` set below), so the key is
         // unique; a view skipped by the `--packages` filter gets an empty detail, which is the honest
@@ -1350,11 +1399,14 @@ public class EntityMetadataGenerator {
                         // records where each class and each accessor is declared, and only the walk knows
                         // the file a declaration came from (DEC-027's amendment).
                         String unitPath = moduleRelativePath(moduleRoot, filePath);
-                        // Every file the pass read or wrote is in the index, and it is added before any
-                        // id is resolved: a file the pass indexed but forgot to add would have no id,
-                        // and the writer would fail loudly rather than write a path into a document.
-                        if (ModuleFileIndex.isModuleRelative(unitPath)) {
-                            fileIndex.add(unitPath);
+                        // Every file the pass read is named by the class index, before its types are
+                        // known: a file that declares no type (a package-info.java) or could not be read
+                        // is then reported rather than silently absent from the pass's own record. A file
+                        // the pass indexed but did not register would have no FQN, and the writer would
+                        // fail loudly rather than write a path into a document.
+                        if (ClassIndex.isModuleRelative(unitPath)) {
+                            classIndex.addFile(unitPath);
+                            classIndex.addTypes(unitPath, cu, false);
                         }
                         units.add(new ParsedUnit(packageName, importTableOf(cu), cu, unitPath));
 
@@ -1705,7 +1757,7 @@ public class EntityMetadataGenerator {
                     // when the documents are written.
                     detailByView.put(getQualifiedName(viewPackage, view.name()),
                             MetadataLocations.collect(moduleRoot, javaOutputRoot, viewPackage, view.name(),
-                                    viewInfo, ordinalProperties, ledger.ledgerSize(), fileIndex, divergences));
+                                    viewInfo, ordinalProperties, ledger.ledgerSize(), classIndex, divergences));
                 }
 
                 // The marker's document is assembled in memory here and written after the whole pass:
@@ -1741,16 +1793,35 @@ public class EntityMetadataGenerator {
         generateRequestedMappers(javaOutputRoot, emittedViews, divergences);
 
         // ── artifacts → index → documents (§ 4.5) ──────────────────────────────────────────────────
-        // Every artifact now exists, so the index can be frozen over the complete set of files and
-        // written. Only then can a document name its files by id: resolving an id against a partial
-        // table is how a document ends up with a dangling reference, and there is no fallback for that
-        // — an unindexed path is a bug in the pass, and `toJson` fails loudly rather than writing the
-        // path into the document and quietly breaking the "a path is stated once" rule.
-        fileIndex.write();
+        // Every artifact now exists, so the index can be resolved over the complete set of files and
+        // written. Only then can a document name its files by FQN: resolving a reference against a
+        // partial table is how a document ends up with a dangling reference, and there is no fallback for
+        // that — a file the pass did not index has no FQN, and `toJson` fails loudly rather than writing
+        // the path into the document and quietly breaking the "a path is stated once" rule.
+        classIndex.write();
+        for (String problem : indexProblems) {
+            divergences.report("class_index_ignored", EntityMetadataGenerator.GENERATOR_NAME + " index",
+                    "the class index from the previous pass could not be used, so this pass re-read and "
+                            + "re-hashed every file and re-stamped every timestamp",
+                    problem, "a readable class index with a format and hash contract this build knows",
+                    "delete .jcodebuddy/index/classes.json and re-run if the table is stale or corrupt");
+        }
+        // The index summary is a fact about what this pass saw, not a divergence: it goes to the log
+        // (which is where a generator pass is read from) rather than into the divergence report, whose
+        // counts `gen.cmd` asserts on. A first pass has nothing to compare against and says nothing.
+        if (previousIndex != null) {
+            System.out.println("[index] " + classIndex.size() + " type(s) in "
+                    + classIndex.indexFile().getFileName() + " — "
+                    + ClassIndex.summarize(classIndex.changedSince(previousIndex)));
+        }
+        for (String typeLess : classIndex.typeLessFiles()) {
+            System.out.println("[index] no type declared in " + typeLess
+                    + ", so the class index has no row for it (the table's key space is types)");
+        }
         for (EntityMeta entityMeta : pendingDocuments) {
             Files.createDirectories(outputDir);
             Path outFile = outputDir.resolve(entityMeta.entityName() + ".metadata.json");
-            Files.writeString(outFile, toJson(entityMeta, fileIndex));
+            Files.writeString(outFile, toJson(entityMeta, classIndex));
         }
     }
 
@@ -2645,19 +2716,24 @@ public class EntityMetadataGenerator {
     }
 
     /**
-     * Writes one marker document (DEC-028).
+     * Writes one marker document (DEC-029).
      *
      * <p><strong>No source path appears in the output.</strong> Every file the document mentions is named
-     * by the id {@link ModuleFileIndex} assigned it; the paths themselves are written once, in
-     * {@code .jcodebuddy/index/files.json}. The single path-like value here is {@code fileIndex}, the
-     * pointer to that table, and it points at the index rather than at a source file.</p>
+     * by the <strong>fully qualified name</strong> of the type that file declares, and the paths
+     * themselves are written once, in {@code .jcodebuddy/index/classes.json}. The single path-like value
+     * here is {@code classIndex}, the pointer to that table, and it points at the index rather than at a
+     * source file.</p>
      *
-     * <p>A path the index does not know is a <strong>bug</strong>, not a fallback: {@link #fileId} fails
+     * <p>The FQN is not an id and is not deliberately opaque: it is the name an IDE's rename refactor
+     * updates in a text file, which is the reason this document has no surrogate key
+     * ({@link ClassIndex}'s class comment states the trade).</p>
+     *
+     * <p>A file the index does not know is a <strong>bug</strong>, not a fallback: {@link #fileFqn} fails
      * loudly rather than writing the path into the document, because doing so would quietly break the one
      * rule the index exists to keep and would leave a consumer with two sources of truth that can
      * disagree.</p>
      */
-    private static String toJson(EntityMeta entityMeta, ModuleFileIndex index) {
+    private static String toJson(EntityMeta entityMeta, ClassIndex index) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         appendJsonField(sb, "entityName", entityMeta.entityName(), true);
@@ -2665,11 +2741,11 @@ public class EntityMetadataGenerator {
         appendJsonField(sb, "markerInterface", entityMeta.markerInterface(), true);
         appendJsonField(sb, "idType", entityMeta.idType(), true, 2);
         // The marker is a class like any other the metadata is about, so it gets the same pair every
-        // other link on the page is made of: its file (by id) and its declaration line. REC-027's
+        // other link on the page is made of: its file (by FQN) and its declaration line. REC-027's
         // "no scan for the marker's link" is what `markerLine` is for.
-        appendJsonField(sb, "markerFile", fileId(index, entityMeta.markerSourcePath()), true, 2);
+        appendJsonField(sb, "markerFile", fileFqn(index, entityMeta.markerSourcePath()), true, 2);
         appendJsonField(sb, "markerLine", entityMeta.markerLine(), true, 2);
-        appendJsonField(sb, "fileIndex", index.documentPointer(), true, 2);
+        appendJsonField(sb, "classIndex", index.documentPointer(), true, 2);
 
         sb.append("  \"views\": [\n");
         for (int i = 0; i < entityMeta.views().size(); i++) {
@@ -2677,7 +2753,7 @@ public class EntityMetadataGenerator {
             sb.append("    {\n");
             appendJsonField(sb, "name", view.name(), true, 6);
             appendJsonField(sb, "lineNumber", view.lineNumber(), true, 6);
-            appendJsonField(sb, "file", fileId(index, view.sourcePath()), true, 6);
+            appendJsonField(sb, "file", fileFqn(index, view.sourcePath()), true, 6);
             sb.append("      \"extends\": [");
 
             sb.append(view.extendsTypes().stream().map(EntityMetadataGenerator::escapeJson).map(s -> "\"" + s + "\"").collect(Collectors.joining(", ")));
@@ -2698,7 +2774,7 @@ public class EntityMetadataGenerator {
                 appendJsonField(sb, "lineNumber", prop.lineNumber(), true, 8);
                 // The file that declares THIS accessor: an inherited field is declared in a different
                 // interface than the view that exposes it, so the view's own file is not the answer.
-                appendJsonField(sb, "file", fileId(index, prop.sourcePath()), hasFieldKind, 8);
+                appendJsonField(sb, "file", fileFqn(index, prop.sourcePath()), hasFieldKind, 8);
                 if (prop.fieldKind() != null) {
                     appendJsonField(sb, "fieldKind", prop.fieldKind(), prop.column() != null || prop.relation() != null || prop.expression() != null, 8);
                     if (prop.column() != null) {
@@ -2735,7 +2811,7 @@ public class EntityMetadataGenerator {
             sb.append("      \"type\": ");
             appendJsonType(sb, parseTypeDescriptor(f.type), true, 0);
             appendJsonField(sb, "lineNumber", f.lineNumber, true, 6);
-            appendJsonField(sb, "file", fileId(index, f.sourcePath), true, 6);
+            appendJsonField(sb, "file", fileFqn(index, f.sourcePath), true, 6);
             appendJsonField(sb, "fieldKind", f.fieldKind, true, 6);
             if (f.column != null) {
                 appendJsonField(sb, "column", f.column, true, 6);
@@ -2768,19 +2844,20 @@ public class EntityMetadataGenerator {
     }
 
     /**
-     * The id of the file at {@code moduleRelativePath}, or {@code null} for a path the pass did not
-     * record (a synthesised field such as the inherited {@code id}).
+     * The fully qualified name of the primary type of the file at {@code moduleRelativePath}, or
+     * {@code null} for a path the pass did not record (a synthesised field such as the inherited
+     * {@code id}).
      *
      * <p>{@code null} is the convention {@code allFields[].file} already had for "declared outside this
      * source root", so a genuinely unknown file keeps the spelling it had rather than gaining a third
-     * one — and it is the only case in which a null may reach the JSON: an <em>unindexed</em> path
+     * one — and it is the only case in which a null may reach the JSON: an <em>unregistered</em> path
      * throws, because that is a bug in the pass rather than a fact about the tree.</p>
      */
-    private static String fileId(ModuleFileIndex index, String moduleRelativePath) {
+    private static String fileFqn(ClassIndex index, String moduleRelativePath) {
         if (moduleRelativePath == null || moduleRelativePath.isBlank()) {
             return null;
         }
-        return index.idFor(moduleRelativePath);
+        return index.fqnForPath(moduleRelativePath);
     }
 
     /**
@@ -2791,7 +2868,7 @@ public class EntityMetadataGenerator {
      * header is the only source of a description.</p>
      */
     private static void appendJsonArtifacts(StringBuilder sb, List<hr.hrg.hipster.entity.tooling.meta.ArtifactMeta> artifacts,
-                                            ModuleFileIndex index) {
+                                            ClassIndex index) {
         sb.append("      \"artifacts\": [");
         if (artifacts.isEmpty()) {
             sb.append("]");
@@ -2803,7 +2880,7 @@ public class EntityMetadataGenerator {
             sb.append("        { \"id\": ").append(artifact.id())
                     .append(", \"name\": \"").append(escapeJson(artifact.name()))
                     .append("\", \"kind\": \"").append(escapeJson(artifact.kind()))
-                    .append("\", \"file\": \"").append(escapeJson(fileId(index, artifact.file())))
+                    .append("\", \"file\": \"").append(escapeJson(fileFqn(index, artifact.file())))
                     .append("\", \"line\": ").append(artifact.line())
                     .append(", \"generated\": ").append(artifact.generated())
                     .append(", \"own\": ").append(artifact.own());
@@ -2829,7 +2906,7 @@ public class EntityMetadataGenerator {
      */
     private static void appendJsonViewFields(StringBuilder sb,
                                              List<hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta> fields,
-                                             ModuleFileIndex index) {
+                                             ClassIndex index) {
         sb.append("      \"fields\": [");
         if (fields.isEmpty()) {
             sb.append("]");
@@ -2933,11 +3010,11 @@ public class EntityMetadataGenerator {
     /**
      * Escapes a value for the hand-rolled JSON writer.
      *
-     * <p>Package-private rather than private because {@link ModuleFileIndex} writes its own table with
-     * the same escaping: two spellings of "how a string reaches JSON" is how the index and the documents
-     * would drift apart on the first value that needs escaping.</p>
+     * <p>Public because the class index writes its own table with the same escaping ({@link ClassIndex}
+     * lives in its own package): two spellings of "how a string reaches JSON" is how the table and the
+     * documents would drift apart on the first value that needs escaping.</p>
      */
-    static String escapeJson(String value) {
+    public static String escapeJson(String value) {
         if (value == null) {
             return null;
         }

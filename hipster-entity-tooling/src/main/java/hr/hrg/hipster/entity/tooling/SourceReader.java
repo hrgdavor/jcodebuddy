@@ -107,6 +107,30 @@ public final class SourceReader {
     }
 
     /**
+     * {@link #read(Path)} for a caller outside this package — the class index, which has to describe a
+     * generated artifact's types by parsing the file the pass just wrote.
+     *
+     * <p>The record it returns is deliberately <strong>not</strong> public: a caller outside this
+     * package only needs the {@link CompilationUnit}, and widening the record's visibility would invite
+     * a second reader to depend on the {@code unparseable} flag's exact meaning.</p>
+     *
+     * @return the parsed unit, or {@code null} when the file is absent or could not be read cleanly
+     */
+    public static CompilationUnit readUnit(Path file) throws IOException {
+        Read read = read(file);
+        return read.readable() ? read.unit() : null;
+    }
+
+    /**
+     * {@link #readText(String)} for a caller outside this package: the parsed unit, or {@code null} when
+     * the text could not be read cleanly.
+     */
+    public static CompilationUnit readSourceText(String source) {
+        Read read = readText(source);
+        return read.readable() ? read.unit() : null;
+    }
+
+    /**
      * Parses source text, distinguishing a clean parse from a partial one.
      *
      * <p>Deliberately uses {@link ParseResult#isSuccessful()} rather than

@@ -1,260 +1,298 @@
 package hr.hrg.jetbrains.webview.services;
 
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
-import com.intellij.openapi.editor.LogicalPosition;
-import com.intellij.openapi.editor.ScrollType;
-import com.intellij.openapi.fileEditor.FileEditorManager;
-import com.intellij.openapi.fileEditor.OpenFileDescriptor;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.project.Project;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import hr.hrg.jetbrains.webview.bridge.AllowedOrigins;
+import hr.hrg.jetbrains.webview.bridge.NavigatorService;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * The browser fallback: an HTTP endpoint that opens a file in the IDE when the page is <b>not</b>
+ * loaded by this plugin's webview, and therefore has no injected {@code window.openFile}.
+ *
+ * <p>Contract, which the HTML report renderer depends on (see {@code scripts/entity-html/README.md}):
+ *
+ * <pre>
+ *   GET http://127.0.0.1:&lt;port&gt;/open?filePath=&lt;abs path&gt;&amp;line=&lt;n&gt;&amp;column=&lt;n&gt;
+ *   GET http://127.0.0.1:&lt;port&gt;/health
+ * </pre>
+ *
+ * <p>The server is off until {@code webview.explorer.port} is configured, because a plugin should not
+ * open a listening socket that nobody asked for.
+ *
+ * <p><b>Security.</b> The endpoint can open an arbitrary file in the IDE, so it is denied unless the
+ * caller proves it may. Three changes from the first implementation, each closing a real hole:
+ * <ul>
+ *   <li>it binds to the loopback address, not {@code 0.0.0.0}, so it is not reachable from the LAN;</li>
+ *   <li>an empty allow-list denies every caller instead of allowing every caller;</li>
+ *   <li>a caller may present either an allowed {@code Origin} or the configured token, so a
+ *       {@code file:} page (which browsers send no usable {@code Origin} for) still has an opt-in
+ *       route that does not require weakening the Origin check.</li>
+ * </ul>
+ */
 @Service(Service.Level.PROJECT)
 public final class HttpBridgeService {
+
     private static final Logger LOG = Logger.getInstance(HttpBridgeService.class);
+
+    private static final String PATH_OPEN = "/open";
+    private static final String PATH_HEALTH = "/health";
+
     private final Project project;
-    private HttpServer server;
-    private final Set<String> allowedOrigins = new HashSet<>();
-    private final Deque<Long> requestTimestamps = new ArrayDeque<>();
-    private static final int RATE_LIMIT_COUNT = 20;
-    private static final int RATE_LIMIT_WINDOW_MS = 20000;
+    private final AtomicInteger threadSequence = new AtomicInteger();
 
-    public HttpBridgeService(Project project) {
+    private volatile HttpServer server;
+    private volatile ExecutorService executor;
+    private volatile int boundPort = -1;
+    private volatile AllowedOrigins allowedOrigins = AllowedOrigins.of(null);
+    private volatile String token = "";
+
+    public HttpBridgeService(@NotNull Project project) {
         this.project = project;
-        LOG.info("Initializing HttpBridgeService for project: " + project.getName());
-        loadSettingsAndStart();
+        applySettingsAndStart();
     }
 
-    private void loadSettingsAndStart() {
-        loadAllowedOrigins();
-        startServerIfNeeded();
+    public static @NotNull HttpBridgeService getInstance(@NotNull Project project) {
+        return project.getService(HttpBridgeService.class);
     }
 
+    /** Re-reads the settings and restarts the server; called when the settings are applied. */
     public synchronized void restartServer() {
-        LOG.info("Restarting HTTP bridge server for project: " + project.getName());
         stopServer();
-        allowedOrigins.clear();
-        loadSettingsAndStart();
+        applySettingsAndStart();
+    }
+
+    /** True when the server is listening. */
+    public boolean isRunning() {
+        return server != null;
+    }
+
+    /** The port actually bound, or -1 when the bridge is not running. */
+    public int getBoundPort() {
+        return boundPort;
+    }
+
+    /** A one-line description of the bridge for the settings UI. */
+    public @NotNull String describeState() {
+        HttpServer current = server;
+        if (current == null) {
+            return "Bridge: stopped";
+        }
+        String auth = token.isEmpty()
+                ? (allowedOrigins.isEmpty() ? "no caller allowed yet" : allowedOrigins.values().size() + " allowed origin(s)")
+                : "token required";
+        return "Bridge: running on 127.0.0.1:" + boundPort + " (" + auth + ")";
     }
 
     public synchronized void stopServer() {
-        if (server != null) {
-            try {
-                server.stop(0);
-                LOG.info("HTTP bridge server stopped.");
-            } catch (Exception e) {
-                LOG.error("Error stopping HTTP bridge server", e);
-            }
+        HttpServer current = server;
+        if (current == null) {
+            return;
+        }
+        try {
+            current.stop(0);
+            LOG.info("WebView HTTP bridge stopped");
+        } catch (RuntimeException e) {
+            LOG.warn("WebView HTTP bridge did not stop cleanly", e);
+        } finally {
             server = null;
+            boundPort = -1;
+        }
+        ExecutorService currentExecutor = executor;
+        if (currentExecutor != null) {
+            currentExecutor.shutdownNow();
+            executor = null;
         }
     }
 
-    private void loadAllowedOrigins() {
+    private void applySettingsAndStart() {
         PluginStateService.State state = PluginStateService.getInstance(project).getState();
-        String allowed = (state != null && state.allowedOrigins != null && !state.allowedOrigins.isEmpty())
-                ? state.allowedOrigins
-                : System.getProperty("webview.explorer.allowed");
-
-        if (allowed != null && !allowed.isEmpty()) {
-            for (String origin : allowed.split(",")) {
-                allowedOrigins.add(origin.trim().toLowerCase());
-            }
-        }
-    }
-
-    private void startServerIfNeeded() {
-        PluginStateService.State state = PluginStateService.getInstance(project).getState();
-        String portStr = (state != null && state.port != null)
-                ? state.port.toString()
+        String portText = state != null && state.port != null
+                ? String.valueOf(state.port)
                 : System.getProperty("webview.explorer.port");
+        String originsText = state != null && state.allowedOrigins != null && !state.allowedOrigins.isBlank()
+                ? state.allowedOrigins
+                : System.getProperty("webview.explorer.allowedOrigins");
+        String tokenText = state != null && state.token != null && !state.token.isBlank()
+                ? state.token
+                : System.getProperty("webview.explorer.token");
 
-        if (portStr == null || portStr.isEmpty()) {
-            LOG.info("webview.explorer.port is not configured for project: " + project.getName());
+        allowedOrigins = AllowedOrigins.of(originsText);
+        token = tokenText == null ? "" : tokenText.trim();
+
+        if (portText == null || portText.isBlank()) {
+            LOG.info("WebView HTTP bridge is off (webview.explorer.port is not configured)");
+            return;
+        }
+        int port;
+        try {
+            port = Integer.parseInt(portText.trim());
+        } catch (NumberFormatException e) {
+            LOG.warn("WebView HTTP bridge: '" + portText + "' is not a port number; bridge stays off");
+            return;
+        }
+        startServer(port);
+    }
+
+    private void startServer(int port) {
+        try {
+            HttpServer created = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+            created.createContext("/", this::handle);
+            ExecutorService createdExecutor = Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "webview-bridge-" + threadSequence.incrementAndGet());
+                thread.setDaemon(true);
+                return thread;
+            });
+            created.setExecutor(createdExecutor);
+            created.start();
+
+            server = created;
+            executor = createdExecutor;
+            boundPort = port;
+            LOG.info("WebView HTTP bridge listening on 127.0.0.1:" + port
+                    + (allowedOrigins.isEmpty() && token.isEmpty()
+                            ? " (denying every caller until an allowed origin or token is configured)"
+                            : ""));
+        } catch (IOException e) {
+            LOG.warn("WebView HTTP bridge could not bind 127.0.0.1:" + port, e);
+        }
+    }
+
+    private void handle(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        if (path != null) {
+            path = path.replaceAll("/+", "/");
+        }
+
+        String origin = exchange.getRequestHeaders().getFirst("Origin");
+        if (origin != null && allowedOrigins.allows(origin)) {
+            // Browsers refuse a cross-origin response without these, so they are sent for an allowed
+            // origin only; an unauthenticated caller gets no CORS grant.
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "*");
+        }
+
+        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
             return;
         }
 
+        if (PATH_HEALTH.equals(path)) {
+            String body = "{\"plugin\":\"hr.hrg.jetbrains.webview\",\"port\":" + boundPort
+                    + ",\"allowedOrigins\":" + allowedOrigins.values().size()
+                    + ",\"tokenRequired\":" + !token.isEmpty() + "}";
+            send(exchange, 200, body, "application/json");
+            return;
+        }
+
+        if (!PATH_OPEN.equals(path)) {
+            send(exchange, 404, "Not Found", "text/plain");
+            return;
+        }
+
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+
+        if (!isAuthorized(exchange, origin)) {
+            LOG.warn("WebView HTTP bridge: refused a request"
+                    + (origin == null ? " with no Origin header" : " from origin " + origin)
+                    + (token.isEmpty() ? " (no token configured)" : " (token missing or wrong)"));
+            send(exchange, 403, "Forbidden: configure webview.explorer.allowedOrigins or webview.explorer.token",
+                    "text/plain");
+            return;
+        }
+
+        Map<String, String> params = parseQuery(exchange.getRequestURI().getQuery());
+        String filePath = params.get("filePath");
+        if (filePath == null || filePath.isBlank()) {
+            send(exchange, 400, "Missing filePath parameter", "text/plain");
+            return;
+        }
+        int line = parseInt(params.get("line"), 1);
+        int column = parseInt(params.get("column"), 1);
+
+        boolean opened = NavigatorService.getInstance(project).open(filePath, line, column);
+        if (opened) {
+            send(exchange, 200, "Opening " + filePath + ":" + line + ":" + column, "text/plain");
+        } else {
+            // Either the path is not in the project or the rate limit refused it; both are "not this".
+            send(exchange, 404, "Could not open " + filePath, "text/plain");
+        }
+    }
+
+    /**
+     * A caller is authorized when it presents the configured token, or an Origin the allow-list names.
+     * With neither configured, nothing is authorized.
+     */
+    private boolean isAuthorized(@NotNull HttpExchange exchange, @Nullable String origin) {
+        if (!token.isEmpty()) {
+            String supplied = exchange.getRequestHeaders().getFirst("X-WebView-Token");
+            if (supplied == null) {
+                Map<String, String> params = parseQuery(exchange.getRequestURI().getQuery());
+                supplied = params.get("token");
+            }
+            if (token.equals(supplied)) {
+                return true;
+            }
+        }
+        return allowedOrigins.allows(origin);
+    }
+
+    private static void send(@NotNull HttpExchange exchange, int status, @NotNull String body,
+                             @NotNull String contentType) throws IOException {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", contentType + "; charset=utf-8");
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(bytes);
+        }
+    }
+
+    private static int parseInt(@Nullable String text, int fallback) {
+        if (text == null || text.isBlank()) {
+            return fallback;
+        }
         try {
-            int port = Integer.parseInt(portStr);
-            LOG.info("Starting HTTP bridge server on port: " + port);
-            server = HttpServer.create(new InetSocketAddress(port), 0);
-            server.createContext("/", new GlobalHandler());
-            server.setExecutor(null);
-            server.start();
-            LOG.info("HTTP bridge server started successfully on port " + port);
-        } catch (Exception e) {
-            LOG.error("Failed to start HTTP bridge server", e);
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
         }
     }
 
-    private class GlobalHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            String origin = exchange.getRequestHeaders().getFirst("Origin");
-            boolean isAllowed = origin != null && allowedOrigins.contains(origin.toLowerCase());
-
-            if (isAllowed) {
-                exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
-                exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, OPTIONS");
-                exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "*");
-            }
-
-            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(204, -1);
-                return;
-            }
-
-            String path = exchange.getRequestURI().getPath();
-            if (path != null) {
-                // Normalize path: collapse // to /
-                path = path.replaceAll("/+", "/");
-            }
-
-            if ("/open".equals(path)) {
-                if (!isAllowed) {
-                    LOG.warn("CORS block: Forbidden origin " + origin);
-                    sendResponse(exchange, 403, "CORS Forbidden: Origin not allowed");
-                    return;
-                }
-
-                if (!checkRateLimit()) {
-                    LOG.warn("HTTP Rate limit exceeded for origin: " + origin);
-                    sendResponse(exchange, 429, "Too Many Requests: Rate limit exceeded (20 per 20s)");
-                    return;
-                }
-
-                new OpenFileHandler().handle(exchange);
-            } else {
-                sendResponse(exchange, 404, "Not Found");
-            }
-        }
-    }
-
-    private void sendResponse(HttpExchange exchange, int code, String message) throws IOException {
-        exchange.sendResponseHeaders(code, message.length());
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(message.getBytes());
-        }
-    }
-
-    private class OpenFileHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
-                return;
-            }
-
-            Map<String, String> params = parseQuery(exchange.getRequestURI().getQuery());
-            String filePath = params.get("filePath");
-            String lineStr = params.get("line");
-            String columnStr = params.get("column");
-
-            if (filePath != null) {
-                int line = 1;
-                int column = 1;
-                try {
-                    if (lineStr != null)
-                        line = Integer.parseInt(lineStr);
-                    if (columnStr != null)
-                        column = Integer.parseInt(columnStr);
-                } catch (NumberFormatException ignored) {
-                }
-
-                final String finalPath = filePath;
-                final int finalLine = line;
-                final int finalColumn = column;
-                ApplicationManager.getApplication()
-                        .invokeLater(() -> navigateToFile(finalPath, finalLine, finalColumn));
-
-                String response = "Opening " + filePath + ":" + line + ":" + column;
-                exchange.sendResponseHeaders(200, response.length());
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response.getBytes());
-                }
-            } else {
-                String response = "Missing filePath parameter";
-                exchange.sendResponseHeaders(400, response.length());
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response.getBytes());
-                }
-            }
-        }
-    }
-
-    private Map<String, String> parseQuery(String query) {
+    private static @NotNull Map<String, String> parseQuery(@Nullable String query) {
         Map<String, String> params = new HashMap<>();
-        if (query == null)
+        if (query == null || query.isEmpty()) {
             return params;
-        for (String param : query.split("&")) {
-            String[] entry = param.split("=");
-            if (entry.length > 1) {
-                params.put(entry[0], URLDecoder.decode(entry[1], StandardCharsets.UTF_8));
+        }
+        for (String pair : query.split("&")) {
+            int equals = pair.indexOf('=');
+            if (equals <= 0) {
+                continue;
             }
+            String name = URLDecoder.decode(pair.substring(0, equals), StandardCharsets.UTF_8);
+            String value = URLDecoder.decode(pair.substring(equals + 1), StandardCharsets.UTF_8);
+            params.put(name, value);
         }
         return params;
-    }
-
-    private synchronized boolean checkRateLimit() {
-        long now = System.currentTimeMillis();
-        while (!requestTimestamps.isEmpty() && now - requestTimestamps.peekFirst() > RATE_LIMIT_WINDOW_MS) {
-            requestTimestamps.removeFirst();
-        }
-        if (requestTimestamps.size() >= RATE_LIMIT_COUNT) {
-            return false;
-        }
-        requestTimestamps.addLast(now);
-        return true;
-    }
-
-    public void navigateToFile(String path, int line, int column) {
-        if (!checkRateLimit()) {
-            LOG.warn("JCEF Rate limit exceeded while trying to open: " + path);
-            return;
-        }
-
-        ApplicationManager.getApplication().invokeLater(() -> {
-            String projectBase = project.getBasePath();
-            String finalPath;
-            if (projectBase != null && !new File(path).isAbsolute()) {
-                finalPath = new File(projectBase, path).getAbsolutePath();
-            } else {
-                finalPath = path;
-            }
-
-            VirtualFile file = LocalFileSystem.getInstance().findFileByPath(finalPath.replace("\\", "/"));
-            if (file != null) {
-                int lineIndex = Math.max(0, line - 1);
-                int colIndex = Math.max(0, column - 1);
-                OpenFileDescriptor descriptor = new OpenFileDescriptor(project, file, lineIndex, colIndex);
-
-                com.intellij.openapi.editor.Editor editor = FileEditorManager.getInstance(project)
-                        .openTextEditor(descriptor, true);
-                if (editor != null) {
-                    LogicalPosition logicalPos = new LogicalPosition(lineIndex, colIndex);
-                    editor.getCaretModel().removeSecondaryCarets();
-                    editor.getCaretModel().moveToLogicalPosition(logicalPos);
-                    editor.getScrollingModel().scrollToCaret(ScrollType.CENTER);
-                    editor.getSelectionModel().removeSelection();
-                }
-            }
-        });
-    }
-
-    public static HttpBridgeService getInstance(@NotNull Project project) {
-        return project.getService(HttpBridgeService.class);
     }
 }

@@ -4,14 +4,13 @@ import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java") // Java support
-    alias(libs.plugins.kotlin) // Kotlin support
     alias(libs.plugins.intelliJPlatform) // IntelliJ Platform Gradle Plugin
     alias(libs.plugins.changelog) // Gradle Changelog Plugin
     alias(libs.plugins.qodana) // Gradle Qodana Plugin
 }
 
-group = providers.gradleProperty("pluginGroup").get()
-version = providers.gradleProperty("pluginVersion").get()
+group = providers.gradleProperty("group").get()
+version = providers.gradleProperty("version").get()
 
 java {
     toolchain {
@@ -26,14 +25,12 @@ repositories {
     // IntelliJ Platform Gradle Plugin Repositories Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-repositories-extension.html
     intellijPlatform {
         defaultRepositories()
-        maven("https://www.jetbrains.com/intellij-repository/snapshots")
     }
 }
 
 // Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/version_catalogs.html
 dependencies {
     testImplementation(libs.junit)
-    testImplementation(libs.opentest4j)
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
@@ -46,6 +43,9 @@ dependencies {
         plugins(providers.gradleProperty("platformPlugins").map { it.split(',') })
 
         // Module Dependencies. Uses `platformBundledModules` property from the gradle.properties file for bundled IntelliJ Platform modules.
+        // NOTE: this configures the *compile* classpath only. Every module the plugin needs at
+        // runtime must also be declared with <depends> in META-INF/plugin.xml - see the JCEF note in
+        // README.md, and the bug this rule was learned from in plan.reimplement.md (finding F8).
         bundledModules(providers.gradleProperty("platformBundledModules").map { it.split(',') })
 
         testFramework(TestFrameworkType.Platform)
@@ -55,8 +55,16 @@ dependencies {
 // Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
     pluginConfiguration {
-        name = providers.gradleProperty("pluginName")
-        version = providers.gradleProperty("pluginVersion")
+        // The template's default title for a plugin's own metadata; each field below is patched into
+        // META-INF/plugin.xml by patchPluginXml, so plugin.xml does not repeat them.
+        id = "hr.hrg.jetbrains.webview"
+        name = "WebView Explorer"
+        version = providers.gradleProperty("version")
+
+        vendor {
+            name = "Davor Hrg"
+            url = "https://github.com/hrgdavor"
+        }
 
         // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
         description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
@@ -73,7 +81,7 @@ intellijPlatform {
 
         val changelog = project.changelog // local variable for configuration cache compatibility
         // Get the latest available change notes from the changelog file
-        changeNotes = providers.gradleProperty("pluginVersion").map { pluginVersion ->
+        changeNotes = providers.gradleProperty("version").map { pluginVersion ->
             with(changelog) {
                 renderItem(
                     (getOrNull(pluginVersion) ?: getUnreleased())
@@ -86,6 +94,9 @@ intellijPlatform {
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
+            // until-build is deliberately not set: the docs recommend leaving it open so the plugin
+            // stays compatible with every IDE newer than since-build. Limit it on the Marketplace if
+            // a per-major-IDE release process is ever wanted.
         }
     }
 
@@ -100,7 +111,7 @@ intellijPlatform {
         // The pluginVersion is based on the SemVer (https://semver.org) and supports pre-release labels, like 2.1.7-alpha.3
         // Specify pre-release label to publish the plugin in a custom Release Channel automatically. Read more:
         // https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html#specifying-a-release-channel
-        channels = providers.gradleProperty("pluginVersion").map { listOf(it.substringAfter('-', "").substringBefore('.').ifEmpty { "default" }) }
+        channels = providers.gradleProperty("version").map { listOf(it.substringAfter('-', "").substringBefore('.').ifEmpty { "default" }) }
     }
 
     pluginVerification {
@@ -129,8 +140,18 @@ tasks {
         dependsOn(patchChangelog)
     }
 
+    // The page rendered by the plugin is a normal file that any browser can open; these flags only
+    // make the sandbox IDE pleasant to debug from. The HTTP bridge is configured through these two
+    // system properties so the acceptance walk in plan.reimplement.md can exercise /open and /health
+    // without editing the sandbox's project workspace file by hand.
     runIde {
-        jvmArgs("-Dide.browser.jcef.enabled=true", "-Dide.browser.jcef.debugPort=9222", "-Dide.browser.jcef.gpu.disable=true")
+        jvmArgs(
+            "-Dide.browser.jcef.enabled=true",
+            "-Dide.browser.jcef.debugPort=9222",
+            "-Dide.browser.jcef.gpu.disable=true",
+            "-Dwebview.explorer.port=18881",
+            "-Dwebview.explorer.allowedOrigins=file://",
+        )
     }
 }
 

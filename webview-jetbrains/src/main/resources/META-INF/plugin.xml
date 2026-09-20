@@ -1,15 +1,27 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<!--
+  id, name, vendor, description, change-notes and idea-version are patched in by the Gradle
+  `patchPluginXml` task from the `intellijPlatform { pluginConfiguration { ... } }` block in
+  build.gradle.kts, so they are not repeated here.
+-->
 <idea-plugin>
-    <id>hr.hrg.jetbrains.webview</id>
-    <name>WebView Explorer</name>
-    <vendor>JetBrains</vendor>
-
     <depends>com.intellij.modules.platform</depends>
+    <!--
+      The JCEF module must be declared here, not only in gradle.properties' platformBundledModules:
+      that property is the compile classpath, while <depends> is what puts
+      intellij.platform.ui.jcef.jar on the plugin classloader at runtime. Without this line every
+      JCEF type (JBCefApp, JBCefBrowser, JBCefBrowserBase, JBCefJSQuery) is unresolvable and the tool
+      window fails to instantiate with a misleading "Cannot find suitable constructor" error.
+      See plan.reimplement.md, finding F8.
+    -->
+    <depends>com.intellij.modules.jcef</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="hr.hrg.jetbrains.webview.toolWindow.JcefToolWindowFactory" id="WebView Explorer" anchor="right" icon="AllIcons.General.Web" secondary="true"/>
         <projectService serviceImplementation="hr.hrg.jetbrains.webview.services.PluginStateService"/>
         <projectService serviceImplementation="hr.hrg.jetbrains.webview.services.HttpBridgeService"/>
+        <projectService serviceImplementation="hr.hrg.jetbrains.webview.bridge.NavigatorService"/>
+        <projectService serviceImplementation="hr.hrg.jetbrains.webview.toolWindow.WebViewService"/>
         <postStartupActivity implementation="hr.hrg.jetbrains.webview.services.HttpBridgeStartupActivity"/>
         <projectConfigurable parentId="tools" instance="hr.hrg.jetbrains.webview.settings.WebViewSettingsConfigurable"
                              id="hr.hrg.jetbrains.webview.settings.WebViewSettingsConfigurable"

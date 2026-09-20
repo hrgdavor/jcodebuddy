@@ -39,8 +39,8 @@ class MetadataLocationsTest {
             "hr.hrg.hipster.entityexample.person.entity",
             "hr.hrg.hipster.entityexample.paymentMethod.entity");
 
-    /** One pass's output: the module it ran in, the index it wrote, and the documents it produced. */
-    private record Pass(Path moduleRoot, Map<String, String> files, Map<String, EntityMeta> markers) {
+    /** One pass's output: the module it ran in, the class index it wrote, and the documents it produced. */
+    private record Pass(Path moduleRoot, Map<String, String> classes, Map<String, EntityMeta> markers) {
 
         ViewMeta view(String marker, String view) {
             EntityMeta meta = markers.get(marker);
@@ -112,27 +112,27 @@ class MetadataLocationsTest {
             EntityMetadataGenerator.setGenerateAdapters(false);
         }
 
-        Map<String, String> files = new LinkedHashMap<>();
-        // The index lands in the MODULE's `.jcodebuddy/index/`, beside `metadata/` — not inside the
-        // report directory, which is the layout the real pass produces (DEC-026/DEC-028).
-        Path indexFile = tree.resolve(".jcodebuddy/index/files.json");
+        Map<String, String> classes = new LinkedHashMap<>();
+        // The class index lands in the MODULE's `.jcodebuddy/index/`, beside `metadata/` — not inside the
+        // report directory, which is the layout the real pass produces (DEC-026/DEC-029).
+        Path indexFile = tree.resolve(".jcodebuddy/index/classes.json");
         Assertions.assertTrue(Files.exists(indexFile), "the pass must write " + indexFile);
         tools.jackson.databind.JsonNode index = new tools.jackson.databind.ObjectMapper()
                 .readTree(Files.readString(indexFile));
-        for (var it = index.path("files").propertyStream().iterator(); it.hasNext(); ) {
+        for (var it = index.path("classes").propertyStream().iterator(); it.hasNext(); ) {
             var entry = it.next();
-            files.put(entry.getKey(), entry.getValue().asText());
+            classes.put(entry.getKey(), entry.getValue().path("path").asText());
         }
 
         Map<String, EntityMeta> markers = new LinkedHashMap<>();
         try (Stream<Path> documents = Files.list(reportDir)) {
             for (Path document : documents.filter(p -> p.toString().endsWith(".metadata.json")).toList()) {
-                EntityMeta meta = EntityMetadataGenerator.fromJson(Files.readString(document), files);
+                EntityMeta meta = EntityMetadataGenerator.fromJson(Files.readString(document), classes);
                 markers.put(meta.entityName(), meta);
             }
         }
         Assertions.assertFalse(markers.isEmpty(), "the pass must write at least one document");
-        return new Pass(tree, files, markers);
+        return new Pass(tree, classes, markers);
     }
 
     /**

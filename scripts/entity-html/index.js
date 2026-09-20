@@ -200,11 +200,11 @@ function linkBaseFromOut(out, linkBase) {
  */
 export function generate(options) {
   const resolved = resolveOptions(options);
-  // The module's central index (DEC-028) is resolved from the module root the CLI already knows, and
-  // `loadMetadata` cross-checks it against the `fileIndex` pointer each document carries: a wrong
+  // The module's class index (DEC-029) is resolved from the module root the CLI already knows, and
+  // `loadMetadata` cross-checks it against the `classIndex` pointer each document carries: a wrong
   // pointer must not be able to break the page, and a document copied elsewhere must still render.
   const metadata = loadMetadata(resolved.metadata, {
-    indexHint: join(resolved.moduleDir, '.jcodebuddy', 'index', 'files.json'),
+    indexHint: join(resolved.moduleDir, '.jcodebuddy', 'index', 'classes.json'),
   });
   const scan = scanSources(resolved.sourceRoot, resolved.linkBase);
   const linkBase = linkBaseFromOut(resolved.out, resolved.linkBase);

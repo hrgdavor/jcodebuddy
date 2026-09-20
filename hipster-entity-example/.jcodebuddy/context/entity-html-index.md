@@ -1,7 +1,7 @@
 # Spec: the HTML entity index for this module
 
 Module-scoped spec for the page `scripts/entity-html/` renders from this module's metadata
-(DEC-027) and its central index (DEC-028). It records what *this module* expects the page to
+(DEC-027) and its class index (DEC-029). It records what *this module* expects the page to
 contain, so a change to the renderer can be judged against something other than the renderer's own
 tests.
 
@@ -22,35 +22,47 @@ of it:
 Both answers are now **read from the metadata, not inferred**: `views[].artifacts[]` is the artifact
 list (with the foreign declaring interfaces the view's fields reference, marked `own: false`), and
 `views[].fields[].at` holds every location as `artifact id → role → line`. The page resolves the
-artifact's file id through `.jcodebuddy/index/files.json`, which is the module's single statement of
-every source path. It still reads the committed source, but only to **verify** that a link's line
-contains the member (DEC-027 § 4.2); discovery is gone. The roles are the fixed eight: `accessor`,
-`annotation`, `enum-constant`, `name-slot`, `record-component`, `field`, `setter`, `ordinal-slot`.
+artifact's file — a fully qualified type name — through `.jcodebuddy/index/classes.json`, which is
+the module's single statement of every source path. It still reads the committed source, but only to
+**verify** that a link's line contains the member (DEC-027 § 4.2); discovery is gone. The roles are
+the fixed eight: `accessor`, `annotation`, `enum-constant`, `name-slot`, `record-component`, `field`,
+`setter`, `ordinal-slot`.
 
 ## What the page reads
 
-Two inputs per module — the `<Marker>.metadata.json` documents and the index they point at:
+Two inputs per module — the `<Marker>.metadata.json` documents and the class index they point at:
 
 ```jsonc
-// .jcodebuddy/index/files.json (excerpt) — every path is stated once, here
+// .jcodebuddy/index/classes.json (excerpt) — every path is stated once, here
 { "format": 1, "module": "hipster-entity-example", "sourceRoot": "src/main/java",
-  "files": { "PersonDetails": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonDetails.java",
-             "entity.Person": "src/main/java/hr/hrg/hipster/entityexample/person/entity/Person.java",
-             "Auditable": "src/main/java/hr/hrg/hipster/entityexample/example/Auditable.java" } }
+  "hash": { "algo": "wyhash64", "normalize": "lf", "of": "content" },
+  "classes": {
+    "hr.hrg.hipster.entityexample.person.entity.PersonDetails": {
+      "path": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonDetails.java",
+      "kind": "interface", "modifiers": ["public"], "line": 18, "depth": 0 },
+    "hr.hrg.hipster.entityexample.person.entity.Person": {
+      "path": "src/main/java/hr/hrg/hipster/entityexample/person/entity/Person.java" },
+    "hr.hrg.hipster.entityexample.example.Auditable": {
+      "path": "src/main/java/hr/hrg/hipster/entityexample/example/Auditable.java" } } }
 ```
 
 ```jsonc
 // Person.metadata.json — the PersonDetails view (abridged; line numbers are this revision's)
-{ "name": "PersonDetails", "lineNumber": 18, "file": "PersonDetails",
+{ "name": "PersonDetails", "lineNumber": 18,
+  "file": "hr.hrg.hipster.entityexample.person.entity.PersonDetails",
   "extends": ["Person"], "addons": ["PersonAuditable"],
   "artifacts": [
-    { "id": 0, "name": "PersonDetails",  "kind": "interface", "file": "PersonDetails",  "line": 19,
+    { "id": 0, "name": "PersonDetails",  "kind": "interface",
+      "file": "hr.hrg.hipster.entityexample.person.entity.PersonDetails", "line": 19,
       "generated": false, "own": true },
-    { "id": 1, "name": "PersonDetails_", "kind": "enum",      "file": "PersonDetails_", "line": 16,
+    { "id": 1, "name": "PersonDetails_", "kind": "enum",
+      "file": "hr.hrg.hipster.entityexample.person.entity.PersonDetails_", "line": 16,
       "generated": true,  "own": true, "header": "Field metadata for the PersonDetails view." },
-    { "id": 2, "name": "Person",         "kind": "interface", "file": "entity.Person",  "line": 14,
+    { "id": 2, "name": "Person",         "kind": "interface",
+      "file": "hr.hrg.hipster.entityexample.person.entity.Person", "line": 14,
       "generated": false, "own": false },
-    { "id": 3, "name": "Auditable",      "kind": "interface", "file": "Auditable",      "line": 7,
+    { "id": 3, "name": "Auditable",      "kind": "interface",
+      "file": "hr.hrg.hipster.entityexample.example.Auditable", "line": 7,
       "generated": false, "own": false } ],
   "fields": [
     { "name": "firstName", "ordinal": 2, "fieldKind": "COLUMN",
@@ -59,20 +71,22 @@ Two inputs per module — the `<Marker>.metadata.json` documents and the index t
       "at": { "1": { "enum-constant": 58, "name-slot": 99 }, "3": { "accessor": 8 } } } ] }
 ```
 
-The document's other keys are unchanged apart from their values being ids: the root
-`markerFile`/`markerLine` plus the `fileIndex` pointer (`"../../index/files.json"`, the only
-path-like value a document contains), and `views[].file`, `views[].properties[].file`,
-`allFields[].file` and `artifacts[].file`. A document written before DEC-028 — plain `sourcePath`
-strings, no `fileIndex`, no `artifacts`, no `fields` — still renders from the source scan, and a
-document whose ids cannot be resolved is a loud `html_index_missing` error that renders nothing.
+The document's key set is unchanged: the root `markerFile`/`markerLine`, the `classIndex` pointer
+(`"../../index/classes.json"`, the only path-like value a document contains), and
+`views[].file`, `views[].properties[].file`, `allFields[].file` and `artifacts[].file` — but every
+one of those values is now the fully qualified name of a type. A document written while DEC-028's
+`files.json` existed — readable ids plus a `fileIndex` pointer — still renders through that legacy
+table, and a document written before DEC-028 — plain `sourcePath` strings, no pointer, no
+`artifacts`, no `fields` — still renders from the source scan. A document whose names cannot be
+resolved is a loud `html_index_missing` error that renders nothing.
 
 ## Module-specific expectations
 
 These are the facts the committed example is *for*, so the page is wrong if it hides them:
 
-- **Every path the page links with is module-relative.** The index states each class's and each
+- **Every path the page links with is module-relative.** The class index states each class's and each
   field's declaring file relative to *this module's* root (`src/main/java/…`), never to the repository
-  above it, and the documents name those files by ids that resolve there; the page resolves the
+  above it, and the documents name those types by FQNs that resolve there; the page resolves the
   resulting path against its own location. Opening the page must therefore work whether the IDE
   project is `hipster-entity-example` or the whole repository — and must never link outside the
   module that holds the class, because that is where this module's `.jcodebuddy/` output and its code
@@ -85,10 +99,10 @@ These are the facts the committed example is *for*, so the page is wrong if it h
   different recorded facts — and **no setter cell** in either builder, because the generator emits
   setters for writable fields only. An empty setter cell is the correct rendering of that rule.
 - **`PersonDetails` shows the addon path.** `createdAt`/`updatedAt` must link to `Auditable.java`
-  (the addon source) and `firstName`/`lastName` must link to `entity.Person` — the interface that
-  declares them — not to `PersonDetails` itself and not to the enum. In the metadata those are
-  artifacts `3` and `2`, both `own: false`, and each field's `at` map names the one its accessor
-  lives in.
+  (the addon source) and `firstName`/`lastName` must link to
+  `hr.hrg.hipster.entityexample.person.entity.Person` — the interface that declares them — not to
+  `PersonDetails` itself and not to the enum. In the metadata those are artifacts `3` and `2`, both
+  `own: false`, and each field's `at` map names the one its accessor lives in.
 - **`id` is inherited from outside the source root** (`Identifiable` in `hipster-entity-api`). It
   must appear with an `inherited` chip, an enum-constant link, and **no** accessor link: the page
   must not invent a source file for a classpath type.

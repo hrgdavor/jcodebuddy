@@ -18,9 +18,10 @@ import java.util.stream.Stream;
  * true:</p>
  *
  * <ol>
- *   <li>the directory holds {@code files.json} and {@code README.md} and <strong>nothing else</strong> —
- *       which is also the assertion that the reserved tables ({@code hashes.json}, the dependency edges
- *       of § 2.3) were <em>not</em> built in this change;</li>
+ *   <li>the directory holds {@code classes.json} and {@code README.md} and <strong>nothing else</strong> —
+ *       which is also the assertion that the reserved tables (the dependency edges, the
+ *       {@code sourceMappingURL}-style artifact pointer) were <em>not</em> built in this change, and that
+ *       the DEC-028 {@code files.json} is gone rather than left beside the new table;</li>
  *   <li>the README states what the table is and what is reserved, so a reader who opens the directory
  *       finds the contract rather than a bare JSON file;</li>
  *   <li>the pass <strong>never overwrites</strong> an existing README. It is tracked and human-owned, and
@@ -77,16 +78,20 @@ class IndexLayoutTest {
         Path indexDir = tree.resolve(".jcodebuddy/index");
         Assertions.assertTrue(Files.isDirectory(indexDir), "the pass writes the index beside metadata/: "
                 + indexDir);
-        Assertions.assertEquals(new TreeSet<>(List.of("files.json", "README.md")), entriesOf(indexDir),
-                "the index directory holds the addressing table and its README, and the reserved tables "
-                        + "(`hashes.json`, the dependency edges) are deliberately NOT built in this change");
+        Assertions.assertEquals(new TreeSet<>(List.of("classes.json", "mtimes.json", "README.md")),
+                entriesOf(indexDir),
+                "the index directory holds the class index, the working-tree mtime sidecar and its README; "
+                        + "the DEC-028 files.json is gone (one table states a path once), and the reserved "
+                        + "work (the dependency edges, the artifact pointer) is deliberately NOT built in "
+                        + "this change");
 
         String readme = Files.readString(indexDir.resolve("README.md"));
-        Assertions.assertTrue(readme.contains("files.json"),
+        Assertions.assertTrue(readme.contains("classes.json"),
                 "the README must say what the table is, or a reader who opens the directory has to guess");
-        Assertions.assertTrue(readme.contains("hashes.json"),
-                "and must name what is reserved for watcher/incremental work, so the layout is not "
-                        + "mistaken for the whole design");
+        Assertions.assertTrue(readme.contains("hash") && readme.contains("checksum"),
+                "and state the content-identity contract the checksums depend on");
+        Assertions.assertTrue(readme.contains("fully qualified"),
+                "and name the key space, so a reader knows what a document's `file` value is");
         Assertions.assertTrue(readme.contains("module-relative"),
                 "and state the currency of the paths it holds");
         Assertions.assertTrue(readme.contains("never\noverwrites") || readme.contains("never overwrites")
@@ -111,7 +116,7 @@ class IndexLayoutTest {
                 "the pass must not touch an existing README: rewriting a tracked, human-owned file on "
                         + "every pass silently reverts the human's edit (DEC-020)");
         // The table it DOES own is rewritten, and stays valid.
-        Assertions.assertTrue(Files.readString(tree.resolve(".jcodebuddy/index/files.json"))
+        Assertions.assertTrue(Files.readString(tree.resolve(".jcodebuddy/index/classes.json"))
                 .startsWith("{"), "while the table the pass owns is rewritten as usual");
     }
 
@@ -121,7 +126,7 @@ class IndexLayoutTest {
      * <p>The fallback layout — a report directory that is not inside a {@code .jcodebuddy} at all, which
      * is what a test or a one-off pass uses — is not a DEC-026 subfolder, so it gets the table and no
      * README. That is also what keeps {@code GeneratorGuardTest}'s "a report directory holds JSON only"
-     * true, and it is why the document's {@code fileIndex} pointer is emitted rather than assumed: the
+     * true, and it is why the document's {@code classIndex} pointer is emitted rather than assumed: the
      * distance to the table differs between the two layouts.</p>
      */
     @Test
@@ -132,7 +137,7 @@ class IndexLayoutTest {
         runPass(tree, reportDir);
 
         Path indexDir = reportDir.resolve("index");
-        Assertions.assertEquals(new TreeSet<>(List.of("files.json")), entriesOf(indexDir),
+        Assertions.assertEquals(new TreeSet<>(List.of("classes.json", "mtimes.json")), entriesOf(indexDir),
                 "a report directory that is not a module holds JSON metadata only");
     }
 }

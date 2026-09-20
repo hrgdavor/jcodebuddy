@@ -131,15 +131,17 @@ code or documentation for this repository:
   reading the `<Marker>.metadata.json` a pass wrote: adding a
   fact to a report means adding it to that JSON, never teaching
   the Java generator to emit HTML. Every source file that metadata
-  describes is named by a short **id**, and the module's central
-  index — `.jcodebuddy/index/files.json` — states each module-relative
-  path (`src/main/java/…`, never project-relative and never absolute)
-  exactly once, because CodeBuddy output belongs to the module that
-  holds the class and a path that needed the project root would be
-  wrong in every module but one; and a generated `.java` still never
-  appears inside `.jcodebuddy/`. A metadata document names source
-  files through the module's central index id (`.jcodebuddy/index/`),
-  a field carries all its locations, and neither the record nor the
+  describes is named by the module's **class index**
+  (`.jcodebuddy/index/classes.json`) — one row per type the module
+  compiles, **keyed by the type's fully qualified name**, carrying
+  the declaring file's path, its content checksum, the instant that
+  checksum was calculated, its size, and the type's kind and
+  modifiers, so any generator can answer "does this type exist, what
+  is it, has it changed" without walking and parsing the tree. A
+  document references a type by that FQN and never by a surrogate
+  id, because an FQN is the one reference a stock IDE's rename
+  refactor updates in a text file (DEC-029). A field carries all its
+  locations, and neither the record nor the
   report ever contains a file's text. The page is **one
   self-contained file with framework-free vanilla JavaScript** —
   no React / Svelte / Solid / Vue / Preact / Lit, no bundler, no
@@ -153,10 +155,13 @@ code or documentation for this repository:
   format, and fails the run. Reports land in the module's
   `.jcodebuddy/metadata/` subtree (DEC-026) as derived,
   ignorable output. The full decisions are in
+  [`doc-hipster-entity/architecture/decisions/DEC-029.md`](doc-hipster-entity/architecture/decisions/DEC-029.md)
+  for the class index,
   [`doc-hipster-entity/architecture/decisions/DEC-027.md`](doc-hipster-entity/architecture/decisions/DEC-027.md)
   for the report half and
   [`doc-hipster-entity/architecture/decisions/DEC-028.md`](doc-hipster-entity/architecture/decisions/DEC-028.md)
-  for the addressing and location half; the renderer's own contract is
+  for the location half (its addressing half is superseded in part by
+  DEC-029); the renderer's own contract is
   [`scripts/entity-html/README.md`](scripts/entity-html/README.md).
 
 ### What this does *not* mean

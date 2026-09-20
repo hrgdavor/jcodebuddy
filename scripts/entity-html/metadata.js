@@ -1,73 +1,83 @@
 /**
- * Reads the generator's JSON metadata — the model the whole page is built from (DEC-027, DEC-028).
+ * Reads the generator's JSON metadata — the model the whole page is built from (DEC-027, DEC-028,
+ * DEC-029).
  *
  * `<Marker>.metadata.json` is written by `EntityMetadataGenerator` and is the only place that knows
  * what this module's entities *are*: which interfaces are views, which fields each view exposes in
  * which order, each field's `FieldKind`, and — since DEC-028 — **every location of every field**, as the
  * pass that wrote the files recorded it. Nothing in this file re-derives those facts from source.
  *
- * <h3>Two inputs, and the index between them</h3>
- * A document no longer contains a source path. It names each file by a short **id**, and the ids are
- * resolved by the module's central index, `.jcodebuddy/index/files.json`, which states every path once:
+ * <h3>Two inputs, and the class index between them</h3>
+ * A document no longer contains a source path. It names each file by the **fully qualified name** of the
+ * type that file declares, and those names are resolved by the module's class index,
+ * `.jcodebuddy/index/classes.json`, which states every path once:
  *
- *     // <module>/.jcodebuddy/index/files.json
- *     { "format": 1, "module": "…", "sourceRoot": "src/main/java", "files": { "Person": "src/main/java/…" } }
+ *     // <module>/.jcodebuddy/index/classes.json
+ *     { "format": 1, "hash": {…}, "classes": { "com.example.Person": { "path": "src/main/java/…" } } }
  *
  * The index is located from the **module root the CLI already knows** and cross-checked against each
- * document's `fileIndex` pointer, so a wrong pointer cannot silently break the page and a moved index
- * still renders. When a document carries ids but the table cannot be read, this module does not guess:
- * `buildPage` reports `html_index_missing` and renders nothing, because an id rendered as if it were a
+ * document's `classIndex` pointer, so a wrong pointer cannot silently break the page and a moved index
+ * still renders. When a document carries FQNs but the table cannot be read, this module does not guess:
+ * `buildPage` reports `html_index_missing` and renders nothing, because an FQN rendered as if it were a
  * path is a page full of dead links that looks like it worked.
  *
  * The shape read here is the `toJson` contract from `EntityMetadataGenerator`:
  *
- *     { entityName, package, markerInterface, idType, markerFile, markerLine, fileIndex, views[], allFields[] }
+ *     { entityName, package, markerInterface, idType, markerFile, markerLine, classIndex, views[], allFields[] }
  *     view:   { name, lineNumber, file, extends[], gen, discriminatorField, addons[], properties[],
  *               artifacts[], fields[] }
  *     artifact: { id, name, kind, file, line, generated, own, header? }
  *     field:  { name, ordinal, type, fieldKind, column?, relation?, expression?, at }
  *     at:     { <artifact id>: { <role>: line } }
  *
- * A document written before DEC-028 (plain `sourcePath` strings, no `artifacts`/`fields`) still reads:
- * every id key falls back to the path key it replaced.
+ * Two earlier spellings still read, for one revision: a document written while `files.json` existed
+ * (short readable ids plus a `fileIndex` pointer) and one written before any index existed (plain
+ * `sourcePath` strings, no `artifacts`/`fields`).
  */
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
 
 /** The JDK packages whose prefix is dropped from a displayed type name. */
 const JDK_PACKAGES = ['java.lang.', 'java.util.', 'java.time.', 'java.math.', 'java.io.', 'java.util.function.'];
 
-/** The only index `format` this renderer understands. An unknown one is refused, never guessed. */
+/** The only class-index `format` this renderer understands. An unknown one is refused, never guessed. */
 export const SUPPORTED_INDEX_FORMAT = 1;
 
+/** The DEC-028 index file name, still read for one revision (a document may carry a `fileIndex`). */
+const LEGACY_INDEX_FILE = 'files.json';
+
 /**
- * The module's central file index: id to module-relative path.
+ * The module's index, as the renderer needs it: a name to a module-relative path.
+ *
+ * `byName` holds FQNs (the current spelling) and/or the DEC-028 readable ids (the legacy one) — the two
+ * key spaces cannot collide, because a readable id has no dot-qualified package prefix that an FQN
+ * always has, so one map serves both spellings and `pathOf` needs no mode.
  *
  * `problem` is the reason the table is unusable, or null. It is carried rather than thrown so the
  * diagnostic can be reported in DEC-022's format by the page builder, which is where every other
  * divergence is decided.
  */
-export class FileIndex {
-  constructor(byId, file, problem) {
-    this.byId = byId;
+export class ClassIndex {
+  constructor(byName, file, problem) {
+    this.byName = byName;
     this.file = file;
     this.problem = problem;
   }
 
-  /** The module-relative path behind `id`, or null when the id is unknown or the table is unusable. */
-  pathOf(id) {
-    if (id === null || id === undefined || !this.byId) {
+  /** The module-relative path behind `name` (an FQN, or a legacy readable id), or null. */
+  pathOf(name) {
+    if (name === null || name === undefined || !this.byName) {
       return null;
     }
-    return this.byId.get(id) ?? null;
+    return this.byName.get(name) ?? null;
   }
 
   get usable() {
-    return this.byId !== null;
+    return this.byName !== null;
   }
 
   get size() {
-    return this.byId ? this.byId.size : 0;
+    return this.byName ? this.byName.size : 0;
   }
 }
 
@@ -245,7 +255,7 @@ export class MarkerMetadata {
     this.markerInterface = raw.markerInterface;
     this.idType = raw.idType ?? '';
     /** The pointer the document carries to the index, or null in a document written before DEC-028. */
-    this.fileIndexPointer = raw.fileIndex ?? null;
+    this.classIndexPointer = raw.classIndex ?? raw.fileIndex ?? null;
     this.markerLine = typeof raw.markerLine === 'number' ? raw.markerLine : -1;
     /** The marker interface's own file, relative to the module root, or null. */
     this.markerSourcePath = raw.markerFile !== undefined && raw.markerFile !== null
@@ -279,10 +289,11 @@ export class MetadataBundle {
     this.generation = generation;
     this.index = index;
     /**
-     * Whether any document names its files by id. A bundle that does needs the index; a bundle that
-     * does not (every document written before DEC-028) renders from the source scan exactly as it did.
+     * Whether any document names its files by reference. A bundle that does needs the index; a bundle
+     * that does not (every document written before DEC-028) renders from the source scan exactly as it
+     * did.
      */
-    this.needsIndex = markers.some((marker) => marker.fileIndexPointer !== null
+    this.needsIndex = markers.some((marker) => marker.classIndexPointer !== null
       || marker.views.some((view) => view.fileId !== null || view.detailed));
   }
 
@@ -296,25 +307,72 @@ export class MetadataBundle {
 }
 
 /**
- * Locates and reads the module's index.
+ * The `name → module-relative path` table of one index file, or a `{problem}` when it cannot be used.
  *
- * Two routes, both tried: the module root the CLI knows (`<module>/.jcodebuddy/index/files.json`) and
- * the `fileIndex` pointer a document carries (relative to the document). The module-root route wins
- * when it works, because that is a fact about the module rather than about one document; the pointer is
- * what makes a document that was copied elsewhere still readable, and it is what the DEC-028 contract
- * promises a consumer that has only the document. Either way the table is the same one.
+ * Two shapes are understood, because two revisions of the table exist: the current class index
+ * (`classes`, keyed by FQN, with a `hash` contract) and the DEC-028 addressing table (`files`, keyed by
+ * a readable id). The keys cannot collide — a class index key is always package-qualified and a readable
+ * id never is — so one map serves both and no caller has to know which revision it is reading.
+ */
+function readIndexTable(file) {
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { problem: `the index table at ${file} is not valid JSON (${error?.message ?? error})` };
+  }
+  if (raw.format !== SUPPORTED_INDEX_FORMAT) {
+    // An unknown format means "do not trust this table": the keys may mean something else entirely, and
+    // guessing would be worse than refusing.
+    return {
+      problem: `the index table at ${file} has format ${JSON.stringify(raw.format)}, and this renderer `
+        + `understands only ${SUPPORTED_INDEX_FORMAT}`,
+    };
+  }
+  const byName = new Map();
+  if (raw.classes && typeof raw.classes === 'object') {
+    for (const [fqn, row] of Object.entries(raw.classes)) {
+      if (row && typeof row.path === 'string') {
+        byName.set(fqn, row.path);
+      }
+    }
+    return { byName };
+  }
+  for (const [id, path] of Object.entries(raw.files ?? {})) {
+    if (typeof path === 'string') {
+      byName.set(id, path);
+    }
+  }
+  return { byName };
+}
+
+/**
+ * Locates and reads the module's index (DEC-029).
+ *
+ * Two routes, both tried: the module root the CLI knows (`<module>/.jcodebuddy/index/classes.json`, with
+ * `files.json` as the one-revision legacy name) and the pointer a document carries (`classIndex`, or the
+ * legacy `fileIndex`), relative to the document. The module-root route wins when it works, because that
+ * is a fact about the module rather than about one document; the pointer is what makes a document that
+ * was copied elsewhere still readable, and it is what the contract promises a consumer that has only the
+ * document.
  */
 function loadIndex(directory, rawDocuments, indexHint) {
-  const pointer = rawDocuments.map((raw) => raw.fileIndex).find(Boolean) ?? null;
+  const pointer = rawDocuments.map((raw) => raw.classIndex ?? raw.fileIndex).find(Boolean) ?? null;
   const candidates = [];
   if (indexHint) {
     candidates.push({ file: indexHint, route: 'module root' });
+    // The legacy table sits beside the current one; a module that has not been regenerated yet still
+    // renders, and a module that has one has no `files.json` at all (the pass does not write it).
+    candidates.push({
+      file: join(dirname(indexHint), LEGACY_INDEX_FILE),
+      route: 'module root (DEC-028 table)',
+    });
   }
   if (pointer) {
     candidates.push({ file: resolve(directory, pointer), route: 'document pointer' });
   }
   if (candidates.length === 0) {
-    return new FileIndex(null, null, 'no document carries a fileIndex pointer');
+    return new ClassIndex(null, null, 'no document carries a classIndex pointer');
   }
 
   // Every route is tried and every failure is kept: reporting only the last one told a reader about the
@@ -326,23 +384,14 @@ function loadIndex(directory, rawDocuments, indexHint) {
       problems.push(`no index table at ${candidate.file} (via the ${candidate.route})`);
       continue;
     }
-    let raw;
-    try {
-      raw = JSON.parse(readFileSync(candidate.file, 'utf8'));
-    } catch (error) {
-      problems.push(`the index table at ${candidate.file} is not valid JSON (${error?.message ?? error})`);
+    const table = readIndexTable(candidate.file);
+    if (table.problem) {
+      problems.push(table.problem);
       continue;
     }
-    if (raw.format !== SUPPORTED_INDEX_FORMAT) {
-      // An unknown format means "do not trust this table": the ids may mean something else entirely,
-      // and guessing would be worse than refusing.
-      problems.push(`the index table at ${candidate.file} has format ${JSON.stringify(raw.format)}, and `
-        + `this renderer understands only ${SUPPORTED_INDEX_FORMAT}`);
-      continue;
-    }
-    return new FileIndex(new Map(Object.entries(raw.files ?? {})), candidate.file, null);
+    return new ClassIndex(table.byName, candidate.file, null);
   }
-  return new FileIndex(null, null, problems.join('; '));
+  return new ClassIndex(null, null, problems.join('; '));
 }
 
 /**

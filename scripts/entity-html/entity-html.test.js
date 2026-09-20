@@ -280,7 +280,8 @@ describe('the model behind the page', () => {
    */
   test('renders only locations the metadata records', () => {
     const files = new Map(Object.entries(JSON.parse(
-      readFileSync(join(first.linkBase, '.jcodebuddy', 'index', 'files.json'), 'utf8')).files));
+      readFileSync(join(first.linkBase, '.jcodebuddy', 'index', 'classes.json'), 'utf8')).classes)
+      .map(([fqn, row]) => [fqn, row.path]));
 
     // marker -> view -> `field|role` -> set of `path:line`
     const recorded = new Map();
@@ -361,19 +362,20 @@ describe('a metadata file written before sourcePath existed', () => {
   });
 
   /**
-   * A document written before DEC-028 — plain `sourcePath` strings, no ids, no artifacts, no field maps —
-   * renders exactly as it did, from the scan.
+   * A document written before the class index — plain `sourcePath` strings, no FQN references, no
+   * artifacts, no field maps — renders exactly as it did, from the scan.
    */
-  test('renders a pre-DEC-028 document, ids and all absent', () => {
+  test('renders a pre-class-index document, references and all absent', () => {
     const legacy = join(SCRATCH, 'legacy-metadata');
     mkdirSync(legacy, { recursive: true });
     const files = new Map(Object.entries(JSON.parse(
-      readFileSync(join(first.linkBase, '.jcodebuddy', 'index', 'files.json'), 'utf8')).files));
-    const pathOf = (id) => (id === null || id === undefined ? null : files.get(id) ?? null);
+      readFileSync(join(first.linkBase, '.jcodebuddy', 'index', 'classes.json'), 'utf8')).classes)
+      .map(([fqn, row]) => [fqn, row.path]));
+    const pathOf = (fqn) => (fqn === null || fqn === undefined ? null : files.get(fqn) ?? null);
 
     for (const name of first.page.metadataFiles) {
       const raw = JSON.parse(readFileSync(join(first.metadata, name), 'utf8'));
-      delete raw.fileIndex;
+      delete raw.classIndex;
       raw.markerSourcePath = pathOf(raw.markerFile);
       delete raw.markerFile;
       for (const view of raw.views ?? []) {
@@ -436,11 +438,11 @@ describe('the module index', () => {
     rmSync(ROUTE, { recursive: true, force: true });
     mkdirSync(join(scratchModule, '.jcodebuddy', 'index'), { recursive: true });
     mkdirSync(scratchMetadata, { recursive: true });
-    copyFileSync(join(first.linkBase, '.jcodebuddy', 'index', 'files.json'),
-      join(scratchModule, '.jcodebuddy', 'index', 'files.json'));
+    copyFileSync(join(first.linkBase, '.jcodebuddy', 'index', 'classes.json'),
+      join(scratchModule, '.jcodebuddy', 'index', 'classes.json'));
     for (const name of first.page.metadataFiles) {
       const raw = JSON.parse(readFileSync(join(first.metadata, name), 'utf8'));
-      raw.fileIndex = pointer;
+      raw.classIndex = pointer;
       writeFileSync(join(scratchMetadata, name), JSON.stringify(raw, null, 2));
     }
     return {
@@ -454,7 +456,7 @@ describe('the module index', () => {
   }
 
   test('is found from the module root even when a document pointer is wrong', () => {
-    const result = generate(stage('does/not/exist/files.json'));
+    const result = generate(stage('does/not/exist/classes.json'));
     expect(result.page.markers.length).toBe(first.page.markers.length);
     expect(result.divergences.filter((item) => item.kind === 'html_index_missing')).toEqual([]);
     expect(result.stats.links).toBe(first.stats.links);
@@ -462,11 +464,11 @@ describe('the module index', () => {
   });
 
   test('is found from the document pointer when the module has none', () => {
-    const pointer = relative(scratchMetadata, join(first.linkBase, '.jcodebuddy', 'index', 'files.json'))
+    const pointer = relative(scratchMetadata, join(first.linkBase, '.jcodebuddy', 'index', 'classes.json'))
       .split(sep).join('/');
-    // The staged module carries no index at all: only the pointer can resolve the ids.
+    // The staged module carries no index at all: only the pointer can resolve the references.
     const options = stage(pointer);
-    rmSync(join(scratchModule, '.jcodebuddy', 'index', 'files.json'));
+    rmSync(join(scratchModule, '.jcodebuddy', 'index', 'classes.json'));
     const result = generate(options);
     expect(result.page.markers.length).toBe(first.page.markers.length);
     expect(result.divergences.filter((item) => item.kind === 'html_index_missing')).toEqual([]);
@@ -474,10 +476,10 @@ describe('the module index', () => {
     rmSync(ROUTE, { recursive: true, force: true });
   });
 
-  test('a missing index is a loud diagnostic, not a page of dangling ids', () => {
-    const options = stage('does/not/exist/files.json');
+  test('a missing index is a loud diagnostic, not a page of dangling references', () => {
+    const options = stage('does/not/exist/classes.json');
     const present = generate(options);
-    rmSync(join(scratchModule, '.jcodebuddy', 'index', 'files.json'));
+    rmSync(join(scratchModule, '.jcodebuddy', 'index', 'classes.json'));
     const missing = generate(options);
     rmSync(ROUTE, { recursive: true, force: true });
 
@@ -485,16 +487,16 @@ describe('the module index', () => {
     const problem = missing.divergences.find((item) => item.kind === 'html_index_missing');
     expect(problem).toBeDefined();
     expect(problem.severity).not.toBe('warning');
-    expect(problem.current).toContain('files.json');
+    expect(problem.current).toContain('classes.json');
     // Nothing is rendered from an index that could not be read.
     expect(missing.page.markers).toEqual([]);
     expect(missing.stats.links).toBe(0);
   });
 
   test('an unrecognised index format is refused rather than guessed', () => {
-    const options = stage('does/not/exist/files.json');
-    writeFileSync(join(scratchModule, '.jcodebuddy', 'index', 'files.json'),
-      JSON.stringify({ format: 99, files: { Person: 'wrong/Person.java' } }));
+    const options = stage('does/not/exist/classes.json');
+    writeFileSync(join(scratchModule, '.jcodebuddy', 'index', 'classes.json'),
+      JSON.stringify({ format: 99, classes: { Person: { path: 'wrong/Person.java' } } }));
     const result = generate(options);
     rmSync(ROUTE, { recursive: true, force: true });
     const problem = result.divergences.find((item) => item.kind === 'html_index_missing');
@@ -506,22 +508,27 @@ describe('the module index', () => {
 
 describe('the size budget', () => {
   /**
-   * The documents stay inside their budget, and the index stays small.
+   * The documents stay inside their budget, and the class index stays small.
    *
-   * The budget is a *shape* guard rather than byte policing (DEC-028 § 5.2): DEC-028 adds information —
-   * every field's every location — and the counterfactual is what the number is for. Writing the path
-   * inline per location instead of grouping locations under an artifact id and stating each path once in
-   * the index would cost roughly 35 KB of path text across the example's ~420 locations, on top of what
-   * is here. So the interesting property is not the exact count; it is that a fact has not started being
-   * repeated once per view, per field or per location again.
+   * The budget is a *shape* guard rather than byte policing (DEC-028 § 5.2, DEC-029 § "honest
+   * accounting"): DEC-028 adds information — every field's every location — and DEC-029 adds the class
+   * manifest, and the counterfactual is what the numbers are for. Writing the path inline per location
+   * instead of grouping locations under an artifact id and stating each path once in the index would cost
+   * roughly 35 KB of path text across the example's ~420 locations, on top of what is here. So the
+   * interesting property is not the exact count; it is that a fact has not started being repeated once per
+   * view, per field or per location again.
+   *
+   * DEC-029 makes the documents *larger* than the DEC-028 ids did: a fully qualified name is longer than
+   * the short id it replaced (measured: 50 993 → 56 097 bytes). That is the price of a reference an IDE's
+   * rename refactor can maintain, and it is stated rather than hidden.
    */
-  test('keeps the documents and the index small enough to stay diffable', () => {
+  test('keeps the documents and the class index small enough to stay diffable', () => {
     const documents = first.page.metadataFiles
       .reduce((total, name) => total + statSync(join(first.metadata, name)).size, 0);
-    const index = statSync(join(first.linkBase, '.jcodebuddy', 'index', 'files.json')).size;
-    expect(index).toBeLessThan(8 * 1024);
+    const index = statSync(join(first.linkBase, '.jcodebuddy', 'index', 'classes.json')).size;
+    expect(index).toBeLessThan(20 * 1024);
     expect(documents).toBeLessThan(60 * 1024);
-    expect(documents + index).toBeLessThan(70 * 1024);
+    expect(documents + index).toBeLessThan(80 * 1024);
   });
 });
 

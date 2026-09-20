@@ -29,10 +29,11 @@ package hr.hrg.hipster.entity.tooling.meta;
  *                  a Java developer names them
  * @param kind      {@code interface} / {@code record} / {@code enum} / {@code class}
  * @param file      the module-relative path of the file in the model, written to JSON as the
- *                  <strong>id</strong> {@code ModuleFileIndex} assigned it — the split DEC-028 § 4.7
- *                  prescribes and that the write ordering forces: ids exist only once the whole pass has
- *                  run, while this inventory is built as each view is emitted, so the conversion happens
- *                  at the single point where JSON is written, never here
+ *                  <strong>fully qualified name</strong> of the type that file declares (DEC-029) — the
+ *                  split DEC-029 § "documents address classes by FQN" prescribes and that the write
+ *                  ordering forces: the class index exists only once the whole pass has run, while this
+ *                  inventory is built as each view is emitted, so the conversion happens at the single
+ *                  point where JSON is written, never here
  * @param line      the declaration line of this type <em>inside</em> that file; a nested type has its own
  * @param generated whether the generator owns the file, i.e. whether it carries a DEC-021 header. A
  *                  hand-written nested record is an artifact of the view without being generated, and

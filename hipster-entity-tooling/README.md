@@ -61,54 +61,110 @@ generator: a matching nested `record` → `RECORD`, else a nested `Write`
 interface → `BUILDER`, else `META`. It never resolves to
 `BUILDER_TRACKED`/`BUILDER_ALL`.
 
-### The module index, and a field's locations
+### The class index, and a field's locations
 
-`<Marker>.metadata.json` no longer names a source file by its path. Each **module** writes one
-addressing table per pass, at `<module>/.jcodebuddy/index/files.json`
-([DEC-028](../doc-hipster-entity/architecture/decisions/DEC-028.md)):
+`<Marker>.metadata.json` no longer names a source file by its path *or* by an id. Each **module**
+writes one **class index** per pass, at `<module>/.jcodebuddy/index/classes.json`
+([DEC-029](../doc-hipster-entity/architecture/decisions/DEC-029.md) — superseding the addressing half
+of [DEC-028](../doc-hipster-entity/architecture/decisions/DEC-028.md)), beside a derived
+`mtimes.json` sidecar:
 
 ```jsonc
 {
   "format": 1,
   "module": "hipster-entity-example",
   "sourceRoot": "src/main/java",
-  "files": {
-    "PersonSummary": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java",
-    "entity.Person": "src/main/java/hr/hrg/hipster/entityexample/person/entity/Person.java",
-    "iface.Person":  "src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java",
-    "record.Person": "src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java"
-  }
-}
+  "hash": { "algo": "wyhash64", "normalize": "lf", "of": "content" },
+  "classes": {
+    "…person.entity.PersonSummary": {
+      "path": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java",
+      "kind": "interface", "modifiers": ["abstract", "public"], "line": 14, "depth": 0,
+      "size": 1837, "checksum": "3f2c8d91a4b7e601",
+      "hashCalculatedAt": "2026-05-14T09:12:33Z" },
+    "…person.entity.PersonSummary.Record": {
+      "path": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java",
+      "kind": "record", "modifiers": ["public"], "line": 26, "depth": 1,
+      "enclosing": "…person.entity.PersonSummary", "generated": 1,
+      "size": 1837, "checksum": "3f2c8d91a4b7e601",
+      "hashCalculatedAt": "2026-05-14T09:12:33Z" } } }
 ```
 
-An **id** is the file's simple name — extension and `src/main/java/` prefix dropped — qualified by
-the **shortest package suffix that disambiguates it** among every file the pass indexed: plain
-`PersonSummary`, but `entity.Person` / `iface.Person` / `record.Person`, because all three exist in
-this repository (which is why a bare basename is not enough). It is a function of the path plus the
-*set* of paths, so it is deterministic, unique in the module, identical in every document that
-mentions the file, and readable in a diff; the deliberate trade-off is that adding a file whose
-simple name collides with an existing one may **lengthen the existing id** (`Person` →
-`entity.Person`), where an opaque hash would not.
+One row per **type** the module compiles — a hand-written source file and a generated artifact alike
+— **keyed by the type's fully qualified name**, member types joined with `.` so
+`…PersonSummary.Record` has a row of its own. A row carries `path` (module-relative, forward slashes,
+never absolute and never `..`), `kind` (`class` / `interface` / `enum` / `record` / `annotation`,
+from the tooling's single kind resolver), `modifiers` (the declaration's Java modifier keywords,
+**sorted**, so a reordered modifier list is not a diff), `line` (the declaration's start line,
+1-based), `depth` and `enclosing` (a member type's nesting; `0`, and no `enclosing`, for a top-level
+type), `generated` (`1` when the pass wrote the file — it carries a DEC-021 header — omitted
+otherwise), `size`, `checksum` and `hashCalculatedAt`. A file that declares no type
+(`package-info.java`) contributes no row, and two paths claiming one FQN fail the pass rather than
+letting an iteration order pick a winner.
+
+**An id is a fact about the writing pass; an FQN is a fact about the code.** A hash, a counter or a
+positional index changes when a file moves, when a row is inserted or when the id scheme changes, and
+it means nothing to a tool that cannot run our writer. A fully qualified name is the one reference a
+Java IDE's rename refactor updates everywhere it appears — **including in text files that are not
+Java**. The cost is stated honestly: an FQN is longer than a short id, and **a package or type rename
+changes the key**, so a document's reference is stale until the next pass rewrites it. The pass
+reports that as a removed row plus an added row, and the document it rewrites carries the new name;
+`changedSince` also reports a retained FQN whose `path` moved (`renamed`).
+
+**Measured, not estimated: this is not a size optimisation.** `files.json` was 4 301 bytes;
+`classes.json` is **14 615 bytes for 42 rows**, and the three metadata documents grew from 50 993 to
+56 097 bytes, because an FQN is longer than the short id it replaced. What the growth buys is one
+addressing scheme (the language's own), content identity, and the class facts every generator
+otherwise re-derives by walking and parsing.
+
+`checksum` is 16 hex characters: `Wyhash64` over the file's bytes with CRLF normalised to LF first —
+the same algorithm *and* the same normalisation the watch agent's own tables use, so the two agree
+about what "the same content" means. The normalisation is not cosmetic: without it a CRLF checkout
+and an LF checkout of the same content would disagree, and the table would describe the developer's
+git configuration rather than the code. The `hash` header names both (`algo`, `normalize`, `of`), and
+a table whose header this build does not recognise must force a full pass, never be half-believed.
+
+`hashCalculatedAt` is the ISO-8601 UTC instant that checksum was **calculated**, at second precision.
+It changes **if and only if** the row's `checksum` changes (or the row is new): the pass carries the
+previous instant forward on unchanged content, which is what makes the table byte-identical across
+two passes over an unchanged tree, and therefore committable and reviewable in a diff. The file's
+last-modified time is deliberately **not** a column — an `mtime` belongs to a working tree and cannot
+survive a checkout — so it lives in `mtimes.json` beside the table, where a watcher may compare it
+against the filesystem as a cheap pre-filter before hashing anything, and where nothing may treat it
+as a correctness input.
+
+**The reader API** is on
+[`ClassIndex`](src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java), and it is read
+methods on the type that also writes, so there is one key implementation and no second class:
+`row(fqn)` (the row a name resolves to), `byPath(path)` (every row a file declares),
+`fqnForPath(path)` (the FQN a document should use for a file — its primary type; a file with no type
+is a caller bug and fails loudly), `changedSince(previous)` with its one-line `summarize`, and the
+static `read(indexFile, reportDir, moduleRoot, sourceRoot)`, which refuses a table whose `format` or
+`hash` contract this build does not recognise. `ClassIndex.pathsByFqn(indexFile)` is the
+`FQN → module-relative path` map a document's references resolve through; `legacyPathsById(filesJson)`
+is the DEC-028 table's counterpart for the one-revision legacy read. After writing, the pass prints
+`[index] N type(s) in classes.json — a added, c content change(s), r removed, n renamed`.
 
 Paths are **module-relative** (`src/main/java/…`, forward slashes), never absolute and never `..`,
 and **a path is written exactly once per module — only here**. Every document points at the table
-through a root `fileIndex` pointer (e.g. `"../../index/files.json"`), the only path-like value a
-document contains, and every file reference in a document is an id: `markerFile` (with `markerLine`),
-`views[].file`, `properties[].file`, `allFields[].file` and `artifacts[].file`. The index lives under
-the nearest `.jcodebuddy/` above the report directory — the same walk-up the module root uses
-(DEC-026 § 2) — and falls back to `<report dir>/index/files.json` when the report directory is not
-inside a `.jcodebuddy/` at all (a temp directory in a test). `format` is the table's version: a
-consumer that does not recognise it must refuse the table rather than guess. A pass writes
-`index/README.md` when it is absent and **never overwrites** it, because that file is tracked, i.e.
-owned by a human; the fallback location gets `files.json` and no README.
+through a `classIndex` pointer (e.g. `"../../index/classes.json"`), the only path-like value a
+document contains, and every file reference in a document is an **FQN**: `markerFile` (with
+`markerLine`), `views[].file`, `properties[].file`, `allFields[].file` and `artifacts[].file`. The
+index lives under the nearest `.jcodebuddy/` above the report directory — the same walk-up the module
+root uses (DEC-026 § 2) — and falls back to `<report dir>/index/classes.json` when the report
+directory is not inside a `.jcodebuddy/` at all (a temp directory in a test); the fallback is not a
+module layout, so it gets the table and no README. `format` is the table's version: a consumer that
+does not recognise it must refuse the table rather than guess. A pass writes `index/README.md` when it
+is absent and **never overwrites** it, because that file is tracked, i.e. owned by a human.
 
 The Java model keeps **paths**. `EntityMeta.markerSourcePath`, `ViewMeta.sourcePath` and
 `Property.sourcePath` keep their meaning for every Java caller, and `ArtifactMeta.file` is a path in
-the model and an id in the JSON; `toJson`/`fromJson` are the single conversion point, because an id
-is a property of the whole indexed set and cannot exist at the moment a location is extracted.
-`fromJson(json)` without a table leaves ids unresolved (`null`) rather than inventing a path, while
-`fromJson(json, idToPath)` resolves them; both accept the pre-DEC-028 `markerSourcePath`/`sourcePath`
-keys, so an older document still parses.
+the model and an FQN in the JSON; `toJson`/`fromJson` are the single conversion point, because the
+document carries the language's own name while the model keeps the path. `fromJson(json)` without a
+table leaves references unresolved (`null`) rather than inventing a path, while
+`fromJson(json, fqnToPath)` resolves them; both accept the pre-DEC-028 `markerSourcePath`/`sourcePath`
+keys, so an older document still parses. **Legacy reading lasts one revision**: a document carrying
+the retired `fileIndex` pointer and DEC-028 readable ids still parses, resolving through `files.json`
+when that table is present. The reader is tolerant; nothing emits two spellings.
 
 **The artifact inventory** (`views[].artifacts[]`) lists the types that belong to a view:
 `{ id, name, kind, file, line, generated, own, header? }`. `id` is a small integer assigned in
@@ -116,8 +172,9 @@ reading order — the view's own file, the nested types it declares, the generat
 emission order, then the **foreign declaring interfaces** its fields reference, marked
 `"own": false`. `generated` says whether the file carries a DEC-021 header (i.e. the generator owns
 it), `header` is that header's description text, and `line` is the type's declaration line inside its
-file. An artifact whose `--java-out` is outside the module has no module-relative path and therefore
-no id: it is reported as an `artifact_outside_module` divergence and is absent from the inventory.
+file. An artifact whose `--java-out` is outside the module has no module-relative path — and so no
+FQN to name it by: it is reported as an `artifact_outside_module` divergence and is absent from the
+inventory.
 
 **A field's locations** (`views[].fields[]`) are `{ name, ordinal, type, fieldKind, column?,
 relation?, expression?, at }`, where `at` is `{ "<artifact id>": { "<role>": line } }` — for
@@ -141,11 +198,17 @@ record (its `lineNumber` is the declaration start, annotations included, which i
 from the accessor role's name-token line) and does not gain a location map; `allFields` carries
 `file` but deliberately **no** location map either, because it is a per-marker union.
 
+The reserved `hashes.json` is **cashed in, not still outstanding**: it was reserved by
+`plan.metadata-locations.md` § 2.3.2 and now lands as the row's `checksum`/`hashCalculatedAt`/`size`
+columns plus the `mtimes.json` sidecar, rather than as a second table.
+
 **Reserved, not implemented.** The directory is a directory of tables on purpose, so these can be
-added without changing any consumer's contract: `hashes.json` (id → a hash of the file's content,
-CRLF normalised to LF first, plus a header naming the algorithm, the tooling revision and the flags
-that change output) and `artifacts[].inputs` (per emitted artifact, the file ids it was generated
-*from*). Neither is written today; they are what a watcher or an incremental pass would need, and
+added without changing any consumer's contract: the `generator` header value (the tooling revision
+and the flags that change output — defined, not written until something consumes it, following the
+same "options are part of the fingerprint" rule the `hash` header already follows), the dependency
+edges (`artifacts[].inputs` — per emitted artifact, the FQNs it was generated *from*), and a pointer
+in a generated artifact's DEC-021 header naming the class index row it came from. None is written
+today; they are what a watcher or an incremental pass would need, and
 `metadata/watch/<toolSet>/metadata.db` (DEC-026 § 3) remains the watch agent's own cache rather than
 being replaced by the index.
 

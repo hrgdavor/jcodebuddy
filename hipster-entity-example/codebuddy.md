@@ -133,7 +133,8 @@ the lines that matter — the preflight, the resolved root, where the Java went,
 validation result, the divergence count, and the build status.
 
 A pass prints `Generating only for packages: …`, `Writing generated java to: …`,
-`Validation: no issues in …`, rewrites the 15 generated files in place and the
+`[index] N type(s) in classes.json — a added, c content change(s), r removed, n renamed`,
+`Validation: no issues in …`, rewrites the 15 generated files in place, the class index and the
 metadata JSON, and leaves `git status` clean when nothing changed.
 
 ### 3.2 Regenerate *and* verify
@@ -286,18 +287,19 @@ bun test                                             renderer tests, from script
 
 The renderer is **Bun JavaScript reading the JSON metadata** — the Java generator does not emit
 HTML, and a fact that should appear on the page is added to `toJson` instead (DEC-027). Since
-DEC-028 its model is two inputs: the document and the module's central index
-(`.jcodebuddy/index/files.json`), which states each source path once while the document names files
-by short ids, and each view's `fields[].at` records every location of every field. The renderer
-therefore reads the locations instead of discovering them; it still scans the committed source, but
-only to **verify** that a link's line contains the member (DEC-027 § 4.2). It reports
-what it could not verify:
+DEC-029 its model is two inputs: the document and the module's class index
+(`.jcodebuddy/index/classes.json`), which states each source path once while the document names a
+file by the **fully qualified name** of the type it declares, and each view's `fields[].at` records
+every location of every field. The renderer therefore reads the locations instead of discovering
+them; it still scans the committed source, but only to **verify** that a link's line contains the
+member (DEC-027 § 4.2). It reports what it could not verify:
 
 - `Link check: N links verified, M candidate(s) rejected` — a candidate is written only when the
   file exists and the line contains the member, so a rejected one is dropped, not guessed at;
 - divergences in DEC-022's format, and the run exits 1 unless `--soft` (the pass fails with it);
-- a missing or unrecognised index is a loud `html_index_missing` **error** — the page renders
-  nothing rather than a page of dangling ids;
+- a missing, unrecognised or corrupt class index is a loud `html_index_missing` **error** — the page
+  renders nothing rather than a page of dangling FQNs (a document written while `files.json` existed,
+  with readable ids and a `fileIndex`, still renders through that legacy table for one revision);
 - **no** `html_field_not_in_ledger` warning any more. Until DEC-028 the renderer found an enum
   constant with a line regex that did not match the way the generator writes one
   (`, email(java.lang.String.class) {` — the comma on the same line), so it read
@@ -392,7 +394,10 @@ not the generated source.
 ```
 hipster-entity-example/.jcodebuddy/
 ├── index/
-│   ├── files.json                 the module's addressing table: id → module-relative source path
+│   ├── classes.json               the module's class index: FQN → row (path, kind, modifiers, line,
+│   │                              depth, enclosing?, generated?, size, checksum, hashCalculatedAt)
+│   ├── mtimes.json                derived sidecar: FQN → last-modified time; a pre-filter only, never
+│   │                              a correctness input and never committed
 │   └── README.md                  tracked; what the table is, and what it reserves
 └── metadata/entity/
     ├── Auditable.metadata.json    (the example/ marker and its addon views)
@@ -403,12 +408,13 @@ hipster-entity-example/.jcodebuddy/
 ```
 
 One file **per entity marker**, named `<Marker>.metadata.json` — not one per view.
-It contains the marker/package/id type, one entry per view (`gen`, `extends`,
-`addons`, `discriminatorField`, properties with `fieldKind`/`expression`/`relation`),
-and an `allFields` array with `typeByView` type descriptors.
+It contains the marker, its package and its identity type (`idType`), one entry per view (`gen`,
+`extends`, `addons`, `discriminatorField`, properties with
+`fieldKind`/`expression`/`relation`), and an `allFields` array with `typeByView` type descriptors.
 
-Since DEC-028 a document contains **no source path at all**. It names each file by a short
-**id** and points at the module's central index with `fileIndex` (`"../../index/files.json"`):
+Since DEC-029 a document contains **no source path at all**. It names each file by the **fully
+qualified name** of the type that file declares and points at the module's class index with
+`classIndex` (`"../../index/classes.json"`):
 
 ```jsonc
 {
@@ -416,19 +422,23 @@ Since DEC-028 a document contains **no source path at all**. It names each file 
   "package": "hr.hrg.hipster.entityexample.person.entity",
   "markerInterface": "Person",
   "idType": "Long",
-  "markerFile": "entity.Person",          // id, not a path
+  "markerFile": "hr.hrg.hipster.entityexample.person.entity.Person",   // FQN, not a path
   "markerLine": 14,
-  "fileIndex": "../../index/files.json",  // the only path-like value in the document
+  "classIndex": "../../index/classes.json",  // the only path-like value in the document
   "views": [
-    { "name": "PersonSummary", "lineNumber": 13, "file": "PersonSummary",
+    { "name": "PersonSummary", "lineNumber": 13,
+      "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary",
       "artifacts": [
-        { "id": 0, "name": "PersonSummary", "kind": "interface", "file": "PersonSummary",
+        { "id": 0, "name": "PersonSummary", "kind": "interface",
+          "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary",
           "line": 14, "generated": false, "own": true },
-        { "id": 3, "name": "PersonSummary_", "kind": "enum", "file": "PersonSummary_",
+        { "id": 3, "name": "PersonSummary_", "kind": "enum",
+          "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary_",
           "line": 17, "generated": true, "own": true,
           "header": "Field metadata for the PersonSummary view." },
-        { "id": 6, "name": "Person", "kind": "interface", "file": "entity.Person",
-          "line": 14, "generated": false, "own": false }   // a foreign declaring interface
+        { "id": 6, "name": "Person", "kind": "interface",
+          "file": "hr.hrg.hipster.entityexample.person.entity.Person",  // a foreign declaring interface
+          "line": 14, "generated": false, "own": false }
       ],
       "fields": [
         { "name": "age", "ordinal": 4, "fieldKind": "DERIVED",
@@ -441,30 +451,36 @@ Since DEC-028 a document contains **no source path at all**. It names each file 
 }
 ```
 
-The index states each path exactly once, and the id behind it is the file's simple name qualified by
-the **shortest package suffix that disambiguates it** (`PersonSummary`, but `entity.Person` /
-`iface.Person` / `record.Person`), so the same file has the same id in every document and the table
-is readable in a diff. `views[].artifacts[]` is the inventory of the files that belong to a view —
-its own file and the nested types it declares, the generated siblings, then the foreign declaring
-interfaces its fields reference with `"own": false` — and `views[].fields[].at` is
-`artifact id → role → line` over the eight roles `accessor`, `annotation`, `enum-constant`,
-`name-slot`, `record-component`, `field`, `setter`, `ordinal-slot`. A role that does not exist for a
-field is **absent**, which is why a `DERIVED` field has no `setter` anywhere.
+The class index states each path exactly once, and its key is the type's **fully qualified name** —
+package-qualified, member types joined with `.` (`…PersonSummary.Record` has a row of its own), so
+the same type has the same name in every document, the name is what a stock IDE's rename refactor
+updates and `grep` finds, and the table is readable in a diff. There is deliberately **no surrogate
+id**: an id is a fact about the writing pass, and it is the one reference an IDE rename could not
+update in a text file. The cost is stated honestly: an FQN is longer than a short id, so the
+metadata **grows** (`files.json` was 4 301 bytes, `classes.json` is 14 615 bytes for 42 rows, and
+these three documents went from 50 993 to 56 097 bytes), and **a package or type rename changes the
+key**, so a document's reference is stale until the next pass rewrites it.
+`views[].artifacts[]` is the inventory of the files that belong to a view — its own file and the
+nested types it declares, the generated siblings, then the foreign declaring interfaces its fields
+reference with `"own": false` — and `views[].fields[].at` is `artifact id → role → line` over the
+eight roles `accessor`, `annotation`, `enum-constant`, `name-slot`, `record-component`, `field`,
+`setter`, `ordinal-slot`. A role that does not exist for a field is **absent**, which is why a
+`DERIVED` field has no `setter` anywhere.
 
 Two facts stay distinct and neither is derived from the other: `properties[].lineNumber` is the
 declaration **start**, annotations included (16 for `PersonSummary.age`), while the `accessor` role is
-the accessor's **name-token** line (17). A field's `file` is the id of the file that declares its
-*accessor*, which is a different file for an inherited field (`PersonDetails.firstName` →
-`entity.Person`, `createdAt` → `Auditable`), and a field declared outside the source root (`id`, from
-`Identifiable` in `hipster-entity-api`) carries no file rather than a guess. `allFields` carries
-`file` too but deliberately **no** location map: it is a per-marker union, and the per-view maps are
-authoritative. That is what makes the metadata usable by a consumer that has to open the class — the
-HTML entity index does exactly that (§ 3.10) — and `MetadataFileIdsTest` and `MetadataLocationsTest`
-assert the rules.
+the accessor's **name-token** line (17). A field's `file` is the FQN of the type that declares its
+*accessor*, which is a different type for an inherited field (`PersonDetails.firstName` →
+`…person.entity.Person`, `createdAt` → `…example.Auditable`), and a field declared outside the source
+root (`id`, from `Identifiable` in `hipster-entity-api`) carries no file rather than a guess — it has
+no row in this module's class index. `allFields` carries `file` too but deliberately **no** location
+map: it is a per-marker union, and the per-view maps are authoritative. That is what makes the
+metadata usable by a consumer that has to open the class — the HTML entity index does exactly that
+(§ 3.10) — and `MetadataFileIdsTest` and `MetadataLocationsTest` assert the rules.
 
-**A record names a file; it never contains one.** The index carries the module-relative path and the
-documents carry ids, and neither they nor the page ever quote a Java file's text: the committed
-source owns those bytes, and a copy in a report is stale the moment anyone edits the file.
+**A record names a file; it never contains one.** The class index carries the module-relative path
+and the documents carry FQNs, and neither they nor the page ever quote a Java file's text: the
+committed source owns those bytes, and a copy in a report is stale the moment anyone edits the file.
 
 ### 5.2 Who reads it
 
@@ -496,8 +512,8 @@ A project that wants the entity JSON reviewed in pull requests opts that subtree
 back in with a `!` rule (the exact rule is in
 [`.jcodebuddy/README.md`](.jcodebuddy/README.md) and DEC-026) — the sibling cache
 subtrees are deliberately not part of that opt-in, but **`.jcodebuddy/index/` must
-travel with `metadata/`**: a document names source files by ids that resolve only in
-`index/files.json`, so opting the metadata in alone would commit documents that
+travel with `metadata/`**: a document names source files by FQNs that resolve only in
+`index/classes.json`, so opting the metadata in alone would commit documents that
 reference an uncommitted table. Note what the default rules
 protect against even then: because only `README.md` files and the re-included
 subtree are tracked, a `.java` that an old hand-run pass dropped into the metadata

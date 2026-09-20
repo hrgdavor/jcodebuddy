@@ -39,7 +39,8 @@ import java.util.Objects;
  *                 ({@code accessor}, {@code annotation}, {@code enum-constant}, {@code name-slot},
  *                 {@code record-component}, {@code field}, {@code setter}, {@code ordinal-slot})
  * @param path     the module-relative path of the file the location lives in; {@code toJson} writes the
- *                 id {@code ModuleFileIndex} assigned it, and a path is never written into a document
+ *                 fully qualified name of the type that file declares (DEC-029), and a path is never
+ *                 written into a document
  * @param line     1-based line number of the member, or {@code -1} when the member's position was not
  *                 resolved. A role that does not exist for a field is <em>absent</em> from the map
  *                 rather than present with {@code -1}: a {@code DERIVED} field has no setter anywhere,

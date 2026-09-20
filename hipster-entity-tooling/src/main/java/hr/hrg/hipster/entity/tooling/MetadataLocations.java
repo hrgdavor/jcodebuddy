@@ -21,6 +21,7 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 
+import hr.hrg.hipster.entity.tooling.index.ClassIndex;
 import hr.hrg.hipster.entity.tooling.meta.ArtifactMeta;
 import hr.hrg.hipster.entity.tooling.meta.InterfaceInfo;
 import hr.hrg.hipster.entity.tooling.meta.Property;
@@ -81,8 +82,12 @@ import java.util.regex.Pattern;
  * scans both see a view's own accessor, so the two collapse to one entry; and keying on the artifact as
  * well is what lets the <em>same</em> field appear twice in one file for two artifacts — an outer
  * interface and its nested {@code Write} both legitimately declare it.</p>
+ *
+ * <p>Public only so {@link hr.hrg.hipster.entity.tooling.index.TypeFacts} can reuse {@link #kindOf} — the
+ * class index records a row's {@code kind} and must not grow a second kind resolver. Every other member
+ * stays package-private, and the {@link Detail} record it produces is the pass's own currency.</p>
  */
-final class MetadataLocations {
+public final class MetadataLocations {
 
     /** The generator's artifact naming conventions, in the order the pass emits them (DEC-028 § 2.4). */
     private static final List<String> GENERATED_SUFFIXES = List.of(
@@ -122,14 +127,15 @@ final class MetadataLocations {
      * @param fields          the view's fields in DEC-023 ledger order (what the emitters consumed)
      * @param ledgerSize      how many of those fields the field enum actually carries, so an appended
      *                        field can be recorded with no ordinal rather than a wrong one
-     * @param index           the pass's central index, which the artifact files are added to as they are
-     *                        found — the index must know a path before any document can name its id
+     * @param index           the pass's class index, which the artifact files are registered with as they
+     *                        are found — a document names a type, so the index must know a file's types
+     *                        before any document can reference it
      * @param divergences     the pass's report; an artifact outside the module or an unreadable file is
      *                        reported here rather than dropped in silence
      */
     static Detail collect(Path moduleRoot, Path javaOutputRoot, String viewPackage, String viewName,
                           InterfaceInfo viewInfo, List<Property> fields, int ledgerSize,
-                          ModuleFileIndex index, DivergenceReporter divergences) throws IOException {
+                          ClassIndex index, DivergenceReporter divergences) throws IOException {
         if (fields == null || fields.isEmpty()) {
             // Nothing to locate. The inventory is still collected below when the files exist, because a
             // view with no fields still has an interface and an enum the page shows as aspects.
@@ -295,7 +301,7 @@ final class MetadataLocations {
      * a half-read artifact produces locations that look plausible and point at the wrong lines.</p>
      */
     private static void readCandidate(Path moduleRoot, Path candidate, Set<String> fieldNames,
-                                      List<ArtifactShape> shapes, List<Found> found, ModuleFileIndex index,
+                                      List<ArtifactShape> shapes, List<Found> found, ClassIndex index,
                                       DivergenceReporter divergences, boolean viewOwnFile) throws IOException {
         if (candidate == null || !Files.isRegularFile(candidate)) {
             return;
@@ -308,7 +314,7 @@ final class MetadataLocations {
         Path moduleBase = moduleRoot.toAbsolutePath().normalize();
         Path candidateAbsolute = candidate.toAbsolutePath().normalize();
         String moduleRelative = EntityMetadataGenerator.moduleRelativePath(moduleRoot, candidate);
-        if (!candidateAbsolute.startsWith(moduleBase) || !ModuleFileIndex.isModuleRelative(moduleRelative)) {
+        if (!candidateAbsolute.startsWith(moduleBase) || !ClassIndex.isModuleRelative(moduleRelative)) {
             // A `--java-out` outside the module: the file exists and is generated, but the metadata has
             // no honest way to name it — a module-relative path is the only currency the index and the
             // documents share, and `..` is not one. Reported rather than dropped, because the pass
@@ -332,7 +338,10 @@ final class MetadataLocations {
                     "record the locations it declares");
             return;
         }
-        index.add(moduleRelative);
+        // Register the artifact in the class index (DEC-029). It is generated when its DEC-021 header says
+        // so, and it declares the types a document will name — including any nested type the view's field
+        // map keys on, which is why every declaration is registered and not just the top-level one.
+        index.addTypes(moduleRelative, read.unit(), true);
         CompilationUnit unit = read.unit();
         String headerDescription = dec021Description(unit);
         boolean generated = headerDescription != null;
@@ -462,7 +471,14 @@ final class MetadataLocations {
         }
     }
 
-    private static String kindOf(TypeDeclaration<?> declaration) {
+    /**
+     * The kind of one type declaration, in this tooling's vocabulary.
+     *
+     * <p>Public because the class index records a row's {@code kind} and must not grow a second kind
+     * resolver: two spellings of "is this an interface or a record" is how the inventory and the index
+     * would disagree about the same file. This class stays package-private; the resolver does not.</p>
+     */
+    public static String kindOf(TypeDeclaration<?> declaration) {
         if (declaration instanceof EnumDeclaration) {
             return "enum";
         }

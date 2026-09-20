@@ -1,15 +1,16 @@
 # `entity-html` — the HTML entity index renderer
 
-Renders one self-contained HTML page from a module's generator JSON metadata and its central index:
+Renders one self-contained HTML page from a module's generator JSON metadata and its class index:
 every entity, every artifact generated from it, and every field clickable through to the exact
 source line of every artifact. The page is meant to be opened inside the IDE — in the JetBrains
 **WebView Explorer** tool window — but it is an ordinary file that any browser can open.
 
 This is the renderer DEC-027 decides on: **the JSON metadata is the model, Bun JavaScript renders
 the page, and the Java generators never emit HTML.** A fact that should appear on the page is added
-to `toJson` in `EntityMetadataGenerator`; it is never scraped into the renderer. Since DEC-028 that
-model is two files — a document and the module's index — and every field's locations are recorded by
-the pass rather than reconstructed here.
+to `toJson` in `EntityMetadataGenerator`; it is never scraped into the renderer. Since DEC-029 that
+model is two files — a document and the module's class index — and every field's locations are
+recorded by the pass rather than reconstructed here. The page itself is unchanged by DEC-029: only
+the spelling of a file reference changed, and the table that reference resolves through.
 
 ```
 scripts\entity-html.cmd                  # the example module, default paths
@@ -45,24 +46,41 @@ Exit codes: `0` success, `1` usage or I/O error, or an unverified link (unless `
 ## What it reads from the metadata and the index
 
 Everything about the model, from two inputs per module: each `<Marker>.metadata.json` and the
-module's central index `.jcodebuddy/index/files.json` (DEC-028). A document names a file by a short
-**id**; the index is the one place that states the path behind it.
+module's class index `.jcodebuddy/index/classes.json` (DEC-029). A document names a file by the
+**fully qualified name** of the type that file declares; the class index is the one place that
+states the path behind it. A document written while DEC-028's `files.json` existed — short readable
+ids plus a `fileIndex` pointer — still renders, because the renderer reads that table too, for one
+revision.
+
+```jsonc
+// <Marker>.metadata.json (abridged) — FQNs, never paths
+{ "entityName": "Person", "package": "hr.hrg.hipster.entityexample.person.entity",
+  "markerInterface": "Person", "idType": "Long",
+  "markerFile": "hr.hrg.hipster.entityexample.person.entity.Person",  // an FQN, not a path
+  "markerLine": 14,
+  "classIndex": "../../index/classes.json",   // the only path-like value in the document
+  "views": [ { "name": "PersonSummary", "lineNumber": 13,
+               "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary",
+               "artifacts": [ { "id": 0, "name": "PersonSummary", "kind": "interface",
+                                "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary",
+                                "line": 14, "generated": false, "own": true } ] } ] }
+```
 
 | JSON | Used for |
 | --- | --- |
-| `index/files.json` — `format`, `files` (id → module-relative path) | the path behind every id the page links with. Located from the module root the CLI already knows **and** cross-checked against each document's pointer; `format` must be one this renderer knows |
-| `entityName`, `package`, `markerInterface`, `idType`, `markerFile`, `markerLine` | the entity section's header — marker, package, identity type, and the marker's own file and declaration line |
-| `fileIndex` | the pointer to the index, relative to the document — the second route to the table |
+| `index/classes.json` — `format`, `hash`, `classes` (FQN → `path`, `kind`, `modifiers`, `line`, `depth`, `enclosing?`, `generated?`, `size`, `checksum`, `hashCalculatedAt`) | the path behind every FQN the page links with. Located from the module root the CLI already knows **and** cross-checked against each document's `classIndex` pointer; `format` must be one this renderer knows, and `index/files.json` is read as the one-revision legacy name |
+| `entityName`, `package`, `markerInterface`, `idType`, `markerFile`, `markerLine` | the entity section's header — marker, package, identity type, and the marker's own file (an FQN) and declaration line |
+| `classIndex` | the pointer to the class index, relative to the document — the second route to the table (the legacy `fileIndex` is read the same way) |
 | `views[].name`, `gen`, `addons`, `extends`, `discriminatorField` | one view section per view, its `GenLevel` chip and its declaration |
-| `views[].file`, `views[].lineNumber` | the view's file id and declaration line — the link behind its name |
-| `views[].properties[]` — `name`, `type`, `lineNumber`, `file`, `fieldKind`, `column`, `relation`, `expression` | a view's own accessors and its `@FieldSource` facts, and the declaring file of each |
-| `views[].artifacts[]` — `id`, `name`, `kind`, `file`, `line`, `generated`, `own`, `header?` | the artifacts that belong to a view: its aspects, their labels and descriptions, and the foreign declaring interfaces its fields reference (`own: false`) |
+| `views[].file`, `views[].lineNumber` | the view's file FQN and declaration line — the link behind its name |
+| `views[].properties[]` — `name`, `type`, `lineNumber`, `file`, `fieldKind`, `column`, `relation`, `expression` | a view's own accessors and its `@FieldSource` facts, and the declaring file (an FQN) of each |
+| `views[].artifacts[]` — `id`, `name`, `kind`, `file`, `line`, `generated`, `own`, `header?` | the artifacts that belong to a view: its aspects, their labels and descriptions, and the foreign declaring interfaces its fields reference (`own: false`); `file` is an FQN |
 | `views[].fields[]` — `name`, `ordinal`, `type`, `fieldKind`, `column`, `relation`, `expression`, `at` | each field's ordinal (DEC-023's ledger order), its type, its chips, and **every location it has**: `at` is artifact id → role → line |
-| `allFields[]` — `name`, `type`/`typeByView`, `lineNumber`, `file`, `fieldKind`, `column`, `relation`, `expression`, `views[]` | each field's type as one view sees it, which views expose it, and **the declaring file's id** (`null` when that file is outside the module — the inherited `id`) |
+| `allFields[]` — `name`, `type`/`typeByView`, `lineNumber`, `file`, `fieldKind`, `column`, `relation`, `expression`, `views[]` | each field's type as one view sees it, which views expose it, and **the declaring file's FQN** (`null` when that file is outside the module — the inherited `id`) |
 | `generation.json` | the footer's run record: generator, version, status, packages |
 
-Every path in the index is **relative to the module root** (`src/main/java/…`), which is exactly the
-base the page's link base is set to, so a resolved path is used as a link path verbatim.
+Every path in the class index is **relative to the module root** (`src/main/java/…`), which is
+exactly the base the page's link base is set to, so a resolved path is used as a link path verbatim.
 
 **The page carries paths, never content.** A cell holds a file, a line and a role — never a copy of a
 Java file. A report that quoted the source would be a second, stale copy of the tree, and the file is
@@ -78,7 +96,8 @@ contains, ordered by the renderer's own `ROLE_ORDER` constant — `accessor`, `a
 `enum-constant`, `record-component`, `setter`, `field`, `ordinal-slot`, `name-slot` — and never by
 the JSON's insertion order, which is the *document's* order and exists so two runs are
 byte-identical. The two orders differ on purpose; neither should be changed to match the other. The
-column set, the labels and the link targets are unchanged by DEC-028.
+column set, the labels and the link targets are unchanged by DEC-028, and unchanged by DEC-029 as
+well: the page looks the same, it just resolves an FQN instead of an id.
 
 The one thing still resolved from source is a **check**, and it is mandatory (DEC-027 § 4.2):
 
@@ -88,21 +107,23 @@ The one thing still resolved from source is a **check**, and it is mandatory (DE
   `kind=html_link_stale` in DEC-022's format, and the run exits 1 unless `--soft`. `sources.js` is
   kept for exactly this: it is the reader that knows how to check a line for a member.
 
-**A missing or unrecognised index is loud.** When a document carries ids but the table cannot be
-read — absent, unparsable, or a `format` this renderer does not know — `buildPage` reports
-`kind=html_index_missing` and renders nothing, because an id rendered as if it were a path is a page
-full of dead links that looks like it worked. Both routes to the table are tried: the module root the
-CLI knows (`<module>/.jcodebuddy/index/files.json`) and the document's own `fileIndex` pointer. The
-module-root route wins, so a wrong pointer cannot silently break the page.
+**A missing, unrecognised or corrupt index is loud.** When a document carries FQNs but the table
+cannot be read — absent, unparsable, an unknown `format`, or a shape this renderer cannot use —
+`buildPage` reports `kind=html_index_missing` and renders nothing, because an FQN rendered as if it
+were a path is a page full of dead links that looks like it worked. Both routes to the table are
+tried: the module root the CLI knows (`<module>/.jcodebuddy/index/classes.json`, with `files.json` as
+the one-revision legacy name) and the document's own `classIndex` pointer (or the legacy
+`fileIndex`). The module-root route wins, so a wrong pointer cannot silently break the page.
 
-**A pre-DEC-028 document still renders.** When a document has no `fileIndex`, no `artifacts` and no
-`fields`, every id key falls back to the path key it replaced and the renderer uses its scan-based
-discovery: the view's file is resolved by name (marker package first, then a unique simple-name
-match, ambiguity reported), an artifact is found by its DEC-021 header `// {@link <fqn>} …` plus the
-naming conventions below, a member's role and line by a line-oriented scan that blanks comments and
-string/char literals first (so no line number can move), and the ordinals from the field enum's
-constant order, because that enum *is* the ledger. That fallback is compatibility, not a second
-supported path.
+**Earlier spellings still render.** A document written while `files.json` existed — the DEC-028
+readable ids plus a `fileIndex` pointer — resolves those ids through that legacy table when it is
+present. A document that predates any index at all — no pointer, no `artifacts`, no `fields` — falls
+back to the source scan: the view's file is resolved by name (marker package first, then a unique
+simple-name match, ambiguity reported), an artifact is found by its DEC-021 header `// {@link <fqn>} …`
+plus the naming conventions below, a member's role and line by a line-oriented scan that blanks
+comments and string/char literals first (so no line number can move), and the ordinals from the field
+enum's constant order, because that enum *is* the ledger. Both fallbacks are compatibility, not a
+second supported path.
 
 ## Naming contract (DEC-022)
 
@@ -113,8 +134,8 @@ never changes generated Java — the table exists so a reader knows what a renam
 | --- | --- | --- | --- |
 | artifact → view association | the metadata's `views[].artifacts[]`; the DEC-021 header's `{@link <viewFqn>}` only on the pre-DEC-028 fallback | the generator re-records the inventory on the next pass, and rewrites the header; the page follows it | **no** — a recorded fact or a reference, not a convention |
 | `<View>_`, `<View>Record`, `<View>Builder`, `<View>BuilderTracking`, `<View>Validator`, `<View>RowAdapter`, `<View>Binder`, `<View>Mapper` | the view's simple name | the file must be renamed by the same pass that renames the view; until then the fallback convention misses and the artifact is still found by its header | handled by the header path; the convention list exists only for a pre-DEC-028 document |
-| view file | the metadata's `views[].file` — an id resolved through the index | the generator re-records the id and the index the path, on the next pass; the page follows both | **no** — the id and the path are data, and no name is written into committed source |
-| field's declaring file | the metadata's `properties[].file` / `allFields[].file` (ids) | likewise re-recorded by the generator | **no** |
+| view file | the metadata's `views[].file` — an FQN resolved through the class index | the generator re-records the FQN and the index the path, on the next pass; the page follows both | **no** — the FQN and the path are data, and no name is written into committed source |
+| field's declaring file | the metadata's `properties[].file` / `allFields[].file` (FQNs) | likewise re-recorded by the generator | **no** |
 | view file, only when the metadata predates DEC-028 | the view's simple name, resolved to `<markerPackage>.<name>`, else the unique type with that simple name | the page follows the new name on the next pass | **no** — nothing is written into committed source either way |
 | field name | the metadata's field name, matched against members by identifier | the page follows the metadata | **no** |
 | column header, role labels, `data-member` | the role vocabulary (`accessor`, `enum constant`, `setter`, …) | nothing — these are explicit page labels, not derived from Java | explicitly **refactor-insensitive** |
@@ -130,7 +151,7 @@ canonical, action` format:
 | kind | severity | meaning |
 | --- | --- | --- |
 | `html_link_stale` | error (exit 1) | a candidate link's target line does not contain the member, or the file/line does not exist — the link is dropped |
-| `html_index_missing` | error (exit 1) | a document carries file ids and the index cannot be read — absent, unparsable, or an unknown `format`; **nothing is rendered**, because dangling ids are not paths |
+| `html_index_missing` | error (exit 1) | a document carries fully qualified type names and the class index cannot be read — absent, unparsable, an unknown `format`, or a shape the renderer cannot use; **nothing is rendered**, because an FQN is not a path |
 | `html_view_file_missing` | error | the metadata names a view with no type of that simple name under the source root (the pre-DEC-028 fallback only) |
 | `html_view_file_ambiguous` | error | several types share the view's simple name and none is in the marker's package (the pre-DEC-028 fallback only) |
 | `html_field_not_in_ledger` | warning | the metadata attributes a field to a view whose field enum has no constant for it; the page shows the row without an ordinal (DEC-023 makes the ledger the ordinal contract) |
@@ -169,15 +190,16 @@ asserts: **every page link maps back to a location the metadata records** — th
 are read from the raw documents and the index, independently of the page model, so a link at a line
 no document mentions could only have come from a scan guessing; every link resolves to a line
 containing the member it claims; the accessor and the `@FieldSource` line stay distinct; the page
-resolves the index by **both** routes (the module root and the document's pointer) to the same table,
-and fails with `html_index_missing` — rendering nothing — when the table is missing, unparsable or of
-an unknown `format`; a document with `fileIndex`/`artifacts`/`fields` stripped (the pre-DEC-028
-shape) still renders from the source, with no error-severity divergence; the page is one
-self-contained file with framework-free vanilla JS that parses standalone; no absolute path and no
-non-loopback URL appears; the page's own link-base resolution lands on the link base; two runs are
-byte-identical; the index plus the three documents stay inside the size budget, which exists to catch
-a *shape* regression rather than to police a byte; and the model groups views under their marker with
-inherited fields resolved to the declaring interface. It writes into
+resolves the class index by **both** routes (the module root and the document's `classIndex` pointer)
+to the same table, and fails with `html_index_missing` — rendering nothing — when the table is
+missing, unparsable or of an unknown `format`; a document that carries the DEC-028 readable ids and
+`fileIndex` still renders through the legacy `files.json`; a document with `fileIndex`/`artifacts`/
+`fields` stripped (the pre-DEC-028 shape) still renders from the source, with no error-severity
+divergence; the page is one self-contained file with framework-free vanilla JS that parses
+standalone; no absolute path and no non-loopback URL appears; the page's own link-base resolution
+lands on the link base; two runs are byte-identical; the class index plus the three documents stay
+inside the size budget, which exists to catch a *shape* regression rather than to police a byte; and
+the model groups views under their marker with inherited fields resolved to the declaring interface. It writes into
 `hipster-entity-example/.jcodebuddy/agent-state/entity-html-test/` (DEC-026 scratch) and removes it
 afterwards — the output must live inside the module, because a path on another Windows drive cannot
 be expressed relative to the link base.

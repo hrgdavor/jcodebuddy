@@ -13,39 +13,47 @@ it, and no build does. It is machine state rather than a document to read by han
 but it answers "what generated this tree?", which no build log keeps.
 
 Each `<Marker>.metadata.json` also says where the classes it describes are declared — but it no
-longer carries a path (DEC-028). The module's index, `../../index/files.json`, states every
-module-relative source path **once**, and a document names a file by the short **id** that resolves
-there; the root `fileIndex` key points at that table (`"../../index/files.json"`, the only path-like
-value a document contains):
+longer carries a path, and no longer a short id either (DEC-029). The module's **class index**,
+`../../index/classes.json`, states every module-relative source path **once**, and a document names a
+type by its **fully qualified name**, which resolves there; the root `classIndex` key points at that
+table (`"../../index/classes.json"`, the only path-like value a document contains):
 
 ```jsonc
-// .jcodebuddy/index/files.json
+// .jcodebuddy/index/classes.json
 { "format": 1, "module": "hipster-entity-example", "sourceRoot": "src/main/java",
-  "files": { "PersonSummary": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java",
-             "entity.Person": "src/main/java/hr/hrg/hipster/entityexample/person/entity/Person.java",
-             "iface.Person":  "src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java",
-             "record.Person": "src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java" } }
+  "hash": { "algo": "wyhash64", "normalize": "lf", "of": "content" },
+  "classes": {
+    "hr.hrg.hipster.entityexample.person.entity.PersonSummary": {
+      "path": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java",
+      "kind": "interface", "modifiers": ["abstract", "public"], "line": 14, "depth": 0,
+      "size": 1837, "checksum": "3f2c8d91a4b7e601",
+      "hashCalculatedAt": "2026-05-14T09:12:33Z" } } }
 ```
 
-An id is the file's simple name qualified by the **shortest package suffix that disambiguates it**
-(`PersonSummary`, but `entity.Person` / `iface.Person` / `record.Person`), so the same file has the
-same id in every document and no path is repeated once per location. A document uses ids in
+A key is the type's fully qualified name — package-qualified, member types joined with `.`
+(`…PersonSummary.Record` has a row of its own) — so the same type has the same name in every document
+and a rename an IDE performs reaches the reference in these text files. A document uses FQNs in
 `markerFile` (with `markerLine`), `views[].file`, `properties[].file`, `allFields[].file` and
-`artifacts[].file`. A field's `file` is its *declaring* accessor's file, so an inherited field names
-another file (`PersonDetails.firstName` → `entity.Person`) and a field from outside the source root
-(`id`) carries `null` rather than a guess. Every path is **relative to this module's root**
-(`src/main/java/…`), never to the project above it and never absolute.
+`artifacts[].file`. A field's `file` is its *declaring* accessor's type, so an inherited field names
+another type (`PersonDetails.firstName` → `…person.entity.Person`) and a field from outside the
+source root (`id`) carries `null` rather than a guess — it has no row in this module's class index.
+Every path is **relative to this module's root** (`src/main/java/…`), never to the project above it
+and never absolute.
 
 Each view also carries the **artifact inventory** and its fields' locations:
 
 ```jsonc
-{ "name": "PersonSummary", "lineNumber": 13, "file": "PersonSummary",
+{ "name": "PersonSummary", "lineNumber": 13,
+  "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary",
   "artifacts": [
-    { "id": 0, "name": "PersonSummary", "kind": "interface", "file": "PersonSummary", "line": 14,
+    { "id": 0, "name": "PersonSummary", "kind": "interface",
+      "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary", "line": 14,
       "generated": false, "own": true },
-    { "id": 3, "name": "PersonSummary_", "kind": "enum", "file": "PersonSummary_", "line": 17,
+    { "id": 3, "name": "PersonSummary_", "kind": "enum",
+      "file": "hr.hrg.hipster.entityexample.person.entity.PersonSummary_", "line": 17,
       "generated": true, "own": true, "header": "Field metadata for the PersonSummary view." },
-    { "id": 6, "name": "Person", "kind": "interface", "file": "entity.Person", "line": 14,
+    { "id": 6, "name": "Person", "kind": "interface",
+      "file": "hr.hrg.hipster.entityexample.person.entity.Person", "line": 14,
       "generated": false, "own": false } ],
   "fields": [
     { "name": "age", "ordinal": 4, "fieldKind": "DERIVED",
@@ -72,7 +80,7 @@ copy of the tree, and the file is one click away instead. Nothing here is genera
 tree stays clear of one.
 
 Both are ignored by default, and `index/` must be opted in **together with** this subtree — a
-document's file ids resolve only there — see `../README.md` for the opt-in rule that makes them
+document's FQNs resolve only there — see `../README.md` for the opt-in rule that makes them
 tracked.
 
 `index.html` is the same model rendered for a human (DEC-027): one page listing every entity, every

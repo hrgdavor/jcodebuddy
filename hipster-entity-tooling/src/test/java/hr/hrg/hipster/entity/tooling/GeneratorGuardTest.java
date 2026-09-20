@@ -173,4 +173,57 @@ class GeneratorGuardTest {
                 "generated .java belongs under src/main/java (AGENTS.md section 1, DEC-026 section 5); a "
                         + "report records the PATH to a source file, never a copy of it");
     }
+
+    /**
+     * Every committed {@code .jcodebuddy/index/} in this repository holds the class index and nothing
+     * else — in particular no DEC-028 {@code files.json} left behind by an older pass.
+     *
+     * <p>{@code IndexLayoutTest} asserts this contract on a module it generates itself; this asserts it on
+     * the tree that is actually committed. The two are not the same claim: a stale table is git-ignored
+     * and therefore invisible to {@code git status}, while a consumer following a document's
+     * {@code classIndex} pointer would find a directory that also holds a table nothing maintains.</p>
+     */
+    @Test
+    void everyCommittedIndexDirectoryHoldsTheClassIndexAndNothingElse() throws Exception {
+        Path repoRoot = CompileHarness.findRepoRoot();
+        List<String> problems = new ArrayList<>();
+        int checked = 0;
+        try (var modules = Files.walk(repoRoot, 3)) {
+            for (Path marker : modules
+                    .filter(Files::isDirectory)
+                    .filter(path -> ".jcodebuddy".equals(path.getFileName().toString()))
+                    .toList()) {
+                Path indexDir = marker.resolve("index");
+                if (!Files.isDirectory(indexDir)) {
+                    continue;
+                }
+                checked++;
+                try (var entries = Files.list(indexDir)) {
+                    for (Path entry : entries.toList()) {
+                        String name = entry.getFileName().toString();
+                        boolean allowed = name.equals(hr.hrg.hipster.entity.tooling.index.ClassIndex.FILE_NAME)
+                                || name.equals(hr.hrg.hipster.entity.tooling.index.ClassIndex.MTIME_FILE_NAME)
+                                || name.equals(hr.hrg.hipster.entity.tooling.index.ClassIndex.README_NAME);
+                        if (!allowed) {
+                            problems.add(repoRoot.relativize(entry).toString().replace('\\', '/'));
+                        }
+                    }
+                }
+                String text = Files.readString(
+                        indexDir.resolve(hr.hrg.hipster.entity.tooling.index.ClassIndex.FILE_NAME));
+                for (String contentish : List.of("sourcesContent", "\"content\":", "package ")) {
+                    if (text.contains(contentish)) {
+                        problems.add(repoRoot.relativize(indexDir).toString().replace('\\', '/')
+                                + " carries " + contentish);
+                    }
+                }
+            }
+        }
+        Assertions.assertTrue(checked > 0,
+                "the repository has a module with a .jcodebuddy/index/, or this guard asserts nothing");
+        Assertions.assertEquals(List.of(), problems,
+                "a module's index directory holds the class index, its mtime sidecar and the README "
+                        + "(DEC-029); a stale files.json is a second table nothing maintains, and the class "
+                        + "index records names, paths and hashes rather than content");
+    }
 }

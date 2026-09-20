@@ -98,11 +98,17 @@ class HtmlRenderBoundaryTest {
         Assertions.assertTrue(metadata.contains("sourcePath"),
                 "and it must read the module-relative sourcePath the generator records, rather than "
                         + "resolving a class's file by name (DEC-027 amendment)");
-        // DEC-028: a document names its files by the id the module's central index assigned them, and
-        // the artifact inventory and field maps are the model rather than something to infer.
+        // DEC-029: a document names its files by the fully qualified name of the type that file declares,
+        // and the artifact inventory and field maps are the model rather than something to infer.
+        Assertions.assertTrue(metadata.contains("classes.json"),
+                "the renderer must resolve a document's FQN through the module class index "
+                        + "(.jcodebuddy/index/classes.json), not render an FQN as if it were a path");
+        Assertions.assertTrue(metadata.contains("fully qualified"),
+                "and its own documentation must say what a `file` value is, so the next reader does not "
+                        + "have to infer it from the code");
         Assertions.assertTrue(metadata.contains("files.json"),
-                "the renderer must resolve file ids through the module index (.jcodebuddy/index/"
-                        + "files.json), not render an id as if it were a path");
+                "and it must still read the DEC-028 addressing table for one revision, or a document "
+                        + "written before the class index can no longer be rendered at all");
         Assertions.assertTrue(metadata.contains("artifacts") && metadata.contains("fields"),
                 "and it must read the artifact inventory and the per-field location maps instead of "
                         + "recognising artifacts by naming convention (DEC-028)");
