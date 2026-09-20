@@ -324,7 +324,8 @@ public final class EnumCompactionCli {
     private static boolean isExcluded(Path repoRoot, Path path) {
         String normalized = repoRoot.relativize(path).toString().replace('\\', '/');
         return normalized.startsWith("target/") || normalized.contains("/target/")
-                || normalized.startsWith(".kilo/worktrees/") || normalized.startsWith("tmp/");
+                || normalized.startsWith(".kilo/worktrees/") || normalized.startsWith("tmp/")
+                || normalized.contains(".jcodebuddy/");
     }
 
     private static String relative(Path repoRoot, Path file) {

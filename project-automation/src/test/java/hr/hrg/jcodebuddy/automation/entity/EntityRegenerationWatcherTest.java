@@ -283,6 +283,52 @@ class EntityRegenerationWatcherTest {
     }
 
     @Test
+    void theNearestJcodebuddyMarkerWinsOverANearerPom() throws Exception {
+        Path moduleRoot = Files.createTempDirectory("jcodebuddy-module");
+        Path sourceRoot = moduleRoot.resolve("src/main/java");
+        Files.createDirectories(sourceRoot);
+
+        // A plain pom sits BELOW the marker — the layout a module has before it is converted. The
+        // marker must still win, because it is the deliberate signal and the pom is only a fallback.
+        Files.writeString(sourceRoot.resolve("pom.xml"), "<project/>");
+        Files.createDirectories(moduleRoot.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR));
+
+        Path reportDir = EntityRegenerationWatcher.Config.defaultReportDir(sourceRoot);
+
+        Assertions.assertEquals(
+                moduleRoot.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR)
+                        .resolve(EntityRegenerationWatcher.METADATA_ENTITY_DIR).toAbsolutePath().normalize(),
+                reportDir);
+    }
+
+    @Test
+    void aModuleWithoutAJcodebuddyMarkerStillGetsAPredictableReportDirectory() throws Exception {
+        Path moduleRoot = Files.createTempDirectory("plain-module");
+        Path sourceRoot = moduleRoot.resolve("src/main/java");
+        Files.createDirectories(sourceRoot);
+        Files.writeString(moduleRoot.resolve("pom.xml"), "<project/>");
+
+        // The search eventually leaves the tree and inspects the real parent directories; only
+        // proceed when none of them carries a marker, so the assertion below cannot pass for the
+        // wrong reason (a stray `.jcodebuddy` above the temporary directory would be found first).
+        Path current = moduleRoot.getParent();
+        while (current != null && !Files.isDirectory(current.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR))) {
+            current = current.getParent();
+        }
+        org.junit.jupiter.api.Assumptions.assumeTrue(current == null,
+                "a .jcodebuddy marker exists above the temporary directory: " + current);
+
+        Path reportDir = EntityRegenerationWatcher.Config.defaultReportDir(sourceRoot);
+
+        Assertions.assertEquals(
+                moduleRoot.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR)
+                        .resolve(EntityRegenerationWatcher.METADATA_ENTITY_DIR).toAbsolutePath().normalize(),
+                reportDir,
+                "the nearest pom.xml is the fallback marker, so a not-yet-converted module resolves "
+                        + "to the same subtree");
+    }
+
+    @Test
     void aConfigWithoutASourceRootIsRejected() {
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> new EntityRegenerationWatcher.Config(null, null, List.of(), false, List.of(), 300));

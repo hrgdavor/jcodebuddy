@@ -107,4 +107,13 @@ Do **not** rename `jswa` to `watch`. The `jwa`/`jswa` branding is intentional: J
 | Layer | Test Framework |
 |-------|---------------|
 | `watch`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jwa-builder-api`, `jwa-builder`, `jwa-sidecar`, `java-watch-agent` | JUnit 4 |
-| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling` | JUnit 5 (via `junit5` profile activation) |
+| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling` | JUnit 5 (the default; no profile needed) |
+
+JUnit 5 is not gated behind profile activation. Each module with tests declares
+`junit-jupiter-engine` as an ordinary test dependency, and surefire 3.2.5 selects its
+`surefire-junit-platform` provider automatically when a JUnit Platform engine is on the
+test classpath. The root `junit5` profile still exists and `-Pjunit5` is still accepted,
+but it is an empty no-op kept for invocation compatibility — it contributes no
+configuration. Previously it injected the engine into surefire's plugin dependencies with
+an illegal `test` scope, which made `-Pjunit5` abort the reactor at POM validation. See
+[`plans__p1/plan.junit5-profile.md`](../../plans__p1/plan.junit5-profile.md).

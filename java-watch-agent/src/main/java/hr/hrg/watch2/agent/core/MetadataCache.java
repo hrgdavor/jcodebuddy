@@ -22,7 +22,8 @@ public class MetadataCache {
     public MetadataCache(Path projectRoot, String toolSetName) {
         this.projectRoot = projectRoot;
         this.toolSetName = toolSetName;
-        this.cacheFile = projectRoot.resolve(".watch").resolve("metadata").resolve(toolSetName).resolve("metadata.db");
+        this.cacheFile = projectRoot.resolve(".jcodebuddy").resolve("metadata").resolve("watch")
+                .resolve(toolSetName).resolve("metadata.db");
     }
 
     public static record FileInfo(String path, String checksum, long lastModified) {

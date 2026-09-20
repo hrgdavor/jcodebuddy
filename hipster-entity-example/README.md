@@ -23,12 +23,17 @@ committed source is the source of truth (DEC-019 / `AGENTS.md` § 1).
 
 ```
 <sourceRoot>            src/main/java
-<outputDir>             target/entity-metadata        (the JSON report; never committed)
---java-out              src/main/java                 (regenerate the committed source in place)
+<outputDir>             .jcodebuddy/metadata/entity    (the JSON report; ignored by git)
+--java-out              src/main/java                  (regenerate the committed source in place)
 --packages              hr.hrg.hipster.entityexample.person.entity,
                         hr.hrg.hipster.entityexample.paymentMethod.entity
 --validate              run the entity rules before writing; print and continue
 ```
+
+The report goes to this module's own `.jcodebuddy/`, the marker directory that says "this module
+uses JCodeBuddy" — the layout and its track policy are documented in
+[`.jcodebuddy/README.md`](.jcodebuddy/README.md). Generated `.java` deliberately does **not** go
+there: it stays under `src/main/java` as committed, IDE-navigable source (DEC-019 / `AGENTS.md` § 1).
 
 Before the `--java-out` flag existed, generated Java landed in the *metadata* directory. That is the
 one flag an adopter most often omits, and the reason the getting-started guide documents it in its

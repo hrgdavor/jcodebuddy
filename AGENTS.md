@@ -171,6 +171,17 @@ with pointers, not a new policy.
   `Arena` / `LongToLongsIndex` / mmap formats from that module
   rather than inventing your own. See
   [`metadata-arena/README.md`](metadata-arena/README.md).
+- **JCodeBuddy output goes in the module's `.jcodebuddy/`.** A
+  `.jcodebuddy/` directory means "this module applies
+  `project-automation`" — it is per-module, never a repository-wide
+  default, and a module without one must not be given one. Reports
+  and caches go in `metadata/` (ignored by default, opt-in with a
+  `!` rule when a project wants metadata as a contract), specs in
+  `context/`, run records in `reports/`, scratch in `agent-state/`.
+  **Generated `.java` does not go there** — it stays under
+  `src/main/java` per rule §1. See
+  [`doc-hipster-entity/architecture/decisions/DEC-026.md`](doc-hipster-entity/architecture/decisions/DEC-026.md)
+  and [`hipster-entity-example/.jcodebuddy/README.md`](hipster-entity-example/.jcodebuddy/README.md).
 
 ## 3. How to use this file
 

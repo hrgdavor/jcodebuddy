@@ -8,7 +8,7 @@ It operates via a background watcher and provides both a local Terminal UI (TUI)
 
 *   **Comment-Driven Generation:** Trigger advanced file manipulations simply by typing comment markers (like `// @gen builder`) in your code.
 *   **Dual UI (Terminal & Web):** Review, diff, and approve generated code through a built-in terminal interface or a companion web application.
-*   **Audit Trails:** Every change is safely backed up in a `.watch` audit directory. You can easily rollback if needed.
+*   **Audit Trails:** Every change is safely backed up in the `.jcodebuddy/metadata/watch/audit` directory. You can easily rollback if needed.
 *   **Zero-Config Security:** Web interfaces are secured by default using Basic Authentication with auto-generated passwords.
 *   **Extensible Tooling:** The agent runs specific `ActionTool` implementations (e.g., Getters, Builders, Record Builders) and can be extended with custom refactoring logic.
 
@@ -81,8 +81,8 @@ This mode is ideal when you want to carefully inspect the automated changes befo
 ### `applyFirst: true`
 In this mode, the agent acts more like a real-time auto-fixer, prioritizing speed while still offering safety via audit trails.
 1. **Apply Immediately:** When a trigger is detected, the agent generates the boilerplate code and *immediately* writes it back to your source file.
-2. **Review via Audit:** The action is still recorded as pending in the TUI or Web UI, and a snapshot of your file *before* the change was made is saved in the `.watch/audit` directory.
-3. **Accept/Reject (Revert):** If you like the change, clicking "Accept" finalizes the action. If you don't like the change, clicking "Reject" will *revert* your source file back to its original state using the `.watch/audit` snapshot.
+2. **Review via Audit:** The action is still recorded as pending in the TUI or Web UI, and a snapshot of your file *before* the change was made is saved in the `.jcodebuddy/metadata/watch/audit` directory.
+3. **Accept/Reject (Revert):** If you like the change, clicking "Accept" finalizes the action. If you don't like the change, clicking "Reject" will *revert* your source file back to its original state using the `.jcodebuddy/metadata/watch/audit` snapshot.
 
 This mode is ideal for experienced users who trust the generators and want the code available in their IDE immediately, while still retaining the ability to undo the action cleanly if it produces an unexpected result.
 

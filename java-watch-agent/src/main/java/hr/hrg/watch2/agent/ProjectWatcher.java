@@ -27,7 +27,7 @@ public class ProjectWatcher {
         this.agents = agents;
         
         // A "pass-all" filter for the root. Each agent will filter internally.
-        FileFilter rootFilter = new FileFilter(root, List.of("**/*"), List.of(".git/**", "target/**", ".watch/**", "**/.git/**", "**/target/**", "**/.watch/**"));
+        FileFilter rootFilter = new FileFilter(root, List.of("**/*"), List.of(".git/**", "target/**", ".watch/**", ".jcodebuddy/**", "**/.git/**", "**/target/**", "**/.watch/**", "**/.jcodebuddy/**"));
         
         this.internalWatcher = new ManagedFileWatcher(root, rootFilter, 500, this::dispatch);
     }

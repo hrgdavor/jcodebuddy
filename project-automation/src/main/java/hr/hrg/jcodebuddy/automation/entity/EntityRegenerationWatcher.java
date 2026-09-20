@@ -61,6 +61,18 @@ import java.util.stream.Stream;
  */
 public final class EntityRegenerationWatcher implements AutoCloseable {
 
+    /**
+     * The marker directory a JCodeBuddy-enabled module owns for its generated output.
+     *
+     * <p>It appears only in modules that apply {@code project-automation}; a module without one has
+     * no JCodeBuddy output and must not be given a directory by a tool. The repo root gets one only
+     * in the rare case of a repo-wide generator (README.md in the directory states the layout).</p>
+     */
+    public static final String JCODEBUDDY_DIR = ".jcodebuddy";
+
+    /** The metadata report subtree inside {@link #JCODEBUDDY_DIR}. */
+    public static final String METADATA_ENTITY_DIR = "metadata/entity";
+
     /** What to generate and where, using the same flags the generator's CLI takes. */
     public record Config(Path sourceRoot, Path reportDir, List<String> packages, boolean adapters,
                          List<String> mappers, long debounceMs) {
@@ -86,28 +98,42 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
         }
 
         /**
-         * The metadata JSON goes to the module's {@code target/}, never into the source tree.
+         * The metadata JSON goes to the module's {@code .jcodebuddy/metadata/entity}, never into the
+         * source tree.
          *
-         * <p>Walking up to the nearest {@code pom.xml} is the same rule the test harness uses to find
-         * the repository root, and it keeps a watched run from dropping untracked
-         * {@code *.metadata.json} files next to the entities.</p>
+         * <p>The marker is the {@code .jcodebuddy} directory itself: it says "this module uses
+         * JCodeBuddy", and it is what distinguishes a converted module from one that merely happens to
+         * be a Maven module. The search therefore looks for the nearest marker <em>anywhere</em> up the
+         * tree, and only falls back to the nearest {@code pom.xml} when no marker exists — a marker
+         * further up must not be shadowed by a plain {@code pom.xml} closer to the sources, which is
+         * the layout a freshly converted submodule of an aggregator has.</p>
+         *
+         * <p>Either way the report lands beside {@code src/main/java}, not inside it, so a watched run
+         * never drops untracked {@code *.metadata.json} files next to the entities.</p>
          *
          * <p>When no module root is discoverable — a source tree outside any Maven project — the
-         * reports go to the system temporary directory rather than to {@code <sourceRoot>/target}.
-         * The latter would be inside the watched root, which is the one place this method exists to
-         * avoid; the watcher's file filter is {@code *.java} so a JSON would not actually feed the
-         * loop, but "the report never lands in the source tree" is worth holding unconditionally.</p>
+         * reports go to the system temporary directory rather than to a directory created next to the
+         * sources. The latter would be inside the watched root, which is the one place this method
+         * exists to avoid; the watcher's file filter is {@code *.java} so a JSON would not actually
+         * feed the loop, but "the report never lands in the source tree" is worth holding
+         * unconditionally.</p>
          */
         static Path defaultReportDir(Path sourceRoot) {
             Path current = sourceRoot;
-            while (current != null && !Files.exists(current.resolve("pom.xml"))) {
+            while (current != null && !Files.isDirectory(current.resolve(JCODEBUDDY_DIR))) {
                 current = current.getParent();
+            }
+            if (current == null) {
+                current = sourceRoot;
+                while (current != null && !Files.exists(current.resolve("pom.xml"))) {
+                    current = current.getParent();
+                }
             }
             if (current == null) {
                 return Path.of(System.getProperty("java.io.tmpdir"), "jcodebuddy-entity-metadata")
                         .toAbsolutePath().normalize();
             }
-            return current.resolve("target/entity-metadata");
+            return current.resolve(JCODEBUDDY_DIR).resolve(METADATA_ENTITY_DIR).toAbsolutePath().normalize();
         }
     }
 
@@ -151,10 +177,11 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
         this.config = config;
         this.observer = observer == null ? pass -> { } : observer;
         // Only entity sources matter, and build output must never re-enter the loop (the same
-        // exclusion the R1 checker and the compaction command use).
+        // exclusion the R1 checker and the compaction command use). `.jcodebuddy` is in the list
+        // because the generator's own metadata report now lands there, inside the module it watches.
         this.fileFilter = new FileFilter(config.sourceRoot(),
                 List.of("**/*.java"),
-                List.of("**/target/**", "**/tmp/**", "**/.kilo/**"));
+                List.of("**/target/**", "**/tmp/**", "**/.kilo/**", "**/" + JCODEBUDDY_DIR + "/**"));
         // Seed the hash table at construction, so the first batch is judged against the tree as the
         // watcher found it. Doing it here rather than in start() also means the decision logic is
         // exercisable without a real filesystem watcher.
@@ -332,7 +359,7 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
      *
      * <pre>
      *   --source &lt;dir&gt;          the source root to watch and regenerate (required)
-     *   --report-dir &lt;dir&gt;      where the metadata JSON goes (default: &lt;module&gt;/target/entity-metadata)
+     *   --report-dir &lt;dir&gt;      where the metadata JSON goes (default: &lt;module&gt;/.jcodebuddy/metadata/entity)
      *   --packages a.b,c.d      restrict generation, exactly as the generator's flag does
      *   --adapters              also emit the JDBC adapters
      *   --mapper Src:Tgt        also emit a mapper (repeatable)

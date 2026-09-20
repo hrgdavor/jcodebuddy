@@ -27,7 +27,8 @@ public class ProjectScanner {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                 String name = dir.getFileName().toString();
-                if (name.equals(".git") || name.equals("target") || name.equals(".watch")) {
+                if (name.equals(".git") || name.equals("target") || name.equals(".watch")
+                        || name.equals(".jcodebuddy")) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;

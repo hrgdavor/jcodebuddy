@@ -21,35 +21,44 @@ buildNumber.properties
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and ad-hoc build/scratch output
 *.log
-/sync_test
+agent_log*.txt
+build_error.txt
+build_output.txt
+cross_verify.bin
 zig-watch-scp/test_create/test.txt
 zig-watch-scp/test_hex
 zig-watch-scp/test_padding
 zig-watch-scp/test_tab
-java-watch-scp/bad.conf
-test_sort
 zig-watch-scp/build_output.txt
+java-watch-scp/bad.conf
+
+# JCodeBuddy tool output. A `.jcodebuddy/` directory appears only in modules that apply
+# `project-automation`, and each one carries its own .gitignore as the authority (see
+# hipster-entity-example/.jcodebuddy/README.md and
+# doc-hipster-entity/architecture/decisions/DEC-026.md). These entries are the
+# belt-and-braces net for the root and for any module that forgets its own; the tracked
+# subtrees (context/, reports/) are deliberately absent, so they stay visible in
+# `git status`.
+.jcodebuddy/metadata/
+.jcodebuddy/agent-state/
+.jcodebuddy/worktrees/
+
+# Compatibility: the watch agent's cache/audit root before it moved under .jcodebuddy.
 .watch
-agent_log*.txt
-build_error.txt
+
+# Node / Gradle trees inside the tooling subprojects
 vscode-jwa/node_modules
 intellij-jwa/.gradle
 vscode-jswa/node_modules
 jswa-core/node_modules
-build_output.txt
-cross_verify.bin
 intellij-jswa/.gradle
-.kilo/plans
-
-# Local scratch: regeneration probes and hand-run generator output (see
-# plans__p1/plan.dsflash.followup.md 4.3 -- untidy, not dangerous: the R1 checker's file set
-# comes from git ls-tree, so an untracked copy is never compared).
-/tmp/
-hipster-entity-example/tmp/
-.vscode-test
 node_modules
+.vscode-test
 /webview-vscode/out
 /webview-vscode/*.vsix
 
+# Agent harness state. `.kilo/plans` holds untracked per-round plans; the tool's own
+# config (package.json, node_modules) is covered above.
+.kilo/plans

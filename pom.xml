@@ -379,24 +379,27 @@
     </build>
 
     <profiles>
+        <!-- JUnit 5 is the DEFAULT here: every module that has tests declares
+             `junit-jupiter-engine` as an ordinary test dependency, and surefire 3.2.5
+             selects its `surefire-junit-platform` provider automatically when a JUnit
+             Platform engine is on the test classpath. The six-module gate therefore runs
+             the full suite with no profile at all.
+
+             This profile is kept as a documented no-op so that the established
+             `-Pjunit5` invocation shape (used throughout the plans and mirrored by an
+             empty `<activeByDefault>` stub in each module) keeps meaning what a reader
+             expects, instead of either failing or silently disappearing.
+
+             It previously injected `junit-jupiter-engine` into
+             `maven-surefire-plugin`'s own &lt;dependencies&gt; with scope `test`. That is
+             not a legal plugin-dependency scope — Maven allows only compile, runtime or
+             system there — so activating the profile aborted the reactor at POM validation
+             with "must be one of [compile, runtime, system] but is 'test'". The injection
+             was also redundant: the provider resolves the engine without it. See
+             plans__p1/plan.junit5-profile.md. Do NOT reintroduce a surefire dependency
+             block here. -->
         <profile>
             <id>junit5</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <dependencies>
-                            <dependency>
-                                <groupId>org.junit.jupiter</groupId>
-                                <artifactId>junit-jupiter-engine</artifactId>
-                                <version>${junit5.version}</version>
-                                <scope>test</scope>
-                            </dependency>
-                        </dependencies>
-                    </plugin>
-                </plugins>
-            </build>
         </profile>
     </profiles>
 </project>

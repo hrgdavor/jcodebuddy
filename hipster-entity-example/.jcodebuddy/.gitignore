@@ -1,0 +1,8 @@
+# Derived: regenerable machine output. Opt a subtree back in with a '!' rule when a
+# project wants its metadata committed as a contract (see README.md, "Track policy").
+metadata/**
+!metadata/**/
+!metadata/**/README.md
+
+# Disposable: run logs, probes, temp copies. Never a deliverable.
+agent-state/**

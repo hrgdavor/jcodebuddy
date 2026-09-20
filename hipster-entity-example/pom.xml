@@ -54,9 +54,12 @@
                  CLI flags — not -D system properties — so a Maven build and a manual run share one
                  flag surface (§ 8.8/3.23). Generated .java is regenerated IN PLACE under
                  src/main/java (the committed source is the source of truth, AGENTS.md §1), while the
-                 metadata JSON report goes to target/ so a build never adds untracked files to a
-                 source tree. `skip` defaults to false; set -Djcodebuddy.entity.codegen.skip=true to
-                 bypass generation.
+                 metadata JSON report goes to this module's own `.jcodebuddy/metadata/entity` — the
+                 marker directory that says "this module uses JCodeBuddy". The build never adds
+                 untracked files to a source tree: `.jcodebuddy/metadata/` is ignored by
+                 `.jcodebuddy/.gitignore`, and the layout is documented in
+                 `.jcodebuddy/README.md`. `skip` defaults to false; set
+                 -Djcodebuddy.entity.codegen.skip=true to bypass generation.
 
                  This is deliberately NOT a new hipster-entity-maven-plugin module (§ 8.8/3.23). -->
             <plugin>
@@ -81,7 +84,7 @@
                             <classpathScope>compile</classpathScope>
                             <arguments>
                                 <argument>${project.basedir}/src/main/java</argument>
-                                <argument>${project.basedir}/target/entity-metadata</argument>
+                                <argument>${project.basedir}/.jcodebuddy/metadata/entity</argument>
                                 <argument>--java-out</argument>
                                 <argument>${project.basedir}/src/main/java</argument>
                                 <argument>--packages</argument>

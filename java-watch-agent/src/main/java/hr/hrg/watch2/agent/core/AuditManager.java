@@ -36,7 +36,8 @@ public class AuditManager {
     public AuditManager(Path projectRoot, String toolSetName) {
         this.projectRoot = projectRoot;
         this.toolSetName = toolSetName;
-        this.auditRoot = projectRoot.resolve(".watch").resolve("metadata").resolve(toolSetName).resolve("audit");
+        this.auditRoot = projectRoot.resolve(".jcodebuddy").resolve("metadata").resolve("watch")
+                .resolve("audit").resolve(toolSetName);
     }
 
     public AuditSession startSession(String actionName) throws IOException {

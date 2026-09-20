@@ -56,7 +56,8 @@ public class ToolSetAgent {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                 String name = dir.getFileName().toString();
-                if (name.equals(".git") || name.equals("target") || name.equals(".watch")) {
+                if (name.equals(".git") || name.equals("target") || name.equals(".watch")
+                        || name.equals(".jcodebuddy")) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -81,7 +82,8 @@ public class ToolSetAgent {
 
     public void processFile(Path path, BasicFileAttributes attrs, boolean force) throws IOException {
         String filename = path.getFileName().toString();
-        if (path.toString().contains(".watch") || filename.equals(".git") || filename.equals("target"))
+        if (path.toString().contains(".watch") || path.toString().contains(".jcodebuddy")
+                || filename.equals(".git") || filename.equals("target"))
             return;
 
         if (!filter.shouldInclude(path))

@@ -200,8 +200,10 @@ public final class EnumConstantOrderCli {
             for (Path file : walk.filter(p -> p.toString().endsWith(".java")).collect(Collectors.toList())) {
                 // Never descend into another checkout: .kilo/worktrees holds a full copy of this
                 // tree (plan.dsflash § 4.1/S2, GR-6), and reading it would compare a tree to itself.
+                // `.jcodebuddy` is tool output (metadata reports), never a source of enums.
                 String relative = repo.relativize(file).toString().replace('\\', '/');
-                if (relative.startsWith(".kilo/worktrees/") || relative.contains("/target/")) {
+                if (relative.startsWith(".kilo/worktrees/") || relative.contains("/target/")
+                        || relative.contains(".jcodebuddy/")) {
                     continue;
                 }
                 sources.put(relative, Files.readString(file, StandardCharsets.UTF_8));
