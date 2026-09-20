@@ -138,5 +138,5 @@ interface.
 `ExampleRegenerationTest` is the other half of the safety net: it regenerates the example in place in a
 temp copy and asserts the result is byte-identical to what is committed, so a generator change cannot
 silently rewrite committed source. It calls the generator API directly, so it never depended on the
-removed Maven binding and is unaffected by the change to a side-car pass. A red one means **regenerate
+removed Maven binding and is unaffected by the generator moving out of the build. A red one means **regenerate
 and commit**, not "fix the test".

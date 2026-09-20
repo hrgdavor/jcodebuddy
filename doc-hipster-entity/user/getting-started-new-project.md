@@ -225,7 +225,7 @@ The metadata JSON is named after the entity's marker and written to positional 2
 Flags may appear anywhere after the two positionals, and
 `--packages=a.b` is accepted too.
 
-**How this fits a Maven build.** JCodeBuddy is a **side-car**: it uses no
+**How this fits a Maven build.** The generator is a **side tool**: it uses no
 annotation processing and no compile hook, and nothing is bound to a
 lifecycle phase. So a new project does three separate things:
 
@@ -234,10 +234,13 @@ lifecycle phase. So a new project does three separate things:
    they never regenerate it. The committed source is the source of truth
    (DEC-019), so a developer with a stock IDE can follow the program
    without running the generator.
-2. **Run the generator explicitly** — a hand-run pass, or a watcher that
-   regenerates when a watched source's *content* changes. That is the
-   `java -cp … EntityMetadataGenerator …` command above; in this
-   repository it is `scripts\gen.cmd` and `scripts\gen.cmd watch`.
+2. **Run the generator explicitly** — this is the whole tool, and it is
+   enough on its own: a hand-run pass, or (the normal development loop) a
+   watcher that regenerates when a watched source's *content* changes.
+   That is the `java -cp … EntityMetadataGenerator …` command above; in
+   this repository it is `scripts\gen.cmd` and `scripts\gen.cmd watch`.
+   Watch mode is part of JCodeBuddy, not an add-on: it is the same pass,
+   triggered by a file watcher.
 3. **If you want Maven to supply the classpath**, you have two options,
    and neither needs `mvn install` nor produces a jar:
    - **Goal-only `exec:java` executions with no `<phase>`.** Declare the
@@ -268,6 +271,12 @@ lifecycle phase. So a new project does three separate things:
      so add the tooling module to `-pl` (with `-am`) if it is a sibling,
      as `scripts\gen.cmd` does. **No jar is packaged and nothing is
      installed into `~/.m2`.**
+4. **Optionally, add an IDE sidecar later.** An LSP sidecar — in-editor
+   diagnostics, code actions, hover for the class-file header, divergence
+   warnings — sits *on top of* watch mode and consumes what it already
+   produces. It is a user-friendliness expansion, not a prerequisite:
+   steps 1–3 work completely without one, and nothing you generate
+   depends on a sidecar being present.
 
 ## 4. What the generator produced
 

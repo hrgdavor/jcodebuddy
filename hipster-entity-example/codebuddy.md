@@ -45,7 +45,7 @@ always a mistake (see § 6.1).
 
 ## 1. Which JCodeBuddy parts this module actually uses
 
-JCodeBuddy here is a **side-car**. Nothing below is bound to a Maven phase, and
+JCodeBuddy here is a **side tool**. Nothing below is bound to a Maven phase, and
 there is no annotation processing and no compile hook: `mvn compile`,
 `mvn package` and `mvn test` compile the committed generated source and do
 nothing else. A pass is started by a person or a script — § 3 is how.
@@ -69,6 +69,7 @@ nothing else. A pass is started by a person or a script — § 3 is how.
 - `--adapters` (the draft JDBC `<View>RowAdapter` / `<View>Binder` pair) — strictly opt-in, and the example does not opt in, so no committed example depends on the emitted shape;
 - `--mapper Src:Tgt` — no view-to-view mapper is requested;
 - the `validate`, `enum-order` and `enum-compact` subcommands — available, run by hand (see [`../hipster-entity-tooling/README.md`](../hipster-entity-tooling/README.md)), not part of this module's build;
+- an IDE **sidecar / LSP** — optional user-friendliness on top of watch mode, not required for any part of this module's generation, and not wired up here;
 - `project-automation`'s `MetadataAnalysisRunner` / metadata server / MCP server — a different subsystem (`metadata-server`, `metadata-mcp-server`), unrelated to entity generation;
 - `hipster-ioc` tooling — a different generator family.
 
@@ -95,7 +96,7 @@ There is **no CI** in this repository. The gate below runs when you run it.
 
 ## 3. How to run
 
-JCodeBuddy is a **side-car**. No part of it is bound to a Maven phase, so the
+JCodeBuddy is a **side tool**. No part of it is bound to a Maven phase, so the
 ordinary build and the generator are two separate things:
 
 - **the build** compiles this module and runs its tests; it never regenerates
@@ -106,6 +107,18 @@ ordinary build and the generator are two separate things:
 A pass needs **no `mvn install` and builds no jar**: `scripts\gen.cmd` compiles
 the tooling in the reactor and asks Maven for the classpath the reactor itself
 resolved (see § 6.5 for why the obvious `mvn exec:java` cannot do this).
+
+### How it gets triggered — only the first layer is required
+
+| Layer | What it is | Needed? |
+| ----- | ---------- | ------- |
+| **The pass** — `scripts\gen.cmd`, § 3.1 | the generator, run when you ask | **Required.** This is the whole tool. |
+| **Watch mode** — `scripts\gen.cmd watch`, § 3.5 | that same pass, driven by a file watcher, so it regenerates after each save | Optional; the normal development loop. Still just the generator. |
+| **Sidecar / LSP** | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings | **A user-friendliness expansion only.** Nothing here needs one, and none is wired up for this generator today. |
+
+The boundary between the last two rows is the point worth remembering: **watch
+mode belongs to JCodeBuddy, not to a sidecar.** A sidecar consumes what watch mode
+already produces; it never replaces it, and removing it leaves the tool complete.
 
 ### 3.1 Regenerate — the one command
 
@@ -516,7 +529,7 @@ ergonomics from PowerShell are not, and this one is **not** fixed.
 ### 6.5 Why `scripts\gen.cmd` does not use `mvn exec:java`
 
 Maven's `exec:java` looks like the obvious way to run the generator, and it is the
-wrong tool for a side-car in a multi-module reactor. Two reasons, both measured:
+wrong tool for a pass in a multi-module reactor. Two reasons, both measured:
 
 1. **A direct goal invocation runs on every module.** `mvn exec:java@hipster-entity-generate`
    executes the goal on *every project in the reactor*, and fails on the parent and

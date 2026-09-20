@@ -37,9 +37,9 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
         <!-- Dev-time only, and on the compile classpath only so that the explicit exec goals below
-             and `scripts\gen.cmd`'s classpath export can see the generator. JCodeBuddy is a
-             side-car: it is NOT bound to a lifecycle phase, so a plain `mvn compile` neither runs
-             nor needs it. It is `provided` because nothing in the example's runtime or tests needs
+             and `scripts\gen.cmd`'s classpath export can see the generator. The generator is a side
+             tool: it is NOT bound to a lifecycle phase, so a plain `mvn compile` neither runs nor
+             needs it. It is `provided` because nothing in the example's runtime or tests needs
              the tooling, and the tooling must never become a runtime dependency of an application —
              see AGENTS.md §2. -->
         <dependency>
@@ -51,15 +51,16 @@
 
     <build>
         <plugins>
-            <!-- JCodeBuddy is a SIDE-CAR, not a build step.
+            <!-- The generator is a SIDE TOOL, not a build step.
 
                  Neither execution below carries a <phase>, so neither is bound to the lifecycle:
                  `mvn compile`, `mvn package`, `mvn test` and every other build run the ordinary
                  compile of the committed sources and nothing else. There is no annotation
                  processing, no compile hook and no generated-sources root. This is the DEC-019 /
                  AGENTS.md §1 model taken literally — the generated .java is committed, ordinary,
-                 IDE-navigable source, and the tool that wrote it runs on the side like any other
-                 agent harness: manually, or in watch mode.
+                 IDE-navigable source, and the tool that wrote it runs beside the build, not inside
+                 it: on demand, or continuously in watch mode. An IDE sidecar would layer on top of
+                 that later; nothing here requires one.
 
                  The two executions exist so the same entry points can be reached explicitly, with
                  their ordinary CLI flags rather than -D system properties, so a manual run and any

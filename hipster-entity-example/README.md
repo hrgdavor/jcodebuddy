@@ -20,12 +20,12 @@ committed source is the source of truth (DEC-019 / `AGENTS.md` § 1).
 
 `pom.xml` declares `exec-maven-plugin` executions for
 `hr.hrg.hipster.entity.tooling.EntityMetadataGenerator` and
-`GeneratorPreflight`, but **neither carries a `<phase>`**: JCodeBuddy here is a
-side-car, not a build step. There is no annotation processing and no compile hook,
+`GeneratorPreflight`, but **neither carries a `<phase>`**: the generator here is a
+side tool, not a build step. There is no annotation processing and no compile hook,
 so `mvn compile`, `mvn package` and `mvn test` only ever compile the committed
 generated source — they never regenerate it.
 
-A pass is run on the side, with:
+A pass is run on demand, or continuously in watch mode, with:
 
 ```
 scripts\gen.cmd            regenerate
@@ -37,6 +37,12 @@ scripts\gen.cmd watch      regenerate on every save (Ctrl+C to stop)
 Maven resolved for those modules (`dependency:build-classpath`), and runs the
 generator with `java -cp`. It needs **no `mvn install` and builds no jar**. See
 [`codebuddy.md`](codebuddy.md) § 3 for why `mvn exec:java` is not used.
+
+Only the **first** of those matters for JCodeBuddy to work: a pass is the whole
+tool. `watch` is that same pass driven by a file watcher, so generated output keeps
+up while you edit. An IDE **sidecar / LSP** — in-editor diagnostics and code
+actions — would sit *on top of* watch mode as a user-friendliness expansion; it is
+not needed here and nothing in this module depends on one.
 
 The generator's flag surface is unchanged, wherever it is invoked from:
 

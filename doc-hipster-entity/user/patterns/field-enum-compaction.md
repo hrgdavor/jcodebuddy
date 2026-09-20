@@ -109,7 +109,7 @@ scripts/gen.cmd
 ```
 
 `scripts\gen.cmd` is the regeneration pass; `scripts\mvn-jdk25.cmd` alone would not do it, because
-JCodeBuddy is a side-car with no lifecycle binding and the build only compiles the committed
+the generator is a side tool with no lifecycle binding and the build only compiles the committed
 generated source.
 
 This is not optional. Compaction rewrites generated source through a parser, so its output is not

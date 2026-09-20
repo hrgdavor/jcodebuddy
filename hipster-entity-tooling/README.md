@@ -119,7 +119,7 @@ consumers, indexes, caches), never a source tree — DEC-026 and `AGENTS.md` § 
 The guard fires before the first write, at every entry point.
 
 In practice it fires for one specific mistake: **the classpath points at an
-older tooling than the pass assumes.** JCodeBuddy is a side-car with no
+older tooling than the pass assumes.** The generator runs as a side tool with no
 lifecycle binding, so a pass assembles its own classpath — `scripts\gen.cmd`
 does, the module POM's goal-only `exec:java` executions do (they resolve the
 `provided` tooling dependency from the local repository), and a reader typing
@@ -312,8 +312,8 @@ and the decision is
 *when* or *whether* to generate. That policy belongs to the
 [`project-automation`](../project-automation/) module, the project's
 dev-time orchestrator, which declares this module as a dependency and is
-the place a project wires the generator into its file watcher or its LSP
-sidecar.
+the place a project wires the generator into its file watcher or, on top of
+that, into an IDE sidecar.
 
 The split is deliberate:
 
@@ -322,6 +322,13 @@ The split is deliberate:
 - **`project-automation`** — the project-specific automation layer that
   calls it: on demand, live while watching, or through the sidecar. It is
   never packaged into the application artifact.
+
+Of those trigger modes only the **pass** is required — running the generator when
+you ask is the whole tool. **Watch mode** (the batched file watcher) is the same
+pass driven continuously, and is what the normal development loop uses. A
+**sidecar / LSP** is a user-friendliness expansion that sits on top of watch mode
+(in-editor diagnostics, code actions, divergence warnings); it consumes what the
+watcher already produces and is not a prerequisite for anything above.
 
 A runtime module therefore depends only on the *generated* source plus
 `hipster-entity-api` / `hipster-entity-core`, never on this module.

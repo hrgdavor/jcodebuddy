@@ -77,7 +77,7 @@ surefire JVM must be JDK 25):
 scripts\mvn-jdk25.cmd
 ```
 
-The build **regenerates nothing.** JCodeBuddy is a side-car — no annotation
+The build **regenerates nothing.** The generator is a side tool — no annotation
 processing, no compile hook, and no lifecycle binding — so `compile`,
 `package` and `test` only compile the generated source already committed
 under `src/main/java`. The pass that produces it is
