@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -105,5 +106,71 @@ class GeneratorGuardTest {
                 "with --java-out pointing at the source root, the field enum is regenerated in place");
         Assertions.assertTrue(Files.exists(reportDir.resolve("Thing.metadata.json")),
                 "and the entity JSON goes to the report directory");
+    }
+
+    /**
+     * A report directory holds <em>metadata</em> — a JSON model that names source files — and never a
+     * copy of a source file.
+     *
+     * <p>The distinction is the whole point of recording a relative path instead of content: a report
+     * that carried source text would be a second, stale copy of the tree, and the file a reader wants is
+     * one click away in the IDE anyway. The residue this asserts against is real (DEC-026's "known
+     * residue": an older tooling wrote its generated output into positional 2, the metadata directory),
+     * and this is the post-condition that catches it instead of a paragraph that describes it.</p>
+     */
+    @Test
+    void aPassLeavesOnlyMetadataInTheReportDirectory() throws Exception {
+        Path sourceRoot = writeMinimalEntitySource();
+        Path reportDir = Files.createTempDirectory("guard-report-content");
+        Path javaOut = Files.createTempDirectory("guard-java-out");
+
+        EntityMetadataGenerator.generate(sourceRoot, reportDir, javaOut);
+
+        List<String> strays = new ArrayList<>();
+        try (var walk = Files.walk(reportDir)) {
+            for (Path path : walk.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (!name.endsWith(".json")) {
+                    strays.add(reportDir.relativize(path).toString().replace('\\', '/'));
+                }
+            }
+        }
+        Assertions.assertEquals(List.of(), strays,
+                "a report directory holds JSON metadata only — no source content, and no generated .java "
+                        + "(DEC-026 section 5)");
+        Assertions.assertTrue(Files.exists(javaOut.resolve("guard/entity/ThingSummary_.java")),
+                "and the generated source went where it belongs: the java output root");
+    }
+
+    /**
+     * No {@code .jcodebuddy/} tree in this repository holds a {@code .java} file.
+     *
+     * <p>This is the invariant the deleted residue violated: thirteen generated files sat under
+     * {@code hipster-entity-example/.jcodebuddy/metadata/entity/hr/…} from a pre-{@code --java-out}
+     * tooling run. They are git-ignored, so nothing failed; the tree looked plausible and was wrong.
+     * Asserting the tree, not the writer, is what makes it impossible to reintroduce quietly — a
+     * second writer, a hand copy, or a stale tool is caught the same way.</p>
+     */
+    @Test
+    void noJcodebuddyTreeInThisRepositoryHoldsGeneratedSource() throws Exception {
+        Path repoRoot = CompileHarness.findRepoRoot();
+        List<String> offenders = new ArrayList<>();
+        try (var modules = Files.walk(repoRoot, 3)) {
+            for (Path marker : modules
+                    .filter(Files::isDirectory)
+                    .filter(path -> ".jcodebuddy".equals(path.getFileName().toString()))
+                    .toList()) {
+                try (var inside = Files.walk(marker)) {
+                    for (Path file : inside.filter(Files::isRegularFile).toList()) {
+                        if (file.getFileName().toString().endsWith(".java")) {
+                            offenders.add(repoRoot.relativize(file).toString().replace('\\', '/'));
+                        }
+                    }
+                }
+            }
+        }
+        Assertions.assertEquals(List.of(), offenders,
+                "generated .java belongs under src/main/java (AGENTS.md section 1, DEC-026 section 5); a "
+                        + "report records the PATH to a source file, never a copy of it");
     }
 }

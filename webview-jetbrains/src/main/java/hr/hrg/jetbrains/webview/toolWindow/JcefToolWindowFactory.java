@@ -21,6 +21,7 @@ import org.cef.browser.CefBrowser;
 import org.cef.browser.CefFrame;
 import org.cef.handler.CefLoadHandlerAdapter;
 import org.jetbrains.annotations.NotNull;
+import hr.hrg.jetbrains.webview.actions.ToggleToolWindowAction;
 import hr.hrg.jetbrains.webview.services.PluginStateService;
 import hr.hrg.jetbrains.webview.settings.WebViewSettingsConfigurable;
 
@@ -197,7 +198,7 @@ public class JcefToolWindowFactory implements ToolWindowFactory, DumbAware {
     }
 
     public static void reloadWithFile(Project project, String url) {
-        ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow("WebView Explorer");
+        ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow(ToggleToolWindowAction.TOOL_WINDOW_ID);
         if (toolWindow == null)
             return;
         Content content = toolWindow.getContentManager().getContent(0);

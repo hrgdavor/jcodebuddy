@@ -1,4 +1,8 @@
-{
+﻿{
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "entity-html": "bun run entity-html/index.js",
+    "test": "bun test"
+  }
 }

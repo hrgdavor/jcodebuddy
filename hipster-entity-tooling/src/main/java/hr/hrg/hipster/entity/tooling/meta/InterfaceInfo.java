@@ -27,6 +27,12 @@ import java.util.List;
  *                               needs one — specifically a polymorphic view's
  *                               {@code default <field>() { return "…"; }}, which declares the
  *                               discriminator value the emitted {@code META} must supply (§ 9/4.9).
+ * @param sourcePath             the file that declares this interface, <strong>relative to the module
+ *                               root</strong> (e.g. {@code src/main/java/a/b/Person.java}), or
+ *                               {@code null} when the pass did not resolve one. Module-relative, not
+ *                               project-relative: a multi-module build resolves a path against the
+ *                               module that holds the source, which is also where that module's
+ *                               `.jcodebuddy/` output lives (DEC-026/DEC-027).
  */
 public record InterfaceInfo(
         String packageName,
@@ -38,7 +44,8 @@ public record InterfaceInfo(
         int lineNumber,
         List<String> nestedRecordComponents,
         boolean publicType,
-        com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declaration
+        com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declaration,
+        String sourcePath
 ) {
     public InterfaceInfo {
         nestedRecordComponents = nestedRecordComponents == null ? null : List.copyOf(nestedRecordComponents);
@@ -47,7 +54,22 @@ public record InterfaceInfo(
     /** Back-compatible constructor for callers that collect neither the record nor the declaration. */
     public InterfaceInfo(String packageName, String name, List<String> extendsTypes, List<Property> properties,
                          ViewAttributes view, String entityBaseIdType, int lineNumber) {
-        this(packageName, name, extendsTypes, properties, view, entityBaseIdType, lineNumber, null, true, null);
+        this(packageName, name, extendsTypes, properties, view, entityBaseIdType, lineNumber, null, true,
+                null, null);
+    }
+
+    /** Back-compatible constructor for callers that predate the source path. */
+    public InterfaceInfo(String packageName, String name, List<String> extendsTypes, List<Property> properties,
+                         ViewAttributes view, String entityBaseIdType, int lineNumber,
+                         List<String> nestedRecordComponents, boolean publicType,
+                         com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declaration) {
+        this(packageName, name, extendsTypes, properties, view, entityBaseIdType, lineNumber,
+                nestedRecordComponents, publicType, declaration, null);
+    }
+
+    /** The declaring file as a module-relative path, or {@code null} when the pass did not resolve it. */
+    public String getSourcePath() {
+        return sourcePath;
     }
 
     public boolean isMarkerEntity() {

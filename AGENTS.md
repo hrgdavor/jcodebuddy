@@ -123,6 +123,41 @@ code or documentation for this repository:
   [`doc-hipster-entity/architecture/decisions/DEC-022.md`](doc-hipster-entity/architecture/decisions/DEC-022.md).
   This complements DEC-020 (cooperative blocks), DEC-021
   (class-file header), and DEC-019 (source-visible wiring).
+- **HTML reports are rendered by Bun from the generator's JSON
+  metadata — never by a Java generator.** A generator owns the
+  model and the committed source; a report renderer owns
+  presentation. Reports (the entity reference page and anything
+  like it) are JavaScript under `scripts/`, run with `bun run`,
+  reading the `<Marker>.metadata.json` a pass wrote: adding a
+  fact to a report means adding it to that JSON, never teaching
+  the Java generator to emit HTML. Every source file that metadata
+  describes is named by a short **id**, and the module's central
+  index — `.jcodebuddy/index/files.json` — states each module-relative
+  path (`src/main/java/…`, never project-relative and never absolute)
+  exactly once, because CodeBuddy output belongs to the module that
+  holds the class and a path that needed the project root would be
+  wrong in every module but one; and a generated `.java` still never
+  appears inside `.jcodebuddy/`. A metadata document names source
+  files through the module's central index id (`.jcodebuddy/index/`),
+  a field carries all its locations, and neither the record nor the
+  report ever contains a file's text. The page is **one
+  self-contained file with framework-free vanilla JavaScript** —
+  no React / Svelte / Solid / Vue / Preact / Lit, no bundler, no
+  `node_modules`, no CDN, no `<script src>`, no network at view
+  time — so it stays greppable, diffable and openable in the
+  JetBrains JCEF webview. Link targets are paths relative to one
+  link base (never absolute), resolved by the page from its own
+  `location`, and **every link is verified** (the file exists and
+  the line contains the member) before it is written; an
+  unverifiable candidate is dropped, reported in DEC-022's
+  format, and fails the run. Reports land in the module's
+  `.jcodebuddy/metadata/` subtree (DEC-026) as derived,
+  ignorable output. The full decisions are in
+  [`doc-hipster-entity/architecture/decisions/DEC-027.md`](doc-hipster-entity/architecture/decisions/DEC-027.md)
+  for the report half and
+  [`doc-hipster-entity/architecture/decisions/DEC-028.md`](doc-hipster-entity/architecture/decisions/DEC-028.md)
+  for the addressing and location half; the renderer's own contract is
+  [`scripts/entity-html/README.md`](scripts/entity-html/README.md).
 
 ### What this does *not* mean
 
@@ -149,6 +184,10 @@ code or documentation for this repository:
   the business-logic concept, which depends on this rule (its
   dispatcher and loop-guard scaffolding are real Java methods, not
   runtime-discovered beans).
+- [`doc-hipster-entity/architecture/decisions/DEC-027.md`](doc-hipster-entity/architecture/decisions/DEC-027.md) —
+  where the rule's HTML-report half comes from: the generator's JSON
+  metadata is the model, Bun JavaScript renders the page, and every
+  source link is verified.
 
 ## 2. Other rules you are expected to follow
 

@@ -31,7 +31,7 @@ root, and each subdirectory holds a different kind of *non-source* artifact:
 
 | Subdirectory                           | Holds                                                        | Git policy                                                |
 | -------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------- |
-| `metadata/entity/`                     | `<Marker>.metadata.json` — the machine-readable entity model, for tooling consumers: JS tooling rendering HTML reports or interactive views of the codebase, schema validators, query builders. Plus `generation.json`, the last pass's run record (generator revision, the artifact its classes came from, roots, flags, counts) | ignored by default; opt in as a contract (DEC-026) |
+| `metadata/entity/`                     | `<Marker>.metadata.json` — the machine-readable entity model, for tooling consumers: JS tooling rendering HTML reports or interactive views of the codebase, schema validators, query builders. Plus `generation.json`, the last pass's run record (generator revision, the artifact its classes came from, roots, flags, counts), and `index.html`, the same model rendered as a page by `scripts\entity-html\` (§ 3.10, DEC-027) | ignored by default; opt in as a contract (DEC-026) |
 | `metadata/watch/`, `metadata/project/` | indexes and checksum/mtime caches (`metadata.db`, `index.fury`) used by the watch agent and whole-project passes to detect offline changes and skip a full rescan | **must stay ignored** — machine-local, large, regenerable |
 | `context/`, `reports/`                 | human-read material: module specs, gate and baseline records | tracked                                                   |
 | `agent-state/`                         | scratch: run logs, probes, temporary copies                  | ignored                                                   |
@@ -50,19 +50,19 @@ there is no annotation processing and no compile hook: `mvn compile`,
 `mvn package` and `mvn test` compile the committed generated source and do
 nothing else. A pass is started by a person or a script — § 3 is how.
 
-| Part                                                                                        | Lives in                                                                 | Wired here by                              | What it does for this module                                                    |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------- |
-| **Entity generator** — `hr.hrg.hipster.entity.tooling.EntityMetadataGenerator`              | `hipster-entity-tooling`                                                 | `scripts\gen.cmd` (primary), or the POM's phase-less `exec:java` goal `hipster-entity-generate` | parses the hand-written view interfaces and **rewrites 15 generator-owned `.java` files in place under `src/main/java`** — the main output — then writes the entity metadata JSON into `.jcodebuddy/metadata/entity/`, plus `generation.json` through `--run-record` (§ 0, § 5) |
-| **Tooling preflight** — `hr.hrg.hipster.entity.tooling.GeneratorPreflight`                  | `hipster-entity-tooling`                                                 | `scripts\gen.cmd` runs it before every pass; also the phase-less `exec:java` goal `hipster-entity-preflight` | refuses to start a pass when the tooling on the classpath is too old to understand the flags the pass passes. An old tooling silently treats `--java-out` as a positional argument and writes generated Java into the metadata directory; this turns that into a loud failure before anything is written. See § 6.1 |
-| **Generation filter** — `--packages …`                                                      | tooling CLI flag                                                         | POM argument, used by `gen.cmd` and the goal | restricts *generation* to `…person.entity` and `…paymentMethod.entity`; indexing is still whole-tree, so cross-package supertypes and addons resolve. `example/`, `person/iface`, `person/record` therefore stay hand-written |
-| **`--java-out <dir>`**                                                                      | tooling CLI flag                                                         | POM argument (`src/main/java`)             | generated Java goes back next to the view it belongs to, not into the `.jcodebuddy/` metadata directory. This is what makes the generated source **committed** — DEC-019 / `AGENTS.md` § 1 |
-| **Entity rules validator** — `--validate` (bare = `REPORT`)                                 | `hipster-entity-tooling` → `…tooling.validation.EntityRulesValidator`    | POM argument                               | runs the registered rules (`MarkerEntityRule`, `ViewInterfaceRule`, `ViewAnnotationRule`, `AuditableRule`, `EntityFieldEnumOrderRule`) *before* writing, prints every issue, and continues. A clean example prints `Validation: no issues in …` |
-| **Divergence reporter** — DEC-022 shape `kind, location, cause, current, canonical, action` | `…tooling.DivergenceReporter`                                            | every pass                                 | explains what the pass did or declined to do. A clean pass over this module prints **3 informational** lines (`addon_field_collision` ×2, `nested_record_reused`) — that is the steady state, not a defect |
-| **Cooperative codegen** — DEC-020 (recognise by shape, preserve user edits) + DEC-021 (the two-line class-file header) | tooling emitters | every generated file here | the header line 1 (`// {@link …}`) is what makes generated classes reachable from the view in a stock IDE; the JSON5 line 2 carries `enabled` (set `false` to freeze a file) and `entityFieldEnum:true` (marks an R1 ledger) |
-| **R1 field-enum ledger** — DEC-023                                                          | tooling + `…tooling.validation.EnumConstantOrderChecker`                 | every `*_.java`                            | the constant list is an append-only ordinal layout; the new constant is appended, a removed field is tombstoned, never reordered |
-| **`.jcodebuddy/` marker + layout** — DEC-026                                                | this module                                                              | the directory itself                       | the module's auxiliary metadata root: the entity model JSON that tooling consumers read, the watch/project indexes and checksum caches, human notes, and scratch. **Never generated source** — see § 0 |
-| **Runtime half** — `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`    | separate modules                                                         | `pom.xml` `<dependencies>` (compile scope) | what the generated code compiles against. These are **not** dev-time: they ship |
-| **Live watcher** — `EntityRegenerationWatcher`                                              | `project-automation`                                                     | `scripts\gen.cmd watch` (§ 3.5)            | the dev-time loop that regenerates on save. It takes the same flags; `project-automation` is not a dependency of this module, and the watch classpath is exported separately |
+| Part                                                                                        | Lives in                                                              | Wired here by                                                                                   | What it does for this module                                                    |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Entity generator** — `hr.hrg.hipster.entity.tooling.EntityMetadataGenerator`              | `hipster-entity-tooling`                                              | `scripts\gen.cmd` (primary), or the POM's phase-less `exec:java` goal `hipster-entity-generate` | parses the hand-written view interfaces and **rewrites 15 generator-owned `.java` files in place under `src/main/java`** — the main output — then writes the entity metadata JSON into `.jcodebuddy/metadata/entity/`, plus `generation.json` through `--run-record` (§ 0, § 5) |
+| **Tooling preflight** — `hr.hrg.hipster.entity.tooling.GeneratorPreflight`                  | `hipster-entity-tooling`                                              | `scripts\gen.cmd` runs it before every pass; also the phase-less `exec:java` goal `hipster-entity-preflight` | refuses to start a pass when the tooling on the classpath is too old to understand the flags the pass passes. An old tooling silently treats `--java-out` as a positional argument and writes generated Java into the metadata directory; this turns that into a loud failure before anything is written. See § 6.1 |
+| **Generation filter** — `--packages …`                                                      | tooling CLI flag                                                      | POM argument, used by `gen.cmd` and the goal                                                    | restricts *generation* to `…person.entity` and `…paymentMethod.entity`; indexing is still whole-tree, so cross-package supertypes and addons resolve. `example/`, `person/iface`, `person/record` therefore stay hand-written |
+| **`--java-out <dir>`**                                                                      | tooling CLI flag                                                      | POM argument (`src/main/java`)                                                                  | generated Java goes back next to the view it belongs to, not into the `.jcodebuddy/` metadata directory. This is what makes the generated source **committed** — DEC-019 / `AGENTS.md` § 1 |
+| **Entity rules validator** — `--validate` (bare = `REPORT`)                                 | `hipster-entity-tooling` → `…tooling.validation.EntityRulesValidator` | POM argument                                                                                    | runs the registered rules (`MarkerEntityRule`, `ViewInterfaceRule`, `ViewAnnotationRule`, `AuditableRule`, `EntityFieldEnumOrderRule`) *before* writing, prints every issue, and continues. A clean example prints `Validation: no issues in …` |
+| **Divergence reporter** — DEC-022 shape `kind, location, cause, current, canonical, action` | `…tooling.DivergenceReporter`                                         | every pass                                                                                      | explains what the pass did or declined to do. A clean pass over this module prints **3 informational** lines (`addon_field_collision` ×2, `nested_record_reused`) — that is the steady state, not a defect |
+| **Cooperative codegen** — DEC-020 (recognise by shape, preserve user edits) + DEC-021 (the two-line class-file header) | tooling emitters                           | every generated file here                                                                       | the header line 1 (`// {@link …}`) is what makes generated classes reachable from the view in a stock IDE; the JSON5 line 2 carries `enabled` (set `false` to freeze a file) and `entityFieldEnum:true` (marks an R1 ledger) |
+| **R1 field-enum ledger** — DEC-023                                                          | tooling + `…tooling.validation.EnumConstantOrderChecker`              | every `*_.java`                                                                                 | the constant list is an append-only ordinal layout; the new constant is appended, a removed field is tombstoned, never reordered |
+| **`.jcodebuddy/` marker + layout** — DEC-026                                                | this module                                                           | the directory itself                                                                            | the module's auxiliary metadata root: the entity model JSON that tooling consumers read, the watch/project indexes and checksum caches, human notes, and scratch. **Never generated source** — see § 0 |
+| **Runtime half** — `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`    | separate modules                                                      | `pom.xml` `<dependencies>` (compile scope)                                                      | what the generated code compiles against. These are **not** dev-time: they ship |
+| **Live watcher** — `EntityRegenerationWatcher`                                              | `project-automation`                                                  | `scripts\gen.cmd watch` (§ 3.5)                                                                 | the dev-time loop that regenerates on save. It takes the same flags; `project-automation` is not a dependency of this module, and the watch classpath is exported separately |
 
 **Deliberately *not* used here**, so that a reader does not go looking:
 
@@ -110,11 +110,11 @@ resolved (see § 6.5 for why the obvious `mvn exec:java` cannot do this).
 
 ### How it gets triggered — only the first layer is required
 
-| Layer | What it is | Needed? |
-| ----- | ---------- | ------- |
-| **The pass** — `scripts\gen.cmd`, § 3.1 | the generator, run when you ask | **Required.** This is the whole tool. |
+| Layer                                           | What it is                                                                  | Needed?                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **The pass** — `scripts\gen.cmd`, § 3.1         | the generator, run when you ask                                             | **Required.** This is the whole tool.                            |
 | **Watch mode** — `scripts\gen.cmd watch`, § 3.5 | that same pass, driven by a file watcher, so it regenerates after each save | Optional; the normal development loop. Still just the generator. |
-| **Sidecar / LSP** | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings | **A user-friendliness expansion only.** Nothing here needs one, and none is wired up for this generator today. |
+| **Sidecar / LSP**                               | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings | **A user-friendliness expansion only.** Nothing here needs one, and none is wired up for this generator today. |
 
 The boundary between the last two rows is the point worth remembering: **watch
 mode belongs to JCodeBuddy, not to a sidecar.** A sidecar consumes what watch mode
@@ -262,6 +262,58 @@ building the whole reactor. Consequences:
 - always give boolean properties an explicit value;
 - from PowerShell, wrap the whole thing: `cmd /c 'scripts\mvn-jdk25.cmd hipster-entity test "-Dtest=X" "-Dsurefire.failIfNoSpecifiedTests=false"'`.
 
+### 3.10 The HTML entity index — read the module from inside the IDE
+
+```bat
+scripts\gen.cmd
+```
+
+A pass now ends by rendering `.jcodebuddy\metadata\entity\index.html`, and that is the file to open:
+right-click it in the Project view and choose **Open in WebView Explorer** (or `Ctrl+Alt+Shift+W`).
+The page lists every entity, every artifact generated from it, and a field-by-artifact table whose
+cells open the exact line of that member — the read accessor in the view, the constant in the field
+enum, the setter and the stored field in each builder, the record component, the ordinal switch arm,
+and the `@FieldSource` line for a `DERIVED`/`JOINED` field.
+
+To render it on its own, without a generation pass:
+
+```bat
+scripts\entity-html.cmd                              render with the default paths
+scripts\entity-html.cmd --module <dir>               another converted module
+bun run scripts/entity-html/index.js --help          the renderer's own flag surface
+bun test                                             renderer tests, from scripts\
+```
+
+The renderer is **Bun JavaScript reading the JSON metadata** — the Java generator does not emit
+HTML, and a fact that should appear on the page is added to `toJson` instead (DEC-027). Since
+DEC-028 its model is two inputs: the document and the module's central index
+(`.jcodebuddy/index/files.json`), which states each source path once while the document names files
+by short ids, and each view's `fields[].at` records every location of every field. The renderer
+therefore reads the locations instead of discovering them; it still scans the committed source, but
+only to **verify** that a link's line contains the member (DEC-027 § 4.2). It reports
+what it could not verify:
+
+- `Link check: N links verified, M candidate(s) rejected` — a candidate is written only when the
+  file exists and the line contains the member, so a rejected one is dropped, not guessed at;
+- divergences in DEC-022's format, and the run exits 1 unless `--soft` (the pass fails with it);
+- a missing or unrecognised index is a loud `html_index_missing` **error** — the page renders
+  nothing rather than a page of dangling ids;
+- **no** `html_field_not_in_ledger` warning any more. Until DEC-028 the renderer found an enum
+  constant with a line regex that did not match the way the generator writes one
+  (`, email(java.lang.String.class) {` — the comma on the same line), so it read
+  `PersonUpdateForm_` and `PersonUpdatableView_` as carrying only `id` and wrongly reported the
+  other four fields as absent from their ledgers. The pass now records those constants and the page
+  reads them; the diagnostic kind still exists, it simply has nothing to report here.
+  (Before DEC-028 the page showed 74 fields and 266 links with two such warnings; now it shows 84
+  fields and 305 links with none. No aspect, column, label, description, marker/view line or field
+  order changed — only what the truncated ledger had hidden.)
+
+Bun is required for the page only. A machine without it gets a `[gen] bun was not found on PATH`
+line and a complete generation pass; the JSON is the pass's deliverable and the page is a view over
+it. Opening a link needs the `webview-jetbrains` plugin: it injects `window.openFile(path, line,
+column)` into the page, with the plugin's HTTP bridge (`webview.explorer.port`) and the clipboard as
+fallbacks when the page is opened outside the IDE.
+
 ---
 
 ## 4. Regenerate: what is input, what is output, what is yours
@@ -338,17 +390,81 @@ not the generated source.
 ### 5.1 Where
 
 ```
-hipster-entity-example/.jcodebuddy/metadata/entity/
-├── Auditable.metadata.json       (the example/ marker and its addon views)
-├── PaymentMethod.metadata.json   (the polymorphic family)
-├── Person.metadata.json          (the person family)
-└── README.md                     (tracked; explains the subtree)
+hipster-entity-example/.jcodebuddy/
+├── index/
+│   ├── files.json                 the module's addressing table: id → module-relative source path
+│   └── README.md                  tracked; what the table is, and what it reserves
+└── metadata/entity/
+    ├── Auditable.metadata.json    (the example/ marker and its addon views)
+    ├── PaymentMethod.metadata.json (the polymorphic family)
+    ├── Person.metadata.json       (the person family)
+    ├── index.html                 (the same model as a page; see § 3.10 and DEC-027)
+    └── README.md                  (tracked; explains the subtree)
 ```
 
 One file **per entity marker**, named `<Marker>.metadata.json` — not one per view.
 It contains the marker/package/id type, one entry per view (`gen`, `extends`,
 `addons`, `discriminatorField`, properties with `fieldKind`/`expression`/`relation`),
 and an `allFields` array with `typeByView` type descriptors.
+
+Since DEC-028 a document contains **no source path at all**. It names each file by a short
+**id** and points at the module's central index with `fileIndex` (`"../../index/files.json"`):
+
+```jsonc
+{
+  "entityName": "Person",
+  "package": "hr.hrg.hipster.entityexample.person.entity",
+  "markerInterface": "Person",
+  "idType": "Long",
+  "markerFile": "entity.Person",          // id, not a path
+  "markerLine": 14,
+  "fileIndex": "../../index/files.json",  // the only path-like value in the document
+  "views": [
+    { "name": "PersonSummary", "lineNumber": 13, "file": "PersonSummary",
+      "artifacts": [
+        { "id": 0, "name": "PersonSummary", "kind": "interface", "file": "PersonSummary",
+          "line": 14, "generated": false, "own": true },
+        { "id": 3, "name": "PersonSummary_", "kind": "enum", "file": "PersonSummary_",
+          "line": 17, "generated": true, "own": true,
+          "header": "Field metadata for the PersonSummary view." },
+        { "id": 6, "name": "Person", "kind": "interface", "file": "entity.Person",
+          "line": 14, "generated": false, "own": false }   // a foreign declaring interface
+      ],
+      "fields": [
+        { "name": "age", "ordinal": 4, "fieldKind": "DERIVED",
+          "expression": "YEAR(NOW()) - YEAR(birthDate)",
+          "at": { "0": { "accessor": 17, "annotation": 16 },
+                  "3": { "enum-constant": 43, "name-slot": 98 },
+                  "4": { "accessor": 48, "field": 18, "ordinal-slot": 66 } } }
+      ] }
+  ]
+}
+```
+
+The index states each path exactly once, and the id behind it is the file's simple name qualified by
+the **shortest package suffix that disambiguates it** (`PersonSummary`, but `entity.Person` /
+`iface.Person` / `record.Person`), so the same file has the same id in every document and the table
+is readable in a diff. `views[].artifacts[]` is the inventory of the files that belong to a view —
+its own file and the nested types it declares, the generated siblings, then the foreign declaring
+interfaces its fields reference with `"own": false` — and `views[].fields[].at` is
+`artifact id → role → line` over the eight roles `accessor`, `annotation`, `enum-constant`,
+`name-slot`, `record-component`, `field`, `setter`, `ordinal-slot`. A role that does not exist for a
+field is **absent**, which is why a `DERIVED` field has no `setter` anywhere.
+
+Two facts stay distinct and neither is derived from the other: `properties[].lineNumber` is the
+declaration **start**, annotations included (16 for `PersonSummary.age`), while the `accessor` role is
+the accessor's **name-token** line (17). A field's `file` is the id of the file that declares its
+*accessor*, which is a different file for an inherited field (`PersonDetails.firstName` →
+`entity.Person`, `createdAt` → `Auditable`), and a field declared outside the source root (`id`, from
+`Identifiable` in `hipster-entity-api`) carries no file rather than a guess. `allFields` carries
+`file` too but deliberately **no** location map: it is a per-marker union, and the per-view maps are
+authoritative. That is what makes the metadata usable by a consumer that has to open the class — the
+HTML entity index does exactly that (§ 3.10) — and `MetadataFileIdsTest` and `MetadataLocationsTest`
+assert the rules.
+
+**A record names a file; it never contains one.** The index carries the module-relative path and the
+documents carry ids, and neither they nor the page ever quote a Java file's text: the committed
+source owns those bytes, and a copy in a report is stale the moment anyone edits the file.
 
 ### 5.2 Who reads it
 
@@ -379,7 +495,10 @@ they are machine-local and regenerable, and committing them is pure churn.
 A project that wants the entity JSON reviewed in pull requests opts that subtree
 back in with a `!` rule (the exact rule is in
 [`.jcodebuddy/README.md`](.jcodebuddy/README.md) and DEC-026) — the sibling cache
-subtrees are deliberately not part of that opt-in. Note what the default rules
+subtrees are deliberately not part of that opt-in, but **`.jcodebuddy/index/` must
+travel with `metadata/`**: a document names source files by ids that resolve only in
+`index/files.json`, so opting the metadata in alone would commit documents that
+reference an uncommitted table. Note what the default rules
 protect against even then: because only `README.md` files and the re-included
 subtree are tracked, a `.java` that an old hand-run pass dropped into the metadata
 directory still cannot be committed by that opt-in — see § 6.1 for why that case
@@ -507,6 +626,15 @@ jar, and prints what the pass did. `scripts\gen.cmd with-tests` adds the test se
 guarded, remove its debris with
 `Remove-Item -Recurse hipster-entity-example\.jcodebuddy\metadata\entity\hr`.
 
+**That debris is gone, and it can no longer come back quietly.** The thirteen generated `.java` files
+an older tooling had written into `metadata/entity/hr/…` were deleted: a report records the
+**module-relative path** to a source file (see § 5.1), never a copy of one, and generated source
+belongs under `src/main/java` (§ 0). Three things now hold that line — `GeneratorGuardTest` refuses a
+`--java-out` under `.jcodebuddy/`, asserts that a pass leaves only JSON in its report directory, and
+asserts that no `.jcodebuddy/` tree in the repository contains a `.java`; and `.jcodebuddy/.gitignore`
+keeps such a file ignored even if the metadata subtree is opted in as a contract. A `.java` under
+`.jcodebuddy/` is always a mistake — do not "fix" it by committing it.
+
 ### 6.3 Classpath scope is load-bearing in the exec-goal form
 
 This applies to the **explicit `exec:java` goal**, not to `scripts\gen.cmd` (which
@@ -590,3 +718,6 @@ compiled, the `java -cp` command alone is the whole pass (§ 3.8).
 - [`../project-automation/README.md`](../project-automation/README.md) — the dev-time orchestrator and the regeneration watcher.
 - [`../doc-hipster-entity/user/getting-started-new-project.md`](../doc-hipster-entity/user/getting-started-new-project.md) — the same workflow for a brand-new project.
 - [`../doc-hipster-entity/architecture/decisions/DEC-026.md`](../doc-hipster-entity/architecture/decisions/DEC-026.md) — `.jcodebuddy/`, per-module and per-purpose.
+- [`../doc-hipster-entity/architecture/decisions/DEC-027.md`](../doc-hipster-entity/architecture/decisions/DEC-027.md) — HTML reports are rendered by Bun from the generator's JSON metadata; the page in § 3.10.
+- [`../scripts/entity-html/README.md`](../scripts/entity-html/README.md) — the renderer's own contract: flags, the JSON it reads, the roles it links, its divergences.
+- [`.jcodebuddy/context/entity-html-index.md`](.jcodebuddy/context/entity-html-index.md) — what *this* module expects the page to show.

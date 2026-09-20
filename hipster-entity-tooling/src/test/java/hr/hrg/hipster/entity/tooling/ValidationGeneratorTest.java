@@ -95,6 +95,24 @@ class ValidationGeneratorTest {
     }
 
     /**
+     * No <em>validation</em> problem is reported about this view.
+     *
+     * <p>Deliberately not "no divergence at all". A pass whose generated output is outside the module —
+     * which is what this fixture's separate temp output root is — reports
+     * {@code artifact_outside_module} for each artifact it cannot name in the metadata, because a
+     * module-relative path is the only currency the index and the documents share (DEC-028). That is a
+     * fact about the fixture's layout, not about the constraint machinery these tests are about, and
+     * folding it into a broader assertion would make the test's subject unreadable.</p>
+     */
+    private static void assertNoValidationIssue(Generated generated) {
+        List<String> issues = generated.divergences().stream()
+                .filter(entry -> entry.contains("kind=validation"))
+                .toList();
+        Assertions.assertEquals(List.of(), issues,
+                "no validation issue may be reported: " + generated.divergences());
+    }
+
+    /**
      * Re-runs the pass over an <strong>existing</strong> tree.
      *
      * <p>{@code generate(viewSource)} builds a fresh output root every time, which is right for the
@@ -390,8 +408,7 @@ class ValidationGeneratorTest {
         String record = read(generated, "PersonFormRecord.java");
         Assertions.assertTrue(record.contains("import jakarta.validation.Valid;"), record);
         Assertions.assertTrue(record.contains("@Valid"), record);
-        Assertions.assertTrue(generated.divergences().isEmpty(),
-                "and nothing is reported about it: " + generated.divergences());
+        assertNoValidationIssue(generated);
     }
 
     @Test
@@ -410,8 +427,7 @@ class ValidationGeneratorTest {
                 "an unconstrained view gains no file, so the feature costs nothing when unused");
         Assertions.assertFalse(read(generated, "PersonFormRecord.java").contains("jakarta.validation"),
                 "and no validation import, so nothing needs the dependency");
-        Assertions.assertTrue(generated.divergences().isEmpty(),
-                "and nothing is reported: " + generated.divergences());
+        assertNoValidationIssue(generated);
         assertCompiles(generated, "unconstrained view");
     }
 

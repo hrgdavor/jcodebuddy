@@ -33,7 +33,7 @@ rem   example are already compiled, `scripts\gen.cmd` costs one incremental
 rem   compile and the pass itself.
 rem
 rem Usage:
-rem   scripts\gen.cmd                   regenerate; tests skipped
+rem   scripts\gen.cmd                   regenerate, then render the HTML entity index; tests skipped
 rem   scripts\gen.cmd with-tests        regenerate and run the entity test set
 rem   scripts\gen.cmd watch             regenerate now, then regenerate on save
 rem   scripts\gen.cmd <maven args...>   forwarded to the entity module set
@@ -96,7 +96,28 @@ if errorlevel 1 goto :report
 "%JAVA%" -cp "%JCPATH%" hr.hrg.hipster.entity.tooling.GeneratorPreflight >> "%LOG%" 2>&1
 if errorlevel 1 goto :report
 "%JAVA%" -cp "%JCPATH%" hr.hrg.hipster.entity.tooling.EntityMetadataGenerator "%EXAMPLE%\src\main\java" "%EXAMPLE%\.jcodebuddy\metadata\entity" --java-out "%EXAMPLE%\src\main\java" --packages hr.hrg.hipster.entityexample.person.entity,hr.hrg.hipster.entityexample.paymentMethod.entity --validate --run-record "%EXAMPLE%\.jcodebuddy\metadata\entity\generation.json" >> "%LOG%" 2>&1
+if errorlevel 1 goto :report
+call :htmlindex
 goto :report
+
+rem ---------------------------------------------------------------------------
+rem The HTML entity index (DEC-027): a Bun script that reads the JSON the pass
+rem just wrote and renders one self-contained page whose cells link to the exact
+rem line of every field in every generated artifact.
+rem
+rem A missing Bun is reported and then ignored, not fatal: the JSON is the
+rem deliverable and the page is a view over it, so a machine without Bun still
+rem gets a complete generation pass. A page that renders but cannot verify a link
+rem IS fatal, because a link to the wrong line is worse than no link at all.
+rem ---------------------------------------------------------------------------
+:htmlindex
+where bun >nul 2>&1
+if errorlevel 1 (
+    echo [gen] bun was not found on PATH: skipping the HTML entity index ^(DEC-027^). 1>&2
+    exit /b 0
+)
+bun run "%REPO%\scripts\entity-html\index.js" --module hipster-entity-example >> "%LOG%" 2>&1
+exit /b %ERRORLEVEL%
 
 rem ---------------------------------------------------------------------------
 rem Watch mode: the same classpath, but project-automation's watcher, which
@@ -193,7 +214,7 @@ exit /b 0
 :report
 set "RC=%ERRORLEVEL%"
 echo [gen] what the pass did:
-findstr /C:"preflight ok" /C:"source root" /C:"Writing generated java" /C:"Validation:" /C:"divergences" /C:"BUILD" "%LOG%"
+findstr /C:"preflight ok" /C:"source root" /C:"Writing generated java" /C:"HTML entity index" /C:"Link check" /C:"Divergences:" /C:"Validation:" /C:"divergences" /C:"BUILD" "%LOG%"
 echo [gen] full log: %LOG%
 if not "%RC%"=="0" (
     echo [gen] FAILED with exit code %RC%. 1>&2

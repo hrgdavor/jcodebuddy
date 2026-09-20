@@ -85,6 +85,25 @@ committed — so a generator change that alters the example fails the tooling's 
 rewriting it. It calls the generator API directly, so it never depended on the removed Maven binding.
 Regenerate and commit in the same change when that test goes red.
 
+## Reading the module as a page
+
+```
+scripts\entity-html.cmd
+```
+
+renders `.jcodebuddy/metadata/entity/index.html` from the metadata JSON the last pass wrote: every
+entity, every artifact generated from it, and every field clickable through to the exact source line
+of every artifact — the accessor in the view, the constant in the field enum, the setter and field in
+each builder, the record component, the ordinal switch arm, the `@FieldSource` line. Open it in
+IntelliJ with the plugin's WebView Explorer tool window (right-click the file in the Project view →
+**Open in WebView Explorer**).
+
+The page is Bun JavaScript reading the JSON; the Java generator does not emit HTML, and every link it
+writes is verified against the file and line it points at (DEC-027). `scripts\gen.cmd` renders it as
+the last step of a pass — [`codebuddy.md`](codebuddy.md) § 3.10 has the details, and
+[`.jcodebuddy/context/entity-html-index.md`](.jcodebuddy/context/entity-html-index.md) records what
+this module expects it to show.
+
 ## Running the demo
 
 ```

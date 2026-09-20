@@ -61,6 +61,106 @@ generator: a matching nested `record` → `RECORD`, else a nested `Write`
 interface → `BUILDER`, else `META`. It never resolves to
 `BUILDER_TRACKED`/`BUILDER_ALL`.
 
+### The module index, and a field's locations
+
+`<Marker>.metadata.json` no longer names a source file by its path. Each **module** writes one
+addressing table per pass, at `<module>/.jcodebuddy/index/files.json`
+([DEC-028](../doc-hipster-entity/architecture/decisions/DEC-028.md)):
+
+```jsonc
+{
+  "format": 1,
+  "module": "hipster-entity-example",
+  "sourceRoot": "src/main/java",
+  "files": {
+    "PersonSummary": "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java",
+    "entity.Person": "src/main/java/hr/hrg/hipster/entityexample/person/entity/Person.java",
+    "iface.Person":  "src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java",
+    "record.Person": "src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java"
+  }
+}
+```
+
+An **id** is the file's simple name — extension and `src/main/java/` prefix dropped — qualified by
+the **shortest package suffix that disambiguates it** among every file the pass indexed: plain
+`PersonSummary`, but `entity.Person` / `iface.Person` / `record.Person`, because all three exist in
+this repository (which is why a bare basename is not enough). It is a function of the path plus the
+*set* of paths, so it is deterministic, unique in the module, identical in every document that
+mentions the file, and readable in a diff; the deliberate trade-off is that adding a file whose
+simple name collides with an existing one may **lengthen the existing id** (`Person` →
+`entity.Person`), where an opaque hash would not.
+
+Paths are **module-relative** (`src/main/java/…`, forward slashes), never absolute and never `..`,
+and **a path is written exactly once per module — only here**. Every document points at the table
+through a root `fileIndex` pointer (e.g. `"../../index/files.json"`), the only path-like value a
+document contains, and every file reference in a document is an id: `markerFile` (with `markerLine`),
+`views[].file`, `properties[].file`, `allFields[].file` and `artifacts[].file`. The index lives under
+the nearest `.jcodebuddy/` above the report directory — the same walk-up the module root uses
+(DEC-026 § 2) — and falls back to `<report dir>/index/files.json` when the report directory is not
+inside a `.jcodebuddy/` at all (a temp directory in a test). `format` is the table's version: a
+consumer that does not recognise it must refuse the table rather than guess. A pass writes
+`index/README.md` when it is absent and **never overwrites** it, because that file is tracked, i.e.
+owned by a human; the fallback location gets `files.json` and no README.
+
+The Java model keeps **paths**. `EntityMeta.markerSourcePath`, `ViewMeta.sourcePath` and
+`Property.sourcePath` keep their meaning for every Java caller, and `ArtifactMeta.file` is a path in
+the model and an id in the JSON; `toJson`/`fromJson` are the single conversion point, because an id
+is a property of the whole indexed set and cannot exist at the moment a location is extracted.
+`fromJson(json)` without a table leaves ids unresolved (`null`) rather than inventing a path, while
+`fromJson(json, idToPath)` resolves them; both accept the pre-DEC-028 `markerSourcePath`/`sourcePath`
+keys, so an older document still parses.
+
+**The artifact inventory** (`views[].artifacts[]`) lists the types that belong to a view:
+`{ id, name, kind, file, line, generated, own, header? }`. `id` is a small integer assigned in
+reading order — the view's own file, the nested types it declares, the generated siblings in
+emission order, then the **foreign declaring interfaces** its fields reference, marked
+`"own": false`. `generated` says whether the file carries a DEC-021 header (i.e. the generator owns
+it), `header` is that header's description text, and `line` is the type's declaration line inside its
+file. An artifact whose `--java-out` is outside the module has no module-relative path and therefore
+no id: it is reported as an `artifact_outside_module` divergence and is absent from the inventory.
+
+**A field's locations** (`views[].fields[]`) are `{ name, ordinal, type, fieldKind, column?,
+relation?, expression?, at }`, where `at` is `{ "<artifact id>": { "<role>": line } }` — for
+`PersonSummary.age`:
+
+```json
+"at": { "0": { "accessor": 17, "annotation": 16 },
+        "1": { "record-component": 30 },
+        "3": { "enum-constant": 43, "name-slot": 98 },
+        "4": { "accessor": 48, "field": 18, "ordinal-slot": 66 },
+        "5": { "accessor": 49, "field": 32, "ordinal-slot": 58 } }
+```
+
+The eight roles, written in this order so two runs are byte-identical, are `accessor` (a no-argument
+read method), `annotation` (the `@FieldSource` line), `enum-constant` (the constant in `<View>_`,
+DEC-023's ledger position), `name-slot` (the `forName` arm), `record-component`, `field` (the stored
+field in a builder), `setter` (the fluent setter, or a `Write` method in a nested interface) and
+`ordinal-slot` (the `case 3 ->` arm). A role that does not exist for a field is **absent**, not
+empty — a `DERIVED` field has no `setter`. The view's `properties[]` stays the "own declaration"
+record (its `lineNumber` is the declaration start, annotations included, which is a different fact
+from the accessor role's name-token line) and does not gain a location map; `allFields` carries
+`file` but deliberately **no** location map either, because it is a per-marker union.
+
+**Reserved, not implemented.** The directory is a directory of tables on purpose, so these can be
+added without changing any consumer's contract: `hashes.json` (id → a hash of the file's content,
+CRLF normalised to LF first, plus a header naming the algorithm, the tooling revision and the flags
+that change output) and `artifacts[].inputs` (per emitted artifact, the file ids it was generated
+*from*). Neither is written today; they are what a watcher or an incremental pass would need, and
+`metadata/watch/<toolSet>/metadata.db` (DEC-026 § 3) remains the watch agent's own cache rather than
+being replaced by the index.
+
+The metadata's consumers are the Bun HTML entity reference page (DEC-027,
+[`scripts/entity-html/`](../scripts/entity-html/README.md)) and any other tool that needs to open a
+class the generator described. The example records **315 locations** across 84 fields and 45
+artifacts; the page renders 305 of them, because ten are a foreign declaring interface's accessor
+for a field whose view has no row in the marker-level `allFields` union, and DEC-028 freezes the
+page's column set rather than widening it. What is recorded is a **name, never content**: no
+metadata document or report ever contains a source file's text, a report directory holds metadata
+only, and a `.java` under `.jcodebuddy/` is a mistake whatever wrote it (DEC-026 § 5).
+`GeneratorGuardTest` asserts both (a pass leaves only JSON in the report directory; no
+`.jcodebuddy/` tree in this repository holds a `.java`), and `.jcodebuddy/.gitignore` keeps such a
+file ignored even after a project opts its metadata subtree in as a contract.
+
 ## Entry points
 
 [`EntityMetadataGenerator`](src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java)
@@ -643,6 +743,10 @@ declining to guess rather than reporting a defect:
   the append-only ordinal ledger.
 - [DEC-025](../doc-hipster-entity/architecture/decisions/DEC-025.md) — the
   deliberate, acknowledged ordinal migration.
+- [DEC-027](../doc-hipster-entity/architecture/decisions/DEC-027.md) — HTML
+  reports are rendered by Bun from the JSON metadata this module writes; the
+  renderer is [`scripts/entity-html/`](../scripts/entity-html/README.md). This
+  module emits **no** HTML: a fact a report needs belongs in `toJson`.
 - [Materialization levels](../doc-hipster-entity/architecture/materialization-levels.md) —
   what each `GenLevel` emits.
 - [Getting started in a new project](../doc-hipster-entity/user/getting-started-new-project.md) —

@@ -258,9 +258,14 @@ public final class ValidationGenerator {
                 }
                 honoured.add(constraint);
             }
+            // Every component is carried through, including the recorded locations: this rebuilds the
+            // property to narrow its constraint list, and a component left out here would silently
+            // disappear from the metadata's field map downstream (there is no compiler check for
+            // "the generator dropped a fact", only a missing line in a document).
             kept.add(new Property(property.name(), property.type(), property.fieldKind(),
                     property.column(), property.relation(), property.expression(),
-                    property.lineNumber(), honoured, property.typeImports()));
+                    property.lineNumber(), honoured, property.typeImports(), property.sourcePath(),
+                    property.locations()));
         }
         return kept;
     }

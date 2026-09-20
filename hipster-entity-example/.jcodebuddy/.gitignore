@@ -4,5 +4,22 @@ metadata/**
 !metadata/**/
 !metadata/**/README.md
 
+# Belt and braces for DEC-026 section 4, and for the rule that a report records a PATH to a
+# source file rather than a copy of it: a .java under .jcodebuddy/ is always a mistake, so it
+# stays ignored even after a project opts metadata/entity in as a contract with the '!' rule
+# above. An older tooling did drop generated source here (codebuddy.md section 6.1); this line
+# is what stops that residue from ever being committed, and GeneratorGuardTest asserts the tree
+# itself stays clear of it.
+metadata/**/*.java
+
+# The module index (DEC-028) is coupled to the metadata above: a document names source files by ids
+# that resolve only in index/files.json, so a project that opts metadata/ in MUST opt index/ in too,
+# or its committed documents reference an uncommitted table. Same shape as the metadata rules: the
+# subtree is derived and ignored, and only its README.md is re-included; README.md shows the two
+# opt-in snippets side by side.
+index/**
+!index/**/
+!index/**/README.md
+
 # Disposable: run logs, probes, temp copies. Never a deliverable.
 agent-state/**

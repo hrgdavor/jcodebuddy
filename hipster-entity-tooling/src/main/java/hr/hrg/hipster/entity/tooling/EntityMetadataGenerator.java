@@ -192,13 +192,43 @@ public class EntityMetadataGenerator {
         }
     }
 
+    /**
+     * Reads a marker document written before the module index existed.
+     *
+     * <p>Kept as its own entry point because it is what a Java consumer that has a document but no index
+     * can call: the ids stay <strong>unresolved</strong> — the model's path fields are {@code null} —
+     * rather than the reader inventing a path it cannot know. {@link #fromJson(String, Map)} resolves
+     * them when the caller has the table.</p>
+     */
     public static EntityMeta fromJson(String json) throws java.io.IOException {
+        return fromJson(json, null);
+    }
+
+    /**
+     * Reads a marker document (DEC-028).
+     *
+     * <p><strong>Paths in the model, ids in the JSON</strong>: that is the single conversion point, and
+     * the reason {@code Property.sourcePath} and friends keep their meaning for every existing Java
+     * caller and test. A document is no longer self-contained — it names files by the id the module's
+     * central index assigned them — so a caller that wants paths passes {@code idToPath} (the
+     * {@code files} object of {@code .jcodebuddy/index/files.json}, which the document's
+     * {@code fileIndex} pointer locates). Without it the ids are left unresolved rather than guessed.</p>
+     *
+     * <p><strong>Legacy documents still parse.</strong> {@code markerSourcePath}/{@code sourcePath}
+     * (plain relative paths) are accepted wherever the id keys are absent, so a document written before
+     * this change reads exactly as it did. A document never carries both spellings of the same fact, so
+     * there is no precedence rule to remember — the id key is read when it is there, the path key
+     * otherwise.</p>
+     */
+    public static EntityMeta fromJson(String json, Map<String, String> idToPath) throws java.io.IOException {
         JsonNode root = OBJECT_MAPPER.readTree(json);
 
         String entityName = root.path("entityName").asText();
         String packageName = root.path("package").asText();
         String markerInterface = root.path("markerInterface").asText();
         String idType = root.path("idType").asText();
+        String markerSourcePath = sourcePath(root, "markerFile", idToPath, "markerSourcePath");
+        int markerLine = root.path("markerLine").asInt(-1);
 
         List<ViewMeta> views = new ArrayList<>();
         for (JsonNode viewNode : root.path("views")) {
@@ -239,9 +269,53 @@ public class EntityMetadataGenerator {
                     typeImports.add(importNode.asText());
                 }
                 properties.add(new Property(name, type, fieldKind, column, relation, expression,
-                        lineNumber, constraints, typeImports));
+                        lineNumber, constraints, typeImports,
+                        sourcePath(propNode, "file", idToPath, "sourcePath")));
             }
-            views.add(new ViewMeta(viewName, extendsTypes, gen, discriminatorField, addons, properties, viewLineNumber));
+
+            List<hr.hrg.hipster.entity.tooling.meta.ArtifactMeta> artifacts = new ArrayList<>();
+            for (JsonNode artifactNode : viewNode.path("artifacts")) {
+                artifacts.add(new hr.hrg.hipster.entity.tooling.meta.ArtifactMeta(
+                        artifactNode.path("id").asInt(-1),
+                        artifactNode.path("name").asText(),
+                        artifactNode.path("kind").asText(),
+                        sourcePath(artifactNode, "file", idToPath, null),
+                        artifactNode.path("line").asInt(-1),
+                        artifactNode.path("generated").asBoolean(false),
+                        artifactNode.path("own").asBoolean(true),
+                        artifactNode.has("header") ? artifactNode.path("header").asText(null) : null));
+            }
+
+            List<hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta> fields = new ArrayList<>();
+            for (JsonNode fieldNode : viewNode.path("fields")) {
+                Map<Integer, Map<String, Integer>> at = new LinkedHashMap<>();
+                for (Iterator<Map.Entry<String, JsonNode>> it = fieldNode.path("at").propertyStream().iterator(); it.hasNext(); ) {
+                    Map.Entry<String, JsonNode> artifactEntry = it.next();
+                    Map<String, Integer> roles = new LinkedHashMap<>();
+                    for (Iterator<Map.Entry<String, JsonNode>> rolesIt = artifactEntry.getValue().propertyStream().iterator(); rolesIt.hasNext(); ) {
+                        Map.Entry<String, JsonNode> role = rolesIt.next();
+                        roles.put(role.getKey(), role.getValue().asInt(-1));
+                    }
+                    try {
+                        at.put(Integer.valueOf(artifactEntry.getKey()), roles);
+                    } catch (NumberFormatException notAnArtifactId) {
+                        // An `at` key that is not an artifact id cannot be resolved against anything;
+                        // dropping it is honest, and keeping it would make the map's contract a guess.
+                    }
+                }
+                fields.add(new hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta(
+                        fieldNode.path("name").asText(),
+                        fieldNode.path("ordinal").asInt(-1),
+                        parseTypeText(fieldNode.path("type")),
+                        fieldNode.has("fieldKind") ? fieldNode.path("fieldKind").asText(null) : null,
+                        fieldNode.has("column") ? fieldNode.path("column").asText(null) : null,
+                        fieldNode.has("relation") ? fieldNode.path("relation").asText(null) : null,
+                        fieldNode.has("expression") ? fieldNode.path("expression").asText(null) : null,
+                        at));
+            }
+
+            views.add(new ViewMeta(viewName, extendsTypes, gen, discriminatorField, addons, properties,
+                    viewLineNumber, sourcePath(viewNode, "file", idToPath, "sourcePath"), artifacts, fields));
         }
 
         List<EntityFieldMeta> allFields = new ArrayList<>();
@@ -265,10 +339,33 @@ public class EntityMetadataGenerator {
                 typeByView.put(entry.getKey(), parseTypeText(entry.getValue()));
             }
 
-            allFields.add(new EntityFieldMeta(name, type, fieldKind, column, relation, expression, lineNumber, fieldViews, typeByView));
+            allFields.add(new EntityFieldMeta(name, type, fieldKind, column, relation, expression, lineNumber, fieldViews, typeByView,
+                    sourcePath(fieldNode, "file", idToPath, "sourcePath")));
         }
 
-        return new EntityMeta(entityName, packageName, markerInterface, idType, views, allFields);
+        return new EntityMeta(entityName, packageName, markerInterface, idType, views, allFields,
+                markerSourcePath, markerLine);
+    }
+
+    /**
+     * The path a node's file key names: the id resolved through {@code idToPath} when the document was
+     * written by this revision, or the literal path key when it was written before ids existed.
+     *
+     * <p>One method rather than five, because "which of the two spellings is this document using?" has
+     * exactly one right answer and it must be the same one everywhere — {@code markerSourcePath} and
+     * {@code sourcePath} were the old keys, {@code markerFile} and {@code file} are the new ones, and a
+     * reader that answered differently at two call sites would resolve one file and not another.</p>
+     */
+    private static String sourcePath(JsonNode node, String idKey, Map<String, String> idToPath,
+                                     String legacyPathKey) {
+        if (node.hasNonNull(idKey)) {
+            String id = node.path(idKey).asText(null);
+            if (id == null || id.isBlank()) {
+                return null;
+            }
+            return idToPath == null ? null : idToPath.get(id);
+        }
+        return legacyPathKey == null ? null : node.path(legacyPathKey).asText(null);
     }
 
     private static String parseTypeText(JsonNode typeNode) {
@@ -785,6 +882,103 @@ public class EntityMetadataGenerator {
         System.err.println("        --acknowledge-drained-data [--target <path-substring>]");
     }
 
+    /**
+     * The module directory that a recorded source path is relative to.
+     *
+     * <p>Resolution order, and the reasoning is DEC-026 § 2 applied to one more output:</p>
+     * <ol>
+     *   <li>a {@code .jcodebuddy/} marker at or above the <em>report</em> directory — the pass already
+     *       writes there, so the module that owns the report is the module that owns the paths, and a
+     *       report directory outside the module (a temp dir, a test) still yields module-relative paths
+     *       because the marker above the source root wins;</li>
+     *   <li>a {@code .jcodebuddy/} marker at or above the source root;</li>
+     *   <li>the nearest {@code pom.xml} above the source root — a converted-but-not-yet-marked module;</li>
+     *   <li>the {@code …/src/main/java} (or {@code …/src/test/java}) convention: the ancestor above
+     *       {@code src};</li>
+     *   <li>otherwise the source root itself, so a source tree outside any project still gets paths
+     *       relative to something meaningful.</li>
+     * </ol>
+     *
+     * <p>Module-relative and not project-relative on purpose: in a multi-module build a consumer — a
+     * report, an IDE plugin, the module's own {@code .jcodebuddy/} output — resolves against the module
+     * that holds the class, and that is the only base that is correct in <em>every</em> module. A
+     * project-relative path would need the project root at read time, which no metadata file knows.</p>
+     */
+    private static Path resolveModuleRoot(Path sourceRoot, Path outputDir) {
+        Path marker = nearestDirectoryNamed(outputDir, JCODEBUDDY_DIR);
+        if (marker == null) {
+            marker = nearestDirectoryNamed(sourceRoot, JCODEBUDDY_DIR);
+        }
+        if (marker != null && marker.getParent() != null) {
+            return marker.getParent();
+        }
+        Path pom = nearestFileNamed(sourceRoot, "pom.xml");
+        if (pom != null && pom.getParent() != null) {
+            return pom.getParent();
+        }
+        Path source = sourceRoot.toAbsolutePath().normalize();
+        Path parent = source.getParent();
+        Path grandParent = parent == null ? null : parent.getParent();
+        if (parent != null && grandParent != null && "java".equals(fileName(source))
+                && ("main".equals(fileName(parent)) || "test".equals(fileName(parent)))
+                && "src".equals(fileName(grandParent))) {
+            return grandParent.getParent() == null ? grandParent : grandParent.getParent();
+        }
+        return source;
+    }
+
+    /**
+     * The path of {@code file} relative to {@code moduleRoot}, with forward slashes.
+     *
+     * <p>Never absolute: an absolute path in metadata is a path that is wrong on the next machine, and
+     * the JSON is a report about a module, not about a disk. A file outside the module (a source root
+     * pointed somewhere else in one invocation) still yields a relative path, because that is what the
+     * caller asked for; only a file on a different Windows drive, where no relative path exists, falls
+     * back to the file name.</p>
+     * <p>Package-private rather than private because {@link MetadataLocations} needs the same answer
+     * when it reads an artifact back: two spellings of "relative to what?" is how the index and a
+     * document's ids would drift apart.</p>
+     */
+    static String moduleRelativePath(Path moduleRoot, Path file) {
+        try {
+            Path base = moduleRoot.toAbsolutePath().normalize();
+            Path target = file.toAbsolutePath().normalize();
+            return base.relativize(target).toString().replace('\\', '/');
+        } catch (IllegalArgumentException noRelativePath) {
+            // Two roots that share no ancestor (a different drive): the honest answer is the file name.
+            return file.getFileName() == null ? file.toString() : file.getFileName().toString();
+        }
+    }
+
+    /** The nearest ancestor (inclusive) that is a directory with this name, or {@code null}. */
+    private static Path nearestDirectoryNamed(Path start, String name) {
+        for (Path cursor = absoluteOrNull(start); cursor != null; cursor = cursor.getParent()) {
+            if (name.equals(fileName(cursor)) && Files.isDirectory(cursor)) {
+                return cursor;
+            }
+        }
+        return null;
+    }
+
+    /** The nearest ancestor (inclusive) that contains a file with this name, or {@code null}. */
+    private static Path nearestFileNamed(Path start, String name) {
+        for (Path cursor = absoluteOrNull(start); cursor != null; cursor = cursor.getParent()) {
+            Path candidate = cursor.resolve(name);
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static Path absoluteOrNull(Path path) {
+        return path == null ? null : path.toAbsolutePath().normalize();
+    }
+
+    private static String fileName(Path path) {
+        return path == null || path.getFileName() == null ? null : path.getFileName().toString();
+    }
+
     private static Path deriveSourceRoot(Path inputPath) {
         if (Files.isDirectory(inputPath)) {
             return inputPath;
@@ -1021,7 +1215,8 @@ public class EntityMetadataGenerator {
      * may refer to a type declared in a file that has not been visited yet, which is exactly the
      * cross-package case the import table alone cannot resolve.</p>
      */
-    private record ParsedUnit(String packageName, Map<String, String> importTable, CompilationUnit cu) {
+    private record ParsedUnit(String packageName, Map<String, String> importTable, CompilationUnit cu,
+                              String sourcePath) {
     }
 
     /**
@@ -1096,6 +1291,30 @@ public class EntityMetadataGenerator {
         rejectJavaOutputUnderJcodebuddy(javaOutputRoot);
         Map<String, InterfaceInfo> interfaceMap = new HashMap<>();
 
+        // The base every recorded source path is relative to: the MODULE that holds the sources, not
+        // the project above it. In a multi-module build the module is what a consumer resolves against
+        // — it is also where that module's own `.jcodebuddy/` output lives (DEC-026) — so a
+        // project-relative path would be wrong in every module but one. Resolved once, here, because
+        // both the walk below and a reader of the JSON need the same answer.
+        Path moduleRoot = resolveModuleRoot(sourceRoot, outputDir);
+
+        // The module's central file index (DEC-028): the ONE place a source path is written, and the one
+        // place a file id is assigned. Every document this pass writes names its files by an id that
+        // resolves here, which is what keeps a path from being repeated once per location — and it is
+        // why the index has to be complete before the first document is written, i.e. why the writes
+        // moved to the end of the pass (§ 4.5).
+        ModuleFileIndex fileIndex = ModuleFileIndex.forPass(outputDir, moduleRoot, sourceRoot);
+        // The detail the emission loop produces per view, keyed by the view's qualified name. Each view
+        // is emitted exactly once for the whole pass (the `alreadyFound` set below), so the key is
+        // unique; a view skipped by the `--packages` filter gets an empty detail, which is the honest
+        // answer to "what did this pass produce for it".
+        Map<String, MetadataLocations.Detail> detailByView = new LinkedHashMap<>();
+        // The documents are assembled in the marker loop but written after it, because an id cannot be
+        // resolved until the index is complete and the index cannot be complete until every artifact
+        // exists. Writing the JSON first would force either a second pass over the emitters or a second
+        // source scan, which is exactly what this change deletes.
+        List<EntityMeta> pendingDocuments = new ArrayList<>();
+
         // Pass 1: parse every file. Reading an interface is deferred to pass 2 because a property's
         // type may be declared in a file this walk has not reached yet, and the resolution that needs
         // is against the whole source set (plan.dsflash § 8.2/3.6).
@@ -1126,7 +1345,18 @@ public class EntityMetadataGenerator {
                         // declared type comes from its own supertype's source, so resolving a whole view's
                         // property list against the view's own imports would attribute the wrong imports
                         // to it (plan.dsflash § 8.2/3.6).
-                        units.add(new ParsedUnit(packageName, importTableOf(cu), cu));
+                        //
+                        // The unit's module-relative path travels with it for the same reason: the JSON
+                        // records where each class and each accessor is declared, and only the walk knows
+                        // the file a declaration came from (DEC-027's amendment).
+                        String unitPath = moduleRelativePath(moduleRoot, filePath);
+                        // Every file the pass read or wrote is in the index, and it is added before any
+                        // id is resolved: a file the pass indexed but forgot to add would have no id,
+                        // and the writer would fail loudly rather than write a path into a document.
+                        if (ModuleFileIndex.isModuleRelative(unitPath)) {
+                            fileIndex.add(unitPath);
+                        }
+                        units.add(new ParsedUnit(packageName, importTableOf(cu), cu, unitPath));
 
                     } catch (IOException e) {
                         throw new RuntimeException(e);
@@ -1166,14 +1396,16 @@ public class EntityMetadataGenerator {
                                 .collect(Collectors.toList()),
                         decl.getMethods().stream()
                                 .filter(EntityMetadataGenerator::isFieldAccessor)
-                                .map(method -> parseProperty(method, packageName, importTable, declaredTypes))
+                                .map(method -> parseProperty(method, packageName, importTable, declaredTypes,
+                                        unit.sourcePath(), decl.getNameAsString()))
                                 .collect(Collectors.toList()),
                         parseViewAnnotation(decl),
                         parseEntityBaseIdType(decl),
                         decl.getBegin().map(pos -> pos.line).orElse(-1),
                         nestedRecordComponents(decl),
                         decl.isPublic(),
-                        decl
+                        decl,
+                        unit.sourcePath()
                 );
                 interfaceMap.put(getQualifiedName(packageName, info.name()), info);
             }
@@ -1315,16 +1547,14 @@ public class EntityMetadataGenerator {
                                 i.view() == null ? GenLevel.META : i.view().gen(),
                                 i.view() == null ? "" : i.view().discriminatorField(),
                                 i.view() == null ? List.of() : i.view().addons(),
-                                i.properties(), i.lineNumber()))
+                                i.properties(), i.lineNumber(), i.sourcePath()))
                         .collect(Collectors.toList());
 
-                List<EntityFieldMeta> allFields = collectEntityFields(views, marker, interfaceMap);
-                EntityMeta entityMeta = new EntityMeta(entityName, marker.packageName(), marker.name(), marker.entityBaseIdType(), views, allFields);
-                String json = toJson(entityMeta);
-
-                Files.createDirectories(outputDir);
-                Path outFile = outputDir.resolve(entityName + ".metadata.json");
-                Files.writeString(outFile, json);
+                // The per-view property lists the marker-level union is built from, keyed exactly as the
+                // union has always looked a view up. Collected here so the union does not compute
+                // `collectViewProperties` a second time — which would report every unusable constraint
+                // and every dropped type parameter twice (§ 4.5 trap c, § 4.8).
+                Map<String, List<Property>> unionPropertiesByView = new LinkedHashMap<>();
 
                 for (ViewMeta view : views) {
                     InterfaceInfo viewInfo = findViewInfo(interfaceMap, marker.packageName(), view.name());
@@ -1364,8 +1594,17 @@ public class EntityMetadataGenerator {
                     // disagreeing about which constraints exist.
                     fullProperties = ValidationGenerator.reportAndFilter(view.name(), fullProperties,
                             divergences);
-                    List<Property> ordinalProperties = ledgerOrderedProperties(
+                    LedgerOrder ledger = ledgerOrderedProperties(
                             javaOutputRoot, viewPackage, view.name(), fullProperties);
+                    List<Property> ordinalProperties = ledger.fields();
+                    // The union's own input, looked up the way `collectEntityFields` has always looked a
+                    // view up — the marker's package first. When the view really is in that package the
+                    // two lookups are the same object, so the list is shared rather than recomputed.
+                    String unionKey = getQualifiedName(marker.packageName(), view.name());
+                    InterfaceInfo unionInfo = interfaceMap.get(unionKey);
+                    unionPropertiesByView.put(unionKey, unionInfo == viewInfo
+                            ? fullProperties
+                            : collectViewProperties(unionInfo, marker, interfaceMap));
 
                     // § 8.4/3.10: if the view already declares a matching nested record, do NOT emit
                     // a second one — target it from create() instead.
@@ -1458,7 +1697,33 @@ public class EntityMetadataGenerator {
                             viewPackage, view.name(), ordinalProperties, recordConstruction);
                     emittedViews.put(reference.qualifiedName(), reference);
                     emittedViews.putIfAbsent(view.name(), reference);
+
+                    // § 4.5: every emitter for this view has now run, so the files exist and can be read
+                    // back. This is the information the pass has and the renderer used to guess — the
+                    // view's artifact inventory and, per field, every location the pass recorded. It is
+                    // collected here, at the only moment it can be, and consumed after the whole pass
+                    // when the documents are written.
+                    detailByView.put(getQualifiedName(viewPackage, view.name()),
+                            MetadataLocations.collect(moduleRoot, javaOutputRoot, viewPackage, view.name(),
+                                    viewInfo, ordinalProperties, ledger.ledgerSize(), fileIndex, divergences));
                 }
+
+                // The marker's document is assembled in memory here and written after the whole pass:
+                // its views now carry the detail the emission loop produced, and its field ids can only
+                // be resolved once the central index is complete (§ 4.5).
+                List<ViewMeta> viewsWithDetail = views.stream()
+                        .map(view -> {
+                            MetadataLocations.Detail detail = detailByView.getOrDefault(
+                                    viewDetailKey(interfaceMap, marker, view),
+                                    MetadataLocations.Detail.empty());
+                            return view.withDetails(detail.artifacts(), detail.fields());
+                        })
+                        .collect(Collectors.toList());
+                List<EntityFieldMeta> allFields =
+                        collectEntityFields(viewsWithDetail, marker, interfaceMap, unionPropertiesByView);
+                pendingDocuments.add(new EntityMeta(entityName, marker.packageName(), marker.name(),
+                        marker.entityBaseIdType(), viewsWithDetail, allFields, marker.sourcePath(),
+                        markerLineOf(marker)));
             }
         }
 
@@ -1474,6 +1739,52 @@ public class EntityMetadataGenerator {
         }
 
         generateRequestedMappers(javaOutputRoot, emittedViews, divergences);
+
+        // ── artifacts → index → documents (§ 4.5) ──────────────────────────────────────────────────
+        // Every artifact now exists, so the index can be frozen over the complete set of files and
+        // written. Only then can a document name its files by id: resolving an id against a partial
+        // table is how a document ends up with a dangling reference, and there is no fallback for that
+        // — an unindexed path is a bug in the pass, and `toJson` fails loudly rather than writing the
+        // path into the document and quietly breaking the "a path is stated once" rule.
+        fileIndex.write();
+        for (EntityMeta entityMeta : pendingDocuments) {
+            Files.createDirectories(outputDir);
+            Path outFile = outputDir.resolve(entityMeta.entityName() + ".metadata.json");
+            Files.writeString(outFile, toJson(entityMeta, fileIndex));
+        }
+    }
+
+    /**
+     * The key {@link #generateInternal}'s detail map uses for one view: its package and name.
+     *
+     * <p>Resolved the same way in the emission loop and when the document is assembled, which is why it
+     * is one method rather than two spellings of the same expression — a view may be declared outside
+     * its marker's package, so "the view's package" is not simply the marker's.</p>
+     */
+    private static String viewDetailKey(Map<String, InterfaceInfo> interfaceMap, InterfaceInfo marker,
+                                        ViewMeta view) {
+        InterfaceInfo viewInfo = findViewInfo(interfaceMap, marker.packageName(), view.name());
+        String viewPackage = viewInfo != null ? viewInfo.packageName() : marker.packageName();
+        return getQualifiedName(viewPackage, view.name());
+    }
+
+    /**
+     * The marker interface's declaration line: the line of its <em>name</em>, not of its begin.
+     *
+     * <p>A marker carrying an annotation begins on the annotation's line, and the page's link has always
+     * pointed at the declaration itself. Recording the begin would open the wrong line — and, because
+     * the renderer verifies every link against the member name, it would be rejected rather than shown,
+     * which is the failure mode that makes a wrong line worse than a missing one.</p>
+     */
+    private static int markerLineOf(InterfaceInfo marker) {
+        if (marker == null) {
+            return -1;
+        }
+        if (marker.declaration() != null) {
+            return marker.declaration().getName().getBegin().map(position -> position.line)
+                    .orElse(marker.lineNumber());
+        }
+        return marker.lineNumber();
     }
 
     /**
@@ -1550,14 +1861,27 @@ public class EntityMetadataGenerator {
      * declaration order <em>is</em> the ledger — a marker-less enum is bootstrapped from the resolved
      * fields (§ 4.5/G7) — so the list is returned unchanged.</p>
      */
-    private static List<Property> ledgerOrderedProperties(Path javaOutputRoot, String viewPackage,
-                                                          String viewName, List<Property> accessors) {
+    /**
+     * A view's fields in DEC-023 ledger order, and how many of them the field enum actually carries.
+     *
+     * <p>The count is the second half of the answer the metadata needs: a field the ledger does not
+     * carry has <strong>no ordinal</strong>, and reporting one would be a positional claim about a
+     * constant that does not exist. The ledger's own length is the only thing that can tell the two
+     * apart, so it is returned beside the list rather than re-derived from it.</p>
+     */
+    private record LedgerOrder(List<Property> fields, int ledgerSize) {
+    }
+
+    private static LedgerOrder ledgerOrderedProperties(Path javaOutputRoot, String viewPackage,
+                                                       String viewName, List<Property> accessors) {
         Path packageDir = viewPackage == null || viewPackage.isBlank()
                 ? javaOutputRoot
                 : javaOutputRoot.resolve(viewPackage.replace('.', '/'));
         Path enumFile = packageDir.resolve(viewName + "_.java");
         if (!Files.exists(enumFile)) {
-            return accessors;
+            // No committed ledger: the emitter is about to create one carrying every accessor in
+            // declaration order, so every field does have an ordinal.
+            return new LedgerOrder(accessors, accessors.size());
         }
         try {
             // The shared read (SourceReader), for the reason F-34 records: JavaParser returns a partial
@@ -1566,11 +1890,11 @@ public class EntityMetadataGenerator {
             // the declaration order and the ledger path reports it separately.
             SourceReader.Read read = SourceReader.read(enumFile);
             if (!read.readable()) {
-                return accessors;
+                return new LedgerOrder(accessors, accessors.size());
             }
             CompilationUnit cu = read.unit();
             if (!hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker.readHeader(cu).marked()) {
-                return accessors;
+                return new LedgerOrder(accessors, accessors.size());
             }
             List<String> existing = new ArrayList<>();
             for (com.github.javaparser.ast.body.EnumDeclaration declaration
@@ -1581,7 +1905,7 @@ public class EntityMetadataGenerator {
                 }
             }
             if (existing.isEmpty()) {
-                return accessors;
+                return new LedgerOrder(accessors, accessors.size());
             }
 
             Map<String, Property> byName = new LinkedHashMap<>();
@@ -1589,17 +1913,22 @@ public class EntityMetadataGenerator {
                 byName.put(property.name(), property);
             }
             List<Property> ordered = new ArrayList<>();
+            int ledgerSize = 0;
             for (String name : existing) {
                 Property property = byName.remove(name);
+                // A tombstone keeps its slot: the constant is still there, so the position is still
+                // taken, and the placeholder is what every positional artifact is driven by.
                 ordered.add(property != null ? property : retiredPlaceholder(name));
+                ledgerSize++;
             }
             // A genuinely new field is appended, exactly as the ledger planner appends its constant.
+            // Appended fields have no ordinal yet, which is what `ledgerSize` says.
             ordered.addAll(byName.values());
-            return ordered;
+            return new LedgerOrder(ordered, ledgerSize);
         } catch (IOException | RuntimeException ignored) {
             // No ordering information is better than a wrong one; the declaration order is what every
             // pass used before this method existed, and it is correct whenever no tombstone is present.
-            return accessors;
+            return new LedgerOrder(accessors, accessors.size());
         }
     }
 
@@ -1676,17 +2005,24 @@ public class EntityMetadataGenerator {
 
     private static Property parseProperty(MethodDeclaration method, String declaringPackage,
                                          Map<String, String> importTable,
-                                         Map<String, List<String>> declaredTypes) {
+                                         Map<String, List<String>> declaredTypes,
+                                         String sourcePath, String declaringName) {
         String name = method.getNameAsString();
         String type = method.getType().asString();
         String fieldKind = null;
         String column = null;
         String relation = null;
         String expression = null;
+        int annotationLine = -1;
 
         Optional<AnnotationExpr> fsOpt = method.getAnnotationByName("FieldSource");
         if (fsOpt.isPresent()) {
             AnnotationExpr fs = fsOpt.get();
+            // The @FieldSource line itself, which is a DIFFERENT line from the accessor's when the
+            // annotation sits above it: `PersonSummary.age` is 17 for `Integer age();` and 16 for the
+            // annotation. Neither can be recovered from `lineNumber`, which is the declaration start,
+            // annotations included — so both are recorded here, while the AST is in hand.
+            annotationLine = fs.getBegin().map(pos -> pos.line).orElse(-1);
             if (fs.isSingleMemberAnnotationExpr()) {
                 fieldKind = extractEnumValue(fs.asSingleMemberAnnotationExpr().getMemberValue().toString());
             } else if (fs.isNormalAnnotationExpr()) {
@@ -1701,9 +2037,27 @@ public class EntityMetadataGenerator {
             }
         }
         int lineNumber = method.getBegin().map(pos -> pos.line).orElse(-1);
+
+        // The interface half of "where is this field". The accessor's own line is read from the NAME
+        // token, never from `method.getBegin()`: an accessor carrying `@FieldSource` (or any other
+        // annotation) begins on the annotation's line, which is exactly the conflation F-46 records.
+        // Reading the AST rather than a regex also avoids the lookahead-after-\s+ trap that silently
+        // disabled a whole member scan in the renderer (plan.dsec § 8.5).
+        List<hr.hrg.hipster.entity.tooling.meta.SourceLocation> locations = new ArrayList<>();
+        int accessorLine = method.getName().getBegin().map(pos -> pos.line).orElse(-1);
+        if (sourcePath != null) {
+            locations.add(new hr.hrg.hipster.entity.tooling.meta.SourceLocation(
+                    declaringName, "accessor", sourcePath, accessorLine));
+            if (annotationLine > 0) {
+                locations.add(new hr.hrg.hipster.entity.tooling.meta.SourceLocation(
+                        declaringName, "annotation", sourcePath, annotationLine));
+            }
+        }
+
         return new Property(name, type, fieldKind, column, relation, expression, lineNumber,
                 ValidationGenerator.constraintsOn(method),
-                typeImportsFor(name, type, declaringPackage, importTable, declaredTypes));
+                typeImportsFor(name, type, declaringPackage, importTable, declaredTypes),
+                sourcePath, locations);
     }
 
     /**
@@ -1815,7 +2169,23 @@ public class EntityMetadataGenerator {
         return v.isEmpty() ? null : v;
     }
 
-    private static List<EntityFieldMeta> collectEntityFields(List<ViewMeta> views, InterfaceInfo marker, Map<String, InterfaceInfo> interfaceMap) {
+    /**
+     * The marker-level union of every view's fields.
+     *
+     * <p><strong>The union's semantics are unchanged</strong> (DEC-028 § 0.3): a non-derived
+     * declaration wins over a derived one, the first view to declare a field owns its location, and a
+     * view is looked up in the marker's own package — the lookup this method has always used, which
+     * {@code unionPropertiesByView} therefore reproduces exactly rather than replaces.</p>
+     *
+     * <p>What changed is only <em>where the property lists come from</em>. They are the ones the
+     * emission loop already computed, so this method no longer calls
+     * {@link #collectViewProperties} a second time — which reported every dropped type parameter and
+     * every unusable constraint a second time, and was the reason § 4.5's trap (c) says
+     * {@code reportAndFilter} must run once per view (plan.metadata-locations § 4.8).</p>
+     */
+    private static List<EntityFieldMeta> collectEntityFields(List<ViewMeta> views, InterfaceInfo marker,
+                                                             Map<String, InterfaceInfo> interfaceMap,
+                                                             Map<String, List<Property>> unionPropertiesByView) {
         // Merge all fields from all views into entity-wide map
         LinkedHashMap<String, EntityFieldMeta> fieldMap = new LinkedHashMap<>();
 
@@ -1827,8 +2197,12 @@ public class EntityMetadataGenerator {
         fieldMap.put("id", idField);
 
         for (ViewMeta view : views) {
-            InterfaceInfo viewInfo = interfaceMap.get(getQualifiedName(marker.packageName(), view.name()));
-            List<Property> fullProps = collectViewProperties(viewInfo, marker, interfaceMap);
+            // The marker's-package lookup, preserved: `unionPropertiesByView` was filled with exactly
+            // this key by the marker loop, and the fallback keeps the method usable on its own.
+            String unionKey = getQualifiedName(marker.packageName(), view.name());
+            List<Property> fullProps = unionPropertiesByView != null
+                    ? unionPropertiesByView.getOrDefault(unionKey, List.of())
+                    : collectViewProperties(interfaceMap.get(unionKey), marker, interfaceMap);
             for (Property prop : fullProps) {
                 String propKind = prop.fieldKind() != null ? prop.fieldKind() : "COLUMN";
                 if (fieldMap.containsKey(prop.name())) {
@@ -1844,11 +2218,17 @@ public class EntityMetadataGenerator {
                         existing.column = prop.column();
                         existing.relation = prop.relation();
                         existing.expression = prop.expression();
+                        existing.sourcePath = prop.sourcePath();
+                    } else if (existing.sourcePath == null) {
+                        // The first view to declare a field owns its location; a view that only
+                        // inherits it must not leave the field without a path when one is known.
+                        existing.sourcePath = prop.sourcePath();
                     }
                 } else {
                     List<String> viewList = new ArrayList<>();
                     viewList.add(view.name());
                     EntityFieldMeta fm = new EntityFieldMeta(prop.name(), prop.type(), propKind, prop.column(), prop.relation(), prop.expression(), prop.lineNumber(), viewList);
+                    fm.sourcePath = prop.sourcePath();
                     fm.typeByView.put(view.name(), prop.type());
                     fieldMap.put(prop.name(), fm);
                 }
@@ -2264,13 +2644,32 @@ public class EntityMetadataGenerator {
         return false;
     }
 
-    private static String toJson(EntityMeta entityMeta) {
+    /**
+     * Writes one marker document (DEC-028).
+     *
+     * <p><strong>No source path appears in the output.</strong> Every file the document mentions is named
+     * by the id {@link ModuleFileIndex} assigned it; the paths themselves are written once, in
+     * {@code .jcodebuddy/index/files.json}. The single path-like value here is {@code fileIndex}, the
+     * pointer to that table, and it points at the index rather than at a source file.</p>
+     *
+     * <p>A path the index does not know is a <strong>bug</strong>, not a fallback: {@link #fileId} fails
+     * loudly rather than writing the path into the document, because doing so would quietly break the one
+     * rule the index exists to keep and would leave a consumer with two sources of truth that can
+     * disagree.</p>
+     */
+    private static String toJson(EntityMeta entityMeta, ModuleFileIndex index) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         appendJsonField(sb, "entityName", entityMeta.entityName(), true);
         appendJsonField(sb, "package", entityMeta.packageName(), true);
         appendJsonField(sb, "markerInterface", entityMeta.markerInterface(), true);
         appendJsonField(sb, "idType", entityMeta.idType(), true, 2);
+        // The marker is a class like any other the metadata is about, so it gets the same pair every
+        // other link on the page is made of: its file (by id) and its declaration line. REC-027's
+        // "no scan for the marker's link" is what `markerLine` is for.
+        appendJsonField(sb, "markerFile", fileId(index, entityMeta.markerSourcePath()), true, 2);
+        appendJsonField(sb, "markerLine", entityMeta.markerLine(), true, 2);
+        appendJsonField(sb, "fileIndex", index.documentPointer(), true, 2);
 
         sb.append("  \"views\": [\n");
         for (int i = 0; i < entityMeta.views().size(); i++) {
@@ -2278,6 +2677,7 @@ public class EntityMetadataGenerator {
             sb.append("    {\n");
             appendJsonField(sb, "name", view.name(), true, 6);
             appendJsonField(sb, "lineNumber", view.lineNumber(), true, 6);
+            appendJsonField(sb, "file", fileId(index, view.sourcePath()), true, 6);
             sb.append("      \"extends\": [");
 
             sb.append(view.extendsTypes().stream().map(EntityMetadataGenerator::escapeJson).map(s -> "\"" + s + "\"").collect(Collectors.joining(", ")));
@@ -2295,7 +2695,10 @@ public class EntityMetadataGenerator {
                 sb.append("        \"type\": ");
                 boolean hasFieldKind = prop.fieldKind() != null;
                 appendJsonType(sb, parseTypeDescriptor(prop.type()), true, 0);
-                appendJsonField(sb, "lineNumber", prop.lineNumber(), hasFieldKind, 8);
+                appendJsonField(sb, "lineNumber", prop.lineNumber(), true, 8);
+                // The file that declares THIS accessor: an inherited field is declared in a different
+                // interface than the view that exposes it, so the view's own file is not the answer.
+                appendJsonField(sb, "file", fileId(index, prop.sourcePath()), hasFieldKind, 8);
                 if (prop.fieldKind() != null) {
                     appendJsonField(sb, "fieldKind", prop.fieldKind(), prop.column() != null || prop.relation() != null || prop.expression() != null, 8);
                     if (prop.column() != null) {
@@ -2312,7 +2715,11 @@ public class EntityMetadataGenerator {
                 if (j < view.properties().size() - 1) sb.append(",");
                 sb.append("\n");
             }
-            sb.append("      ]\n");
+            sb.append("      ],\n");
+            appendJsonArtifacts(sb, view.artifacts(), index);
+            sb.append(",\n");
+            appendJsonViewFields(sb, view.fields(), index);
+            sb.append("\n");
             sb.append("    }");
             if (i < entityMeta.views().size() - 1) sb.append(",");
             sb.append("\n");
@@ -2328,6 +2735,7 @@ public class EntityMetadataGenerator {
             sb.append("      \"type\": ");
             appendJsonType(sb, parseTypeDescriptor(f.type), true, 0);
             appendJsonField(sb, "lineNumber", f.lineNumber, true, 6);
+            appendJsonField(sb, "file", fileId(index, f.sourcePath), true, 6);
             appendJsonField(sb, "fieldKind", f.fieldKind, true, 6);
             if (f.column != null) {
                 appendJsonField(sb, "column", f.column, true, 6);
@@ -2357,6 +2765,134 @@ public class EntityMetadataGenerator {
         sb.append("  ]\n");
         sb.append("}");
         return sb.toString();
+    }
+
+    /**
+     * The id of the file at {@code moduleRelativePath}, or {@code null} for a path the pass did not
+     * record (a synthesised field such as the inherited {@code id}).
+     *
+     * <p>{@code null} is the convention {@code allFields[].file} already had for "declared outside this
+     * source root", so a genuinely unknown file keeps the spelling it had rather than gaining a third
+     * one — and it is the only case in which a null may reach the JSON: an <em>unindexed</em> path
+     * throws, because that is a bug in the pass rather than a fact about the tree.</p>
+     */
+    private static String fileId(ModuleFileIndex index, String moduleRelativePath) {
+        if (moduleRelativePath == null || moduleRelativePath.isBlank()) {
+            return null;
+        }
+        return index.idFor(moduleRelativePath);
+    }
+
+    /**
+     * The artifact inventory of one view, one artifact per line.
+     *
+     * <p>{@code header} is omitted for a hand-written artifact, which is how a consumer tells a
+     * generated file from one the developer owns without reading either: the generator's own DEC-021
+     * header is the only source of a description.</p>
+     */
+    private static void appendJsonArtifacts(StringBuilder sb, List<hr.hrg.hipster.entity.tooling.meta.ArtifactMeta> artifacts,
+                                            ModuleFileIndex index) {
+        sb.append("      \"artifacts\": [");
+        if (artifacts.isEmpty()) {
+            sb.append("]");
+            return;
+        }
+        sb.append("\n");
+        for (int i = 0; i < artifacts.size(); i++) {
+            hr.hrg.hipster.entity.tooling.meta.ArtifactMeta artifact = artifacts.get(i);
+            sb.append("        { \"id\": ").append(artifact.id())
+                    .append(", \"name\": \"").append(escapeJson(artifact.name()))
+                    .append("\", \"kind\": \"").append(escapeJson(artifact.kind()))
+                    .append("\", \"file\": \"").append(escapeJson(fileId(index, artifact.file())))
+                    .append("\", \"line\": ").append(artifact.line())
+                    .append(", \"generated\": ").append(artifact.generated())
+                    .append(", \"own\": ").append(artifact.own());
+            if (artifact.header() != null) {
+                sb.append(", \"header\": \"").append(escapeJson(artifact.header())).append("\"");
+            }
+            sb.append(" }");
+            sb.append(i < artifacts.size() - 1 ? ",\n" : "\n");
+        }
+        sb.append("      ]");
+    }
+
+    /**
+     * The per-field location maps of one view, in DEC-023 ledger order.
+     *
+     * <p>{@code at} is written as quoted object keys ({@code "2": { … }}) so any JSON parser reads it the
+     * same way: a JSON object's keys are strings, and a consumer that iterates with
+     * {@code Object.keys} must see the same artifact ids the writer put in.</p>
+     *
+     * <p><strong>Comma discipline</strong> (§ 3.2.7): this writer is a {@code StringBuilder} with an
+     * explicit trailing-comma decision per insertion, and there is no formatter to catch a mistake — a
+     * wrong comma produces a document only the tests reject.</p>
+     */
+    private static void appendJsonViewFields(StringBuilder sb,
+                                             List<hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta> fields,
+                                             ModuleFileIndex index) {
+        sb.append("      \"fields\": [");
+        if (fields.isEmpty()) {
+            sb.append("]");
+            return;
+        }
+        sb.append("\n");
+        for (int i = 0; i < fields.size(); i++) {
+            hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta field = fields.get(i);
+            sb.append("        {\n");
+            appendJsonField(sb, "name", field.name(), true, 8);
+            appendJsonField(sb, "ordinal", field.ordinal(), true, 8);
+            // Every key here is followed by at least `at`, so every one of them carries its comma; the
+            // last insertion before `at` must not be the one that forgets it. `fieldKind` is always
+            // written — an unannotated accessor is a COLUMN, which is a fact rather than an absence.
+            sb.append("        \"type\": ");
+            appendJsonType(sb, parseTypeDescriptor(field.type()), true, 0);
+            appendJsonField(sb, "fieldKind", field.fieldKind(), true, 8);
+            if (field.column() != null) {
+                appendJsonField(sb, "column", field.column(), true, 8);
+            }
+            if (field.relation() != null) {
+                appendJsonField(sb, "relation", field.relation(), true, 8);
+            }
+            if (field.expression() != null) {
+                appendJsonField(sb, "expression", field.expression(), true, 8);
+            }
+            appendJsonAt(sb, field);
+            sb.append("        }");
+            sb.append(i < fields.size() - 1 ? ",\n" : "\n");
+        }
+        sb.append("      ]");
+    }
+
+    /**
+     * One field's {@code at} map: artifact id → role → line, in artifact order then role order.
+     *
+     * <p>Written on <strong>one line</strong> rather than one artifact per line, which is what keeps the
+     * map cheap: it is the densest part of the document (a field has up to eight locations) and the
+     * only part whose shape is fixed by grouping rather than by pretty-printing. The grouping is what
+     * makes it small — the artifact's name, kind and file are stated once, in the inventory, instead of
+     * being repeated per location.</p>
+     */
+    private static void appendJsonAt(StringBuilder sb,
+                                     hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta field) {
+        sb.append("        \"at\": {");
+        if (field.at().isEmpty()) {
+            sb.append("}\n");
+            return;
+        }
+        int artifactIndex = 0;
+        for (Map.Entry<Integer, Map<String, Integer>> artifact : field.at().entrySet()) {
+            sb.append(artifactIndex == 0 ? " " : ", ");
+            sb.append("\"").append(artifact.getKey()).append("\": {");
+            int roleIndex = 0;
+            for (Map.Entry<String, Integer> role : artifact.getValue().entrySet()) {
+                sb.append(roleIndex == 0 ? " " : ", ");
+                sb.append("\"").append(escapeJson(role.getKey())).append("\": ").append(role.getValue());
+                roleIndex++;
+            }
+            sb.append(" }");
+            artifactIndex++;
+        }
+        sb.append(" }\n");
     }
 
     private static void appendJsonField(StringBuilder sb, String key, String value, boolean trailingComma) {
@@ -2394,7 +2930,14 @@ public class EntityMetadataGenerator {
         sb.append("\n");
     }
 
-    private static String escapeJson(String value) {
+    /**
+     * Escapes a value for the hand-rolled JSON writer.
+     *
+     * <p>Package-private rather than private because {@link ModuleFileIndex} writes its own table with
+     * the same escaping: two spellings of "how a string reaches JSON" is how the index and the documents
+     * would drift apart on the first value that needs escaping.</p>
+     */
+    static String escapeJson(String value) {
         if (value == null) {
             return null;
         }

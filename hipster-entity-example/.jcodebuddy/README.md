@@ -15,6 +15,7 @@ purpose so it is obvious what may be committed and what must not be:
     │   ├── entity/    <Entity>.metadata.json and generation.json, written by the hipster-entity generator
     │   ├── watch/     the watch agent's metadata.db plus its audit/ trail
     │   └── project/   whole-project metadata indexes (index.fury and friends)
+    ├── index/         derived   the module's index: files.json (id → source path) that the documents above reference
     ├── reports/       tracked   human-read run records worth keeping
     └── agent-state/   ignored   scratch: run logs, probes, temp copies
 
@@ -26,7 +27,24 @@ purpose so it is obvious what may be committed and what must not be:
 |---|---|---|
 | `context/`, `reports/` | **tracked** | the "why" and the evidence; small, text, reviewable |
 | `metadata/` | **ignored** | machine-written and regenerable; a whole-tree commit here is churn. Opt a subtree back in with a `!` rule in `.jcodebuddy/.gitignore` when a project wants its metadata committed as a contract |
+| `index/` | **ignored** | derived like `metadata/`, and **coupled to it**: a metadata document names source files by ids that resolve only in `index/files.json`, so an opt-in for the metadata subtree must carry the index too |
 | `agent-state/` | **ignored** | scratch, never a deliverable |
+
+The opt-in that makes a subtree tracked is written in `.jcodebuddy/.gitignore`. Because the
+metadata and the index are coupled, the two snippets travel **together** — opting the documents in
+without the table would commit documents whose every file reference is dangling:
+
+```gitignore
+!metadata/entity/
+!metadata/entity/**
+
+!index/
+!index/**
+```
+
+Every ignored subfolder keeps a tracked `README.md` (`!metadata/**/README.md`, `!index/**/README.md`),
+so the taxonomy survives in git even when the contents do not. `index/README.md` is tracked and
+human-owned: a generation pass creates it when it is absent and **never overwrites** it.
 
 ## What must *not* move here
 
@@ -35,6 +53,15 @@ generated wiring to be committed, IDE-navigable source; a dotted directory is
 conventionally tool state and moving program source there would break
 jump-to-definition and "find usages". This directory holds the *reports about*
 generation, never the generated code that is part of the program.
+
+**And a report records a path, never a copy of a file.** The module's index (`index/files.json`)
+names the source file a class lives in (module-relative, `src/main/java/…`) and the metadata
+documents name that file by an id which resolves there — that is what a consumer needs to open it —
+but neither the metadata, the index nor the HTML page quotes a Java file's text. An older tooling
+did drop thirteen generated `.java` files into `metadata/entity/hr/…` (a pre-`--java-out` run; see
+`codebuddy.md` § 6.1); they have been deleted, `GeneratorGuardTest` asserts that no `.jcodebuddy/`
+tree holds a `.java` and that a pass leaves only JSON in its report directory, and `.gitignore`
+below keeps a stray `.java` ignored even if this subtree is ever opted in as a committed contract.
 
 ## How the locations are decided
 

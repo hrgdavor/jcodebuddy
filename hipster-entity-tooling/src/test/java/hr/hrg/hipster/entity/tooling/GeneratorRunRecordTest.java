@@ -123,10 +123,15 @@ class GeneratorRunRecordTest {
                 "--java-out", sourceRoot.toString() });
 
         try (var files = Files.list(reportDir)) {
-            Assertions.assertEquals(List.of("Thing.metadata.json"),
+            // The run record is opt-in, so no `generation.json` appears. The module index does: DEC-028's
+            // location rule puts the table beside the documents when the report directory is not inside a
+            // `.jcodebuddy/`, because a temp directory has no module layout to put it in — and a document
+            // whose ids resolve nowhere is not a report.
+            Assertions.assertEquals(List.of("Thing.metadata.json", "index"),
                     files.map(p -> p.getFileName().toString()).sorted().toList(),
-                    "the pass writes its metadata and nothing else: the record is opt-in, so library "
-                            + "callers and existing tests see exactly the output they saw before");
+                    "the pass writes its metadata and the index its file ids resolve through, and "
+                            + "nothing else: the run record is opt-in, and a report directory still holds "
+                            + "JSON metadata rather than source (GeneratorGuardTest asserts the contents)");
         }
     }
 }
