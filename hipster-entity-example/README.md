@@ -18,8 +18,27 @@ committed source is the source of truth (DEC-019 / `AGENTS.md` § 1).
 
 ## How generation is wired
 
-`pom.xml` binds `exec-maven-plugin` to `generate-sources`, invoking
-`hr.hrg.hipster.entity.tooling.EntityMetadataGenerator` with its ordinary CLI flags:
+`pom.xml` declares `exec-maven-plugin` executions for
+`hr.hrg.hipster.entity.tooling.EntityMetadataGenerator` and
+`GeneratorPreflight`, but **neither carries a `<phase>`**: JCodeBuddy here is a
+side-car, not a build step. There is no annotation processing and no compile hook,
+so `mvn compile`, `mvn package` and `mvn test` only ever compile the committed
+generated source — they never regenerate it.
+
+A pass is run on the side, with:
+
+```
+scripts\gen.cmd            regenerate
+scripts\gen.cmd with-tests regenerate and run the entity test set
+scripts\gen.cmd watch      regenerate on every save (Ctrl+C to stop)
+```
+
+`scripts\gen.cmd` compiles the tooling in the reactor, exports the classpath
+Maven resolved for those modules (`dependency:build-classpath`), and runs the
+generator with `java -cp`. It needs **no `mvn install` and builds no jar**. See
+[`codebuddy.md`](codebuddy.md) § 3 for why `mvn exec:java` is not used.
+
+The generator's flag surface is unchanged, wherever it is invoked from:
 
 ```
 <sourceRoot>            src/main/java
@@ -28,6 +47,7 @@ committed source is the source of truth (DEC-019 / `AGENTS.md` § 1).
 --packages              hr.hrg.hipster.entityexample.person.entity,
                         hr.hrg.hipster.entityexample.paymentMethod.entity
 --validate              run the entity rules before writing; print and continue
+--run-record            .jcodebuddy/metadata/entity/generation.json
 ```
 
 The report goes to this module's own `.jcodebuddy/`, the marker directory that says "this module
@@ -39,22 +59,25 @@ Before the `--java-out` flag existed, generated Java landed in the *metadata* di
 one flag an adopter most often omits, and the reason the getting-started guide documents it in its
 flag table.
 
-**`classpathScope` must be `compile`.** `exec:java` defaults to the runtime scope, which excludes
-`provided` dependencies — and the tooling is `provided` so it never becomes a transitive runtime
-dependency of an application (`AGENTS.md` § 2). Without `<classpathScope>compile</classpathScope>` the
-generator is not on the exec classpath at all.
+**`classpathScope` must be `compile`** for the `exec:java` goal form. `exec:java` defaults to the
+runtime scope, which excludes `provided` dependencies — and the tooling is `provided` so it never
+becomes a transitive runtime dependency of an application (`AGENTS.md` § 2). Without
+`<classpathScope>compile</classpathScope>` the generator is not on the exec classpath at all.
+(`scripts\gen.cmd` does not use `exec:java`, so this does not apply to it.)
 
-**Turning generation off.** `-Djcodebuddy.entity.codegen.skip=true` skips the execution, which is what
-you want when you only need to compile or inspect the committed output:
+**Turning generation off** is no longer a thing you do: generation never runs during a build, and the
+old `-Djcodebuddy.entity.codegen.skip=true` property has been removed along with the lifecycle
+bindings it skipped. Compile, and the committed output is used as-is:
 
 ```
-scripts\mvn-jdk25.cmd -o -pl hipster-entity-example -am "-Djcodebuddy.entity.codegen.skip=true" package
+scripts\mvn-jdk25.cmd -o -pl hipster-entity-example -am compile
 ```
 
 **Generation is fail-safe about the example.** `ExampleRegenerationTest` copies the committed tree into
 a temp directory, runs the pass in place there, and asserts the result is byte-identical to what is
 committed — so a generator change that alters the example fails the tooling's tests instead of quietly
-rewriting it. Regenerate and commit in the same change when that test goes red.
+rewriting it. It calls the generator API directly, so it never depended on the removed Maven binding.
+Regenerate and commit in the same change when that test goes red.
 
 ## Running the demo
 

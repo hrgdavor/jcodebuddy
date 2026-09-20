@@ -18,13 +18,14 @@ import java.util.List;
  * build that predates {@code --java-out} ignores the flag, treats it as a positional argument, and
  * writes generated source into positional 2 — the module's metadata directory. Generation in the
  * <em>right</em> place is asserted by {@code ExampleRegenerationTest}; this class asserts the
- * <em>wrong</em> place is refused, which is the half a passing build was previously silent about.</p>
+ * <em>wrong</em> place is refused, at every entry point — CLI, script, watcher — rather than only on
+ * whatever path happened to be exercised last.</p>
  */
 class GeneratorGuardTest {
 
     @BeforeEach
     void resetProcessGlobalKnobs() {
-        // The generator's knobs are process-global because the CLI and the Maven binding share one
+        // The generator's knobs are process-global because the CLI and the library callers share one
         // flag surface; a test that leaves them set changes the next test's pass.
         EntityMetadataGenerator.setGenerationPackages(List.of());
         EntityMetadataGenerator.setMapperRequests(List.of());

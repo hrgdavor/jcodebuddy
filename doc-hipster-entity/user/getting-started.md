@@ -77,7 +77,13 @@ surefire JVM must be JDK 25):
 scripts\mvn-jdk25.cmd
 ```
 
-That is exactly:
+The build **regenerates nothing.** JCodeBuddy is a side-car — no annotation
+processing, no compile hook, and no lifecycle binding — so `compile`,
+`package` and `test` only compile the generated source already committed
+under `src/main/java`. The pass that produces it is
+[section 4](#4-run-the-generator), and it is always an explicit step.
+
+The wrapper with no arguments is exactly:
 
 ```text
 mvn -o -pl hipster-entity-api,hipster-entity-core,hipster-entity-tooling,hipster-entity-jackson,hipster-entity-test,hipster-entity-example -am test
@@ -97,17 +103,46 @@ and the Maven launcher.
 
 ## 4. Run the generator
 
-The generator's entry point is `EntityMetadataGenerator` (shaded into
-the tooling jar with that main class):
+This is the **primary path, and it is always explicit**: nothing in the
+build runs the generator, so a pass is a manual run or a watch loop. In
+this repository the one-command way is
+[`scripts\gen.cmd`](../../scripts/gen.cmd):
+
+```bat
+scripts\gen.cmd              rem regenerate (compile-only: no jars, no install)
+scripts\gen.cmd with-tests   rem regenerate, then run the entity test set
+scripts\gen.cmd watch        rem regenerate on every save (Ctrl+C stops it)
+```
+
+The script compiles the tooling in the reactor, exports the classpath with
+Maven's `dependency:build-classpath` (which maps a reactor dependency to
+that module's `target/classes` directory), and runs the generator with a
+plain `java -cp`. **No `mvn install` and no jar are needed**, and nothing
+is put into the local repository. It also runs `GeneratorPreflight` first,
+so a classpath that points at an older tooling fails before anything is
+written.
+
+The entry point it runs is `EntityMetadataGenerator`:
 
 ```text
-java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir> [--packages a.b,c.d] [--adapters]
+java -cp "<hipster-entity-tooling classes + its dependencies>" \
+     hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+     <source-root|java-source-file> <output-dir> [--java-out <dir>] \
+     [--packages a.b,c.d] [--adapters] [--validate] [--run-record <file>]
 ```
+
+(The same class is the shaded tooling jar's `Main-Class`, so
+`java -jar hipster-entity-tooling.jar …` is an equivalent form for anyone
+who already has a jar.)
 
 - The first positional argument is the source root, or a single `.java`
   file — in which case the tool searches upward for `src/main/java` or
   `src/test/java` to derive the root.
 - The second is the output directory for the metadata JSON.
+- `--java-out <dir>` is where the generated `.java` goes. Without it,
+  generated source is written into positional 2 — the *metadata*
+  directory — which is almost never what you want; point it at the
+  source root so the files land next to the view.
 - `--packages a.b,c.d` restricts **generation** to those packages (it
   does not restrict indexing, so cross-package supertypes and addons
   stay resolvable). Omitting it generates everything.

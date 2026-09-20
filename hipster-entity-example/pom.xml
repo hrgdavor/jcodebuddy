@@ -36,11 +36,12 @@
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
-        <!-- Build-time only: the entity generator runs during `generate-sources` (plan.dsflash
-             § 8.8/3.23, § 4.5/G4). It is `provided` because nothing in the example's runtime or
-             tests needs the tooling, and the tooling must never become a runtime dependency of an
-             application — see AGENTS.md §2. It brings the pinned JavaParser and Jackson artifacts
-             along for the exec:java classpath. -->
+        <!-- Dev-time only, and on the compile classpath only so that the explicit exec goals below
+             and `scripts\gen.cmd`'s classpath export can see the generator. JCodeBuddy is a
+             side-car: it is NOT bound to a lifecycle phase, so a plain `mvn compile` neither runs
+             nor needs it. It is `provided` because nothing in the example's runtime or tests needs
+             the tooling, and the tooling must never become a runtime dependency of an application —
+             see AGENTS.md §2. -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>hipster-entity-tooling</artifactId>
@@ -50,34 +51,46 @@
 
     <build>
         <plugins>
-            <!-- The generator's entry point is invoked through exec-maven-plugin with its ordinary
-                 CLI flags — not -D system properties — so a Maven build and a manual run share one
-                 flag surface (§ 8.8/3.23). Generated .java is regenerated IN PLACE under
-                 src/main/java (the committed source is the source of truth, AGENTS.md §1), while the
-                 metadata JSON report goes to this module's own `.jcodebuddy/metadata/entity` — the
-                 marker directory that says "this module uses JCodeBuddy". The build never adds
-                 untracked files to a source tree: `.jcodebuddy/metadata/` is ignored by
-                 `.jcodebuddy/.gitignore`, and the layout is documented in
-                 `.jcodebuddy/README.md`. `skip` defaults to false; set
-                 -Djcodebuddy.entity.codegen.skip=true to bypass generation.
+            <!-- JCodeBuddy is a SIDE-CAR, not a build step.
 
-                 TWO executions, in this order, and the first one is the point:
+                 Neither execution below carries a <phase>, so neither is bound to the lifecycle:
+                 `mvn compile`, `mvn package`, `mvn test` and every other build run the ordinary
+                 compile of the committed sources and nothing else. There is no annotation
+                 processing, no compile hook and no generated-sources root. This is the DEC-019 /
+                 AGENTS.md §1 model taken literally — the generated .java is committed, ordinary,
+                 IDE-navigable source, and the tool that wrote it runs on the side like any other
+                 agent harness: manually, or in watch mode.
 
-                 1. `hipster-entity-preflight` runs GeneratorPreflight, a class that exists only in a
-                    CURRENT tooling build. This phase runs before `compile`, so a reactor invocation
-                    that stops at `generate-sources` — or any invocation without `-am` — has not built
-                    the tooling module at all, and Maven then resolves the `provided` dependency to
-                    whatever is installed in ~/.m2. An older artifact does not know the java-out flag,
-                    treats it and the packages flag as positional arguments, and writes generated
-                    Java into positional 2: `.jcodebuddy/metadata/entity`. The build would then report
-                    SUCCESS, the committed sources would not be regenerated, and the debris would be
-                    git-ignored — silent and plausible. With this execution an outdated artifact fails
-                    the build on the missing class, before anything is written. See `codebuddy.md`
-                    § 6.1; `scripts/gen.cmd` is the one-command way to regenerate.
-                 2. `hipster-entity-generate` runs the generator, which additionally refuses — at any
-                    entry point, not just this binding — to write generated .java under a
-                    `.jcodebuddy/` directory, and records what it ran with in
-                    `.jcodebuddy/metadata/entity/generation.json`.
+                 The two executions exist so the same entry points can be reached explicitly, with
+                 their ordinary CLI flags rather than -D system properties, so a manual run and any
+                 future automation share one flag surface:
+
+                   mvn -o -f hipster-entity-example/pom.xml exec:java@hipster-entity-preflight
+                   mvn -o -f hipster-entity-example/pom.xml exec:java@hipster-entity-generate
+
+                 1. `hipster-entity-preflight` runs GeneratorPreflight, which asserts that the tooling
+                    on the classpath understands the flag surface below before anything is written.
+                 2. `hipster-entity-generate` runs the generator itself, which refuses — at every
+                    entry point — to write generated .java under a `.jcodebuddy/` directory, and
+                    records what it ran with in `.jcodebuddy/metadata/entity/generation.json`.
+
+                 Both invocations above resolve the tooling from the local repository, which is why
+                 `scripts\gen.cmd` is the recommended entry point: it compiles the tooling in the
+                 same reactor, exports the reactor's classpath, and invokes the generator directly
+                 with `java -cp`. That path needs no `mvn install` and builds no jar. See
+                 `codebuddy.md` § 3 for all three ways to run a pass.
+
+                 `exec:java` defaults to the RUNTIME classpath scope, which excludes `provided`
+                 dependencies — and the tooling is `provided` on purpose so it never becomes a
+                 transitive runtime dependency of an application (AGENTS.md §2). The
+                 classpathScope below is what puts it in front of exec:java.
+
+                 Generated .java is regenerated IN PLACE under src/main/java (the committed source is
+                 the source of truth, AGENTS.md §1), while the metadata JSON report goes to this
+                 module's own `.jcodebuddy/metadata/entity` — the marker directory that says "this
+                 module uses JCodeBuddy". The pass never adds untracked files to a source tree:
+                 `.jcodebuddy/metadata/` is ignored by `.jcodebuddy/.gitignore`, and the layout is
+                 documented in `.jcodebuddy/README.md`.
 
                  This is deliberately NOT a new hipster-entity-maven-plugin module (§ 8.8/3.23). -->
             <plugin>
@@ -87,26 +100,20 @@
                 <executions>
                     <execution>
                         <id>hipster-entity-preflight</id>
-                        <phase>generate-sources</phase>
                         <goals>
                             <goal>java</goal>
                         </goals>
                         <configuration>
-                            <skip>${jcodebuddy.entity.codegen.skip}</skip>
                             <mainClass>hr.hrg.hipster.entity.tooling.GeneratorPreflight</mainClass>
-                            <!-- Same reason as the generator below: exec:java defaults to the runtime
-                                 scope, which excludes `provided` dependencies. -->
                             <classpathScope>compile</classpathScope>
                         </configuration>
                     </execution>
                     <execution>
                         <id>hipster-entity-generate</id>
-                        <phase>generate-sources</phase>
                         <goals>
                             <goal>java</goal>
                         </goals>
                         <configuration>
-                            <skip>${jcodebuddy.entity.codegen.skip}</skip>
                             <mainClass>hr.hrg.hipster.entity.tooling.EntityMetadataGenerator</mainClass>
                             <!-- exec:java's default classpath scope is RUNTIME, which excludes
                                  `provided` dependencies — and the tooling must stay `provided` so it
@@ -122,9 +129,9 @@
                                 <argument>--packages</argument>
                                 <argument>hr.hrg.hipster.entityexample.person.entity,hr.hrg.hipster.entityexample.paymentMethod.entity</argument>
                                 <!-- Task 1.13: run the entity rules on every generation pass. REPORT
-                                     (the bare flag) prints each issue to the build log and continues,
-                                     so the validator's output is visible in every build without making
-                                     the example unbuildable while a project's own conventions differ
+                                     (the bare flag) prints each issue to the pass log and continues,
+                                     so the validator's output is visible on every manual or watched
+                                     pass without blocking a project whose own conventions differ
                                      from the tooling's advisory ones. A project that wants the gate
                                      passes the STRICT mode (or runs the `validate` subcommand) and the
                                      pass then refuses to write until the issues are fixed. -->
@@ -132,7 +139,7 @@
                                 <!-- The run record: what this pass ran with, next to the entity JSON in
                                      the metadata tree. Machine-readable, ignored by git, and the only
                                      place "which generator revision produced this tree" survives the
-                                     build that produced it. -->
+                                     pass that produced it. -->
                                 <argument>--run-record</argument>
                                 <argument>${project.basedir}/.jcodebuddy/metadata/entity/generation.json</argument>
                                 <!-- NO SQL-generation flag here, deliberately. SQL generation (the
@@ -150,10 +157,6 @@
             </plugin>
         </plugins>
     </build>
-
-    <properties>
-        <jcodebuddy.entity.codegen.skip>false</jcodebuddy.entity.codegen.skip>
-    </properties>
 
     <profiles>
         <profile>

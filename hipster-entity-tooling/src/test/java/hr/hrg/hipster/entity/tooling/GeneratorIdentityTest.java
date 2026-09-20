@@ -16,16 +16,16 @@ import java.util.regex.Pattern;
 /**
  * The generator has to be able to say which revision is running.
  *
- * <p>Every diagnosis of the stale-artifact trap recorded in
+ * <p>Every diagnosis of the wrong-tooling trap recorded in
  * {@code hipster-entity-example/codebuddy.md} section 6.1 starts with the same question — "which
- * tooling did this build actually use?" — and before this existed the build log could not answer it:
- * the pass printed the source root and nothing about itself, so a jar from the local repository and
- * the reactor's own {@code target/classes} produced identical output. The banner answers it on every
- * run, and {@code --version} answers it without running a pass.</p>
+ * tooling did this pass actually use?" — and before this existed the log could not answer it: the
+ * pass printed the source root and nothing about itself, so an old jar and the reactor's own
+ * {@code target/classes} produced identical output. The banner answers it on every run, and
+ * {@code --version} answers it without running a pass.</p>
  *
- * <p>The other half of the class asserts the flag surface the build binding passes is a subset of the
- * flags this build understands — the invariant {@link GeneratorPreflight} checks at build time, held
- * here too so a mismatch fails a unit test rather than only a Maven invocation.</p>
+ * <p>The other half of the class asserts the flag surface every documented invocation passes is a
+ * subset of the flags this build understands — the invariant {@link GeneratorPreflight} checks
+ * before a pass starts, held here too so a mismatch fails a unit test as well.</p>
  */
 class GeneratorIdentityTest {
 
@@ -43,31 +43,32 @@ class GeneratorIdentityTest {
     }
 
     @Test
-    void everyFlagTheBuildBindingPassesIsSupportedByThisBuild() {
+    void everyFlagADocumentedInvocationPassesIsSupportedByThisBuild() {
         List<String> unsupported = new ArrayList<>();
-        for (String flag : EntityMetadataGenerator.BINDING_FLAGS) {
+        for (String flag : EntityMetadataGenerator.EXECUTION_FLAGS) {
             if (!EntityMetadataGenerator.supportsFlag(flag)) {
                 unsupported.add(flag);
             }
         }
         Assertions.assertTrue(unsupported.isEmpty(),
-                "a flag the binding passes but this build does not understand degrades into a positional "
-                        + "argument — the exact mechanism of the stale-artifact trap: " + unsupported);
+                "a flag an invocation passes but this build does not understand degrades into a positional "
+                        + "argument — the exact mechanism of the wrong-tooling trap: " + unsupported);
         Assertions.assertFalse(EntityMetadataGenerator.supportsFlag("--not-a-flag"),
                 "and the check is a real lookup, not a constant true");
     }
 
     /**
-     * The binding's flag surface is read out of the example's {@code pom.xml}, so this test states the
-     * invariant across the two modules instead of restating the constant: a new {@code --flag} added
-     * to the binding must be added to {@link EntityMetadataGenerator#SUPPORTED_FLAGS}, or the
-     * preflight silently stops covering it (the POM-as-text technique {@code GateParityTest} and
+     * The invocation's flag surface is read out of the example's {@code pom.xml} — the module POM is
+     * where the explicit {@code exec:java} goals declare it — so this test states the invariant across
+     * the two modules instead of restating the constant: a new {@code --flag} added to the example's
+     * goal must be added to {@link EntityMetadataGenerator#SUPPORTED_FLAGS}, or the preflight silently
+     * stops covering it (the POM-as-text technique {@code GateParityTest} and
      * {@code DependencyBoundaryTest} already use).
      */
     @Test
-    void theExampleBindingOnlyPassesFlagsThisBuildDeclares() throws Exception {
+    void theExamplePomOnlyPassesFlagsThisBuildDeclares() throws Exception {
         Path pom = CompileHarness.findRepoRoot().resolve("hipster-entity-example/pom.xml");
-        Assertions.assertTrue(Files.exists(pom), "the example binding must exist: " + pom);
+        Assertions.assertTrue(Files.exists(pom), "the example's exec:java goals must exist: " + pom);
 
         List<String> passed = new ArrayList<>();
         Matcher argument = Pattern.compile("<argument>(--[a-z-]+)</argument>").matcher(
@@ -76,7 +77,7 @@ class GeneratorIdentityTest {
             passed.add(argument.group(1));
         }
         Assertions.assertFalse(passed.isEmpty(),
-                "the example's exec binding passes at least one flag; an empty read means this test "
+                "the example's exec:java goal passes at least one flag; an empty read means this test "
                         + "stopped looking at the thing it asserts");
 
         List<String> unsupported = passed.stream()
@@ -85,7 +86,7 @@ class GeneratorIdentityTest {
         Assertions.assertTrue(unsupported.isEmpty(),
                 "hipster-entity-example/pom.xml passes " + unsupported + ", which this generator does "
                         + "not declare in SUPPORTED_FLAGS: add it there (and teach the generator the "
-                        + "flag), or the binding stops being checked");
+                        + "flag), or the invocation stops being checked");
     }
 
     /**

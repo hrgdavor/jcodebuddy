@@ -28,8 +28,8 @@ import java.util.stream.Stream;
  * batched {@link BatchedFileWatcher} with {@code hipster-entity-tooling}'s generator, so editing a
  * view interface regenerates its enum, builders, adapters and mappers without a build. It decides
  * nothing about <em>policy</em> — the packages, adapters and mappers are the same CLI-style flags the
- * generator takes, passed through unchanged, so a watched run and a build-time run cannot disagree
- * about what gets generated.</p>
+ * generator takes, passed through unchanged, so a watched run and a manually invoked run cannot
+ * disagree about what gets generated.</p>
  *
  * <h3>The one hazard that matters: the generator writes into the tree it watches</h3>
  * <p>Generation is in place (the committed source is the source of truth — AGENTS.md § 1), so every
@@ -54,7 +54,8 @@ import java.util.stream.Stream;
  *
  * <h3>Ownership of the generator's configuration</h3>
  * <p>{@code EntityMetadataGenerator}'s packages/adapters/mappers are process-global statics, because
- * the tooling's CLI and its Maven binding share one flag surface (§ 8.8/3.23). A long-lived watcher
+ * every entry point — the CLI, {@code scripts/gen.cmd}, the module POM's {@code exec:java} goals and
+ * this watcher — shares one flag surface (§ 8.8/3.23). A long-lived watcher
  * therefore takes ownership of them: each pass sets them from its own {@link Config} and resets them
  * afterwards, so a watcher embedded in a larger process cannot silently configure someone else's
  * generation run. Passes are serialized, so a batch that arrives mid-pass is handled after it.</p>
@@ -355,7 +356,7 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
 
     /**
      * The entry point, with the same flags the generator's CLI takes so a watched run and a
-     * build-time run are configured identically (§ 8.8/3.23).
+     * manually invoked run are configured identically (§ 8.8/3.23).
      *
      * <pre>
      *   --source &lt;dir&gt;          the source root to watch and regenerate (required)

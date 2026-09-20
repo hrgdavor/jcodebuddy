@@ -47,11 +47,39 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 
 | Command | What it does |
 |---|---|
-| `scripts/mvn-jdk25.cmd` (Windows) / `scripts/mvn-jdk25.sh` (POSIX) | `mvn -o -pl <six hipster-entity modules> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate |
+| `scripts/mvn-jdk25.cmd` (Windows) / `scripts/mvn-jdk25.sh` (POSIX) | `mvn -o -pl <six hipster-entity modules> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.cmd` below) |
 | `scripts/mvn-jdk25.cmd hipster-entity test` | the same module set with an explicit goal (no implicit `clean`) |
 | `scripts/mvn-jdk25.cmd hipster-entity install` | install the six modules into the local repository |
 | `scripts/mvn-jdk25.cmd -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned |
+| `scripts/gen.cmd` | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
+| `scripts/gen.cmd with-tests` | the same pass, then the entity test set |
+| `scripts/gen.cmd watch` | the same pass, then regenerate on every save (long-running, Ctrl+C to stop) |
 | `scripts/run-demo.cmd` | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
+
+**JCodeBuddy is a side tool, not a build step.** This project uses no annotation processing and
+no compile hooks: `mvn compile`, `package` and `test` only compile the committed generated source
+that already sits under `src/main/java`, because no execution in
+`hipster-entity-example/pom.xml` carries a `<phase>`. The pass that actually rewrites that source is
+`scripts\gen.cmd` — run by hand, or in `watch` mode — which compiles the tooling in the reactor,
+exports the reactor classpath with `dependency:build-classpath` (the "no `mvn install` needed"
+mechanism) and runs the generator with `java -cp`. `scripts\gen.cmd` reuses the JDK that
+`mvn-jdk25.cmd` resolved (exported as `JCODEBUDDY_RESOLVED_JDK`) rather than whatever `java` is on
+`PATH`.
+
+### How a pass gets triggered: three layers, only the first of which is required
+
+JCodeBuddy works with **just the first layer**. The other two exist to make it more pleasant to use,
+and neither is a prerequisite for the generator:
+
+| Layer | What it is | Needed? |
+|---|---|---|
+| **The pass** | `java -cp … EntityMetadataGenerator …`, or the `scripts\gen.cmd` wrapper around it. Run it whenever you want the generated source refreshed. | **Required.** This is the whole tool. |
+| **Watch mode** | The same pass, run continuously: `scripts\gen.cmd watch` (`EntityRegenerationWatcher`) regenerates after each save, so generated output keeps up with your edits without you asking. | Optional, and worth it — this is the normal development loop. Still just the generator, triggered by a file watcher. |
+| **Sidecar / LSP** | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings. The `project-automation` module is the conventional home for it. | **Purely a user-friendliness expansion.** Not implemented for the entity generator in this repository; the pipeline above works fully without it. |
+
+The important part of that table is the boundary between the last two rows: **watch mode is
+JCodeBuddy's own live loop, not a sidecar feature.** A sidecar consumes what watch mode already
+produces; it never replaces it, and removing the sidecar would leave the tool complete.
 
 `clean` in the recorded gate is not optional: without it the build can be satisfied by a previous
 revision's class files, which is how a source that did not compile once reported `BUILD SUCCESS`
@@ -85,8 +113,8 @@ behind them are under [`doc-hipster-entity/architecture/decisions/`](doc-hipster
 ### The gate is local — there is no CI
 
 This repository has **no CI workflow**, so the recorded gate above is the only thing that runs the
-tests, and nothing runs it unless a developer does. Two further checks are worth running by hand
-before a commit that touches entities, because neither can be a build-time gate:
+full test set, and nothing runs it unless a developer does. Two further checks are worth running by hand
+before a commit that touches entities, because neither can be part of the build:
 
 ```text
 # the entity rules: naming conventions, marker shape, the R1 ledger
@@ -99,11 +127,16 @@ java -cp hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.Ent
      enum-order --repo . --baseline origin/main --strict
 ```
 
-The example's Maven binding runs the first set on every build with `--validate` (report and continue),
-so its output is in the build log; `--validate=STRICT` is how a project makes it refuse to write.
-Adding either to a real CI pipeline is a repository-policy decision, not a code change — the commands
-above are the whole interface.
+The example runs the first set on every **generation** pass — `scripts\gen.cmd`, manual or watched —
+not on every build, because no build runs the generator at all. That pass is report-and-continue
+(`--validate`), so its output is in the pass log; a clean example prints `Validation: no issues in ...`
+plus three informational divergence lines (`addon_field_collision` ×2, `nested_record_reused`).
+`--validate=STRICT` is how a project makes the pass refuse to write. Adding either command to a real CI
+pipeline is a repository-policy decision, not a code change — the commands above are the whole
+interface.
 
 `ExampleRegenerationTest` is the other half of the safety net: it regenerates the example in place in a
 temp copy and asserts the result is byte-identical to what is committed, so a generator change cannot
-silently rewrite committed source. A red one means **regenerate and commit**, not "fix the test".
+silently rewrite committed source. It calls the generator API directly, so it never depended on the
+removed Maven binding and is unaffected by the change to a side-car pass. A red one means **regenerate
+and commit**, not "fix the test".

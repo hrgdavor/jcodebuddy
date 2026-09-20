@@ -47,7 +47,7 @@ import java.util.stream.Collectors;
 public class EntityMetadataGenerator {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    // ── identity, and the flag surface a build binding depends on ────────────
+    // ── identity, and the flag surface a runner depends on ───────────────────
 
     /** The generator's stable name, used by the identity banner, {@code --version} and the run record. */
     public static final String GENERATOR_NAME = "hipster-entity-generator";
@@ -66,15 +66,17 @@ public class EntityMetadataGenerator {
             "--adapters", "--run-record", "--version");
 
     /**
-     * The flags a build binding is expected to be able to pass.
+     * The flags every documented invocation of this generator passes.
      *
-     * <p>A build wired to this generator passes these; an <em>older</em> tooling artifact silently
-     * ignores the ones it does not know (they become positional arguments) and writes generated
-     * Java into positional 2 — which is exactly the metadata directory. {@link GeneratorPreflight}
-     * asserts this list against the artifact on the classpath, so that failure mode becomes a build
-     * failure instead of a silent mis-generation.</p>
+     * <p>JCodeBuddy is a side-car: nothing here is bound to a build lifecycle. These are the flags
+     * the module POM's explicit {@code exec:java} goals and {@code scripts/gen.cmd} pass, and they
+     * are also the flags a caller reads out of that POM to learn the invocation contract.
+     * {@link GeneratorPreflight} asserts this list against the tooling actually on the classpath,
+     * so an <em>older</em> tooling — which silently ignores the flags it does not know, turning
+     * them into positional arguments and writing generated Java into positional 2, the metadata
+     * directory — fails loudly instead of mis-generating.</p>
      */
-    public static final List<String> BINDING_FLAGS = List.of(
+    public static final List<String> EXECUTION_FLAGS = List.of(
             "--java-out", "--packages", "--validate", "--run-record");
 
     /** Whether this build understands {@code flag} — the preflight's whole assertion. */
@@ -86,7 +88,7 @@ public class EntityMetadataGenerator {
      * Where the running generator's classes came from: a jar path, or a module's
      * {@code target/classes}.
      *
-     * <p>This is the fact that identifies a stale artifact. A build that reports
+     * <p>This is the fact that identifies the wrong tooling. A pass that reports
      * {@code from .../.m2/repository/...} is running an installed revision, which is not necessarily
      * the revision in the working tree; {@code from .../hipster-entity-tooling/target/classes} is the
      * reactor's own output.</p>
@@ -162,13 +164,14 @@ public class EntityMetadataGenerator {
      * Refuses to write generated {@code .java} under a {@link #JCODEBUDDY_DIR} directory.
      *
      * <p>Called before the first write of every pass, so every entry point is covered — the CLI, the
-     * Maven binding, and {@code EntityRegenerationWatcher}. The rule it enforces is the layout rule,
-     * not a preference: {@code .jcodebuddy/} holds the module's auxiliary metadata, and generated
-     * source is ordinary committed Java that belongs next to the view it came from.</p>
+     * module POM's explicit {@code exec:java} goals, {@code scripts/gen.cmd}, and
+     * {@code EntityRegenerationWatcher}. The rule it enforces is the layout rule, not a preference:
+     * {@code .jcodebuddy/} holds the module's auxiliary metadata, and generated source is ordinary
+     * committed Java that belongs next to the view it came from.</p>
      *
-     * <p>In practice this fires when the generator on the classpath ignores {@code --java-out} and
-     * the invocation has no other place to put source — i.e. when a build resolved an outdated
-     * tooling artifact. The message says both things, because which one it is decides the fix.</p>
+     * <p>In practice this fires when the invocation has no {@code --java-out} and no other place to
+     * put source, so positional 2 — the metadata directory — is all that is left. The message says
+     * both things, because which one it is decides the fix.</p>
      */
     static void rejectJavaOutputUnderJcodebuddy(Path javaOutputRoot) throws IOException {
         if (javaOutputRoot == null) {
@@ -179,11 +182,12 @@ public class EntityMetadataGenerator {
                 throw new IOException("refusing to write generated .java into " + javaOutputRoot
                         + ": a " + JCODEBUDDY_DIR + "/ directory is a module's metadata root and never"
                         + " holds generated source (DEC-026, AGENTS.md section 2). Pass --java-out with"
-                        + " the source root, as the Maven binding does. If this happened during a build,"
-                        + " the tooling on the classpath is older than the binding: it does not know"
-                        + " --java-out and writes generated Java into positional 2. Refresh it with"
-                        + " `scripts\\mvn-jdk25.cmd hipster-entity install`, or run a phase that compiles"
-                        + " it in the same reactor (package or test).");
+                        + " the source root, as `scripts\\gen.cmd` and the module POM's exec:java goal"
+                        + " both do. If --java-out was passed and still lost, the tooling on the"
+                        + " classpath is older than the invocation: it does not know the flag and writes"
+                        + " generated Java into positional 2. Rebuild it with"
+                        + " `scripts\\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am compile`, or let"
+                        + " `scripts\\gen.cmd` compile and export the classpath for you.");
             }
         }
     }
@@ -408,7 +412,7 @@ public class EntityMetadataGenerator {
      *
      * <p>A mapper is requested rather than derived because there is no way to know which of the
      * n×(n-1) view pairs a project actually wants, and generating all of them would be noise. The flag
-     * is repeatable and is the same surface the Maven binding uses (§ 8.8/3.23).</p>
+     * is repeatable and is the same surface every documented invocation uses (§ 8.8/3.23).</p>
      */
     private static List<String> mapperRequests = new ArrayList<>();
 
@@ -437,8 +441,8 @@ public class EntityMetadataGenerator {
      *       caller that did not ask for validation, and for the generator's own unit tests, so
      *       introducing validation cannot change unrelated fixtures.</li>
      *   <li>{@link Policy#REPORT} — the rules run, every issue is printed once, and generation
-     *       continues. This is what the example's Maven binding uses: it makes the validator's output
-     *       part of every build log, which is how a newly broken rule becomes visible.</li>
+     *       continues. This is what the example's invocation uses: it makes the validator's output
+     *       part of every pass log, which is how a newly broken rule becomes visible.</li>
      *   <li>{@link Policy#STRICT} — the rules run and the pass fails <em>before</em> any file is
      *       written, so a violating tree is never half-regenerated. This is the mode an adopting project
      *       gates its build with, and the mode the {@code validate} subcommand exits non-zero on.</li>
@@ -533,7 +537,7 @@ public class EntityMetadataGenerator {
 
     /**
      * Signal that the entity rules rejected the tree. A named exception rather than a bare
-     * {@link IllegalStateException} so the Maven binding's failure message says which layer refused,
+     * {@link IllegalStateException} so a failed pass says which layer refused,
      * and so a caller can catch exactly this and still read {@link #lastValidationIssues()}.
      */
     public static class ValidationFailedException extends IOException {
@@ -576,7 +580,8 @@ public class EntityMetadataGenerator {
         }
 
         // CLI flags may appear anywhere after the two positional arguments (§ 8.8/3.23), so one
-        // flag surface serves both the Maven build and a manual run.
+        // flag surface serves every invocation: the module POM's exec:java goals, scripts\gen.cmd,
+        // and the watcher.
         // A flag belongs to one invocation, never to the process: a second pass in the same JVM (a
         // test, a watcher run) must not inherit the first pass's mode.
         validationPolicy = Policy.OFF;
@@ -591,7 +596,7 @@ public class EntityMetadataGenerator {
             String arg = args[i];
             if ("--version".equals(arg)) {
                 // Identity without side effects: no pass, no write, no exit call (a `--version` that
-                // killed the JVM would take Maven with it when run through exec:java).
+                // killed the JVM would take the Maven JVM with it under exec:java).
                 System.out.println(generatorIdentity());
                 System.out.println("flags: " + String.join(" ", SUPPORTED_FLAGS));
                 return;
@@ -634,9 +639,10 @@ public class EntityMetadataGenerator {
                 runRecord = Path.of(arg.substring("--run-record=".length()));
             } else if ("--java-out".equals(arg) && i + 1 < args.length) {
                 // Where generated .java goes, independently of where the metadata JSON goes. The
-                // two differ in the Maven binding (§ 8.8/3.23): source is regenerated in place under
-                // src/main/java, while the JSON belongs in the module's `.jcodebuddy/metadata/entity`
-                // (DEC-026), so a build never drops generated source into the metadata tree.
+                // two always differ for this project (§ 8.8/3.23): source is regenerated in place
+                // under src/main/java, while the JSON belongs in the module's
+                // `.jcodebuddy/metadata/entity` (DEC-026), so a pass never drops generated source
+                // into the metadata tree.
                 javaOutputOverride = Path.of(args[++i]);
             } else if (arg.startsWith("--java-out=")) {
                 javaOutputOverride = Path.of(arg.substring("--java-out=".length()));
@@ -668,8 +674,8 @@ public class EntityMetadataGenerator {
             System.out.println("Generating only for packages: " + generationPackages);
         }
         if (javaOutputOverride != null && !inputPath.toString().endsWith(".java")) {
-            // § 8.8/3.23: the Maven binding regenerates the committed source in place and keeps the
-            // metadata JSON in `.jcodebuddy/metadata/entity`, so a build never drops untracked files
+            // § 8.8/3.23: a pass regenerates the committed source in place and keeps the
+            // metadata JSON in `.jcodebuddy/metadata/entity`, so it never drops untracked files
             // into src/main/java.
             System.out.println("Writing generated java to: " + javaOutputOverride);
         }
@@ -759,8 +765,8 @@ public class EntityMetadataGenerator {
         System.err.println("                        Bare --validate means REPORT: print and continue. STRICT refuses");
         System.err.println("                        to write anything until the reported issues are fixed.");
         System.err.println("  --run-record <file>   also write what this pass ran with (revision, flags, counts)");
-        System.err.println("                        as JSON. The build binding writes .jcodebuddy/metadata/entity/");
-        System.err.println("                        generation.json.");
+        System.err.println("                        as JSON. A generation pass writes");
+        System.err.println("                        .jcodebuddy/metadata/entity/generation.json.");
         System.err.println("  --version             print the generator identity and its flag surface, then stop.");
         System.err.println();
         System.err.println("Generated .java is never written under a .jcodebuddy/ directory: that is the");

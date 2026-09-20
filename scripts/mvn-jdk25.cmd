@@ -9,7 +9,7 @@ rem (it only passes JVM options to the Maven process), so the JDK is selected
 rem here through JAVA_HOME.
 rem
 rem Usage:
-rem   scripts\mvn-jdk25.cmd                       -> hipster-entity regen+test set
+rem   scripts\mvn-jdk25.cmd                       -> hipster-entity test set
 rem   scripts\mvn-jdk25.cmd hipster-entity test   -> explicit goal
 rem   scripts\mvn-jdk25.cmd -o -pl <mods> -am test
 rem   scripts\mvn-jdk25.cmd hipster-entity install
@@ -56,6 +56,9 @@ if not exist "%JCODEBUDDY_MVN%" (
 )
 
 set "JAVA_HOME=%JCODEBUDDY_JDK25%"
+rem Exported for a calling script that runs a plain `java` of its own (gen.cmd):
+rem it must pick the same JDK this launcher resolved, not whatever is on PATH.
+set "JCODEBUDDY_RESOLVED_JDK=%JCODEBUDDY_JDK25%"
 
 rem The `hipster-entity` shortcut expands to the recorded -pl module list
 rem (0.3: a Maven profile cannot narrow a reactor, so -pl is the mechanism).

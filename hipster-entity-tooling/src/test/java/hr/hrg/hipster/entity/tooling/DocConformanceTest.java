@@ -202,9 +202,21 @@ class DocConformanceTest {
         Assertions.assertTrue(viewAnnotation.contains("Class<?>[] addons()"));
     }
 
-    /** The example's own binding is part of the adoption story, so its flags are documented facts. */
+    /**
+     * The example's own invocation is part of the adoption story, so its flags are documented facts.
+     *
+     * <p>JCodeBuddy is a side-car — the goals carry no {@code <phase>} — so this asserts both halves
+     * of that contract: the invocation passes the flags the module documents, and it is not bound to
+     * any lifecycle phase that would make it run on an ordinary build.</p>
+     *
+     * <p>The phase check strips comments first, the way {@code DependencyBoundaryTest} does for its
+     * POM scans. The POM deliberately <em>discusses</em> phases in the comment that explains why
+     * there are none, and a raw text search reads that prose as a binding. This test caught exactly
+     * that when it was written, which is the argument for stripping rather than for softening the
+     * assertion.</p>
+     */
     @Test
-    void theExamplePomRunsValidationAndStillLeavesSqlGenerationOff() throws Exception {
+    void theExampleInvocationRunsValidationLeavesSqlGenerationOffAndIsNotBoundToAPhase() throws Exception {
         String pom = read("hipster-entity-example/pom.xml");
         Assertions.assertTrue(pom.contains("<argument>--validate</argument>"),
                 "the example must run the entity rules on every pass (task 1.13)");
@@ -212,6 +224,12 @@ class DocConformanceTest {
                 "and must not enable the draft SQL generator: it is strictly opt-in (D-17)");
         Assertions.assertTrue(pom.contains("<classpathScope>compile</classpathScope>"),
                 "exec:java defaults to runtime scope, which excludes the provided tooling");
+
+        String pomCode = pom.replaceAll("(?s)<!--.*?-->", "");
+        Assertions.assertFalse(pomCode.contains("<phase>"),
+                "nothing may bind JCodeBuddy to a lifecycle phase: this project uses no annotation "
+                        + "processing and no compile hooks — a pass runs on the side, manually or in "
+                        + "watch mode, so an ordinary `mvn compile` must never invoke the generator");
     }
 
     /**

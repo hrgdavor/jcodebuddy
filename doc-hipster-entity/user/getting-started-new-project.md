@@ -207,7 +207,7 @@ java -cp hipster-entity-tooling.jar hr.hrg.hipster.entity.tooling.EntityMetadata
 |---|---|
 | positional 1 | the source root, or a single `.java` file — for a file, the tool searches upward for `src/main/java` or `src/test/java` to derive the root |
 | positional 2 | the output directory for the metadata JSON. The convention is the module's own `.jcodebuddy/metadata/entity` — the `.jcodebuddy/` directory is the marker that says "this module uses JCodeBuddy", and only modules that apply `project-automation` have one |
-| `--java-out <dir>` | **where the generated `.java` goes.** Without it, generated source is written into positional 2 — the *metadata* directory — which is almost never what you want. Passing your source root here is what makes the generated files land next to the view, and it is what the example's Maven binding does |
+| `--java-out <dir>` | **where the generated `.java` goes.** Without it, generated source is written into positional 2 — the *metadata* directory — which is almost never what you want. Passing your source root here is what makes the generated files land next to the view; it is the flag every pass passes, including this repository's `scripts\gen.cmd` |
 | `--packages a.b,c.d` | restrict **generation** to these packages. Indexing is *not* restricted: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omit it to generate everything |
 | `--validate[=OFF\|REPORT\|STRICT]` | run the entity rules before writing anything. Bare `--validate` = `REPORT` (print the issues, keep going); `STRICT` refuses to write until they are fixed; `OFF` is the default for a library caller |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two views. Repeatable; defaults to class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
@@ -225,10 +225,49 @@ The metadata JSON is named after the entity's marker and written to positional 2
 Flags may appear anywhere after the two positionals, and
 `--packages=a.b` is accepted too.
 
-For the Maven build, invoke the same entry point with
-`exec-maven-plugin` bound to `generate-sources`, passing `sourceRoot`,
-`outputDir` and the flags as `<arguments>` (not `-D` system properties),
-so one flag surface serves both the build and a manual run.
+**How this fits a Maven build.** JCodeBuddy is a **side-car**: it uses no
+annotation processing and no compile hook, and nothing is bound to a
+lifecycle phase. So a new project does three separate things:
+
+1. **Commit the generated source and build normally.** `mvn compile`,
+   `package` and `test` compile what is already under `src/main/java`;
+   they never regenerate it. The committed source is the source of truth
+   (DEC-019), so a developer with a stock IDE can follow the program
+   without running the generator.
+2. **Run the generator explicitly** — a hand-run pass, or a watcher that
+   regenerates when a watched source's *content* changes. That is the
+   `java -cp … EntityMetadataGenerator …` command above; in this
+   repository it is `scripts\gen.cmd` and `scripts\gen.cmd watch`.
+3. **If you want Maven to supply the classpath**, you have two options,
+   and neither needs `mvn install` nor produces a jar:
+   - **Goal-only `exec:java` executions with no `<phase>`.** Declare the
+     `exec-maven-plugin` executions (this repository names them
+     `hipster-entity-preflight` and `hipster-entity-generate`), pass the
+     flags as `<arguments>` — not `-D` system properties — and add **no**
+     `<phase>` element. Reach them explicitly:
+     `mvn -o -f pom.xml exec:java@hipster-entity-generate`. A goal-only
+     execution is not a build step: `mvn compile` still regenerates
+     nothing. It does require the tooling to be resolvable from `~/.m2`,
+     because `exec:java` resolves a `provided` tooling dependency from the
+     local repository instead of from the reactor.
+   - **`dependency:build-classpath` plus `java -cp`** — Maven's official
+     answer for "use the reactor's classes without install", and what this
+     repository's `scripts\gen.cmd` does:
+
+     ```bash
+     mvn -o -pl <your-module> -am compile dependency:build-classpath \
+         "-Dmdep.outputFile=<abs path>/gen-classpath.txt"
+     java -cp "<your-module>/target/classes;<the exported classpath>" \
+          hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+          src/main/java .jcodebuddy/metadata/entity \
+          --java-out src/main/java --packages com.example.person.entity
+     ```
+
+     `dependency:build-classpath` maps a dependency to that module's
+     `target/classes` when the module is in the same reactor invocation —
+     so add the tooling module to `-pl` (with `-am`) if it is a sibling,
+     as `scripts\gen.cmd` does. **No jar is packaged and nothing is
+     installed into `~/.m2`.**
 
 ## 4. What the generator produced
 

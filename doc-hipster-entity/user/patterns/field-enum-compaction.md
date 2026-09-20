@@ -13,8 +13,8 @@
 ```
 1. Drain the data.                     (you do this; nothing here can check it)
 2. Run the compaction.                 enum-compact --repo . --allow-reorder --acknowledge-drained-data
-3. Regenerate.                         the generator rewrites the enums canonically and drops the
-                                       retired fields from allFields
+3. Regenerate.                         scripts/gen.cmd: the generator rewrites the enums canonically
+                                       and drops the retired fields from allFields
 4. Verify.                             the R1 checker passes; the diff contains only the migration
 5. Commit.                             one commit, the report in the message
 ```
@@ -65,10 +65,14 @@ same revision, which is exactly what step 3 guarantees.
 ## Step 2 — run the compaction
 
 ```bash
-scripts/mvn-jdk25.cmd hipster-entity test          # the build must be green first
+scripts/mvn-jdk25.cmd hipster-entity test          # the tests must be green first
 java -cp <tooling classpath> hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
     enum-compact --repo . --allow-reorder --acknowledge-drained-data
 ```
+
+The first line only runs the test set: like every Maven command here it compiles the committed
+generated source and never regenerates it, so the regeneration is the separate step 3 below. The
+compaction itself is always an explicit command.
 
 The two flags are not alternatives and neither implies the other:
 
@@ -101,8 +105,12 @@ What the command will not do:
 ## Step 3 — regenerate
 
 ```bash
-scripts/mvn-jdk25.cmd
+scripts/gen.cmd
 ```
+
+`scripts\gen.cmd` is the regeneration pass; `scripts\mvn-jdk25.cmd` alone would not do it, because
+JCodeBuddy is a side-car with no lifecycle binding and the build only compiles the committed
+generated source.
 
 This is not optional. Compaction rewrites generated source through a parser, so its output is not
 byte-identical to the generator's canonical emission; the generation pass normalises it. It also
