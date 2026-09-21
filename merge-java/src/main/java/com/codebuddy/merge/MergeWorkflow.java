@@ -158,7 +158,7 @@ public final class MergeWorkflow {
     /**
      * What the workflow did.
      */
-    public record Result(String branchName, String upstreamRef, String mergeBase,
+    public record Result(String branchName, String upstreamRef, String mergeBase, String baseSource,
                          List<String> filesResolved, List<String> filesNeedingAttention,
                          List<String> filesSkipped, MergeBatch.Summary summary, boolean dryRun) {
 
@@ -176,7 +176,7 @@ public final class MergeWorkflow {
             StringBuilder text = new StringBuilder();
             text.append("branch ").append(branchName)
                 .append(" against ").append(upstreamRef)
-                .append(" (merge base ").append(mergeBase == null ? "none" : mergeBase)
+                .append(" (base: ").append(baseSource)
                 .append(")\n");
             text.append("  resolved:           ").append(filesResolved.size()).append('\n');
             text.append("  needs attention:    ").append(filesNeedingAttention.size()).append('\n');
@@ -203,6 +203,30 @@ public final class MergeWorkflow {
                 ? nameOfTrackingBranch(repository).orElse(upstreamRef)
                 : upstreamRef;
 
+            Path historyRoot = repositoryRoot.resolve(".jcodebuddy")
+                .resolve("merge-history").resolve(branchName);
+
+            // "base" here means the last-synced upstream state, not Git's merge base.
+            // A recorded marker is authoritative because it is a fact about this
+            // branch's history and survives a rebase; the merge base is only derived
+            // from the commit graph and silently changes when the graph is rewritten.
+            // It is used solely to establish a base for a branch that has never
+            // synced, where there is nothing to have recorded yet.
+            Optional<LastSyncMarker> marker = LastSyncMarker.read(historyRoot);
+            ObjectId recordedCommit = marker
+                .flatMap(recorded -> resolveQuietly(repository, recorded.upstreamCommit()))
+                .orElse(null);
+
+            // First sync of a branch: nothing has been recorded, so the only available
+            // notion of "what the upstream looked like last time" is the common ancestor.
+            // Every later sync uses the recorded marker instead.
+            ObjectId reference = recordedCommit != null
+                ? recordedCommit
+                : deriveInitialBase(repository, upstream);
+            String baseSource = recordedCommit != null
+                ? "recorded last-sync marker " + marker.get().shortCommit()
+                : "merge base, no sync recorded yet";
+
             List<String> targets = paths.isEmpty() ? List.of() : paths;
             List<MergeConflictResolver.MergeReport> reports = new ArrayList<>();
             List<String> resolved = new ArrayList<>();
@@ -211,13 +235,12 @@ public final class MergeWorkflow {
 
             MergeConflictResolver resolver = new MergeConflictResolver.Builder()
                 .setBranchName(branchName)
-                .setHistoryPath(repositoryRoot.resolve(".jcodebuddy")
-                    .resolve("merge-history").resolve(branchName))
+                .setHistoryPath(historyRoot)
                 .setTypeContext(typeContext)
                 .build();
 
             for (String path : targets) {
-                Optional<VersionSet> versions = readVersions(repository, upstream, path);
+                Optional<VersionSet> versions = readVersions(repository, upstream, reference, path);
                 if (versions.isEmpty()) {
                     skipped.add(path);
                     continue;
@@ -246,7 +269,20 @@ public final class MergeWorkflow {
             if (reportPath != null) {
                 MergeReportWriter.write(reportPath, reports, summary);
             }
-            return new Result(branchName, upstreamName, mergeBaseOf(repository, upstream),
+
+            // Record what this branch has now seen, so the next run resolves against the
+            // last-synced upstream rather than against a merge base recomputed from the
+            // commit graph. Also recorded on a dry run, because the marker describes
+            // which upstream commit was inspected, not that a merge happened.
+            try {
+                LastSyncMarker.of(upstream.getName(), upstreamName,
+                    dryRun ? "inspected by a dry run" : "synced").write(historyRoot);
+            } catch (UncheckedIOException e) {
+                // Failing to record must not fail the merge: the next run simply falls
+                // back to a merge base, which is what it would have done anyway.
+            }
+
+            return new Result(branchName, upstreamName, mergeBaseOf(repository, upstream), baseSource,
                 List.copyOf(resolved), List.copyOf(attention), List.copyOf(skipped),
                 summary, dryRun);
         } catch (IOException e) {
@@ -334,15 +370,17 @@ public final class MergeWorkflow {
     /**
      * Read the three versions from the object database.
      *
-     * <p>The merge base is found with a revision walk rather than by running a
-     * merge, so a path that conflicts is not mistaken for a path that failed:
-     * "these tips conflict" and "I could not work out the base" are different
-     * answers and only the second should skip the file.
+     * <p>The base is <b>not</b> Git's merge base. It is the last-synced upstream
+     * state: the {@code reference} the caller resolved, which is the recorded sync
+     * marker when one exists and only falls back to the merge base on a branch that
+     * has never synced. See {@code docs/WHAT_IS_BASE.md} - substituting an older base
+     * makes the upstream look as though it re-added everything already merged.
      *
      * <p>When the path does not exist in one of the trees the version is empty,
      * which is exactly what a merge would see for an added or deleted file.
      */
-    Optional<VersionSet> readVersions(Repository repository, ObjectId upstream, String path) {
+    Optional<VersionSet> readVersions(Repository repository, ObjectId upstream,
+                                      ObjectId reference, String path) {
         try (RevWalk walk = new RevWalk(repository)) {
             ObjectId headId = repository.resolve(Constants.HEAD);
             if (headId == null) {
@@ -350,7 +388,7 @@ public final class MergeWorkflow {
             }
             RevCommit ours = walk.parseCommit(headId);
             RevCommit theirs = walk.parseCommit(upstream);
-            RevCommit base = mergeBase(walk, ours, theirs);
+            RevCommit base = walk.parseCommit(reference);
 
             String baseContent = readBlob(repository, base, path);
             String oursContent = readBlob(repository, ours, path);
@@ -360,6 +398,43 @@ public final class MergeWorkflow {
                 return Optional.empty();
             }
             return Optional.of(new VersionSet(baseContent, oursContent, theirsContent));
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * The base to use for a branch that has never recorded a sync.
+     *
+     * <p>Only reached on a first sync, where there is nothing recorded to consult. The
+     * common ancestor of the two tips is the best available stand-in for "the upstream
+     * as this branch last saw it", because it is by definition the point where the two
+     * histories last agreed.
+     *
+     * <p>Falls back to the upstream tip when the histories are unrelated, which means
+     * the branch shares no ancestor with the upstream - there is genuinely nothing to
+     * compare against, and treating the upstream as unchanged is the only reading that
+     * cannot invent a conflict.
+     */
+    private static ObjectId deriveInitialBase(Repository repository, ObjectId upstream) {
+        try (RevWalk walk = new RevWalk(repository)) {
+            ObjectId headId = repository.resolve(Constants.HEAD);
+            if (headId == null) {
+                return upstream;
+            }
+            RevCommit base = mergeBase(walk, walk.parseCommit(headId), walk.parseCommit(upstream));
+            return base == null ? upstream : base;
+        } catch (IOException e) {
+            return upstream;
+        }
+    }
+
+    /**
+     * Resolve a commit id, reporting absence rather than throwing.
+     */
+    private static Optional<ObjectId> resolveQuietly(Repository repository, String commitId) {
+        try {
+            return Optional.ofNullable(repository.resolve(commitId));
         } catch (IOException e) {
             return Optional.empty();
         }
@@ -426,7 +501,7 @@ public final class MergeWorkflow {
     }
 
     private static Result emptyResult(String branchName, String reason) {
-        return new Result(branchName, reason, null, List.of(), List.of(), List.of(),
+        return new Result(branchName, reason, null, "none", List.of(), List.of(), List.of(),
             new MergeBatch.Summary(0, 0, 0, 0, 0, 0, 0, 0, true), true);
     }
 

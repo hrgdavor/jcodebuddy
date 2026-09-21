@@ -1,0 +1,33 @@
+package com.example.payments;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Theirs: removes one import the base had, adds nothing.
+ *
+ * The removal is the part a text comparison cannot see. Comparing ours against
+ * theirs alone shows `java.util.Set` on one side and `java.time.Instant` on the
+ * other, which reads as a genuine clash over the import block. Only the base
+ * reveals that ours *added* and theirs *removed*: an addition and a removal of
+ * different imports do not conflict at all.
+ */
+public class PaymentProcessor {
+
+    public static final int MAX_RETRIES = 3;
+
+    private final Map<String, List<BigDecimal>> ledger;
+
+    public PaymentProcessor(Map<String, List<BigDecimal>> ledger) {
+        this.ledger = ledger;
+    }
+
+    public void process(String account) {
+        audit(account);
+    }
+
+    public void audit(String account) {
+        // record the account
+    }
+}

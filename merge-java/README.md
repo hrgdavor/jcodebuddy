@@ -305,6 +305,8 @@ automatically, by design. The reasoning, with worked examples, is in
 |---|---|
 | [QUICKSTART.md](QUICKSTART.md) | Runnable examples for each capability |
 | [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md) | The extension pattern |
+| [docs/THREE_WAY_FIXTURES.md](docs/THREE_WAY_FIXTURES.md) | How to add a merge case as real source files, and why |
+| [docs/WHAT_IS_BASE.md](docs/WHAT_IS_BASE.md) | **What `base` means**: the last-synced upstream state, not Git's merge base |
 | [VERSION_MAINTENANCE.md](VERSION_MAINTENANCE.md) | **The half-yearly version-update obligation**: what to bump, how to verify, and the traps |
 | [DESIGN_NEVER_AUTO_RESOLVED.md](DESIGN_NEVER_AUTO_RESOLVED.md) | Why three conflict kinds stay manual |
 | [IMPROVEMENT_PROPOSAL.md](IMPROVEMENT_PROPOSAL.md) | The analysis and evidence behind the last round of work |

@@ -41,6 +41,16 @@
 
 ### Changed
 
+- **"base" is now defined explicitly as the last-synced upstream state**, not Git's
+  merge base. The two are different reference points: a merge base is *derived* from
+  the commit graph and a rebase silently changes it, whereas the last-synced point is
+  *recorded* as a fact about the branch. `LastSyncMarker` records it per branch
+  alongside the decision history, `MergeWorkflow` resolves against it and reports which
+  reference it used, and it falls back to the common ancestor only on a branch that has
+  never synced. See `docs/WHAT_IS_BASE.md`. Passing a stale base makes the upstream look
+  as though it re-added everything already merged, and the branch look as though it
+  deleted it - conflicts that do not exist, which is the failure this module exists to
+  remove.
 - **Upgraded OpenRewrite 8.40.1 → 8.90.4 and the parser `rewrite-java-21` →
   `rewrite-java-25`**, so this module builds and runs at the parent's Java 25 level
   instead of needing a release-21 override. `rewrite-java-25` was published in

@@ -1,0 +1,28 @@
+package com.example.payments;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Base version. Both branches start from exactly this file.
+ */
+public class PaymentProcessor {
+
+    public static final int MAX_RETRIES = 3;
+
+    private final Map<String, List<BigDecimal>> ledger;
+
+    public PaymentProcessor(Map<String, List<BigDecimal>> ledger) {
+        this.ledger = ledger;
+    }
+
+    public void process(String account) {
+        audit(account);
+    }
+
+    public void audit(String account) {
+        // record the account
+    }
+}

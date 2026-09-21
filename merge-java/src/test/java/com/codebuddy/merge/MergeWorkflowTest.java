@@ -256,6 +256,64 @@ class MergeWorkflowTest {
     }
 
     @Test
+    @DisplayName("the first sync uses the merge base, because nothing is recorded yet")
+    void firstSyncUsesMergeBase() throws Exception {
+        buildRepository();
+
+        MergeWorkflow.Result result = MergeWorkflow.open(repositoryDir)
+            .upstream("upstream").path(FILE).run();
+
+        assertTrue(result.baseSource().contains("merge base"),
+            "with no sync recorded, the common ancestor is the only stand-in: "
+                + result.baseSource());
+    }
+
+    @Test
+    @DisplayName("a later sync resolves against the recorded last-synced upstream")
+    void laterSyncUsesRecordedMarker() throws Exception {
+        buildRepository();
+
+        // The first run records what this branch has seen.
+        MergeWorkflow.open(repositoryDir).upstream("upstream").path(FILE).run();
+
+        MergeWorkflow.Result second = MergeWorkflow.open(repositoryDir)
+            .upstream("upstream").path(FILE).run();
+
+        assertTrue(second.baseSource().contains("last-sync marker"),
+            "the second sync must use the recorded marker, not a recomputed merge base: "
+                + second.baseSource());
+    }
+
+    @Test
+    @DisplayName("the marker is written where the decision history lives")
+    void markerIsWrittenBesideDecisions() throws Exception {
+        buildRepository();
+
+        MergeWorkflow.open(repositoryDir).upstream("upstream").path(FILE).run();
+
+        Path branchHistory = repositoryDir.resolve(".jcodebuddy")
+            .resolve("merge-history").resolve("feature");
+        assertTrue(Files.isRegularFile(branchHistory.resolve(LastSyncMarker.FILE_NAME)),
+            "the marker belongs with the branch's decisions: " + branchHistory);
+
+        LastSyncMarker marker = LastSyncMarker.read(branchHistory).orElseThrow();
+        assertEquals("upstream", marker.upstreamRef());
+        assertTrue(marker.note().contains("dry run"),
+            "a dry run records what it inspected, and says so: " + marker.note());
+    }
+
+    @Test
+    @DisplayName("reports which reference point it resolved against")
+    void reportsTheBaseUsed() throws Exception {
+        buildRepository();
+
+        String description = MergeWorkflow.open(repositoryDir)
+            .upstream("upstream").path(FILE).run().describe();
+
+        assertTrue(description.contains("base:"), description);
+    }
+
+    @Test
     @DisplayName("distinctPaths deduplicates the reported paths")
     void distinctPathsDeduplicates() {
         MergeConflictResolver.MergeReport first = MergeConflictResolver.create(TestTypeContexts.jdk())

@@ -1,0 +1,9 @@
+--- base/PaymentProcessor.java
++++ ours/PaymentProcessor.java
+
+(no change)
+
+Ours is identical to the base. This fixture exists to isolate the ambiguous case:
+theirs removes `java.util.Set` while ours keeps it, so the only question is what a
+removal on one side means. Ours changing nothing is what makes the policy the sole
+input to the decision.

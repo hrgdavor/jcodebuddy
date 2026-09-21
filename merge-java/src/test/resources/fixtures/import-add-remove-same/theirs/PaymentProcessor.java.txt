@@ -1,0 +1,21 @@
+package com.example.payments;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+/**
+ * Payment processing. The body is identical in all three versions; this fixture is
+ * only about the import block.
+ */
+public class PaymentProcessor {
+
+    private final java.util.Map<String, java.util.List<java.math.BigDecimal>> ledger;
+
+    public PaymentProcessor(java.util.Map<String, java.util.List<java.math.BigDecimal>> ledger) {
+        this.ledger = ledger;
+    }
+
+    public void process(String account) {
+        ledger.computeIfAbsent(account, key -> new java.util.ArrayList<>());
+    }
+}
