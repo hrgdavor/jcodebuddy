@@ -1,6 +1,6 @@
 # Plan — reimplement `webview-jetbrains` on the current IntelliJ Platform plugin template
 
-Status: proposed (not started)
+Status: **implemented** (steps 1–10 done; see "Implementation record" below)
 Scope: the entire `webview-jetbrains` module (`hr.hrg.jetbrains.webview`, "WebView Explorer")
 Written against: IntelliJ Platform Gradle Plugin **2.19.0**, IntelliJ IDEA **2026.2.3**, Gradle **9.2.1**,
 JDK **25** — all already pinned in this module's `gradle.properties` / `gradle/libs.versions.toml`.
@@ -14,8 +14,39 @@ must be widened before any Gradle command.)
 > `src/main/resources/META-INF/plugin.xml` was missing
 > `<depends>com.intellij.modules.jcef</depends>`, so every JCEF type was unresolvable at runtime and
 > the tool window failed with a misleading *"Cannot find suitable constructor"* error (see F8 in
-> §2.3). One line was added and the fix was verified in a real `runIde` sandbox. Everything else in
-> this document is still open work.
+> §2.3). One line was added and the fix was verified in a real `runIde` sandbox.
+
+## Implementation record
+
+All ten steps are done. What was built, and what proves it:
+
+| Step | Outcome |
+| --- | --- |
+| 1 | Pure logic extracted: `BridgeMessage`, `UrlNormalizer`, `AllowedOrigins`, `RateLimiter` + injectable `Clock`, and `NavigatorService` as the single path→editor entry point |
+| 2 | **52 unit tests** in 9 classes, `gradlew test` green; no IDE required |
+| 3 | Identity moved into `intellijPlatform { pluginConfiguration { … } }`; vendor/URL fixed; catalog cleaned; Kotlin plugin and `withJcef.xml` removed; `until-build` deliberately absent |
+| 4 | `withJcef.xml` deleted and replaced by the plain `<depends>com.intellij.modules.jcef</depends>` |
+| 5 | `WebViewPanel` owns the browser, `WebViewService` owns the panel, `WebViewActions` names the four buttons, `JBCefScrollbarsHelper` applied, load errors shown in an error card, splash page added |
+| 6 | `JcefBridgeNew` replaced by `WebViewBridge`: one `JBCefJSQuery`, one load handler, JSON parsing, disposed with the panel |
+| 7 | HTTP bridge binds to loopback, denies when unauthenticated, accepts a token or an allowed origin, single rate limit, `/health`, `404` + log on an unresolvable path |
+| 8 | Port validation reports instead of swallowing, bridge status line, optional token field |
+| 9 | README rewritten (JDK 25, the JCEF `<depends>` rule, the bridge's security model), CHANGELOG entry |
+| 10 | `clean test buildPlugin verifyPluginProjectConfiguration` green; `verifyPlugin` reports **Compatible** against IU-262.10968.63 and IU-263.5153.40 |
+
+Acceptance criteria 1, 3, 4, 6 and 8 are verified as recorded in the table above and below. Criterion 2
+(the report renders and a field link lands on the right line) and criterion 5 (degrading to the
+clipboard path) were confirmed by the maintainer in a running IDE, not by an automated assertion: the
+sandbox IDE exposed no CDP target for the tool window, so the live-browser check could not be completed
+programmatically. Criterion 7's disposal path is covered by the single-owner design and the
+`Content.setDisposer(panel)` wiring rather than by a leak assertion.
+
+### A second defect the plan did not anticipate
+
+The first implementation had no owner for "which page does the tool window show first". The factory
+delivered a URL parked by **Open in WebView Explorer** and then loaded its own fallback — the splash
+page — on top of it, so the file never rendered. The rule now lives in `PendingLoad` and is applied in
+exactly one place (`WebViewService.register`), with `PendingLoadTest` pinning the ordering.
+
 
 ---
 

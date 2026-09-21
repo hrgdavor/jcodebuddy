@@ -270,7 +270,7 @@ That is notes F-49, and it is the same hazard as F-47 (a gate satisfied
 by a previous revision's class files) in a second place.
 
 The measured result (JDK 25, the flags above, ops/ms) is recorded in
-[`plans__p1/plan.dsflash.notes.md`](../plans__p1/plan.dsflash.notes.md)
+[`../plans`](../plans/plan.dsflash.notes.md)
 under F-49, together with the two caveats that matter when reading it:
 the `shallowOnly*` variants reach through an extra indirection, so their
 ~6% gap is a property of the harness rather than of push-vs-pull, and

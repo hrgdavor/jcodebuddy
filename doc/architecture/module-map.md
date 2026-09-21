@@ -116,4 +116,4 @@ test classpath. The root `junit5` profile still exists and `-Pjunit5` is still a
 but it is an empty no-op kept for invocation compatibility — it contributes no
 configuration. Previously it injected the engine into surefire's plugin dependencies with
 an illegal `test` scope, which made `-Pjunit5` abort the reactor at POM validation. See
-[`plans__p1/plan.junit5-profile.md`](../../plans__p1/plan.junit5-profile.md).
+[`../../plans`](../../plans/plan.junit5-profile.md).

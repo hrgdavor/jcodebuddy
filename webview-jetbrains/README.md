@@ -154,7 +154,7 @@ src/main/java/hr/hrg/jetbrains/webview/
     └── WebViewToolWindow.java           # the tool window id
 
 src/main/resources/META-INF/plugin.xml   # extensions and actions; identity comes from build.gradle.kts
-src/test/java/…                          # 48 unit tests, no IDE required
+src/test/java/…                          # 52 unit tests, no IDE required
 ```
 
 `WebViewPanel` owns the browser and `WebViewService` owns the panel, so nothing else has to search the

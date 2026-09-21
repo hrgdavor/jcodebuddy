@@ -24,9 +24,9 @@
 >   ordinal ledgers).
 >
 > **The current plan** is the combined execution plan
-> [`plans__p1/plan.dsflash.md`](../../plans__p1/plan.dsflash.md),
+> [`../../plans`](../../plans/plan.dsflash.md),
 > whose execution findings are recorded in
-> [`plans__p1/plan.dsflash.notes.md`](../../plans__p1/plan.dsflash.notes.md).
+> [`../../plans`](../../plans/plan.dsflash.notes.md).
 > Current implementation status is tracked in
 > [`roadmap/README.md`](README.md).
 

@@ -178,7 +178,11 @@ not carry and asserts the warning.
   Explorer** plugin into every page it loads — then the plugin's HTTP bridge
   (`http://127.0.0.1:<port>/open?filePath=…&line=…`, needs the page's origin in
   `webview.explorer.allowedOrigins`), then clipboard plus a toast. The header pill says which one is
-  live.
+  live. **The contract itself — the exact signature, the payload, the HTTP parameters, the security
+  model and the fallback ladder — is documented in
+  [`doc/webview-link-api.md`](../../doc/webview-link-api.md)**, which is the document to read if you are
+  writing another page or another plugin. For a smaller worked example of the same contract, see
+  [`scripts/markdown-view/`](../markdown-view/README.md), which renders Markdown this way.
 - A cell is empty when the field genuinely has no such slot there — a `DERIVED` field has no setter,
   a `META` view has no builder. The absences are part of the answer, so they are rendered, not
   omitted.

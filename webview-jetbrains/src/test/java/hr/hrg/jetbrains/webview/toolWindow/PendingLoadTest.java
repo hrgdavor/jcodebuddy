@@ -81,15 +81,18 @@ public class PendingLoadTest {
     }
 
     @Test
-    public void anExistingPanelLoadsImmediatelyAndCanLoadAgain() {
-        // The "Open in WebView Explorer" path when the tool window is already showing something: the
-        // service loads straight into the panel instead of parking anything.
-        assertTrue(pending.deliverTo(loaded::add));
-        assertEquals("the parked-URL path loads nothing when nothing is parked", List.of(), loaded);
-
-        assertTrue(pending.request("file:///D:/wrk/other.html"));
+    public void anUndeliveredUrlIsForgottenAfterDelivery() {
+        // With a panel present the service loads straight into it; nothing is parked, so there is nothing
+        // for a later first-page decision to pick up. Guards against a stale URL resurfacing on the next
+        // tool window creation.
+        pending.request("file:///D:/wrk/other.html");
         assertTrue(pending.deliverTo(loaded::add));
 
         assertEquals(List.of("file:///D:/wrk/other.html"), loaded);
+        assertFalse("a delivered URL is gone", pending.isWaiting());
+        assertNull(pending.waitingUrl());
+
+        assertFalse("a second delivery has nothing to deliver", pending.deliverTo(loaded::add));
+        assertEquals(1, loaded.size());
     }
 }

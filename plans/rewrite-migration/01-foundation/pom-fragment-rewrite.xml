@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+// {@link hr.hrg.rewrite.api.AstVisitor} OpenRewrite Maven dependency fragment.
+// {enabled:true, blockMarker: "implicit"}
+-->
+<dependencyManagement>
+    <dependencies>
+        <!-- OpenRewrite Core Module -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-core</artifactId>
+            <version>8.40.1</version>
+        </dependency>
+        
+        <!-- OpenRewrite Java Support -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java</artifactId>
+            <version>8.40.1</version>
+        </dependency>
+        
+        <!-- OpenRewrite Java 11+ Support -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-11</artifactId>
+            <version>8.40.1</version>
+        </dependency>
+        
+        <!-- OpenRewrite Java 17+ Support -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-17</artifactId>
+            <version>8.40.1</version>
+        </dependency>
+        
+        <!-- OpenRewrite Java 21+ Support -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-21</artifactId>
+            <version>8.40.1</version>
+        </dependency>
+        
+        <!-- OpenRewrite Maven Support -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-maven</artifactId>
+            <version>8.40.1</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
