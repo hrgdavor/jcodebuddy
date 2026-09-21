@@ -30,6 +30,7 @@
         <graal.version>25.0.2</graal.version>
         <fory.version>1.3.0</fory.version>
         <mcp.version>2.0.0</mcp.version>
+        <openrewrite.version>8.40.1</openrewrite.version>
 
         <junit.version>4.13.2</junit.version>
         <junit5.version>5.10.2</junit5.version>
@@ -74,6 +75,24 @@
                 <groupId>com.github.javaparser</groupId>
                 <artifactId>javaparser-core</artifactId>
                 <version>${javaparser.version}</version>
+            </dependency>
+
+            <!-- OpenRewrite Core (Phase 1-4 migration) -->
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-core</artifactId>
+                <version>${openrewrite.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-java</artifactId>
+                <version>${openrewrite.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-maven</artifactId>
+                <version>${openrewrite.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <dependency>
