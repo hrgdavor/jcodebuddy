@@ -165,4 +165,5 @@ class SourceReaderTest {
         Assertions.assertTrue(SourceReader.readText(good).readable());
         Assertions.assertFalse(SourceReader.readText(broken).readable());
     }
+
 }

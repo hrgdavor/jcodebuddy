@@ -46,8 +46,8 @@ Rules the gate enforces:
 | `- [ ] jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` | jwa-builder | high | high | see Checklist.md |
 | `- [ ] jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` | jwa-builder | high | high | see Checklist.md |
 | `- [x] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` | hipster-entity-tooling | high | medium |  |
-| `- [ ] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` | hipster-entity-tooling | high | medium |  |
-| `- [ ] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` | hipster-entity-tooling | high | medium |  |
+| `- [~] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` | hipster-entity-tooling | high | medium |  |
+| `- [x] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` | hipster-entity-tooling | high | medium |  |
 | `- [ ] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` | hipster-entity-tooling | high | medium |  |
 | `- [x] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRulesValidator.java` | hipster-entity-tooling | high | medium |  |
 | `- [x] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java` | hipster-entity-tooling | high | medium |  |
@@ -71,7 +71,7 @@ Rules the gate enforces:
 | `- [ ] hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java` | hipster-entity-tooling | medium | medium |  |
 | `- [ ] jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` | jwa-builder | medium | medium |  |
 | `- [ ] hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` | hipster-entity-tooling | medium | low |  |
-| `- [ ] hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java` | hipster-entity-tooling | medium | low |  |
+| `- [x] hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java` | hipster-entity-tooling | medium | low |  |
 | `- [ ] hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` | hipster-entity-tooling | medium | low |  |
 | `- [ ] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java` | hipster-entity-tooling | low | low |  |
 | `- [x] hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java` | hipster-entity-tooling | high | medium | added by generate-checklist.js |

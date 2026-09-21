@@ -6,6 +6,8 @@ import tools.jackson.databind.JsonNode;
 
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
 import hr.hrg.hipster.entity.tooling.SourceReader;
+import hr.hrg.hipster.entity.tooling.TreeQueries;
+import org.openrewrite.java.tree.J;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -370,13 +372,60 @@ public final class ClassIndex {
         typeLessFiles.add(moduleRelativePath);
     }
 
-    /** Registers one file's type declarations, reading them from a parsed unit. */
-    public void addTypes(String moduleRelativePath, CompilationUnit unit, boolean generated) {
+    /**
+     * Registers one file's type declarations, reading them from a parsed unit.
+     *
+     * <p>Phase 6: the unit is an LST, and the source it came from is required alongside it. The
+     * declaration's line number is the one fact the LST cannot supply — a node carries no line — so it
+     * is resolved against the text (see {@link hr.hrg.hipster.entity.tooling.TreeQueries#lineOf}). The
+     * FQN and the enclosing chain need no symbol solver: {@code TreeQueries.typesWithEnclosing}
+     * captures the ancestry from the traversal cursor, which is what replaces JavaParser's
+     * {@code getParentNode()} walk.</p>
+     *
+     * @param source the exact text {@code unit} was parsed from
+     */
+    public void addTypes(String moduleRelativePath, J.CompilationUnit unit, String source, boolean generated) {
         List<TypeFacts> types = new ArrayList<>();
-        for (TypeDeclaration<?> declaration : unit.getTypes()) {
-            collectTypes(declaration, types);
-        }
+        collectTypes(unit, source, types);
         addTypes(moduleRelativePath, types, generated);
+    }
+
+    /**
+     * {@link #addTypes(String, J.CompilationUnit, String, boolean)} for the queue files that are
+     * <strong>not yet ported</strong>.
+     *
+     * <p>Delegates to the same {@code addTypes(String, List&lt;TypeFacts&gt;, boolean)} the LST path uses,
+     * so there is one index-building implementation and this is only a translator. The facts themselves
+     * come from {@link TypeFacts}'s JavaParser factory — one FQN composition, so a nested type cannot be
+     * spelled two ways depending on which parser read it.</p>
+     *
+     * <p>Deleted with the last JavaParser caller ({@code EntityMetadataGenerator}); the Phase 6
+     * checklist tracks it.</p>
+     */
+    public void addTypes(String moduleRelativePath,
+                         com.github.javaparser.ast.CompilationUnit unit, boolean generated) {
+        List<TypeFacts> types = new ArrayList<>();
+        collectTypesJp(unit, new ArrayList<>(), types);
+        addTypes(moduleRelativePath, types, generated);
+    }
+
+    private static void collectTypesJp(com.github.javaparser.ast.CompilationUnit unit,
+                                       List<String> enclosing, List<TypeFacts> into) {
+        for (com.github.javaparser.ast.body.TypeDeclaration<?> declaration : unit.getTypes()) {
+            collectTypesJp(declaration, enclosing, into);
+        }
+    }
+
+    private static void collectTypesJp(com.github.javaparser.ast.body.TypeDeclaration<?> declaration,
+                                       List<String> enclosing, List<TypeFacts> into) {
+        into.add(TypeFacts.of(declaration, enclosing));
+        List<String> nested = new ArrayList<>(enclosing);
+        nested.add(declaration.getNameAsString());
+        for (com.github.javaparser.ast.body.BodyDeclaration<?> member : declaration.getMembers()) {
+            if (member instanceof com.github.javaparser.ast.body.TypeDeclaration<?> inner) {
+                collectTypesJp(inner, nested, into);
+            }
+        }
     }
 
     /**
@@ -389,7 +438,8 @@ public final class ClassIndex {
      */
     public void addGeneratedArtifact(String moduleRelativePath, Path fileOnDisk) throws IOException {
         requireModuleRelative(moduleRelativePath);
-        CompilationUnit unit = SourceReader.readUnitJp(fileOnDisk);
+        String source = Files.readString(fileOnDisk);
+        J.CompilationUnit unit = SourceReader.readSourceText(source);
         if (unit == null) {
             // A generated file this pass cannot read is a bug in an emitter rather than a fact about the
             // tree, and giving it a type-less row would hide it. The pass's own divergence reporter
@@ -398,7 +448,7 @@ public final class ClassIndex {
             typeLessFiles.add(moduleRelativePath);
             return;
         }
-        addTypes(moduleRelativePath, unit, true);
+        addTypes(moduleRelativePath, unit, source, true);
     }
 
     private void put(ClassRecord row) {
@@ -421,13 +471,16 @@ public final class ClassIndex {
         }
     }
 
-    /** One declaration's facts, member types included — the row set of one file. */
-    private static void collectTypes(TypeDeclaration<?> declaration, List<TypeFacts> into) {
-        into.add(TypeFacts.of(declaration));
-        for (com.github.javaparser.ast.body.BodyDeclaration<?> member : declaration.getMembers()) {
-            if (member instanceof TypeDeclaration<?> nested) {
-                collectTypes(nested, into);
-            }
+    /**
+     * One file's declaration facts, member types included — the row set of one file.
+     *
+     * <p>Replaces the recursive {@code getMembers()} walk with the cursor-captured tree, so the
+     * enclosing chain each FQN needs is already computed. A nested type of a nested type is included,
+     * which is what the old recursion did, and the order is source order.</p>
+     */
+    private static void collectTypes(J.CompilationUnit unit, String source, List<TypeFacts> into) {
+        for (TreeQueries.EnclosedType enclosed : TreeQueries.typesWithEnclosing(unit)) {
+            into.add(TypeFacts.of(enclosed.declaration(), enclosed.enclosing(), source));
         }
     }
 

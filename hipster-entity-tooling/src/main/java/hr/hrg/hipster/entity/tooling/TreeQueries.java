@@ -11,6 +11,7 @@ import org.openrewrite.java.tree.Statement;
 import org.openrewrite.java.tree.TypeTree;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
 
@@ -431,4 +432,112 @@ public final class TreeQueries {
         }
         return false;
     }
+
+    // ------------------------------------------------------- ancestry and position ---
+
+    /**
+     * One type declaration together with the chain of types enclosing it.
+     *
+     * @param declaration the declaration itself
+     * @param enclosing   the enclosing type declarations, <strong>outermost first</strong>
+     */
+    public record EnclosedType(J.ClassDeclaration declaration, List<J.ClassDeclaration> enclosing) {
+
+        public EnclosedType {
+            enclosing = List.copyOf(enclosing);
+        }
+    }
+
+    /**
+     * Every type declaration in the file with its enclosing chain, in source order.
+     *
+     * <p>Replaces JavaParser's {@code Node.getParentNode()} walk, which has no LST equivalent: an LST
+     * node does not know its parent. The cursor does — {@link JavaIsoVisitor#getCursor()} exposes the
+     * path from the root to the node currently being visited — so the ancestry is captured
+     * <em>during</em> traversal rather than reconstructed afterwards.</p>
+     *
+     * <p>This is what an FQN needs: DEC-029 keys the class index by package-qualified name with member
+     * types joined by {@code .}, and the package plus the enclosing chain is all that name requires.
+     * No symbol solver is involved, and none is available at generation time.</p>
+     */
+    public static List<EnclosedType> typesWithEnclosing(J.CompilationUnit cu) {
+        List<EnclosedType> found = new ArrayList<>();
+        if (cu == null) {
+            return found;
+        }
+        // The ancestry is tracked as an explicit stack on the way down rather than read out of
+        // `getCursor().getPath()`. The cursor path's order is not documented and was measured to be
+        // neither root-first nor leaf-first, so reading it produced a chain that matched the *wrong*
+        // declaration — a nested type silently resolved to its parent's line. A stack the visitor
+        // pushes and pops itself has one correct order by construction.
+        new JavaIsoVisitor<ExecutionContext>() {
+
+            private final java.util.Deque<J.ClassDeclaration> stack = new java.util.ArrayDeque<>();
+
+            @Override
+            public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration type, ExecutionContext ctx) {
+                found.add(new EnclosedType(type, new ArrayList<>(stack)));
+                stack.push(type);
+                try {
+                    return super.visitClassDeclaration(type, ctx);
+                } finally {
+                    stack.pop();
+                }
+            }
+        }.visit(cu, VISIT_CONTEXT);
+        return found;
+    }
+
+    /**
+     * The line a declaration sits on, or {@code -1}.
+     *
+     * <p><strong>Unimplemented, and deliberately returning {@code -1} rather than a guess.</strong>
+     * JavaParser answered this with {@code getName().getBegin().line}; the LST exposes no positions at
+     * all, so the line has to come from javac's line map over the same text (the machinery is in
+     * {@link JavaSyntaxCheck#typeNameLines}, which works — it is the *matching* of a declaration to its
+     * entry that is unfinished).</p>
+     *
+     * <p>{@code -1} is the value DEC-029 already defines as "line unknown", and it is the fail-safe
+     * answer: an off-by-one points a reader at the wrong code while looking authoritative, and DEC-028
+     * verifies report links against the line they point at. Three attempts at the matching produced
+     * confidently wrong lines — a nested `Shape.Circle` and its enclosing `Shape` share a chain prefix
+     * in a way that defeated both a simple-name and a chain comparison — so the feature is left off
+     * until it is done properly.</p>
+     *
+     * <p>Recorded as an open gap in the caveats document rather than papered over. The class index
+     * carries {@code line = -1} until then, which its consumers already handle.</p>
+     */
+    public static int lineOf(J.ClassDeclaration declaration, String source) {
+        return -1;
+    }
+
+    /**
+     * Resolve a declaration to its javac-recorded line, when that is implemented.
+     *
+     * <p>Unused today: {@link #lineOf} returns {@code -1} while the declaration-to-position matching is
+     * unfinished. Kept, with its cache, because {@link JavaSyntaxCheck#typeNameLines} is the working
+     * half of the feature and deleting the plumbing would make the remaining work harder to resume than
+     * to leave. Deliberately package-private and unreferenced rather than wired into {@code lineOf} with
+     * a fallback: a fallback is exactly what produced wrong lines before.</p>
+     */
+    static List<JavaSyntaxCheck.NamePosition> positionsOf(String source) {
+        return lineLookup(source);
+    }
+
+    /** The parse result for one source text, memoised so a file's declarations cost one javac parse. */
+    private static List<JavaSyntaxCheck.NamePosition> lineLookup(String source) {
+        if (!LINE_CACHE.containsKey(source)) {
+            // Bounded so a long generation pass over a large tree cannot hold every file's parse
+            // alive; the access pattern is "many declarations of one file, then move on".
+            if (LINE_CACHE.size() > MAX_CACHED_SOURCES) {
+                LINE_CACHE.clear();
+            }
+            LINE_CACHE.put(source, JavaSyntaxCheck.typeNameLines(source));
+        }
+        return LINE_CACHE.get(source);
+    }
+
+    private static final int MAX_CACHED_SOURCES = 64;
+    private static final java.util.Map<String, List<JavaSyntaxCheck.NamePosition>> LINE_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
 }

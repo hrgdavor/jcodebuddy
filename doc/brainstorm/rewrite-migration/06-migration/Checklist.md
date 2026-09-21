@@ -12,7 +12,7 @@ Generated: 2026-09-21
 
 ## First pass — completed
 
-The read-only spine is ported: **10 files settled**, 1 in progress, 26 remaining. `hipster-entity-tooling` builds and its full test suite is green.
+The read-only spine is ported: **11 files settled**, 2 in progress, 24 remaining. `hipster-entity-tooling` builds and its full test suite is green.
 
 Three API findings from that pass are recorded in `MIGRATION-GUIDE.md` § 4, and each one matters for every file still to be ported because each is silent:
 
@@ -20,16 +20,18 @@ Three API findings from that pass are recorded in `MIGRATION-GUIDE.md` § 4, and
 - **§ 4.6** a reused parser must be `reset()` between parse sets, or the second read of any type reports "unparseable".
 - **§ 4.7** an interface's `extends` clause is held in `getImplements()`, not `getExtends()`; reading the latter finds no supertype for any interface.
 
+Read [`MIGRATION-CAVEATS.md`](MIGRATION-CAVEATS.md) **before** porting a file: it lists the five ways a port fails silently, the model differences that force a rewrite rather than a rename, and the open gaps.
+
 ## Phase 6 state
 
 | Measure | Count |
 | --- | --- |
-| Files in the migration queue | 36 |
-| Settled (complete or exempt) | 10 (28%) |
-| Remaining | 26 |
-| Still importing JavaParser | 21 |
+| Files in the migration queue | 35 |
+| Settled (complete or exempt) | 11 (31%) |
+| Remaining | 24 |
+| Still importing JavaParser | 19 |
 | Unclassified by curation | 0 |
-| JavaParser import lines to remove | 165 |
+| JavaParser import lines to remove | 159 |
 
 ## Phase-0 prerequisites
 
@@ -99,7 +101,7 @@ OpenRewrite mapping for each type, and the migration notes from
   Confirm against the OpenRewrite reference for 8.90.4 before
   relying on it.
 
-## The queue (36 files, in work order)
+## The queue (35 files, in work order)
 
 Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 
@@ -115,8 +117,8 @@ Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 | `[ ]` not-started | high | high | 5 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
 | `[ ]` not-started | high | high | 9 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` |
-| `[ ]` not-started | high | medium | 2 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
-| `[ ]` not-started | high | medium | 4 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
+| `[~]` in-progress | high | medium | 2 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java` |
 | `[ ]` not-started | high | medium | 3 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java` |
@@ -138,7 +140,6 @@ Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 | `[ ]` not-started | medium | medium | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java` |
 | `[ ]` not-started | medium | medium | 4 | `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` |
 | `[ ]` not-started | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
-| `[ ]` not-started | medium | low | 2 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java` |
 | `[ ]` not-started | medium | low | 4 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
 | `[ ]` not-started | low | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java` |
 
@@ -292,7 +293,7 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 597
+**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 612
 
 **JavaParser surface on disk**:
 
@@ -565,7 +566,7 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 978
+**Status**: `[~]` in-progress · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 1031
 
 **JavaParser surface on disk**:
 
@@ -574,7 +575,7 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 **Migration notes**:
 
-DEC-029 owner: one row per compiled type, keyed by FQN, carrying the file path, content checksum, checksum instant, size, kind and modifiers. It parses generated artifacts to describe them, so it depends on the ported `SourceReader`. The published contract is the JSON shape — keep it byte-identical and let only the tree access change.
+DEC-029 owner: one row per compiled type, keyed by FQN, carrying the file path, content checksum, checksum instant, size, kind and modifiers. It parses generated artifacts to describe them, so it depends on the ported `SourceReader`. The published contract is the JSON shape — keep it byte-identical and let only the tree access change. The type-collection path is ported (`addTypes(J.CompilationUnit, source, generated)`); a documented JavaParser bridge remains for `EntityMetadataGenerator`, which still holds a JavaParser unit, and it delegates to the same `List<TypeFacts>` overload so there is one index-building implementation rather than two that can drift.
 
 **OpenRewrite classes involved**: `org.openrewrite.java.tree.J`, `org.openrewrite.SourceFile`
 
@@ -589,18 +590,32 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 118
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: qualified-only · **Lines**: 231
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.Modifier` — **inferred**
-- `com.github.javaparser.ast.Node` — **inferred**
-- `com.github.javaparser.ast.body.TypeDeclaration` — **verified**
+- No import lines. Every use is fully qualified, so an import-driven port
+  misses this file:
+  - `public static TypeFacts of(com.github.javaparser.ast.body.TypeDeclaration<?> declaration,`
+  - `.flatMap(com.github.javaparser.ast.CompilationUnit::getPackageDeclaration)`
+  - `for (com.github.javaparser.ast.Modifier modifier : declaration.getModifiers()) {`
+  - `private static String kindOfJp(com.github.javaparser.ast.body.TypeDeclaration<?> declaration) {`
+  - `if (declaration instanceof com.github.javaparser.ast.body.EnumDeclaration) {`
+  - `if (declaration instanceof com.github.javaparser.ast.body.RecordDeclaration) {`
+  - `if (declaration instanceof com.github.javaparser.ast.body.AnnotationDeclaration) {`
+  - `if (declaration instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration classOrInterface) {`
+- 6 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* the JavaParser path in the call sites that have not yet been ported — the latter by way of`
+  - `* <p>Phase 6: the enclosing chain is supplied rather than discovered. JavaParser's`
+  - `* have two spellings of a nested type's FQN — so this resolves the JavaParser node's own local`
+  - `* chain is supplied by the caller's own recursion, which is how the JavaParser side already walked`
+  - `* <p>Deleted with the last JavaParser caller.</p>`
+  - `* The kind of a JavaParser declaration, in DEC-029's vocabulary.`
 
 **Migration notes**:
 
-Feeds DEC-029’s class index: the per-type kind and modifiers written into `.jcodebuddy/index/classes.json`. The index is keyed by FQN and consumers read `kind` as a string, so the port must preserve the *spelling* of every kind it reports even though the LST discriminates differently. A changed spelling is a silently broken index, not a compile error.
+Feeds DEC-029’s class index: the per-type kind and modifiers written into `.jcodebuddy/index/classes.json`. The index is keyed by FQN and consumers read `kind` as a string, so the port must preserve the *spelling* of every kind it reports even though the LST discriminates differently. A changed spelling is a silently broken index, not a compile error. Ported: the FQN comes from the cursor-captured enclosing chain, and `non-sealed` is rendered explicitly rather than via the enum constant’s `toString()` — the latter would emit `NON_SEALED` and break DEC-029’s vocabulary for exactly the two hyphenated keywords. One caveat: `line` is -1 pending MIGRATION-CAVEATS.md § 4.1, because the LST exposes no positions.
 
 **OpenRewrite classes involved**: `org.openrewrite.java.tree.J`, `org.openrewrite.java.tree.J.Modifier`
 
@@ -615,15 +630,16 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 163
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 264
 
 **JavaParser surface on disk**:
 
-- 3 bare-name mention(s) — `JavaParser` or `javaparser`
+- 4 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
-  - `* <p>{@link SourceReader}'s whole reason for existing is the fail-safe recorded as F-34: JavaParser`
-  - `* does so more quietly than JavaParser did: measured on F-34's own fixture`
-  - `* what "recovered" means. Re-parsing with JavaParser would work but re-introduces the dependency this`
+  - `* <p>{@link SourceReader}'s whole reason for existing is the fail-safe recorded as F-34: JavaParser is`
+  - `* and DEC-028 verifies every link against the line a member is declared on. JavaParser answered with`
+  - `* Re-parsing with JavaParser would work but re-introduces the dependency this migration exists to`
+  - `* <p>Replaces JavaParser's {@code getName().getBegin().line}, which is why this class exists at all`
 
 **Migration notes**:
 
@@ -947,11 +963,11 @@ bun run scripts/rewrite-migration/migrate-file.js --after jwa-sidecar/src/main/j
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 435
+**Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 544
 
 **JavaParser surface on disk**:
 
-- 18 bare-name mention(s) — `JavaParser` or `javaparser`
+- 20 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
   - `* from the JavaParser code being replaced:</p>`
   - `*       Every JavaParser {@code findAll} in this module becomes the same fifteen-line`
@@ -959,7 +975,7 @@ bun run scripts/rewrite-migration/migrate-file.js --after jwa-sidecar/src/main/j
   - `* <p>Includes nested types. The old JavaParser code that read {@code cu.getTypes()} saw only`
   - `* The type declarations directly under the compilation unit — the set JavaParser's`
   - `* <p>Note the shape this replaces. JavaParser expressed "is an interface" as`
-  - …and 12 more
+  - …and 14 more
 
 **Migration notes**:
 
@@ -1184,30 +1200,6 @@ bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tool
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java
-```
-
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java`
-
-**Status**: `[ ]` not-started · **Priority**: medium · **Risk**: low · **Detected**: imports · **Lines**: 170
-
-**JavaParser surface on disk**:
-
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.TypeDeclaration` — **verified**
-
-**Migration notes**:
-
-Test-side port of the class-index fixtures.
-
-**OpenRewrite classes involved**: `org.openrewrite.java.tree.J`
-
-**Port procedure**:
-
-```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java
-# ... edit ...
-cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java
 ```
 
 ### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java`

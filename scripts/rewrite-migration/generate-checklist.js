@@ -149,6 +149,10 @@ function renderChecklist(model, generatedAt) {
     push('- **§ 4.7** an interface\'s `extends` clause is held in `getImplements()`, not ' +
       '`getExtends()`; reading the latter finds no supertype for any interface.');
     push();
+    push('Read [`MIGRATION-CAVEATS.md`](MIGRATION-CAVEATS.md) **before** porting a file: it lists the ' +
+      'five ways a port fails silently, the model differences that force a rewrite rather than a ' +
+      'rename, and the open gaps.');
+    push();
   }
 
   // ---- phase state ---------------------------------------------------------

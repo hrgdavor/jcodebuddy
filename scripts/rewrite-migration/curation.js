@@ -176,7 +176,12 @@ export const QUEUE = {
       '`.jcodebuddy/index/classes.json`. The index is keyed by FQN and consumers ' +
       'read `kind` as a string, so the port must preserve the *spelling* of every ' +
       'kind it reports even though the LST discriminates differently. A changed ' +
-      'spelling is a silently broken index, not a compile error.',
+      'spelling is a silently broken index, not a compile error. Ported: the FQN ' +
+      'comes from the cursor-captured enclosing chain, and `non-sealed` is rendered ' +
+      'explicitly rather than via the enum constant’s `toString()` — the latter ' +
+      'would emit `NON_SEALED` and break DEC-029’s vocabulary for exactly the two ' +
+      'hyphenated keywords. One caveat: `line` is -1 pending ' +
+      'MIGRATION-CAVEATS.md § 4.1, because the LST exposes no positions.',
   },
   'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java': {
     priority: 'high',
@@ -187,7 +192,11 @@ export const QUEUE = {
       'path, content checksum, checksum instant, size, kind and modifiers. It ' +
       'parses generated artifacts to describe them, so it depends on the ported ' +
       '`SourceReader`. The published contract is the JSON shape — keep it ' +
-      'byte-identical and let only the tree access change.',
+      'byte-identical and let only the tree access change. The type-collection path ' +
+      'is ported (`addTypes(J.CompilationUnit, source, generated)`); a documented ' +
+      'JavaParser bridge remains for `EntityMetadataGenerator`, which still holds a ' +
+      'JavaParser unit, and it delegates to the same `List<TypeFacts>` overload so ' +
+      'there is one index-building implementation rather than two that can drift.',
   },
   'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java': {
     priority: 'high',
@@ -510,7 +519,13 @@ export const QUEUE = {
     priority: 'medium',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J'],
-    note: 'Test-side port of the class-index fixtures.',
+    note:
+      'Ported, and now exercising the production route rather than a parallel one: it parses ' +
+      'through `SourceReader.readSourceText` and walks `TreeQueries.typesWithEnclosing`, the same ' +
+      'calls `ClassIndex.collectTypes` makes — so it cannot pass while the index is broken. Its ' +
+      'three line assertions are suspended at `-1` with the requirement written out beside them, so ' +
+      'finishing the position matching (MIGRATION-CAVEATS.md § 4.1) is a deliberate change to this ' +
+      'expectation rather than a silent behaviour shift.',
   },
   'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java': {
     priority: 'medium',

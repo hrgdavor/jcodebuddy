@@ -1,5 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
+import org.openrewrite.java.tree.J;
+
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
@@ -362,7 +364,10 @@ public final class MetadataLocations {
         int line = declaration.getName().getBegin().map(position -> position.line).orElse(-1);
         // The DEC-021 description is a property of the FILE, and the page labels the file's top-level
         // type with it; a nested type is described as "nested type" by whoever reads this.
-        shapes.add(new ArtifactShape(displayName, kindOf(declaration), file, line,
+        // Kind through the bridge factory: this tree is JavaParser's, and one factory keeps the
+        // five spellings identical to the LST side.
+        String kind = hr.hrg.hipster.entity.tooling.index.TypeFacts.of(declaration, List.of()).kind();
+        shapes.add(new ArtifactShape(displayName, kind, file, line,
                 generated && topLevel, topLevel ? headerDescription : null));
 
         collectFromType(declaration, displayName, file, fieldNames, found);
@@ -477,21 +482,29 @@ public final class MetadataLocations {
      * <p>Public because the class index records a row's {@code kind} and must not grow a second kind
      * resolver: two spellings of "is this an interface or a record" is how the inventory and the index
      * would disagree about the same file. This class stays package-private; the resolver does not.</p>
+     *
+     * <h3>Phase 6: the five kinds are one class</h3>
+     * <p>JavaParser gave five distinct types here — {@code EnumDeclaration},
+     * {@code RecordDeclaration}, {@code AnnotationDeclaration}, and
+     * {@code ClassOrInterfaceDeclaration} split by {@code isInterface()} — so the resolution was a
+     * chain of {@code instanceof}. The LST has <strong>one</strong> type, {@link J.ClassDeclaration},
+     * whose {@link J.ClassDeclaration#getKind()} returns exactly those five kinds. The mapping is
+     * exact, and getting it wrong is silent in the worst way: dropping the kind test and returning
+     * {@code "class"} for everything produces an index that compiles, validates, and mislabels every
+     * record and enum in the tree. The vocabulary below is DEC-029's contract and must not change.</p>
      */
-    public static String kindOf(TypeDeclaration<?> declaration) {
-        if (declaration instanceof EnumDeclaration) {
-            return "enum";
+    public static String kindOf(J.ClassDeclaration declaration) {
+        if (declaration == null) {
+            return "class";
         }
-        if (declaration instanceof RecordDeclaration) {
-            return "record";
-        }
-        if (declaration instanceof AnnotationDeclaration) {
-            return "annotation";
-        }
-        if (declaration instanceof ClassOrInterfaceDeclaration classOrInterface) {
-            return classOrInterface.isInterface() ? "interface" : "class";
-        }
-        return "class";
+        return switch (declaration.getKind()) {
+            case Enum -> "enum";
+            case Record -> "record";
+            case Annotation -> "annotation";
+            case Interface -> "interface";
+            case Class -> "class";
+            default -> "class";
+        };
     }
 
     private static int lineOf(Node node) {
@@ -585,7 +598,9 @@ public final class MetadataLocations {
             SourceReader.ReadJp read = SourceReader.readJp(moduleRoot.resolve(moduleRelativePath));
             if (read.readable()) {
                 for (TypeDeclaration<?> declaration : read.unit().getTypes()) {
-                    return kindOf(declaration);
+                    // The bridge factory, not `kindOf`: this declaration came from the JavaParser
+                    // path, and the two factories return the same five spellings.
+                    return hr.hrg.hipster.entity.tooling.index.TypeFacts.of(declaration, List.of()).kind();
                 }
             }
         } catch (IOException | RuntimeException unreadable) {

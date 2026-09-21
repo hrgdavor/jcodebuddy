@@ -3,14 +3,18 @@
 How to port a file in this repository from JavaParser to OpenRewrite, and how to
 tell whether the port is correct.
 
-This guide is the **procedural** half of Phase 6. The other three deliverables are:
+This guide is the **procedural** half of Phase 6. The other four deliverables are:
 
 | Document | Answers |
 | --- | --- |
 | [`Checklist.md`](Checklist.md) | Which files, what JavaParser surface, what each needs |
 | [`tracker.md`](tracker.md) | What the status of each file is |
+| [`MIGRATION-CAVEATS.md`](MIGRATION-CAVEATS.md) | **What will go wrong, how it fails, what to do — read this before porting** |
 | `../../scripts/rewrite-migration/README.md` | How to run the tooling |
 | **this guide** | **How to do the port, and how to know it worked** |
+
+The caveats document is the one written from the mistakes made during the first two passes; this
+guide is the procedure, and the caveats file is why the procedure has the shape it does.
 
 The machine-readable mapping table lives in
 `scripts/rewrite-migration/mappings.js`; this guide explains how to read it and

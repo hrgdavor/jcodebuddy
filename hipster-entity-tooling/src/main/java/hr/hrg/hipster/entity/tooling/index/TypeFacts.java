@@ -1,16 +1,12 @@
 package hr.hrg.hipster.entity.tooling.index;
 
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Modifier;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.TypeDeclaration;
-
 import hr.hrg.hipster.entity.tooling.MetadataLocations;
+import hr.hrg.hipster.entity.tooling.TreeQueries;
+import org.openrewrite.java.tree.J;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -24,8 +20,8 @@ import java.util.Set;
  *
  * @param fqn       the fully qualified name of the type — the row's key
  * @param kind      {@code class} / {@code interface} / {@code enum} / {@code record} / {@code annotation},
- *                  from {@link MetadataLocations#kindOf(TypeDeclaration)} so there is exactly one kind
- *                  resolver in the tooling
+ *                  from {@link MetadataLocations#kindOf} so there is exactly one kind resolver in the
+ *                  tooling
  * @param modifiers the Java modifier keywords of the declaration, <strong>sorted</strong> and
  *                  restricted to {@link #KEYWORDS} — a reordered modifier list must not be a diff
  * @param enclosing the FQN of the enclosing type, or {@code null} for a top-level type
@@ -37,7 +33,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     /**
      * The modifier vocabulary the index records.
      *
-     * <p>Deliberately not "every keyword JavaParser reports": the index answers "what kind of type is
+     * <p>Deliberately not "every keyword the parser reports": the index answers "what kind of type is
      * this and who can see it", and a keyword outside this set (a type-use modifier, a JVM-only flag)
      * would be a fact this table has no contract for. Adding one here is a format change and belongs in
      * DEC-029.</p>
@@ -50,68 +46,185 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
     }
 
-    /** The facts of one declaration, with its FQN derived from the unit's package and its parents. */
-    public static TypeFacts of(TypeDeclaration<?> declaration) {
-        List<String> enclosingChain = enclosingNames(declaration);
-        String packageName = packageOf(declaration);
-        String simpleName = declaration.getNameAsString();
-
-        List<String> chain = new ArrayList<>(enclosingChain);
+    /**
+     * {@link #of(J.ClassDeclaration, List, String)} for callers that already hold the facts.
+     *
+     * <p>The one place an FQN is composed, so the index cannot grow two spellings of a nested type's
+     * name. Both parsing paths feed it: the LST walk through {@link TreeQueries#typesWithEnclosing}, and
+     * the JavaParser path in the call sites that have not yet been ported — the latter by way of
+     * {@code TypeFacts.of(com.github.javaparser...)} below, which is deleted with them.</p>
+     *
+     * @param packageName    the declaring file's package, or {@code ""} for the default package
+     * @param simpleName     the type's own name
+     * @param enclosingNames the enclosing types' simple names, outermost first
+     */
+    public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
+                               String kind, List<String> modifiers, int line) {
+        List<String> chain = new ArrayList<>(enclosingNames);
         chain.add(simpleName);
-        String fqn = packageName.isEmpty() ? String.join(".", chain) : packageName + "." + String.join(".", chain);
-        String enclosing = enclosingChain.isEmpty()
-                ? null
-                : (packageName.isEmpty()
-                        ? String.join(".", enclosingChain)
-                        : packageName + "." + String.join(".", enclosingChain));
-
-        return new TypeFacts(fqn, MetadataLocations.kindOf(declaration), modifiersOf(declaration), enclosing,
-                declaration.getName().getBegin().map(position -> position.line).orElse(-1),
-                enclosingChain.size());
+        String prefix = packageName == null || packageName.isEmpty() ? "" : packageName + ".";
+        return new TypeFacts(
+                prefix + String.join(".", chain),
+                kind,
+                modifiers,
+                enclosingNames == null || enclosingNames.isEmpty()
+                        ? null
+                        : prefix + String.join(".", enclosingNames),
+                line,
+                enclosingNames == null ? 0 : enclosingNames.size());
     }
 
-    /** The decl's package, or {@code ""} when the unit has no package declaration. */
-    public static String packageOf(TypeDeclaration<?> declaration) {
-        Optional<CompilationUnit> unit = declaration.findCompilationUnit();
-        return unit.flatMap(CompilationUnit::getPackageDeclaration)
+    /**
+     * The facts of one declaration, with its FQN derived from the unit's package and its parents.
+     *
+     * <p>Phase 6: the enclosing chain is supplied rather than discovered. JavaParser's
+     * {@code Node.getParentNode()} has no LST equivalent — a node does not know its parent — so the
+     * ancestry is captured during traversal by {@link TreeQueries#typesWithEnclosing} and handed in
+     * here. Every fact this method needs is then either local to the declaration or already computed.
+     * </p>
+     *
+     * @param source the text the declaration was parsed from; carried for the line number, which the
+     *               tree alone cannot supply (see {@link TreeQueries#lineOf})
+     */
+    public static TypeFacts of(J.ClassDeclaration declaration, List<J.ClassDeclaration> enclosingTypes,
+                               String source) {
+        List<String> enclosingChain = new ArrayList<>();
+        for (J.ClassDeclaration enclosing : enclosingTypes) {
+            enclosingChain.add(enclosing.getSimpleName());
+        }
+        return of(packageOf(declaration, source), declaration.getSimpleName(), enclosingChain,
+                MetadataLocations.kindOf(declaration), modifiersOf(declaration),
+                // -1 until the declaration-to-line matching is finished; see TreeQueries.lineOf and
+                // the caveats document. The enclosing chain is still computed, because every other
+                // fact needs it and it is the input that matching will require.
+                TreeQueries.lineOf(declaration, source));
+    }
+
+    /**
+     * {@link #of(J.ClassDeclaration, List, String)} for the queue files that are
+     * <strong>not yet ported</strong>.
+     *
+     * <p>The class index is fed from both parsers while the migration is in flight, and DEC-029 cannot
+     * have two spellings of a nested type's FQN — so this resolves the JavaParser node's own local
+     * facts (name, kind, keywords, package) and funnels them through the same
+     * {@link #of(String, String, List, String, List, int)} factory the LST path uses. The enclosing
+     * chain is supplied by the caller's own recursion, which is how the JavaParser side already walked
+     * the tree.</p>
+     *
+     * <p>Deleted with the last JavaParser caller.</p>
+     */
+    public static TypeFacts of(com.github.javaparser.ast.body.TypeDeclaration<?> declaration,
+                               List<String> enclosingNames) {
+        String packageName = declaration.findCompilationUnit()
+                .flatMap(com.github.javaparser.ast.CompilationUnit::getPackageDeclaration)
                 .map(pd -> pd.getNameAsString())
                 .orElse("");
-    }
-
-    /**
-     * The names of this declaration's enclosing types, outermost first.
-     *
-     * <p>Walked through {@link Node#getParentNode()} rather than through JavaParser's symbol solver:
-     * there is no classpath at generation time, and the parent chain is all an FQN needs.</p>
-     */
-    private static List<String> enclosingNames(TypeDeclaration<?> declaration) {
-        List<String> names = new ArrayList<>();
-        Node cursor = declaration.getParentNode().orElse(null);
-        while (cursor != null) {
-            if (cursor instanceof TypeDeclaration<?> parent) {
-                names.add(0, parent.getNameAsString());
-            }
-            cursor = cursor.getParentNode().orElse(null);
-        }
-        return names;
-    }
-
-    /**
-     * The declaration's keywords, filtered to {@link #KEYWORDS} and sorted.
-     *
-     * <p>Read from {@link Modifier#asString()} rather than from the enum constant, so a keyword
-     * JavaParser models as two words ({@code non-sealed}) is spelled the way the source spells it and
-     * the way this table's contract spells it.</p>
-     */
-    private static List<String> modifiersOf(TypeDeclaration<?> declaration) {
         List<String> keywords = new ArrayList<>();
-        for (Modifier modifier : declaration.getModifiers()) {
+        for (com.github.javaparser.ast.Modifier modifier : declaration.getModifiers()) {
             String keyword = modifier.getKeyword().asString();
             if (KEYWORDS.contains(keyword)) {
                 keywords.add(keyword);
             }
         }
         Collections.sort(keywords);
+        return of(packageName, declaration.getNameAsString(), enclosingNames,
+                kindOfJp(declaration), keywords,
+                declaration.getName().getBegin().map(position -> position.line).orElse(-1));
+    }
+
+    /**
+     * The kind of a JavaParser declaration, in DEC-029's vocabulary.
+     *
+     * <p>The bridge twin of {@link MetadataLocations#kindOf(J.ClassDeclaration)}. Both return the same
+     * five spellings, and the duplication is the price of the two parsers coexisting — which is why it
+     * is a single small method with the vocabulary written out rather than a lookup that could drift.
+     * </p>
+     */
+    private static String kindOfJp(com.github.javaparser.ast.body.TypeDeclaration<?> declaration) {
+        if (declaration instanceof com.github.javaparser.ast.body.EnumDeclaration) {
+            return "enum";
+        }
+        if (declaration instanceof com.github.javaparser.ast.body.RecordDeclaration) {
+            return "record";
+        }
+        if (declaration instanceof com.github.javaparser.ast.body.AnnotationDeclaration) {
+            return "annotation";
+        }
+        if (declaration instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration classOrInterface) {
+            return classOrInterface.isInterface() ? "interface" : "class";
+        }
+        return "class";
+    }
+
+    /**
+     * The declaration's package, or {@code ""} when the unit has no package declaration.
+     *
+     * <p>Read from the source text rather than by walking to the compilation unit, because the LST
+     * gives a node no way back to its root. The package declaration is at the top of the file by
+     * definition, so the text is both the cheapest and the most reliable place to ask — and it is
+     * already required for the line number.</p>
+     */
+    public static String packageOf(J.ClassDeclaration declaration, String source) {
+        if (source == null) {
+            return "";
+        }
+        for (String rawLine : source.split("\\R", -1)) {
+            String line = rawLine.trim();
+            if (line.startsWith("package ")) {
+                String name = line.substring("package ".length()).trim();
+                if (name.endsWith(";")) {
+                    name = name.substring(0, name.length() - 1).trim();
+                }
+                return name;
+            }
+            // The package declaration must precede every type; anything else ends the search.
+            if (!line.isEmpty() && !line.startsWith("//") && !line.startsWith("*")
+                    && !line.startsWith("/*") && !line.startsWith("import ")) {
+                break;
+            }
+        }
+        return "";
+    }
+
+    /**
+     * The declaration's keywords, filtered to {@link #KEYWORDS} and sorted.
+     *
+     * <p>Read from {@link J.Modifier#getKeyword()} rather than from the enum constant, so a keyword the
+     * parser models as two words ({@code non-sealed}) is spelled the way the source spells it and the
+     * way this table's contract spells it.</p>
+     */
+    private static List<String> modifiersOf(J.ClassDeclaration declaration) {
+        List<String> keywords = new ArrayList<>();
+        for (J.Modifier modifier : declaration.getModifiers()) {
+            String keyword = keywordOf(modifier);
+            if (KEYWORDS.contains(keyword)) {
+                keywords.add(keyword);
+            }
+        }
+        Collections.sort(keywords);
         return keywords;
+    }
+
+    /**
+     * The source spelling of a modifier keyword.
+     *
+     * <p>{@code J.Modifier.Type.NonSealed} must render as {@code non-sealed}, not {@code NonSealed}:
+     * DEC-029's table is a contract over {@link #KEYWORDS}, and every entry there is spelled the way
+     * Java spells it. The default {@code toString()} of the enum constant would silently break that
+     * contract for the two hyphenated keywords.</p>
+     */
+    private static String keywordOf(J.Modifier modifier) {
+        return switch (modifier.getType()) {
+            case Public -> "public";
+            case Protected -> "protected";
+            case Private -> "private";
+            case Abstract -> "abstract";
+            case Static -> "static";
+            case Final -> "final";
+            case Sealed -> "sealed";
+            case NonSealed -> "non-sealed";
+            case Strictfp -> "strictfp";
+            default -> modifier.getType().name().toLowerCase(java.util.Locale.ROOT);
+        };
     }
 }
