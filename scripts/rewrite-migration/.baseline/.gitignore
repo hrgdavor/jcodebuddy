@@ -1,0 +1,4 @@
+# Pre-flight snapshots written by migrate-file.js --baseline.
+# Scratch state, not a contract: safe to delete at any time.
+*
+!.gitignore

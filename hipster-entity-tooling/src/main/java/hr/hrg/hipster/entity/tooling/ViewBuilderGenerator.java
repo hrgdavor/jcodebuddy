@@ -119,7 +119,7 @@ public final class ViewBuilderGenerator {
         // The shared, fail-safe read (SourceReader): an error-tolerant partial parse of a broken
         // builder could report every setter as missing — a wall of false positives about a file
         // nobody can read, which is worse than saying nothing about it.
-        SourceReader.Read read = SourceReader.read(builderFile);
+        SourceReader.ReadJp read = SourceReader.readJp(builderFile);
         if (!read.readable()) {
             SourceReader.reportUnparseable(divergences, "source_not_parsed",
                     builderClass,

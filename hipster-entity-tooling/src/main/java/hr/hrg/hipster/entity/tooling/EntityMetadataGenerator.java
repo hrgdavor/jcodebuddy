@@ -1043,7 +1043,7 @@ public class EntityMetadataGenerator {
             // If no standard Maven source root is found, derive the source root from the package declaration.
             try {
                 String source = Files.readString(inputPath);
-                ParseResult<CompilationUnit> parseResult = SourceReader.parser().parse(source);
+                ParseResult<CompilationUnit> parseResult = SourceReader.portingParser().parse(source);
                 CompilationUnit cu = parseResult.getResult().orElse(null);
                 if (cu != null && cu.getPackageDeclaration().isPresent()) {
                     String packageName = cu.getPackageDeclaration().get().getNameAsString();
@@ -1379,7 +1379,7 @@ public class EntityMetadataGenerator {
                 .forEach(filePath -> {
                     try {
                         String source = Files.readString(filePath);
-                        SourceReader.Read read = SourceReader.readText(source);
+                        SourceReader.ReadJp read = SourceReader.readJpText(source);
                         if (!read.readable()) {
                             // Fail safe: the file contributes nothing, and the report says which one.
                             unparsedFiles.add(sourceRoot.relativize(filePath).toString().replace('\\', '/'));
@@ -1959,7 +1959,7 @@ public class EntityMetadataGenerator {
             // unit for broken source, and a partial unit whose constant list failed to parse would look
             // like an empty ledger and silently renumber everything. An unreadable enum therefore keeps
             // the declaration order and the ledger path reports it separately.
-            SourceReader.Read read = SourceReader.read(enumFile);
+            SourceReader.ReadJp read = SourceReader.readJp(enumFile);
             if (!read.readable()) {
                 return new LedgerOrder(accessors, accessors.size());
             }

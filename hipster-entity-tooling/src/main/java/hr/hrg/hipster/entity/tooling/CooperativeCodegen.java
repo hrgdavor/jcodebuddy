@@ -103,7 +103,7 @@ public final class CooperativeCodegen {
         // parse must never be the basis for "nothing to preserve", because that is how a user's member
         // gets deleted. An unreadable file yields nothing preserved, which is the same as a fresh file
         // — and the pass that overwrites it is what the caller's own report covers.
-        SourceReader.Read read = SourceReader.readText(text);
+        SourceReader.ReadJp read = SourceReader.readJpText(text);
         if (!read.readable()) {
             return List.of();
         }
@@ -207,8 +207,8 @@ public final class CooperativeCodegen {
             return new Reconciled(canonical, List.of());
         }
         String previousText = Files.readString(previousFile);
-        SourceReader.Read previousRead = SourceReader.readText(previousText);
-        SourceReader.Read canonicalRead = SourceReader.readText(canonical);
+        SourceReader.ReadJp previousRead = SourceReader.readJpText(previousText);
+        SourceReader.ReadJp canonicalRead = SourceReader.readJpText(canonical);
         if (!previousRead.readable() || !canonicalRead.readable()) {
             // Unreadable on either side: the safe answer is the canonical text plus nothing preserved,
             // and the caller's read guard has already reported why.

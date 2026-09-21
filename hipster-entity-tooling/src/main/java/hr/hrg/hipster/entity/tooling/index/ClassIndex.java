@@ -389,7 +389,7 @@ public final class ClassIndex {
      */
     public void addGeneratedArtifact(String moduleRelativePath, Path fileOnDisk) throws IOException {
         requireModuleRelative(moduleRelativePath);
-        CompilationUnit unit = SourceReader.readUnit(fileOnDisk);
+        CompilationUnit unit = SourceReader.readUnitJp(fileOnDisk);
         if (unit == null) {
             // A generated file this pass cannot read is a bug in an emitter rather than a fact about the
             // tree, and giving it a type-less row would hide it. The pass's own divergence reporter

@@ -49,7 +49,7 @@ class TypeFactsTest {
             """;
 
     private static List<TypeFacts> factsOf(String source) {
-        CompilationUnit unit = SourceReader.readSourceText(source);
+        CompilationUnit unit = SourceReader.readUnitJpText(source);
         Assertions.assertNotNull(unit, "the fixture must parse");
         List<TypeFacts> facts = new ArrayList<>();
         for (TypeDeclaration<?> declaration : unit.getTypes()) {

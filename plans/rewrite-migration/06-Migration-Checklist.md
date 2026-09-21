@@ -250,8 +250,47 @@ All migrated code must comply with:
 
 ## Status
 
-**Current**: Ready for implementation
-**Next**: After Phase 6 completion, proceed to Phase 7
+**Current**: Deliverables complete — see the note below.
+**Next**: Clear prerequisites P0-1..P0-3, then port in the order `Checklist.md` prints.
+
+### Implementation note (added on delivery)
+
+The four deliverables listed under § Deliverables exist:
+
+- `doc/brainstorm/rewrite-migration/06-migration/Checklist.md` (generated)
+- `doc/brainstorm/rewrite-migration/06-migration/tracker.md` (hand-maintained state)
+- `doc/brainstorm/rewrite-migration/06-migration/MIGRATION-GUIDE.md`
+- the four scripts, as JavaScript under `scripts/rewrite-migration/` rather than
+  `06-migration/scripts/*.sh` — this checkout is Windows with Bun tooling, and
+  `scripts/*.sh` would not be executable or verifiable here
+
+Four corrections to this plan were needed once the tree was scanned. Each is
+recorded in full in `Checklist.md` § *Corrections to the plan's file list*:
+
+1. **The file list is wrong.** `webview-jetbrains/.../HttpBridgeStartupActivity.java`
+   does not exist; the real path is
+   `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java`.
+   Six files use JavaParser **fully qualified with no import** and are invisible
+   to Step 1's scan.
+2. **Step 1's command is not a usable scan.** `grep -r "import com.github.javaparser"`
+   misses the six files above, and a case-insensitive form of it matches
+   `org.openrewrite.java.JavaParser` — a *different library's* class with the same
+   simple name, which is why the already-converted `project-automation` staging
+   package appears to still use JavaParser.
+3. **Check 1 cannot fail usefully.** `| grep -v "test" | grep -v "comment"` drops
+   every test file from the count. `verify-migration.js` replaces it with checks
+   that can fail, including whether `tracker.md` agrees with the code.
+4. **Prerequisites (Phase 5) are not actually met.**
+   `project-automation/src/main/java/hr/hrg/rewrite/**` does not compile — two
+   syntax errors plus semantic errors behind them, including references to a
+   `hr.hrg.hipster.entity.tooling.TypeTree` that exists nowhere — and the module
+   declares no OpenRewrite dependency. Recorded as P0-1..P0-3. Note that a plain
+   `compile` reports `BUILD SUCCESS` from stale class files (note F-47); only
+   `clean compile` shows the breakage.
+
+The plan's `ProjectAutomation` / `AutomationEngine` deliverables in Phase 5 were
+never materialised in `project-automation`, which is why item 4 blocks Phase 6
+rather than merely preceding it.
 
 ## Quick Reference
 

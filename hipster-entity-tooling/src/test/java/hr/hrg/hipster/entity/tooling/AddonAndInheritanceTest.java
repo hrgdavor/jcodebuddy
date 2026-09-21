@@ -125,7 +125,7 @@ class AddonAndInheritanceTest {
      */
     private static List<String> constants(Path enumFile) throws Exception {
         Assertions.assertTrue(Files.exists(enumFile), "the field enum must be emitted: " + enumFile);
-        com.github.javaparser.ast.CompilationUnit cu = SourceReader.read(enumFile).unit();
+        com.github.javaparser.ast.CompilationUnit cu = SourceReader.readJp(enumFile).unit();
         Assertions.assertNotNull(cu, "the emitted enum must parse: " + enumFile);
         List<String> names = new java.util.ArrayList<>();
         for (com.github.javaparser.ast.body.EnumConstantDeclaration constant

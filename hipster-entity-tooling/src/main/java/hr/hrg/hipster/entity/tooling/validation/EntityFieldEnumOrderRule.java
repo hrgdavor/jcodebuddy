@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import com.github.javaparser.ast.CompilationUnit;
+import hr.hrg.hipster.entity.tooling.TreeQueries;
+import org.openrewrite.java.tree.J;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -18,18 +19,53 @@ import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker.EnumLed
  * decodable. The cross-revision order comparison is driven by {@link #compareRevisions}, which the
  * CLI in {@code EntityMetadataGenerator}'s entry point ({@code --baseline}) calls with two revision
  * sources; it is deliberately not a git dependency of this class.</p>
+ *
+ * <h3>Phase 6: the tree is no longer printed back to text</h3>
+ * <p>The old check re-serialised the parsed unit ({@code cu.toString()}) and re-parsed it inside
+ * {@code readLedgers}. That was a round trip through the printer to recover something the caller
+ * already had: the source text. It now passes the source through, which also removes the one place
+ * in this rule where a printer change could silently alter the diagnostic text. The per-file
+ * overload keeps the same signature as the rest of the registry; the CLI path uses
+ * {@link #validateSource} directly.</p>
  */
 public class EntityFieldEnumOrderRule implements EntityRule {
 
     @Override
-    public void validate(Path file, String pkg, CompilationUnit cu, List<EntityRulesValidator.ValidationIssue> issues) {
-        // Per-file checks only; the cross-revision comparison needs the baseline text.
+    public void validate(Path file, String pkg, J.CompilationUnit cu,
+                         List<EntityRulesValidator.ValidationIssue> issues) {
+        // A tree cannot carry the DEC-021 header comment, so the per-file entry point
+        // cannot see the marker. Recorded as a known narrowing: callers that have the
+        // source (EntityRulesValidator, the --baseline CLI) use validateSource.
         EnumConstantOrderChecker.HeaderConfig header = EnumConstantOrderChecker.readHeader(cu);
         for (String diagnostic : header.diagnostics()) {
             issues.add(new EntityRulesValidator.ValidationIssue(file, diagnostic));
         }
+    }
 
-        String source = cu.toString();
+    /**
+     * Checks one file from its <strong>source text</strong>.
+     *
+     * <p>This is the entry point the validator uses for the ledger half of R1. It parses the text once
+     * and reads both the DEC-021 header and the field-enum ledgers from that one tree, so the two
+     * cannot disagree about which revision they describe — the reason the old version re-serialised the
+     * tree with {@code cu.toString()} and re-parsed it was to get back to a single source, and passing
+     * the source through is what removes that round trip.</p>
+     */
+    public static void validateSource(Path file, String source,
+                                      List<EntityRulesValidator.ValidationIssue> issues) {
+        hr.hrg.hipster.entity.tooling.SourceReader.Read read =
+                hr.hrg.hipster.entity.tooling.SourceReader.readText(source);
+        if (!read.readable()) {
+            // The caller has already reported an unreadable file; a second diagnostic here
+            // would duplicate it. Nothing can be said about a ledger that was not read.
+            return;
+        }
+        EnumConstantOrderChecker.HeaderConfig header =
+                EnumConstantOrderChecker.readHeader(read.unit());
+        for (String diagnostic : header.diagnostics()) {
+            issues.add(new EntityRulesValidator.ValidationIssue(file, diagnostic));
+        }
+
         Map<String, EnumLedger> ledgers = EnumConstantOrderChecker.readLedgers(source);
         for (EnumLedger ledger : ledgers.values()) {
             if (!ledger.guarded()) {
@@ -46,6 +82,15 @@ public class EntityFieldEnumOrderRule implements EntityRule {
                                 + " carries allowReorder:true; remove it once the layout is settled"));
             }
         }
+    }
+
+    /**
+     * Whether the file declares any type at all, used by the validator to skip a file it should not
+     * report on. Kept here because "does this tree declare anything" is an enum-ledger question in
+     * this rule's terms, not a general one.
+     */
+    static boolean declaresNoTypes(J.CompilationUnit cu) {
+        return TreeQueries.typeDeclarations(cu).isEmpty();
     }
 
     /**

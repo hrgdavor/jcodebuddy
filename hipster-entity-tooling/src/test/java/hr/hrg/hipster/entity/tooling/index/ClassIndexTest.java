@@ -86,7 +86,7 @@ class ClassIndexTest {
                 // The walk names the file first and upgrades it with its types, so a file that declares
                 // none is still recorded by the pass's report rather than vanishing.
                 index.addFile(relative);
-                var unit = SourceReader.readUnit(file);
+                var unit = SourceReader.readUnitJp(file);
                 if (unit == null) {
                     // The pass reports an unreadable file and registers no types; the fixture has none, so
                     // reaching here would mean the fixture itself is broken rather than the index.
@@ -336,7 +336,7 @@ class ClassIndexTest {
     void twoFilesDeclaringOneTypeIsAFatalDiagnostic() throws Exception {
         Path root = writeModule(Files.createTempDirectory("class-index-duplicate"));
         ClassIndex index = indexOf(root);
-        var unit = SourceReader.readUnit(root.resolve("src/main/java/a/b/Person.java"));
+        var unit = SourceReader.readUnitJp(root.resolve("src/main/java/a/b/Person.java"));
         index.addTypes("src/main/java/a/b/Person.java", unit, false);
 
         IllegalStateException thrown = Assertions.assertThrows(IllegalStateException.class,

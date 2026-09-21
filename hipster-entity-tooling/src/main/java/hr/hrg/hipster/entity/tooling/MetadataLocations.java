@@ -330,7 +330,7 @@ public final class MetadataLocations {
             }
             return;
         }
-        SourceReader.Read read = SourceReader.read(candidate);
+        SourceReader.ReadJp read = SourceReader.readJp(candidate);
         if (!read.readable()) {
             SourceReader.reportUnparseable(divergences, "source_not_parsed", moduleRelative,
                     "the generated artifact could not be parsed, so it contributed no locations to this "
@@ -539,7 +539,7 @@ public final class MetadataLocations {
     private static int declarationLineOf(Path moduleRoot, String moduleRelativePath, String displayName) {
         try {
             Path file = moduleRoot.resolve(moduleRelativePath);
-            SourceReader.Read read = SourceReader.read(file);
+            SourceReader.ReadJp read = SourceReader.readJp(file);
             if (!read.readable()) {
                 return -1;
             }
@@ -582,7 +582,7 @@ public final class MetadataLocations {
      */
     private static String kindOfForeign(Path moduleRoot, String moduleRelativePath) {
         try {
-            SourceReader.Read read = SourceReader.read(moduleRoot.resolve(moduleRelativePath));
+            SourceReader.ReadJp read = SourceReader.readJp(moduleRoot.resolve(moduleRelativePath));
             if (read.readable()) {
                 for (TypeDeclaration<?> declaration : read.unit().getTypes()) {
                     return kindOf(declaration);

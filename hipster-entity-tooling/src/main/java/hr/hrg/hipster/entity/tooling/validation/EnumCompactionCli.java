@@ -164,9 +164,27 @@ public final class EnumCompactionCli {
         }
     }
 
-    /** Compacts one file's enum in memory, or explains why it will not. */
+    /**
+     * Compacts one file's enum in memory, or explains why it will not.
+     *
+     * <h3>Phase 6: the second-pass boundary</h3>
+     * <p>This is the one queue file whose port needs the <em>emission</em> strategy rather than just
+     * the read path: it mutates an enum's constant list and then prints the whole file, and the LST
+     * printer will reformat what it prints (migration guide § 5). That decision belongs with the
+     * generator port, so this method keeps JavaParser for now and is the explicit boundary of the
+     * first pass.</p>
+     *
+     * <p>What changed here is only the parser it borrows: {@code SourceReader.parser()} used to hand
+     * out a live parser, and that accessor is gone because handing out the parser is how the
+     * single-read guarantee leaks. The same configured parser is now reached through
+     * {@link hr.hrg.hipster.entity.tooling.SourceReader#portingParser()}, so this file cannot
+     * construct a second, differently-configured parser behind the toolchain's back — which is the
+     * exact defect ({@code new JavaParser()} reading at Java 11) that {@code SourceReader} exists to
+     * prevent.</p>
+     */
     static CompactionResult compactFile(Path file) throws IOException {
-        ParseResult<CompilationUnit> parsed = hr.hrg.hipster.entity.tooling.SourceReader.parser().parse(Files.readString(file));
+        ParseResult<CompilationUnit> parsed = hr.hrg.hipster.entity.tooling.SourceReader
+                .portingParser().parse(Files.readString(file));
         if (!parsed.isSuccessful() || parsed.getResult().isEmpty()) {
             // A partial unit would compact the wrong thing, which is worse than not compacting.
             return CompactionResult.error("could not be parsed; left untouched");

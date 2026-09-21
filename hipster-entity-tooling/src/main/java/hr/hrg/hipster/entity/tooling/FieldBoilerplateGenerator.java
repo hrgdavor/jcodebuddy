@@ -175,7 +175,7 @@ public final class FieldBoilerplateGenerator {
         if (!Files.exists(enumFile)) {
             return false;
         }
-        SourceReader.Read read = SourceReader.read(enumFile);
+        SourceReader.ReadJp read = SourceReader.readJp(enumFile);
         if (!read.readable()) {
             // Unreadable: preserve it. The report is emitted by the caller, which owns the sink.
             return true;
@@ -233,7 +233,7 @@ public final class FieldBoilerplateGenerator {
             return LedgerPlan.fresh(properties);
         }
         String existing = Files.readString(enumFile);
-        SourceReader.Read read = SourceReader.readText(existing);
+        SourceReader.ReadJp read = SourceReader.readJpText(existing);
         // The fail-safe direction of DR-7, now shared with every other read in the generator
         // ({@link SourceReader}): JavaParser is error tolerant and returns a PARTIAL compilation unit
         // for broken source. Trusting the mere presence of a result meant a syntax error made the enum
@@ -809,7 +809,7 @@ public final class FieldBoilerplateGenerator {
     }
 
     private Expression parseExpression(String source) {
-        return SourceReader.parser().parseExpression(source)
+        return SourceReader.portingParser().parseExpression(source)
                 .getResult()
                 .orElseThrow(() -> new IllegalArgumentException("Unable to parse expression: " + source));
     }

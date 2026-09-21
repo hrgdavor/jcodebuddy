@@ -1,7 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.RecordDeclaration;
+import org.openrewrite.java.tree.J;
+import org.openrewrite.java.tree.Statement;
 
 import hr.hrg.hipster.entity.api.GenLevel;
 
@@ -46,9 +46,23 @@ import java.util.List;
  * direction, and a shape the tree does not contain.</p>
  *
  * <p>Rationale: DEFAULT means "do not add anything the author did not ask for, but do not leave the
- * declared interface unimplemented". It <strong>never</strong> returns
+ * declared interface untouched". It <strong>never</strong> returns
  * {@code BUILDER_TRACKED}/{@code BUILDER_ALL} — a view that wants tracking must say so, because
  * tracking changes the public surface ({@code changes()}/{@code changesBuilder()}).</p>
+ *
+ * <h3>Phase 6: how the nested shapes are recognised</h3>
+ * <p>Two kind tests replace two JavaParser types, and both are the kind of change that keeps
+ * compiling while changing the answer:</p>
+ * <ul>
+ *   <li>{@code members.filter(m -> m instanceof RecordDeclaration)} becomes a kind test for
+ *       {@code Record}, because a record is a {@link J.ClassDeclaration} and so is every other
+ *       declaration.</li>
+ *   <li>{@code member instanceof ClassOrInterfaceDeclaration && nested.isInterface()} becomes a kind
+ *       test for {@code Interface}. Keeping only the {@code instanceof J.ClassDeclaration} half would
+ *       make a nested record named {@code Write} count as the {@code Write} interface.</li>
+ * </ul>
+ * <p>Only the declaration's <em>direct</em> members are considered, which is what
+ * {@code decl.getMembers()} meant and what nested-type recursion would change.</p>
  */
 public final class GenLevelResolver {
 
@@ -72,7 +86,7 @@ public final class GenLevelResolver {
      *                  record's component list; may be empty when the caller has not collected them
      *                  yet, in which case rule 1 falls back to {@code META} with a diagnostic
      */
-    public static Resolved resolve(GenLevel requested, ClassOrInterfaceDeclaration decl, List<String> fieldNames) {
+    public static Resolved resolve(GenLevel requested, J.ClassDeclaration decl, List<String> fieldNames) {
         GenLevel level = requested == null ? GenLevel.DEFAULT : requested;
         if (level != GenLevel.DEFAULT) {
             return new Resolved(level, List.of());
@@ -81,15 +95,15 @@ public final class GenLevelResolver {
         List<String> diagnostics = new ArrayList<>();
 
         // Rule 1: a nested record with a matching component list means the author wants a record.
-        for (RecordDeclaration record : decl.getMembers().stream()
-                .filter(m -> m instanceof RecordDeclaration)
-                .map(m -> (RecordDeclaration) m)
-                .toList()) {
-            List<String> components = record.getParameters().stream()
-                    .map(p -> p.getNameAsString())
-                    .toList();
+        // Only direct members are inspected: `getMembers()` was the direct-member list, and a
+        // nested type inside a nested type is not a declaration of this view.
+        for (J.ClassDeclaration nested : directMembers(decl)) {
+            if (!TreeQueries.isKind(nested, J.ClassDeclaration.Kind.Type.Record)) {
+                continue;
+            }
+            List<String> components = recordComponentNames(nested);
             if (fieldNames == null || fieldNames.isEmpty()) {
-                diagnostics.add("default_level_unresolved: nested record " + record.getNameAsString()
+                diagnostics.add("default_level_unresolved: nested record " + nested.getSimpleName()
                         + " found but the view's field list is not known yet; falling back to META");
                 return new Resolved(GenLevel.META, diagnostics);
             }
@@ -98,7 +112,7 @@ public final class GenLevelResolver {
             }
             // "If the two disagree (a stale record), emit the DEC-022 divergence diagnostic and
             // fall back to META rather than generating a create() that would not compile."
-            diagnostics.add("nested_record_mismatch: nested record " + record.getNameAsString()
+            diagnostics.add("nested_record_mismatch: nested record " + nested.getSimpleName()
                     + " has components " + components + " but the view's fields are "
                     + withInheritedId(fieldNames)
                     + "; falling back to META");
@@ -107,10 +121,9 @@ public final class GenLevelResolver {
 
         // Rule 2: a nested Write interface means the author wants a builder.
         boolean hasWrite = false;
-        for (var member : decl.getMembers()) {
-            if (member instanceof ClassOrInterfaceDeclaration nested
-                    && nested.isInterface()
-                    && "Write".equals(nested.getNameAsString())) {
+        for (J.ClassDeclaration nested : directMembers(decl)) {
+            if (TreeQueries.isKind(nested, J.ClassDeclaration.Kind.Type.Interface)
+                    && "Write".equals(nested.getSimpleName())) {
                 hasWrite = true;
                 break;
             }
@@ -124,8 +137,129 @@ public final class GenLevelResolver {
     }
 
     /** Convenience: resolve without any field-name information for rule 1. */
-    public static Resolved resolve(GenLevel requested, ClassOrInterfaceDeclaration decl) {
+    public static Resolved resolve(GenLevel requested, J.ClassDeclaration decl) {
         return resolve(requested, decl, null);
+    }
+
+    // ---------------------------------------------------------------- bridge ---
+
+    /**
+     * The JavaParser-tree overload, for the queue files that are <strong>not yet ported</strong>.
+     *
+     * <p>This resolver is shared between {@code ViewAnnotationRule} (ported) and
+     * {@code EntityMetadataGenerator} (not yet ported), and the class exists precisely so the two
+     * cannot disagree about what {@code DEFAULT} means. Duplicating the rule per parser would
+     * reintroduce that divergence, so for as long as either caller is on the old parser both trees
+     * are accepted.</p>
+     *
+     * <p>The shape census maps exactly: JavaParser's {@code RecordDeclaration} is the LST's
+     * kind-{@code Record} {@link J.ClassDeclaration}, and a nested {@code Write} interface is a
+     * kind-{@code Interface} declaration named {@code Write}. Only direct members are considered on
+     * both sides, which is what {@code getMembers()} meant.</p>
+     *
+     * @param decl a JavaParser declaration, from a call site that has not yet been ported
+     */
+    public static Resolved resolve(GenLevel requested,
+                                   com.github.javaparser.ast.body.ClassOrInterfaceDeclaration decl,
+                                   List<String> fieldNames) {
+        return resolve(requested, decl, fieldNames, true);
+    }
+
+    /** {@link #resolve(GenLevel, com.github.javaparser.ast.body.ClassOrInterfaceDeclaration, List)} without field names. */
+    public static Resolved resolve(GenLevel requested,
+                                   com.github.javaparser.ast.body.ClassOrInterfaceDeclaration decl) {
+        return resolve(requested, decl, null, true);
+    }
+
+    private static Resolved resolve(GenLevel requested,
+                                    com.github.javaparser.ast.body.ClassOrInterfaceDeclaration decl,
+                                    List<String> fieldNames, boolean jpMarker) {
+        GenLevel level = requested == null ? GenLevel.DEFAULT : requested;
+        if (level != GenLevel.DEFAULT) {
+            return new Resolved(level, List.of());
+        }
+
+        List<String> diagnostics = new ArrayList<>();
+
+        // Rule 1: a nested record with a matching component list means the author wants a record.
+        for (com.github.javaparser.ast.body.BodyDeclaration<?> member : decl.getMembers()) {
+            if (!(member instanceof com.github.javaparser.ast.body.RecordDeclaration record)) {
+                continue;
+            }
+            List<String> components = record.getParameters().stream()
+                    .map(com.github.javaparser.ast.body.Parameter::getNameAsString)
+                    .toList();
+            if (fieldNames == null || fieldNames.isEmpty()) {
+                diagnostics.add("default_level_unresolved: nested record " + record.getNameAsString()
+                        + " found but the view's field list is not known yet; falling back to META");
+                return new Resolved(GenLevel.META, diagnostics);
+            }
+            if (components.equals(fieldNames) || components.equals(withInheritedId(fieldNames))) {
+                return new Resolved(GenLevel.RECORD, diagnostics);
+            }
+            diagnostics.add("nested_record_mismatch: nested record " + record.getNameAsString()
+                    + " has components " + components + " but the view's fields are "
+                    + withInheritedId(fieldNames)
+                    + "; falling back to META");
+            return new Resolved(GenLevel.META, diagnostics);
+        }
+
+        // Rule 2: a nested Write interface means the author wants a builder.
+        for (com.github.javaparser.ast.body.BodyDeclaration<?> member : decl.getMembers()) {
+            if (member instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration nested
+                    && nested.isInterface()
+                    && "Write".equals(nested.getNameAsString())) {
+                return new Resolved(GenLevel.BUILDER, diagnostics);
+            }
+        }
+
+        // Rule 3.
+        return new Resolved(GenLevel.META, diagnostics);
+    }
+
+    /**
+     * The types declared directly inside {@code decl}, in declaration order.
+     *
+     * <p>Read from the body's statement list, which is where the LST keeps members, and filtered to
+     * type declarations. Note this is deliberately <em>not</em> a deep walk: a nested type of a
+     * nested type is not a member of this view.</p>
+     */
+    private static List<J.ClassDeclaration> directMembers(J.ClassDeclaration decl) {
+        List<J.ClassDeclaration> members = new ArrayList<>();
+        if (decl == null || decl.getBody() == null) {
+            return members;
+        }
+        for (Statement statement : decl.getBody().getStatements()) {
+            if (statement instanceof J.ClassDeclaration nested) {
+                members.add(nested);
+            }
+        }
+        return members;
+    }
+
+    /**
+     * A record's component names, in declaration order.
+     *
+     * <p>A record's components are its primary-constructor parameters — there is no record-specific
+     * component accessor, which is the trap the migration guide records for
+     * {@code RecordDeclaration}.</p>
+     */
+    private static List<String> recordComponentNames(J.ClassDeclaration record) {
+        List<String> names = new ArrayList<>();
+        List<Statement> components = record.getPrimaryConstructor();
+        if (components == null) {
+            return names;
+        }
+        for (Statement component : components) {
+            // Each component is a J.VariableDeclarations; one entry may declare several
+            // names (`record Row(int a, int b)` is two entries, but `record Row(int a, b)`
+            // would be one), so every variable is read rather than only the first.
+            if (component instanceof J.VariableDeclarations declarations) {
+                declarations.getVariables().forEach(variable ->
+                        names.add(variable.getName().getSimpleName()));
+            }
+        }
+        return names;
     }
 
     /**

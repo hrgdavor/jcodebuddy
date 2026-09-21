@@ -1,8 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import hr.hrg.hipster.entity.tooling.TreeQueries;
+import org.openrewrite.java.tree.J;
 
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -59,6 +58,13 @@ import java.util.Set;
  *
  * <p>It also does not dictate a package: the new-project guide shows a consuming project using its own
  * ({@code com.example.person.entity}), so a rule that rejected it would contradict the guide.</p>
+ *
+ * <h3>Phase 6</h3>
+ * <p>The index is built from {@link TreeQueries#interfaces} and
+ * {@link TreeQueries#supertypeNames}, which absorb two API splits that a mechanical port gets wrong
+ * silently: one {@link J.ClassDeclaration} covers five kinds, and a supertype is a
+ * {@link J.Identifier} when bare but a {@link J.ParameterizedType} when it has type arguments. The
+ * rule's meaning is unchanged — only the names are indexed, and still with no symbol solver.</p>
  */
 public class ViewInterfaceRule implements EntityRule {
 
@@ -71,35 +77,39 @@ public class ViewInterfaceRule implements EntityRule {
             Set.of("ViewReader", "ViewWriter", "ViewChangeTracking");
 
     @Override
-    public void validateAll(Map<Path, CompilationUnit> units, List<EntityRulesValidator.ValidationIssue> issues) {
+    public void validateAll(Map<Path, J.CompilationUnit> units,
+                            List<EntityRulesValidator.ValidationIssue> issues) {
         // Only the `extends` names are indexed, merged per simple name so a chain that crosses packages
         // still resolves without a symbol solver. No role inference happens on top of it.
         Map<String, Set<String>> parents = new HashMap<>();
-        for (Map.Entry<Path, CompilationUnit> unit : units.entrySet()) {
-            for (ClassOrInterfaceDeclaration decl : unit.getValue()
-                    .findAll(ClassOrInterfaceDeclaration.class)) {
-                Set<String> extended = parents.computeIfAbsent(decl.getNameAsString(), __ -> new HashSet<>());
-                for (ClassOrInterfaceType type : decl.getExtendedTypes()) {
-                    extended.add(simpleName(type));
-                }
+        for (Map.Entry<Path, J.CompilationUnit> unit : units.entrySet()) {
+            for (J.ClassDeclaration decl : TreeQueries.typeDeclarations(unit.getValue())) {
+                Set<String> extended = parents.computeIfAbsent(decl.getSimpleName(), __ -> new HashSet<>());
+                // supertypeNames, not getExtends(): an interface's `extends` clause lives in
+                // getImplements() (verified — see TreeQueries.supertypeNames). Reading getExtends()
+                // here would index nothing for any interface, so every view's chain would look
+                // empty and the rule would report correct views as unreachable.
+                extended.addAll(TreeQueries.supertypeNames(decl));
             }
         }
 
-        for (Map.Entry<Path, CompilationUnit> unit : units.entrySet()) {
-            for (ClassOrInterfaceDeclaration decl : unit.getValue()
-                    .findAll(ClassOrInterfaceDeclaration.class)) {
+        for (Map.Entry<Path, J.CompilationUnit> unit : units.entrySet()) {
+            for (J.ClassDeclaration decl : TreeQueries.typeDeclarations(unit.getValue())) {
                 check(decl, unit.getKey(), parents, issues);
             }
         }
     }
 
-    private void check(ClassOrInterfaceDeclaration decl, Path file, Map<String, Set<String>> parents,
+    private void check(J.ClassDeclaration decl, Path file, Map<String, Set<String>> parents,
                        List<EntityRulesValidator.ValidationIssue> issues) {
-        if (!decl.isInterface() || isSurface(decl)) {
+        // Kind test first: an interface only. The old guard was `!decl.isInterface()`, and the
+        // enclosing findAll matched one JavaParser type; here the type covers every kind, so
+        // dropping this test would make the rule judge records and enums as views.
+        if (!TreeQueries.isKind(decl, J.ClassDeclaration.Kind.Type.Interface) || isSurface(decl)) {
             return;
         }
-        String name = decl.getNameAsString();
-        if (decl.getAnnotationByName("View").isPresent()) {
+        String name = decl.getSimpleName();
+        if (TreeQueries.hasAnnotation(decl, "View")) {
             return; // an explicit view declaration: the author knows, and naming is not enforced here
         }
         if (!reachesEntityBase(name, parents, new HashSet<>())
@@ -131,16 +141,7 @@ public class ViewInterfaceRule implements EntityRule {
         return false;
     }
 
-    private static boolean isSurface(ClassOrInterfaceDeclaration decl) {
-        return decl.getExtendedTypes().stream()
-                .anyMatch(type -> SURFACE_TYPES.contains(simpleName(type)));
-    }
-
-    /** The simple name of a possibly-qualified, possibly-generic type reference. */
-    private static String simpleName(ClassOrInterfaceType type) {
-        String raw = type.getNameAsString();
-        String withoutArgs = raw.contains("<") ? raw.substring(0, raw.indexOf('<')) : raw;
-        int dot = withoutArgs.lastIndexOf('.');
-        return dot >= 0 ? withoutArgs.substring(dot + 1) : withoutArgs;
+    private static boolean isSurface(J.ClassDeclaration decl) {
+        return TreeQueries.supertypeNames(decl).stream().anyMatch(SURFACE_TYPES::contains);
     }
 }

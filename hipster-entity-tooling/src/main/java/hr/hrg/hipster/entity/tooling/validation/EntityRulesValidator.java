@@ -1,7 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import com.github.javaparser.ParseResult;
-import com.github.javaparser.ast.CompilationUnit;
+import hr.hrg.hipster.entity.tooling.SourceReader;
+import org.openrewrite.java.tree.J;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,10 +17,12 @@ import java.util.Map;
  * array in the constructor, so a reader (or an IDE's find-usages) can see exactly which checks run.
  *
  * <p>It parses the whole source set first and then offers the units to every rule, so a tree-wide rule
- * can ask a question that spans files — see {@link EntityRule#validateAll}. The parse itself goes
- * through {@link hr.hrg.hipster.entity.tooling.SourceReader#parser()}, which is pinned to the project's
- * language level: a bare {@code new JavaParser()} reads at Java 11 and cannot see switch expressions,
- * records or sealed types, which is most of what this repository generates (notes § 2.5).</p>
+ * can ask a question that spans files — see {@link EntityRule#validateAll}. The parse goes through
+ * {@link hr.hrg.hipster.entity.tooling.SourceReader}, which owns the one configured parser: a bare
+ * parser reads below the project's language level and cannot see switch expressions, records or
+ * sealed types, which is most of what this repository generates (notes § 2.5). The rule this
+ * validator inherits is {@link SourceReader}'s: "the parse returned something" is never "the file is
+ * readable", so an unreadable file is reported, not treated as empty.</p>
  */
 public class EntityRulesValidator {
 
@@ -88,7 +90,7 @@ public class EntityRulesValidator {
 
     public List<ValidationIssue> validate(Path moduleRoot) throws IOException {
         List<ValidationIssue> issues = new ArrayList<>();
-        Map<Path, CompilationUnit> units = new LinkedHashMap<>();
+        Map<Path, J.CompilationUnit> units = new LinkedHashMap<>();
 
         if (!Files.exists(moduleRoot)) {
             issues.add(new ValidationIssue(moduleRoot, "source root does not exist"));
@@ -106,18 +108,22 @@ public class EntityRulesValidator {
 
         // Parse first, rule second: a rule that needs the tree must not observe a half-built index,
         // and the order of `Files.walk` must never influence a diagnostic's content.
+        List<SourceFilePair> readable = new ArrayList<>();
         for (Path file : files) {
             try {
                 String source = Files.readString(file);
-                ParseResult<CompilationUnit> parse =
-                        hr.hrg.hipster.entity.tooling.SourceReader.parser().parse(source);
-                CompilationUnit cu = parse.getResult().orElse(null);
-                if (!parse.isSuccessful() || cu == null) {
+                // SourceReader owns the "is this readable at all" question. Asking it here
+                // rather than re-deriving it from a parse result is the whole point of the
+                // class: one place decides, so the F-34 failure (a partial parse mistaken
+                // for a fresh file) cannot be reintroduced at a call site.
+                SourceReader.Read read = SourceReader.readText(source);
+                if (!read.readable()) {
                     issues.add(new ValidationIssue(file, "source_not_parsed: the file could not be read "
                             + "as Java at the configured language level; it was NOT treated as empty"));
                     continue;
                 }
-                units.put(file, cu);
+                units.put(file, read.unit());
+                readable.add(new SourceFilePair(file, source));
             } catch (IOException e) {
                 issues.add(new ValidationIssue(file, "IO error: " + e.getMessage()));
             }
@@ -126,7 +132,19 @@ public class EntityRulesValidator {
         for (EntityRule rule : rules) {
             rule.validateAll(units, issues);
         }
+
+        // The field-enum ledger is the one rule that needs the source text as well as the tree,
+        // because the DEC-021 marker is a comment and the LST carries no comment nodes. It is run
+        // here rather than from `validateAll` so the header and the ledgers are read from the same
+        // text — a tree cannot supply the header at all.
+        for (SourceFilePair pair : readable) {
+            EntityFieldEnumOrderRule.validateSource(pair.file(), pair.source(), issues);
+        }
         return issues;
+    }
+
+    /** A parsed file and the text it was parsed from, so a rule can read comments as well as the tree. */
+    private record SourceFilePair(Path file, String source) {
     }
 
     /**

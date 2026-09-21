@@ -134,7 +134,7 @@ public final class ViewInterfaceGenerator {
         // cannot be read must not be rewritten. It used to accept a partial parse, which meant a
         // syntax error could make an already-present `default` method invisible — and the generator
         // would then add a second copy of it to a file it could not correctly read.
-        SourceReader.Read read = SourceReader.readText(text);
+        SourceReader.ReadJp read = SourceReader.readJpText(text);
         if (!read.readable()) {
             SourceReader.reportUnparseable(divergences, "source_not_parsed",
                     packageName + "." + viewName,
