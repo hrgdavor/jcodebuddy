@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+// {@link hr.hrg.rewrite.api package} OpenRewrite migration foundation.
+// {enabled:true, blockMarker: "delete to regen"}
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>hr.hrg.rewrite</groupId>
+    <artifactId>foundation</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>OpenRewrite Foundation</name>
+    <description>Foundation module for OpenRewrite migration - dependencies and API compatibility layer.</description>
+
+    <properties>
+        <openrewrite.version>8.40.1</openrewrite.version>
+        <javaparser.version>3.28.0</javaparser.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>11</maven.compiler.release>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- OpenRewrite Core -->
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-core</artifactId>
+                <version>${openrewrite.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-java</artifactId>
+                <version>${openrewrite.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-java-11</artifactId>
+                <version>${openrewrite.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-java-17</artifactId>
+                <version>${openrewrite.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-java-21</artifactId>
+                <version>${openrewrite.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-maven</artifactId>
+                <version>${openrewrite.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- JavaParser (kept for migration period) -->
+            <dependency>
+                <groupId>com.github.javaparser</groupId>
+                <artifactId>javaparser-core</artifactId>
+                <version>${javaparser.version}</version>
+            </dependency>
+            <!-- Test dependencies -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>4.13.2</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>3.24.2</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- OpenRewrite Core -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-11</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-17</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-21</artifactId>
+        </dependency>
+        <!-- JavaParser (kept for migration period) -->
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+        </dependency>
+        <!-- Test dependencies -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${maven.compiler.release}</source>
+                    <target>${maven.compiler.release}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.1.2</version>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

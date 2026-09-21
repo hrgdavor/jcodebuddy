@@ -2,6 +2,7 @@
 // {enabled:true, blockMarker: "implicit"}
 package hr.hrg.rewrite.api;
 
+import org.openrewrite.java.JavaParser;
 import org.openrewrite.java.tree.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -9,6 +10,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.github.javaparser.JavaParser as JavaParserParser;
+import com.github.javaparser.ast.CompilationUnit as JavaParserCompilationUnit;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.InterfaceDeclaration;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 
 /**
  * Adapter for converting between JavaParser CompilationUnit and OpenRewrite SourceFile.
@@ -24,7 +34,7 @@ public class CompilationUnitAdapter {
      * @param unit The JavaParser compilation unit
      * @return The OpenRewrite source file
      */
-    public static SourceFile toOpenRewrite(com.github.javaparser.ast.CompilationUnit unit) {
+    public static SourceFile toOpenRewrite(JavaParserCompilationUnit unit) {
         // Read the source code
         String source = unit.toString();
         
@@ -44,14 +54,14 @@ public class CompilationUnitAdapter {
      * @param sourceFile The OpenRewrite source file
      * @return The JavaParser compilation unit
      */
-    public static com.github.javaparser.ast.CompilationUnit toJavaParser(SourceFile sourceFile) {
+    public static JavaParserCompilationUnit toJavaParser(SourceFile sourceFile) {
         // Extract the source code
         String source = sourceFile.print();
         
         // Parse as JavaParser
-        com.github.javaparser.ast.CompilationUnit unit;
+        JavaParserCompilationUnit unit;
         try {
-            unit = new com.github.javaparser.JavaParser()
+            unit = new JavaParserParser()
                 .parse(source).get();
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse source as JavaParser", e);
@@ -83,10 +93,10 @@ public class CompilationUnitAdapter {
      * @param path The file path
      * @return The JavaParser compilation unit
      */
-    public static com.github.javaparser.ast.CompilationUnit fromPathJavaParser(Path path) {
+    public static JavaParserCompilationUnit fromPathJavaParser(Path path) {
         try {
             String source = Files.readString(path, StandardCharsets.UTF_8);
-            return new com.github.javaparser.JavaParser()
+            return new JavaParserParser()
                 .parse(source).get();
         } catch (IOException e) {
             throw new RuntimeException("Failed to read file: " + path, e);
@@ -111,7 +121,7 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return The source code as a string
      */
-    public static String toSource(com.github.javaparser.ast.CompilationUnit unit) {
+    public static String toSource(JavaParserCompilationUnit unit) {
         return unit.toString();
     }
 
@@ -131,12 +141,12 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return A list of class declarations
      */
-    public static List<com.github.javaparser.ast.body.ClassOrInterfaceDeclaration>
-        findClasses(com.github.javaparser.ast.CompilationUnit unit) {
+    public static List<ClassOrInterfaceDeclaration>
+        findClasses(JavaParserCompilationUnit unit) {
         return unit.getTypes()
             .stream()
-            .filter(t -> t instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration)
-            .map(t -> (com.github.javaparser.ast.body.ClassOrInterfaceDeclaration) t)
+            .filter(t -> t instanceof ClassOrInterfaceDeclaration)
+            .map(t -> (ClassOrInterfaceDeclaration) t)
             .collect(Collectors.toList());
     }
 
@@ -158,11 +168,11 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return A list of method declarations
      */
-    public static List<com.github.javaparser.ast.body.MethodDeclaration>
-        findMethods(com.github.javaparser.ast.CompilationUnit unit) {
+    public static List<MethodDeclaration>
+        findMethods(JavaParserCompilationUnit unit) {
         return unit.getTypes()
             .stream()
-            .map(t -> (com.github.javaparser.ast.body.ClassOrInterfaceDeclaration) t)
+            .map(t -> (ClassOrInterfaceDeclaration) t)
             .flatMap(c -> c.getMethods().stream())
             .collect(Collectors.toList());
     }
@@ -185,11 +195,11 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return A list of field declarations
      */
-    public static List<com.github.javaparser.ast.body.FieldDeclaration>
-        findFields(com.github.javaparser.ast.CompilationUnit unit) {
+    public static List<FieldDeclaration>
+        findFields(JavaParserCompilationUnit unit) {
         return unit.getTypes()
             .stream()
-            .map(t -> (com.github.javaparser.ast.body.ClassOrInterfaceDeclaration) t)
+            .map(t -> (ClassOrInterfaceDeclaration) t)
             .flatMap(c -> c.getFields().stream())
             .collect(Collectors.toList());
     }
@@ -212,11 +222,11 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return A list of annotation expressions
      */
-    public static List<com.github.javaparser.ast.expr.AnnotationExpr>
-        findAnnotations(com.github.javaparser.ast.CompilationUnit unit) {
+    public static List<AnnotationExpr>
+        findAnnotations(JavaParserCompilationUnit unit) {
         return unit.getTypes()
             .stream()
-            .map(t -> (com.github.javaparser.ast.body.ClassOrInterfaceDeclaration) t)
+            .map(t -> (ClassOrInterfaceDeclaration) t)
             .flatMap(c -> c.getAnnotations().stream())
             .collect(Collectors.toList());
     }
@@ -239,12 +249,12 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return A list of record declarations
      */
-    public static List<com.github.javaparser.ast.body.RecordDeclaration>
-        findRecords(com.github.javaparser.ast.CompilationUnit unit) {
+    public static List<RecordDeclaration>
+        findRecords(JavaParserCompilationUnit unit) {
         return unit.getTypes()
             .stream()
-            .filter(t -> t instanceof com.github.javaparser.ast.body.RecordDeclaration)
-            .map(t -> (com.github.javaparser.ast.body.RecordDeclaration) t)
+            .filter(t -> t instanceof RecordDeclaration)
+            .map(t -> (RecordDeclaration) t)
             .collect(Collectors.toList());
     }
 
@@ -268,12 +278,12 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return A list of enum declarations
      */
-    public static List<com.github.javaparser.ast.body.EnumDeclaration>
-        findEnums(com.github.javaparser.ast.CompilationUnit unit) {
+    public static List<EnumDeclaration>
+        findEnums(JavaParserCompilationUnit unit) {
         return unit.getTypes()
             .stream()
-            .filter(t -> t instanceof com.github.javaparser.ast.body.EnumDeclaration)
-            .map(t -> (com.github.javaparser.ast.body.EnumDeclaration) t)
+            .filter(t -> t instanceof EnumDeclaration)
+            .map(t -> (EnumDeclaration) t)
             .collect(Collectors.toList());
     }
 
@@ -297,12 +307,12 @@ public class CompilationUnitAdapter {
      * @param unit The compilation unit
      * @return A list of interface declarations
      */
-    public static List<com.github.javaparser.ast.body.InterfaceDeclaration>
-        findInterfaces(com.github.javaparser.ast.CompilationUnit unit) {
+    public static List<InterfaceDeclaration>
+        findInterfaces(JavaParserCompilationUnit unit) {
         return unit.getTypes()
             .stream()
-            .filter(t -> t instanceof com.github.javaparser.ast.body.InterfaceDeclaration)
-            .map(t -> (com.github.javaparser.ast.body.InterfaceDeclaration) t)
+            .filter(t -> t instanceof InterfaceDeclaration)
+            .map(t -> (InterfaceDeclaration) t)
             .collect(Collectors.toList());
     }
 
