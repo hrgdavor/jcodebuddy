@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>merge-java</artifactId>
+    <packaging>jar</packaging>
+
+    <name>merge-java</name>
+    <description>
+        Reliable resolution of common merge conflicts. Resolves import additions,
+        comment additions, constant additions, overloads and widening type changes
+        automatically; offers fix paths for renames, package moves and ambiguous
+        body edits; and remembers per-branch decisions so repeated base-branch
+        updates stop re-conflicting.
+    </description>
+
+    <properties>
+        <!--
+            Matches the parent's managed OpenRewrite version. Pinned here only
+            because the version-specific parser implementation below is not
+            managed by the parent.
+        -->
+        <openrewrite.version>8.90.4</openrewrite.version>
+        <jgit.version>6.10.0.202406032230-r</jgit.version>
+        <mockito.version>5.13.0</mockito.version>
+    </properties>
+
+    <dependencies>
+        <!-- OpenRewrite versions are managed by the parent POM. OpenRewrite
+             bundles its own Java parser, so no separate JavaParser dependency
+             is needed. -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java</artifactId>
+        </dependency>
+        <!--
+            rewrite-java is a facade: it needs one version-specific parser
+            implementation on the classpath. -25 is the newest OpenRewrite 8.90.4
+            provides (the set is 8, 11, 17, 21, 25), and it requires a JDK 25
+            runtime, so this module builds and runs on 25 - the same level as the
+            parent.
+        -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-25</artifactId>
+            <version>${openrewrite.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-maven</artifactId>
+        </dependency>
+
+        <!-- JGit: branch and history access straight from the library, so the
+             module never shells out to git. -->
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+            <version>${jgit.version}</version>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven.surefire.plugin.version}</version>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

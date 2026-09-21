@@ -1,0 +1,28 @@
+# Derived metadata is not checked in (DEC-026).
+.jcodebuddy/metadata/*
+! .jcodebuddy/metadata/.gitkeep
+
+# NOTE: .jcodebuddy/merge-history/ is deliberately NOT ignored. A branch's
+# recorded conflict decisions are a contract and are meant to be committed.
+
+# IDE and build files
+.idea/
+*.iml
+*.iws
+.project
+.settings/
+target/
+build/
+*.class
+*.jar
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+*.tmp
+
+# Maven repository used for sandboxed/local builds
+.mvn-local-repo/

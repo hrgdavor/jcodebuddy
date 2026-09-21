@@ -62,3 +62,4 @@ node_modules
 # Agent harness state. `.kilo/plans` holds untracked per-round plans; the tool's own
 # config (package.json, node_modules) is covered above.
 .kilo/plans
+.mvn-local-repo

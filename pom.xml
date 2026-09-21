@@ -30,7 +30,7 @@
         <graal.version>25.0.2</graal.version>
         <fory.version>1.3.0</fory.version>
         <mcp.version>2.0.0</mcp.version>
-        <openrewrite.version>8.40.1</openrewrite.version>
+        <openrewrite.version>8.90.4</openrewrite.version>
 
         <junit.version>4.13.2</junit.version>
         <junit5.version>5.10.2</junit5.version>
@@ -67,6 +67,7 @@
         <module>metadata-server</module>
         <module>metadata-mcp-server</module>
         <module>metadata-arena</module>
+        <module>merge-java</module>
     </modules>
 
     <dependencyManagement>
