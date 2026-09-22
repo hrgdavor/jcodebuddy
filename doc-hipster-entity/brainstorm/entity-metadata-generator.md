@@ -191,3 +191,15 @@ Covered by `EntityMetadataGeneratorTest`.
 - The `EntityMeta` / `ViewMeta` / `EntityFieldMeta` model classes are public and reusable in Java for boilerplate generation (mapper, DAO, query builder) without going through JSON.
 - `allFields` provides entity-wide cross-view field metadata for schema generation, validation, and query planning.
 - `@FieldSource` annotations are optional; unannotated fields default to `COLUMN`.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**"Parser uses JavaParser" is the one Note above that no longer holds.**
+
+`EntityMetadataGenerator` still scans a source directory for `.java` interface files and produces the same `EntityMeta` / `ViewMeta` / `EntityFieldMeta` JSON with the same field rules, but it reads each unit through `SourceReader` and queries it through `TreeQueries` — `annotationArg` / `annotationNamed` for `@View` and `@FieldSource` — over OpenRewrite's LST rather than through `com.github.javaparser`. Neither the model it emits nor the `allFields` / primitive / view-property-enum rules above change.
+
+The historical-sketch banner at the top of this file is a separate, older correction and is untouched by this note.
+
+The representation decision is [DEC-030](../architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).

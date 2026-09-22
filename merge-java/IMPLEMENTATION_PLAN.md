@@ -196,3 +196,15 @@ output is self-contained.
   CI exit code.
 - **Type resolver gaps**: JDK supertype chains, varargs/array equivalence, generic
   canonicalisation.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**A plan of record: the design it describes was carried out, and the live instructions moved elsewhere.**
+
+Phase 1's "No `JavaParser` dependency: OpenRewrite bundles its own parser" records why no `com.github.javaparser` artifact appears in this module. Note the name collision, because it is easy to misread here: in `merge-java`, `JavaParser` means OpenRewrite's own `org.openrewrite.java.JavaParser` class — the type the delivered Phase 9 code (`ResolvedTypeReader`, `TypeContext`) calls, and the type [`IMPROVEMENTS_DELIVERED.md`](IMPROVEMENTS_DELIVERED.md) discusses when it records that a version-specific implementation must be an explicit dependency.
+
+The module [`README.md`](README.md) and [`VERSION_MAINTENANCE.md`](VERSION_MAINTENANCE.md) carry the JDK / parser-module / OpenRewrite-version procedure as live instructions; this file stays as the plan that was executed.
+
+The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).

@@ -248,7 +248,7 @@ lists a module's *dependencies*, not its own output. Do **not** hand-build the
 classpath by globbing the local Maven repository — see the "Reading source
 outside Maven" note in
 [`../hipster-entity-tooling/README.md`](../hipster-entity-tooling/README.md)
-(an old JavaParser silently parses nothing, and the only symptom is missing
+(an old parser silently parses nothing, and the only symptom is missing
 files).
 
 ### 3.9 The `-D` quoting rule (Windows)
@@ -322,7 +322,8 @@ fallbacks when the page is opened outside the IDE.
 
 ### 4.1 Input — hand-written, never overwritten
 
-The view interfaces and their markers, read with JavaParser:
+The view interfaces and their markers, read through OpenRewrite's LST
+([`SourceReader`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java)):
 
 ```
 src/main/java/hr/hrg/hipster/entityexample/person/entity/       Person, PersonSummary, PersonDetails, PersonDto,
@@ -485,7 +486,7 @@ committed source owns those bytes, and a copy in a report is stale the moment an
 ### 5.2 Who reads it
 
 **The Java generator does not read it back.** A generation pass re-parses the view
-interfaces with JavaParser; the only reader in the tree today is the tooling's own
+interfaces through OpenRewrite's LST; the only reader in the tree today is the tooling's own
 test (`EntityMetadataGeneratorTest` round-trips it through `fromJson`). That is why
 deleting it is safe — it cannot change a single byte of generated Java.
 

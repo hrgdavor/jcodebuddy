@@ -41,9 +41,9 @@ public interface CodeContext {
 
 ## Alternatives considered
 
-- **Annotation-based generator discovery** � rejected for now because it adds annotation processing overhead and complexity; the generator registry approach is simpler and more transparent.
-- **Return type as void with side effects** � rejected because returning `T` allows generators to produce both code artifacts and metadata, enabling pipelines where one generator consumes the output of another.
-- **Mandatory type resolution** � rejected because not all generators need type information; `TypeResolver.empty()` provides a safe no-op fallback.
+- **Annotation-based generator discovery** — rejected for now because it adds annotation processing overhead and complexity; the generator registry approach is simpler and more transparent.
+- **Return type as void with side effects** — rejected because returning `T` allows generators to produce both code artifacts and metadata, enabling pipelines where one generator consumes the output of another.
+- **Mandatory type resolution** — rejected because not all generators need type information; `TypeResolver.empty()` provides a safe no-op fallback.
 
 ## Consequences
 
@@ -59,3 +59,14 @@ public interface CodeContext {
 - `TypeResolver.empty()` MUST return a no-op resolver that returns `null` for all queries
 - `CodeContextImpl` MUST be the default implementation
 
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**A problem statement is a record of the state the decision replaced; this one is left as written.**
+
+The Context paragraph says that before this decision "some used raw JavaParser AST manipulation". That describes the landscape this decision replaced, and it stays for that reason — the decision it motivated (one `CodeGenerator<T>` / `CodeContext` contract for every generator) is unchanged. `JavaParser` there names `com.github.javaparser`, which is no longer how this project reads Java source.
+
+Today the tooling reads through OpenRewrite's LST — `SourceReader.read(Path)` / `readText(String)` and `TreeQueries` in `hipster-entity-tooling` — takes positions from javac via `JavaSyntaxCheck`, and writes by splicing into text with `SourceSplicer` rather than by manipulating an AST towards a printed form.
+
+The representation decision is [DEC-030](../../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../../doc_knowledge/code.graph.md).

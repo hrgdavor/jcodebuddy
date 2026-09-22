@@ -131,6 +131,22 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ---
 
+### Phase 8: Documentation
+
+**Status**: **Delivered** (2026-09-22) — see `08-Documentation.md` § *Status* for the five decisions, what
+was built, and the three places the phase departed from this plan
+
+**Goal**: make the documentation agree with the code the migration produced, and make the agreement checkable
+
+**Deliverables** (full list and evidence in `08-Documentation.md`):
+- `AGENTS.md` § 2: the "JavaParser as the AST of choice" rule replaced by the OpenRewrite one
+- `doc_knowledge/code.graph.md`: rewritten as the source-handling guide (kept, not retired — four documents link to it)
+- module READMEs and entry points: `hipster-entity-tooling`, `jwa-sidecar`, `hipster-entity-core`, `scripts/rewrite-migration`, both root READMEs, and the two dependency lists that still claimed `javaparser-core`
+- 20 DEC/brainstorm/record appendix notes (appended, never rewritten) and `DEC-030: OpenRewrite as the source representation`
+- a `docs-honest` check in `verify-migration.js` (the gate's ninth), with a 28-entry documentation allowlist in `curation.js`
+
+---
+
 ## Phase status — verified against the tree, 2026-09-22
 
 The per-phase "Status" lines further up this file are the **plan's own optimistic headings** from when it
@@ -148,26 +164,43 @@ made the plan's status lines misleading.
 | 5 — Automation | **Delivered** (2026-09-22) | The eleven classes are in `project-automation/src/main/java/hr/hrg/jcodebuddy/automation/` (`Transformation`, `TransformationRegistry`, `AutomationEngine`, `BatchProcessor` + `BatchReport`, `ProjectAutomation`, `TransformationResult`, `ValidationResult`, `AnalysisResult`, `TransformationException`, `SourceFiles`, `SourceFacts`) with 67 tests. The ten sketches in `05-automation/` were reviewed line by line and rewritten: two registries became one, the reflective registration overload and the empty `initialize()` are gone, `apply` returns a result rather than a `String`, writes are opt-in, and the regex-based counting / whole-path glob / hard-coded thread count / stdout reporting were replaced. `ValidationException` had no caller and was deleted. Delivery record: `05-Automation.md` § *Status*. |
 | 6 — Migration of Existing Tooling | **COMPLETE** (2026-09-22) | 34/34 queue files ported; `javaparser-core` declared by no module; `verify-migration.js` `RESULT: PASS`; whole reactor `clean test` green (1164 tests at that point; 1231 after Phase 5). Delivery record: `06-Migration-Checklist.md` § *Delivery record*. |
 | 7 — Testing & Validation | **Delivered** (2026-09-22) | Re-scoped first, because its deliverables named Phase 2 sketches (`AstVisitorTests`, `TypeUtilsTests`) and two of them compared against JavaParser, which Phase 6 removed. What exists: `TreeQueriesTest` (40), `JavaSyntaxCheckTest` (22), `LargeSourceEdgeCaseTest` (4), `MigrationCompletenessTest` (3 over 283 real files), four more `SourceReader` entry-point cases, `AutomationChainIntegrationTest` (4, a chain over a generated tree), `ToolSeamTest` (18, `java-watch-agent`'s first tests), two `*JmhBenchmark` classes with 18 measured results, and Bun-rendered `TEST-REPORT.md` / `BenchmarkReport.md`. Reactor total 1231 to **1326 tests, 0 failures**, gate `RESULT: PASS`. The new tests found and fixed three production defects in the position-lookup half (reversed enclosing chain; `@Foo`/`Outer.Foo` stealing a name line; a match inside a string literal), with committed output byte-identical. Delivery record: `07-Testing-Validation.md` § *Status*. |
+| 8 — Documentation | **Delivered** (2026-09-22) | The five "decide first" questions are answered in `08-Documentation.md` § *Status*. What exists: `AGENTS.md` § 2 now states the OpenRewrite rule with its four operations; `doc_knowledge/code.graph.md` is rewritten as *Reading and writing Java source* (read contract and the two channels, javac positions and the `(simpleName, enclosingChain)` match, the `TreeQueries` trap table, the splice rule, the measured read cost); `docs/RecordBuilderGenerator.md` rewritten against `jwa-builder` and `java-watch-agent/record builder.md` retired into it; 20 DEC/brainstorm/record appendix notes appended (`DEC-009`, `DEC-020`, `DEC-023`, `DEC-029`, `gen-freezing`, six brainstorms, five watch-series DECs, four `merge-java` records, the legacy continuation plan, `java-watch-agent/plan.md`); `DEC-030-openrewrite-source-representation.md` written and registered in the decisions index; `docs-honest` added to `verify-migration.js` with a 28-entry `DOC_ALLOWLIST` in `curation.js`. Measured result: 284 markdown files scanned, 51 still mention the library (13 live, 17 decisions, 21 records/generated), **0 live documents teach a removed API** except one recorded warning, gate `RESULT: PASS with 1 warning(s)`, and `DocConformanceTest` 7/7 green over the rewritten links. |
 
-**With Phase 7 delivered, the migration itself is complete.** The "20 weeks / 5 months" timeline above was
-never a used estimate and should not be read as remaining work. Phase 8 (Documentation) is the only phase
-left, and it is about writing down a finished migration rather than about the parser.
+**With Phase 7 delivered, the migration itself is complete. With Phase 8 delivered, the documentation
+says so.** The "20 weeks / 5 months" timeline above was never a used estimate and should not be read as
+remaining work.
 
 ---
 
 ## Current status
 
-**Phase**: Phases 1–7 are complete. Phase 8 (Documentation) is the only one left.
+**Phase**: Phases 1–8 are complete. The migration has no remaining phase.
 
-**Verified in this session**:
+**Delivered in Phase 8** (the documentation phase, 2026-09-22):
+- `AGENTS.md` § 2's AST rule names the tree the code actually uses, and names the operation that answers
+  each question — reading (`SourceReader`), positions (javac via `JavaSyntaxCheck`), queries
+  (`TreeQueries`), writing (splicing via `SourceSplicer`);
+- the guide `AGENTS.md` points at is that guide now, not a survey of third-party graph projects built on
+  the removed library;
+- the `docs-honest` check makes the property survivable: a live document that names the removed library
+  without a recorded reason fails the gate, and one that *teaches* the removed API is reported by name;
+- `DEC-030` records the representation decision, so the next contributor reads a decision instead of
+  inferring one from a missing import;
+- nothing else moved — Phase 8 changed no `.java` file, so the 1326-test figure below carries over.
+
+**Verified in this session (Phase 7, unchanged by Phase 8)**:
 - the whole reactor builds and its tests pass: `1326` tests, `0` failures, `0` errors, counted from the
   fresh surefire reports of a single `clean test` (1231 before Phase 7, plus the 95 it added:
   `hipster-entity-tooling` 361 to 434, `project-automation` 81 to 85, `java-watch-agent` 0 to 18).
   The largest module is `merge-java` (601), which is also the last in the reactor — the earlier "601
   tests" figure in this file was that module's own total mistaken for the reactor's;
-- `verify-migration.js` reports `RESULT: PASS` with all eight checks green and no `pom-dependencies`
-  warning — no module declares `javaparser-core`. Phase 7 added two `curation.js` allowlist entries for
-  its own new files, which name the retired library only in prose;
+- `verify-migration.js` reports `RESULT: PASS` — no module declares `javaparser-core`. Phase 7 added two
+  `curation.js` allowlist entries for its own new files, which name the retired library only in prose;
+  **Phase 8 added the ninth check, `docs-honest`**, so the gate now reads
+  `RESULT: PASS with 1 warning(s)` over nine checks: eight green plus one recorded warning
+  (`docs/RecordBuilderGenerator.md` names the printer whose removal is the reason the builder guide
+  generates text) and one new section reporting the documentation inventory —
+  284 markdown files scanned, 51 still mentioning, 13 live, 28 allowlist entries;
 - `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md` is generated, not written: it is rendered
   by Bun from the surefire XML of that build, the captured gate run and `benchmarks/latest.json`, and it
   states a missing input as missing rather than rendering it as zero;
@@ -197,8 +230,9 @@ left, and it is about writing down a finished migration rather than about the pa
 | Phase 5: Automation | 2 weeks | Phase 4 |
 | Phase 6: Migration | 4 weeks | Phase 5 |
 | Phase 7: Testing | 3 weeks | Phase 6 |
+| Phase 8: Documentation | 1 week | Phase 7 |
 
-**Total Estimated Duration**: 20 weeks (~5 months)
+**Total Estimated Duration**: 21 weeks (~5 months) — never a used estimate, kept as the plan's own record
 
 ---
 
@@ -243,7 +277,7 @@ The plan documents live in `plans/rewrite-migration/`; the sketches they were wr
 1. `plans/rewrite-migration/REWRITE-MIGRATION-PLAN.md` - Main plan
 2. `plans/rewrite-migration/README.md` - Project README
 3. `plans/rewrite-migration/PLAN-SUMMARY.md` - This summary
-4. `plans/rewrite-migration/01-Foundation.md` … `07-Testing-Validation.md` - The phase documents
+4. `plans/rewrite-migration/01-Foundation.md` … `08-Documentation.md` - The phase documents
 
 ### Phase 1 Files
 
@@ -305,17 +339,17 @@ version-specific parser. `javaparser-core` is declared by no module — that is 
 
 ## Approval Required
 
-Historical: this section is the plan's original gate, and the gate was passed — Phases 1–7 have been
+Historical: this section is the plan's original gate, and the gate was passed — Phases 1–8 have been
 executed. It is kept only so the sequence is on record.
 
 1. Review this plan document
-2. Review architecture decisions (DEC-019, DEC-020, DEC-021, DEC-022, DEC-029)
+2. Review architecture decisions (DEC-019, DEC-020, DEC-021, DEC-022, DEC-029, DEC-030)
 3. Confirm timeline and resource availability
 4. Approve migration approach
 
 ---
 
-**Document Version**: 1.2  
+**Document Version**: 1.3  
 **Last Updated**: 2026-09-22  
-**Status**: Phases 1–7 delivered; the migration is complete. Phase 8 (Documentation) remains — see
-§ *Phase status*.
+**Status**: Phases 1–8 delivered; the migration is complete and its documentation agrees with it — see
+§ *Phase status* and `08-Documentation.md` § *Status*.

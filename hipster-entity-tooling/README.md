@@ -3,10 +3,10 @@
 The **generator and validator** module for
 [`hipster-entity`](../doc-hipster-entity/README.md).
 
-It reads hand-written view interfaces with JavaParser and writes the
-companion boilerplate back into the source tree: the field enum, the
-record, the `Write` interface, the builders, the tracking builder and the
-`ViewMeta`. SQL materialization — a generated `<View>RowAdapter` /
+It reads hand-written view interfaces through OpenRewrite's Lossless Semantic
+Tree and writes the companion boilerplate back into the source tree: the field
+enum, the record, the `Write` interface, the builders, the tracking builder and
+the `ViewMeta`. SQL materialization — a generated `<View>RowAdapter` /
 `<View>Binder` pair — exists as a **draft/exploration behind the explicit
 `--adapters` flag** (opt-in, never a default; see the status note below).
 It also hosts the R1 ordinal-ledger checker.
@@ -711,15 +711,59 @@ revision's self-consistency (marker present, constants unique, header
 decodable, enum not empty) and surfaces the `allowReorder` warning; the
 cross-revision comparison is driven by the CLI above.
 
+## Reading, querying and writing source
+
+The four operations the generator is built on, and where each lives. The
+repository-wide guide is
+[`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md); this is the
+module's half of it, and the classes below are in this module unless stated.
+
+| | Class | What to reach for |
+|---|---|---|
+| **Read** | [`SourceReader`](src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java) | `read(Path)` / `readText(String)` / `readUnit(Path)` / `readSourceText(String)`. Returns a `Read` whose **`readable()` is the verdict**; `problemsIn(String)` is the parser's detail and can be empty for a file that is *not* readable. A file javac recovers from is not a readable file. `readFragmentUnit(String)` reads an expression fragment and throws rather than returning a partial answer. |
+| **Position** | [`JavaSyntaxCheck`](src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java) | The javac line map. The LST has **no** positions, so this is the only source of a line or an offset. `inspect(source)` returns `FileCheck` with `types()`, `methods()`, `annotations()`, `members()` and `spans()`; `typeNameLines(source)` and `isSyntacticallyValid(source)` are the two entry points `SourceReader` itself uses. |
+| **Query** | [`TreeQueries`](src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java) | Traversal (`findAll`, `typeDeclarations`, `topLevelTypes`), kinds (`interfaces`, `classes`, `records`, `enums`, `annotations`), members (`methodsOf`, `noArgMethodNames`), supertypes (`supertypeTypes` / `Names` / `Texts`), annotations (`annotationNamed`, `annotationArg`), type and expression text (`typeText`, `expressionText`), ancestry (`typesWithEnclosing`) and the position queries over `JavaSyntaxCheck` (`lineOf`, `declarationLineOf`, `methodLineOf`, `annotationLineOf`, `memberLineOf`). |
+| **Write** | [`SourceSplicer`](src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java) | `withMembers(source, typeName, members, indent)` — splices generated members into a hand-written interface. **The generator splices text; it never reprints a tree.** Reprinting reformats the developer's file, which is the defect the splice rule exists to prevent (DEC-020), so `SourceSplicer` is the write path and there is no print path. |
+
+Two rules that cover most of the mistakes:
+
+- **The tree is read for its shape and then discarded.** `TreeQueries` builds
+  nothing, on purpose, so the emission strategy stays with the caller; and
+  `SourceReader.PARSER` is reset after every read, because a parser refuses a
+  second set of sources declaring the same FQNs.
+- **A parse that produced a result is not a file that can be read.** Gate on
+  `readable()`; `problemsIn` is what you show a human, not what you branch on.
+  `SourceReader.reportUnparseable(...)` is the fail-safe report for the branch.
+
+### Running the module's gate and benchmarks
+
+```sh
+# the migration gate: this module is the queue's home, so a port regression shows here first
+bun run scripts/rewrite-migration/verify-migration.js
+
+# the read-path benchmarks (JMH) — pinned to the same JDK 25 the recorded gate uses
+bun run scripts/rewrite-migration/run-tooling-benchmarks.js
+```
+
+The `jmh` Maven profile adds the JMH annotation processor and `-proc:full` to
+this module and `hipster-entity-core`. The benchmark *sources* compile in a plain
+`clean test` as well — deliberately, so a broken benchmark is caught by the gate
+rather than by whoever happens to run the profile. The numbers land in
+[`doc/brainstorm/rewrite-migration/07-testing/benchmarks/latest.json`](../doc/brainstorm/rewrite-migration/07-testing/benchmarks/latest.json)
+and are interpreted in the `BenchmarkReport.md` beside it.
+
 ## Reading source outside Maven
 
-The generator reads hand-written source with the **pinned** JavaParser
-(`javaparser-core`, version declared once in the root POM's
-`javaparser.version`; this module declares no version — see
-`DependencyBoundaryTest#javaParserIsPinnedOnceInTheRootPom`). That pin
-matters more than it looks: a local Maven repository can hold many
-JavaParser versions, and an old one silently fails to parse modern
-syntax.
+The parser is **the artifact on the classpath**, not a setting: this module
+pins `org.openrewrite:rewrite-java-25` (the version-specific implementation
+`rewrite-java` needs) and declares no language level anywhere, because there is
+none to declare. That pin matters more than it looks — a parser below the
+project's release cannot read the generator's own output (records, switch
+expressions, `sealed`), and the F-23 failure was exactly that: an old parser
+made five example files generate **nothing**, with no error at all and a missing
+file as the only symptom. OpenRewrite's parser needs a version-specific
+implementation on the classpath or it fails at *runtime* with "Unable to create
+a Java parser instance", which no build catches.
 
 `scripts\gen.cmd` already does exactly this — the mechanism is described
 [above](#the-layout-guard-and-the-stale-tooling-trap-it-closes). If you
@@ -740,20 +784,15 @@ hipster-entity-tooling/target/classes
  target/classes directory, not as a jar>
 ```
 
-Both halves of that recipe were learned from failures:
-
-- a repository glob picked `3.25.1`, which cannot parse `sealed`, and
-  five example files generated **nothing** with no error (the only
-  symptom was files missing from a diff);
-- `dependency:build-classpath` maps a reactor dependency to that
-  module's `target/classes` **only while that module is in the same
-  reactor invocation**. Run it for one module alone and this module's
-  siblings resolve to the **installed** `~/.m2` jars, which may be a
-  previous revision, so a hand run compiles generated source against
-  stale classes and reports `cannot find symbol` or "does not override"
-  for code that is correct. The `-am` above keeps the siblings in the
-  reactor; `ExampleMetadataGeneratorTest` and friends do not hit this
-  because they run in the reactor too.
+The second half of that recipe was learned from a failure:
+`dependency:build-classpath` maps a reactor dependency to that module's
+`target/classes` **only while that module is in the same reactor invocation**.
+Run it for one module alone and this module's siblings resolve to the
+**installed** `~/.m2` jars, which may be a previous revision, so a hand run
+compiles generated source against stale classes and reports `cannot find symbol`
+or "does not override" for code that is correct. The `-am` above keeps the
+siblings in the reactor; `ExampleMetadataGeneratorTest` and friends do not hit
+this because they run in the reactor too.
 
 ## Divergence reporting
 
@@ -816,3 +855,8 @@ declining to guess rather than reporting a defect:
   the end-to-end workflow.
 - [Field-enum compaction](../doc-hipster-entity/user/patterns/field-enum-compaction.md) —
   the migration procedure, step by step.
+- [Reading and writing Java source](../doc_knowledge/code.graph.md) — the
+  repository-wide guide to `SourceReader` / `JavaSyntaxCheck` / `TreeQueries` /
+  `SourceSplicer`, with the measured read cost.
+- [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) —
+  why the tree is read for its shape and the text is spliced.

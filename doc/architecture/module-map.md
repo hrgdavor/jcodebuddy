@@ -65,7 +65,7 @@ These modules depend on Layer 1 and/or Layer 2:
 
 ### `project-automation` — Dev-Time Only
 - **This module is the ORCHESTRATOR.** It wires together generators from `java-watch-agent` and `hipster-entity-tooling`.
-- It has compile-scope dependencies on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jackson-databind`, and `javaparser-core`.
+- It has compile-scope dependencies on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
 - **It must NOT be a transitive dependency of any production/runtime module.**
 - `java-watch-agent` depends on `project-automation` to wrap `ActionTool` generators into the unified `CodeGenerator<T>` interface.
 
@@ -77,7 +77,7 @@ These modules depend on Layer 1 and/or Layer 2:
 - This module **must not** depend on any `hr.hrg.hipster.entity` artifacts.
 
 ### `hipster-entity-tooling` — Standalone Library
-- This module depends only on `hipster-entity-api` (and `hipster-entity-core` for tests).
+- This module depends only on `hipster-entity-api` (and `hipster-entity-core` for tests), plus the OpenRewrite parser artifacts (`rewrite-core`, `rewrite-java`, `rewrite-java-25`).
 - It has **zero dependency** on `project-automation` or any `watch` modules.
 - `project-automation` consumes it as a library.
 

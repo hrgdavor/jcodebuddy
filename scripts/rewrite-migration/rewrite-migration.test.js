@@ -17,7 +17,12 @@ import { describe, expect, test } from 'bun:test';
 import { classifyJavaText, scopeOf, moduleOf, findRepoRoot } from './inventory.js';
 import { loadTracker, checkboxFor, STATUSES, progressOf } from './model.js';
 import { MAPPINGS, mappingFor, mappingStats, OPENREWRITE_VERSION } from './mappings.js';
-import { QUEUE, ALLOWLIST, PREREQUISITES } from './curation.js';
+import { QUEUE, ALLOWLIST, DOC_ALLOWLIST, PREREQUISITES } from './curation.js';
+import {
+  classifyMarkdown,
+  docKindOf,
+  docOffenders,
+} from './documentation.js';
 import { parseArgs, UsageError } from './cli.js';
 import {
   parseSurefireXml, summarise, readGateResult, renderReport,
@@ -439,6 +444,103 @@ describe('generate-test-report', () => {
     expect(page).toContain('Ran with no test classes');
     expect(page).toContain('`no-tests-module`');
     expect(page).toContain('No benchmark results');
+  });
+});
+
+/**
+ * Phase 8's documentation scan. The judgement calls worth pinning are the three that decide whether
+ * `docs-honest` can be trusted: that the *kind* of a document comes from its path (so a record cannot
+ * be laundered into the allowlist, and a generated page cannot be "fixed" by a human), that a mention
+ * of OpenRewrite's own identically-named class is not counted against the document that explains it,
+ * and that teaching a removed API is a distinct, catchable verdict rather than a louder mention.
+ */
+describe('documentation', () => {
+  test('classifies a document by its path, most specific rule first', () => {
+    // A generated page lives under a record prefix, and "a script writes this" is the more specific
+    // fact — so the order of the rules is load-bearing, not cosmetic.
+    expect(docKindOf('doc/brainstorm/rewrite-migration/06-migration/Checklist.md')).toBe('generated');
+    expect(docKindOf('doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md')).toBe('generated');
+    expect(docKindOf('doc/brainstorm/rewrite-migration/06-migration/MIGRATION-GUIDE.md')).toBe('record');
+    expect(docKindOf('plans/rewrite-migration/06-Migration-Checklist.md')).toBe('record');
+    expect(docKindOf('doc-hipster-entity/architecture/decisions/DEC-020.md')).toBe('decision');
+    expect(docKindOf('doc-hipster-entity/brainstorm/gen-freezing.md')).toBe('decision');
+    expect(docKindOf('AGENTS.md')).toBe('live');
+    expect(docKindOf('hipster-entity-tooling/README.md')).toBe('live');
+  });
+
+  test('does not count OpenRewrite\'s own identically-named class as a removed mention', () => {
+    // The guard the Java scanner has, for the same reason: OpenRewrite ships `JavaParser`, so a
+    // repository that uses it must be able to say so without every mention being a finding.
+    const migrated = classifyMarkdown(
+      'Parse with `org.openrewrite.java.JavaParser.fromJavaVersion()`.', 'AGENTS.md');
+    expect(migrated.liveNameLines).toEqual([]);
+    expect(migrated.mentionLines).toBe(1);
+    expect(migrated.teachesRemovedApi).toBe(false);
+
+    // The package name is never excluded: no OpenRewrite line can contain it.
+    const removed = classifyMarkdown(
+      'Read source with `com.github.javaparser`.\nAnd `JavaParser` too.', 'AGENTS.md');
+    expect(removed.packageLines).toBe(1);
+    expect(removed.liveNameLines).toEqual(['2:And `JavaParser` too.']);
+    expect(removed.teachesRemovedApi).toBe(false);
+  });
+
+  test('flags a document that teaches a removed API, and names the API', () => {
+    const teaching = classifyMarkdown([
+      '# How to add a builder',
+      '',
+      '```java',
+      'CompilationUnit cu = StaticJavaParser.parse(code);',
+      'LexicalPreservingPrinter.setup(cu);',
+      '```',
+    ].join('\n'), 'docs/SomeGuide.md');
+    expect(teaching.teachesRemovedApi).toBe(true);
+    expect(teaching.taughtApis).toEqual(['LexicalPreservingPrinter', 'StaticJavaParser']);
+    expect(teaching.kind).toBe('live');
+
+    // A record is allowed to teach by definition: its subject IS the removal, and rewriting the
+    // sample would delete the instructions the port left for whoever reads it next.
+    const guide = classifyMarkdown(
+      'CompilationUnit cu = StaticJavaParser.parse(code);',
+      'doc/brainstorm/rewrite-migration/06-migration/MIGRATION-GUIDE.md');
+    expect(guide.teachesRemovedApi).toBe(true);
+    expect(guide.isHistorical).toBe(true);
+  });
+
+  test('reports a live mention with no recorded reason, and nothing else', () => {
+    const scan = {
+      files: [
+        { repoPath: 'AGENTS.md', kind: 'live', allowed: false, teachesRemovedApi: false },
+        { repoPath: 'docs/Guide.md', kind: 'live', allowed: false, teachesRemovedApi: true },
+        { repoPath: 'docs/Kept.md', kind: 'live', allowed: true, teachesRemovedApi: false },
+        { repoPath: 'DEC-020.md', kind: 'decision', allowed: false, teachesRemovedApi: false },
+        { repoPath: 'Checklist.md', kind: 'generated', allowed: false, teachesRemovedApi: false },
+      ],
+    };
+    expect(docOffenders(scan).unallowlisted.map(file => file.repoPath))
+        .toEqual(['AGENTS.md', 'docs/Guide.md']);
+  });
+
+  test('every documentation-allowlist entry gives a reason and an exit condition', () => {
+    // Same contract as the source allowlist: an exemption without both is a permanent hole.
+    for (const [path, entry] of Object.entries(DOC_ALLOWLIST)) {
+      expect(entry.reason, `${path} needs a reason`).toBeTruthy();
+      expect(entry.reason.trim().length, `${path}'s reason is too short to be a reason`)
+          .toBeGreaterThan(40);
+      expect(entry.deferredTo, `${path} needs a retirement condition`).toBeTruthy();
+      expect(entry.deferredTo.trim().length, `${path}'s deferredTo is too short`)
+          .toBeGreaterThan(15);
+      expect(entry.status, `${path} must be exempt`).toBe('exempt');
+    }
+  });
+
+  test('the documentation allowlist and the source allowlist are separate key spaces', () => {
+    // A `.md` path in the Java allowlist (or the reverse) would be an exemption nobody reads.
+    for (const path of Object.keys(DOC_ALLOWLIST)) {
+      expect(path.endsWith('.md'), `${path} is not a markdown path`).toBe(true);
+      expect(ALLOWLIST[path], `${path} is in both allowlists`).toBeUndefined();
+      expect(QUEUE[path], `${path} is both queue and documentation exemption`).toBeUndefined();
+    }
   });
 });
 

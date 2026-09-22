@@ -17,7 +17,8 @@ Each feature module (e.g., `jwa-builder`) is split into two components:
     - Projects being enhanced depend on this JAR at compile time.
 2.  **Implementation JAR (`jwa-builder`)**:
     - Contains the actual transformation logic (`BuilderTransformationEngine`).
-    - Depends on `jwa-builder-api` and heavy libraries like `JavaParser`.
+    - Depends on `jwa-builder-api` and heavy libraries (`rewrite-java` plus the
+      version-specific `rewrite-java-25` parser, and `Jackson`).
     - **Only the Sidecar** loads this JAR (and its dependencies) from `.m2`.
 
 ### 2. Project Configuration (`jwa-sidecar.txt`)
@@ -28,14 +29,20 @@ hr.hrg.watch2:jwa-builder:1.0-SNAPSHOT
 ```
 
 ### 3. External Prefetch Tool
-The prefetch tool ensures that both the implementation JARs and their heavy dependencies (like `JavaParser`) are available in the local `.m2` repository.
+The prefetch tool ensures that both the implementation JARs and their heavy dependencies (the OpenRewrite parser artifacts) are available in the local `.m2` repository.
 
 ## Why this approach?
 - **Minimal Project Footprint**: Working projects only pull in a few KB of annotations, not the entire transformation engine or its dependencies.
 - **Clean Separation**: The Sidecar handles the heavy lifting using the implementation JARs, while the code stays "marked" via the lightweight API.
 - **Dynamic Updates**: Implementation logic can be updated in `.m2` without requiring any changes or re-builds of the projects being enhanced.
 
+## What the sidecar module actually contains
+
+Six classes, no tests — see the table in
+[`README.md`](README.md#what-the-sidecar-is-today). The split described here is
+about where the *worker* logic lives; the shell itself is protocol plumbing.
+
 ## Next Steps
-1. Split `jwa-builder` into `jwa-builder-api` (annotations) and `jwa-builder` (implementation).
-2. Update the parent POM to manage both modules.
-3. Refactor Sidecar to load implementation JARs based on `jwa-sidecar.txt`.
+1. Split `jwa-builder` into `jwa-builder-api` (annotations) and `jwa-builder` (implementation). — **done**, and the split is what the two poms above resolve.
+2. Update the parent POM to manage both modules. — **done**.
+3. Refactor Sidecar to load implementation JARs based on `jwa-sidecar.txt`. — **done**; the configuration format is in [`README.md`](README.md#configuration-jwa-sidecartxt).

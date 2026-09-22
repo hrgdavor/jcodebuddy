@@ -14,13 +14,33 @@ This module contains only the markers (annotations, interfaces) that the user ne
 - **Example**: `jwa-builder-api` contains the `@GenerateBuilder` annotation.
 
 ### 2. The Worker Module (Implementation)
-This module contains the heavy logic, AST parsers, and transformation engines.
+This module contains the heavy logic, source parsing, and transformation engines.
 
-- **Dependencies**: Heavy libraries (e.g., `JavaParser`, `Jackson`).
+- **Dependencies**: Heavy libraries (e.g., `rewrite-java` + its version-specific parser, `Jackson`).
 - **Target**: Only the **Sidecar's runtime**.
 - **Example**: `jwa-builder` contains the `BuilderTransformationEngine`.
 
 ---
+
+## What the sidecar is today
+
+The sidecar itself is **six classes and no tests** — it is an LSP shell, not a
+library:
+
+| Class | Role |
+|---|---|
+| `SidecarApp` | the entry point (LSP on stdin/stdout, Jump HTTP on port 7979) |
+| `JwaLanguageServer` | LSP server wiring |
+| `JwaLanguageClient` | client callbacks |
+| `JwaTextDocumentService` | text-document lifecycle and the builder code actions |
+| `JwaWorkspaceService` | workspace-level requests |
+| `JumpParams` | the `mytool/jump` Remote Jump parameters |
+
+It has no `src/test` directory: the behaviour it drives lives in the worker
+modules (`jwa-builder`'s `RecordBuilderProcessorTest`,
+`RecordBuilderFormattingTest` and `ClassMemberProcessorTest`), and the sidecar
+adds protocol plumbing on top. Say so rather than implying coverage that is not
+there.
 
 ## Why Two Modules?
 

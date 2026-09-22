@@ -123,3 +123,15 @@ Persisting `CacheEntry` records by hash to `.cache/<hash>.fury` and maintaining 
 - Existing cache-backed RPC and MCP tools (`get_entry`, `list_entries`, `get_metadata`, `has_changed`, `list_classes`) MUST be unaffected by the addition of `parse`.
 - Simple tools MUST be implementable using only `parse` without starting a cache server or running an inventory pass.
 - Cache write-back and cache-read-with-fallback MAY be layered on later without changing the `parse` method signature or semantics.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**The `parse` contract is about *where* parsing lives; its parenthetical about *how* is updated by this note.**
+
+§ "Implementation boundaries" says `hipster-entity-tooling` "(which provides JavaParser-based parsing)" is the expected implementation of `parse`, and § "Implementation order" names "`hipster-entity-tooling` JavaParser integration". The location is unchanged — the tooling module is still where source bytes are turned into a `SourceMetadata` tree — but the parsing it performs is OpenRewrite's, through [`SourceReader`](../../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java) (`readText(String)`) and `TreeQueries`, not `com.github.javaparser`.
+
+The contract itself is untouched: `parse(relativePath, sourceBytes)` is a pure function with no cache interaction, and the `SourceMetadata` it returns is still file-scoped only, with correlation data kept outside the entry under its own dependency hash.
+
+The representation decision is [DEC-030](../../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../../doc_knowledge/code.graph.md).

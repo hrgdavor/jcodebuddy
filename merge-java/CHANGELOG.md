@@ -146,3 +146,13 @@
   token-based scanner - remains the main outstanding item. See
   `IMPROVEMENTS_DELIVERED.md`.
 
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**A changelog entry is appended, never edited: this mention describes a past release and stays.**
+
+The Notes entry "`JavaParser` is deliberately **not** a dependency: OpenRewrite bundles its own parser" records a fact about the release it was written under — no `com.github.javaparser` artifact is declared, because OpenRewrite supplies its own parser — and that fact still holds. In this module the name means OpenRewrite's `org.openrewrite.java.JavaParser`.
+
+The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).
+

@@ -179,3 +179,13 @@ Mitigation:
 3. Add syntax-error skip diagnostics with per-file reporting.
 4. Add CI regeneration consistency check for checked-in outputs.
 5. Add sidecar undo/rollback trace format for applied generation patches.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**The same strategy, one library later.**
+
+§ 2's scope recap lists "JavaParser-based source analysis as primary path". The strategy — source analysis rather than annotation processing, generated source checked into VCS, freeze mode, syntax-error skip — is unchanged (see [DEC-009's own appendix](../architecture/decisions/DEC-009.md)); only the parser behind "source analysis" moved. Reading is `SourceReader`, traversal and queries are `TreeQueries`, positions come from javac via `JavaSyntaxCheck`, and all three live in `hipster-entity-tooling`.
+
+The representation decision is [DEC-030](../architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).

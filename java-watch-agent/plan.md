@@ -143,3 +143,13 @@ For complex refactorings and large-scale migrations, we propose integrating [Ope
 - [x] Implement **Inverse Navigation** (Jump to source and Clipboard integration).
 - [ ] Create lightweight hooks for IntelliJ and VS Code.
 - [ ] Prototype an OpenRewrite-based tool module.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**A one-line tense correction: the plan is the record of the earlier shape.**
+
+§ 1.3 said Contextual Discovery "Uses `JavaParser` to analyze the code around the trigger site". The module reads through [`RecordBuilderProcessor`](../jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java) and takes source positions from [`LineLookup`](../jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java) in `jwa-builder`, over OpenRewrite's LST, instead. The behaviour the line sits inside — infer a candidate tool from the node at the trigger site and offer it in the menu — is unchanged.
+
+The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).

@@ -162,3 +162,15 @@ String lastName();
 - Freezing is a generator-level safeguard, not a replacement for stable generator semantics.
 - The architecture intentionally allows a manual freeze marker to coexist with generated metadata that is still produced for the same entity.
 - The marker should be easy to remove once the generator is corrected.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**Freeze-marker detection as described here is superseded in practice by DEC-021's class-file header; the freeze idea itself is unchanged.**
+
+The implementation constraint above says the generator "may use JavaParser comment attachment and AST annotations to detect freeze markers". That mechanism is gone with `com.github.javaparser`. The freeze control this repository exercises today is the `enabled` knob in [DEC-021](decisions/DEC-021.md)'s class-file header, the per-file equivalent of DEC-018's whole-file freeze: a generated file is taken fully under manual control by setting `enabled:false` in its JSON5 header blob, which is read by the header reader rather than by attaching a comment node to a declaration.
+
+What a freeze *means* is not retracted by that substitution: preserving the element exactly, skipping its regeneration, leaving unfrozen siblings eligible, and emitting an informational diagnostic on the skip all still describe the intent, and the marker-precedence, diagnostics and manual-edit-workflow sections are unaffected.
+
+The representation decision is [DEC-030](decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).

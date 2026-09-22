@@ -1008,3 +1008,381 @@ export function allowlistEntryFor(repoPath) {
 export function mappingStatusOf(fqn) {
   return mappingFor(fqn)?.status ?? 'unknown';
 }
+
+/**
+ * Phase 8's documentation allowlist: tracked markdown that legitimately still
+ * names the removed library.
+ *
+ * <p>Same shape as {@link ALLOWLIST} above on purpose. A reader who has learned
+ * that an exemption carries a `reason` and a `deferredTo` should not have to
+ * learn a second vocabulary for prose, and the `docs-honest` check reads both
+ * with the same question: <em>is this a recorded decision, or an accident?</em>
+ * The one difference is the key space — these are `.md` paths, and the check is
+ * run against the documentation scan rather than the Java scan.</p>
+ *
+ * <p>Three things are <b>not</b> here, and each for a reason that keeps the list
+ * honest:</p>
+ *
+ * <ul>
+ *   <li><b>Generated pages</b> (`Checklist.md`, `tracker.md`, `TEST-REPORT.md`,
+ *       `BenchmarkReport.md`) and the migration's own records under
+ *       `doc/brainstorm/rewrite-migration/` and `plans/rewrite-migration/`. The
+ *       scanner classifies those as `generated` or `record` from their path, so
+ *       they need no entry <em>and cannot be hidden by one</em>: a record is
+ *       never reported as live instruction in the first place.</li>
+ *   <li><b>Decision documents</b> are `decision` by path for the same reason —
+ *       DEC-028 already says a later phase corrects DEC-029 by appending a note,
+ *       and an appendix note is a correction to the record rather than a rewrite
+ *       of the decision. They are still listed below where the note is specific,
+ *       because the reason is worth writing down.</li>
+ *   <li><b>Anything D1–D4 rewrites.</b> An exemption that outlives the rewrite is
+ *       the tidying this whole phase exists to stop, so a file whose prose stops
+ *       naming the library must lose its entry, and `docs-honest` fails while it
+ *       remains.</li>
+ * </ul>
+ *
+ * @type {Record<string, {reason: string, deferredTo: string, status: 'exempt'}>}
+ */
+export const DOC_ALLOWLIST = {
+  // ------------------------------------------------------------ live, reworded ---
+  'merge-java/VERSION_MAINTENANCE.md': {
+    status: 'exempt',
+    reason:
+      'Every `JavaParser` here is OpenRewrite\'s own `org.openrewrite.java.JavaParser` — ' +
+      'the parser-selection mechanism, the "cannot parse three versions of one file" ' +
+      'cache, and the `reset()` message. The file is *about* that class, so a bare ' +
+      '`JavaParser` is the subject rather than a leftover, and the scanner\'s ' +
+      'same-line OpenRewrite guard does not catch it because the surrounding prose ' +
+      'says "the parser" instead of repeating the package. Recorded so that a future ' +
+      'reader does not "fix" it by renaming OpenRewrite\'s class.',
+    deferredTo:
+      'Never while the class is called JavaParser. If a future OpenRewrite release ' +
+      'renames it, this entry is the signal that the guide needs the new name.',
+  },
+  'merge-java/README.md': {
+    status: 'exempt',
+    reason:
+      'One sentence: "OpenRewrite bundles its own Java parser, so no separate ' +
+      '`JavaParser` dependency is needed". It names the dependency that is *absent*, ' +
+      'which is the opposite of an instruction to add one.',
+    deferredTo:
+      'Retire when the sentence stops naming the product by that name — it is one ' +
+      'clause, and dropping it changes nothing a reader needs.',
+  },
+
+  // ------------------------------------------------------------- live, records ---
+  'scripts/rewrite-migration/README.md': {
+    status: 'exempt',
+    reason:
+      'The gate\'s own documentation, and the plan names exactly this case: "mostly ' +
+      'correct by design — it documents the tool that found the mentions". Its ' +
+      'mentions are the scanner\'s vocabulary rather than instructions to a reader: ' +
+      'the link to the migration plan (whose title names both sides), the ' +
+      '`javaparser-core` declaration the `pom-dependencies` check looks for, and the ' +
+      'OpenRewrite class that shares the removed product\'s name and is the whole ' +
+      'reason a bare-name test cannot be taken at face value. The Phase 8 additions ' +
+      'to this file are the migration-complete statement, the gate as the entry ' +
+      'point, and the `docs-honest` check itself.',
+    deferredTo:
+      'Never while the file documents the scanner. If the scanner is retired, the ' +
+      'README goes with it.',
+  },
+  'merge-java/CHANGELOG.md': {
+    status: 'exempt',
+    reason:
+      'A changelog entry: "`JavaParser` is deliberately **not** a dependency: ' +
+      'OpenRewrite bundles its own". A changelog is a record of what a release did, ' +
+      'and rewriting it would falsify the release it describes.',
+    deferredTo:
+      'Never. A changelog entry is appended, not edited; the mention describes a past ' +
+      'release and must keep doing so.',
+  },
+  'merge-java/IMPROVEMENTS_DELIVERED.md': {
+    status: 'exempt',
+    reason:
+      'A delivered-work record. Both mentions name OpenRewrite\'s parser selection ' +
+      'and its one-parser-per-read rule, in the tense of work already done — ' +
+      '`VERSION_MAINTENANCE.md` carries the same facts as instructions, and this file ' +
+      'carries them as history.',
+    deferredTo: 'Never: it is a record of a completed change, not a guide.',
+  },
+  'merge-java/IMPLEMENTATION_PLAN.md': {
+    status: 'exempt',
+    reason:
+      'A plan document, superseded by the implementation. Its one mention is "No ' +
+      '`JavaParser` dependency: OpenRewrite bundles its own parser" — a statement ' +
+      'about the design, in a plan that has since been carried out.',
+    deferredTo:
+      'Never. It is a plan of record; the live instructions live in the README and ' +
+      '`VERSION_MAINTENANCE.md`.',
+  },
+  'merge-java/IMPROVEMENT_PROPOSAL.md': {
+    status: 'exempt',
+    reason:
+      'The one live-looking sentence in the module — "Note the JCodeBuddy rule that ' +
+      'JavaParser is the project\'s AST of choice for *generators*" — and it is the ' +
+      'superseded rule stated in the tense of the proposal that observed it. The ' +
+      'paragraph\'s conclusion is unaffected: it argues that OpenRewrite\'s parser is ' +
+      'right here because it is already on the classpath and this is analysis, not ' +
+      'codegen. Phase 8 appended a note marking the sentence as superseded rather than ' +
+      'rewriting the proposal, because the proposal is the record of why the choice ' +
+      'was made.',
+    deferredTo:
+      'Never for the record; the note appended in Phase 8 is what a reader sees first. ' +
+      'If the proposal is ever promoted into a decision document, that document ' +
+      'replaces the sentence and this entry goes with it.',
+  },
+  'doc/continuation-plan-legacy.md': {
+    status: 'exempt',
+    reason:
+      '"Legacy" is in the filename. Four mentions describe the pre-migration module ' +
+      'layout, including `javaparser-core:3.28.0` in a dependency list that no longer ' +
+      'exists. It is a superseded plan kept as a record of the starting point.',
+    deferredTo:
+      'Never: a legacy plan that is rewritten stops being the record of what the tree ' +
+      'looked like before the migration.',
+  },
+  'java-watch-agent/plan.md': {
+    status: 'exempt',
+    reason:
+      'One line — "Static Analysis: Uses `JavaParser` to analyze the code around the ' +
+      'trigger site" — inside a plan for the module, describing the design as it was ' +
+      'when the plan was written. The module now reads through ' +
+      '`RecordBuilderProcessor` / `LineLookup`; the plan is the record of the earlier ' +
+      'shape.',
+    deferredTo:
+      'Never for the plan. If the module is re-planned, the new plan supersedes this ' +
+      'one and this entry goes with it.',
+  },
+  'docs/RecordBuilderGenerator.md': {
+    status: 'exempt',
+    reason:
+      'This became the *surviving* builder guide in Phase 8 — the AI-transcript ' +
+      'guide `java-watch-agent/record builder.md` was retired into it, and the ' +
+      'whole file was rewritten against `jwa-builder`\'s `RecordBuilderProcessor`. ' +
+      'The mentions left are deliberate and load-bearing: the "Why the previous ' +
+      'implementation was replaced" section names the removed package and ' +
+      '`LexicalPreservingPrinter` as the primitive whose removal is the reason the ' +
+      'current design generates text instead of editing a tree. It is the record ' +
+      'of a rejected design, not an API to call.',
+    deferredTo:
+      'Never for that section while "splice, do not reprint" is the rule it ' +
+      'justifies. If the section is ever cut, the entry goes with it.',
+  },
+  'java-watch-agent/record builder.md': {
+    status: 'exempt',
+    reason:
+      'The retired AI-transcript guide. Phase 8 replaced its body with a tombstone ' +
+      'that says what it was, what it got right, where the surviving guide is, and ' +
+      'how to read the original out of git history. The one mention left names the ' +
+      'removed package as the reason the file could not be corrected in place; it ' +
+      'is the provenance of the retirement, so it stays. The behaviour the ' +
+      'transcript specified — idempotency, sync rather than replace, `build()` ' +
+      'refreshed, minimal diffs, the language level — is tabulated in the tombstone ' +
+      'against the classes that implement it today.',
+    deferredTo:
+      'Never. The tombstone is the retirement record, and the pointer is what stops ' +
+      'the guide being rewritten from the transcript.',
+  },
+  'doc/architecture/module-map.md': {
+    status: 'exempt',
+    reason:
+      'One dependency-list line claiming `hipster-entity-tooling` has a compile-scope ' +
+      'dependency on `javaparser-core`. That is the one mention in the tree that is ' +
+      'both live and *wrong*, so Phase 8 corrected the list line itself and this entry ' +
+      'records why the correction was made rather than left to the next sweep.',
+    deferredTo:
+      'Retire with the correction: once the line reads `rewrite-java`, the file no ' +
+      'longer mentions the removed library and `docs-honest` reports the exemption as ' +
+      'stale on the next run.',
+  },
+
+  // --------------------------------------------------------- DEC appendix notes ---
+  'doc-hipster-entity/architecture/decisions/DEC-020.md': {
+    status: 'exempt',
+    reason:
+      'Two mentions, and the design they justify is unchanged. The tense is the whole ' +
+      'question: `LexicalPreservingPrinter` refusing an added `default` modifier is ' +
+      'the *cause* of the splice rule, so the reason stays and Phase 8 appended a note ' +
+      'marking it as the previous parser\'s behaviour. A DEC records what was decided ' +
+      'and why; rewriting the sentence would edit the reason rather than the tense.',
+    deferredTo:
+      'Never for the decision body. The appended note is the Phase 8 correction, and ' +
+      'it is what a reader reaches before the original sentence.',
+  },
+  'doc-hipster-entity/architecture/decisions/DEC-009.md': {
+    status: 'exempt',
+    reason:
+      '"Prefer JavaParser-based source analysis over annotation processing" — the ' +
+      'decision that created this whole code-generation strategy. The *choice* (source ' +
+      'analysis in preference to annotation processing) is untouched by the migration; ' +
+      'only the library that implements it changed, which is what the Phase 8 note ' +
+      'says.',
+    deferredTo:
+      'Never: superseding DEC-030 records the representation, and DEC-009 remains the ' +
+      'decision that source analysis is the path.',
+  },
+  'doc-hipster-entity/architecture/decisions/DEC-023.md': {
+    status: 'exempt',
+    reason:
+      'The R1 ledger decision. Two mentions describe the checker as parsing "a Java ' +
+      'file with JavaParser" — the implementation detail under a rule that is about ' +
+      'ordinal ordering, not about a parser. The note appended in Phase 8 points at ' +
+      'the ported `EnumConstantOrderChecker` without touching the rule.',
+    deferredTo: 'Never for the decision; the note carries the port.',
+  },
+  'doc-hipster-entity/architecture/decisions/DEC-029.md': {
+    status: 'exempt',
+    reason:
+      'The class-index decision. One mention records that an earlier draft walked ' +
+      '"JavaParser\'s parent nodes" — the defect that produced the explicit ' +
+      'enclosing-chain stack in `TreeQueries.typesWithEnclosing`. The decision itself ' +
+      '(an FQN reference, never a surrogate id) is unaffected.',
+    deferredTo: 'Never for the decision; the note carries the port.',
+  },
+  'doc-hipster-entity/architecture/gen-freezing.md': {
+    status: 'exempt',
+    reason:
+      'One line proposing that the generator "may use JavaParser comment attachment ' +
+      'and AST annotations to detect freeze markers" — an option in an architecture ' +
+      'note, superseded in practice by DEC-021\'s header. The Phase 8 note marks it ' +
+      'superseded by the header.',
+    deferredTo: 'Never for the note; DEC-021 is what the code implements.',
+  },
+  'doc-hipster-entity/brainstorm/cooperative-codegen-preserve-user-tweaks.md': {
+    status: 'exempt',
+    reason:
+      'The brainstorming companion to DEC-020, and the mention is the same one: ' +
+      '`LexicalPreservingPrinter` recommended as the primitive for preserving ' +
+      'user-tweaked blocks. The note appended in Phase 8 records that the rule ' +
+      'survived the primitive — the splice achieves the same property by construction.',
+    deferredTo: 'Never for the brainstorm; the note carries the correction.',
+  },
+  'doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md': {
+    status: 'exempt',
+    reason:
+      'The brainstorm behind DEC-009, whose one mention is the same ' +
+      '"JavaParser-based source analysis as primary path" line. The strategy is intact; ' +
+      'the Phase 8 note names the current implementation.',
+    deferredTo: 'Never for the brainstorm; the note carries the correction.',
+  },
+  'doc-hipster-entity/brainstorm/entity-metadata-generator.md': {
+    status: 'exempt',
+    reason:
+      'One line — "Parser uses JavaParser" — in a brainstorm sketch of the generator. ' +
+      'The Phase 8 note records that the parser is now OpenRewrite\'s.',
+    deferredTo: 'Never for the brainstorm; the note carries the correction.',
+  },
+  'doc-hipster-entity/brainstorm/gen-freezing.md': {
+    status: 'exempt',
+    reason:
+      'The brainstorm companion to `gen-freezing.md`, with two lines about detecting ' +
+      'freeze markers "with JavaParser". Same treatment: the idea is superseded by the ' +
+      'DEC-021 header, and the Phase 8 note says so.',
+    deferredTo: 'Never for the brainstorm; the note carries the correction.',
+  },
+  'doc-hipster-entity/brainstorm/typed-annotation-exposure.md': {
+    status: 'exempt',
+    reason:
+      'Two mentions: coercing "JavaParser annotation expression values" to record ' +
+      'component types, and compile-time discoverability "for the JavaParser-based ' +
+      'generator". Both describe the generator\'s implementation in a sketch whose ' +
+      'subject is annotation exposure, which the migration did not change. The Phase 8 ' +
+      'note names the current classes.',
+    deferredTo: 'Never for the brainstorm; the note carries the correction.',
+  },
+  'doc-hipster-entity/brainstorm/README.md': {
+    status: 'exempt',
+    reason:
+      'The brainstorm index. Its two mentions are a section heading ("What JavaParser ' +
+      'already collects") and the API surface behind it — ' +
+      '`MethodDeclaration.getAnnotationByName(...)` — which is how the *old* generator ' +
+      'collected annotations. The section is the provenance of the annotation-reading ' +
+      'contract that `TreeQueries.annotationArg` now implements.',
+    deferredTo:
+      'Never for the provenance. The class names in that section go in whichever edit ' +
+      'next touches the section, since the contract they describe is unchanged.',
+  },
+  'doc/architecture/decisions-watch/DEC-W003.md': {
+    status: 'exempt',
+    reason:
+      'A watch-series decision with one dependency-list line claiming ' +
+      '`hipster-entity-tooling` declares `javaparser-core`. Like the module map, the ' +
+      'line is a fact about the tree that the migration changed; Phase 8 corrected the ' +
+      'line and this entry records why.',
+    deferredTo:
+      'Retire with the correction: once the list reads `rewrite-java`, the file no ' +
+      'longer mentions the removed library and `docs-honest` reports this as stale.',
+  },
+  'doc/architecture/decisions-watch/DEC-W005.md': {
+    status: 'exempt',
+    reason:
+      'One mention, in the problem statement: generators previously used "raw ' +
+      'JavaParser AST manipulation" and needed a common contract. It describes the ' +
+      'state the decision replaced, which is what a problem statement is for.',
+    deferredTo: 'Never: the problem statement is the record of why the contract exists.',
+  },
+  'doc/architecture/decisions-watch/DEC-W006.md': {
+    status: 'exempt',
+    reason:
+      'Two mentions in an analysis phase plan: "must not invoke JavaParser or any ' +
+      'expensive metadata generation" and "each thread parses source with JavaParser". ' +
+      'The plan is about *when* parsing happens, and its subject is the cost, not the ' +
+      'library.',
+    deferredTo: 'Never for the plan; the note appended in Phase 8 names the ported parser.',
+  },
+  'doc/architecture/decisions-watch/DEC-W007.md': {
+    status: 'exempt',
+    reason:
+      'The heaviest watch-series document (10 mentions): a migration plan from ' +
+      '"ad-hoc JavaParser walks" to a `SourceMetadata` projection, with phases, risks ' +
+      'and a rejected-alternatives section. Its proposed cache/projection architecture ' +
+      'is the subject; the parser is the mechanism, and one line of it (JavaParser ' +
+      '"natively provides line numbers") is exactly the assumption the migration ' +
+      'invalidated. Phase 8 appended a note naming that line rather than rewriting the ' +
+      'plan.',
+    deferredTo:
+      'Never for the plan. The line about native line numbers is the one a reader must ' +
+      'not act on, and the appended note says where positions come from now.',
+  },
+  'doc/architecture/decisions-watch/DEC-W008.md': {
+    status: 'exempt',
+    reason:
+      'Two mentions defining a `parse` contract whose expected implementation is ' +
+      '"`hipster-entity-tooling` (which provides JavaParser-based parsing)". The ' +
+      'contract is about where parsing lives, not which parser; the Phase 8 note ' +
+      'updates the parenthetical.',
+    deferredTo: 'Never for the contract; the note carries the correction.',
+  },
+};
+
+/**
+ * Matchers for {@link DOC_ALLOWLIST}, built once and lazily.
+ *
+ * <p>Lazy because this file declares the allowlist (and the source allowlist's
+ * matchers) above the function that uses them: a top-level `const` that read
+ * `DOC_ALLOWLIST` at module-evaluation time would sit in its temporal dead zone
+ * and throw before any entry script got as far as its first check.</p>
+ */
+let docAllowlistMatchers = null;
+
+/**
+ * Look up the documentation allowlist entry covering a path, or `null`.
+ *
+ * <p>Same matcher as {@link allowlistEntryFor}, deliberately: a `.md` path needs
+ * no different glob semantics from a `.java` path, and one `allowlistMatcher`
+ * keeps a `**` meaning the same thing in both tables.</p>
+ *
+ * @param {string} repoPath
+ */
+export function docAllowlistEntryFor(repoPath) {
+  if (docAllowlistMatchers === null) {
+    docAllowlistMatchers = Object.keys(DOC_ALLOWLIST).map((key) => [key, allowlistMatcher(key)]);
+  }
+  for (const [key, matches] of docAllowlistMatchers) {
+    if (matches(repoPath)) {
+      return { ...DOC_ALLOWLIST[key], matchedKey: key };
+    }
+  }
+  return null;
+}

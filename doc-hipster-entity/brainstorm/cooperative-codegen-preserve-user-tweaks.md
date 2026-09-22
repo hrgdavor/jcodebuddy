@@ -298,3 +298,15 @@ method instead; emitted a fresh `withName`."
 > surrounding code, and refuse to preserve it (with a clear
 > diagnostic), rather than producing a file that fails to
 > compile? -->`
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**The rule survived the primitive that was recommended for it, and the primitive's removal is why it is now implemented the stronger way.**
+
+§ 1 ("Use AST-aware diffing, not text diffing") recommends JavaParser's `LexicalPreservingPrinter` as the patcher's primitive. That primitive is gone with `com.github.javaparser`, and [DEC-020's appendix note](../architecture/decisions/DEC-020.md) records the concrete reason the design does **not** reprint a tree: `LexicalPreservingPrinter` refused a newly added `default` modifier ("Not supported keywordDEFAULT"), so the old code fell back to `cu.toString()` and reformatted the whole hand-written interface.
+
+The hard rule — a block the user has not deleted keeps its body verbatim — is achieved today by **splicing into the original text**: [`SourceSplicer`](../../../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java) for the tooling, `jwa-builder`'s own `SourceSplicer` for the record builder. Everything outside the spliced span is byte-identical **by construction**, which is a stronger guarantee than a printer could give, and it is why "user tweaks survive" no longer depends on the patcher's fidelity.
+
+The representation decision is [DEC-030](../architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).

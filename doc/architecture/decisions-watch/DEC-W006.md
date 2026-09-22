@@ -186,3 +186,15 @@ Out-of-module annotations (e.g., an `@RpcMethod` annotation whose defining class
 - The cache MUST support two-phase population: inventory (fast, `metadata=null`) followed by enrichment (parallel parsing).
 - The cache MUST handle `metadata == null` gracefully in all read APIs.
 
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**This decision is about *when* parsing happens and what it costs — not about which library parses.**
+
+The two-phase rule is unchanged: the inventory phase "must not invoke JavaParser or any expensive metadata generation", and each enrichment thread parses its assigned file. Read those mentions as "the parser" rather than as `com.github.javaparser`: the parser is OpenRewrite's now, so inventory invokes no parser at all (it computes the wayhash) and enrichment parses each file through `SourceReader` in `hipster-entity-tooling`.
+
+Everything else — cache keying by wayhash, the `CacheEntry` and metadata hierarchy, cross-module links, retention, correlation metadata and the `metadata == null` consumer contract — is library-independent and unchanged.
+
+The representation decision is [DEC-030](../../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../../doc_knowledge/code.graph.md).
+

@@ -251,3 +251,13 @@ System.exit(result.exitCode());
 
 `result.exitCode()` is non-zero when a human is needed, so the whole thing composes
 in CI.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**A delivered-work record: `VERSION_MAINTENANCE.md` carries these same facts as live instructions, and this file carries them as history.**
+
+Both `JavaParser` mentions under "Findings that only surfaced by building it" name OpenRewrite's `org.openrewrite.java.JavaParser`, not `com.github.javaparser`: a version-specific implementation (`rewrite-java-25`) must be an explicit dependency or the parser cannot be created, and one parser cannot parse three versions of one file, so a parser is created per read. Those are the two facts [`VERSION_MAINTENANCE.md`](VERSION_MAINTENANCE.md) exists to keep current; read them here as what the work found, not as the procedure to follow.
+
+The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).

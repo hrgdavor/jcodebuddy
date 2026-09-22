@@ -1238,3 +1238,15 @@ public @interface StoreBinding {
 
 The enum approach is better when the generator needs to switch on store kind to select an adapter generator. The string approach is better when stores are fully plugin-driven. A hybrid (enum with a `CUSTOM` + qualifier fallback) covers both.
 
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**The annotation-reading contract is unchanged; the classes that implement it are.**
+
+Two mentions name the old parser: "the generator must coerce JavaParser annotation expression values to record component types" (the "Attribute type coercion" table) and compile-time discoverability "for the JavaParser-based generator" (the module descriptor). Both state a *requirement* rather than an API, and the requirement still holds: annotation attribute values are read through `TreeQueries.annotationArg` / `annotationNamed` in `hipster-entity-tooling`, which supply the same values the coercion table describes. One normalisation belongs with that table, because it is part of the reader's behaviour: a single unnamed annotation argument is normalised to the attribute name `value`.
+
+Nothing in the typing options, the comparison, the recommendation, the `@CollectAnnotation` registration or the module descriptor depends on which parser produced the expression.
+
+The representation decision is [DEC-030](../architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).
+

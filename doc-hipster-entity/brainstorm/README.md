@@ -980,4 +980,16 @@ Focus:
 For a centralized list of unresolved cross-document questions, see:
 - [Open questions index](open-questions-index.md)
 
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**§ 2.1 is the provenance of a contract, not a statement about today's reader, so it is left as written.**
+
+"What JavaParser already collects" describes `MethodDeclaration.getAnnotationByName("FieldSource")` returning a method's annotation expressions. That call is gone with `com.github.javaparser`; the *question* it answered — which annotations does this accessor carry, and with which attribute values — is implemented today by `TreeQueries.annotationNamed` / `annotationArg` in `hipster-entity-tooling`, over OpenRewrite's LST. The section is kept verbatim because it records what the old generator collected, and that is why § 2.2's "what to collect" list has the shape it has.
+
+§ 2.2 onwards — the collection scope, the `AnnotationMeta` model, the exposure options and the JSON output — describes a contract that is unaffected by the parser swap.
+
+The representation decision is [DEC-030](../architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).
+
 

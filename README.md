@@ -4,7 +4,7 @@
 
 Code generation has moved too much into background, and this project aims to provide coopeartive code generation where all generated code lives alongside manually typed code with clear visibility and deterministic behavior. The idea itself mimics one direction AI coding popularized where we accept the generated code directly into the codebase.
 
-Technically **JCodeBuddy** is a development buddy(companion) for Java that automates the synchronization between project structure and source code.Unlike traditional annotation processing, which is isolated and happens during the compilation phase, JCodeBuddy utilizes **JavaParser** to enable **cooperative code generation**. 
+Technically **JCodeBuddy** is a development buddy(companion) for Java that automates the synchronization between project structure and source code.Unlike traditional annotation processing, which is isolated and happens during the compilation phase, JCodeBuddy reads and writes source through OpenRewrite's **Lossless Semantic Tree** to enable **cooperative code generation**: it reads a tree for its shape, splices generated members into the original text so nothing around them is reformatted, and asks javac — not the tree — where anything is. The reading/querying/writing contract is in [`doc_knowledge/code.graph.md`](doc_knowledge/code.graph.md). 
 
 To ensure a seamless developer experience, the framework integrates **real-time file watching**. This creates a "live" development loop where changes to the project structure or configuration are immediately detected and reflected in the codebase via the cooperative generators.
 
@@ -33,7 +33,7 @@ The `project-automation` module can either be a standalone project folder inside
 
 To solve the "recursion problem" (the fact that JCodeBuddy uses itself to be built), a clear naming distinction has been established to prevent confusion for both human developers and AI coding agents:
 
-1.  **The Tool (`JCodeBuddy`)**: The framework/library providing the engine, JavaParser wrappers, and watching APIs.
+1.  **The Tool (`JCodeBuddy`)**: The framework/library providing the engine, the OpenRewrite-based source readers and splicers, and the watching APIs.
 2.  **The Implementation (`project-automation`)**: The project-specific module where the tool is applied. **This is never packaged into the final deliverable.** It is the project's "brain" for defining automation behavior (used here, and suggested name for projects using JCodeBuddy).
 
 ### Dev-Time Only Guarantee

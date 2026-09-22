@@ -207,10 +207,36 @@ with pointers, not a new policy.
   generating committed source that coexists with hand-written
   code, rather than a processor that only runs at compile time.
   See [`doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md`](doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md).
-- **JavaParser as the AST of choice.** Read, write, and reformat
-  source through `com.github.javaparser` so generated code and
-  parsed code share the same representation. See
-  [`doc_knowledge/code.graph.md`](doc_knowledge/code.graph.md).
+- **OpenRewrite LST for Java source.** Read, write, and query Java
+  source through OpenRewrite's Lossless Semantic Tree
+  (`org.openrewrite.java.tree.J`), so generated code and queried
+  code share one representation and no second parser is added to the
+  build. Which operation lives where:
+  - **reading** — `SourceReader.read(Path)` / `readText(String)`.
+    The `Read` it returns carries **two** channels: `readable()` is
+    the verdict, and `problemsIn(...)` is the parser's own detail.
+    Trust the verdict — the detail is often empty even for a file
+    javac rejects, because a file javac *recovers* from is **not** a
+    readable file (F-34). "A parse produced a result" is never the
+    test.
+  - **positions** — from javac (`com.sun.source`), never from the
+    tree, which has none at all. `JavaSyntaxCheck` owns the line
+    map; the typed queries over it are `TreeQueries.lineOf`,
+    `declarationLineOf`, `methodLineOf`, `annotationLineOf` and
+    `memberLineOf`.
+  - **traversal, kinds, annotations and type text** — `TreeQueries`.
+    Read its javadoc before porting a query: one
+    `J.ClassDeclaration` covers five kinds, an interface's `extends`
+    clause is held in `getImplements()`, and an empty parameter list
+    is a single `J.Empty`.
+  - **writing** — generators **splice into text** (`SourceSplicer`)
+    rather than reprinting a tree, because reprinting reformats the
+    hand-written code around the change. The tree is read for its
+    shape and then discarded.
+  The guide is
+  [`doc_knowledge/code.graph.md`](doc_knowledge/code.graph.md), and
+  the decision behind it is
+  [`DEC-030`](doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
 - **Memory and off-heap work go through `metadata-arena`.** Use
   `Arena` / `LongToLongsIndex` / mmap formats from that module
   rather than inventing your own. See

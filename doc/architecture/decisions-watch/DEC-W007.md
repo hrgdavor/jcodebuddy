@@ -434,3 +434,23 @@ These approaches depend on the metadata model defined here but are not part of t
 8. **Concurrent enrichment tests:** Multiple threads enrich distinct entries simultaneously. No data corruption or lost updates. Index updates are atomic.
 9. **Absent-metadata consumer tests:** Generators that call `get(hash, TypeMeta.class, path)` on an unenriched entry receive `null` and handle it without throwing.
 
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**The migration invalidated exactly one assumption in this plan — that the parser "natively provides line numbers" — and left the cache and projection architecture untouched.**
+
+§ "Source-position Range" justifies `Range(startLine, endLine, startColumn, endColumn)` with "Line/column pairs are used because JavaParser natively provides line numbers". That is precisely the assumption the rewrite migration invalidated: an OpenRewrite LST node carries **no position at all**. Positions come from javac's own line map, owned by [`JavaSyntaxCheck`](../../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java) and queried through [`TreeQueries`](../../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java) (`lineOf`, `declarationLineOf`, `methodLineOf`, `annotationLineOf`, `memberLineOf`), so a `Range` is filled from javac rather than read off a node. `MethodMeta` keeps its `range` field, with a different supplier.
+
+| § | Was | Is |
+| --- | --- | --- |
+| Source-position `Range` | `Node.getRange()` off a parsed node | javac's line map via `JavaSyntaxCheck` + `TreeQueries` |
+| Inventory "must not invoke JavaParser" | no parsing during inventory | the same rule: no parser and no expensive metadata generation during inventory |
+| Enrichment "parses source with JavaParser" | JavaParser per worker thread | `SourceReader.read(Path)` per worker thread |
+| "from ad-hoc JavaParser walks to tree construction" | a JavaParser walk | an LST traversal through `TreeQueries` |
+| "Generators continue to use JavaParser AST for source manipulation" | an AST to be modified | the tree is read for its shape and then discarded; writes splice text through `SourceSplicer` |
+
+Everything else stands as written, because it is independent of which parser produced the tree: two-phase population, one `CacheEntry` per wayhash, the `SourceMetadata` hierarchy, the file-scoped-only rule, correlation metadata keyed by `dependencyHash`, the per-module `index.fury`, the `MetadataTypeResolver` bridge and the `RuntimeTypeView` projection. `hipster-entity-tooling` declares `org.openrewrite:rewrite-core`, `rewrite-java` and `rewrite-java-25`; `javaparser-core` is gone from its POM.
+
+The representation decision is [DEC-030](../../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../../doc_knowledge/code.graph.md).
+

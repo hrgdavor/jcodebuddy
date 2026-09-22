@@ -406,10 +406,10 @@ cmd /c "scripts\mvn-jdk25.cmd -o -Dmaven.compiler.useIncrementalCompilation=fals
 # Tests run: 1326, Failures: 0, Errors: 0, Skipped: 0 / BUILD SUCCESS
 
 bun run scripts/rewrite-migration/verify-migration.js
-# RESULT: PASS.
+# RESULT: PASS.                                    (at the time; see the note below)
 
 cd scripts && bun test rewrite-migration/rewrite-migration.test.js
-# 35 pass, 0 fail
+# 35 pass, 0 fail                                 (at the time; see the note below)
 
 bun run scripts/rewrite-migration/run-tooling-benchmarks.js
 # writes benchmarks/benchmarks.json and latest.json, then BenchmarkReport.md is rendered from them
@@ -417,6 +417,23 @@ bun run scripts/rewrite-migration/run-tooling-benchmarks.js
 bun run scripts/rewrite-migration/generate-test-report.js --gate-out doc/brainstorm/rewrite-migration/07-testing/gate-run.txt
 # Wrote doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md: 1326 tests, 128 suites, gate RESULT: PASS.
 ```
+
+> **Updated by Phase 8 (2026-09-22).** Phase 8 changed no `.java` file, so the 1326-test figure above still
+> holds — but it added a ninth gate check, `docs-honest`, and 6 tests of its own, and `gate-run.txt` was
+> re-captured so the generated report's gate table has the right shape. The two lines this changes:
+>
+> ```
+> bun run scripts/rewrite-migration/verify-migration.js
+> # RESULT: PASS with 1 warning(s).   (9 checks: 8 OK, 1 WARN; the warning is recorded, not a regression)
+>
+> cd scripts && bun test rewrite-migration/rewrite-migration.test.js
+> # 41 pass, 0 fail
+> ```
+>
+> `TEST-REPORT.md` was regenerated from the same surefire XML with the new capture, so its counts are
+> unchanged and its gate section now shows `10 checks: 9 OK, 1 warn, 0 fail` (the warning is a second row
+> for the check that produced it). Phase 8's own record is `08-Documentation.md` § *Status*; this section
+> is Phase 7's and is left as written apart from this note.
 
 Keep the gate capture out of `target/`: a `clean` build deletes it, and the generator then reports the gate as
 not supplied rather than inventing a verdict.

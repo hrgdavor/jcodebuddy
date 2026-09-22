@@ -13,7 +13,7 @@ A comprehensive suite of Java-based file monitoring and developer productivity t
 
 ## Key Features
 
-- **Surgical Code Updates**: Uses JavaParser and LexicalPreservingPrinter to modify code without destroying comments or formatting.
+- **Surgical Code Updates**: Reads a record's or class's shape from an OpenRewrite tree, then **splices generated text into the original source** — so comments, whitespace and the rest of the file are preserved byte-for-byte instead of being reformatted. See [`docs/RecordBuilderGenerator.md`](docs/RecordBuilderGenerator.md).
 - **IO-Agnostic Tools**: Transformation logic is decoupled from file system operations, allowing it to run in CLI watchers or as interactive IDE plugins.
 - **Real-time Change Detection**: Uses `ChecksumDatabase` to ensure actions only trigger on meaningful content changes.
 - **IDE Connectivity**: The Sidecar provides an LSP bridge, enabling "Sync Builder" lightbulbs in VS Code, IntelliJ, and more.

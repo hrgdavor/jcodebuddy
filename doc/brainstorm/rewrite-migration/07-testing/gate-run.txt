@@ -1,4 +1,3 @@
-
 Phase 6 — migration verification
 ================================
 repository: D:\wrk\java\jcodebuddy
@@ -9,6 +8,11 @@ repository: D:\wrk\java\jcodebuddy
   import-free        0
   unclassified       0
   exempt             11
+
+  markdown scanned   284
+  still mentioning   51 (521 lines)
+  live documents     13 (1 teaching the removed API)
+  doc allowlist      28 entries
 
     complete        34
 
@@ -22,5 +26,7 @@ Checks
   OK    curation-freshness: every curation entry names a file that exists
   OK    allowlist-honest: 11 allowlisted file(s), each with a recorded reason
   OK    pom-dependencies: no queue module declares javaparser-core
+  OK    docs-honest: every mentioning document is classified; 1 allowlisted live document(s) are flagged as still teaching the removed API
+  WARN  docs-honest: docs/RecordBuilderGenerator.md still teaches LexicalPreservingPrinter — allowed by its recorded reason, but a reader will follow it.
 
-RESULT: PASS.
+RESULT: PASS with 1 warning(s).

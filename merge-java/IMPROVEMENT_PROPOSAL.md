@@ -363,3 +363,15 @@ most of the value.
 5. The test count grows from 431 to cover every new contract, and
    `ADDING_A_RESOLVER.md` still executes as a test.
 6. `IMPLEMENTATION_PLAN.md` is updated to point here for future work.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**The rule this paragraph cites was superseded; the conclusion the same paragraph reaches was not.**
+
+WS2 step 2 says "Note the JCodeBuddy rule that JavaParser is the project's AST of choice for *generators*; OpenRewrite's parser is the right choice here because it is already on the classpath and this is analysis, not codegen." There is no longer a JavaParser-versus-OpenRewrite split to appeal to: [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) records OpenRewrite's LST as the repository's representation for reading, querying and writing Java source, so the *generators* rule and the *analysis* exception now name the same parser. The recommendation the sentence draws — use OpenRewrite's parser because it is already on the classpath — is exactly what the module did, and it is unaffected.
+
+This file is a proposal kept as the record of what was proposed and why; the outcome is in [`IMPROVEMENTS_DELIVERED.md`](IMPROVEMENTS_DELIVERED.md).
+
+The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).

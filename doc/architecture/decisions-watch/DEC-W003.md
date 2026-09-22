@@ -16,7 +16,7 @@ The `project-automation` module is the dev-time orchestrator that wires together
 `project-automation` is a **Layer 1 framework library** with compile-scope dependencies only (no transitive propagation):
 
 - It exposes the `CodeGenerator<T>` interface and `CodeContext` API as the unified contract for all generators.
-- It depends on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jackson-databind`, and `javaparser-core`.
+- It depends on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST â€” see [DEC-030](../../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
 - **It MUST NOT be a transitive dependency of any production/runtime module** (Layer 3).
 - `java-watch-agent` depends on `project-automation` to wrap `ActionTool` generators into the `CodeGenerator<T>` interface.
 
@@ -24,9 +24,9 @@ The module is the sole location for automation code and configuration. No produc
 
 ## Alternatives considered
 
-- **Making project-automation a Layer 3 app** — rejected because it would force generation tooling into the runtime classpath and risk packaging it in the final artifact.
-- **Merging project-automation into java-watch-agent** — rejected because it would make the agent dependent on generation orchestration logic, violating the single-responsibility boundary.
-- **Using a separate build profile** — rejected because the compile-scope isolation in Maven is cleaner and more enforceable than profile-based inclusion/exclusion.
+- **Making project-automation a Layer 3 app** â€” rejected because it would force generation tooling into the runtime classpath and risk packaging it in the final artifact.
+- **Merging project-automation into java-watch-agent** â€” rejected because it would make the agent dependent on generation orchestration logic, violating the single-responsibility boundary.
+- **Using a separate build profile** â€” rejected because the compile-scope isolation in Maven is cleaner and more enforceable than profile-based inclusion/exclusion.
 
 ## Consequences
 

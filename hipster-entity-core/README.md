@@ -8,7 +8,7 @@ them work without reflection: positional arrays, bitset-backed change
 tracking, and the array-backed view proxy.
 
 It depends on `hipster-entity-api` only. Nothing here knows about
-Jackson, JavaParser, or the generator.
+Jackson, the source parser, or the generator.
 
 ## What lives here
 

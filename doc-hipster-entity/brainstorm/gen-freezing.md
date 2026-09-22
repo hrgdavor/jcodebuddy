@@ -201,3 +201,15 @@ If a class is frozen, the generator should not rewrite the file at all unless it
 ## Next step
 
 Define a concrete architecture contract for freeze marker semantics and implement a generator pass that recognizes and honors the markers.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**The marker forms, scope and semantics above stand; only the detection mechanism named under "Detection" moved.**
+
+"Detection" says the generator "can detect freeze markers with JavaParser by scanning annotations on declarations, comments attached to declarations, and special region comment pairs". That parser is gone. Annotations are read today through `TreeQueries.annotationNamed` / `annotationArg` over OpenRewrite's LST, and the freeze control this repository actually exercises for a whole file is the `enabled` knob in [DEC-021](../architecture/decisions/DEC-021.md)'s class-file header — the per-file equivalent of DEC-018's whole-file freeze — rather than a comment attached to a declaration node.
+
+Nothing else here is retracted: the candidate marker forms, the freeze scope, the preservation semantics, the diagnostics and the open questions are the record of the design. The architecture contract this file asked for is [`gen-freezing.md`](../architecture/gen-freezing.md), whose own appendix records the same substitution.
+
+The representation decision is [DEC-030](../architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).

@@ -142,3 +142,15 @@ jcodebuddy/
 ---
 
 **Ready to proceed:** All infrastructure is ready. The next step is creating `java-watch-agent` submodule and refactoring the AccessorGenerator/BuilderGenerator for use in jcodebuddy framework.
+
+---
+
+## Appendix note — Phase 8 of the rewrite migration (2026-09-22)
+
+**"Legacy" is in the filename: this is the record of the starting point, and it is left as written.**
+
+The four mentions describe a pre-migration module layout — "All generators parse Java source and modify AST nodes", a `java-watch-agent/pom.xml` depending on `javaparser-core:3.28.0`, and a demo generator applying "imperative transformations using JavaParser AST". That layout is what this plan was written against, and the plan's own deprecation banner already says so; no reader should take `javaparser-core:3.28.0` as the current dependency.
+
+The generators now read through [`RecordBuilderProcessor`](../jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java) and take source positions from [`LineLookup`](../jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java) in `jwa-builder`, over OpenRewrite's LST.
+
+The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).
