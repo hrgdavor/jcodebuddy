@@ -4,6 +4,11 @@ package com.codebuddy.merge;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.TreeWalk;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,6 +21,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -93,6 +99,176 @@ class MergeWorkflowTest {
 
     private String fileContent() throws IOException {
         return Files.readString(repositoryDir.resolve(FILE), StandardCharsets.UTF_8);
+    }
+
+    // -------------------------------------------------------------- the marker
+
+    /**
+     * Write a marker for the feature branch by hand, as a person mid-merge or another
+     * tool would.
+     */
+    private void writeMarker(String upstreamCommit) throws IOException {
+        Path branchHistory = repositoryDir.resolve(".jcodebuddy")
+            .resolve("merge-history").resolve("feature");
+        Files.createDirectories(branchHistory);
+        Files.writeString(branchHistory.resolve(LastSyncMarker.FILE_NAME),
+            "upstreamCommit = " + upstreamCommit + "\n"
+                + "upstreamRef = upstream\n"
+                + "note = written by hand\n",
+            StandardCharsets.UTF_8);
+    }
+
+    private Repository openRepository() throws IOException {
+        return new FileRepositoryBuilder()
+            .setGitDir(repositoryDir.resolve(".git").toFile())
+            .setMustExist(true)
+            .build();
+    }
+
+    /** The full id of a commit, for a marker that is supposed to be usable. */
+    private String commitId(String rev) throws IOException {
+        try (Repository repository = openRepository()) {
+            return repository.resolve(rev).getName();
+        }
+    }
+
+    /** The full id of a *blob* in the upstream commit: a real object, but not a commit. */
+    private String blobId(String rev) throws IOException {
+        try (Repository repository = openRepository();
+             RevWalk walk = new RevWalk(repository)) {
+            RevCommit commit = walk.parseCommit(repository.resolve(rev));
+            try (TreeWalk tree = TreeWalk.forPath(repository, FILE, commit.getTree())) {
+                return tree.getObjectId(0).getName();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("a marker naming a branch is refused, not resolved to that branch")
+    void markerNamingABranchIsRefused() throws Exception {
+        buildRepository();
+        // The mistake this guards: `upstream` resolves - to the upstream tip - so the
+        // base became the upstream, neither side had changed anything relative to it,
+        // and a file that conflicts was reported clean.
+        writeMarker("upstream");
+
+        SyncMarkerException failure = assertThrows(SyncMarkerException.class, () ->
+            MergeWorkflow.open(repositoryDir).upstream("upstream").path(FILE).run());
+
+        assertTrue(failure.getMessage().contains("'upstream'"),
+            "the message must quote the offending value: " + failure.getMessage());
+        assertTrue(failure.getMessage().contains("not a commit id"),
+            "and say what is wrong with it: " + failure.getMessage());
+        assertTrue(failure.getMessage().contains("last-sync"),
+            "and name the file to fix: " + failure.getMessage());
+        assertTrue(failure.getMessage().contains("clean"),
+            "and say what believing it would have cost: " + failure.getMessage());
+    }
+
+    @Test
+    @DisplayName("a marker naming a revision expression is refused")
+    void markerNamingARevisionExpressionIsRefused() throws Exception {
+        buildRepository();
+        // Resolvable by git, and meaningless as a record: it names a different commit
+        // as soon as anything is committed.
+        writeMarker("HEAD~1");
+
+        assertThrows(SyncMarkerException.class, () ->
+            MergeWorkflow.open(repositoryDir).upstream("upstream").path(FILE).run());
+    }
+
+    @Test
+    @DisplayName("a marker holding an abbreviated id is refused")
+    void markerHoldingAnAbbreviatedIdIsRefused() throws Exception {
+        buildRepository();
+        String abbreviated = commitId("refs/heads/upstream").substring(0, 7);
+        writeMarker(abbreviated);
+
+        SyncMarkerException failure = assertThrows(SyncMarkerException.class, () ->
+            MergeWorkflow.open(repositoryDir).upstream("upstream").path(FILE).run());
+
+        assertTrue(failure.getMessage().contains("not a commit id"),
+            "an abbreviation is not what this module writes, and is where the slope "
+                + "towards naming a branch starts: " + failure.getMessage());
+    }
+
+    @Test
+    @DisplayName("a marker naming a commit this repository does not have is refused")
+    void markerNamingAMissingCommitIsRefused() throws Exception {
+        buildRepository();
+        writeMarker("0".repeat(40));
+
+        SyncMarkerException failure = assertThrows(SyncMarkerException.class, () ->
+            MergeWorkflow.open(repositoryDir).upstream("upstream").path(FILE).run());
+
+        assertTrue(failure.getMessage().contains("cannot read as a commit"),
+            "an unreadable base is not the same as never having synced, so it must not "
+                + "quietly become a merge base or a skipped path: " + failure.getMessage());
+    }
+
+    @Test
+    @DisplayName("a marker naming a blob is refused, rather than skipping the path")
+    void markerNamingABlobIsRefused() throws Exception {
+        buildRepository();
+        // A real object in this repository, of the wrong kind. Without the kind check
+        // this reached parseCommit, whose IOException readVersions turns into an empty
+        // version - the path was then skipped, and a run whose only path was skipped
+        // still looked resolved.
+        writeMarker(blobId("refs/heads/upstream"));
+
+        SyncMarkerException failure = assertThrows(SyncMarkerException.class, () ->
+            MergeWorkflow.open(repositoryDir).upstream("upstream").path(FILE).run());
+
+        assertTrue(failure.getMessage().contains("cannot read as a commit"),
+            failure.getMessage());
+    }
+
+    @Test
+    @DisplayName("a marker holding a commit id is used as the base")
+    void markerHoldingACommitIdIsUsedAsTheBase() throws Exception {
+        buildRepository();
+        String base = commitId("refs/heads/main");
+        writeMarker(base);
+
+        MergeWorkflow.Result result = MergeWorkflow.open(repositoryDir)
+            .upstream("upstream").path(FILE).run();
+
+        assertTrue(result.baseSource().contains("last-sync marker"),
+            "a usable marker is still authoritative, exactly as before: "
+                + result.baseSource());
+        assertTrue(result.baseSource().contains(base.substring(0, 12)),
+            "and the base must be the commit it names: " + result.baseSource());
+    }
+
+    @Test
+    @DisplayName("an absent marker is still a first sync, not an error")
+    void absentMarkerIsStillAFirstSync() throws Exception {
+        buildRepository();
+
+        MergeWorkflow.Result result = MergeWorkflow.open(repositoryDir)
+            .upstream("upstream").path(FILE).run();
+
+        assertTrue(result.baseSource().contains("merge base"),
+            "the refusal is for a marker that names something unusable, and must not "
+                + "have turned absence into a failure: " + result.baseSource());
+    }
+
+    @Test
+    @DisplayName("a marker with no commit field is still a first sync, not an error")
+    void markerWithoutACommitFieldIsAFirstSync() throws Exception {
+        buildRepository();
+        Path branchHistory = repositoryDir.resolve(".jcodebuddy")
+            .resolve("merge-history").resolve("feature");
+        Files.createDirectories(branchHistory);
+        Files.writeString(branchHistory.resolve(LastSyncMarker.FILE_NAME),
+            "upstreamRef = upstream\nnote = half-written\n", StandardCharsets.UTF_8);
+
+        MergeWorkflow.Result result = MergeWorkflow.open(repositoryDir)
+            .upstream("upstream").path(FILE).run();
+
+        assertTrue(result.baseSource().contains("merge base"),
+            "a field with nothing in it names nothing, so there is no wrong answer to "
+                + "fall into: " + result.baseSource());
     }
 
     @Test

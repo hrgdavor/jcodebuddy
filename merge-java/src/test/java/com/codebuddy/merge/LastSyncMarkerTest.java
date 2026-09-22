@@ -15,6 +15,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -93,6 +94,69 @@ class LastSyncMarkerTest {
         assertTrue(LastSyncMarker.parse("upstreamRef = origin/main\n").isEmpty(),
             "a marker with no commit id tells us nothing usable");
         assertTrue(LastSyncMarker.parse("upstreamCommit = null\n").isEmpty());
+    }
+
+    @Test
+    @DisplayName("a commit id is recognised, and anything that can move is not")
+    void recognisesACommitId() {
+        String sha1 = "eecaadfe6259845cea5d182e4f0f9b7d7f9ab471";
+        assertTrue(LastSyncMarker.isCommitId(sha1));
+        assertTrue(LastSyncMarker.isCommitId(sha1.toUpperCase()),
+            "git prints lowercase, but a person pasting an id should not be punished "
+                + "for the case");
+        assertTrue(LastSyncMarker.isCommitId("a".repeat(64)),
+            "a SHA-256 repository has 64-character ids");
+
+        assertFalse(LastSyncMarker.isCommitId(null));
+        assertFalse(LastSyncMarker.isCommitId(""));
+        assertFalse(LastSyncMarker.isCommitId("upstream"),
+            "a branch name means whatever it points at when it is read");
+        assertFalse(LastSyncMarker.isCommitId("origin/main"));
+        assertFalse(LastSyncMarker.isCommitId("v1.2.0"), "a tag is not a fixed point either");
+        assertFalse(LastSyncMarker.isCommitId("HEAD~3"),
+            "a revision expression is a question, not a record");
+        assertFalse(LastSyncMarker.isCommitId(sha1.substring(0, 7)),
+            "an abbreviation is where the slope starts");
+        assertFalse(LastSyncMarker.isCommitId("z".repeat(40)),
+            "40 characters is not the same as 40 hex characters");
+    }
+
+    @Test
+    @DisplayName("turning a marker into a base refuses a name that can move")
+    void requireCommitIdRefusesMovableNames() {
+        LastSyncMarker marker = new LastSyncMarker("origin/main", "origin/main", "", "");
+
+        SyncMarkerException failure = assertThrows(SyncMarkerException.class,
+            () -> marker.requireCommitId(historyRoot));
+
+        assertTrue(failure.getMessage().contains("origin/main"), failure.getMessage());
+        assertTrue(failure.getMessage().contains(LastSyncMarker.FILE_NAME),
+            "the message must name the file to fix: " + failure.getMessage());
+        assertTrue(failure.getMessage().contains("clean"),
+            "and why believing it would be worse than failing: " + failure.getMessage());
+    }
+
+    @Test
+    @DisplayName("turning a marker into a base accepts a commit id")
+    void requireCommitIdAcceptsACommitId() {
+        String sha1 = "eecaadfe6259845cea5d182e4f0f9b7d7f9ab471";
+        LastSyncMarker marker = new LastSyncMarker(sha1, "origin/main", "", "");
+
+        assertEquals(sha1, marker.requireCommitId(historyRoot).getName());
+    }
+
+    @Test
+    @DisplayName("parsing stays permissive: it reads a file and decides nothing")
+    void parsingDoesNotValidate() {
+        // Deliberate, and worth pinning: this type is a record of a file's contents, and
+        // one is legitimately built and compared with no repository in sight. The refusal
+        // belongs where the value would acquire the power to choose a base.
+        Optional<LastSyncMarker> parsed = LastSyncMarker.parse(
+            "upstreamCommit = origin/main\nupstreamRef = origin/main\n");
+
+        assertTrue(parsed.isPresent(), "a well-formed file parses");
+        assertEquals("origin/main", parsed.get().upstreamCommit(),
+            "and the value is carried through unchanged for requireCommitId to refuse");
     }
 
     @Test

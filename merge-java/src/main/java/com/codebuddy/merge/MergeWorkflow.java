@@ -214,7 +214,7 @@ public final class MergeWorkflow {
             // synced, where there is nothing to have recorded yet.
             Optional<LastSyncMarker> marker = LastSyncMarker.read(historyRoot);
             ObjectId recordedCommit = marker
-                .flatMap(recorded -> resolveQuietly(repository, recorded.upstreamCommit()))
+                .map(recorded -> recordedBase(repository, historyRoot, recorded))
                 .orElse(null);
 
             // First sync of a branch: nothing has been recorded, so the only available
@@ -430,13 +430,43 @@ public final class MergeWorkflow {
     }
 
     /**
-     * Resolve a commit id, reporting absence rather than throwing.
+     * The commit a recorded marker names, refusing anything this repository would have
+     * to <em>interpret</em>.
+     *
+     * <p>The format half is {@link LastSyncMarker#requireCommitId(Path)}'s: a marker
+     * holding a branch name, a tag or a revision expression is an error, because such a
+     * name means whatever it points at when it is read and the base would move with it.
+     *
+     * <p>This half is the repository's. The id must name a commit the repository can
+     * actually read. A valid object that is a blob or a tree would fail
+     * {@code parseCommit} inside {@link #readVersions}, which reports an unreadable
+     * version by returning empty - the path would then be quietly <em>skipped</em>, and a
+     * run whose only path was skipped can still look resolved. Checking here keeps that
+     * from being mistaken for "nothing to do".
+     *
+     * <p>Deliberately does not ask <em>which</em> commit: the base is allowed to be a
+     * commit the upstream no longer contains, because that is what a rebase leaves
+     * behind and the marker exists precisely to survive it. Only the marker's ability to
+     * name a commit is checked, never its choice of one. Recording the upstream tip
+     * after a sync - which the workflow itself does, below - is a normal and correct
+     * state in which the base <em>does</em> equal the upstream.
+     *
+     * @throws SyncMarkerException when the marker's commit is unusable in this repository
      */
-    private static Optional<ObjectId> resolveQuietly(Repository repository, String commitId) {
-        try {
-            return Optional.ofNullable(repository.resolve(commitId));
+    private static ObjectId recordedBase(Repository repository, Path historyRoot,
+                                        LastSyncMarker marker) {
+        ObjectId commit = marker.requireCommitId(historyRoot);
+        try (RevWalk walk = new RevWalk(repository)) {
+            walk.parseCommit(commit);
+            return commit;
         } catch (IOException e) {
-            return Optional.empty();
+            throw new SyncMarkerException("the sync marker at "
+                + LastSyncMarker.pathFor(historyRoot) + " records " + marker.shortCommit()
+                + ", which this repository cannot read as a commit ("
+                + e.getClass().getSimpleName() + ": " + e.getMessage() + "). A base that"
+                + " cannot be read is not the same as a branch that never synced, so this is"
+                + " refused rather than quietly skipped. Write a commit id this repository"
+                + " has, or delete the marker to start again from a merge base.");
         }
     }
 

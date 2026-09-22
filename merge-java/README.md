@@ -79,6 +79,16 @@ from the Git object database (JGit as a library, never a subprocess), applies th
 independently applicable resolutions, and reports the rest. It is dry by default and
 never stages or commits.
 
+The base it resolves against is the **last-synced upstream state**, recorded in
+`.jcodebuddy/merge-history/<branch>/last-sync` after each run — not Git's merge base
+([why](docs/WHAT_IS_BASE.md)). That file's `upstreamCommit` must be a full commit id:
+a branch name, a tag or a revision expression such as `HEAD~3` is refused with a
+`SyncMarkerException`, because such a name means whatever it points at when it is
+read. A base that had moved up to the upstream would make a conflicting merge look
+clean, and a false clean is the one answer this module must never give. A missing
+marker is not an error — it means the branch has never synced, and the merge base is
+used instead. Delete the file to return to that state.
+
 ## Quick start
 
 ```java
@@ -263,11 +273,18 @@ the parent's level with no override.
 > verify it, and the traps. Leaving it to drift is what produced the Java 21
 > override this module briefly needed.
 
-573 tests covering resolver behaviour, detection, region attribution, conflict
-composition, the verification gate, history persistence and replay, the registry
-contract, the extension pattern, type-aware parameter comparison, the batch facade,
-the JGit workflow against a real repository, and the JSON-to-HTML report (the
-renderer test skips itself when Bun is not installed).
+Roughly six hundred tests covering resolver behaviour, detection, region attribution,
+conflict composition, the verification gate, history persistence and replay, the
+registry contract, the extension pattern, type-aware parameter comparison, the batch
+facade, the JGit workflow against a real repository, a fixture rebuilt as a real git
+repository, and the JSON-to-HTML report (the renderer test skips itself when Bun is
+not installed). Run `mvn test` for the number rather than trusting one written here.
+
+The fixture generator has its own harness, which runs without Maven:
+
+```
+bun run scripts/git-sample/sample-repo.test.js
+```
 
 ## Dependencies
 
@@ -311,5 +328,7 @@ automatically, by design. The reasoning, with worked examples, is in
 | [DESIGN_NEVER_AUTO_RESOLVED.md](DESIGN_NEVER_AUTO_RESOLVED.md) | Why three conflict kinds stay manual |
 | [IMPROVEMENT_PROPOSAL.md](IMPROVEMENT_PROPOSAL.md) | The analysis and evidence behind the last round of work |
 | [IMPROVEMENTS_DELIVERED.md](IMPROVEMENTS_DELIVERED.md) | What that round actually produced |
+| [IMPROVEMENT_PROPOSAL_ROUND_2.md](IMPROVEMENT_PROPOSAL_ROUND_2.md) | **Where the evidence is thin**: fixture coverage, marker validation (fixed, §7), and what to fix first |
+| [scripts/git-sample/README.md](scripts/git-sample/README.md) | Turning one fixture into a real git repository, to open in a git GUI or hand to another tool |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Delivery phases |
 | [CHANGELOG.md](CHANGELOG.md) | Change history |

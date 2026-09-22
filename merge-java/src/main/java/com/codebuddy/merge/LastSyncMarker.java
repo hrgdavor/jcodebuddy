@@ -9,6 +9,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
+
+import org.eclipse.jgit.lib.ObjectId;
 
 /**
  * The upstream commit that was current the last time a branch was brought up to
@@ -37,6 +40,22 @@ import java.util.Optional;
  * is part of the same story: the decisions are what this branch concluded, the marker
  * is what it had seen when it concluded them.
  *
+ * <h2>The commit field must be an object id</h2>
+ *
+ * <p>{@link #upstreamCommit()} is the one field that reaches the repository as a
+ * revision expression, and a revision expression is not a record of the past: a
+ * branch name, a tag or {@code HEAD} means something different tomorrow than it means
+ * today. A marker is only a fact about this branch's history if the value in it
+ * cannot move, so a marker naming anything but a full object id is refused by
+ * {@link #requireCommitId(Path)} rather than resolved - see
+ * {@link SyncMarkerException} for what a movable name would have cost.
+ *
+ * <p>Parsing stays permissive and validation is separate, on purpose. This type is a
+ * record of a file's contents, and one is legitimately constructed and compared in
+ * contexts that have no repository and no real commit (a unit test of
+ * {@link #differsFrom}); the refusal belongs where the value would acquire the power
+ * to choose a base.
+ *
  * @param upstreamCommit the upstream commit id that was last merged in
  * @param upstreamRef    the ref it was reached through, e.g. {@code origin/main}
  * @param recordedAt     when the marker was written, as an ISO-8601 instant
@@ -47,6 +66,16 @@ public record LastSyncMarker(String upstreamCommit, String upstreamRef,
 
     /** File name used within a branch's history directory. */
     public static final String FILE_NAME = "last-sync";
+
+    /**
+     * The shape of a commit id: 40 hex characters for SHA-1, 64 for SHA-256.
+     *
+     * <p>Nothing shorter. An abbreviated id is legal to git and would usually resolve,
+     * but it is not what this module writes, it can be ambiguous, and shortening is the
+     * beginning of the same slope that ends with a branch name. A marker is read once
+     * per run, so being exact costs nothing and removes a class of doubt.
+     */
+    private static final Pattern COMMIT_ID = Pattern.compile("[0-9a-fA-F]{40}|[0-9a-fA-F]{64}");
 
     public LastSyncMarker {
         Objects.requireNonNull(upstreamCommit, "upstreamCommit");
@@ -90,7 +119,61 @@ public record LastSyncMarker(String upstreamCommit, String upstreamRef,
     }
 
     /**
+     * True when a value is a full commit id rather than a name that can move.
+     *
+     * <p>The distinction is the marker's whole safety property: {@code eecaadf...} can
+     * only ever mean the commit it names, while {@code upstream} means whatever that
+     * branch happens to point at when it is read.
+     */
+    public static boolean isCommitId(String value) {
+        return value != null && COMMIT_ID.matcher(value).matches();
+    }
+
+    /**
+     * This marker's commit as an object id, or an error saying why it is not one.
+     *
+     * <p>The only way to get a usable base out of a marker, so that failing to check is
+     * not the easy path. A caller that has a repository should use this rather than
+     * {@link #upstreamCommit()}, which is the raw field.
+     *
+     * <p>Deliberately does not consult the repository: "is this an object id" is a
+     * question about the file's format, and this type owns the format. "Is it a commit
+     * this repository can read" is a question about a repository, and belongs to the
+     * caller that has one.
+     *
+     * @param historyRoot the branch's history directory, used both to locate the file
+     *                    for an accurate message and to name it for the reader
+     * @throws SyncMarkerException when the field is not a full commit id
+     */
+    public ObjectId requireCommitId(Path historyRoot) {
+        if (!isCommitId(upstreamCommit)) {
+            throw new SyncMarkerException("the sync marker at " + pathFor(historyRoot)
+                + " records the base as '" + upstreamCommit + "', which is not a commit id."
+                + " A branch name, a tag or a revision expression means whatever it points at"
+                + " when it is read, and a base that has moved up to the upstream makes a"
+                + " conflicting merge look clean - so this is refused rather than resolved."
+                + " Write the full 40-character commit id there, or delete the marker to start"
+                + " again from a merge base.");
+        }
+        try {
+            return ObjectId.fromString(upstreamCommit);
+        } catch (RuntimeException e) {
+            // A 64-character id in a SHA-1 repository lands here.
+            throw new SyncMarkerException("the sync marker at " + pathFor(historyRoot)
+                + " records the base as '" + upstreamCommit + "', which this repository"
+                + " cannot use as an object id (" + e.getMessage() + "). Write the id this"
+                + " repository uses, or delete the marker to start again from a merge base.");
+        }
+    }
+
+    /**
      * Read a branch's marker, if one has been recorded.
+     *
+     * <p>An absent file is absence; a file that is present but names no commit at all is
+     * also absence, because a blank field names nothing and there is no wrong answer to
+     * fall into - see {@link #parse(String)}. A file that names something
+     * <em>unusable</em> is not absence, and is refused by {@link #requireCommitId(Path)}
+     * rather than reported as "never synced".
      */
     public static Optional<LastSyncMarker> read(Path historyRoot) {
         Path path = pathFor(historyRoot);
@@ -136,9 +219,15 @@ public record LastSyncMarker(String upstreamCommit, String upstreamRef,
     /**
      * Parse the file written by {@link #render()}.
      *
-     * <p>An unreadable or incomplete marker is treated as absent rather than as an
-     * error: a missing marker means "first sync", which the caller can handle, and
+     * <p>This reads a file, and only that. A marker with no commit field, or a blank one,
+     * is absent: a missing marker means "first sync", which the caller can handle, and
      * guessing a commit from a malformed file would be worse than not knowing.
+     *
+     * <p>A commit field holding something that is <em>not</em> a commit id is parsed
+     * through unchanged rather than rejected here, because rejecting it is a decision
+     * about using it and this method never uses anything. The refusal happens in
+     * {@link #requireCommitId(Path)}, which is the only supported way to turn a marker
+     * into a base.
      */
     static Optional<LastSyncMarker> parse(String text) {
         if (text == null || text.isBlank()) {

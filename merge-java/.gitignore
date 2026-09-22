@@ -24,5 +24,10 @@ Thumbs.db
 *.log
 *.tmp
 
+# Sample repositories generated from fixtures by
+# scripts/git-sample/sample-repo.js. Derived, disposable, never checked in:
+# regenerate one with `--force` whenever it is wanted.
+.sample-repos/
+
 # Maven repository used for sandboxed/local builds
 .mvn-local-repo/
