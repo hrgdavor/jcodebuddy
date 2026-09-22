@@ -18,7 +18,6 @@
         <maven.compiler.target>25</maven.compiler.target>
         <maven.compiler.release>25</maven.compiler.release>
 
-        <javaparser.version>3.28.0</javaparser.version>
         <jackson.version>3.2.1</jackson.version>
         <slf4j.version>2.0.9</slf4j.version>
         <directory-watcher.version>0.18.0</directory-watcher.version>
@@ -72,11 +71,12 @@
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>com.github.javaparser</groupId>
-                <artifactId>javaparser-core</artifactId>
-                <version>${javaparser.version}</version>
-            </dependency>
+            <!-- `com.github.javaparser:javaparser-core` was managed here, with the single
+                 `<javaparser.version>` property, and both were removed on 2026-09-22 at the end of
+                 Phase 6 of the rewrite-migration plan: no module in this reactor declares the
+                 dependency any more, so a managed version would only invite one back without the
+                 version property that made F-23's failure (eleven versions in the local repository,
+                 one of them silently too old) impossible to reach. -->
 
             <!-- OpenRewrite Core (Phase 1-4 migration) -->
             <dependency>

@@ -2,6 +2,8 @@ package hr.hrg.hipster.entity.tooling.meta;
 
 import java.util.List;
 
+import org.openrewrite.java.tree.J;
+
 /**
  * A discovered interface in the tooling's metadata model.
  *
@@ -44,7 +46,7 @@ public record InterfaceInfo(
         int lineNumber,
         List<String> nestedRecordComponents,
         boolean publicType,
-        com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declaration,
+        org.openrewrite.java.tree.J.ClassDeclaration declaration,
         String sourcePath
 ) {
     public InterfaceInfo {
@@ -62,11 +64,10 @@ public record InterfaceInfo(
     public InterfaceInfo(String packageName, String name, List<String> extendsTypes, List<Property> properties,
                          ViewAttributes view, String entityBaseIdType, int lineNumber,
                          List<String> nestedRecordComponents, boolean publicType,
-                         com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declaration) {
+                         org.openrewrite.java.tree.J.ClassDeclaration declaration) {
         this(packageName, name, extendsTypes, properties, view, entityBaseIdType, lineNumber,
                 nestedRecordComponents, publicType, declaration, null);
     }
-
     /** The declaring file as a module-relative path, or {@code null} when the pass did not resolve it. */
     public String getSourcePath() {
         return sourcePath;

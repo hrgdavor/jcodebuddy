@@ -1,8 +1,6 @@
 package hr.hrg.hipster.entity.tooling;
 
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.expr.AnnotationExpr;
-import com.github.javaparser.ast.expr.MemberValuePair;
+import org.openrewrite.java.tree.J;
 
 import hr.hrg.hipster.entity.tooling.meta.FieldConstraint;
 import hr.hrg.hipster.entity.tooling.meta.Property;
@@ -91,39 +89,100 @@ public final class ValidationGenerator {
      *
      * <p>Called from the property reader, so a constraint is captured wherever a {@code @FieldSource}
      * would be — the two annotations are read the same way, in the same place.</p>
+     *
+     * <h3>Phase 6</h3>
+     * <p>Two API differences, neither of which changes the output:</p>
+     * <ul>
+     *   <li>The method is a {@link J.MethodDeclaration}. Nothing here needs a method's body, so the only
+     *       consequence is that a caller must not hand in a constructor — and
+     *       {@code TreeQueries.methodsOf} already excludes those.</li>
+     *   <li>The annotation is a {@link J.Annotation} carrying the method name and the rendered
+     *       arguments. Both the {@code @FieldSource} and validation namespaces are what is read, not
+     *       JavaParser's four annotation node types.</li>
+     * </ul>
+     * <p>Recognition is still by simple name and namespace prefix, because no parser resolves
+     * anything: an author writing {@code @jakarta.validation.constraints.NotNull} and one writing
+     * {@code @NotNull} must both be recognised, and neither is checked against a classpath.</p>
      */
-    public static List<FieldConstraint> constraintsOn(MethodDeclaration method) {
+    public static List<FieldConstraint> constraintsOn(J.MethodDeclaration method) {
         List<FieldConstraint> constraints = new ArrayList<>();
-        for (AnnotationExpr annotation : method.getAnnotations()) {
-            String name = annotation.getNameAsString();
-            int dot = name.lastIndexOf('.');
-            String simpleName = dot >= 0 ? name.substring(dot + 1) : name;
-            boolean validationNamespace = name.startsWith("jakarta.validation")
-                    || name.startsWith("javax.validation");
-            if (!validationNamespace && !RECOGNISED.contains(simpleName)) {
-                // Not a validation annotation at all. The generator has no way to know another
-                // annotation's semantics, so it is left alone rather than guessed at.
-                continue;
+        if (method == null) {
+            return constraints;
+        }
+        for (J.Annotation annotation : method.getLeadingAnnotations()) {
+            String name = renderedAnnotationName(annotation);
+            FieldConstraint constraint = constraintOf(name, annotationArguments(annotation));
+            if (constraint != null) {
+                constraints.add(constraint);
             }
-            constraints.add(new FieldConstraint(simpleName, annotationArguments(annotation)));
         }
         return constraints;
     }
 
-    /** The annotation's argument text without the parentheses, or {@code ""} for a marker form. */
-    private static String annotationArguments(AnnotationExpr annotation) {
-        if (annotation.isMarkerAnnotationExpr()) {
+    /**
+     * The constraint an annotation describes, or {@code null} when it is not one this generator knows.
+     *
+     * <p>The whole recognition rule, taking the annotation's name as the source spells it. It lived
+     * here so that "is this a constraint?" had one answer while two parsers were in flight, and it stays
+     * here as the single owner of that answer now that there is one.</p>
+     */
+    private static FieldConstraint constraintOf(String name, String arguments) {
+        int dot = name.lastIndexOf('.');
+        String simpleName = dot >= 0 ? name.substring(dot + 1) : name;
+        boolean validationNamespace = name.startsWith("jakarta.validation")
+                || name.startsWith("javax.validation");
+        if (!validationNamespace && !RECOGNISED.contains(simpleName)) {
+            // Not a validation annotation at all. The generator has no way to know another
+            // annotation's semantics, so it is left alone rather than guessed at.
+            return null;
+        }
+        return new FieldConstraint(simpleName, arguments);
+    }
+
+    /**
+     * The annotation's name as the source spells it — bare or qualified.
+     *
+     * <p>Read from the annotation type rather than from a printed node, because the namespace prefix is
+     * what decides whether an unrecognised simple name is still a validation annotation:
+     * {@code @jakarta.validation.constraints.Pattern} must be recognised on the prefix even though
+     * {@code Pattern} could plausibly be anything.</p>
+     */
+    private static String renderedAnnotationName(J.Annotation annotation) {
+        return annotation.getAnnotationType() == null ? "" : annotation.getAnnotationType().toString().trim();
+    }
+
+    /**
+     * The annotation's argument text without the parentheses, or {@code ""} for a marker form.
+     *
+     * <p>The LST has one annotation node where JavaParser had four, and the forms are told apart by the
+     * argument list — the same discrimination {@code ViewAnnotationReader} documents:</p>
+     * <ul>
+     *   <li>{@code getArguments() == null} &rarr; the bare marker {@code @NotNull}, so no text;</li>
+     *   <li>a single {@link J.Empty} &rarr; {@code @NotNull()}, which is also no text;</li>
+     *   <li>{@link J.Assignment} arguments &rarr; {@code name = value} pairs, joined with
+     *       {@code ", "} in declaration order;</li>
+     *   <li>any other single argument &rarr; the unnamed member form, rendered bare.</li>
+     * </ul>
+     */
+    private static String annotationArguments(J.Annotation annotation) {
+        List<org.openrewrite.java.tree.Expression> arguments = annotation.getArguments();
+        if (arguments == null) {
             return "";
         }
-        if (annotation.isSingleMemberAnnotationExpr()) {
-            return annotation.asSingleMemberAnnotationExpr().getMemberValue().toString();
-        }
         StringBuilder sb = new StringBuilder();
-        for (MemberValuePair pair : annotation.asNormalAnnotationExpr().getPairs()) {
+        for (org.openrewrite.java.tree.Expression argument : arguments) {
+            if (argument instanceof J.Empty) {
+                continue;
+            }
             if (sb.length() > 0) {
                 sb.append(", ");
             }
-            sb.append(pair.getNameAsString()).append(" = ").append(pair.getValue());
+            if (argument instanceof J.Assignment assignment) {
+                sb.append(TreeQueries.expressionText(assignment.getVariable())).append(" = ")
+                        .append(TreeQueries.expressionText(assignment.getAssignment()));
+            } else {
+                sb.append(TreeQueries.expressionText(argument));
+            }
         }
         return sb.toString();
     }

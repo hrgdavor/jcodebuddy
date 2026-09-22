@@ -49,16 +49,13 @@
             <version>${openrewrite.version}</version>
         </dependency>
 
-        <!-- JavaParser is still here, deliberately, and not only because files
-             remain to be ported. DependencyBoundaryTest asserts this module does
-             NOT pin a version of its own (the root POM owns that), and the
-             `javaparser-core` declaration is what that test reads. It stays until
-             the last file in the module is ported, at which point both the
-             dependency and that assertion are removed together. -->
-        <dependency>
-            <groupId>com.github.javaparser</groupId>
-            <artifactId>javaparser-core</artifactId>
-        </dependency>
+        <!-- `javaparser-core` was removed here on 2026-09-22, at the end of Phase 6 of the
+             rewrite-migration plan: every source in this module — main and test — now reads and writes
+             Java through OpenRewrite, and the module's gate (`clean test`, 362 tests) is green without
+             it. `DependencyBoundaryTest`, which asserted that this POM declared the dependency without
+             pinning a version, was retired in the same change: the single-sourcing property becomes
+             vacuous when there is no dependency to single-source, which is what its own javadoc said
+             the retirement condition was. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>

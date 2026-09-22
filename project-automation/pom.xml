@@ -38,10 +38,16 @@
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.github.javaparser</groupId>
-            <artifactId>javaparser-core</artifactId>
-        </dependency>
+        <!--
+            javaparser-core was removed with the `hr.hrg.rewrite` staging package (Phase 6 of the
+            rewrite-migration plan). That package was the only consumer in this module, and it never
+            compiled: it referenced eight types that exist nowhere (`TypeTree`, `MethodTree`,
+            `ClassTree`, `FieldTree`, `AnnotationTree`, `EnumDeclarationTree`, `CodeResolver`,
+            `ViewMetaImpl`) — measured at 200 errors across 14 files once two syntax errors in front of
+            them were fixed. Nothing outside this module referenced it, and this module's own live
+            classes did not either, so removing it restored a compiling module and unblocked
+            `java-watch-agent`, which depends on this artifact.
+        -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>metadata-server</artifactId>

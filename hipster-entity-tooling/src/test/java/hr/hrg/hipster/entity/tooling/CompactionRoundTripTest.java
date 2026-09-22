@@ -67,13 +67,28 @@ class CompactionRoundTripTest {
     private static final String VIEW_PLUS_ONE = VIEW_WITHOUT_LAST_NAME.replace("String email();",
             "String email();\n    String phoneNumber();");
 
+    /**
+     * The constant names of a field enum, in declaration order.
+     *
+     * <p>Phase 6: read through the LST. JavaParser modelled each constant as its own member declaration;
+     * the LST groups an enum's constants into one {@code J.EnumValueSet} statement, so the walk is
+     * different but the answer — declaration order — is the same.</p>
+     */
     private static List<String> constants(Path enumFile) throws Exception {
-        var declaration = new com.github.javaparser.JavaParser().parse(Files.readString(enumFile))
-                .getResult().orElseThrow()
-                .findFirst(com.github.javaparser.ast.body.EnumDeclaration.class).orElseThrow();
-        return declaration.getEntries().stream()
-                .map(com.github.javaparser.ast.body.EnumConstantDeclaration::getNameAsString)
-                .toList();
+        org.openrewrite.java.tree.J.CompilationUnit unit =
+                SourceReader.readSourceText(Files.readString(enumFile));
+        Assertions.assertNotNull(unit, "the enum must parse: " + enumFile);
+        org.openrewrite.java.tree.J.ClassDeclaration declaration =
+                TreeQueries.enums(unit).get(0);
+        List<String> names = new java.util.ArrayList<>();
+        for (org.openrewrite.java.tree.Statement statement : declaration.getBody().getStatements()) {
+            if (statement instanceof org.openrewrite.java.tree.J.EnumValueSet values) {
+                for (org.openrewrite.java.tree.J.EnumValue value : values.getEnums()) {
+                    names.add(value.getName().getSimpleName());
+                }
+            }
+        }
+        return names;
     }
 
     @Test

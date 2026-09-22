@@ -263,12 +263,16 @@ describe('curation', () => {
     expect(overlap).toEqual([]);
   });
 
-  test('every prerequisite records evidence and starts open', () => {
+  test('every prerequisite records evidence and a boolean done flag', () => {
+    // `done` is a fact about the tree, not an invariant: a prerequisite that has been cleared is
+    // recorded as cleared (P0-1 was, when its two syntax errors were fixed). What must hold for every
+    // entry is that it states why it exists and what the evidence is, so a reader can check the claim
+    // rather than trust it.
     for (const prereq of PREREQUISITES) {
       expect(prereq.id).toMatch(/^P0-\d+$/);
       expect(prereq.why.length).toBeGreaterThan(0);
       expect(prereq.evidence.length).toBeGreaterThan(0);
-      expect(prereq.done).toBe(false);
+      expect(typeof prereq.done).toBe('boolean');
     }
   });
 });

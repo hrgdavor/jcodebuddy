@@ -8,11 +8,11 @@
 > Regenerate after any change to the Java tree, or `verify-migration.js` will fail
 > on the disagreement.
 
-Generated: 2026-09-21
+Generated: 2026-09-22
 
 ## First pass — completed
 
-The read-only spine is ported: **11 files settled**, 2 in progress, 24 remaining. `hipster-entity-tooling` builds and its full test suite is green.
+The read-only spine is ported: **34 files settled**, 0 in progress, 0 remaining. `hipster-entity-tooling` builds and its full test suite is green.
 
 Three API findings from that pass are recorded in `MIGRATION-GUIDE.md` § 4, and each one matters for every file still to be ported because each is silent:
 
@@ -20,18 +20,18 @@ Three API findings from that pass are recorded in `MIGRATION-GUIDE.md` § 4, and
 - **§ 4.6** a reused parser must be `reset()` between parse sets, or the second read of any type reports "unparseable".
 - **§ 4.7** an interface's `extends` clause is held in `getImplements()`, not `getExtends()`; reading the latter finds no supertype for any interface.
 
-Read [`MIGRATION-CAVEATS.md`](MIGRATION-CAVEATS.md) **before** porting a file: it lists the five ways a port fails silently, the model differences that force a rewrite rather than a rename, and the open gaps.
+Read [`MIGRATION-CAVEATS.md`](MIGRATION-CAVEATS.md) **before** porting a file: it lists the eight ways a port fails silently, the model differences that force a rewrite rather than a rename, and the open gaps.
 
 ## Phase 6 state
 
 | Measure | Count |
 | --- | --- |
-| Files in the migration queue | 35 |
-| Settled (complete or exempt) | 11 (31%) |
-| Remaining | 24 |
-| Still importing JavaParser | 19 |
+| Files in the migration queue | 34 |
+| Settled (complete or exempt) | 34 (100%) |
+| Remaining | 0 |
+| Still importing JavaParser | 0 |
 | Unclassified by curation | 0 |
-| JavaParser import lines to remove | 159 |
+| JavaParser import lines to remove | 0 |
 
 ## Phase-0 prerequisites
 
@@ -41,29 +41,25 @@ is real in the tree today.
 
 | Id | Prerequisite | Done |
 | --- | --- | --- |
-| P0-1 | Repair project-automation staging code so the module compiles | **no** |
-| P0-2 | Re-point the hr.hrg.rewrite package at the real OpenRewrite API | **no** |
-| P0-3 | Add the OpenRewrite dependency set to project-automation | **no** |
+| P0-1 | Repair project-automation staging code so the module compiles | yes |
+| P0-2 | Re-point the hr.hrg.rewrite package at the real OpenRewrite API | yes |
+| P0-6 | Repair java-watch-agent, which has never compiled | **no** |
+| P0-7 | metadata-server has a failing test that blocks every downstream module gate | **no** |
+| P0-3 | Add the OpenRewrite dependency set to project-automation | yes |
 | P0-4 | Establish the clean-build baseline for every module in the queue | **no** |
 | P0-5 | Reconcile the plan’s file list with the tree | **no** |
 
-### P0-1 — Repair project-automation staging code so the module compiles
+### P0-6 — Repair java-watch-agent, which has never compiled
 
-A clean compile of the module fails. Stale class files made a plain `compile` report success ("Nothing to compile - all classes are up to date"), so the breakage is invisible until someone cleans — the same stale-class hazard the repo records as note F-47.
+With `project-automation` compiling, `java-watch-agent`’s own breakage became visible and it is not a migration problem at all: **`FileChange` and `ToolContext` do not exist anywhere in the repository**, and `git log --all` shows they never did. `ActionToolAdapter` references both, as do `ActionEngine`, `ActionTool`, `HelloTool`, `RecordBuilderGenerator` and the three generator tools. There is also a Jackson 3 incompatibility in `AuditManager` (`ObjectMapper.enable(SerializationFeature)` no longer exists).
 
-*Evidence:* project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteValidationGenerator.java:83 — `sb.append("}")\n\n");` is an unbalanced close paren; the escape never reaches the string. OpenRewriteFieldBoilerplateGenerator.java:131 — `sb.append("    public String ").append(property.name()).append "() {\n");` is missing the parens on the second `.append`.
+*Evidence:* `git show HEAD:.../ActionToolAdapter.java` contains the same `FileChange` / `ToolContext` references as the working tree, so this predates every change in this migration. Measured: 6 compile errors in 2 files after the staging package was removed.
 
-### P0-2 — Re-point the hr.hrg.rewrite package at the real OpenRewrite API
+### P0-7 — metadata-server has a failing test that blocks every downstream module gate
 
-Behind P0-1’s syntax errors the package references types that do not exist: `hr.hrg.hipster.entity.tooling.TypeTree`, `InterfaceTree`, `MethodTree`, `ClassTree`. The real names are `org.openrewrite.java.tree.TypeTree` and the `J.*` node types; there is no `MethodTree` at all. It also calls `SourceReader.readText()` (package-private) and `getTypes()`/`addMember()` on JavaParser’s `CompilationUnit` as though it were an LST.
+`MetadataServerTest.httpForyRoundTrip` fails with an HTTP 500, and `java-watch-agent` (and `project-automation`) depend on `metadata-server`, so no downstream `clean test` gate can pass. It fails in isolation — `mvn -pl metadata-server -am test` reproduces it with none of this migration’s changes on the classpath — so it is pre-existing and unrelated to the port, but it must be resolved or excluded before any module whose gate includes it can be called green.
 
-*Evidence:* OpenRewriteViewInterfaceGenerator.java:141-221, OpenRewriteViewBuilderGenerator.java:132, plus the same pattern across hr/hrg/rewrite/validation/*.
-
-### P0-3 — Add the OpenRewrite dependency set to project-automation
-
-The module declares no `org.openrewrite` dependency at all, so even once P0-2 is fixed the `hr.hrg.rewrite` package has no OpenRewrite API to compile against. Without this, Phase 5’s automation engine cannot be wired into the module Phase 6 depends on.
-
-*Evidence:* project-automation/pom.xml declares javaparser-core (line 42) and no OpenRewrite artifact.
+*Evidence:* `mvn -o -pl metadata-server -am -Dmaven.compiler.useIncrementalCompilation=false test` → `Tests run: 5, Failures: 0, Errors: 1` — `MetadataServerTest.httpForyRoundTrip:155 » IO Server returned HTTP response code: 500 for URL: http://localhost:18291/api/fory`.
 
 ### P0-4 — Establish the clean-build baseline for every module in the queue
 
@@ -101,67 +97,60 @@ OpenRewrite mapping for each type, and the migration notes from
   Confirm against the OpenRewrite reference for 8.90.4 before
   relying on it.
 
-## The queue (35 files, in work order)
+## The queue (34 files, in work order)
 
 Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 
 | Status | Priority | Risk | Imports | File |
 | --- | --- | --- | --- | --- |
-| `[ ]` not-started | high | high | 11 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java` |
-| `[ ]` not-started | high | high | 12 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java` |
-| `[ ]` not-started | high | high | 35 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` |
-| `[ ]` not-started | high | high | 20 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java` |
 | `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java` |
-| `[~]` in-progress | high | high | 12 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` |
 | `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java` |
-| `[ ]` not-started | high | high | 5 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
-| `[ ]` not-started | high | high | 9 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` |
+| `[x]` complete | high | high | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
+| `[x]` complete | high | high | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` |
-| `[~]` in-progress | high | medium | 2 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java` |
-| `[ ]` not-started | high | medium | 3 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java` |
-| `[ ]` not-started | high | medium | 3 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` |
-| `[ ]` not-started | high | medium | 10 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
-| `[ ]` not-started | high | medium | 6 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
-| `[ ]` not-started | high | medium | 6 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
-| `[ ]` not-started | high | medium | 6 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
-| `[ ]` not-started | high | medium | 6 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java` |
-| `[ ]` not-started | high | medium | 3 | `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
+| `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
+| `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
+| `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
+| `[x]` complete | high | medium | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java` |
+| `[x]` complete | high | medium | 0 | `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
 | `[x]` complete | high | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java` |
 | `[x]` complete | high | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java` |
 | `[x]` complete | high | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java` |
-| `[ ]` not-started | high | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewBuilderGenerator.java` |
-| `[ ]` not-started | high | low | 2 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/JavaParserFactory.java` |
-| `[ ]` not-started | medium | medium | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` |
-| `[ ]` not-started | medium | medium | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java` |
-| `[ ]` not-started | medium | medium | 4 | `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` |
-| `[ ]` not-started | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
-| `[ ]` not-started | medium | low | 4 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
-| `[ ]` not-started | low | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java` |
+| `[x]` complete | high | low | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java` |
+| `[x]` complete | medium | medium | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` |
+| `[x]` complete | medium | medium | 0 | `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` |
+| `[x]` complete | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
+| `[x]` complete | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
+| `[x]` complete | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java` |
 
 ## Per-file detail
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 400
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 409
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.Range` — **inferred**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.Node` — **inferred**
-- `com.github.javaparser.ast.body.BodyDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.ConstructorDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.EnumConstantDeclaration` — **verified**
-- `com.github.javaparser.ast.body.FieldDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.body.TypeDeclaration` — **verified**
-- `com.github.javaparser.ast.comments.Comment` — **inferred**
+- 3 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>Phase 6: the span comes from javac, because the LST has no positions at all. JavaParser answered`
+  - `* {@link J.MethodDeclaration#isConstructor()} and keyed by the class name, which is what JavaParser's`
+  - `* {@link J.VariableDeclarations} holding N declarators where JavaParser held one`
 
 **Migration notes**:
 
@@ -191,22 +180,19 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 3488
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 3621
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParseResult` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.body.TypeDeclaration` — **verified**
-- `com.github.javaparser.ast.expr.AnnotationExpr` — **inferred**
-- `com.github.javaparser.ast.expr.MemberValuePair` — **inferred**
-- `com.github.javaparser.ast.expr.NameExpr` — **inferred**
-- `com.github.javaparser.ast.expr.SimpleName` — **inferred**
-- `com.github.javaparser.ast.expr.StringLiteralExpr` — **inferred**
-- `com.github.javaparser.ast.type.ClassOrInterfaceType` — **inferred**
+- 10 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `// The old code asked JavaParser for a result and then for the package declaration; the`
+  - `* <p>This is the offline substitute for JavaParser's symbol solver: it does not answer "what does`
+  - `// JavaParser's `getFullyQualifiedName()` — the LST has no such accessor, and a node does not`
+  - `// Files JavaParser could not read cleanly. Collected rather than reported inline so the`
+  - `// JavaParser unit now, and the source is what its line numbers come from.`
+  - `// single `J.EnumValueSet` statement, which is the same list JavaParser's `getEntries()``
+  - …and 4 more
 
 **Migration notes**:
 
@@ -234,45 +220,19 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 1008
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 1080
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.NodeList` — **inferred**
-- `com.github.javaparser.ast.Modifier` — **inferred**
-- `com.github.javaparser.ast.body.ConstructorDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.EnumConstantDeclaration` — **verified**
-- `com.github.javaparser.ast.body.EnumDeclaration` — **verified**
-- `com.github.javaparser.ast.body.FieldDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.ArrayCreationLevel` — **inferred**
-- `com.github.javaparser.ast.body.VariableDeclarator` — **inferred**
-- `com.github.javaparser.ast.expr.ArrayCreationExpr` — **inferred**
-- `com.github.javaparser.ast.expr.ArrayInitializerExpr` — **inferred**
-- `com.github.javaparser.ast.expr.AssignExpr` — **inferred**
-- `com.github.javaparser.ast.expr.BinaryExpr` — **inferred**
-- `com.github.javaparser.ast.expr.ClassExpr` — **inferred**
-- `com.github.javaparser.ast.expr.Expression` — **inferred**
-- `com.github.javaparser.ast.expr.FieldAccessExpr` — **inferred**
-- `com.github.javaparser.ast.expr.MethodCallExpr` — **inferred**
-- `com.github.javaparser.ast.expr.NameExpr` — **inferred**
-- `com.github.javaparser.ast.expr.NullLiteralExpr` — **inferred**
-- `com.github.javaparser.ast.expr.ObjectCreationExpr` — **inferred**
-- `com.github.javaparser.ast.expr.StringLiteralExpr` — **inferred**
-- `com.github.javaparser.ast.expr.SwitchExpr` — **inferred**
-- `com.github.javaparser.ast.expr.ThisExpr` — **inferred**
-- `com.github.javaparser.ast.stmt.BlockStmt` — **inferred**
-- `com.github.javaparser.ast.stmt.ExpressionStmt` — **inferred**
-- `com.github.javaparser.ast.stmt.IfStmt` — **inferred**
-- `com.github.javaparser.ast.stmt.ReturnStmt` — **inferred**
-- `com.github.javaparser.ast.stmt.Statement` — **inferred**
-- `com.github.javaparser.ast.stmt.SwitchEntry` — **inferred**
-- `com.github.javaparser.ast.type.ClassOrInterfaceType` — **inferred**
-- `com.github.javaparser.ast.type.Type` — **inferred**
-- `com.github.javaparser.ast.type.WildcardType` — **inferred**
-- `com.github.javaparser.printer.configuration.PrettyPrinterConfiguration` — **inferred**
+- 8 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The JavaParser version <em>built a {@code CompilationUnit}</em> — {@code addEnum}, {@code addEntry},`
+  - `* rejected for this file: OpenRewrite's printer formats differently from JavaParser's (measured: a space`
+  - `* <p>Phase 6: JavaParser gave five expression classes here; the LST has one node per shape, and the`
+  - `* <p>Phase 6: JavaParser modelled a constant as its own member declaration; the LST groups an enum's`
+  - `* The enum as <strong>text</strong>, byte-identical to what the JavaParser printer produced.`
+  - `// `MAX_HORIZONTAL_CONSTANTS` is JavaParser's own default rather than a number chosen here.`
+  - …and 2 more
 
 **Migration notes**:
 
@@ -293,30 +253,18 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 612
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 684
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.Node` — **inferred**
-- `com.github.javaparser.ast.body.AnnotationDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.BodyDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.EnumConstantDeclaration` — **verified**
-- `com.github.javaparser.ast.body.EnumDeclaration` — **verified**
-- `com.github.javaparser.ast.body.FieldDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.body.Parameter` — **verified**
-- `com.github.javaparser.ast.body.RecordDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.TypeDeclaration` — **verified**
-- `com.github.javaparser.ast.body.VariableDeclarator` — **inferred**
-- `com.github.javaparser.ast.comments.Comment` — **inferred**
-- `com.github.javaparser.ast.expr.AnnotationExpr` — **inferred**
-- `com.github.javaparser.ast.expr.FieldAccessExpr` — **inferred**
-- `com.github.javaparser.ast.expr.NameExpr` — **inferred**
-- `com.github.javaparser.ast.expr.StringLiteralExpr` — **inferred**
-- `com.github.javaparser.ast.stmt.Statement` — **inferred**
-- `com.github.javaparser.ast.stmt.SwitchEntry` — **inferred**
+- 6 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>JavaParser answered every line here with {@code node.getBegin().line}. The LST exposes`
+  - `* {@link J.EnumValueSet} statement (JavaParser had a separate {@code EnumDeclaration} class with`
+  - `* {@link J.VariableDeclarations} with one or more declarators (JavaParser had one`
+  - `// the JavaParser walk collected, because a false positive needs a field and a local of one`
+  - `* <p>JavaParser gave five distinct types here — {@code EnumDeclaration},`
+  - `* than a fallback. JavaParser exposed a compilation unit's comments with their positions, so the`
 
 **Migration notes**:
 
@@ -337,21 +285,11 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: qualified-only · **Lines**: 463
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 360
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `private static final com.github.javaparser.JavaParser JPARSER =`
-  - `new com.github.javaparser.JavaParser(new com.github.javaparser.ParserConfiguration()`
-  - `.setLanguageLevel(com.github.javaparser.ParserConfiguration.LanguageLevel.JAVA_25));`
-  - `public static com.github.javaparser.JavaParser portingParser() {`
-  - `com.github.javaparser.ParseResult<com.github.javaparser.ast.CompilationUnit> parsed =`
-  - `public record ReadJp(com.github.javaparser.ast.CompilationUnit unit, boolean unparseable) {`
-  - `public static com.github.javaparser.ast.CompilationUnit readUnitJp(Path file) throws IOException {`
-  - `public static com.github.javaparser.ast.CompilationUnit readUnitJpText(String source) {`
-- 22 bare-name mention(s) — `JavaParser` or `javaparser`
+- 10 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
   - `* <p>JavaParser was <strong>error tolerant</strong>: for genuinely broken source it still returned a`
   - `* <p>This class now parses with OpenRewrite instead of JavaParser. The <strong>contract is unchanged`
@@ -359,7 +297,7 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
   - `*       checked: it <em>throws</em> where JavaParser was tolerant, and a tree that is not a`
   - `*       JavaParser too old for {@code sealed} made five example files generate nothing, with no error`
   - `* repeat per file. Unlike JavaParser, OpenRewrite's parser carries no language-level setting — the`
-  - …and 16 more
+  - …and 4 more
 
 **Migration notes**:
 
@@ -388,22 +326,15 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java`
 
-**Status**: `[~]` in-progress · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 404
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 518
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParseResult` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.EnumConstantDeclaration` — **verified**
-- `com.github.javaparser.ast.body.EnumDeclaration` — **verified**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.expr.BooleanLiteralExpr` — **inferred**
-- `com.github.javaparser.ast.expr.StringLiteralExpr` — **inferred**
-- `com.github.javaparser.ast.stmt.ReturnStmt` — **inferred**
-- `com.github.javaparser.ast.stmt.SwitchEntry` — **inferred**
-- `com.github.javaparser.ast.stmt.SwitchStmt` — **inferred**
-- `com.github.javaparser.printer.configuration.PrettyPrinterConfiguration` — **inferred**
+- 3 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The JavaParser version did {@code entry.remove()} on the constant and {@code entry.remove()} on`
+  - `* that is the property the JavaParser version's whole-unit print did not have.</p>`
+  - `* annotation list, a name, and a {@code new} expression whose body is the block JavaParser held as`
 
 **Migration notes**:
 
@@ -424,28 +355,16 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: qualified-only · **Lines**: 395
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 342
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `for (com.github.javaparser.ast.comments.Comment comment : jpComments(cu)) {`
-  - `private static List<com.github.javaparser.ast.comments.Comment> jpComments(J.CompilationUnit cu) {`
-  - `List<com.github.javaparser.ast.comments.Comment> comments = new ArrayList<>();`
-  - `comments.add(new com.github.javaparser.ast.comments.LineComment(textComment.getText()));`
-  - `public static HeaderConfig readHeader(com.github.javaparser.ast.CompilationUnit cu) {`
-  - `for (com.github.javaparser.ast.comments.Comment comment : cu.getAllComments()) {`
-  - `private static Optional<String> configLine(com.github.javaparser.ast.comments.Comment comment) {`
-- 8 bare-name mention(s) — `JavaParser` or `javaparser`
+- 4 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
   - `* <p>JavaParser had a real comment model, {@code cu.getAllComments()}, and the old code leaned on a`
   - `* subtlety of it: JavaParser attaches the last comment of a run to the <em>following</em>`
   - `* <p>JavaParser had a comment model, so {@code cu.getAllComments()} returned both header lines and`
-  - `* <p>Kept for the call sites that still hold a JavaParser tree — {@code FieldBoilerplateGenerator}`
-  - `* {@code getAllComments()} and the JavaParser attachment rule (the last comment of a run attaches`
-  - `* @param cu a JavaParser compilation unit, from a call site that has not yet been ported`
-  - …and 2 more
+  - `* {@code // {@link com.example.Foo} description}, which also begins with a brace. JavaParser never`
 
 **Migration notes**:
 
@@ -466,23 +385,24 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 106
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 81
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParserConfiguration` — **inferred**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.RecordDeclaration` — **inferred**
-- `com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter` — **verified**
+- 4 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The JavaParser version parsed with {@code LexicalPreservingPrinter} enabled, mutated the record`
+  - `* the record through JavaParser's {@code Range}.</p>`
+  - `* JavaParser version produced — so {@code CodeEditApplier} and the callers in {@code jwa-sidecar} and`
+  - `*         cannot be located — the same fail-safe the JavaParser version had, and deliberately not`
 
 **Migration notes**:
 
-> **Why this is not mechanical**: Lexical preservation is the file’s entire purpose; the LST guarantees it differently, and `requirePrintEqualsInput` will reject non-idempotent output.
+> **Why this is not mechanical**: Lexical preservation is the file’s entire purpose; the LST guarantees it differently, and the edit’s range must keep meaning the same thing so the two consumers do not silently rewrite whole files.
 
-Removes a `LexicalPreservingPrinter` round trip. The replacement guarantee is weaker in one respect and stronger in another: weaker because the LST printer reformats anything it believes it owns, stronger because OpenRewrite verifies print-idempotency and fails loudly rather than silently reformatting. Keep that verification on here — this is generation, not fragment analysis.
+Ported, and it lost three of its four steps: lexical preservation (no longer needed — the edit is a range replacement, so the surrounding text is untouched by construction), the line-by-line re-indentation pass (the indent is applied where the text is built), and `Range` (the span comes from javac). What it kept is the `CodeEdit` contract: the edit still replaces the record’s own span with the completed record, which is why `jwa-sidecar` and `java-watch-agent` compiled unchanged. The parser is built per read rather than shared: a parser refuses a second set of sources declaring the same FQNs, which is exactly what completing a record twice produces (MIGRATION-CAVEATS.md § 1.2).
 
-**OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`, `org.openrewrite.java.tree.J.ClassDeclaration`
+**OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`, `org.openrewrite.java.tree.J`
 
 **Port procedure**:
 
@@ -495,27 +415,24 @@ bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/j
 
 ### `jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: high · **Detected**: imports · **Lines**: 166
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 290
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParseResult` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.Modifier` — **inferred**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.FieldDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.body.RecordDeclaration` — **inferred**
-- `com.github.javaparser.ast.stmt.BlockStmt` — **inferred**
+- 4 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The JavaParser version mutated a live AST — {@code record.addMethod(...)},`
+  - `*       keep JavaParser's node identity stable so the printer would emit each member once. Generating`
+  - `* <p>Selection reproduces the JavaParser version: prefer a record whose <em>name</em> line is within`
+  - `* <p>Both spellings of the annotation are accepted, exactly as the JavaParser version accepted them:`
 
 **Migration notes**:
 
-> **Why this is not mechanical**: It is a build-time processor: its input is generated record source and its output is edited source, so a port that reformats output breaks the build for every consumer of the module.
+> **Why this is not mechanical**: It is a build-time processor: its input is generated record source and its output is edited source, so a port that reformats output breaks the build for every consumer of the module. It also mutates an AST, which an LST cannot do at all — the port is a rewrite, not a rename.
 
-Record support is the crux: `RecordDeclaration` becomes a kind-Record `J.ClassDeclaration` whose components live on the primary constructor. Depends on hipster-entity-tooling only for tooling classes, not for the parser, so it needs its own `rewrite-java-25` dependency.
+Ported by replacing AST mutation with text generation, and that is the design rather than a stopgap. The JavaParser version added methods, swept stale fields and setters, and reordered members on a live tree, relying on `LexicalPreservingPrinter` to write it back — none of which exists on an immutable LST, and none of which was ever what the feature is. Generating the builder from the record’s component list produces the same text with no node-identity bookkeeping. Recognition of the *previous* builder (the two entry-point methods and the nested `Builder` class) is by name and structure, which is what makes the operation idempotent without a marker comment. This module therefore answers the migration guide’s open emission-strategy question for the append-style case: text, not `withXxx`.
 
-**OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`, `org.openrewrite.java.tree.J.ClassDeclaration`, `org.openrewrite.java.tree.J.MethodDeclaration`
+**OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`, `org.openrewrite.java.JavaIsoVisitor`, `org.openrewrite.java.tree.J`
 
 **Port procedure**:
 
@@ -528,26 +445,13 @@ bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/j
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: qualified-only · **Lines**: 282
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 206
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration decl,`
-  - `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration decl) {`
-  - `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration decl,`
-  - `for (com.github.javaparser.ast.body.BodyDeclaration<?> member : decl.getMembers()) {`
-  - `if (!(member instanceof com.github.javaparser.ast.body.RecordDeclaration record)) {`
-  - `.map(com.github.javaparser.ast.body.Parameter::getNameAsString)`
-  - `for (com.github.javaparser.ast.body.BodyDeclaration<?> member : decl.getMembers()) {`
-  - `if (member instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration nested`
-- 4 bare-name mention(s) — `JavaParser` or `javaparser`
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
   - `* <p>Two kind tests replace two JavaParser types, and both are the kind of change that keeps`
-  - `* The JavaParser-tree overload, for the queue files that are <strong>not yet ported</strong>.`
-  - `* <p>The shape census maps exactly: JavaParser's {@code RecordDeclaration} is the LST's`
-  - `* @param decl a JavaParser declaration, from a call site that has not yet been ported`
 
 **Migration notes**:
 
@@ -566,12 +470,13 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java`
 
-**Status**: `[~]` in-progress · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 1031
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 991
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.TypeDeclaration` — **verified**
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* captures the ancestry from the traversal cursor, which is what replaces JavaParser's`
 
 **Migration notes**:
 
@@ -590,32 +495,17 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: qualified-only · **Lines**: 231
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 174
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `public static TypeFacts of(com.github.javaparser.ast.body.TypeDeclaration<?> declaration,`
-  - `.flatMap(com.github.javaparser.ast.CompilationUnit::getPackageDeclaration)`
-  - `for (com.github.javaparser.ast.Modifier modifier : declaration.getModifiers()) {`
-  - `private static String kindOfJp(com.github.javaparser.ast.body.TypeDeclaration<?> declaration) {`
-  - `if (declaration instanceof com.github.javaparser.ast.body.EnumDeclaration) {`
-  - `if (declaration instanceof com.github.javaparser.ast.body.RecordDeclaration) {`
-  - `if (declaration instanceof com.github.javaparser.ast.body.AnnotationDeclaration) {`
-  - `if (declaration instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration classOrInterface) {`
-- 6 bare-name mention(s) — `JavaParser` or `javaparser`
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
-  - `* the JavaParser path in the call sites that have not yet been ported — the latter by way of`
   - `* <p>Phase 6: the enclosing chain is supplied rather than discovered. JavaParser's`
-  - `* have two spellings of a nested type's FQN — so this resolves the JavaParser node's own local`
-  - `* chain is supplied by the caller's own recursion, which is how the JavaParser side already walked`
-  - `* <p>Deleted with the last JavaParser caller.</p>`
-  - `* The kind of a JavaParser declaration, in DEC-029's vocabulary.`
 
 **Migration notes**:
 
-Feeds DEC-029’s class index: the per-type kind and modifiers written into `.jcodebuddy/index/classes.json`. The index is keyed by FQN and consumers read `kind` as a string, so the port must preserve the *spelling* of every kind it reports even though the LST discriminates differently. A changed spelling is a silently broken index, not a compile error. Ported: the FQN comes from the cursor-captured enclosing chain, and `non-sealed` is rendered explicitly rather than via the enum constant’s `toString()` — the latter would emit `NON_SEALED` and break DEC-029’s vocabulary for exactly the two hyphenated keywords. One caveat: `line` is -1 pending MIGRATION-CAVEATS.md § 4.1, because the LST exposes no positions.
+Feeds DEC-029’s class index: the per-type kind and modifiers written into `.jcodebuddy/index/classes.json`. The index is keyed by FQN and consumers read `kind` as a string, so the port must preserve the *spelling* of every kind it reports even though the LST discriminates differently. A changed spelling is a silently broken index, not a compile error. Ported: the FQN comes from the cursor-captured enclosing chain, and `non-sealed` is rendered explicitly rather than via the enum constant’s `toString()` — the latter would emit `NON_SEALED` and break DEC-029’s vocabulary for exactly the two hyphenated keywords. `line` comes from javac’s `LineMap` over the same text, matched on the simple name *and* the enclosing chain — the chain alone answers a nested type’s query with its parent’s line (see MIGRATION-CAVEATS.md § 4.1 for the case that cost three attempts).
 
 **OpenRewrite classes involved**: `org.openrewrite.java.tree.J`, `org.openrewrite.java.tree.J.Modifier`
 
@@ -630,16 +520,18 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 264
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 653
 
 **JavaParser surface on disk**:
 
-- 4 bare-name mention(s) — `JavaParser` or `javaparser`
+- 6 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
   - `* <p>{@link SourceReader}'s whole reason for existing is the fail-safe recorded as F-34: JavaParser is`
   - `* and DEC-028 verifies every link against the line a member is declared on. JavaParser answered with`
   - `* Re-parsing with JavaParser would work but re-introduces the dependency this migration exists to`
-  - `* <p>Replaces JavaParser's {@code getName().getBegin().line}, which is why this class exists at all`
+  - `* <p><strong>Two lines, because JavaParser exposed two.</strong> {@code getBegin().line} is the`
+  - `* would differ from the one the developer wrote. JavaParser answered this with`
+  - `// javac reports. JavaParser modelled `private int a, b;` as one `FieldDeclaration` with two`
 
 **Migration notes**:
 
@@ -656,15 +548,40 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java`
+### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 210
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 162
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The JavaParser version added a member to a live AST and relied on`
+
+**Migration notes**:
+
+Added when the two view emitters were ported: it is the shared splice that inserts generated members into a developer-owned file. Its whole reason for existing is a property the JavaParser version could not guarantee — `LexicalPreservingPrinter` refuses an added `default` modifier ("Not supported keywordDEFAULT"), and `ViewInterfaceGenerator` caught that and fell back to `cu.toString()`, so its normal path reformatted the whole hand-written interface. Splicing into the text leaves every other byte untouched by construction. Known limit, documented on the class: brace matching is textual, which is acceptable because the caller only ever hands it source that has already parsed cleanly.
+
+**OpenRewrite classes involved**: `(none — generates text)`
+
+**Port procedure**:
+
+```sh
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java
+# ... edit ...
+cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java
+```
+
+### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java`
+
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 194
+
+**JavaParser surface on disk**:
+
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>Phase 6: the walk is {@link TreeQueries#typeParameterNames}. JavaParser needed three`
 
 **Migration notes**:
 
@@ -733,17 +650,20 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 556
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 615
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.expr.AnnotationExpr` — **inferred**
-- `com.github.javaparser.ast.expr.MemberValuePair` — **inferred**
+- 4 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The constraint annotation on the <strong>view accessor itself</strong>, read with JavaParser`
+  - `* <p>Recognition is by simple name, because JavaParser resolves nothing: an author writing`
+  - `*       JavaParser's four annotation node types.</li>`
+  - `* <p>The LST has one annotation node where JavaParser had four, and the forms are told apart by the`
 
 **Migration notes**:
 
-Reads constraint annotations off methods. Note `J.Annotation.getArguments()` normalises the single-element form `@Foo(Bar.class)` into an assignment named `value`, where JavaParser leaves the name implicit — a reader keyed by pair name must handle that or it will miss the common single-argument case.
+Ported. Reads constraint annotations off methods and renders their arguments as text. The recognition rule — namespace prefix or a known simple name — now lives in ONE place (`constraintOf`) that both parsers feed, with a bridge overload for the un-ported `EntityMetadataGenerator`; only the argument *rendering* differs per parser, because the LST has one annotation node where JavaParser had four and tells the forms apart by the argument list. That discrimination is the trap: a single `J.Empty` means `@NotNull()` (no text), and treating it as a value yields garbage in the emitted constraint.
 
 **OpenRewrite classes involved**: `org.openrewrite.java.tree.J.MethodDeclaration`, `org.openrewrite.java.tree.J.Annotation`, `org.openrewrite.java.tree.J.Assignment`
 
@@ -758,24 +678,15 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: qualified-only · **Lines**: 382
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 316
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `public static ViewAttributes read(com.github.javaparser.ast.expr.AnnotationExpr view) {`
-  - `public static Parsed parse(com.github.javaparser.ast.expr.AnnotationExpr view) {`
-  - `for (com.github.javaparser.ast.expr.MemberValuePair pair`
-- 9 bare-name mention(s) — `JavaParser` or `javaparser`
+- 3 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
   - `* <p>JavaParser had four distinct node types for the four forms, so the old code branched on`
   - `// The LST collapses JavaParser's ArrayCreationExpr and ArrayInitializerExpr`
-  - `* The JavaParser-tree overload, for the queue files that are <strong>not yet ported</strong>.`
-  - `* {@code EntityMetadataGenerator} (not yet ported, JavaParser) both read {@code @View} through`
-  - `* It is deleted with the last JavaParser caller — {@code EntityMetadataGenerator} — and the`
-  - `* @param view a JavaParser annotation, from a call site that has not yet been ported`
-  - …and 3 more
+  - `// JavaParser bridge path cannot disagree about what an attribute means. The LST path`
 
 **Migration notes**:
 
@@ -794,20 +705,14 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 227
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 214
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.MethodDeclaration` — **verified**
-- `com.github.javaparser.ast.body.TypeDeclaration` — **verified**
-- `com.github.javaparser.ast.expr.ObjectCreationExpr` — **inferred**
-- `com.github.javaparser.ast.stmt.BlockStmt` — **inferred**
-- `com.github.javaparser.ast.stmt.ReturnStmt` — **inferred**
-- `com.github.javaparser.ast.type.ClassOrInterfaceType` — **inferred**
-- `com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter` — **verified**
+- 2 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `*       made this stronger rather than merely different: the JavaParser version asked`
+  - `// JavaParser version set up the lexical printer and then fell back to `cu.toString()` whenever`
 
 **Migration notes**:
 
@@ -826,16 +731,13 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 151
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 130
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.Node` — **inferred**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.RecordDeclaration` — **inferred**
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParseResult` — **verified**
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>Phase 6: the JavaParser walk is gone. The type declarations and their line spans come from`
 
 **Migration notes**:
 
@@ -854,16 +756,13 @@ bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/m
 
 ### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 112
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 71
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParseResult` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.BodyDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.FieldDeclaration` — **inferred**
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>One behaviour changed with the move, deliberately: the JavaParser version returned`
 
 **Migration notes**:
 
@@ -882,16 +781,13 @@ bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/m
 
 ### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 109
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 66
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParseResult` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.BodyDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.FieldDeclaration` — **inferred**
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* rather than re-printed). The idempotence the JavaParser version got from looking for an existing`
 
 **Migration notes**:
 
@@ -908,43 +804,42 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIn
 bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
 ```
 
-### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java`
+### `jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 91
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 325
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParseResult` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.BodyDeclaration` — **inferred**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.body.FieldDeclaration` — **inferred**
+- 2 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The JavaParser implementation built the builder by mutating an AST — adding methods, removing`
+  - `* <p><strong>This is what makes the operation idempotent.</strong> The JavaParser version updated a`
 
 **Migration notes**:
 
-See AccessorGenerator. Constructors are `J.MethodDeclaration` with `isConstructor()`, so any `instanceof ConstructorDeclaration` becomes that test.
+Added when jwa-builder was ported: it is what replaced the AST mutation. The processor reads a tree and never writes one, so the builder is generated as text and spliced into the record. The contract is exact and pinned by RecordBuilderFormattingTest: entry points, then the nested Builder class whose members are grouped fields → build() → setters, with indentation read from the record itself so a nested record is indented correctly. Replacing the *previous* builder (recognised by name and structure) is what makes the operation idempotent without a marker comment.
 
-**OpenRewrite classes involved**: `org.openrewrite.java.tree.J.MethodDeclaration`, `org.openrewrite.java.tree.J.VariableDeclarations`
+**OpenRewrite classes involved**: `(none — generates text)`
 
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java
 # ... edit ...
-cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java
+cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
+bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java
 ```
 
 ### `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: medium · **Detected**: imports · **Lines**: 176
+**Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 170
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParserConfiguration` — **inferred**
-- `com.github.javaparser.ast.body.RecordDeclaration` — **inferred**
+- 2 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>Phase 6 of the rewrite-migration plan: this class used to hold its own JavaParser configured at`
+  - `// answer here: nothing to sync, and the save itself is already on disk. The JavaParser version`
 
 **Migration notes**:
 
@@ -963,19 +858,19 @@ bun run scripts/rewrite-migration/migrate-file.js --after jwa-sidecar/src/main/j
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 544
+**Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 1133
 
 **JavaParser surface on disk**:
 
-- 20 bare-name mention(s) — `JavaParser` or `javaparser`
+- 31 bare-name mention(s) — `JavaParser` or `javaparser`
   with no package qualifier. Prose, artifact ids and test assertions:
   - `* from the JavaParser code being replaced:</p>`
   - `*       Every JavaParser {@code findAll} in this module becomes the same fifteen-line`
   - `* <p>Replaces JavaParser's`
   - `* <p>Includes nested types. The old JavaParser code that read {@code cu.getTypes()} saw only`
   - `* The type declarations directly under the compilation unit — the set JavaParser's`
-  - `* <p>Note the shape this replaces. JavaParser expressed "is an interface" as`
-  - …and 14 more
+  - `* <p>Replaces the three {@code findAll} walks JavaParser needed — one for`
+  - …and 25 more
 
 **Migration notes**:
 
@@ -1044,68 +939,40 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewBuilderGenerator.java`
+### `jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java`
 
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: low · **Detected**: qualified-only · **Lines**: 302
+**Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 164
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `com.github.javaparser.ast.CompilationUnit cu = read.unit();`
-  - `for (com.github.javaparser.ast.body.MethodDeclaration method`
-  - `: cu.findAll(com.github.javaparser.ast.body.MethodDeclaration.class)) {`
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>This module selects a record by proximity to the cursor line, which the JavaParser version did`
 
 **Migration notes**:
 
-No imports at all: its three references are fully qualified inline (`com.github.javaparser.ast.CompilationUnit cu = read.unit();`), so a port driven by the import list would miss this file entirely. That is the case the scanner’s `qualified-only` classification exists to catch.
+Added when jwa-builder was ported: the engine selects a record by proximity to the cursor line, which JavaParser did with `Range` and the LST cannot do at all (a node exposes no position). The line comes from javac, which costs no dependency because OpenRewrite’s Java parser is a javac front end. Same recipe as the tooling module’s JavaSyntaxCheck; the matching rule and the trap that cost three attempts are in MIGRATION-CAVEATS.md § 4.1.
 
-**OpenRewrite classes involved**: `org.openrewrite.java.tree.J.MethodDeclaration`, `org.openrewrite.SourceFile`
+**OpenRewrite classes involved**: `com.sun.source.util.JavacTask`, `com.sun.source.tree.LineMap`
 
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewBuilderGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java
 # ... edit ...
-cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewBuilderGenerator.java
-```
-
-### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/JavaParserFactory.java`
-
-**Status**: `[ ]` not-started · **Priority**: high · **Risk**: low · **Detected**: imports · **Lines**: 21
-
-**JavaParser surface on disk**:
-
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParserConfiguration` — **inferred**
-
-**Migration notes**:
-
-Twenty lines, and the natural first port in this module: it owns parser construction, so every other file in the module inherits the change. Rename it in the same commit — a class named `JavaParserFactory` that builds OpenRewrite parsers is a trap for the next reader.
-
-**OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`
-
-**Port procedure**:
-
-```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/JavaParserFactory.java
-# ... edit ...
-cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/JavaParserFactory.java
+cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
+bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java
 ```
 
 ### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java`
 
-**Status**: `[ ]` not-started · **Priority**: medium · **Risk**: medium · **Detected**: qualified-only · **Lines**: 167
+**Status**: `[x]` complete · **Priority**: medium · **Risk**: medium · **Detected**: comment-only · **Lines**: 182
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `var declaration = new com.github.javaparser.JavaParser().parse(Files.readString(enumFile))`
-  - `.findFirst(com.github.javaparser.ast.body.EnumDeclaration.class).orElseThrow();`
-  - `.map(com.github.javaparser.ast.body.EnumConstantDeclaration::getNameAsString)`
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>Phase 6: read through the LST. JavaParser modelled each constant as its own member declaration;`
 
 **Migration notes**:
 
@@ -1122,49 +989,23 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
 ```
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java`
-
-**Status**: `[ ]` not-started · **Priority**: medium · **Risk**: medium · **Detected**: qualified-only · **Lines**: 265
-
-**JavaParser surface on disk**:
-
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `var parsed = new com.github.javaparser.JavaParser().parse(source);`
-  - `.findFirst(com.github.javaparser.ast.body.EnumDeclaration.class).orElseThrow();`
-  - `.map(com.github.javaparser.ast.body.EnumConstantDeclaration::getNameAsString)`
-
-**Migration notes**:
-
-Same shape as CompactionRoundTripTest; port with the CLI, not after it.
-
-**OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`, `org.openrewrite.java.tree.J.EnumValue`
-
-**Port procedure**:
-
-```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java
-# ... edit ...
-cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java
-```
-
 ### `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java`
 
-**Status**: `[ ]` not-started · **Priority**: medium · **Risk**: medium · **Detected**: imports · **Lines**: 146
+**Status**: `[x]` complete · **Priority**: medium · **Risk**: medium · **Detected**: comment-only · **Lines**: 216
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ParserConfiguration` — **inferred**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter` — **verified**
+- 3 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The old version built a JavaParser {@code JavaParser}, parsed a snippet, called`
+  - `* <p>The JavaParser version needed {@code LexicalPreservingPrinter} plus a line-by-line re-indent`
+  - `* <p>These replaced a JavaParser walk in {@code JwaTextDocumentService}: which records carry the`
 
 **Migration notes**:
 
-Test-side port. It asserts on `LexicalPreservingPrinter` output; rewrite the assertion as "the transformed source equals the expected source" and let the print-idempotency check carry the formatting guarantee.
+Ported. It no longer parses anything itself — the processor reads a tree but never mutates one, and the output is generated text rather than a printed tree — so the test now asserts on the text a developer’s file is given. Every behavioural assertion is preserved: obsolete members gone, member grouping (fields, `build()`, setters) and indentation relative to the record. One assertion was tightened rather than weakened: the nested-record case now pins the indent as `record indent + one engine step` instead of `>= 4`, because the old threshold happened to pass for a 2-space engine while asserting nothing about the relationship.
 
-**OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`, `org.openrewrite.SourceFile`
+**OpenRewrite classes involved**: `org.openrewrite.java.tree.J`
 
 **Port procedure**:
 
@@ -1177,15 +1018,13 @@ bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/test/j
 
 ### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java`
 
-**Status**: `[ ]` not-started · **Priority**: medium · **Risk**: low · **Detected**: qualified-only · **Lines**: 334
+**Status**: `[x]` complete · **Priority**: medium · **Risk**: low · **Detected**: comment-only · **Lines**: 347
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `com.github.javaparser.ast.CompilationUnit cu = SourceReader.readJp(enumFile).unit();`
-  - `for (com.github.javaparser.ast.body.EnumConstantDeclaration constant`
-  - `: cu.findAll(com.github.javaparser.ast.body.EnumConstantDeclaration.class)) {`
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>Phase 6: the LST replaces JavaParser's {@code findAll(EnumConstantDeclaration.class)}, and the`
 
 **Migration notes**:
 
@@ -1204,14 +1043,13 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java`
 
-**Status**: `[ ]` not-started · **Priority**: medium · **Risk**: low · **Detected**: imports · **Lines**: 130
+**Status**: `[x]` complete · **Priority**: medium · **Risk**: low · **Detected**: comment-only · **Lines**: 152
 
 **JavaParser surface on disk**:
 
-- `com.github.javaparser.JavaParser` — **verified**
-- `com.github.javaparser.ast.CompilationUnit` — **verified**
-- `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration` — **verified**
-- `com.github.javaparser.ast.expr.AnnotationExpr` — **inferred**
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* <p>The test used to build its fixtures with JavaParser and hand the reader a JavaParser`
 
 **Migration notes**:
 
@@ -1228,33 +1066,32 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java`
+### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java`
 
-**Status**: `[ ]` not-started · **Priority**: low · **Risk**: low · **Detected**: qualified-only · **Lines**: 84
+**Status**: `[x]` complete · **Priority**: medium · **Risk**: low · **Detected**: comment-only · **Lines**: 113
 
 **JavaParser surface on disk**:
 
-- No import lines. Every use is fully qualified, so an import-driven port
-  misses this file:
-  - `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declaration,`
-  - `com.github.javaparser.ast.body.ClassOrInterfaceDeclaration declaration) {`
+- 1 bare-name mention(s) — `JavaParser` or `javaparser`
+  with no package qualifier. Prose, artifact ids and test assertions:
+  - `* "nothing <em>else</em> changed". The JavaParser implementation could not guarantee that: it fell back`
 
 **Migration notes**:
 
-Two fully-qualified `ClassOrInterfaceDeclaration` parameters, no imports. It sits in the `meta` package, which is otherwise JavaParser-free, so it is the one file keeping that package off the finished list.
+Added with the `ViewInterfaceGenerator` port. That class had no direct coverage — it is reached only from `EntityMetadataGenerator` — so a port could not be verified at all without a test, and the property that most needed pinning is not "a method appears" but "nothing else changed". The three cases: byte-preservation of hand-written formatting (including a comment the generator must not disturb), idempotence when the entry point is already present, and insertion inside the interface rather than after a trailing type. The last one is what a naive "find the last brace" implementation would fail.
 
-**OpenRewrite classes involved**: `org.openrewrite.java.tree.J.ClassDeclaration`
+**OpenRewrite classes involved**: `org.openrewrite.java.tree.J`
 
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java
 ```
 
-## Exempt (25)
+## Exempt (9)
 
 Files that legitimately keep a JavaParser reference. Each states why, and what
 removes the exemption — an allowlist entry without an exit condition is a hole.
@@ -1273,9 +1110,9 @@ removes the exemption — an allowlist entry without an exit condition is a hole
 
 ### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java`
 
-**Reason**: Mentions JavaParser only in a comment. It is the test that asserts the module’s dependency boundary, so it is the file that will police the JavaParser removal.
+**Reason**: Mentions JavaParser only in prose, now including the retirement note for `javaParserIsPinnedOnceInTheRootPom` — the test that policed the dependency boundary and was deleted with the dependency. The remaining assertions are about Jakarta Validation and Jackson, which are untouched by this migration.
 
-**Deferred to**: Never — a comment naming the dependency it polices is correct.
+**Deferred to**: Never — a comment naming the dependency it policed is correct.
 
 ### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DivergenceKindTest.java`
 
@@ -1291,123 +1128,27 @@ removes the exemption — an allowlist entry without an exit condition is a hole
 
 ### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java`
 
-**Reason**: Asserts the configured parser language level is `ParserConfiguration.LanguageLevel.JAVA_25` (by fully-qualified name, with no import). That assertion is the regression guard for notes F-23/F-34 — the whole reason the generator can read its own output. The JavaParser constant is the thing under test, so removing the reference removes the guard.
+**Reason**: Re-expressed when the dependency went (2026-09-22, end of Phase 6): the language-level assertion against `ParserConfiguration.LanguageLevel.JAVA_25` is gone, and what remains is the property it guarded — a clean file reads and a file whose enum hides a syntax error does not (`aCleanFileReadsAndARecoveredSyntaxErrorDoesNot`). The file still mentions the library by name, in the javadoc that records what was removed and why, so the scan still reports it.
 
-**Deferred to**: Stays as long as javaparser-core remains on the module classpath. When the dependency is finally dropped this test must first be re-expressed as "a record, a switch expression and a sealed type all parse cleanly", which preserves the property without naming the library.
+**Deferred to**: Never for the javadoc, which is the provenance of the current contract. The *guard* it used to be was re-expressed rather than deleted, so nothing here is waiting on a port.
+
+### `jwa-builder/src/main/java/hr/hrg/watch2/builder/ClassMemberProcessor.java`
+
+**Reason**: The only `JavaParser` this file names is OpenRewrite's own `org.openrewrite.java.JavaParser` — the trap MIGRATION-CAVEATS.md opens with, and the reason the scanner's bare-name test cannot be taken at face value. There is no `com.github.javaparser` reference here, and no dependency on one.
+
+**Deferred to**: Never: the name is the ported API's, and a file that parses with OpenRewrite has to say so. It is recorded rather than filtered because the scanner should keep reporting the collision — a rename in a future OpenRewrite release is exactly the event this entry makes visible.
+
+### `jwa-builder/src/test/java/hr/hrg/watch2/builder/ClassMemberProcessorTest.java`
+
+**Reason**: Same as its subject: the JavaParser mentions are OpenRewrite's class and prose about what the port replaced. No `com.github.javaparser` reference.
+
+**Deferred to**: Never, for the same reason as ClassMemberProcessor.
 
 ### `merge-java/src/main/java/com/codebuddy/merge/ResolvedTypeReader.java`
 
 **Reason**: The reference port: it is the file this migration’s `verified` mappings are evidenced from. Its bare-name mentions are an `{@link JavaParser}` that resolves to `org.openrewrite.java.JavaParser`, plus prose explaining the parser-reuse rule it had to discover (a JavaParser caches parsed sources and refuses a second set declaring the same FQNs).
 
 **Deferred to**: Never. This is the destination, not the source: it is what the queue is being ported towards.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteEntityMetadataGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteFieldBoilerplateGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteTypeLiterals.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteValidationGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteViewBuilderGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteViewInterfaceGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/AccessorGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/AuditableRule.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/BuilderGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/ConstructorGenerator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/ContextualAnalyzer.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/EntityRulesValidator.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/EnumCompactionCli.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/EnumConstantOrderChecker.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/JavaParserTool.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/MarkerEntityRule.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/ViewAnnotationRule.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
-
-### `project-automation/src/main/java/hr/hrg/rewrite/validation/ViewInterfaceRule.java`
-
-**Reason**: The staged ports. Every file here is already written against OpenRewrite and mentions JavaParser only in a provenance annotation — `<p>Original JavaParser location: <path></p>` or "maintains the JavaParser API while internally using OpenRewrite". Those annotations are the DEC-019 requirement that a reader can navigate from the ported file back to what it replaced, so they must not be "cleaned up" as leftover JavaParser usage. The same comment also explains why a case-insensitive grep is misleading here: the package has no `com.github.javaparser` reference at all.
-
-**Deferred to**: Never for the provenance annotation — it is the navigational half of the port. The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), which is Phase-0 repair work and not a Phase 6 migration.
 
 ## Outside the queue (7)
 

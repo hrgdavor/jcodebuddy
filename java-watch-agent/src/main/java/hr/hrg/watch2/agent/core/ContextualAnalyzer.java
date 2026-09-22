@@ -2,10 +2,7 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.agent.core;
 
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.RecordDeclaration;
+import hr.hrg.watch2.builder.ClassMemberProcessor;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -14,8 +11,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ParseResult;
 
 /**
  * Analyzer to detect markers and suggest tools based on Java source context.
@@ -74,77 +69,61 @@ public class ContextualAnalyzer {
 
     /**
      * Suggests tools based on the code structure at the given line.
+     *
+     * <p>Phase 6: the JavaParser walk is gone. The type declarations and their line spans come from
+     * {@link ClassMemberProcessor#typesIn}, which reads the structure from the LST and the positions from
+     * javac — an LST node has no positions at all — and the selection rule is unchanged: prefer the
+     * <em>most specific</em> declaration containing or near the line, and let a record win over a class
+     * because a record's builder is what {@code record_builder} means. A file that cannot be read yields
+     * no suggestions, which is the same answer the old {@code catch} produced.</p>
      */
     public List<String> suggestTools(Path path, int lineNum) {
         List<String> suggestions = new ArrayList<>();
-        JavaParser parser = JavaParserFactory.getParser();
+        String source;
         try {
-            ParseResult<CompilationUnit> result = parser.parse(path);
-            if (!result.isSuccessful()) {
-                System.err.println("Parse failed for " + path + ": " + result.getProblems());
-                return suggestions;
-            }
-            CompilationUnit cu = result.getResult().get();
-
-            // Find all candidates and pick the one with smallest range that contains the
-            // line
-            ClassOrInterfaceDeclaration classCandidate = cu.findAll(ClassOrInterfaceDeclaration.class).stream()
-                    .filter(cid -> isNear(cid, lineNum) || isIn(cid, lineNum))
-                    .min((a, b) -> Integer.compare(getLineCount(a), getLineCount(b)))
-                    .orElse(null);
-
-            RecordDeclaration recordCandidate = cu.findAll(RecordDeclaration.class).stream()
-                    .filter(rd -> isNear(rd, lineNum) || isIn(rd, lineNum))
-                    .min((a, b) -> Integer.compare(getLineCount(a), getLineCount(b)))
-                    .orElse(null);
-
-            // If we are inside both a class and a record (highly unlikely in standard Java,
-            // but nested classes),
-            // we should pick the most specific one.
-            boolean isRecordMoreSpecific = false;
-            if (classCandidate != null && recordCandidate != null) {
-                isRecordMoreSpecific = getLineCount(recordCandidate) < getLineCount(classCandidate);
-            }
-
-            if (recordCandidate != null && (classCandidate == null || isRecordMoreSpecific)) {
-                suggestions.add("record_builder");
-            } else if (classCandidate != null) {
-                suggestions.add("builder");
-                suggestions.add("getters");
-                suggestions.add("setters");
-                suggestions.add("constructor");
-            }
-
-            if (suggestions.isEmpty()) {
-                System.out.println("[DEBUG] No suggestions found for " + path.getFileName() + " at line " + lineNum);
-                System.out.println("[DEBUG] ClassCandidate: "
-                        + (classCandidate == null ? "null" : classCandidate.getNameAsString())
-                        + " (isIn: " + (classCandidate != null && isIn(classCandidate, lineNum))
-                        + ", isNear: " + (classCandidate != null && isNear(classCandidate, lineNum)) + ")");
-                System.out.println("[DEBUG] RecordCandidate: "
-                        + (recordCandidate == null ? "null" : recordCandidate.getNameAsString())
-                        + " (isIn: " + (recordCandidate != null && isIn(recordCandidate, lineNum))
-                        + ", isNear: " + (recordCandidate != null && isNear(recordCandidate, lineNum)) + ")");
-            } else {
-                System.out.println(
-                        "[DEBUG] Suggestions for " + path.getFileName() + " at line " + lineNum + ": " + suggestions);
-            }
-
-        } catch (Exception e) {
-            // Source might be invalid during edit
+            source = Files.readString(path);
+        } catch (IOException unreadable) {
+            // Source might be invalid during edit.
+            return suggestions;
         }
+
+        ClassMemberProcessor.TypeAt classCandidate = null;
+        ClassMemberProcessor.TypeAt recordCandidate = null;
+        for (ClassMemberProcessor.TypeAt type : ClassMemberProcessor.typesIn(source)) {
+            if (!isNear(type, lineNum) && !isIn(type, lineNum)) {
+                continue;
+            }
+            if (type.isRecord()) {
+                if (recordCandidate == null || type.lineCount() < recordCandidate.lineCount()) {
+                    recordCandidate = type;
+                }
+            } else if (classCandidate == null || type.lineCount() < classCandidate.lineCount()) {
+                classCandidate = type;
+            }
+        }
+
+        // If the caret is inside both a class and a record (a record nested in a class, which the tools
+        // offer on), the most specific one wins.
+        boolean isRecordMoreSpecific = classCandidate != null && recordCandidate != null
+                && recordCandidate.lineCount() < classCandidate.lineCount();
+
+        if (recordCandidate != null && (classCandidate == null || isRecordMoreSpecific)) {
+            suggestions.add("record_builder");
+        } else if (classCandidate != null) {
+            suggestions.add("builder");
+            suggestions.add("getters");
+            suggestions.add("setters");
+            suggestions.add("constructor");
+        }
+
         return suggestions;
     }
 
-    private int getLineCount(Node node) {
-        return node.getRange().map(r -> r.end.line - r.begin.line + 1).orElse(Integer.MAX_VALUE);
+    private static boolean isNear(ClassMemberProcessor.TypeAt type, int line) {
+        return type.startLine() > 0 && Math.abs(type.startLine() - line) <= 5;
     }
 
-    private boolean isNear(Node node, int line) {
-        return node.getRange().map(r -> Math.abs(r.begin.line - line) <= 5).orElse(false);
-    }
-
-    private boolean isIn(Node node, int line) {
-        return node.getRange().map(r -> line >= r.begin.line && line <= r.end.line).orElse(false);
+    private static boolean isIn(ClassMemberProcessor.TypeAt type, int line) {
+        return type.startLine() > 0 && line >= type.startLine() && line <= type.endLine();
     }
 }

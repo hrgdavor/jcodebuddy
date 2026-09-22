@@ -2,6 +2,7 @@ package hr.hrg.hipster.entity.tooling;
 
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
+import org.openrewrite.java.tree.J;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -119,7 +120,7 @@ public final class ViewBuilderGenerator {
         // The shared, fail-safe read (SourceReader): an error-tolerant partial parse of a broken
         // builder could report every setter as missing — a wall of false positives about a file
         // nobody can read, which is worse than saying nothing about it.
-        SourceReader.ReadJp read = SourceReader.readJp(builderFile);
+        SourceReader.Read read = SourceReader.read(builderFile);
         if (!read.readable()) {
             SourceReader.reportUnparseable(divergences, "source_not_parsed",
                     builderClass,
@@ -127,11 +128,15 @@ public final class ViewBuilderGenerator {
                     "verify the setters: the file was left exactly as it is");
             return;
         }
-        com.github.javaparser.ast.CompilationUnit cu = read.unit();
-        for (com.github.javaparser.ast.body.MethodDeclaration method
-                : cu.findAll(com.github.javaparser.ast.body.MethodDeclaration.class)) {
-            if (method.getParameters().size() == 1) {
-                setters.add(method.getNameAsString());
+        // Phase 6: one walk over the LST's method declarations, with the arity test kept as the
+        // discriminator. `getParameters().size() == 1` becomes `hasOneParameter` because the LST holds
+        // an empty parameter list as a single `J.Empty` placeholder rather than an empty list — so the
+        // obvious `size() == 1` would match a no-arg accessor and this check would stop finding
+        // anything (MIGRATION-CAVEATS.md § 1.6/§ 1.7).
+        J.CompilationUnit cu = read.unit();
+        for (J.MethodDeclaration method : TreeQueries.findAll(cu, J.MethodDeclaration.class)) {
+            if (TreeQueries.hasOneParameter(method)) {
+                setters.add(method.getSimpleName());
             }
         }
         for (Property property : writable) {

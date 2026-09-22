@@ -1,41 +1,5 @@
 package hr.hrg.hipster.entity.tooling;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.Modifier;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.ArrayCreationLevel;
-import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.ArrayCreationExpr;
-import com.github.javaparser.ast.expr.ArrayInitializerExpr;
-import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.BinaryExpr;
-import com.github.javaparser.ast.expr.ClassExpr;
-import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.NullLiteralExpr;
-import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
-import com.github.javaparser.ast.expr.SwitchExpr;
-import com.github.javaparser.ast.expr.ThisExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.stmt.ExpressionStmt;
-import com.github.javaparser.ast.stmt.IfStmt;
-import com.github.javaparser.ast.stmt.ReturnStmt;
-import com.github.javaparser.ast.stmt.Statement;
-import com.github.javaparser.ast.stmt.SwitchEntry;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.Type;
-import com.github.javaparser.ast.type.WildcardType;
-import com.github.javaparser.printer.configuration.PrettyPrinterConfiguration;
-
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker;
 
@@ -48,6 +12,33 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * The view's <strong>field enum</strong> — the file that names a view's fields and, in field-enum mode,
+ * carries the R1 append-only ordinal ledger.
+ *
+ * <h3>Phase 6: what the port changed, and what it deliberately did not</h3>
+ * <p>The JavaParser version <em>built a {@code CompilationUnit}</em> — {@code addEnum}, {@code addEntry},
+ * {@code addMember}, {@code setJavadocComment}, {@code parseExpression} for every initialiser — and then
+ * printed it through {@code PrettyPrinterConfiguration} with two textual fix-ups
+ * ({@code switch(} → {@code switch (}, and collapsing an arrow's newline). An LST is immutable, so none
+ * of those calls has an equivalent; more importantly they were never the point. The output is a file, and
+ * the file is generated here as <strong>text</strong>, which is what the rest of this module already does
+ * ({@code ValidationGenerator}, the builders, {@code ViewRecordGenerator}).</p>
+ *
+ * <p>That is not a formatting free-for-all: the enums this class writes are <strong>committed</strong>,
+ * and {@code ExampleRegenerationTest} regenerates the example and compares every one of them
+ * byte-for-byte. So the text emitted below reproduces the printer's output exactly, including the parts
+ * that only make sense as printer artefacts — {@code @Override()} with empty parentheses, a constant's
+ * separating comma on a line of its own, and the mixed line endings the old path produced (the two-line
+ * DEC-021 header ends each line with {@code \n} while the printed body uses the platform separator). Each
+ * of those is called out where it is emitted, because a reader will otherwise delete it.</p>
+ *
+ * <p>The alternative — building the enum with {@code withXxx}/{@code JavaTemplate} and printing it — was
+ * rejected for this file: OpenRewrite's printer formats differently from JavaParser's (measured: a space
+ * after the comma inside a type argument), so it would have regenerated every committed field enum with
+ * different bytes. That is a change to committed artifacts, not a port. The full reasoning is in
+ * {@code doc/brainstorm/rewrite-migration/06-migration/MIGRATION-CAVEATS.md} § 4.2.</p>
+ */
 public final class FieldBoilerplateGenerator {
 
     private final String packageName;
@@ -175,21 +166,44 @@ public final class FieldBoilerplateGenerator {
         if (!Files.exists(enumFile)) {
             return false;
         }
-        SourceReader.ReadJp read = SourceReader.readJp(enumFile);
-        if (!read.readable()) {
+        // The shared read (SourceReader), for the reason DR-7 records: a parser recovers from broken
+        // source, and a partially-read enum must be preserved rather than rebuilt from what little was
+        // understood — its ordinals are the ledger.
+        org.openrewrite.java.tree.J.CompilationUnit unit =
+                SourceReader.readSourceText(Files.readString(enumFile));
+        if (unit == null) {
             // Unreadable: preserve it. The report is emitted by the caller, which owns the sink.
             return true;
         }
-        return isPolymorphicRootEnum(read.unit());
+        return isPolymorphicRootEnum(unit);
     }
 
-    /** Whether a parsed compilation unit carries a populated permitted-subtype list. */
-    private static boolean isPolymorphicRootEnum(CompilationUnit cu) {
-        return cu.findAll(com.github.javaparser.ast.expr.ObjectCreationExpr.class).stream()
-                .filter(creation -> creation.getType().getNameAsString().equals("DefaultViewMeta"))
-                .anyMatch(creation -> creation.getArguments().stream()
-                        .anyMatch(argument -> argument instanceof ArrayInitializerExpr array
-                                && !array.getValues().isEmpty()));
+    /**
+     * Whether a parsed unit carries a populated permitted-subtype list.
+     *
+     * <p>Phase 6: JavaParser gave five expression classes here; the LST has one node per shape, and the
+     * shape that matters is {@code new Class<?>[]{A.class, B.class}} — a {@code J.NewArray} with a
+     * non-empty initialiser. {@code new Class<?>[0]} is the same node type with dimensions and no
+     * initialiser, which is exactly the distinction this predicate has to keep: the array is emitted
+     * unconditionally, so "an array is present" is true of every generated enum and would classify all
+     * of them as hand-written roots.</p>
+     */
+    private static boolean isPolymorphicRootEnum(org.openrewrite.java.tree.J.CompilationUnit unit) {
+        for (org.openrewrite.java.tree.J.NewClass creation
+                : TreeQueries.findAll(unit, org.openrewrite.java.tree.J.NewClass.class)) {
+            if (creation.getClazz() == null
+                    || !"DefaultViewMeta".equals(TreeQueries.simpleTypeName(creation.getClazz()))
+                    || creation.getArguments() == null) {
+                continue;
+            }
+            for (org.openrewrite.java.tree.Expression argument : creation.getArguments()) {
+                if (argument instanceof org.openrewrite.java.tree.J.NewArray array
+                        && array.getInitializer() != null && !array.getInitializer().isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -233,14 +247,14 @@ public final class FieldBoilerplateGenerator {
             return LedgerPlan.fresh(properties);
         }
         String existing = Files.readString(enumFile);
-        SourceReader.ReadJp read = SourceReader.readJpText(existing);
+        org.openrewrite.java.tree.J.CompilationUnit cu = SourceReader.readSourceText(existing);
         // The fail-safe direction of DR-7, now shared with every other read in the generator
-        // ({@link SourceReader}): JavaParser is error tolerant and returns a PARTIAL compilation unit
+        // ({@link SourceReader}): a parser is error tolerant and can return a PARTIAL compilation unit
         // for broken source. Trusting the mere presence of a result meant a syntax error made the enum
         // look like it had NO constants at all, which routed it to the bootstrap path — i.e. exactly
         // the silent renumbering R1 exists to prevent, reached by the very code that was supposed to
         // protect against it. A file with parse problems is treated as unreadable.
-        if (!read.readable()) {
+        if (cu == null) {
             return new LedgerPlan(properties, List.of(), List.of(
                     "kind=enum_not_parsed, location=" + enumName
                             + ", cause=the existing enum could not be parsed"
@@ -249,19 +263,15 @@ public final class FieldBoilerplateGenerator {
                             + ", action=inspect the file by hand: this pass did NOT preserve the "
                             + "append-only ledger (R1)"));
         }
-        CompilationUnit cu = read.unit();
         EnumConstantOrderChecker.HeaderConfig header = EnumConstantOrderChecker.readHeader(cu);
         if (!header.marked()) {
             // Bootstrap: rebuild from source. Any stale constant is dropped and reported.
             List<String> sourceNames = properties.stream().map(Property::name).toList();
             List<String> stale = new ArrayList<>();
-            List<String> existingNames = new ArrayList<>();
-            for (EnumDeclaration decl : cu.findAll(EnumDeclaration.class)) {
-                for (EnumConstantDeclaration constant : decl.getEntries()) {
-                    existingNames.add(constant.getNameAsString());
-                    if (!sourceNames.contains(constant.getNameAsString())) {
-                        stale.add(constant.getNameAsString());
-                    }
+            List<String> existingNames = enumConstants(cu);
+            for (String existingName : existingNames) {
+                if (!sourceNames.contains(existingName)) {
+                    stale.add(existingName);
                 }
             }
             List<String> divergences = new ArrayList<>();
@@ -275,12 +285,7 @@ public final class FieldBoilerplateGenerator {
         }
 
         // Marker-carrying: preserve and tombstone.
-        List<String> existingNames = new ArrayList<>();
-        for (EnumDeclaration decl : cu.findAll(EnumDeclaration.class)) {
-            for (EnumConstantDeclaration constant : decl.getEntries()) {
-                existingNames.add(constant.getNameAsString());
-            }
-        }
+        List<String> existingNames = enumConstants(cu);
         java.util.Map<String, Property> byName = new java.util.LinkedHashMap<>();
         for (Property property : properties) {
             byName.put(property.name(), property);
@@ -342,7 +347,7 @@ public final class FieldBoilerplateGenerator {
      * enum_order_shuffled} diagnostic. On the bootstrap path there is no committed ledger, the order
      * is about to be renumbered densely, and the drift is a fact the reader needs.</p>
      */
-    private void auditExistingEnum(CompilationUnit cu, List<String> existingNames,
+    private void auditExistingEnum(org.openrewrite.java.tree.J.CompilationUnit cu, List<String> existingNames,
                                    boolean bootstrapping, List<String> divergences) {
         Set<String> declared = new LinkedHashSet<>(existingNames);
         Set<String> accessors = new LinkedHashSet<>();
@@ -376,12 +381,15 @@ public final class FieldBoilerplateGenerator {
         // considered: forName switches on the field name, and any other switch in the file is a
         // different construct the generator does not own.
         Set<String> labels = new LinkedHashSet<>();
-        for (com.github.javaparser.ast.stmt.SwitchStmt sw : cu.findAll(com.github.javaparser.ast.stmt.SwitchStmt.class)) {
-            for (SwitchEntry entry : sw.getEntries()) {
-                for (Expression label : entry.getLabels()) {
-                    if (label instanceof StringLiteralExpr literal) {
-                        labels.add(literal.asString());
-                    }
+        for (org.openrewrite.java.tree.J.Case arm
+                : TreeQueries.findAll(cu, org.openrewrite.java.tree.J.Case.class)) {
+            if (arm.getCaseLabels() == null) {
+                continue;
+            }
+            for (org.openrewrite.java.tree.J label : arm.getCaseLabels()) {
+                if (label instanceof org.openrewrite.java.tree.J.Literal literal
+                        && literal.getValue() instanceof String text) {
+                    labels.add(text);
                 }
             }
         }
@@ -394,38 +402,40 @@ public final class FieldBoilerplateGenerator {
             }
         }
 
-        for (EnumDeclaration decl : cu.findAll(EnumDeclaration.class)) {
-            for (EnumConstantDeclaration constant : decl.getEntries()) {
-                int index = indexOfAccessor(constant.getNameAsString());
-                if (index < 0 || constant.getArguments().isEmpty()) {
-                    continue;
-                }
-                String declaredType = properties.get(index).type();
-                // A type the generator cannot resolve is NOT a type the developer changed. `classLiteral`
-                // maps the type parameter name `ID` (from `Identifiable<ID>`) to `java.lang.Object`, so a
-                // view resolved under a marker whose id type is still the parameter — the doc-sample
-                // interfaces are the live case — produced `Object.class` as the canonical type and this
-                // check called the perfectly correct `Long.class` on disk a hand edit. Reporting a
-                // divergence the generator cannot be sure about is worse than not reporting it: the
-                // whole point of the report is that each line is actionable.
-                //
-                // The comparison is against the NORMALIZED form, because that is what the other side of
-                // the check is: an earlier revision compared the normalized value against the literal
-                // `java.lang.Object.class`, which normalizeType strips, so the guard could never fire
-                // and the false positive survived every green test run.
-                String canonicalType = normalizeType(parseTypeExpression(declaredType).toString());
-                if ("Object.class".equals(canonicalType)
-                        && !"Object".equals(declaredType) && !"java.lang.Object".equals(declaredType)) {
-                    continue;
-                }
-                String existingType = normalizeType(constant.getArgument(0).toString());
-                if (!existingType.equals(canonicalType)) {
-                    divergences.add("kind=type_mismatch, location=" + enumName + "."
-                            + constant.getNameAsString()
-                            + ", cause=the constant's declared type is not the accessor's resolved type"
-                            + ", current=" + existingType + ", canonical=" + canonicalType
-                            + ", action=regenerate: a hand-edited type is not preserved");
-                }
+        for (org.openrewrite.java.tree.J.EnumValue constant : enumConstantsOf(cu)) {
+            String constantName = constant.getName().getSimpleName();
+            int index = indexOfAccessor(constantName);
+            List<org.openrewrite.java.tree.Expression> arguments =
+                    constant.getInitializer() instanceof org.openrewrite.java.tree.J.NewClass creation
+                            ? creation.getArguments() : null;
+            if (index < 0 || arguments == null || arguments.isEmpty()) {
+                continue;
+            }
+            String declaredType = properties.get(index).type();
+            // A type the generator cannot resolve is NOT a type the developer changed. `classLiteral`
+            // maps the type parameter name `ID` (from `Identifiable<ID>`) to `java.lang.Object`, so a
+            // view resolved under a marker whose id type is still the parameter — the doc-sample
+            // interfaces are the live case — produced `Object.class` as the canonical type and this
+            // check called the perfectly correct `Long.class` on disk a hand edit. Reporting a
+            // divergence the generator cannot be sure about is worse than not reporting it: the
+            // whole point of the report is that each line is actionable.
+            //
+            // The comparison is against the NORMALIZED form, because that is what the other side of
+            // the check is: an earlier revision compared the normalized value against the literal
+            // `java.lang.Object.class`, which normalizeType strips, so the guard could never fire
+            // and the false positive survived every green test run. Normalisation also makes the
+            // comparison independent of the printer that produced either side (it strips whitespace).
+            String canonicalType = normalizeType(typeExpression(declaredType));
+            if ("Object.class".equals(canonicalType)
+                    && !"Object".equals(declaredType) && !"java.lang.Object".equals(declaredType)) {
+                continue;
+            }
+            String existingType = normalizeType(argumentText(arguments.get(0)));
+            if (!existingType.equals(canonicalType)) {
+                divergences.add("kind=type_mismatch, location=" + enumName + "." + constantName
+                        + ", cause=the constant's declared type is not the accessor's resolved type"
+                        + ", current=" + existingType + ", canonical=" + canonicalType
+                        + ", action=regenerate: a hand-edited type is not preserved");
             }
         }
 
@@ -456,6 +466,55 @@ public final class FieldBoilerplateGenerator {
     }
 
     /**
+     * Every enum constant in the unit, in declaration order.
+     *
+     * <p>Phase 6: JavaParser modelled a constant as its own member declaration; the LST groups an enum's
+     * constants into a single {@code J.EnumValueSet} statement. The reach is the same — every enum in the
+     * file, nested ones included — because the contract being audited is "the file's constants", and a
+     * hand-written helper enum is as much a part of it as the top-level one.</p>
+     *
+     * <p>Lives here rather than in {@code TreeQueries} because nothing else in the tooling wants a flat
+     * cross-enum constant list; the index and the location map both walk per declaration.</p>
+     */
+    private static List<org.openrewrite.java.tree.J.EnumValue> enumConstantsOf(
+            org.openrewrite.java.tree.J.CompilationUnit unit) {
+        List<org.openrewrite.java.tree.J.EnumValue> constants = new ArrayList<>();
+        for (org.openrewrite.java.tree.J.ClassDeclaration declaration : TreeQueries.enums(unit)) {
+            if (declaration.getBody() == null) {
+                continue;
+            }
+            for (org.openrewrite.java.tree.Statement statement : declaration.getBody().getStatements()) {
+                if (statement instanceof org.openrewrite.java.tree.J.EnumValueSet values) {
+                    constants.addAll(values.getEnums());
+                }
+            }
+        }
+        return constants;
+    }
+
+    /** The names of {@link #enumConstantsOf}, in the same order. */
+    private static List<String> enumConstants(org.openrewrite.java.tree.J.CompilationUnit unit) {
+        List<String> names = new ArrayList<>();
+        for (org.openrewrite.java.tree.J.EnumValue constant : enumConstantsOf(unit)) {
+            names.add(constant.getName().getSimpleName());
+        }
+        return names;
+    }
+
+    /**
+     * A constant's declared type as source text, for the type-mismatch comparison.
+     *
+     * <p>{@code TreeQueries.expressionText} rather than {@code toString()}: the argument is a class
+     * literal, and an LST literal's {@code toString()} is its <em>value</em>, but the comparison is
+     * against a canonical expression like {@code java.lang.Long.class} — so the source spelling is the
+     * only one that can match. Normalisation strips the whitespace afterwards, which is why the two
+     * sides may come from different printers at all.</p>
+     */
+    private static String argumentText(org.openrewrite.java.tree.Expression argument) {
+        return TreeQueries.expressionText(argument);
+    }
+
+    /**
      * A comparison form for a declared type expression: whitespace removed and the package
      * qualifiers the emitter may or may not print stripped.
      *
@@ -480,12 +539,7 @@ public final class FieldBoilerplateGenerator {
     }
 
     private String buildSource(LedgerPlan ledger) {
-        CompilationUnit cu = buildCompilationUnit(ledger);
-        PrettyPrinterConfiguration printerConfig = new PrettyPrinterConfiguration();
-        printerConfig.setIndentSize(4);
-        String source = cu.toString(printerConfig).replace("switch(", "switch (");
-        source = source.replaceAll("->\\s*\\r?\\n\\s*", "-> ");
-        return generatorHeader() + source;
+        return generatorHeader() + renderEnum(ledger);
     }
 
     /**
@@ -512,12 +566,78 @@ public final class FieldBoilerplateGenerator {
         return sb.toString();
     }
 
-    private CompilationUnit buildCompilationUnit(LedgerPlan ledger) {
-        CompilationUnit cu = new CompilationUnit();
+    /**
+     * The enum as <strong>text</strong>, byte-identical to what the JavaParser printer produced.
+     *
+     * <p>The layout is not arbitrary — it is the committed example's, and every detail below was read off
+     * it. The two that look like mistakes are the ones a future editor is most likely to "fix", so they
+     * are marked in place: the mixed line endings, and {@code @Override()} with empty parentheses.</p>
+     */
+    private String renderEnum(LedgerPlan ledger) {
+        // The body uses the PLATFORM separator, which is what the printer emitted and therefore what the
+        // committed files contain. The DEC-021 header above it uses `\n` (see `generatorHeader`), so a
+        // generated file really does mix the two — 110 CRLF and 2 LF in `PersonSummary_.java`. It is
+        // reproduced rather than normalised because the example gate compares bytes.
+        String nl = System.lineSeparator();
+        StringBuilder sb = new StringBuilder();
         if (packageName != null && !packageName.isBlank()) {
-            cu.setPackageDeclaration(packageName);
+            sb.append("package ").append(packageName).append(';').append(nl).append(nl);
+        }
+        for (String importName : importNames()) {
+            sb.append("import ").append(importName).append(';').append(nl);
+        }
+        sb.append(nl);
+        sb.append("public enum ").append(enumName);
+        if (fieldEnumMode) {
+            sb.append(" implements FieldDef");
+        }
+        sb.append(" {").append(nl);
+
+        List<Property> ordered = ledger.ordered();
+        // The printer's two enum layouts, and the gate between them is not cosmetic. Up to five
+        // constants it aligns them horizontally, so the separator is `, ` in front of the next
+        // constant; past five — or as soon as any constant carries a comment, which a tombstone's
+        // javadoc is — it switches to one constant per line with the comma on a line of its own. Both
+        // spellings are in the committed example (`PaymentMethodAuditable_` has three constants and
+        // reads `, createdAt(...)`, `PersonSummary_` has six and reads `,\n    firstName(...)`), and
+        // `MAX_HORIZONTAL_CONSTANTS` is JavaParser's own default rather than a number chosen here.
+        boolean alignVertically = ordered.size() > MAX_HORIZONTAL_CONSTANTS || !ledger.tombstoned().isEmpty();
+        for (int index = 0; index < ordered.size(); index++) {
+            boolean last = index + 1 == ordered.size();
+            boolean body = hasClassBody(ordered.get(index), ledger);
+            if (index == 0) {
+                // One blank line between the enum header and its first constant.
+                sb.append(nl).append("    ");
+            } else if (alignVertically) {
+                sb.append(nl).append("    ,").append(nl).append("    ");
+            } else {
+                sb.append(nl).append("    , ");
+            }
+            sb.append(constantText(ordered.get(index), ledger, nl));
+            if (last) {
+                // A constant with a body ends on its own `}`, so its terminator sits alone on the next
+                // line; a body-less one keeps it inline.
+                sb.append(body ? nl + "    ;" : ";").append(nl);
+                sb.append(nl);
+            }
         }
 
+        renderMembers(sb, ordered, nl);
+        sb.append('}').append(nl);
+        return sb.toString();
+    }
+
+    /**
+     * The number of constants up to which the printer aligns an enum's constants horizontally.
+     *
+     * <p>JavaParser's {@code PrettyPrinterConfiguration.maxEnumConstantsToAlignHorizontally} default,
+     * which the committed example encodes: every generated enum with six or more constants has its
+     * separators on their own lines, and every one with five or fewer has them inline.</p>
+     */
+    private static final int MAX_HORIZONTAL_CONSTANTS = 5;
+
+    /** The import set, in the order the committed files list them. */
+    private List<String> importNames() {
         Set<String> imports = new LinkedHashSet<>();
         if (fieldEnumMode) {
             imports.add("java.lang.reflect.Type");
@@ -542,111 +662,191 @@ public final class FieldBoilerplateGenerator {
             imports.addAll(JdkImportSupport.importsFor(properties));
         }
         imports.addAll(additionalImports);
-
-        imports.forEach(cu::addImport);
-
-        EnumDeclaration enumDecl = cu.addEnum(enumName);
-        if (fieldEnumMode) {
-            enumDecl.addImplementedType("FieldDef");
-        }
-
-        for (Property prop : ledger.ordered()) {
-            Expression initializer = parseTypeExpression(prop.type());
-            EnumConstantDeclaration constant = new EnumConstantDeclaration(prop.name());
-            constant.getArguments().add(initializer);
-            if (fieldEnumMode) {
-                addFieldSourceOverrides(constant, prop);
-            }
-            if (ledger.tombstoned().contains(prop.name())) {
-                // R1.4: a tombstone reports retired() == true, so every generated writer skips it,
-                // and it is @Deprecated with a short reason.
-                constant.addAnnotation("Deprecated");
-                constant.setJavadocComment(
-                        "@deprecated no longer an accessor on " + viewName
-                                + "; retained to preserve ordinals.");
-                addOverride(constant, "retired", new ClassOrInterfaceType(null, "boolean"),
-                        parseExpression("true"));
-            }
-            enumDecl.addEntry(constant);
-        }
-
-        if (fieldEnumMode) {
-            // javaType() is declared to return Type (FieldDef.javaType()), not Class<?>: a generic
-            // field is passed as TypeUtils.parameterizedType(...), which is a Type and would not
-            // compile against a Class<?> return type. The backing field and constructor parameter
-            // are therefore also Type (plan.dsflash § 8.3/3.7).
-            enumDecl.addMember(new FieldDeclaration(NodeList.nodeList(Modifier.privateModifier(), Modifier.finalModifier()),
-                    new VariableDeclarator(new ClassOrInterfaceType(null, "Type"), "javaType")));
-        } else {
-            enumDecl.addMember(new FieldDeclaration(NodeList.nodeList(Modifier.privateModifier(), Modifier.finalModifier()),
-                    new VariableDeclarator(new ClassOrInterfaceType(null, "Type"), "propertyType")));
-        }
-
-        addConstructor(enumDecl);
-        if (fieldEnumMode) {
-            addJavaTypeMethod(enumDecl);
-        } else {
-            addPropertyMethods(enumDecl);
-        }
-        // forName must resolve the RETIRED names too: an incoming payload that still carries a
-        // removed field has to be accepted and bound to the tombstone (R1.4), and the R1 checker
-        // compares the switch against the constant list.
-        addForNameMethod(enumDecl, ledger.ordered());
-
-        if (fieldEnumMode) {
-            FieldDeclaration mapperField = new FieldDeclaration(NodeList.nodeList(Modifier.privateModifier(), Modifier.staticModifier(), Modifier.finalModifier()),
-                    new VariableDeclarator(new ClassOrInterfaceType(null, "FieldNameMapper").setTypeArguments(NodeList.nodeList(new ClassOrInterfaceType(null, enumName))), "NAME_MAPPER", parseExpression(enumName + "::forName")));
-            enumDecl.addMember(mapperField);
-        }
-
-        if (metaCreatorBody != null) {
-            if (!fieldEnumMode) {
-                throw new IllegalStateException("ViewMeta generation requires field enum mode");
-            }
-
-            ClassOrInterfaceType metaType = new ClassOrInterfaceType(null, "ViewMeta")
-                    .setTypeArguments(NodeList.nodeList(new ClassOrInterfaceType(null, viewName), new ClassOrInterfaceType(null, enumName)));
-            ObjectCreationExpr initializer = new ObjectCreationExpr(null,
-                    new ClassOrInterfaceType(null, "DefaultViewMeta").setTypeArguments(NodeList.nodeList(new ClassOrInterfaceType(null, viewName), new ClassOrInterfaceType(null, enumName))),
-                    NodeList.nodeList(
-                            new ClassExpr(new ClassOrInterfaceType(null, viewName)),
-                            new ClassExpr(new ClassOrInterfaceType(null, enumName)),
-                            new NameExpr("NAME_MAPPER"),
-                            parseExpression(metaCreatorBody),
-                            discriminatorFieldReference == null ? new NullLiteralExpr() : parseExpression(discriminatorFieldReference),
-                            new StringLiteralExpr(discriminatorValue),
-                            permittedSubtypeArrayExpression()
-                    ));
-
-            FieldDeclaration metaField = new FieldDeclaration(NodeList.nodeList(Modifier.publicModifier(), Modifier.staticModifier(), Modifier.finalModifier()),
-                    new VariableDeclarator(metaType, "META", initializer));
-            enumDecl.addMember(metaField);
-        }
-
-        return cu;
+        return List.copyOf(imports);
     }
 
-    private Type classTypeWithWildcard() {
-        return new ClassOrInterfaceType(null, "Class").setTypeArguments(NodeList.nodeList(new WildcardType()));
+    /** Whether a constant gains a class body: it does exactly when it has an override to declare. */
+    private boolean hasClassBody(Property prop, LedgerPlan ledger) {
+        return fieldEnumMode && !overridesOf(prop, ledger.tombstoned().contains(prop.name())).isEmpty();
     }
 
     /**
-     * Emits the {@code @FieldSource}-derived overrides on a single enum constant
-     * (plan.dsflash § 8.3/3.9, § 4.3/X2).
+     * One constant, without its leading indentation and without its separator — the caller places both,
+     * because the separator's position depends on the enum's layout (see {@link #MAX_HORIZONTAL_CONSTANTS}).
+     */
+    private String constantText(Property prop, LedgerPlan ledger, String nl) {
+        StringBuilder sb = new StringBuilder();
+        if (ledger.tombstoned().contains(prop.name())) {
+            // R1.4: a tombstone reports retired() == true, so every generated writer skips it, and it is
+            // @Deprecated with a short reason. The javadoc is what JavaParser's `setJavadocComment`
+            // printed, one sentence per line, and the annotation sits on the line immediately above the
+            // constant.
+            sb.append("/**").append(nl)
+                    .append("     * @deprecated no longer an accessor on ").append(viewName)
+                    .append("; retained to preserve ordinals.").append(nl)
+                    .append("     */").append(nl)
+                    .append("    @Deprecated").append(nl);
+        }
+        sb.append(prop.name()).append('(').append(typeExpression(prop.type())).append(')');
+        List<String> overrides = fieldEnumMode
+                ? overridesOf(prop, ledger.tombstoned().contains(prop.name())) : List.of();
+        if (overrides.isEmpty()) {
+            // Property-enum mode, or a field with nothing to resolve: no class body at all.
+            return sb.toString();
+        }
+        sb.append(" {");
+        for (String override : overrides) {
+            // A blank line before every override, the first included: `{`, blank, override, blank,
+            // override, `}` is the printer's member separation, and it is what the committed enums
+            // contain. Two line breaks per override, and none emitted after `{` — the first of the two
+            // ends the head's line and the second opens a fresh one.
+            sb.append(nl).append(nl).append(override);
+        }
+        return sb.append(nl).append("    }").toString();
+    }
+
+    /** The whole enum body after the constant list: the backing field and the members. */
+    private void renderMembers(StringBuilder sb, List<Property> ordered, String nl) {
+        String backingField = fieldEnumMode ? "javaType" : "propertyType";
+        sb.append("    private final Type ").append(backingField).append(';').append(nl).append(nl);
+        sb.append("    private ").append(enumName).append("(Type ").append(backingField).append(") {").append(nl)
+                .append("        this.").append(backingField).append(" = ").append(backingField).append(';')
+                .append(nl)
+                .append("    }").append(nl).append(nl);
+
+        if (fieldEnumMode) {
+            sb.append("    public Type javaType() {").append(nl)
+                    .append("        return javaType;").append(nl)
+                    .append("    }").append(nl).append(nl);
+            renderForNameStatement(sb, ordered, nl);
+            sb.append(nl)
+                    .append("    private static final FieldNameMapper<").append(enumName).append("> NAME_MAPPER = ")
+                    .append(enumName).append("::forName;").append(nl);
+            if (metaCreatorBody != null) {
+                sb.append(nl);
+                renderMeta(sb, nl);
+            }
+            return;
+        }
+
+        // Property-enum mode: the name/type accessors instead of `javaType()`.
+        sb.append("    public String getPropertyName() {").append(nl)
+                .append("        return name();").append(nl)
+                .append("    }").append(nl).append(nl);
+        sb.append("    public Type getPropertyType() {").append(nl)
+                .append("        return propertyType;").append(nl)
+                .append("    }").append(nl).append(nl);
+        renderForNameExpression(sb, nl);
+    }
+
+    /**
+     * {@code forName} in field-enum mode: a real {@code switch} <em>statement</em> whose arms return the
+     * constant.
      *
-     * <p>The generator emits an override only where there is something to resolve: the {@code
-     * @FieldSource} attributes when the accessor carries them, and <strong>{@code column()} for every
-     * {@code COLUMN} field</strong> regardless of annotation. Everything else falls back to
-     * {@code FieldDef}'s defaults (kind {@code COLUMN}, no relation/expression label), so an
-     * unannotated non-column field adds nothing to the enum.</p>
+     * <p>An earlier version emitted a switch <em>expression</em> whose arms carried {@code return}
+     * statements, which the arrow-flattening pass rewrote to {@code -> return id;} — not legal Java
+     * ("attempt to return out of a switch expression"). A statement switch has no such restriction.</p>
+     *
+     * <p>The returned constants are <strong>qualified by the enum type</strong>, and that is not
+     * cosmetic: the parameter is called {@code name}, so an unqualified {@code return name;} for a view
+     * with a field called {@code name} resolved to the String parameter and produced
+     * {@code incompatible types: java.lang.String cannot be converted to <Enum>} — a generated enum that
+     * does not compile, for any view with a field named {@code name}, {@code id} or any other name the
+     * method's own scope happens to declare. Qualifying makes the arm independent of the method's
+     * scope.</p>
+     */
+    private void renderForNameStatement(StringBuilder sb, List<Property> constants, String nl) {
+        sb.append("    public static ").append(enumName).append(" forName(String name) {").append(nl)
+                .append("        if (name == null)").append(nl)
+                .append("            return null;").append(nl)
+                .append("        switch (name) {").append(nl);
+        for (Property prop : constants) {
+            sb.append("            case \"").append(prop.name()).append("\":").append(nl)
+                    .append("                return ").append(enumName).append('.').append(prop.name())
+                    .append(';').append(nl);
+        }
+        sb.append("            default:").append(nl)
+                .append("                return null;").append(nl)
+                .append("        }").append(nl)
+                .append("    }").append(nl);
+    }
+
+    /**
+     * {@code forName} in property-enum mode: a switch <em>expression</em> whose arms yield the constant —
+     * the shape the tooling's own Property model expects.
+     *
+     * <p>The arms carry a trailing semicolon, which is the printer's output for an expression arm and is
+     * what {@code FieldBoilerplateGeneratorTest} pins ({@code case "metadata" -> metadata;}).</p>
+     */
+    private void renderForNameExpression(StringBuilder sb, String nl) {
+        sb.append("    public static ").append(enumName).append(" forName(String name) {").append(nl)
+                .append("        if (name == null)").append(nl)
+                .append("            return null;").append(nl)
+                .append("        return switch (name) {").append(nl);
+        for (Property prop : properties) {
+            sb.append("            case \"").append(prop.name()).append("\" -> ").append(prop.name())
+                    .append(';').append(nl);
+        }
+        sb.append("            default -> null;").append(nl)
+                .append("        };").append(nl)
+                .append("    }").append(nl);
+    }
+
+    /**
+     * The {@code META} constant, on one line, exactly as the printer emitted it.
+     *
+     * <p>{@code discriminatorFieldReference} is an expression or {@code null}, and
+     * {@code discriminatorValue} a plain string: the two are genuinely different things — a field
+     * reference resolves through the enum, a value is the payload's discriminator label — which is why
+     * one is emitted bare and the other quoted.</p>
+     */
+    private void renderMeta(StringBuilder sb, String nl) {
+        String viewMetaType = "ViewMeta<" + viewName + ", " + enumName + ">";
+        sb.append("    public static final ").append(viewMetaType)
+                .append(" META = new DefaultViewMeta<").append(viewName).append(", ").append(enumName)
+                .append(">(").append(viewName).append(".class, ").append(enumName).append(".class, ")
+                .append("NAME_MAPPER, ").append(metaCreatorBody).append(", ")
+                .append(discriminatorFieldReference == null ? "null" : discriminatorFieldReference).append(", ")
+                .append(stringLiteral(discriminatorValue)).append(", ")
+                .append(permittedSubtypeArray()).append(");").append(nl);
+    }
+
+    /** {@code new Class<?>[0]}, or an initialised array of the permitted subtype literals. */
+    private String permittedSubtypeArray() {
+        if (permittedSubtypeClassNames.length == 0) {
+            return "new Class<?>[0]";
+        }
+        StringBuilder sb = new StringBuilder("new Class<?>[] {");
+        for (int index = 0; index < permittedSubtypeClassNames.length; index++) {
+            if (index > 0) {
+                sb.append(',');
+            }
+            sb.append(' ').append(permittedSubtypeClassNames[index]);
+        }
+        return sb.append(" }").toString();
+    }
+
+    /**
+     * The overrides a constant declares, as source lines.
+     *
+     * <p>An override is emitted only where there is something to resolve: the {@code @FieldSource}
+     * attributes when the accessor carries them, and <strong>{@code column()} for every {@code COLUMN}
+     * field</strong> regardless of annotation. Everything else falls back to {@code FieldDef}'s defaults
+     * (kind {@code COLUMN}, no relation/expression label), so an unannotated non-column field adds
+     * nothing to the enum.</p>
      *
      * <p>The unconditional {@code column()} is the one rule here that is not "emit what the annotation
      * says": the accessor's name is the column name when no label is given
      * ({@code FieldDef.column()}'s contract), and this emitter is the only place that knows it. Before
-     * it, a view with no {@code @FieldSource} at all produced {@code column() == null} for every field
-     * — so an adapter driven by {@code column()} saw no writable column (notes F-12).</p>
+     * it, a view with no {@code @FieldSource} at all produced {@code column() == null} for every field —
+     * so an adapter driven by {@code column()} saw no writable column (notes F-12).</p>
+     *
+     * <p>A tombstone gains {@code retired()} returning {@code true} <em>in addition to</em> whatever its
+     * placeholder property resolves to. That is the half of R1.4 every generated writer consults, so
+     * leaving it out does not merely lose a marker: the writers stop skipping the retired slot
+     * (notes DR-2).</p>
      */
-    private void addFieldSourceOverrides(EnumConstantDeclaration constant, Property prop) {
+    private List<String> overridesOf(Property prop, boolean tombstoned) {
         boolean hasKind = prop.fieldKind() != null;
         boolean hasColumn = prop.column() != null;
         boolean hasRelation = prop.relation() != null;
@@ -654,168 +854,40 @@ public final class FieldBoilerplateGenerator {
         // The resolved kind: an accessor with no `@FieldSource` is a COLUMN field (FieldDef's own
         // default), which is the common case and must still carry a column name — see below.
         boolean isColumn = hasKind ? "COLUMN".equals(prop.fieldKind()) : true;
-        // A COLUMN field always answers `column()`, whether or not it was annotated. `FieldDef.column()`
-        // documents "the accessor name when the annotation's label is empty", and that resolution has
-        // to happen here because only the generator knows the accessor's name — the enum constant does,
-        // but `FieldDef` is not handed it. Without this, `column()` returned null for every field of a
-        // view that carried no `@FieldSource` at all, so an adapter driven purely by `column()` saw no
-        // writable column name (notes F-12, flagged for § 12.1/7.2–7.4).
         boolean emitsColumn = isColumn;
-        if (!hasKind && !hasColumn && !hasRelation && !hasExpression && !emitsColumn) {
-            return;
-        }
 
+        List<String> overrides = new ArrayList<>();
         if (hasKind) {
-            addOverride(constant, "fieldKind", new ClassOrInterfaceType(null, "FieldKind"),
-                    parseExpression("FieldKind." + prop.fieldKind()));
+            overrides.add(override("FieldKind", "fieldKind", "FieldKind." + prop.fieldKind()));
         }
         if (emitsColumn) {
-            addOverride(constant, "column", new ClassOrInterfaceType(null, "String"),
-                    new StringLiteralExpr(hasColumn ? prop.column() : prop.name()));
+            overrides.add(override("String", "column", stringLiteral(hasColumn ? prop.column() : prop.name())));
         }
         if (hasRelation) {
-            addOverride(constant, "relation", new ClassOrInterfaceType(null, "String"),
-                    new StringLiteralExpr(prop.relation()));
+            overrides.add(override("String", "relation", stringLiteral(prop.relation())));
         }
         if (hasExpression) {
-            addOverride(constant, "expression", new ClassOrInterfaceType(null, "String"),
-                    new StringLiteralExpr(prop.expression()));
+            overrides.add(override("String", "expression", stringLiteral(prop.expression())));
         }
-    }
-
-    private void addOverride(EnumConstantDeclaration constant, String name, Type returnType, Expression body) {
-        MethodDeclaration method = new MethodDeclaration(
-                NodeList.nodeList(Modifier.publicModifier()), returnType, name);
-        method.addAnnotation("Override");
-        method.setBody(new BlockStmt(NodeList.nodeList(new ReturnStmt(body))));
-        // A per-constant override lives in the constant's class body. JavaParser models that body
-        // as a NodeList<BodyDeclaration<?>> obtained from getClassBody(), which is only
-        // materialised once the list is non-empty (there is no addClassBody()).
-        constant.getClassBody().add(method);
-    }
-
-    private void addConstructor(EnumDeclaration enumDecl) {
-        String parameterName = fieldEnumMode ? "javaType" : "propertyType";
-        Type parameterType = new ClassOrInterfaceType(null, "Type");
-        ConstructorDeclaration ctor = enumDecl.addConstructor(Modifier.Keyword.PRIVATE);
-        ctor.addParameter(parameterType, parameterName);
-        ctor.getBody().addStatement(new AssignExpr(
-                new FieldAccessExpr(new ThisExpr(), parameterName),
-                new NameExpr(parameterName),
-                AssignExpr.Operator.ASSIGN));
-    }
-
-    private void addJavaTypeMethod(EnumDeclaration enumDecl) {
-        MethodDeclaration method = enumDecl.addMethod("javaType", Modifier.Keyword.PUBLIC);
-        method.setType(new ClassOrInterfaceType(null, "Type"));
-        method.setBody(new BlockStmt(NodeList.nodeList(new ReturnStmt(new NameExpr("javaType")))));
-    }
-
-    private void addPropertyMethods(EnumDeclaration enumDecl) {
-        MethodDeclaration nameMethod = enumDecl.addMethod("getPropertyName", Modifier.Keyword.PUBLIC);
-        nameMethod.setType("String");
-        nameMethod.setBody(new BlockStmt(NodeList.nodeList(new ReturnStmt(new MethodCallExpr("name")))));
-
-        MethodDeclaration typeMethod = enumDecl.addMethod("getPropertyType", Modifier.Keyword.PUBLIC);
-        typeMethod.setType(new ClassOrInterfaceType(null, "Type"));
-        typeMethod.setBody(new BlockStmt(NodeList.nodeList(new ReturnStmt(new NameExpr("propertyType")))));
-    }
-
-    private void addForNameMethod(EnumDeclaration enumDecl, List<Property> constants) {
-        MethodDeclaration method = enumDecl.addMethod("forName", Modifier.Keyword.PUBLIC, Modifier.Keyword.STATIC);
-        method.setType(enumName);
-        method.addParameter(new ClassOrInterfaceType(null, "String"), "name");
-
-        // Tooling must use JavaParser AST nodes directly, not string building.
-        // The desired generated code is:
-        //   public static PersonSummary_ forName(String name) {
-        //       if (name == null) return null;
-        //       switch (name) {
-        //           case "id": return PersonSummary_.id;
-        //           ...
-        //           default: return null;
-        //       }
-        //   }
-        //
-        // The returned constants are QUALIFIED by the enum type, and that is not cosmetic: the
-        // parameter is called `name`, so an unqualified `return name;` for a view with a field called
-        // `name` resolved to the String parameter and produced
-        // `incompatible types: java.lang.String cannot be converted to <Enum>` — a generated enum that
-        // does not compile, for any view with a field named `name`, `id` or any other name the method's
-        // own scope happens to declare. Qualifying makes the arm independent of the method's scope.
-
-        BlockStmt body = new BlockStmt();
-        body.addStatement(new IfStmt(
-                new BinaryExpr(new NameExpr("name"), new NullLiteralExpr(), BinaryExpr.Operator.EQUALS),
-                new ReturnStmt(new NullLiteralExpr()),
-                null));
-
-        if (fieldEnumMode) {
-            // Field-enum mode: a real `switch` STATEMENT whose arms `return` the constant.
-            // An earlier version emitted a SwitchExpr whose arms carried `return` statements, which
-            // the arrow-flattening pass then rewrote to `-> return id;` — not legal Java ("attempt
-            // to return out of a switch expression"). A statement switch has no such restriction.
-            com.github.javaparser.ast.stmt.SwitchStmt switchStmt = new com.github.javaparser.ast.stmt.SwitchStmt();
-            switchStmt.setSelector(new NameExpr("name"));
-            for (Property prop : constants) {
-                switchStmt.getEntries().add(new SwitchEntry(
-                        NodeList.nodeList(new StringLiteralExpr(prop.name())),
-                        SwitchEntry.Type.STATEMENT_GROUP,
-                        NodeList.nodeList(new ReturnStmt(new FieldAccessExpr(
-                                new NameExpr(enumName), prop.name())))));
-            }
-            switchStmt.getEntries().add(new SwitchEntry(
-                    NodeList.nodeList(),
-                    SwitchEntry.Type.STATEMENT_GROUP,
-                    NodeList.nodeList(new ReturnStmt(new NullLiteralExpr()))));
-            body.addStatement(switchStmt);
-            method.setBody(body);
-            return;
+        if (tombstoned) {
+            overrides.add(override("boolean", "retired", "true"));
         }
-
-        // Property-enum mode: a switch EXPRESSION yielding the constant, used as an expression
-        // statement — the shape the tooling's own Property model expects.
-        SwitchExpr switchExpr = new SwitchExpr();
-        switchExpr.setSelector(new NameExpr("name"));
-        for (Property prop : constants) {
-            switchExpr.getEntries().add(new SwitchEntry(
-                    NodeList.nodeList(new StringLiteralExpr(prop.name())),
-                    SwitchEntry.Type.EXPRESSION,
-                    NodeList.nodeList(new ExpressionStmt(new NameExpr(prop.name())))));
-        }
-        switchExpr.getEntries().add(new SwitchEntry(
-                NodeList.nodeList(),
-                SwitchEntry.Type.EXPRESSION,
-                NodeList.nodeList(new ExpressionStmt(new NullLiteralExpr()))));
-        body.addStatement(new ReturnStmt(switchExpr));
-        method.setBody(body);
+        return overrides;
     }
 
-    private Expression permittedSubtypeArrayExpression() {
-        if (permittedSubtypeClassNames.length == 0) {
-            return parseExpression("new Class<?>[0]");
-        }
-        ArrayCreationExpr arrayCreation = new ArrayCreationExpr();
-        arrayCreation.setElementType(new ClassOrInterfaceType(null, "Class").setTypeArguments(new NodeList<>(new WildcardType())));
-        arrayCreation.setLevels(new NodeList<>(new ArrayCreationLevel()));
-        ArrayInitializerExpr initializer = new ArrayInitializerExpr();
-        NodeList<Expression> values = new NodeList<>();
-        for (String subtype : permittedSubtypeClassNames) {
-            values.add(parseExpression(subtype));
-        }
-        initializer.setValues(values);
-        arrayCreation.setInitializer(initializer);
-        return arrayCreation;
-    }
-
-    private Expression parseExpression(String source) {
-        return SourceReader.portingParser().parseExpression(source)
-                .getResult()
-                .orElseThrow(() -> new IllegalArgumentException("Unable to parse expression: " + source));
-    }
-
-    private Expression parseTypeExpression(String rawType) {
-        return parseExpression(typeExpression(rawType));
+    /**
+     * One override method, indented one level inside the constant's class body.
+     *
+     * <p>{@code @Override()} keeps its empty parentheses because that is what the printer emitted, and
+     * the committed enums contain it. Dropping them would be a formatting change to files this class
+     * does not own a formatter for.</p>
+     */
+    private String override(String returnType, String name, String value) {
+        String nl = System.lineSeparator();
+        return "        @Override()" + nl
+                + "        public " + returnType + " " + name + "() {" + nl
+                + "            return " + value + ";" + nl
+                + "        }";
     }
 
     /**

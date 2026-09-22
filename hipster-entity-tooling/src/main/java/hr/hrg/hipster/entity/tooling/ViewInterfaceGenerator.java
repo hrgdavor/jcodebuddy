@@ -1,15 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.stmt.ReturnStmt;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
+import org.openrewrite.java.tree.J;
+
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -44,9 +36,13 @@ import java.util.List;
  *       method with the right name means the developer has one, whether or not its body is the one
  *       the generator would write. A user-edited body is therefore preserved verbatim; deleting the
  *       method is the opt-in to get a fresh one back (DEC-020's three-state model).</li>
- *   <li><strong>When a method must be added, the rest of the file is preserved lexically.</strong>
- *       {@link LexicalPreservingPrinter} keeps the developer's own formatting everywhere except the
- *       new member, so adding one method does not reformat a hand-written interface.</li>
+ *   <li><strong>When a method must be added, the rest of the file is preserved byte for byte.</strong>
+ *       The member is spliced into the interface's own text before its closing brace
+ *       ({@link SourceSplicer}), so adding one method cannot reformat a hand-written interface. Phase 6
+ *       made this stronger rather than merely different: the JavaParser version asked
+ *       {@code LexicalPreservingPrinter} for that property and then fell back to {@code cu.toString()}
+ *       whenever the printer refused — which it does for an added {@code default} modifier, the very
+ *       case this generator exists for. So the common path used to reformat the file.</li>
  * </ul>
  *
  * <p>Deliberately absent: any check that the method's <em>return type</em> matches the builder the
@@ -134,7 +130,7 @@ public final class ViewInterfaceGenerator {
         // cannot be read must not be rewritten. It used to accept a partial parse, which meant a
         // syntax error could make an already-present `default` method invisible — and the generator
         // would then add a second copy of it to a file it could not correctly read.
-        SourceReader.ReadJp read = SourceReader.readJpText(text);
+        SourceReader.Read read = SourceReader.readText(text);
         if (!read.readable()) {
             SourceReader.reportUnparseable(divergences, "source_not_parsed",
                     packageName + "." + viewName,
@@ -142,11 +138,13 @@ public final class ViewInterfaceGenerator {
                     "add the builder entry points: the file was left exactly as it is");
             return new Result(viewFile, List.of(), false);
         }
-        CompilationUnit cu = read.unit();
-        ClassOrInterfaceDeclaration declaration = null;
-        for (TypeDeclaration<?> type : cu.getTypes()) {
-            if (type.getNameAsString().equals(viewName) && type instanceof ClassOrInterfaceDeclaration cid) {
-                declaration = cid;
+        J.CompilationUnit cu = read.unit();
+        // `interfaces`, not `typeDeclarations`: the LST has one class for all five kinds, so a search
+        // that omitted the kind test would also match a record or enum of the same name.
+        J.ClassDeclaration declaration = null;
+        for (J.ClassDeclaration type : TreeQueries.interfaces(cu)) {
+            if (type.getSimpleName().equals(viewName)) {
+                declaration = type;
                 break;
             }
         }
@@ -166,39 +164,31 @@ public final class ViewInterfaceGenerator {
             return new Result(viewFile, List.of(), true);
         }
 
-        boolean lexical;
-        try {
-            LexicalPreservingPrinter.setup(cu);
-            lexical = true;
-        } catch (RuntimeException ignored) {
-            lexical = false;
-        }
-        for (EntryPoint entryPoint : missing) {
-            declaration.addMember(entryPointMethod(entryPoint));
-        }
-        String out;
-        if (lexical) {
-            try {
-                out = LexicalPreservingPrinter.print(cu);
-            } catch (RuntimeException e) {
-                // The lexical printer refuses a few constructs it cannot place text for — an added
-                // `default` modifier is one of them ("Not supported keywordDEFAULT"). Falling back to
-                // the standard printer reformats the file, which is a cosmetic loss; refusing to add
-                // the method would be a functional one, because the developer's opt-in is precisely
-                // "I deleted it, please put it back".
-                out = cu.toString();
-            }
-        } else {
-            out = cu.toString();
-        }
+        // Phase 6: the members are spliced into the interface's own text instead of being added to a
+        // tree and printed. That is a *behavioural improvement*, not merely a translation: the
+        // JavaParser version set up the lexical printer and then fell back to `cu.toString()` whenever
+        // it refused the construct — and adding a `default` modifier is exactly such a case
+        // ("Not supported keywordDEFAULT"), so in practice the common path reformatted the whole
+        // hand-written file. Splicing before the closing brace leaves every other byte untouched.
+        String out = SourceSplicer.withMembers(text, viewName, missing, indentOf(text, viewName));
         Files.writeString(viewFile, out);
         return new Result(viewFile, missing.stream().map(EntryPoint::methodName).toList(), false);
     }
 
-    /** Whether the interface already declares the entry point as a {@code default}, no-arg method. */
-    private static boolean hasDefaultMethod(ClassOrInterfaceDeclaration declaration, String methodName) {
-        for (MethodDeclaration method : declaration.getMethods()) {
-            if (method.getNameAsString().equals(methodName) && method.isDefault() && method.getParameters().isEmpty()) {
+    /**
+     * Whether the interface already declares the entry point as a {@code default}, no-arg method.
+     *
+     * <p>Phase 6: {@code TreeQueries.methodsOf} already excludes constructors, and
+     * {@code hasNoParameters} knows that the LST holds an empty parameter list as one {@code J.Empty}
+     * placeholder rather than an empty list — so the obvious {@code getParameters().isEmpty()} would
+     * be false for every genuinely no-argument method and this recognition would never fire, making the
+     * generator re-add a method the developer already has.</p>
+     */
+    private static boolean hasDefaultMethod(J.ClassDeclaration declaration, String methodName) {
+        for (J.MethodDeclaration method : TreeQueries.methodsOf(declaration)) {
+            if (method.getSimpleName().equals(methodName)
+                    && TreeQueries.isDefaultMethod(method)
+                    && TreeQueries.hasNoParameters(method)) {
                 return true;
             }
         }
@@ -206,21 +196,18 @@ public final class ViewInterfaceGenerator {
     }
 
     /**
-     * {@code public default <Builder> toBuilder() { return new <Builder>(this); }}
-     *
-     * <p>Built through the AST rather than as text so the declaration is a real {@code MethodDeclaration}
-     * that the lexical printer can splice into the surrounding formatting.</p>
+     * One indentation step for a generated member: the body's own indentation, discovered from a
+     * member the interface already declares, or a single tab-stop-sized default when it declares none.
      */
-    private static MethodDeclaration entryPointMethod(EntryPoint entryPoint) {
-        MethodDeclaration method = new MethodDeclaration();
-        method.setPublic(true);
-        method.setDefault(true);
-        method.setType(new ClassOrInterfaceType(null, entryPoint.builderType()));
-        method.setName(entryPoint.methodName());
-        ObjectCreationExpr creation = new ObjectCreationExpr(null,
-                new ClassOrInterfaceType(null, entryPoint.builderType()),
-                com.github.javaparser.ast.NodeList.nodeList(new com.github.javaparser.ast.expr.ThisExpr()));
-        method.setBody(new BlockStmt(com.github.javaparser.ast.NodeList.nodeList(new ReturnStmt(creation))));
-        return method;
+    private static String indentOf(String text, String typeName) {
+        // A file with only an empty interface gives nothing to measure, and guessing four spaces is at
+        // least the Java convention; a file with members tells us the truth, which is what matters
+        // because the generated method must line up with the developer's own.
+        for (String line : text.split("\\R", -1)) {
+            if (line.startsWith("    ") || line.startsWith("\t")) {
+                return line.startsWith("\t") ? "\t" : "    ";
+            }
+        }
+        return "    ";
     }
 }

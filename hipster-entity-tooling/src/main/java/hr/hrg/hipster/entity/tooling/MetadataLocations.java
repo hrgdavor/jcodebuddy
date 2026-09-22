@@ -2,27 +2,6 @@ package hr.hrg.hipster.entity.tooling;
 
 import org.openrewrite.java.tree.J;
 
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.AnnotationDeclaration;
-import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.expr.AnnotationExpr;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
-import com.github.javaparser.ast.stmt.Statement;
-import com.github.javaparser.ast.stmt.SwitchEntry;
-
 import hr.hrg.hipster.entity.tooling.index.ClassIndex;
 import hr.hrg.hipster.entity.tooling.meta.ArtifactMeta;
 import hr.hrg.hipster.entity.tooling.meta.InterfaceInfo;
@@ -73,7 +52,7 @@ import java.util.regex.Pattern;
  * </ol>
  *
  * <h3>Completeness and honesty</h3>
- * <p>Every role this class records is taken from JavaParser's positions, never from a regex: the
+ * <p>Every role this class records is taken from a parser's positions, never from a regex: the
  * identifier's own line, not the declaration's, because an annotated accessor declares on a different
  * line than it is written on. A file it cannot read contributes nothing and is reported through the
  * existing {@code source_not_parsed} divergence — <strong>never</strong> a failed pass, because a missing
@@ -88,6 +67,18 @@ import java.util.regex.Pattern;
  * <p>Public only so {@link hr.hrg.hipster.entity.tooling.index.TypeFacts} can reuse {@link #kindOf} — the
  * class index records a row's {@code kind} and must not grow a second kind resolver. Every other member
  * stays package-private, and the {@link Detail} record it produces is the pass's own currency.</p>
+ *
+ * <h3>Phase 6: where the positions come from now</h3>
+ * <p>JavaParser answered every line here with {@code node.getBegin().line}. The LST exposes
+ * <strong>no positions at all</strong>, so the lines come from javac's line map over the same text —
+ * {@link TreeQueries#lineOf}, {@link TreeQueries#methodLineOf}, {@link TreeQueries#annotationLineOf},
+ * {@link TreeQueries#memberLineOf} and {@link TreeQueries#caseLines}. Each of those carries the
+ * matching rule it needs, and each returns {@code -1} when it cannot match: the fail-safe answer, which
+ * this class already turns into "no location recorded" rather than a link that opens the wrong line.</p>
+ *
+ * <p>The roles are read from the LST — {@code J.EnumValueSet}, {@code getPrimaryConstructor()},
+ * {@code J.VariableDeclarations}, {@code J.MethodDeclaration} — while the lines are read from javac.
+ * That split is what keeps this class free of a second parser trying to be the first.</p>
  */
 public final class MetadataLocations {
 
@@ -332,7 +323,12 @@ public final class MetadataLocations {
             }
             return;
         }
-        SourceReader.ReadJp read = SourceReader.readJp(candidate);
+        // The text is read once and handed to both readers: `SourceReader` parses it into the LST the
+        // roles are read from, and every line lookup re-reads the same text through javac's line map.
+        // Splitting them — a `ReadJp` for the tree and a second read for the text — is what the port
+        // removes, and it is also what would let the two disagree about a file that changed in between.
+        String source = Files.readString(candidate);
+        SourceReader.Read read = SourceReader.readText(source);
         if (!read.readable()) {
             SourceReader.reportUnparseable(divergences, "source_not_parsed", moduleRelative,
                     "the generated artifact could not be parsed, so it contributed no locations to this "
@@ -343,137 +339,221 @@ public final class MetadataLocations {
         // Register the artifact in the class index (DEC-029). It is generated when its DEC-021 header says
         // so, and it declares the types a document will name — including any nested type the view's field
         // map keys on, which is why every declaration is registered and not just the top-level one.
-        index.addTypes(moduleRelative, read.unit(), true);
-        CompilationUnit unit = read.unit();
-        String headerDescription = dec021Description(unit);
+        J.CompilationUnit unit = read.unit();
+        index.addTypes(moduleRelative, unit, source, true);
+        String headerDescription = dec021Description(source);
         boolean generated = headerDescription != null;
+        // The arm pairing is file-wide by construction, so it is computed once per file rather than
+        // per method: javac's arm list and the LST's are matched by position in the file, and a
+        // per-method list would not line up with either.
+        Map<J.Case, Integer> caseLines = TreeQueries.caseLines(unit, source);
 
-        for (TypeDeclaration<?> declaration : unit.getTypes()) {
-            walkType(declaration, "", moduleRelative, fieldNames, generated, headerDescription, shapes, found,
-                    viewOwnFile);
+        for (J.ClassDeclaration declaration : TreeQueries.topLevelTypes(unit)) {
+            walkType(declaration, "", moduleRelative, source, caseLines, fieldNames, generated,
+                    headerDescription, shapes, found, viewOwnFile);
         }
     }
 
     /** Walks one type declaration and, for the view's own file, its nested types — in reading order. */
-    private static void walkType(TypeDeclaration<?> declaration, String prefix, String file,
-                                 Set<String> fieldNames, boolean generated, String headerDescription,
-                                 List<ArtifactShape> shapes, List<Found> found, boolean walkNested) {
-        String simpleName = declaration.getNameAsString();
+    private static void walkType(J.ClassDeclaration declaration, String prefix, String file, String source,
+                                 Map<J.Case, Integer> caseLines, Set<String> fieldNames, boolean generated,
+                                 String headerDescription, List<ArtifactShape> shapes, List<Found> found,
+                                 boolean walkNested) {
+        String simpleName = declaration.getSimpleName();
         String displayName = prefix.isEmpty() ? simpleName : prefix + "." + simpleName;
         boolean topLevel = prefix.isEmpty();
-        int line = declaration.getName().getBegin().map(position -> position.line).orElse(-1);
-        // The DEC-021 description is a property of the FILE, and the page labels the file's top-level
-        // type with it; a nested type is described as "nested type" by whoever reads this.
-        // Kind through the bridge factory: this tree is JavaParser's, and one factory keeps the
-        // five spellings identical to the LST side.
-        String kind = hr.hrg.hipster.entity.tooling.index.TypeFacts.of(declaration, List.of()).kind();
+        // The NAME's line, not the declaration's: an annotated type begins on its annotation, and a link
+        // that opens the annotation is wrong while looking authoritative. The enclosing chain has to be
+        // supplied because the LST gives a node no way back to its parent, and the display name already
+        // is that chain.
+        List<String> enclosing = prefix.isEmpty() ? List.of() : List.of(prefix.split("\\."));
+        int line = TreeQueries.lineOfChained(declaration, enclosing, source);
+        // The five spellings are DEC-029's contract, and this is the one resolver for them — the class
+        // index reuses it rather than growing a second opinion about what a record is.
+        String kind = kindOf(declaration);
         shapes.add(new ArtifactShape(displayName, kind, file, line,
                 generated && topLevel, topLevel ? headerDescription : null));
 
-        collectFromType(declaration, displayName, file, fieldNames, found);
+        collectFromType(declaration, displayName, file, source, caseLines, fieldNames, found);
 
         if (!walkNested) {
             return;
         }
-        for (BodyDeclaration<?> member : declaration.getMembers()) {
-            if (member instanceof TypeDeclaration<?> nested) {
-                walkType(nested, displayName, file, fieldNames, generated, headerDescription, shapes, found,
-                        true);
+        if (declaration.getBody() == null) {
+            return;
+        }
+        for (org.openrewrite.java.tree.Statement member : declaration.getBody().getStatements()) {
+            if (member instanceof J.ClassDeclaration nested) {
+                walkType(nested, displayName, file, source, caseLines, fieldNames, generated,
+                        headerDescription, shapes, found, true);
             }
         }
     }
 
-    /** The roles one type declaration contributes, for the fields of interest. */
-    private static void collectFromType(TypeDeclaration<?> declaration, String displayName, String file,
+    /**
+     * The roles one type declaration contributes, for the fields of interest.
+     *
+     * <p>Every role is discovered from the LST, and every <em>line</em> from javac over the same text. The
+     * discovery shapes are the ported ones: an enum's constants are the {@link J.EnumValue}s of its
+     * {@link J.EnumValueSet} statement (JavaParser had a separate {@code EnumDeclaration} class with
+     * {@code getEntries()}), a record's components are its primary constructor's parameters
+     * ({@code getParameters()} on a separate {@code RecordDeclaration}), and a field is a
+     * {@link J.VariableDeclarations} with one or more declarators (JavaParser had one
+     * {@code FieldDeclaration} per declaration line with N variables — the same shape, one level down).</p>
+     */
+    private static void collectFromType(J.ClassDeclaration declaration, String displayName, String file,
+                                        String source, Map<J.Case, Integer> caseLines,
                                         Set<String> fieldNames, List<Found> found) {
-        if (declaration instanceof EnumDeclaration enumDeclaration) {
-            for (EnumConstantDeclaration entry : enumDeclaration.getEntries()) {
-                String name = entry.getNameAsString();
-                if (fieldNames.contains(name)) {
-                    found.add(new Found(displayName, name, "enum-constant", file, lineOf(entry.getName())));
+        // Enum constants, in declaration order, from the single `J.EnumValueSet` the LST groups them into.
+        if (declaration.getKind() == J.ClassDeclaration.Kind.Type.Enum && declaration.getBody() != null) {
+            for (org.openrewrite.java.tree.Statement statement : declaration.getBody().getStatements()) {
+                if (!(statement instanceof J.EnumValueSet values)) {
+                    continue;
                 }
-            }
-        }
-        if (declaration instanceof RecordDeclaration record) {
-            for (Parameter parameter : record.getParameters()) {
-                String name = parameter.getNameAsString();
-                if (fieldNames.contains(name)) {
-                    found.add(new Found(displayName, name, "record-component", file, lineOf(parameter.getName())));
-                }
-            }
-        }
-
-        for (MethodDeclaration method : declaration.getMethods()) {
-            String name = method.getNameAsString();
-            if (fieldNames.contains(name)) {
-                int arity = method.getParameters().size();
-                if (arity == 0) {
-                    // The NAME token's line, never the method's begin: an annotated accessor begins on
-                    // its annotation, which is a different line and is recorded separately below.
-                    found.add(new Found(displayName, name, "accessor", file, lineOf(method.getName())));
-                } else if (arity == 1) {
-                    found.add(new Found(displayName, name, "setter", file, lineOf(method.getName())));
-                }
-                for (AnnotationExpr annotation : method.getAnnotations()) {
-                    if ("FieldSource".equals(annotation.getNameAsString())) {
-                        found.add(new Found(displayName, name, "annotation", file, lineOf(annotation)));
+                for (J.EnumValue entry : values.getEnums()) {
+                    String name = entry.getName().getSimpleName();
+                    if (fieldNames.contains(name)) {
+                        found.add(new Found(displayName, name, "enum-constant", file,
+                                TreeQueries.memberLineOf(displayName, name, "enum-constant", source)));
                     }
                 }
             }
-            for (SwitchEntry entry : method.findAll(SwitchEntry.class)) {
-                collectSwitchEntry(entry, displayName, file, fieldNames, found);
+        }
+        // Record components: the primary constructor's parameter list, which is where a record declares
+        // them — `getPrimaryConstructor()` returns that list of `Statement`s directly, not a method
+        // declaration, because a record's header is not a member the author wrote.
+        if (declaration.getKind() == J.ClassDeclaration.Kind.Type.Record
+                && declaration.getPrimaryConstructor() != null) {
+            for (org.openrewrite.java.tree.Statement parameter : declaration.getPrimaryConstructor()) {
+                if (!(parameter instanceof J.VariableDeclarations component)
+                        || component.getVariables() == null) {
+                    continue;
+                }
+                for (J.VariableDeclarations.NamedVariable declarator : component.getVariables()) {
+                    String name = declarator.getSimpleName();
+                    if (fieldNames.contains(name)) {
+                        found.add(new Found(displayName, name, "record-component", file,
+                                TreeQueries.memberLineOf(displayName, name, "record-component", source)));
+                    }
+                }
             }
         }
 
-        for (FieldDeclaration field : declaration.getFields()) {
-            for (VariableDeclarator variable : field.getVariables()) {
-                String name = variable.getNameAsString();
+        // Methods are read from the body's own statements, never by a recursive walk: a nested type's
+        // accessors are its own, and `getMethods()` never returned them (MIGRATION-CAVEATS.md § 1.10).
+        for (J.MethodDeclaration method : TreeQueries.methodsOf(declaration)) {
+            String name = method.getSimpleName();
+            if (fieldNames.contains(name)) {
+                // The accessor's own line, read from the NAME token — an annotated accessor begins on its
+                // annotation, which is a different line and is recorded separately below — and the arity
+                // is what separates a getter from a setter.
+                int arity = TreeQueries.hasNoParameters(method) ? 0
+                        : (method.getParameters() == null ? 0 : method.getParameters().size());
+                if (arity == 0) {
+                    found.add(new Found(displayName, name, "accessor", file,
+                            TreeQueries.methodLineOf(method, displayName, source)));
+                } else if (arity == 1) {
+                    found.add(new Found(displayName, name, "setter", file,
+                            TreeQueries.methodLineOf(method, displayName, source)));
+                }
+                J.Annotation annotation = TreeQueries.annotationNamed(method, "FieldSource");
+                if (annotation != null) {
+                    found.add(new Found(displayName, name, "annotation", file,
+                            TreeQueries.annotationLineOf(declaration.getSimpleName(), name, "FieldSource",
+                                    source)));
+                }
+            }
+            // The switch arms of this method, paired against javac's own source-ordered arm list.
+            for (J.Case arm : TreeQueries.findAll(method, J.Case.class)) {
+                collectSwitchEntry(arm, caseLines.getOrDefault(arm, -1), displayName, file, fieldNames, found);
+            }
+        }
+
+        // Fields: one `J.VariableDeclarations` may declare several names.
+        if (declaration.getBody() == null) {
+            return;
+        }
+        for (org.openrewrite.java.tree.Statement member : declaration.getBody().getStatements()) {
+            if (!(member instanceof J.VariableDeclarations fields) || fields.getVariables() == null) {
+                continue;
+            }
+            for (J.VariableDeclarations.NamedVariable variable : fields.getVariables()) {
+                String name = variable.getSimpleName();
                 if (fieldNames.contains(name)) {
-                    found.add(new Found(displayName, name, "field", file, lineOf(variable.getName())));
+                    found.add(new Found(displayName, name, "field", file,
+                            TreeQueries.memberLineOf(displayName, name, "field", source)));
                 }
             }
         }
     }
 
     /**
-     * The roles a switch arm contributes: an integer label is DEC-023's ordinal slot, a string label is
-     * the name lookup.
+     * The roles a switch arm contributes: a string label is the name lookup, an integer label is
+     * DEC-023's ordinal slot.
      *
-     * <p>An ordinal arm is attributed to the fields it actually writes — read from the AST, so
+     * <p>An ordinal arm is attributed to the fields it actually writes — read from the tree, so
      * {@code case 3 -> age;} and {@code case 0 -> { this.id = value; }} both resolve to the field they
      * touch — rather than to the labels of the arm, which are integers.</p>
+     *
+     * @param line the arm's start line from {@link TreeQueries#caseLines}, or {@code -1} when the two
+     *             parsers disagreed about how many arms the file has
      */
-    private static void collectSwitchEntry(SwitchEntry entry, String displayName, String file,
+    private static void collectSwitchEntry(J.Case arm, int line, String displayName, String file,
                                            Set<String> fieldNames, List<Found> found) {
-        int line = entry.getBegin().map(position -> position.line).orElse(-1);
-        for (com.github.javaparser.ast.expr.Expression label : entry.getLabels()) {
-            if (label instanceof StringLiteralExpr literal) {
-                String name = literal.asString();
-                if (fieldNames.contains(name)) {
-                    found.add(new Found(displayName, name, "name-slot", file, line));
+        List<J> labels = arm.getCaseLabels();
+        if (labels == null) {
+            return;
+        }
+        for (J label : labels) {
+            if (label instanceof J.Literal literal && literal.getValue() instanceof String text) {
+                if (fieldNames.contains(text)) {
+                    found.add(new Found(displayName, text, "name-slot", file, line));
                 }
                 continue;
             }
-            if (!label.isIntegerLiteralExpr()) {
+            if (!(label instanceof J.Literal literal) || !isIntegerLiteral(literal)) {
                 continue;
             }
-            for (Statement statement : entry.getStatements()) {
-                Set<String> targets = new LinkedHashSet<>();
-                for (NameExpr name : statement.findAll(NameExpr.class)) {
-                    targets.add(name.getNameAsString());
+            // The arm's body: every identifier it mentions, plus every `this.x` it assigns. The same set
+            // the JavaParser walk collected, because a false positive needs a field and a local of one
+            // name in the same arm.
+            //
+            // Both shapes have to be read, and missing one is silent: an old-style `case 0: stmt;` arm
+            // keeps its statements, while an arrow arm (`case 0 -> stmt;`, and every arm the emitters
+            // write) keeps its single body on `getBody()`. Reading only `getStatements()` finds no
+            // ordinal slot in any builder — which is exactly the shape of a location that is absent
+            // rather than wrong, so nothing complains.
+            List<J> roots = new ArrayList<>();
+            if (arm.getStatements() != null) {
+                roots.addAll(arm.getStatements());
+            }
+            if (arm.getBody() != null) {
+                roots.add(arm.getBody());
+            }
+            Set<String> targets = new LinkedHashSet<>();
+            for (J root : roots) {
+                for (J.Identifier identifier : TreeQueries.findAll(root, J.Identifier.class)) {
+                    targets.add(identifier.getSimpleName());
                 }
-                for (FieldAccessExpr access : statement.findAll(FieldAccessExpr.class)) {
-                    if (access.getScope() instanceof com.github.javaparser.ast.expr.ThisExpr) {
-                        targets.add(access.getNameAsString());
+                for (J.FieldAccess access : TreeQueries.findAll(root, J.FieldAccess.class)) {
+                    if (access.getTarget() instanceof J.Identifier scope && "this".equals(scope.getSimpleName())) {
+                        targets.add(access.getName().getSimpleName());
                     }
                 }
-                for (String target : targets) {
-                    if (fieldNames.contains(target)) {
-                        found.add(new Found(displayName, target, "ordinal-slot", file, line));
-                    }
+            }
+            for (String target : targets) {
+                if (fieldNames.contains(target)) {
+                    found.add(new Found(displayName, target, "ordinal-slot", file, line));
                 }
             }
         }
+    }
+
+    /** Whether a literal is an integer literal, whatever width it was written at. */
+    private static boolean isIntegerLiteral(J.Literal literal) {
+        Object value = literal.getValue();
+        return value instanceof Integer || value instanceof Long
+                || value instanceof Short || value instanceof Byte;
     }
 
     /**
@@ -507,10 +587,6 @@ public final class MetadataLocations {
         };
     }
 
-    private static int lineOf(Node node) {
-        return node.getBegin().map(position -> position.line).orElse(-1);
-    }
-
     private static String key(String artifact, String file) {
         return artifact + "\u0000" + (file == null ? "" : file);
     }
@@ -518,31 +594,36 @@ public final class MetadataLocations {
     /**
      * The DEC-021 description of a file, or {@code null} when the file carries no DEC-021 header.
      *
-     * <p>Read from the compilation unit's own comments, restricted to the <strong>leading {@code //}
-     * run</strong> — the header is the two-line pair above the {@code package} declaration, whose first
-     * line references the view it was generated for. The restriction is not cosmetic: a generated class
-     * also carries a javadoc that names the view in a {@code {@link …}} of its own
-     * ({@code An immutable {@link PersonCreateForm} whose component order is …}), and reading the first
-     * {@code {@link}} in <em>any</em> comment labelled the builder with half a javadoc sentence. A file
-     * without the header line is hand-written, and the page must say so rather than claim it is
-     * generated.</p>
+     * <p>Read from the source text's <strong>leading {@code //} run</strong> — the header is the two-line
+     * pair above the {@code package} declaration, whose first line references the view it was generated
+     * for. The restriction is not cosmetic: a generated class also carries a javadoc that names the view
+     * in a {@code {@link …}} of its own ({@code An immutable {@link PersonCreateForm} whose component
+     * order is …}), and reading the first {@code {@link}} in <em>any</em> comment labelled the builder
+     * with half a javadoc sentence. A file without the header line is hand-written, and the page must say
+     * so rather than claim it is generated.</p>
+     *
+     * <p>Phase 6: this is the one place where reading the source <em>text</em> is the right answer rather
+     * than a fallback. JavaParser exposed a compilation unit's comments with their positions, so the
+     * original code could sort them and stop at the first block comment; the LST exposes comments as
+     * whitespace trivia with no position at all. The leading {@code //} run is exactly what DEC-021
+     * defines the header to be, and it is trivially addressable in the text — so the text is read here
+     * deliberately, and the {@code //} itself is stripped before matching so the pattern stays the one
+     * that describes the header's content.</p>
      */
-    private static String dec021Description(CompilationUnit unit) {
-        // Ordered by position, because `getAllComments` promises no order: the header comes first in
-        // the file, and "first" is the only thing that distinguishes it from a javadoc {@link}.
-        List<Comment> comments = new ArrayList<>(unit.getAllComments());
-        comments.sort(Comparator.comparingInt(
-                comment -> comment.getBegin().map(position -> position.line).orElse(Integer.MAX_VALUE)));
-        for (Comment comment : comments) {
-            if (!comment.isLineComment()) {
-                // The header is a run of `//` lines; the first block comment ends the run.
-                break;
+    private static String dec021Description(String source) {
+        for (String rawLine : source.split("\\R", -1)) {
+            String line = rawLine.trim();
+            if (line.isEmpty()) {
+                continue;
             }
-            for (String rawLine : comment.getContent().split("\\R")) {
-                Matcher matcher = DEC_021_HEADER.matcher(rawLine.trim());
-                if (matcher.find()) {
-                    return matcher.group(2).trim();
-                }
+            if (!line.startsWith("//")) {
+                // The leading run of line comments ended: a javadoc, an annotation, or the package
+                // declaration itself. Only comments above `package` can be the header.
+                return null;
+            }
+            Matcher matcher = DEC_021_HEADER.matcher(line.substring(2).trim());
+            if (matcher.find()) {
+                return matcher.group(2).trim();
             }
         }
         return null;
@@ -552,36 +633,27 @@ public final class MetadataLocations {
     private static int declarationLineOf(Path moduleRoot, String moduleRelativePath, String displayName) {
         try {
             Path file = moduleRoot.resolve(moduleRelativePath);
-            SourceReader.ReadJp read = SourceReader.readJp(file);
-            if (!read.readable()) {
+            String source = Files.readString(file);
+            J.CompilationUnit unit = SourceReader.readSourceText(source);
+            if (unit == null) {
                 return -1;
             }
-            for (TypeDeclaration<?> declaration : read.unit().getTypes()) {
-                int line = findDeclaration(declaration, "", displayName);
-                if (line > 0) {
-                    return line;
+            // The display name is the dotted chain, which is exactly what `typesWithEnclosing` already
+            // carries — so the search is a name comparison rather than a recursive descent.
+            for (TreeQueries.EnclosedType enclosed : TreeQueries.typesWithEnclosing(unit)) {
+                String simpleName = enclosed.declaration().getSimpleName();
+                String full = enclosed.enclosing().isEmpty() ? simpleName
+                        : String.join(".", enclosed.enclosing().stream()
+                                .map(J.ClassDeclaration::getSimpleName).toList()) + "." + simpleName;
+                if (full.equals(displayName)) {
+                    return TreeQueries.lineOfChained(enclosed.declaration(),
+                            enclosed.enclosing().stream().map(J.ClassDeclaration::getSimpleName).toList(),
+                            source);
                 }
             }
         } catch (IOException | RuntimeException unreadable) {
             // A foreign declaring interface the pass cannot re-read: the location itself is still true,
             // and -1 is the honest answer for the declaration line rather than a guess.
-        }
-        return -1;
-    }
-
-    private static int findDeclaration(TypeDeclaration<?> declaration, String prefix, String displayName) {
-        String simpleName = declaration.getNameAsString();
-        String full = prefix.isEmpty() ? simpleName : prefix + "." + simpleName;
-        if (full.equals(displayName)) {
-            return declaration.getName().getBegin().map(position -> position.line).orElse(-1);
-        }
-        for (BodyDeclaration<?> member : declaration.getMembers()) {
-            if (member instanceof TypeDeclaration<?> nested) {
-                int line = findDeclaration(nested, full, displayName);
-                if (line > 0) {
-                    return line;
-                }
-            }
         }
         return -1;
     }
@@ -595,12 +667,12 @@ public final class MetadataLocations {
      */
     private static String kindOfForeign(Path moduleRoot, String moduleRelativePath) {
         try {
-            SourceReader.ReadJp read = SourceReader.readJp(moduleRoot.resolve(moduleRelativePath));
-            if (read.readable()) {
-                for (TypeDeclaration<?> declaration : read.unit().getTypes()) {
-                    // The bridge factory, not `kindOf`: this declaration came from the JavaParser
-                    // path, and the two factories return the same five spellings.
-                    return hr.hrg.hipster.entity.tooling.index.TypeFacts.of(declaration, List.of()).kind();
+            J.CompilationUnit unit = SourceReader.readSourceText(
+                    Files.readString(moduleRoot.resolve(moduleRelativePath)));
+            if (unit != null) {
+                for (J.ClassDeclaration declaration : TreeQueries.topLevelTypes(unit)) {
+                    // The same resolver the index uses, not a second opinion: one kind vocabulary.
+                    return kindOf(declaration);
                 }
             }
         } catch (IOException | RuntimeException unreadable) {

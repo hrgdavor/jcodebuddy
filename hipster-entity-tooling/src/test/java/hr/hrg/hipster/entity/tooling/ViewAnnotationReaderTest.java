@@ -1,9 +1,6 @@
 package hr.hrg.hipster.entity.tooling;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.expr.AnnotationExpr;
+import org.openrewrite.java.tree.J;
 
 import hr.hrg.hipster.entity.api.GenLevel;
 import hr.hrg.hipster.entity.tooling.meta.ViewAttributes;
@@ -17,32 +14,51 @@ import java.util.List;
  * The shape matrix of plan.dsflash § 4.5/G9 / § 4.7/DR-9 for {@link ViewAnnotationReader}.
  *
  * <p>Every one of the four shapes the tree contains must parse, and the two {@code gen} spellings
- * must both resolve. A {@code NormalAnnotationExpr}-restricted parser silently drops the bare
- * {@code @View} marker form, which is live on {@code PersonDto} and {@code PersonUpdateForm} — two
- * of the five {@code @View}-carrying views the plan expects to generate.</p>
+ * must both resolve. The reader is shape-blind by construction, which is why the bare {@code @View}
+ * marker form — live on {@code PersonDto} and {@code PersonUpdateForm} — must be found rather than
+ * dropped.</p>
+ *
+ * <h3>Phase 6</h3>
+ * <p>The test used to build its fixtures with JavaParser and hand the reader a JavaParser
+ * {@code AnnotationExpr}. It now parses through {@link SourceReader} and finds the annotation on an
+ * LST declaration, so it exercises the same route the production callers use. Every assertion is
+ * unchanged: the shapes, the two {@code gen} spellings, the fallbacks and the four diagnostics are the
+ * reader's contract, and none of them depends on which parser produced the tree.</p>
  */
 class ViewAnnotationReaderTest {
 
-    private AnnotationExpr annotationOf(String source) {
-        CompilationUnit cu = new JavaParser().parse(source).getResult().orElseThrow();
-        ClassOrInterfaceDeclaration decl = cu.findFirst(ClassOrInterfaceDeclaration.class).orElseThrow();
-        return decl.getAnnotationByName("View").orElseThrow();
+    /**
+     * The {@code @View} annotation on the interface a fixture declares.
+     *
+     * <p>{@code TreeQueries.annotationNamed} rather than a direct {@code getLeadingAnnotations()} walk,
+     * because the annotation's type may be spelled bare or fully qualified and only the last segment is
+     * the name being looked for — the same reason the production discovery path uses it.</p>
+     */
+    private J.Annotation annotationOf(String source) {
+        J.CompilationUnit unit = SourceReader.readSourceText(source);
+        Assertions.assertNotNull(unit, "the fixture must parse");
+        for (J.ClassDeclaration declaration : TreeQueries.interfaces(unit)) {
+            J.Annotation view = TreeQueries.annotationNamed(declaration, "View");
+            if (view != null) {
+                return view;
+            }
+        }
+        throw new AssertionError("no @View annotation found in fixture");
     }
 
     private ViewAttributes read(String annotation) {
-        return ViewAnnotationReader.read(annotationOf(
-                "import hr.hrg.hipster.entity.api.View;\n"
-                + "import hr.hrg.hipster.entity.api.GenLevel;\n"
-                + annotation + "\n"
-                + "public interface V {}\n"));
+        return ViewAnnotationReader.read(annotationOf(fixture(annotation)));
     }
 
     private ViewAnnotationReader.Parsed parse(String annotation) {
-        return ViewAnnotationReader.parse(annotationOf(
-                "import hr.hrg.hipster.entity.api.View;\n"
+        return ViewAnnotationReader.parse(annotationOf(fixture(annotation)));
+    }
+
+    private static String fixture(String annotation) {
+        return "import hr.hrg.hipster.entity.api.View;\n"
                 + "import hr.hrg.hipster.entity.api.GenLevel;\n"
                 + annotation + "\n"
-                + "public interface V {}\n"));
+                + "public interface V {}\n";
     }
 
     @Test
@@ -97,9 +113,19 @@ class ViewAnnotationReaderTest {
         Assertions.assertEquals(List.of("PersonAuditable", "Other"), attributes.addons());
     }
 
+    /**
+     * An empty addons list means "no addons", which the LST expresses as a single {@code J.Empty}
+     * placeholder rather than an empty list.
+     *
+     * <p>This test caught a real defect in the ported reader: the placeholder was being read as an addon
+     * named {@code Empty}, so {@code @View(addons = {})} reported one phantom addon and no diagnostic.
+     * The same {@code J.Empty} shape appears for an empty parameter list, which is why the migration
+     * caveats call it out as a class of trap rather than a one-off.</p>
+     */
     @Test
     void emptyAddonsListParses() {
-        Assertions.assertTrue(read("@View(addons = {})").addons().isEmpty());
+        Assertions.assertTrue(read("@View(addons = {})").addons().isEmpty(),
+                "an empty addons list must yield no addons, not one placeholder");
     }
 
     @Test
@@ -118,11 +144,7 @@ class ViewAnnotationReaderTest {
     void discoveryIsShapeBlind() {
         for (String shape : List.of("@View", "@View()", "@View(gen = GenLevel.META)",
                 "@View(gen = GenLevel.BUILDER_ALL)")) {
-            AnnotationExpr annotation = annotationOf(
-                    "import hr.hrg.hipster.entity.api.View;\n"
-                    + "import hr.hrg.hipster.entity.api.GenLevel;\n"
-                    + shape + "\n"
-                    + "public interface V {}\n");
+            J.Annotation annotation = annotationOf(fixture(shape));
             Assertions.assertNotNull(annotation, shape + " must be discoverable");
         }
     }

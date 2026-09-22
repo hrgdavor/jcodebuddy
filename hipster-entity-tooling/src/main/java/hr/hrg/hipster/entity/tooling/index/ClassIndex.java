@@ -1,7 +1,5 @@
 package hr.hrg.hipster.entity.tooling.index;
 
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import tools.jackson.databind.JsonNode;
 
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
@@ -391,45 +389,7 @@ public final class ClassIndex {
     }
 
     /**
-     * {@link #addTypes(String, J.CompilationUnit, String, boolean)} for the queue files that are
-     * <strong>not yet ported</strong>.
-     *
-     * <p>Delegates to the same {@code addTypes(String, List&lt;TypeFacts&gt;, boolean)} the LST path uses,
-     * so there is one index-building implementation and this is only a translator. The facts themselves
-     * come from {@link TypeFacts}'s JavaParser factory — one FQN composition, so a nested type cannot be
-     * spelled two ways depending on which parser read it.</p>
-     *
-     * <p>Deleted with the last JavaParser caller ({@code EntityMetadataGenerator}); the Phase 6
-     * checklist tracks it.</p>
-     */
-    public void addTypes(String moduleRelativePath,
-                         com.github.javaparser.ast.CompilationUnit unit, boolean generated) {
-        List<TypeFacts> types = new ArrayList<>();
-        collectTypesJp(unit, new ArrayList<>(), types);
-        addTypes(moduleRelativePath, types, generated);
-    }
-
-    private static void collectTypesJp(com.github.javaparser.ast.CompilationUnit unit,
-                                       List<String> enclosing, List<TypeFacts> into) {
-        for (com.github.javaparser.ast.body.TypeDeclaration<?> declaration : unit.getTypes()) {
-            collectTypesJp(declaration, enclosing, into);
-        }
-    }
-
-    private static void collectTypesJp(com.github.javaparser.ast.body.TypeDeclaration<?> declaration,
-                                       List<String> enclosing, List<TypeFacts> into) {
-        into.add(TypeFacts.of(declaration, enclosing));
-        List<String> nested = new ArrayList<>(enclosing);
-        nested.add(declaration.getNameAsString());
-        for (com.github.javaparser.ast.body.BodyDeclaration<?> member : declaration.getMembers()) {
-            if (member instanceof com.github.javaparser.ast.body.TypeDeclaration<?> inner) {
-                collectTypesJp(inner, nested, into);
-            }
-        }
-    }
-
-    /**
-     * Registers a file the pass <strong>wrote</strong>, reading it back from disk.
+     * Registers one file the pass <strong>wrote</strong>, reading it back from disk.
      *
      * <p>A generated artifact is a file like any other in this table — it declares types, it has content
      * and it can change — so it gets the same treatment, with {@code generated = true}. The caller must

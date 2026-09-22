@@ -68,7 +68,7 @@ public final class ViewRecordGenerator {
             if (i > 0) {
                 sb.append(", ");
             }
-            sb.append('(').append(ViewTrackingBuilderGenerator.boxedType(allProperties.get(i).type()))
+            sb.append('(').append(ViewTrackingBuilderGenerator.castType(allProperties.get(i).type()))
                     .append(") values[").append(i).append(']');
         }
         sb.append(')');

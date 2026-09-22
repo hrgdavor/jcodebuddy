@@ -1,19 +1,9 @@
 package hr.hrg.hipster.entity.tooling;
 
+import org.openrewrite.java.tree.J;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ParseResult;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.expr.AnnotationExpr;
-import com.github.javaparser.ast.expr.MemberValuePair;
-import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.SimpleName;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
 
 import hr.hrg.hipster.entity.tooling.index.ClassIndex;
 import hr.hrg.hipster.entity.tooling.meta.EntityFieldMeta;
@@ -1042,11 +1032,12 @@ public class EntityMetadataGenerator {
 
             // If no standard Maven source root is found, derive the source root from the package declaration.
             try {
-                String source = Files.readString(inputPath);
-                ParseResult<CompilationUnit> parseResult = SourceReader.portingParser().parse(source);
-                CompilationUnit cu = parseResult.getResult().orElse(null);
-                if (cu != null && cu.getPackageDeclaration().isPresent()) {
-                    String packageName = cu.getPackageDeclaration().get().getNameAsString();
+                // Only the package name is wanted, and `TreeQueries.packageName` reads it off the LST.
+                // The old code asked JavaParser for a result and then for the package declaration; the
+                // shape of the question is unchanged, only the tree it is asked of (phase 6).
+                J.CompilationUnit parsed = SourceReader.readSourceText(Files.readString(inputPath));
+                if (parsed != null) {
+                    String packageName = TreeQueries.packageName(parsed);
                     Path parent = inputPath.getParent();
                     String[] segments = packageName.split("\\.");
                     for (int i = segments.length - 1; i >= 0 && parent != null; i--) {
@@ -1109,20 +1100,20 @@ public class EntityMetadataGenerator {
      *       plumbing, not a field — the {@code changes()} leak in {@code PersonUpdatableView_}.</li>
      * </ol>
      */
-    private static boolean isFieldAccessor(MethodDeclaration method) {
-        if (!method.getParameters().isEmpty()) {
+    private static boolean isFieldAccessor(J.MethodDeclaration method) {
+        if (!TreeQueries.hasNoParameters(method)) {
             return false;
         }
-        if (method.getType().isVoidType()) {
+        if (TreeQueries.isVoidReturn(method)) {
             return false;
         }
-        if (method.isDefault()) {
+        if (TreeQueries.isDefaultMethod(method)) {
             return false;
         }
-        if (method.isStatic()) {
+        if (TreeQueries.isStaticMethod(method)) {
             return false;
         }
-        String name = method.getNameAsString();
+        String name = method.getSimpleName();
         if (!FRAMEWORK_ACCESSORS.contains(name)) {
             return true;
         }
@@ -1134,10 +1125,18 @@ public class EntityMetadataGenerator {
         return false;
     }
 
-    /** Whether any declared or inherited supertype of {@code decl} is a framework surface. */
-    private static boolean extendsFrameworkSurface(ClassOrInterfaceDeclaration decl) {
-        for (ClassOrInterfaceType type : decl.getExtendedTypes()) {
-            if (FRAMEWORK_TYPES.contains(type.getNameAsString())) {
+    /**
+     * Whether any declared supertype of {@code decl} is a framework surface.
+     *
+     * <p>Phase 6: {@code TreeQueries.supertypeNames} reads both the {@code extends} and the
+     * {@code implements} clause, because the LST holds an <em>interface's</em> {@code extends} in
+     * {@code getImplements()} (MIGRATION-CAVEATS.md § 1.3). Reading {@code getExtends()} alone would
+     * find no supertype for any interface, so every view would look like it does not extend the
+     * surface it plainly does.</p>
+     */
+    private static boolean extendsFrameworkSurface(J.ClassDeclaration decl) {
+        for (String supertype : TreeQueries.supertypeNames(decl)) {
+            if (FRAMEWORK_TYPES.contains(supertype)) {
                 return true;
             }
         }
@@ -1241,7 +1240,7 @@ public class EntityMetadataGenerator {
     private static DivergenceReporter activeDivergences;
 
     /** Every compilation unit the current pass parsed, retained for lookups that need a non-interface. */
-    private static final List<CompilationUnit> parsedCompilationUnits = new ArrayList<>();
+    private static final List<J.CompilationUnit> parsedCompilationUnits = new ArrayList<>();
 
     /**
      * One parsed source file, with the two facts a property reader needs from it
@@ -1252,8 +1251,16 @@ public class EntityMetadataGenerator {
      * may refer to a type declared in a file that has not been visited yet, which is exactly the
      * cross-package case the import table alone cannot resolve.</p>
      */
-    private record ParsedUnit(String packageName, Map<String, String> importTable, CompilationUnit cu,
-                              String sourcePath) {
+    /**
+     * One parsed source file and everything the pass needs from it.
+     *
+     * <p>Phase 6: {@code cu} is an LST and {@code source} is the exact text it was parsed from. The
+     * text is not redundant — it is the only input from which a declaration's line can be recovered,
+     * because the LST exposes no positions (MIGRATION-CAVEATS.md § 4.5). Carrying it here means the
+     * position queries never have to re-read the file.</p>
+     */
+    private record ParsedUnit(String packageName, Map<String, String> importTable, J.CompilationUnit cu,
+                              String sourcePath, String source) {
     }
 
     /**
@@ -1275,14 +1282,25 @@ public class EntityMetadataGenerator {
     private static Map<String, List<String>> declaredTypesBySimpleName(List<ParsedUnit> units) {
         Map<String, TreeSet<String>> byName = new TreeMap<>();
         for (ParsedUnit unit : units) {
-            for (TypeDeclaration<?> type : unit.cu().findAll(TypeDeclaration.class)) {
-                type.getFullyQualifiedName().ifPresent(fqn -> {
-                    int dot = fqn.lastIndexOf('.');
-                    String simpleName = dot < 0 ? fqn : fqn.substring(dot + 1);
-                    if (!simpleName.isEmpty()) {
-                        byName.computeIfAbsent(simpleName, __ -> new TreeSet<>()).add(fqn);
-                    }
-                });
+            // The FQN is composed from the package and the enclosing chain, which is what replaces
+            // JavaParser's `getFullyQualifiedName()` — the LST has no such accessor, and a node does not
+            // know its own ancestry (MIGRATION-CAVEATS.md § 4.5). Nested types are included, as the old
+            // `findAll(TypeDeclaration.class)` included them.
+            String packageName = unit.packageName();
+            for (TreeQueries.EnclosedType enclosed : TreeQueries.typesWithEnclosing(unit.cu())) {
+                StringBuilder chain = new StringBuilder();
+                if (packageName != null && !packageName.isEmpty()) {
+                    chain.append(packageName).append('.');
+                }
+                for (J.ClassDeclaration enclosing : enclosed.enclosing()) {
+                    chain.append(enclosing.getSimpleName()).append('.');
+                }
+                chain.append(enclosed.declaration().getSimpleName());
+                String fqn = chain.toString();
+                String simpleName = enclosed.declaration().getSimpleName();
+                if (!simpleName.isEmpty()) {
+                    byName.computeIfAbsent(simpleName, __ -> new TreeSet<>()).add(fqn);
+                }
             }
         }
         Map<String, List<String>> index = new TreeMap<>();
@@ -1379,16 +1397,16 @@ public class EntityMetadataGenerator {
                 .forEach(filePath -> {
                     try {
                         String source = Files.readString(filePath);
-                        SourceReader.ReadJp read = SourceReader.readJpText(source);
+                        SourceReader.Read read = SourceReader.readText(source);
                         if (!read.readable()) {
                             // Fail safe: the file contributes nothing, and the report says which one.
                             unparsedFiles.add(sourceRoot.relativize(filePath).toString().replace('\\', '/'));
                             return;
                         }
-                        CompilationUnit cu = read.unit();
+                        J.CompilationUnit cu = read.unit();
                         parsedCompilationUnits.add(cu);
 
-                        String packageName = cu.getPackageDeclaration().map(pd -> pd.getNameAsString()).orElse("");
+                        String packageName = TreeQueries.packageName(cu);
                         // The declaring unit's import table, carried to the property reader because that
                         // is the only place a type name can be resolved correctly: an inherited accessor's
                         // declared type comes from its own supertype's source, so resolving a whole view's
@@ -1406,9 +1424,11 @@ public class EntityMetadataGenerator {
                         // fail loudly rather than write a path into a document.
                         if (ClassIndex.isModuleRelative(unitPath)) {
                             classIndex.addFile(unitPath);
-                            classIndex.addTypes(unitPath, cu, false);
+                            // The LST path, with the source it was parsed from: the index refuses a
+                            // JavaParser unit now, and the source is what its line numbers come from.
+                            classIndex.addTypes(unitPath, cu, source, false);
                         }
-                        units.add(new ParsedUnit(packageName, importTableOf(cu), cu, unitPath));
+                        units.add(new ParsedUnit(packageName, importTableOf(cu), cu, unitPath, source));
 
                     } catch (IOException e) {
                         throw new RuntimeException(e);
@@ -1429,33 +1449,42 @@ public class EntityMetadataGenerator {
         for (ParsedUnit unit : units) {
             String packageName = unit.packageName();
             Map<String, String> importTable = unit.importTable();
-            for (ClassOrInterfaceDeclaration decl : unit.cu().findAll(ClassOrInterfaceDeclaration.class)) {
-                if (!decl.isInterface()) {
+            // `typesWithEnclosing`, not `interfaces`: discovery must skip nested declarations, and the
+            // LST gives a node no way back to its parent — so the ancestry is captured during traversal
+            // rather than read off the node afterwards (MIGRATION-CAVEATS.md § 1.4).
+            for (TreeQueries.EnclosedType enclosed : TreeQueries.typesWithEnclosing(unit.cu())) {
+                J.ClassDeclaration decl = enclosed.declaration();
+                if (decl.getKind() != J.ClassDeclaration.Kind.Type.Interface) {
                     continue;
                 }
                 // Discovery never descends into a nested type of a view file (§ 4.5/G8
                 // rule 2): the generator's own emitted nested Write/tracking surfaces
                 // must not become a discovery input on the next pass.
-                if (isNested(decl)) {
+                if (isNested(enclosed.enclosing())) {
                     continue;
                 }
 
                 InterfaceInfo info = new InterfaceInfo(
                         packageName,
-                        decl.getNameAsString(),
-                        decl.getExtendedTypes().stream()
-                                .map(ClassOrInterfaceType::asString)
-                                .collect(Collectors.toList()),
-                        decl.getMethods().stream()
+                        decl.getSimpleName(),
+                        // The written form, type arguments included: `Identifiable<Long>` is what tells a
+                        // markerless view its id type, and `supertypeNames` has already discarded it.
+                        TreeQueries.supertypeTexts(decl),
+                        TreeQueries.methodsOf(decl).stream()
                                 .filter(EntityMetadataGenerator::isFieldAccessor)
                                 .map(method -> parseProperty(method, packageName, importTable, declaredTypes,
-                                        unit.sourcePath(), decl.getNameAsString()))
+                                        unit.sourcePath(), unit.source(), decl.getSimpleName()))
                                 .collect(Collectors.toList()),
                         parseViewAnnotation(decl),
                         parseEntityBaseIdType(decl),
-                        decl.getBegin().map(pos -> pos.line).orElse(-1),
+                        // `getBegin().line`, annotations included — NOT the name line and not the
+                        // class-index line. The two differ for every annotated view, and this one is the
+                        // recorded metadata contract (TreeQueries.declarationLineOf).
+                        TreeQueries.declarationLineOfChained(decl,
+                                enclosed.enclosing().stream().map(J.ClassDeclaration::getSimpleName).toList(),
+                                unit.source()),
                         nestedRecordComponents(decl),
-                        decl.isPublic(),
+                        decl.hasModifier(J.Modifier.Type.Public),
                         decl,
                         unit.sourcePath()
                 );
@@ -1851,10 +1880,9 @@ public class EntityMetadataGenerator {
         if (marker == null) {
             return -1;
         }
-        if (marker.declaration() != null) {
-            return marker.declaration().getName().getBegin().map(position -> position.line)
-                    .orElse(marker.lineNumber());
-        }
+        // `marker.lineNumber()` is the declaration's own line, recorded by the discovery pass through
+        // javac's line map (the LST exposes no positions). It is the same value the removed
+        // `getName().getBegin().line` produced, so there is nothing left to recompute here.
         return marker.lineNumber();
     }
 
@@ -1955,24 +1983,33 @@ public class EntityMetadataGenerator {
             return new LedgerOrder(accessors, accessors.size());
         }
         try {
-            // The shared read (SourceReader), for the reason F-34 records: JavaParser returns a partial
-            // unit for broken source, and a partial unit whose constant list failed to parse would look
-            // like an empty ledger and silently renumber everything. An unreadable enum therefore keeps
-            // the declaration order and the ledger path reports it separately.
-            SourceReader.ReadJp read = SourceReader.readJp(enumFile);
+            // The shared read (SourceReader), for the reason F-34 records: a parser that recovers from
+            // broken source returns a partial unit, and a partial unit whose constant list failed to
+            // parse would look like an empty ledger and silently renumber everything. An unreadable
+            // enum therefore keeps the declaration order and the ledger path reports it separately.
+            SourceReader.Read read = SourceReader.read(enumFile);
             if (!read.readable()) {
                 return new LedgerOrder(accessors, accessors.size());
             }
-            CompilationUnit cu = read.unit();
+            J.CompilationUnit cu = read.unit();
             if (!hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker.readHeader(cu).marked()) {
                 return new LedgerOrder(accessors, accessors.size());
             }
+            // The constants in declaration order. The LST groups every constant of one enum into a
+            // single `J.EnumValueSet` statement, which is the same list JavaParser's `getEntries()`
+            // returned — and `enums(cu)` keeps the old `findAll(EnumDeclaration.class)` reach, nested
+            // declarations included (MIGRATION-CAVEATS.md § 1.10).
             List<String> existing = new ArrayList<>();
-            for (com.github.javaparser.ast.body.EnumDeclaration declaration
-                    : cu.findAll(com.github.javaparser.ast.body.EnumDeclaration.class)) {
-                for (com.github.javaparser.ast.body.EnumConstantDeclaration constant
-                        : declaration.getEntries()) {
-                    existing.add(constant.getNameAsString());
+            for (J.ClassDeclaration declaration : TreeQueries.enums(cu)) {
+                if (declaration.getBody() == null) {
+                    continue;
+                }
+                for (org.openrewrite.java.tree.Statement statement : declaration.getBody().getStatements()) {
+                    if (statement instanceof J.EnumValueSet values) {
+                        for (J.EnumValue value : values.getEnums()) {
+                            existing.add(value.getName().getSimpleName());
+                        }
+                    }
                 }
             }
             if (existing.isEmpty()) {
@@ -2074,51 +2111,74 @@ public class EntityMetadataGenerator {
         return false;
     }
 
-    private static Property parseProperty(MethodDeclaration method, String declaringPackage,
+    private static Property parseProperty(J.MethodDeclaration method, String declaringPackage,
                                          Map<String, String> importTable,
                                          Map<String, List<String>> declaredTypes,
-                                         String sourcePath, String declaringName) {
-        String name = method.getNameAsString();
-        String type = method.getType().asString();
+                                         String sourcePath, String source, String declaringName) {
+        String name = method.getSimpleName();
+        // `typeText`, not `toString()`: JavaParser's `getType().asString()` separated type arguments
+        // with a bare comma, and the emitted text is both compared byte-for-byte against the committed
+        // example and used to RECOGNISE the generator's own previous output, so the printer's comma
+        // space is not a cosmetic difference (MIGRATION-CAVEATS.md § 2.4).
+        String type = method.getReturnTypeExpression() == null
+                ? "void"
+                : TreeQueries.typeText(method.getReturnTypeExpression());
         String fieldKind = null;
         String column = null;
         String relation = null;
         String expression = null;
         int annotationLine = -1;
 
-        Optional<AnnotationExpr> fsOpt = method.getAnnotationByName("FieldSource");
-        if (fsOpt.isPresent()) {
-            AnnotationExpr fs = fsOpt.get();
+        J.Annotation fs = TreeQueries.annotationNamed(method, "FieldSource");
+        if (fs != null) {
             // The @FieldSource line itself, which is a DIFFERENT line from the accessor's when the
             // annotation sits above it: `PersonSummary.age` is 17 for `Integer age();` and 16 for the
             // annotation. Neither can be recovered from `lineNumber`, which is the declaration start,
-            // annotations included — so both are recorded here, while the AST is in hand.
-            annotationLine = fs.getBegin().map(pos -> pos.line).orElse(-1);
-            if (fs.isSingleMemberAnnotationExpr()) {
-                fieldKind = extractEnumValue(fs.asSingleMemberAnnotationExpr().getMemberValue().toString());
-            } else if (fs.isNormalAnnotationExpr()) {
-                for (MemberValuePair pair : fs.asNormalAnnotationExpr().getPairs()) {
-                    switch (pair.getName().asString()) {
-                        case "kind" -> fieldKind = extractEnumValue(pair.getValue().toString());
-                        case "column" -> column = stripQuotes(pair.getValue().toString());
-                        case "relation" -> relation = stripQuotes(pair.getValue().toString());
-                        case "expression" -> expression = stripQuotes(pair.getValue().toString());
+            // annotations included — so both are recorded here.
+            annotationLine = TreeQueries.annotationLineOf(declaringName, name, "FieldSource", source);
+            // The LST has one annotation node where JavaParser had four, and the forms are told apart
+            // by the argument list (MIGRATION-CAVEATS.md § 1.7): a single unnamed member is the
+            // retired `@FieldSource(FieldKind.X)` form, named assignments are the normal form.
+            if (!TreeQueries.hasAnnotationArguments(fs)) {
+                // A bare marker: no kind, no column, no relation.
+            } else {
+                boolean named = false;
+                for (org.openrewrite.java.tree.Expression argument : fs.getArguments()) {
+                    if (argument instanceof J.Empty) {
+                        continue;
+                    }
+                    if (argument instanceof J.Assignment assignment) {
+                        named = true;
+                        String value = String.valueOf(assignment.getAssignment());
+                        switch (TreeQueries.assignmentName(assignment)) {
+                            case "kind" -> fieldKind = extractEnumValue(value);
+                            case "column" -> column = stripQuotes(value);
+                            case "relation" -> relation = stripQuotes(value);
+                            case "expression" -> expression = stripQuotes(value);
+                            default -> { }
+                        }
+                    }
+                }
+                if (!named) {
+                    // The single-member form: the one argument is the kind.
+                    for (org.openrewrite.java.tree.Expression argument : fs.getArguments()) {
+                        if (!(argument instanceof J.Empty)) {
+                            fieldKind = extractEnumValue(String.valueOf(argument));
+                            break;
+                        }
                     }
                 }
             }
         }
-        int lineNumber = method.getBegin().map(pos -> pos.line).orElse(-1);
+        int lineNumber = TreeQueries.methodLineOf(method, declaringName, source);
 
         // The interface half of "where is this field". The accessor's own line is read from the NAME
-        // token, never from `method.getBegin()`: an accessor carrying `@FieldSource` (or any other
+        // token, never from the declaration's start: an accessor carrying `@FieldSource` (or any other
         // annotation) begins on the annotation's line, which is exactly the conflation F-46 records.
-        // Reading the AST rather than a regex also avoids the lookahead-after-\s+ trap that silently
-        // disabled a whole member scan in the renderer (plan.dsec § 8.5).
         List<hr.hrg.hipster.entity.tooling.meta.SourceLocation> locations = new ArrayList<>();
-        int accessorLine = method.getName().getBegin().map(pos -> pos.line).orElse(-1);
         if (sourcePath != null) {
             locations.add(new hr.hrg.hipster.entity.tooling.meta.SourceLocation(
-                    declaringName, "accessor", sourcePath, accessorLine));
+                    declaringName, "accessor", sourcePath, lineNumber));
             if (annotationLine > 0) {
                 locations.add(new hr.hrg.hipster.entity.tooling.meta.SourceLocation(
                         declaringName, "annotation", sourcePath, annotationLine));
@@ -2209,14 +2269,24 @@ public class EntityMetadataGenerator {
         return names;
     }
 
-    /** The simple-name to fully-qualified-name map of one compilation unit's non-static imports. */
-    private static Map<String, String> importTableOf(CompilationUnit cu) {
+    /**
+     * The simple-name to fully-qualified-name map of one compilation unit's non-static imports.
+     *
+     * <p>Phase 6: the LST reports an import through {@link J.Import#getTypeName()} and exposes the
+     * wildcard/static flags as booleans on the node rather than on a qualified name. The map this builds
+     * is unchanged — a wildcard or static import contributes no simple-name entry, which is what makes
+     * the table a resolution aid rather than a compiler.</p>
+     */
+    private static Map<String, String> importTableOf(J.CompilationUnit cu) {
         Map<String, String> table = new LinkedHashMap<>();
-        for (var importDeclaration : cu.getImports()) {
-            if (importDeclaration.isStatic() || importDeclaration.isAsterisk()) {
+        if (cu.getImports() == null) {
+            return table;
+        }
+        for (J.Import importDeclaration : cu.getImports()) {
+            if (importDeclaration.isStatic() || importDeclaration.getTypeName().endsWith(".*")) {
                 continue;
             }
-            String qualified = importDeclaration.getNameAsString();
+            String qualified = importDeclaration.getTypeName();
             int dot = qualified.lastIndexOf('.');
             if (dot > 0) {
                 table.put(qualified.substring(dot + 1), qualified);
@@ -2318,28 +2388,42 @@ public class EntityMetadataGenerator {
      * <p>{@code DEFAULT} is resolved by {@link GenLevelResolver} (the single owner, § 4.7/DR-3);
      * this method supplies the field names rule 1 needs.</p>
      */
-    private static ViewAttributes parseViewAnnotation(ClassOrInterfaceDeclaration decl) {
-        Optional<AnnotationExpr> viewOpt = decl.getAnnotationByName("View");
-        if (viewOpt.isEmpty()) {
+    private static ViewAttributes parseViewAnnotation(J.ClassDeclaration decl) {
+        J.Annotation view = TreeQueries.annotationNamed(decl, "View");
+        if (view == null) {
             return null;
         }
-        ViewAnnotationReader.Parsed parsed = ViewAnnotationReader.parse(viewOpt.get());
+        ViewAnnotationReader.Parsed parsed = ViewAnnotationReader.parse(view);
         ViewAttributes attributes = parsed.attributes();
 
-        List<String> fieldNames = decl.getMethods().stream()
+        List<String> fieldNames = TreeQueries.methodsOf(decl).stream()
                 .filter(EntityMetadataGenerator::isFieldAccessor)
-                .map(MethodDeclaration::getNameAsString)
+                .map(J.MethodDeclaration::getSimpleName)
                 .collect(Collectors.toList());
 
         GenLevelResolver.Resolved resolved = GenLevelResolver.resolve(attributes.gen(), decl, fieldNames);
         return new ViewAttributes(resolved.level(), attributes.discriminatorField(), attributes.addons());
     }
 
-    private static String parseEntityBaseIdType(ClassOrInterfaceDeclaration decl) {
-        for (ClassOrInterfaceType ext : decl.getExtendedTypes()) {
-            if ("EntityBase".equals(ext.getNameAsString())) {
-                if (ext.getTypeArguments().isPresent()) {
-                    return ext.getTypeArguments().get().stream().findFirst().map(Object::toString).orElse(null);
+    /**
+     * The type argument {@code decl} passes to {@code EntityBase}, or {@code null}.
+     *
+     * <p>Phase 6: {@code getExtendedTypes()} becomes {@link TreeQueries#supertypeTypes} — the LST holds
+     * an <em>interface's</em> {@code extends} clause in {@code getImplements()} and leaves
+     * {@code getExtends()} {@code null}, so reading {@code getExtends()} alone (MIGRATION-CAVEATS.md
+     * § 1.3) finds no supertype for the commonest shape in this module: {@code interface PersonEntity
+     * extends EntityBase<Long>}. That is not a near miss — it makes every marker interface look like a
+     * non-marker, which empties the whole pass with no exception raised. The <em>type argument</em> then
+     * comes from the LST's own node: a generic supertype is a {@code J.ParameterizedType} whose type
+     * parameters are on {@code getTypeParameters()}, while a bare supertype has none.</p>
+     */
+    private static String parseEntityBaseIdType(J.ClassDeclaration decl) {
+        for (org.openrewrite.java.tree.TypeTree supertype : TreeQueries.supertypeTypes(decl)) {
+            if (supertype instanceof J.ParameterizedType parameterized
+                    && "EntityBase".equals(TreeQueries.simpleTypeName(parameterized.getClazz()))) {
+                List<org.openrewrite.java.tree.Expression> arguments = parameterized.getTypeParameters();
+                if (arguments != null && !arguments.isEmpty()) {
+                    return arguments.get(0).toString();
                 }
             }
         }
@@ -2538,28 +2622,30 @@ public class EntityMetadataGenerator {
         String explicit = view.view() == null ? null : view.view().discriminatorField();
         boolean explicitGiven = explicit != null && !explicit.isBlank();
 
-        for (MethodDeclaration method : view.declaration().getMethods()) {
-            if (!method.isDefault()
-                    || !method.getParameters().isEmpty()
-                    || method.getType().isVoidType()) {
+        for (J.MethodDeclaration method : TreeQueries.methodsOf(view.declaration())) {
+            if (!TreeQueries.isDefaultMethod(method)
+                    || !TreeQueries.hasNoParameters(method)
+                    || TreeQueries.isVoidReturn(method)) {
                 continue;
             }
             if (explicitGiven) {
-                if (!method.getNameAsString().equals(explicit)) {
+                if (!method.getSimpleName().equals(explicit)) {
                     continue;
                 }
-            } else if (!overridesMarkerAccessor(view, method.getNameAsString(), interfaceMap)) {
+            } else if (!overridesMarkerAccessor(view, method.getSimpleName(), interfaceMap)) {
                 continue;
             }
-            var body = method.getBody().orElse(null);
-            if (body == null || body.getStatements().size() != 1) {
+            var body = method.getBody();
+            if (body == null || body.getStatements() == null || body.getStatements().size() != 1) {
                 continue;
             }
-            var statement = body.getStatement(0);
-            if (statement.isReturnStmt()) {
-                var expression = statement.asReturnStmt().getExpression().orElse(null);
-                if (expression instanceof StringLiteralExpr literal) {
-                    return literal.asString();
+            var statement = body.getStatements().get(0);
+            if (statement instanceof org.openrewrite.java.tree.J.Return returnStatement) {
+                var expression = returnStatement.getExpression();
+                // A string literal is one `J.Literal` discriminated by its primitive, not a dedicated
+                // `StringLiteralExpr` node (MIGRATION-CAVEATS.md § 2).
+                if (expression instanceof J.Literal literal && literal.getValue() instanceof String text) {
+                    return text;
                 }
             }
         }
@@ -2603,17 +2689,19 @@ public class EntityMetadataGenerator {
 
     /** Whether the interface declares the named accessor with no body — i.e. requires an answer. */
     private static boolean declaresAbstractAccessor(InterfaceInfo info, String methodName) {
-        ClassOrInterfaceDeclaration decl = info.declaration();
+        J.ClassDeclaration decl = info.declaration();
         if (decl == null) {
             return false;
         }
-        for (MethodDeclaration method : decl.getMethods()) {
-            if (!method.getNameAsString().equals(methodName)
-                    || method.isDefault()
-                    || method.isStatic()
-                    || method.getBody().isPresent()
-                    || !method.getParameters().isEmpty()
-                    || method.getType().isVoidType()) {
+        for (J.MethodDeclaration method : TreeQueries.methodsOf(decl)) {
+            if (!method.getSimpleName().equals(methodName)
+                    || TreeQueries.isDefaultMethod(method)
+                    || TreeQueries.isStaticMethod(method)
+                    // An abstract interface method has no body: the LST models that as a null body,
+                    // where JavaParser had an empty Optional.
+                    || method.getBody() != null
+                    || !TreeQueries.hasNoParameters(method)
+                    || TreeQueries.isVoidReturn(method)) {
                 continue;
             }
             return true;
@@ -2631,24 +2719,48 @@ public class EntityMetadataGenerator {
      */
     private static boolean rootDeclaresPermittedSubtypes(InterfaceInfo marker, Map<String, InterfaceInfo> interfaceMap) {
         String rootEnumName = marker.name() + "_";
-        Set<CompilationUnit> units = new HashSet<>();
-        for (InterfaceInfo info : interfaceMap.values()) {
-            if (info.declaration() != null) {
-                info.declaration().findCompilationUnit().ifPresent(units::add);
+        // The enum is a separate file from the marker interface, so it cannot be found in the marker's
+        // own unit — an earlier version looked there and always answered "no", silently dropping every
+        // discriminant. The pass's retained units are the search space; every unit it parsed is in
+        // `parsedCompilationUnits`, so there is nothing to gather from the interface map.
+        for (J.CompilationUnit cu : parsedCompilationUnits) {
+            for (J.ClassDeclaration decl : TreeQueries.typeDeclarations(cu)) {
+                if (decl.getKind() != J.ClassDeclaration.Kind.Type.Enum
+                        || !decl.getSimpleName().equals(rootEnumName)) {
+                    continue;
+                }
+                return declaresPopulatedDefaultViewMeta(decl);
             }
         }
-        // The enum is neither an interface nor in the marker's own unit, so the pass's retained
-        // units are the only place it can be found.
-        units.addAll(parsedCompilationUnits);
-        for (CompilationUnit cu : units) {
-            for (var type : cu.getTypes()) {
-                if (type instanceof com.github.javaparser.ast.body.EnumDeclaration enumDecl
-                        && enumDecl.getNameAsString().equals(rootEnumName)) {
-                    return enumDecl.findAll(com.github.javaparser.ast.expr.ObjectCreationExpr.class).stream()
-                            .filter(creation -> creation.getType().getNameAsString().equals("DefaultViewMeta"))
-                            .anyMatch(creation -> creation.getArguments().stream()
-                                    .anyMatch(argument -> argument instanceof com.github.javaparser.ast.expr.ArrayInitializerExpr array
-                                            && !array.getValues().isEmpty()));
+        return false;
+    }
+
+    /**
+     * Whether an enum's constants build a {@code DefaultViewMeta} with a non-empty discriminator array.
+     *
+     * <p>Phase 6: JavaParser answered this with {@code findAll(ObjectCreationExpr.class)} plus a check of
+     * the argument's {@code ArrayInitializerExpr}. The LST collapses the construction and its initialiser
+     * differently — an object creation is a {@link J.NewClass} and an array literal is a
+     * {@link J.NewArray} whose initialiser may be <strong>null</strong> when the array is only
+     * dimensioned (the same null-instead-of-empty shape MIGRATION-CAVEATS.md § 1.6 records), so the
+     * emptiness test is null-safe rather than {@code isEmpty()}.</p>
+     */
+    private static boolean declaresPopulatedDefaultViewMeta(J.ClassDeclaration enumDeclaration) {
+        for (J.NewClass creation : TreeQueries.findAll(enumDeclaration, J.NewClass.class)) {
+            if (creation.getClazz() == null
+                    || !"DefaultViewMeta".equals(TreeQueries.simpleTypeName(creation.getClazz()))) {
+                continue;
+            }
+            List<org.openrewrite.java.tree.Expression> arguments = creation.getArguments();
+            if (arguments == null) {
+                continue;
+            }
+            for (org.openrewrite.java.tree.Expression argument : arguments) {
+                if (!(argument instanceof J.NewArray array)) {
+                    continue;
+                }
+                if (array.getInitializer() != null && !array.getInitializer().isEmpty()) {
+                    return true;
                 }
             }
         }
@@ -2675,11 +2787,16 @@ public class EntityMetadataGenerator {
         return false;
     }
 
-    /** A declaration nested inside another type — the generator's own emitted output lives there. */
-    private static boolean isNested(ClassOrInterfaceDeclaration decl) {
-        return decl.getParentNode()
-                .filter(parent -> parent instanceof com.github.javaparser.ast.body.TypeDeclaration)
-                .isPresent();
+    /**
+     * Whether a declaration is nested inside another type — the generator's own emitted output lives
+     * there.
+     *
+     * <p>Phase 6: decided from the enclosing chain the traversal captured, because an LST node does not
+     * know its parent. Callers must therefore come through
+     * {@link TreeQueries#typesWithEnclosing} rather than asking for a flat type list.</p>
+     */
+    private static boolean isNested(List<J.ClassDeclaration> enclosing) {
+        return enclosing != null && !enclosing.isEmpty();
     }
 
     private static boolean isDerivedFrom(InterfaceInfo candidate, InterfaceInfo marker, Map<String, InterfaceInfo> interfaceMap) {
@@ -3057,7 +3174,7 @@ public class EntityMetadataGenerator {
             if (i > 0) {
                 sb.append(", ");
             }
-            sb.append('(').append(ViewTrackingBuilderGenerator.boxedType(allProperties.get(i).type()))
+            sb.append('(').append(ViewTrackingBuilderGenerator.castType(allProperties.get(i).type()))
                     .append(") values[").append(i).append(']');
         }
         sb.append(')');
@@ -3085,13 +3202,29 @@ public class EntityMetadataGenerator {
      * (§ 4.5/G1 rule 1) and the {@code RECORD} level's "recognize an existing nested record and do
      * not emit a second one" rule (§ 8.4/3.10) compare this list against the field enum order.</p>
      */
-    private static List<String> nestedRecordComponents(ClassOrInterfaceDeclaration decl) {
-        for (com.github.javaparser.ast.body.BodyDeclaration<?> member : decl.getMembers()) {
-            if (member instanceof com.github.javaparser.ast.body.RecordDeclaration record) {
-                return record.getParameters().stream()
-                        .map(parameter -> parameter.getNameAsString())
-                        .collect(Collectors.toList());
+    private static List<String> nestedRecordComponents(J.ClassDeclaration decl) {
+        if (decl.getBody() == null) {
+            return null;
+        }
+        // Direct members only, and a record is a kind of J.ClassDeclaration rather than its own type —
+        // so the test is the kind, not an `instanceof` (MIGRATION-CAVEATS.md § 1.4). The component list
+        // is the primary constructor's parameters, which is the only place a record keeps them.
+        for (org.openrewrite.java.tree.Statement member : decl.getBody().getStatements()) {
+            if (!(member instanceof J.ClassDeclaration nested)
+                    || nested.getKind() != J.ClassDeclaration.Kind.Type.Record) {
+                continue;
             }
+            List<String> components = new ArrayList<>();
+            List<org.openrewrite.java.tree.Statement> primary = nested.getPrimaryConstructor();
+            if (primary != null) {
+                for (org.openrewrite.java.tree.Statement component : primary) {
+                    if (component instanceof J.VariableDeclarations declarations) {
+                        declarations.getVariables().forEach(variable ->
+                                components.add(variable.getName().getSimpleName()));
+                    }
+                }
+            }
+            return components;
         }
         return null;
     }

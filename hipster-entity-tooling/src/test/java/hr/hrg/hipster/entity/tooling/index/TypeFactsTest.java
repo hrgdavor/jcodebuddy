@@ -60,6 +60,33 @@ class TypeFactsTest {
         return facts;
     }
 
+    /**
+     * The line and the enclosing chain reach a nested declaration correctly.
+     *
+     * <p>This is the case that defeated three attempts: {@code Shape} and its nested {@code Circle}
+     * produce chains {@code [Shape]} and {@code [Shape, Circle]}, so the two are only distinguished by
+     * comparing <em>both</em> the simple name and the full chain. A lookup that matches on the chain
+     * alone answers the outer declaration's query with the inner one's line.</p>
+     */
+    @Test
+    void nestedDeclarationLinesResolveWithoutCollision() {
+        String source = """
+                package a.b;
+                public sealed interface Shape permits Shape.Circle {
+                    record Circle(double radius) implements Shape {}
+                }
+                """;
+        List<TypeFacts> facts = factsOf(source);
+
+        TypeFacts outer = named(facts, "a.b.Shape");
+        Assertions.assertEquals(2, outer.line(), "the interface's name is on line 2");
+        Assertions.assertNull(outer.enclosing());
+
+        TypeFacts inner = named(facts, "a.b.Shape.Circle");
+        Assertions.assertEquals(3, inner.line(), "the record's name is on line 3");
+        Assertions.assertEquals("a.b.Shape", inner.enclosing());
+    }
+
     private static TypeFacts named(List<TypeFacts> facts, String fqn) {
         return facts.stream().filter(f -> f.fqn().equals(fqn)).findFirst()
                 .orElseThrow(() -> new AssertionError("no facts for " + fqn + " in "
@@ -79,11 +106,8 @@ class TypeFactsTest {
                 "the declaration's own keywords, sorted, so a reordered list is not a diff");
         Assertions.assertNull(shape.enclosing(), "a top-level type has no enclosing type");
         Assertions.assertEquals(0, shape.depth());
-        // The line is -1 while the LST-to-javac position matching is unfinished (see
-        // TreeQueries.lineOf and MIGRATION-CAVEATS.md § Open gaps). Asserted explicitly so that
-        // completing it is a deliberate change to this expectation rather than a silent shift.
-        Assertions.assertEquals(-1, shape.line(),
-                "line is unknown, not guessed: an off-by-one points a report link at the wrong code");
+        Assertions.assertEquals(5, shape.line(),
+                "the line of the type's NAME, not of its annotations");
 
         TypeFacts noPackage = named(factsOf("class Bare {}\n"), "Bare");
         Assertions.assertEquals("Bare", noPackage.fqn(),
@@ -99,8 +123,7 @@ class TypeFactsTest {
         Assertions.assertEquals("a.b.Shape", circle.enclosing(),
                 "the enclosing type's own FQN, so a consumer can walk the nesting");
         Assertions.assertEquals(1, circle.depth());
-        Assertions.assertEquals(-1, circle.line(),
-                "unknown until the position matching is finished");
+        Assertions.assertEquals(8, circle.line());
         Assertions.assertEquals(List.of(), circle.modifiers(),
                 "the source writes no modifier on the record, so none is recorded: the table states what "
                         + "the declaration says rather than what the language infers from its position");
@@ -156,20 +179,12 @@ class TypeFactsTest {
         }
     }
 
-    /**
-     * A declaration on a line of its own records the line of the name, not of the preceding annotation.
-     *
-     * <p>Suspended while the position matching is unfinished: the fixture is kept because it is the
-     * exact case that makes a naive implementation wrong (the declaration starts on the annotation's
-     * line, the name on the one after), and it is the test to turn back on when `TreeQueries.lineOf` is
-     * implemented. Asserting {@code -1} keeps the requirement visible instead of deleting it.</p>
-     */
+    /** A declaration on a line of its own records the line of the name, not of the preceding annotation. */
     @Test
     void theLineIsTheNameLineNotTheAnnotationLine() {
         String annotated = "package a;\n\n@Deprecated\npublic class Marked {\n}\n";
         TypeFacts marked = named(factsOf(annotated), "a.Marked");
-        Assertions.assertEquals(-1, marked.line(),
-                "the name is on line 4 and the annotation on line 3; until the matching is finished the "
-                        + "line is unknown, which is the safe answer — a wrong line opens the wrong code");
+        Assertions.assertEquals(4, marked.line(),
+                "the declaration's name is on line 4; pointing at the annotation would open the wrong line");
     }
 }

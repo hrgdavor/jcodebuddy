@@ -218,11 +218,23 @@ function checkTrackerAgreement(model) {
     fail(check, `${missing.length} queue file(s) have no tracker row: ${missing.slice(0, 3).join(', ')}`);
   }
 
-  const extra = [...tracked].filter(
-    (path) => !queuePaths.has(path) && !model.exemptFiles.some((f) => f.repoPath === path),
-  );
+  // Rows whose file the scan no longer reports. A *settled* row is expected here: the
+  // scan only returns files that still mention JavaParser, so a file that has been
+  // fully ported drops out of it — the row is the completion record, not a
+  // disagreement. An unsettled row naming a file with no JavaParser reference is the
+  // real signal: the tracker claims work remains on a file that has none.
+  const extra = [...tracked].filter((path) => {
+    if (queuePaths.has(path)) {
+      return false;
+    }
+    if (model.exemptFiles.some((f) => f.repoPath === path)) {
+      return false;
+    }
+    const status = model.tracker.entries.get(path)?.status;
+    return status !== 'complete' && status !== 'exempt';
+  });
   if (extra.length > 0) {
-    caution(check, `${extra.length} tracker row(s) name a file that is no longer in the queue: ${extra.slice(0, 3).join(', ')}`);
+    caution(check, `${extra.length} tracker row(s) claim unfinished work on a file with no JavaParser reference: ${extra.slice(0, 3).join(', ')}`);
   }
 
   if (missing.length === 0 && extra.length === 0) {

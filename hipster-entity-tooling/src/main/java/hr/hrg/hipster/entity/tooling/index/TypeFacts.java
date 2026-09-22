@@ -50,9 +50,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * {@link #of(J.ClassDeclaration, List, String)} for callers that already hold the facts.
      *
      * <p>The one place an FQN is composed, so the index cannot grow two spellings of a nested type's
-     * name. Both parsing paths feed it: the LST walk through {@link TreeQueries#typesWithEnclosing}, and
-     * the JavaParser path in the call sites that have not yet been ported — the latter by way of
-     * {@code TypeFacts.of(com.github.javaparser...)} below, which is deleted with them.</p>
+     * name. Every caller reaches it through the LST walk in
+     * {@link TreeQueries#typesWithEnclosing}.</p>
      *
      * @param packageName    the declaring file's package, or {@code ""} for the default package
      * @param simpleName     the type's own name
@@ -94,66 +93,10 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         }
         return of(packageOf(declaration, source), declaration.getSimpleName(), enclosingChain,
                 MetadataLocations.kindOf(declaration), modifiersOf(declaration),
-                // -1 until the declaration-to-line matching is finished; see TreeQueries.lineOf and
-                // the caveats document. The enclosing chain is still computed, because every other
-                // fact needs it and it is the input that matching will require.
-                TreeQueries.lineOf(declaration, source));
-    }
-
-    /**
-     * {@link #of(J.ClassDeclaration, List, String)} for the queue files that are
-     * <strong>not yet ported</strong>.
-     *
-     * <p>The class index is fed from both parsers while the migration is in flight, and DEC-029 cannot
-     * have two spellings of a nested type's FQN — so this resolves the JavaParser node's own local
-     * facts (name, kind, keywords, package) and funnels them through the same
-     * {@link #of(String, String, List, String, List, int)} factory the LST path uses. The enclosing
-     * chain is supplied by the caller's own recursion, which is how the JavaParser side already walked
-     * the tree.</p>
-     *
-     * <p>Deleted with the last JavaParser caller.</p>
-     */
-    public static TypeFacts of(com.github.javaparser.ast.body.TypeDeclaration<?> declaration,
-                               List<String> enclosingNames) {
-        String packageName = declaration.findCompilationUnit()
-                .flatMap(com.github.javaparser.ast.CompilationUnit::getPackageDeclaration)
-                .map(pd -> pd.getNameAsString())
-                .orElse("");
-        List<String> keywords = new ArrayList<>();
-        for (com.github.javaparser.ast.Modifier modifier : declaration.getModifiers()) {
-            String keyword = modifier.getKeyword().asString();
-            if (KEYWORDS.contains(keyword)) {
-                keywords.add(keyword);
-            }
-        }
-        Collections.sort(keywords);
-        return of(packageName, declaration.getNameAsString(), enclosingNames,
-                kindOfJp(declaration), keywords,
-                declaration.getName().getBegin().map(position -> position.line).orElse(-1));
-    }
-
-    /**
-     * The kind of a JavaParser declaration, in DEC-029's vocabulary.
-     *
-     * <p>The bridge twin of {@link MetadataLocations#kindOf(J.ClassDeclaration)}. Both return the same
-     * five spellings, and the duplication is the price of the two parsers coexisting — which is why it
-     * is a single small method with the vocabulary written out rather than a lookup that could drift.
-     * </p>
-     */
-    private static String kindOfJp(com.github.javaparser.ast.body.TypeDeclaration<?> declaration) {
-        if (declaration instanceof com.github.javaparser.ast.body.EnumDeclaration) {
-            return "enum";
-        }
-        if (declaration instanceof com.github.javaparser.ast.body.RecordDeclaration) {
-            return "record";
-        }
-        if (declaration instanceof com.github.javaparser.ast.body.AnnotationDeclaration) {
-            return "annotation";
-        }
-        if (declaration instanceof com.github.javaparser.ast.body.ClassOrInterfaceDeclaration classOrInterface) {
-            return classOrInterface.isInterface() ? "interface" : "class";
-        }
-        return "class";
+                // The enclosing chain is the line lookup's key half: `Shape` and `Shape.Circle` differ
+                // only by it, and a lookup missing it answers the outer declaration with the inner
+                // declaration's line.
+                TreeQueries.lineOfChained(declaration, enclosingChain, source));
     }
 
     /**

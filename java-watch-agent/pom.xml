@@ -35,10 +35,12 @@
             <artifactId>project-automation</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.github.javaparser</groupId>
-            <artifactId>javaparser-core</artifactId>
-        </dependency>
+        <!-- `javaparser-core` was removed here on 2026-09-22 (Phase 6 of the rewrite-migration plan).
+             This module imported it transitively before that, which is why its five JavaParser files
+             went unnoticed: the three member generators now delegate to `jwa-builder`'s
+             `ClassMemberProcessor` / `RecordBuilderProcessor`, `ContextualAnalyzer` asks the same class
+             for its type/line facts, and the shared `JavaParserFactory` was deleted with its last
+             consumer. The module still compiles, which is the only gate it has (it has no tests). -->
 
         <dependency>
             <groupId>tools.jackson.core</groupId>

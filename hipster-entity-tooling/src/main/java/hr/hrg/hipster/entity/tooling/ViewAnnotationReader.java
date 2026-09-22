@@ -205,6 +205,13 @@ public final class ViewAnnotationReader {
             entries.add(value);
         }
         for (Expression entry : entries) {
+            // An empty initialiser is held as a single `J.Empty` placeholder rather than as an empty
+            // list — the same shape the LST uses for an empty parameter list, and the reason
+            // `@View(addons = {})` read as one addon named `Empty`. It is "no entry", not "an entry
+            // whose name could not be read", so it is skipped silently rather than diagnosed.
+            if (entry instanceof J.Empty) {
+                continue;
+            }
             String simple = simpleClassName(entry);
             if (simple == null || simple.isEmpty()) {
                 diagnostics.add("unresolved_addon: cannot read an addon class from '" + entry + "'");
@@ -241,79 +248,6 @@ public final class ViewAnnotationReader {
     /** Convenience for callers that only need the attributes. */
     public static ViewAttributes read(J.Annotation view) {
         return parse(view).attributes();
-    }
-
-    /** {@link #read(J.Annotation)} for a call site that has not yet been ported. */
-    public static ViewAttributes read(com.github.javaparser.ast.expr.AnnotationExpr view) {
-        return parse(view).attributes();
-    }
-
-    // ---------------------------------------------------------------- bridge ---
-
-    /**
-     * The JavaParser-tree overload, for the queue files that are <strong>not yet ported</strong>.
-     *
-     * <p>This class is shared: {@code ViewAnnotationRule} (ported, OpenRewrite) and
-     * {@code EntityMetadataGenerator} (not yet ported, JavaParser) both read {@code @View} through
-     * it, and the whole reason it exists is that the two must not disagree about the annotation's
-     * shape. So for as long as either caller is on the old parser, the reader has to accept both
-     * trees — duplicating the parsing logic per parser would reintroduce exactly the divergence the
-     * class was created to remove.</p>
-     *
-     * <p>The conversion below mirrors the shape census in the class comment, and it is deliberately
-     * total: every branch produces the LST form the primary {@link #parse(J.Annotation)} already
-     * handles, so there is one implementation of the attribute rules and this is only a translator.
-     * It is deleted with the last JavaParser caller — {@code EntityMetadataGenerator} — and the
-     * Phase 6 checklist tracks that file.</p>
-     *
-     * @param view a JavaParser annotation, from a call site that has not yet been ported
-     */
-    public static Parsed parse(com.github.javaparser.ast.expr.AnnotationExpr view) {
-        if (view == null) {
-            return parse((J.Annotation) null);
-        }
-        // The three JavaParser shapes carry the same information the LST encodes in the
-        // argument list, so each is translated into the argument-list form rather than
-        // re-implementing the attribute rules.
-        if (view.isMarkerAnnotationExpr()) {
-            return parse((J.Annotation) null);
-        }
-        if (view.isSingleMemberAnnotationExpr()) {
-            // `@View(true)`: a lone unnamed member. Reported by the primary path as an
-            // unsupported form, which is what this reaches by presenting no named argument.
-            List<String> diagnostics = new ArrayList<>();
-            diagnostics.add("unsupported_view_annotation_form: @View("
-                    + view.asSingleMemberAnnotationExpr().getMemberValue()
-                    + ") has no matching annotation member; treating gen as DEFAULT");
-            return new Parsed(new ViewAttributes(GenLevel.DEFAULT, "", List.of()), diagnostics);
-        }
-        if (!view.isNormalAnnotationExpr()) {
-            List<String> diagnostics = new ArrayList<>();
-            diagnostics.add("unsupported_view_annotation_form: unrecognized @View form " + view);
-            return new Parsed(new ViewAttributes(GenLevel.DEFAULT, "", List.of()), diagnostics);
-        }
-
-        // A normal annotation. The attribute rules run off the *rendered* value of each
-        // pair, so both parsers share one implementation: a JavaParser MemberValuePair
-        // and an LST J.Assignment differ in how a tree is shaped, not in what
-        // `gen = GenLevel.META` or `addons = {A.class}` means. Building an LST here just
-        // to read it back would be more machinery for the same answer.
-        List<String> diagnostics = new ArrayList<>();
-        GenLevel gen = GenLevel.DEFAULT;
-        String discriminatorField = "";
-        List<String> addons = new ArrayList<>();
-        for (com.github.javaparser.ast.expr.MemberValuePair pair
-                : view.asNormalAnnotationExpr().getPairs()) {
-            String name = pair.getName().asString();
-            switch (name) {
-                case "gen" -> gen = genLevelFromText(pair.getValue().toString(), diagnostics);
-                case "discriminatorField" -> discriminatorField = stringLiteralFromText(pair.getValue().toString());
-                case "addons" -> addons.addAll(addonNamesFromText(pair.getValue().toString(), diagnostics));
-                default -> diagnostics.add("unknown_view_attribute: @" + name
-                        + " is not a member of @View and is ignored");
-            }
-        }
-        return new Parsed(new ViewAttributes(gen, discriminatorField, addons), diagnostics);
     }
 
     // --------------------------------------------- shared attribute decoding ---

@@ -8,6 +8,13 @@ import hr.hrg.jcodebuddy.automation.CodeGenerator;
 import java.nio.file.Path;
 import java.util.List;
 
+// `FileChange` and `ToolContext` are declared INSIDE `ActionTool`, and a nested type is not visible to
+// another type in the same package: an unqualified use does not resolve, and this file did not compile
+// until these two imports were added. Recorded here because the symptom was six "cannot find symbol"
+// errors that read like a missing dependency rather than two missing imports.
+import hr.hrg.watch2.agent.tools.ActionTool.FileChange;
+import hr.hrg.watch2.agent.tools.ActionTool.ToolContext;
+
 public class ActionToolAdapter implements CodeGenerator<List<FileChange>> {
 
     private final ActionTool delegate;

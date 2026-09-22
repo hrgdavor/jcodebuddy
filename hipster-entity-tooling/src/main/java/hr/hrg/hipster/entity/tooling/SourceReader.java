@@ -84,20 +84,6 @@ public final class SourceReader {
             .build();
 
     /**
-     * The JavaParser the un-ported call sites borrow, configured for the project's language level.
-     *
-     * <p>Kept only for the lifetime of the Phase 6 port, and configured exactly as the old
-     * {@code PARSER} field was: {@code LanguageLevel.JAVA_25}, matching the root POM's
-     * {@code maven.compiler.release=25}. A parser left at {@code POPULAR} (Java 11) cannot read
-     * records, switch expressions or {@code sealed}, which is most of what this module generates, and
-     * the failure is silent — a case can parse to something and be reported as clean (notes F-23 and
-     * F-34). The comment is kept because the constant is the kind of thing a tidy-up deletes.</p>
-     */
-    private static final com.github.javaparser.JavaParser JPARSER =
-            new com.github.javaparser.JavaParser(new com.github.javaparser.ParserConfiguration()
-                    .setLanguageLevel(com.github.javaparser.ParserConfiguration.LanguageLevel.JAVA_25));
-
-    /**
      * Execution context for reading something that is <em>not required to print back to itself</em>.
      *
      * <p>{@code org.openrewrite.requirePrintEqualsInput} is disabled deliberately, for the reason
@@ -124,96 +110,6 @@ public final class SourceReader {
     }
 
     /**
-     * The configured JavaParser, for the queue files that have <strong>not yet been ported</strong>.
-     *
-     * <p>The old {@code parser()} accessor was public and unmarked, so nothing distinguished "this
-     * caller is mid-migration" from "this caller is the toolchain's parser owner" — and a public
-     * parser accessor is how a second, differently-configured parser gets built behind
-     * {@link SourceReader}'s back. That is the defect this class exists to stop: a bare
-     * {@code new JavaParser()} reads at Java 11 and cannot see records, switch expressions or
-     * {@code sealed}, which made part of this module's own output silently unreadable (notes F-23).</p>
-     *
-     * <p>This accessor exists so the remaining JavaParser call sites borrow <em>this</em> configured
-     * parser instead of constructing their own, and it is named for its lifetime rather than its
-     * function: <strong>every caller is a Phase 6 porting target</strong>, and the accessor is deleted
-     * with the last of them. It carries no {@code @Deprecated} because that reads as "use the
-     * replacement instead"; there is no replacement, only files that have not been ported yet — the
-     * Phase 6 checklist tracks which.</p>
-     */
-    public static com.github.javaparser.JavaParser portingParser() {
-        return JPARSER;
-    }
-
-    /**
-     * A parse through the JavaParser path, for the queue files that are <strong>not yet
-     * ported</strong>.
-     *
-     * <p>Exists so an un-ported consumer can share the single configured parser and the single
-     * "could this be read at all" answer while keeping the tree type it still manipulates. The
-     * result's tree is a JavaParser {@code CompilationUnit}; the OpenRewrite path is
-     * {@link #readText(String)}. Two methods rather than one generic one, because the two tree
-     * types are not interchangeable and a caller silently handed the wrong one would fail at a
-     * distance that is hard to read.</p>
-     *
-     * <p>Same contract as the LST path: a missing file is not an error, and a partial parse is a
-     * failure rather than an empty file. That is the whole reason {@code isSuccessful()} is checked
-     * here instead of at each call site.</p>
-     *
-     * @return the read outcome; {@link ReadJp#unit()} is null unless the parse was clean
-     */
-    public static ReadJp readJp(Path file) throws IOException {
-        if (file == null || !Files.exists(file)) {
-            return new ReadJp(null, false);
-        }
-        return readJpText(Files.readString(file));
-    }
-
-    /** {@link #readJp(Path)} for a caller holding source text. */
-    public static ReadJp readJpText(String source) {
-        com.github.javaparser.ParseResult<com.github.javaparser.ast.CompilationUnit> parsed =
-                JPARSER.parse(source == null ? "" : source);
-        if (!parsed.isSuccessful() || parsed.getResult().isEmpty()) {
-            return new ReadJp(null, true);
-        }
-        return new ReadJp(parsed.getResult().get(), false);
-    }
-
-    /**
-     * The JavaParser-tree read outcome, mirroring {@link Read}.
-     *
-     * <p>A record of its own rather than a generic {@code Read<T>}: the two units have nothing in
-     * common above {@code Object}, and a generic would invite a caller to pass one where the other
-     * is meant — which is the failure this class exists to make impossible.</p>
-     */
-    public record ReadJp(com.github.javaparser.ast.CompilationUnit unit, boolean unparseable) {
-
-        public boolean readable() {
-            return unit != null;
-        }
-    }
-
-    /**
-     * {@link #readJp(Path)} for a caller outside this package that needs the JavaParser tree.
-     *
-     * <p>One accessor per parser, deliberately: {@link #readUnit(Path)} returns the LST and this
-     * returns the JavaParser unit, so a caller's tree type is visible in the method it called rather
-     * than in a cast. Both are deleted together when the last JavaParser caller is ported; today this
-     * one serves the class index, which still describes types by walking a JavaParser tree.</p>
-     *
-     * @return the parsed unit, or {@code null} when the file is absent or could not be read cleanly
-     */
-    public static com.github.javaparser.ast.CompilationUnit readUnitJp(Path file) throws IOException {
-        ReadJp read = readJp(file);
-        return read.readable() ? read.unit() : null;
-    }
-
-    /** {@link #readJpText(String)} for a caller that only needs the JavaParser tree. */
-    public static com.github.javaparser.ast.CompilationUnit readUnitJpText(String source) {
-        ReadJp read = readJpText(source);
-        return read.readable() ? read.unit() : null;
-    }
-
-    /**
      * The outcome of reading a file: either a compilation unit that parsed cleanly, or the reason it
      * could not be read.
      *
@@ -233,7 +129,7 @@ public final class SourceReader {
 
         /**
          * Not named {@code unparseable()}: a static method with a record component's name and a
-         * different return type is rejected by javac ("invalid accessor method in record") — which is
+         * different return type is rejected by javac ("invalid accessor method in record") � which is
          * the compiler usefully refusing to let a factory be mistaken for an accessor.
          */
         static Read ofUnparseable() {
@@ -250,7 +146,7 @@ public final class SourceReader {
     }
 
     /**
-     * {@link #read(Path)} for a caller outside this package — the class index, which has to describe a
+     * {@link #read(Path)} for a caller outside this package � the class index, which has to describe a
      * generated artifact's types by parsing the file the pass just wrote.
      *
      * <p>The record it returns is deliberately <strong>not</strong> public: a caller outside this
@@ -272,6 +168,7 @@ public final class SourceReader {
         Read read = readText(source);
         return read.readable() ? read.unit() : null;
     }
+
 
     /**
      * Parses source text, distinguishing a clean parse from a partial one.

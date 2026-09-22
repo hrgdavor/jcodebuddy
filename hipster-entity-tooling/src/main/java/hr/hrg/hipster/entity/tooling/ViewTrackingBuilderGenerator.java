@@ -633,4 +633,51 @@ public final class ViewTrackingBuilderGenerator {
             default -> type;
         };
     }
+
+    /**
+     * The same boxing, in the spelling a <strong>cast</strong> uses: generic arguments separated by
+     * {@code ", "} rather than the compact {@code ","} a declaration uses.
+     *
+     * <p>The two spellings are not a preference — they are both in the committed example, and each is
+     * pinned by a test. {@code PersonSummaryBuilder}'s field declarations and setters read
+     * {@code Map<String,List<Long>>}, while the {@code META} creator's cast in
+     * {@code PersonSummary_.java} reads {@code (Map<String, List<Long>>) values[5]}; and
+     * {@code ViewRecordGeneratorTest} asserts exactly that pair
+     * ({@code header.contains("Map<String,List<Long>>")} for the record's component and
+     * {@code meta.contains("(Map<String, List<Long>>) values[4]")} for the enum's cast).</p>
+     *
+     * <p>The declaration spelling is the compact one and lives in {@link #boxedType}, which every
+     * emitter of a declaration uses. A creator body is not a declaration: it is a cast of a positional
+     * value to the component's type, and its spelling is kept in step with the enum constant's own
+     * {@code TypeUtils.parameterizedType(...)} argument list — which separates its arguments with
+     * {@code ", "} because it is built by parsing the type text rather than by printing a tree. So the
+     * cast and the constant that describes it read the same way.</p>
+     */
+    static String castType(String declaredType) {
+        String boxed = boxedType(declaredType);
+        StringBuilder out = new StringBuilder(boxed.length() + 8);
+        int depth = 0;
+        for (int index = 0; index < boxed.length(); index++) {
+            char character = boxed.charAt(index);
+            if (character == '<') {
+                depth++;
+            } else if (character == '>') {
+                depth = Math.max(0, depth - 1);
+            } else if (character == ',' && depth > 0) {
+                out.append(',');
+                int next = index + 1;
+                while (next < boxed.length() && boxed.charAt(next) == ' ') {
+                    next++;
+                }
+                // No space before a closing bracket: `Map<String,>` is not a type.
+                if (next < boxed.length() && boxed.charAt(next) != '>') {
+                    out.append(' ');
+                }
+                index = next - 1;
+                continue;
+            }
+            out.append(character);
+        }
+        return out.toString();
+    }
 }

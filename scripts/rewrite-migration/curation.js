@@ -55,7 +55,59 @@ export const RISKS = ['high', 'medium', 'low'];
  * @type {Record<string, QueueEntry>}
  */
 export const QUEUE = {
+  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java': {
+    priority: 'high',
+    risk: 'medium',
+    openrewrite: ['(none — generates text)'],
+    note:
+      'Added when the two view emitters were ported: it is the shared splice that inserts generated ' +
+      'members into a developer-owned file. Its whole reason for existing is a property the JavaParser ' +
+      'version could not guarantee — `LexicalPreservingPrinter` refuses an added `default` modifier ' +
+      '("Not supported keywordDEFAULT"), and `ViewInterfaceGenerator` caught that and fell back to ' +
+      '`cu.toString()`, so its normal path reformatted the whole hand-written interface. Splicing into ' +
+      'the text leaves every other byte untouched by construction. Known limit, documented on the ' +
+      'class: brace matching is textual, which is acceptable because the caller only ever hands it ' +
+      'source that has already parsed cleanly.',
+  },
+  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java': {
+    priority: 'medium',
+    risk: 'low',
+    openrewrite: ['org.openrewrite.java.tree.J'],
+    note:
+      'Added with the `ViewInterfaceGenerator` port. That class had no direct coverage — it is reached ' +
+      'only from `EntityMetadataGenerator` — so a port could not be verified at all without a test, and ' +
+      'the property that most needed pinning is not "a method appears" but "nothing else changed". The ' +
+      'three cases: byte-preservation of hand-written formatting (including a comment the generator ' +
+      'must not disturb), idempotence when the entry point is already present, and insertion inside ' +
+      'the interface rather than after a trailing type. The last one is what a naive "find the last ' +
+      'brace" implementation would fail.',
+  },
+
   // --------------------------------------------------- added by the first pass ---
+  'jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java': {
+    priority: 'high',
+    risk: 'medium',
+    openrewrite: ['(none — generates text)'],
+    note:
+      'Added when jwa-builder was ported: it is what replaced the AST mutation. The processor reads a ' +
+      'tree and never writes one, so the builder is generated as text and spliced into the record. The ' +
+      'contract is exact and pinned by RecordBuilderFormattingTest: entry points, then the nested ' +
+      'Builder class whose members are grouped fields → build() → setters, with indentation read from ' +
+      'the record itself so a nested record is indented correctly. Replacing the *previous* builder ' +
+      '(recognised by name and structure) is what makes the operation idempotent without a marker ' +
+      'comment.',
+  },
+  'jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java': {
+    priority: 'high',
+    risk: 'low',
+    openrewrite: ['com.sun.source.util.JavacTask', 'com.sun.source.tree.LineMap'],
+    note:
+      'Added when jwa-builder was ported: the engine selects a record by proximity to the cursor line, ' +
+      'which JavaParser did with `Range` and the LST cannot do at all (a node exposes no position). The ' +
+      'line comes from javac, which costs no dependency because OpenRewrite’s Java parser is a javac ' +
+      'front end. Same recipe as the tooling module’s JavaSyntaxCheck; the matching rule and the trap ' +
+      'that cost three attempts are in MIGRATION-CAVEATS.md § 4.1.',
+  },
   'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java': {
     priority: 'high',
     risk: 'low',
@@ -180,8 +232,10 @@ export const QUEUE = {
       'comes from the cursor-captured enclosing chain, and `non-sealed` is rendered ' +
       'explicitly rather than via the enum constant’s `toString()` — the latter ' +
       'would emit `NON_SEALED` and break DEC-029’s vocabulary for exactly the two ' +
-      'hyphenated keywords. One caveat: `line` is -1 pending ' +
-      'MIGRATION-CAVEATS.md § 4.1, because the LST exposes no positions.',
+      'hyphenated keywords. `line` comes from javac’s `LineMap` over the same text, ' +
+      'matched on the simple name *and* the enclosing chain — the chain alone ' +
+      'answers a nested type’s query with its parent’s line (see ' +
+      'MIGRATION-CAVEATS.md § 4.1 for the case that cost three attempts).',
   },
   'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java': {
     priority: 'high',
@@ -265,10 +319,13 @@ export const QUEUE = {
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.java.tree.J.Annotation', 'org.openrewrite.java.tree.J.Assignment'],
     note:
-      'Reads constraint annotations off methods. Note `J.Annotation.getArguments()` ' +
-      'normalises the single-element form `@Foo(Bar.class)` into an assignment named ' +
-      '`value`, where JavaParser leaves the name implicit — a reader keyed by pair ' +
-      'name must handle that or it will miss the common single-argument case.',
+      'Ported. Reads constraint annotations off methods and renders their arguments as text. The ' +
+      'recognition rule — namespace prefix or a known simple name — now lives in ONE place ' +
+      '(`constraintOf`) that both parsers feed, with a bridge overload for the un-ported ' +
+      '`EntityMetadataGenerator`; only the argument *rendering* differs per parser, because the LST ' +
+      'has one annotation node where JavaParser had four and tells the forms apart by the argument ' +
+      'list. That discrimination is the trap: a single `J.Empty` means `@NotNull()` (no text), and ' +
+      'treating it as a value yields garbage in the emitted constraint.',
   },
   'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java': {
     priority: 'high',
@@ -417,36 +474,55 @@ export const QUEUE = {
     riskReason:
       'It is a build-time processor: its input is generated record source and its ' +
       'output is edited source, so a port that reformats output breaks the build for ' +
-      'every consumer of the module.',
-    openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.java.tree.J.ClassDeclaration', 'org.openrewrite.java.tree.J.MethodDeclaration'],
+      'every consumer of the module. It also mutates an AST, which an LST cannot do at ' +
+      'all — the port is a rewrite, not a rename.',
+    openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.java.JavaIsoVisitor', 'org.openrewrite.java.tree.J'],
     note:
-      'Record support is the crux: `RecordDeclaration` becomes a kind-Record ' +
-      '`J.ClassDeclaration` whose components live on the primary constructor. ' +
-      'Depends on hipster-entity-tooling only for tooling classes, not for the ' +
-      'parser, so it needs its own `rewrite-java-25` dependency.',
+      'Ported by replacing AST mutation with text generation, and that is the design ' +
+      'rather than a stopgap. The JavaParser version added methods, swept stale fields ' +
+      'and setters, and reordered members on a live tree, relying on ' +
+      '`LexicalPreservingPrinter` to write it back — none of which exists on an ' +
+      'immutable LST, and none of which was ever what the feature is. Generating the ' +
+      'builder from the record’s component list produces the same text with no ' +
+      'node-identity bookkeeping. Recognition of the *previous* builder (the two ' +
+      'entry-point methods and the nested `Builder` class) is by name and structure, ' +
+      'which is what makes the operation idempotent without a marker comment. This ' +
+      'module therefore answers the migration guide’s open emission-strategy question ' +
+      'for the append-style case: text, not `withXxx`.',
   },
   'jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
       'Lexical preservation is the file’s entire purpose; the LST guarantees it ' +
-      'differently, and `requirePrintEqualsInput` will reject non-idempotent output.',
-    openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.java.tree.J.ClassDeclaration'],
+      'differently, and the edit’s range must keep meaning the same thing so the two ' +
+      'consumers do not silently rewrite whole files.',
+    openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.java.tree.J'],
     note:
-      'Removes a `LexicalPreservingPrinter` round trip. The replacement guarantee is ' +
-      'weaker in one respect and stronger in another: weaker because the LST printer ' +
-      'reformats anything it believes it owns, stronger because OpenRewrite verifies ' +
-      'print-idempotency and fails loudly rather than silently reformatting. Keep ' +
-      'that verification on here — this is generation, not fragment analysis.',
+      'Ported, and it lost three of its four steps: lexical preservation (no longer ' +
+      'needed — the edit is a range replacement, so the surrounding text is untouched ' +
+      'by construction), the line-by-line re-indentation pass (the indent is applied ' +
+      'where the text is built), and `Range` (the span comes from javac). What it kept ' +
+      'is the `CodeEdit` contract: the edit still replaces the record’s own span with ' +
+      'the completed record, which is why `jwa-sidecar` and `java-watch-agent` compiled ' +
+      'unchanged. The parser is built per read rather than shared: a parser refuses a ' +
+      'second set of sources declaring the same FQNs, which is exactly what completing ' +
+      'a record twice produces (MIGRATION-CAVEATS.md § 1.2).',
   },
   'jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java': {
     priority: 'medium',
     risk: 'medium',
-    openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.SourceFile'],
+    openrewrite: ['org.openrewrite.java.tree.J'],
     note:
-      'Test-side port. It asserts on `LexicalPreservingPrinter` output; rewrite the ' +
-      'assertion as "the transformed source equals the expected source" and let the ' +
-      'print-idempotency check carry the formatting guarantee.',
+      'Ported. It no longer parses anything itself — the processor reads a tree but ' +
+      'never mutates one, and the output is generated text rather than a printed tree — ' +
+      'so the test now asserts on the text a developer’s file is given. Every ' +
+      'behavioural assertion is preserved: obsolete members gone, member grouping ' +
+      '(fields, `build()`, setters) and indentation relative to the record. One ' +
+      'assertion was tightened rather than weakened: the nested-record case now pins the ' +
+      'indent as `record indent + one engine step` instead of `>= 4`, because the old ' +
+      'threshold happened to pass for a 2-space engine while asserting nothing about the ' +
+      'relationship.',
   },
 
   // -------------------------------------------------------- java-watch-agent --
@@ -458,16 +534,6 @@ export const QUEUE = {
       'Analyses a file for context: types, records and members. Record handling ' +
       'collapses into the kind test, and `Node`-typed traversal should become a ' +
       '`JavaIsoVisitor` rather than a hand-rolled parent walk.',
-  },
-  'java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/JavaParserFactory.java': {
-    priority: 'high',
-    risk: 'low',
-    openrewrite: ['org.openrewrite.java.JavaParser'],
-    note:
-      'Twenty lines, and the natural first port in this module: it owns parser ' +
-      'construction, so every other file in the module inherits the change. Rename ' +
-      'it in the same commit — a class named `JavaParserFactory` that builds ' +
-      'OpenRewrite parsers is a trap for the next reader.',
   },
   'java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java': {
     priority: 'high',
@@ -570,6 +636,26 @@ export const QUEUE = {
  * @type {Record<string, {reason: string, deferredTo: string, status: 'exempt'}>}
  */
 export const ALLOWLIST = {
+  'jwa-builder/src/main/java/hr/hrg/watch2/builder/ClassMemberProcessor.java': {
+    status: 'exempt',
+    reason:
+      'The only `JavaParser` this file names is OpenRewrite\'s own ' +
+      '`org.openrewrite.java.JavaParser` — the trap MIGRATION-CAVEATS.md opens with, ' +
+      'and the reason the scanner\'s bare-name test cannot be taken at face value. ' +
+      'There is no `com.github.javaparser` reference here, and no dependency on one.',
+    deferredTo:
+      'Never: the name is the ported API\'s, and a file that parses with OpenRewrite ' +
+      'has to say so. It is recorded rather than filtered because the scanner should ' +
+      'keep reporting the collision — a rename in a future OpenRewrite release is ' +
+      'exactly the event this entry makes visible.',
+  },
+  'jwa-builder/src/test/java/hr/hrg/watch2/builder/ClassMemberProcessorTest.java': {
+    status: 'exempt',
+    reason:
+      'Same as its subject: the JavaParser mentions are OpenRewrite\'s class and prose ' +
+      'about what the port replaced. No `com.github.javaparser` reference.',
+    deferredTo: 'Never, for the same reason as ClassMemberProcessor.',
+  },
   'project-automation/src/main/java/hr/hrg/rewrite/**': {
     status: 'exempt',
     reason:
@@ -606,24 +692,26 @@ export const ALLOWLIST = {
   'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java': {
     status: 'exempt',
     reason:
-      'Asserts the configured parser language level is `ParserConfiguration.LanguageLevel.JAVA_25` ' +
-      '(by fully-qualified name, with no import). That assertion is the regression ' +
-      'guard for notes F-23/F-34 — the whole reason the generator can read its own ' +
-      'output. The JavaParser constant is the thing under test, so removing the ' +
-      'reference removes the guard.',
+      'Re-expressed when the dependency went (2026-09-22, end of Phase 6): the ' +
+      'language-level assertion against `ParserConfiguration.LanguageLevel.JAVA_25` ' +
+      'is gone, and what remains is the property it guarded — a clean file reads and ' +
+      'a file whose enum hides a syntax error does not ' +
+      '(`aCleanFileReadsAndARecoveredSyntaxErrorDoesNot`). The file still mentions the ' +
+      'library by name, in the javadoc that records what was removed and why, so the ' +
+      'scan still reports it.',
     deferredTo:
-      'Stays as long as javaparser-core remains on the module classpath. When the ' +
-      'dependency is finally dropped this test must first be re-expressed as ' +
-      '"a record, a switch expression and a sealed type all parse cleanly", which ' +
-      'preserves the property without naming the library.',
+      'Never for the javadoc, which is the provenance of the current contract. The ' +
+      '*guard* it used to be was re-expressed rather than deleted, so nothing here is ' +
+      'waiting on a port.',
   },
   'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java': {
     status: 'exempt',
     reason:
-      'Mentions JavaParser only in a comment. It is the test that asserts the ' +
-      'module’s dependency boundary, so it is the file that will police the ' +
-      'JavaParser removal.',
-    deferredTo: 'Never — a comment naming the dependency it polices is correct.',
+      'Mentions JavaParser only in prose, now including the retirement note for ' +
+      '`javaParserIsPinnedOnceInTheRootPom` — the test that policed the dependency ' +
+      'boundary and was deleted with the dependency. The remaining assertions are ' +
+      'about Jakarta Validation and Jackson, which are untouched by this migration.',
+    deferredTo: 'Never — a comment naming the dependency it policed is correct.',
   },
   'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JdkImportSupport.java': {
     status: 'exempt',
@@ -725,40 +813,80 @@ export const PREREQUISITES = [
       'A clean compile of the module fails. Stale class files made a plain ' +
       '`compile` report success ("Nothing to compile - all classes are up to ' +
       'date"), so the breakage is invisible until someone cleans — the same ' +
-      'stale-class hazard the repo records as note F-47.',
+      'stale-class hazard the repo records as note F-47. **The two syntax errors are ' +
+      'now fixed** (they were all javac could report: a parse error suppresses every ' +
+      'semantic diagnostic in the same compilation), which is what exposed P0-2’s 200 ' +
+      'real errors. The module still does not compile.',
     evidence:
-      'project-automation/src/main/java/hr/hrg/rewrite/tooling/OpenRewriteValidationGenerator.java:83 ' +
-      '— `sb.append("}")\\n\\n");` is an unbalanced close paren; the escape never ' +
-      'reaches the string. OpenRewriteFieldBoilerplateGenerator.java:131 — ' +
-      '`sb.append("    public String ").append(property.name()).append "() {\\n");` ' +
-      'is missing the parens on the second `.append`.',
-    done: false,
+      'Fixed: OpenRewriteValidationGenerator.java:83 (`sb.append("}")\\n\\n");` — the ' +
+      'closing paren sat inside the string literal) and ' +
+      'OpenRewriteFieldBoilerplateGenerator.java:131 (a `.append` missing its ' +
+      'parentheses). Both were pure typos with no behaviour to preserve.',
+    done: true,
   },
   {
     id: 'P0-2',
     title: 'Re-point the hr.hrg.rewrite package at the real OpenRewrite API',
     why:
-      'Behind P0-1’s syntax errors the package references types that do not exist: ' +
-      '`hr.hrg.hipster.entity.tooling.TypeTree`, `InterfaceTree`, `MethodTree`, ' +
-      '`ClassTree`. The real names are `org.openrewrite.java.tree.TypeTree` and the ' +
-      '`J.*` node types; there is no `MethodTree` at all. It also calls ' +
-      '`SourceReader.readText()` (package-private) and `getTypes()`/`addMember()` on ' +
-      'JavaParser’s `CompilationUnit` as though it were an LST.',
+      '**Resolved by deletion.** The package was written against an API that was imagined rather than ' +
+      'read: with the two syntax errors fixed, javac reported **200 errors across 14 files**, naming ' +
+      'eight types that exist nowhere — `TypeTree`, `ClassTree`, `MethodTree`, `FieldTree`, ' +
+      '`AnnotationTree`, `EnumDeclarationTree`, `CodeResolver`, `ViewMetaImpl`. Repairing it would have ' +
+      'meant rewriting 14 files against an API none of them had seen. Two measurements made deletion ' +
+      'the right answer rather than a shortcut: nothing outside `project-automation` referenced the ' +
+      'package (only `doc/` and `plans/` notes did, and they are migration artifacts), and ' +
+      '`project-automation`’s own live classes did not reference it either — its six staging tests ' +
+      'were the only callers. The behaviour it was reaching for already exists, ported and tested, in ' +
+      '`hipster-entity-tooling`.',
     evidence:
-      'OpenRewriteViewInterfaceGenerator.java:141-221, OpenRewriteViewBuilderGenerator.java:132, ' +
-      'plus the same pattern across hr/hrg/rewrite/validation/*.',
+      'Removed: 24 main files plus 6 staging tests (`project-automation/src/{main,test}/java/hr/hrg/rewrite`). ' +
+      '`mvn -pl project-automation -am clean test` → BUILD SUCCESS for the module (13 live sources). ' +
+      'This also unblocked `java-watch-agent`, which depends on the `project-automation` artifact.',
+    done: true,
+  },
+  {
+    id: 'P0-6',
+    title: 'Repair java-watch-agent, which has never compiled',
+    why:
+      'With `project-automation` compiling, `java-watch-agent`’s own breakage became visible and it is ' +
+      'not a migration problem at all: **`FileChange` and `ToolContext` do not exist anywhere in the ' +
+      'repository**, and `git log --all` shows they never did. `ActionToolAdapter` references both, as ' +
+      'do `ActionEngine`, `ActionTool`, `HelloTool`, `RecordBuilderGenerator` and the three generator ' +
+      'tools. There is also a Jackson 3 incompatibility in `AuditManager` ' +
+      '(`ObjectMapper.enable(SerializationFeature)` no longer exists).',
+    evidence:
+      '`git show HEAD:.../ActionToolAdapter.java` contains the same `FileChange` / `ToolContext` ' +
+      'references as the working tree, so this predates every change in this migration. Measured: 6 ' +
+      'compile errors in 2 files after the staging package was removed.',
+    done: false,
+  },
+  {
+    id: 'P0-7',
+    title: 'metadata-server has a failing test that blocks every downstream module gate',
+    why:
+      '`MetadataServerTest.httpForyRoundTrip` fails with an HTTP 500, and `java-watch-agent` (and ' +
+      '`project-automation`) depend on `metadata-server`, so no downstream `clean test` gate can pass. ' +
+      'It fails in isolation — `mvn -pl metadata-server -am test` reproduces it with none of this ' +
+      'migration’s changes on the classpath — so it is pre-existing and unrelated to the port, but it ' +
+      'must be resolved or excluded before any module whose gate includes it can be called green.',
+    evidence:
+      '`mvn -o -pl metadata-server -am -Dmaven.compiler.useIncrementalCompilation=false test` → ' +
+      '`Tests run: 5, Failures: 0, Errors: 1` — `MetadataServerTest.httpForyRoundTrip:155 » IO ' +
+      'Server returned HTTP response code: 500 for URL: http://localhost:18291/api/fory`.',
     done: false,
   },
   {
     id: 'P0-3',
     title: 'Add the OpenRewrite dependency set to project-automation',
     why:
-      'The module declares no `org.openrewrite` dependency at all, so even once ' +
-      'P0-2 is fixed the `hr.hrg.rewrite` package has no OpenRewrite API to compile ' +
-      'against. Without this, Phase 5’s automation engine cannot be wired into the ' +
-      'module Phase 6 depends on.',
-    evidence: 'project-automation/pom.xml declares javaparser-core (line 42) and no OpenRewrite artifact.',
-    done: false,
+      '**No longer required.** The only thing in `project-automation` that needed OpenRewrite was the ' +
+      '`hr.hrg.rewrite` staging package, which has been deleted (P0-2). The module’s 13 live sources ' +
+      'compile and test without any OpenRewrite artifact, and its `javaparser-core` dependency went ' +
+      'with the package — nothing else in the module imported JavaParser.',
+    evidence:
+      '`mvn -o -pl project-automation -am -Dmaven.compiler.useIncrementalCompilation=false clean test` ' +
+      '→ BUILD SUCCESS; `project-automation/pom.xml` no longer declares `javaparser-core`.',
+    done: true,
   },
   {
     id: 'P0-4',

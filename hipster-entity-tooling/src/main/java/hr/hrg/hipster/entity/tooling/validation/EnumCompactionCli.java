@@ -1,23 +1,18 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ParseResult;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.expr.BooleanLiteralExpr;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
-import com.github.javaparser.ast.stmt.ReturnStmt;
-import com.github.javaparser.ast.stmt.SwitchEntry;
-import com.github.javaparser.ast.stmt.SwitchStmt;
-import com.github.javaparser.printer.configuration.PrettyPrinterConfiguration;
+import org.openrewrite.java.tree.J;
+
+import hr.hrg.hipster.entity.tooling.SourceReader;
+import hr.hrg.hipster.entity.tooling.TreeQueries;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -59,6 +54,20 @@ import java.util.stream.Stream;
  * generator pass that follows it, which rewrites {@code allFields} from the compacted interfaces
  * (the tombstoned fields are gone, so they disappear from the JSON naturally). The procedure is
  * documented end to end in {@code user/patterns/field-enum-compaction.md}.</p>
+ *
+ * <h3>Phase 6: the deletion is a text splice, not an AST mutation</h3>
+ * <p>The JavaParser version did {@code entry.remove()} on the constant and {@code entry.remove()} on
+ * its {@code forName} arm, then printed the whole compilation unit. An LST node cannot be removed from
+ * its parent — the tree is immutable — so the two deletions became two <strong>character spans</strong>
+ * sliced out of the file, which is the same mechanism {@code CooperativeCodegen} uses to preserve a
+ * member verbatim, and the same one {@code SourceSplicer} uses to add one.</p>
+ *
+ * <p>That has a consequence worth stating, because a later reader will notice it: the compacted file is
+ * no longer the printer's normalisation of the whole unit, it is the original file minus two ranges.
+ * For this command that is strictly better — nothing outside the deleted ranges moves, so a developer's
+ * formatting anywhere else in the file survives a migration — and it changes no contract, because
+ * {@code CompactionRoundTripTest} already records that compaction's output is not the generator's
+ * canonical emission and that the documented procedure ends with a generation pass.</p>
  */
 public final class EnumCompactionCli {
 
@@ -167,51 +176,40 @@ public final class EnumCompactionCli {
     /**
      * Compacts one file's enum in memory, or explains why it will not.
      *
-     * <h3>Phase 6: the second-pass boundary</h3>
-     * <p>This is the one queue file whose port needs the <em>emission</em> strategy rather than just
-     * the read path: it mutates an enum's constant list and then prints the whole file, and the LST
-     * printer will reformat what it prints (migration guide § 5). That decision belongs with the
-     * generator port, so this method keeps JavaParser for now and is the explicit boundary of the
-     * first pass.</p>
-     *
-     * <p>What changed here is only the parser it borrows: {@code SourceReader.parser()} used to hand
-     * out a live parser, and that accessor is gone because handing out the parser is how the
-     * single-read guarantee leaks. The same configured parser is now reached through
-     * {@link hr.hrg.hipster.entity.tooling.SourceReader#portingParser()}, so this file cannot
-     * construct a second, differently-configured parser behind the toolchain's back — which is the
-     * exact defect ({@code new JavaParser()} reading at Java 11) that {@code SourceReader} exists to
-     * prevent.</p>
+     * <p>Structure comes from the LST, the two deletions come from javac's character spans, and the
+     * result is the file's own text with those spans cut out. Nothing else in the file is rewritten —
+     * that is the property the JavaParser version's whole-unit print did not have.</p>
      */
     static CompactionResult compactFile(Path file) throws IOException {
-        ParseResult<CompilationUnit> parsed = hr.hrg.hipster.entity.tooling.SourceReader
-                .portingParser().parse(Files.readString(file));
-        if (!parsed.isSuccessful() || parsed.getResult().isEmpty()) {
-            // A partial unit would compact the wrong thing, which is worse than not compacting.
+        String source = Files.readString(file);
+        // The shared, fail-safe read: a parser recovers from a syntax error and hands back a partial
+        // unit, and compacting a partial unit would delete the wrong constants — which is worse than not
+        // compacting. `SourceReader` refuses that case by asking javac for the syntax verdict.
+        J.CompilationUnit unit = SourceReader.readSourceText(source);
+        if (unit == null) {
             return CompactionResult.error("could not be parsed; left untouched");
         }
-        CompilationUnit cu = parsed.getResult().get();
-        EnumConstantOrderChecker.HeaderConfig header = EnumConstantOrderChecker.readHeader(cu);
+        EnumConstantOrderChecker.HeaderConfig header = EnumConstantOrderChecker.readHeader(unit);
         if (!header.marked()) {
             return CompactionResult.error("carries no " + EnumConstantOrderChecker.MARKER_KEY
                     + " marker, so it has no committed ledger to compact");
         }
 
-        EnumDeclaration declaration = cu.findFirst(EnumDeclaration.class).orElse(null);
+        J.ClassDeclaration declaration = firstEnum(unit);
         if (declaration == null) {
             return CompactionResult.error("declares no enum");
         }
-        String qualifiedName = cu.getPackageDeclaration().map(pd -> pd.getNameAsString() + ".")
-                .orElse("") + declaration.getNameAsString();
+        String qualifiedName = TreeQueries.packageName(unit) + declaration.getSimpleName();
+        List<J.EnumValue> entries = enumConstants(declaration);
 
-        List<EnumConstantDeclaration> entries = declaration.getEntries();
         List<String> survivors = new ArrayList<>();
         List<Dropped> dropped = new ArrayList<>();
         for (int ordinal = 0; ordinal < entries.size(); ordinal++) {
-            EnumConstantDeclaration entry = entries.get(ordinal);
+            J.EnumValue entry = entries.get(ordinal);
             if (isTombstone(entry)) {
-                dropped.add(new Dropped(qualifiedName, entry.getNameAsString(), ordinal));
+                dropped.add(new Dropped(qualifiedName, entry.getName().getSimpleName(), ordinal));
             } else {
-                survivors.add(entry.getNameAsString());
+                survivors.add(entry.getName().getSimpleName());
             }
         }
         if (dropped.isEmpty()) {
@@ -220,10 +218,7 @@ public final class EnumCompactionCli {
 
         // The report is computed against the original list, before anything is removed, so the
         // "moved" figures describe the migration rather than the result.
-        List<String> original = new ArrayList<>();
-        for (EnumConstantDeclaration entry : entries) {
-            original.add(entry.getNameAsString());
-        }
+        List<String> original = entries.stream().map(entry -> entry.getName().getSimpleName()).toList();
         List<Move> moves = new ArrayList<>();
         for (int newOrdinal = 0; newOrdinal < survivors.size(); newOrdinal++) {
             String survivor = survivors.get(newOrdinal);
@@ -243,17 +238,149 @@ public final class EnumCompactionCli {
                     + "the original; refusing to renumber a live field");
         }
 
-        for (EnumConstantDeclaration entry : new ArrayList<>(entries)) {
-            if (isTombstone(entry)) {
-                entry.remove();
+        Set<String> removedNames = dropped.stream().map(Dropped::constant)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        return new CompactionResult(withoutDroppedMembers(source, unit, declaration, removedNames),
+                moves, dropped, null);
+    }
+
+    /**
+     * {@code source} with every dropped constant, and every {@code forName} arm that names one, cut out.
+     *
+     * <p>Applied back to front, so the earlier ranges keep their offsets. Each deletion is widened to
+     * whole lines: a constant sits in a comma-separated list and an arm is one line (or a block), so
+     * removing only the declaration's own span would leave a dangling comma or a dangling
+     * {@code case} label — source that does not compile, which is the failure this class exists to
+     * avoid.</p>
+     */
+    private static String withoutDroppedMembers(String source, J.CompilationUnit unit,
+                                                J.ClassDeclaration declaration, Set<String> removedNames) {
+        List<TreeQueries.SourceSpan> removals = new ArrayList<>();
+        for (String constant : removedNames) {
+            TreeQueries.SourceSpan span = TreeQueries.memberTextSpan(declaration.getSimpleName(),
+                    "enum-constant", constant, 0, source);
+            if (span != null) {
+                removals.add(constantRemoval(source, span));
             }
         }
-        dropForNameArms(cu, dropped);
+        java.util.Map<J.Case, TreeQueries.SourceSpan> armSpans = TreeQueries.caseSpans(unit, source);
+        for (J.Case arm : TreeQueries.findAll(unit, J.Case.class)) {
+            TreeQueries.SourceSpan span = armSpans.get(arm);
+            if (span != null && namesARemovedConstant(arm, removedNames)) {
+                removals.add(lineRange(source, span));
+            }
+        }
+        removals.sort(Comparator.comparingInt(TreeQueries.SourceSpan::start).reversed());
+        StringBuilder out = new StringBuilder(source);
+        for (TreeQueries.SourceSpan removal : removals) {
+            out.replace(removal.start(), removal.end(), "");
+        }
+        return out.toString();
+    }
 
-        PrettyPrinterConfiguration printer = new PrettyPrinterConfiguration();
-        printer.setIndentSize(4);
-        String source = cu.toString(printer).replace("switch(", "switch (");
-        return new CompactionResult(source, moves, dropped, null);
+    /**
+     * The range to delete for one constant: its own lines, plus the comma that separated it.
+     *
+     * <p>Two shapes, and both have to be handled or the enum does not compile. A constant followed by
+     * another one keeps its <em>trailing</em> comma, which goes with it. A constant that is the last in
+     * the list keeps no comma, so the <em>preceding</em> one has to go instead — otherwise the enum ends
+     * {@code firstName(...),;}.</p>
+     */
+    private static TreeQueries.SourceSpan constantRemoval(String source, TreeQueries.SourceSpan span) {
+        int start = lineStart(source, span.start());
+        int end = span.end();
+        int probe = end;
+        while (probe < source.length() && Character.isWhitespace(source.charAt(probe))) {
+            probe++;
+        }
+        if (probe < source.length() && source.charAt(probe) == ',') {
+            int to = probe + 1;
+            while (to < source.length() && source.charAt(to) != '\n') {
+                to++;
+            }
+            if (to < source.length()) {
+                to++;
+            }
+            return new TreeQueries.SourceSpan(start, to);
+        }
+        // The last constant: take the comma in front of it, which also takes the line break and the
+        // indentation between them, so the previous constant's line ends with its own `;` or `,`.
+        int back = start - 1;
+        while (back >= 0 && Character.isWhitespace(source.charAt(back))) {
+            back--;
+        }
+        return new TreeQueries.SourceSpan(back >= 0 && source.charAt(back) == ',' ? back : start, end);
+    }
+
+    /** The whole lines one arm occupies. */
+    private static TreeQueries.SourceSpan lineRange(String source, TreeQueries.SourceSpan span) {
+        int to = span.end();
+        while (to < source.length() && source.charAt(to) != '\n') {
+            to++;
+        }
+        if (to < source.length()) {
+            to++;
+        }
+        return new TreeQueries.SourceSpan(lineStart(source, span.start()), to);
+    }
+
+    /** The offset of the start of the line containing {@code offset}. */
+    private static int lineStart(String source, int offset) {
+        return source.lastIndexOf('\n', Math.max(offset - 1, 0)) + 1;
+    }
+
+    /**
+     * Whether an arm's label or its body names a dropped constant.
+     *
+     * <p>Both halves are needed: {@code case "lastName": return lastName;} names it twice, and an arm
+     * whose label is an ordinal may still assign the field. Leaving either behind produces an enum whose
+     * switch disagrees with its constant list — the {@code stale_switch} divergence the generator reports
+     * on every later pass.</p>
+     */
+    private static boolean namesARemovedConstant(J.Case arm, Set<String> removedNames) {
+        if (arm.getCaseLabels() != null) {
+            for (J label : arm.getCaseLabels()) {
+                if (label instanceof J.Literal literal && literal.getValue() instanceof String text
+                        && removedNames.contains(text)) {
+                    return true;
+                }
+            }
+        }
+        List<J> roots = new ArrayList<>();
+        if (arm.getStatements() != null) {
+            roots.addAll(arm.getStatements());
+        }
+        if (arm.getBody() != null) {
+            roots.add(arm.getBody());
+        }
+        for (J root : roots) {
+            for (J.Identifier identifier : TreeQueries.findAll(root, J.Identifier.class)) {
+                if (removedNames.contains(identifier.getSimpleName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The first enum declaration in the unit, or {@code null}. */
+    private static J.ClassDeclaration firstEnum(J.CompilationUnit unit) {
+        List<J.ClassDeclaration> enums = TreeQueries.enums(unit);
+        return enums.isEmpty() ? null : enums.get(0);
+    }
+
+    /** An enum's constants, in declaration order. */
+    private static List<J.EnumValue> enumConstants(J.ClassDeclaration declaration) {
+        List<J.EnumValue> constants = new ArrayList<>();
+        if (declaration.getBody() == null) {
+            return constants;
+        }
+        for (org.openrewrite.java.tree.Statement statement : declaration.getBody().getStatements()) {
+            if (statement instanceof J.EnumValueSet values) {
+                constants.addAll(values.getEnums());
+            }
+        }
+        return constants;
     }
 
     /**
@@ -287,55 +414,42 @@ public final class EnumCompactionCli {
      *
      * <p>Both halves are required. The annotation alone can be a developer documenting an ordinary
      * deprecation, and dropping such a constant would silently move every ordinal after it.</p>
+     *
+     * <p>Phase 6: the class body of an enum constant hangs off its initialiser — an LST constant is an
+     * annotation list, a name, and a {@code new} expression whose body is the block JavaParser held as
+     * {@code getClassBody()}.</p>
      */
-    private static boolean isTombstone(EnumConstantDeclaration entry) {
-        boolean deprecated = entry.getAnnotations().stream()
-                .anyMatch(annotation -> annotation.getNameAsString().endsWith("Deprecated"));
+    private static boolean isTombstone(J.EnumValue entry) {
+        boolean deprecated = entry.getAnnotations() != null && entry.getAnnotations().stream()
+                .anyMatch(annotation -> TreeQueries.annotationName(annotation).endsWith("Deprecated"));
         if (!deprecated) {
             return false;
         }
-        for (com.github.javaparser.ast.body.BodyDeclaration<?> member : entry.getClassBody()) {
-            if (!(member instanceof MethodDeclaration method)
-                    || !"retired".equals(method.getNameAsString())
-                    || !method.getParameters().isEmpty()) {
+        if (!(entry.getInitializer() instanceof J.NewClass creation) || creation.getBody() == null) {
+            return false;
+        }
+        for (org.openrewrite.java.tree.Statement member : creation.getBody().getStatements()) {
+            if (!(member instanceof J.MethodDeclaration method)
+                    || !"retired".equals(method.getSimpleName())
+                    || !TreeQueries.hasNoParameters(method)) {
                 continue;
             }
-            return method.getBody()
-                    .filter(body -> body.getStatements().size() == 1)
-                    .map(body -> body.getStatement(0))
-                    .flatMap(com.github.javaparser.ast.stmt.Statement::toReturnStmt)
-                    .flatMap(ReturnStmt::getExpression)
-                    .filter(expression -> expression instanceof BooleanLiteralExpr)
-                    .map(expression -> ((BooleanLiteralExpr) expression).getValue())
-                    .orElse(false);
+            return returnsTrue(method);
         }
         return false;
     }
 
-    /**
-     * Removes a {@code forName} arm whose label or returned constant names a dropped tombstone.
-     *
-     * <p>Leaving the arm behind would produce an enum that no longer compiles, and — worse — an enum
-     * whose switch disagrees with its constant list, which is the {@code stale_switch} divergence the
-     * generator reports on every later pass.</p>
-     */
-    private static void dropForNameArms(CompilationUnit cu, List<Dropped> dropped) {
-        List<String> removed = dropped.stream().map(Dropped::constant).toList();
-        for (SwitchStmt switchStmt : cu.findAll(SwitchStmt.class)) {
-            for (SwitchEntry entry : new ArrayList<>(switchStmt.getEntries())) {
-                boolean namesARemovedConstant = entry.getLabels().stream()
-                        .filter(label -> label instanceof StringLiteralExpr)
-                        .map(label -> ((StringLiteralExpr) label).asString())
-                        .anyMatch(removed::contains)
-                        || entry.getStatements().stream()
-                                .flatMap(statement -> statement.findAll(
-                                        com.github.javaparser.ast.expr.NameExpr.class).stream())
-                                .anyMatch(name -> removed.contains(name.getNameAsString()));
-                if (namesARemovedConstant) {
-                    entry.remove();
-                }
-            }
+    /** Whether a method body is exactly {@code return true;}. */
+    private static boolean returnsTrue(J.MethodDeclaration method) {
+        if (method.getBody() == null || method.getBody().getStatements() == null
+                || method.getBody().getStatements().size() != 1) {
+            return false;
         }
+        org.openrewrite.java.tree.Statement only = method.getBody().getStatements().get(0);
+        if (!(only instanceof J.Return returns) || !(returns.getExpression() instanceof J.Literal literal)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(literal.getValue());
     }
 
     /** The build outputs and any second checkout must not be compacted (gate review GR-6). */

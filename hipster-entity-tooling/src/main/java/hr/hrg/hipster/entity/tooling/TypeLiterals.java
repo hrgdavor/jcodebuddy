@@ -1,12 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
 
 /**
  * The one place a source type name becomes the literal a generated file needs
@@ -183,27 +178,16 @@ final class TypeLiterals {
      * <p>Derived rather than listed: the generator already walks every compilation unit, so the index
      * costs one pass and cannot drift from the source the way a hand-written set of "names that look
      * like type variables" would.</p>
+     *
+     * <p>Phase 6: the walk is {@link TreeQueries#typeParameterNames}. JavaParser needed three
+     * {@code findAll} calls — classes/interfaces, records, and methods — because a record was its own
+     * type; the LST's {@link org.openrewrite.java.tree.J.ClassDeclaration} covers all five kinds, so
+     * one walk over the declarations plus one over their methods covers the same ground. Reading it
+     * any narrower would silently drop record or method type parameters, and a dropped name is a
+     * {@code T.class} in emitted source — the F-38 defect this method exists to prevent.</p>
      */
-    static Set<String> typeParameterNames(List<CompilationUnit> units) {
-        Set<String> names = new LinkedHashSet<>();
-        for (CompilationUnit unit : units) {
-            if (unit == null) {
-                continue;
-            }
-            // Type parameters live on interface/class declarations, on records, and on methods. They are
-            // collected from all three because a bare name is ambiguous by nature: `T` from a generic
-            // method has no class literal either.
-            for (ClassOrInterfaceDeclaration decl : unit.findAll(ClassOrInterfaceDeclaration.class)) {
-                decl.getTypeParameters().forEach(tp -> names.add(tp.getNameAsString()));
-            }
-            for (com.github.javaparser.ast.body.RecordDeclaration decl
-                    : unit.findAll(com.github.javaparser.ast.body.RecordDeclaration.class)) {
-                decl.getTypeParameters().forEach(tp -> names.add(tp.getNameAsString()));
-            }
-            for (MethodDeclaration method : unit.findAll(MethodDeclaration.class)) {
-                method.getTypeParameters().forEach(tp -> names.add(tp.getNameAsString()));
-            }
-        }
-        return names;
+    static Set<String> typeParameterNames(List<org.openrewrite.java.tree.J.CompilationUnit> units) {
+        return TreeQueries.typeParameterNames(units);
     }
+
 }

@@ -86,13 +86,14 @@ class ClassIndexTest {
                 // The walk names the file first and upgrades it with its types, so a file that declares
                 // none is still recorded by the pass's report rather than vanishing.
                 index.addFile(relative);
-                var unit = SourceReader.readUnitJp(file);
+                String source = Files.readString(file);
+                var unit = SourceReader.readSourceText(source);
                 if (unit == null) {
                     // The pass reports an unreadable file and registers no types; the fixture has none, so
                     // reaching here would mean the fixture itself is broken rather than the index.
                     Assertions.fail("the fixture must parse: " + file);
                 }
-                index.addTypes(relative, unit, false);
+                index.addTypes(relative, unit, source, false);
             }
         }
     }
@@ -336,11 +337,13 @@ class ClassIndexTest {
     void twoFilesDeclaringOneTypeIsAFatalDiagnostic() throws Exception {
         Path root = writeModule(Files.createTempDirectory("class-index-duplicate"));
         ClassIndex index = indexOf(root);
-        var unit = SourceReader.readUnitJp(root.resolve("src/main/java/a/b/Person.java"));
-        index.addTypes("src/main/java/a/b/Person.java", unit, false);
+        Path personFile = root.resolve("src/main/java/a/b/Person.java");
+        String personSource = Files.readString(personFile);
+        var unit = SourceReader.readSourceText(personSource);
+        index.addTypes("src/main/java/a/b/Person.java", unit, personSource, false);
 
         IllegalStateException thrown = Assertions.assertThrows(IllegalStateException.class,
-                () -> index.addTypes("src/main/java/other/Person.java", unit, false),
+                () -> index.addTypes("src/main/java/other/Person.java", unit, personSource, false),
                 "the language makes an FQN unique, so two files claiming one is two source roots holding "
                         + "the same type; picking a winner by iteration order is the F-44 failure this "
                         + "repository has already paid for");

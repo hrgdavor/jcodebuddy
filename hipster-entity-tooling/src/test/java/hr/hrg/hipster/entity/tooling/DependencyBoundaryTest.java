@@ -148,44 +148,22 @@ class DependencyBoundaryTest {
     }
 
     /**
-     * The JavaParser version is declared once, centrally (follow-up plan § 4.2; notes F-23).
+     * <strong>Retired</strong> with the dependency it guarded (Phase 6, 2026-09-22).
      *
-     * <p>F-23 is the reason this is a test and not a comment: the local repository holds eleven
-     * JavaParser versions, an ad-hoc classpath built by globbing it picked {@code 3.25.1}, that version
-     * cannot parse {@code sealed}, and the generator therefore produced <strong>nothing</strong> for
-     * five example files with no error at all — the only symptom was files missing from a diff.
+     * <p>{@code javaParserIsPinnedOnceInTheRootPom} asserted that the tooling POM declared
+     * {@code javaparser-core} without pinning a version of its own, so that the single version property
+     * in the root POM was the only place the number appeared. That property is what F-23 needed while
+     * JavaParser was in use: the local repository holds eleven JavaParser versions, an ad-hoc classpath
+     * built by globbing it picked {@code 3.25.1}, that version cannot parse {@code sealed}, and the
+     * generator therefore produced <strong>nothing</strong> for five example files with no error at
+     * all — the only symptom was files missing from a diff.</p>
      *
-     * <p>Raising it to a language level the project can actually read is what made the failure visible
-     * instead of partial ({@link SourceReader} pins {@code JAVA_25}, and {@code SourceReaderTest}
-     * asserts it), but the <em>version</em> still has to be single-sourced: the tooling POM must not
-     * pin one, and the root POM must be the only place the number appears.</p>
+     * <p>Phase 6 removed {@code javaparser-core} from every POM in the tree, so there is no dependency
+     * left to single-source and the assertion would be vacuous. What remains of F-23's lesson is the
+     * part that still has a subject: the reader refuses source it cannot parse
+     * ({@code SourceReaderTest.aCleanFileReadsAndARecoveredSyntaxErrorDoesNot}) and the parser is
+     * pinned to the project's language level in {@code SourceReader}.</p>
      */
-    @Test
-    void javaParserIsPinnedOnceInTheRootPom() throws Exception {
-        Path root = repoRoot();
-        String toolingPom = read(root.resolve("hipster-entity-tooling/pom.xml"));
-        String parentPom = read(root.resolve("pom.xml"));
-
-        Assertions.assertTrue(toolingPom.contains("javaparser-core"),
-                "the tooling must declare the dependency it compiles against");
-        // Scoped to the javaparser dependency block, not to the file: the module legitimately pins
-        // `jakarta.validation-api:3.0.2` (F-39 requires that pin so the offline build works), so a
-        // file-wide "no 3.x version" check would fail on a correct POM. The first version of this test
-        // did exactly that.
-        Assertions.assertFalse(
-                java.util.regex.Pattern.compile("(?s)<artifactId>javaparser-core</artifactId>\\s*<version>")
-                        .matcher(toolingPom).find(),
-                "the javaparser-core dependency must carry no <version> of its own: a local repository "
-                        + "holds eleven JavaParser versions, and a module-level pin is how an old one gets "
-                        + "picked (F-23)");
-
-        Assertions.assertTrue(
-                java.util.regex.Pattern.compile("<javaparser\\.version>[^<]+</javaparser\\.version>")
-                        .matcher(parentPom).find(),
-                "the root POM declares the single version property");
-        Assertions.assertTrue(parentPom.contains("<version>${javaparser.version}</version>"),
-                "and dependencyManagement resolves the dependency through it");
-    }
 
     /**
      * DEC-021's pinned JSON5 feature table and the code that implements it name the same features

@@ -116,21 +116,34 @@ class AddonAndInheritanceTest {
     /**
      * The constant names of an emitted field enum, in declaration order.
      *
-     * <p>Read from the parsed AST rather than by scanning text. The text version of this helper matched
+     * <p>Read from the parsed tree rather than by scanning text. The text version of this helper matched
      * every {@code name(} inside the enum body up to its first {@code ;}, which was correct only while
      * the constant list was one flat line: a constant that carries any
      * {@code @FieldSource} override gets a class body, and the first {@code ;} inside that body then
      * cut the scan short — turning the next constant's override methods into "constants" and making
      * three correct assertions look like failures.</p>
+     *
+     * <p>Phase 6: the LST replaces JavaParser's {@code findAll(EnumConstantDeclaration.class)}, and the
+     * shape is different rather than merely renamed — every constant of one enum is an element of a
+     * single {@link org.openrewrite.java.tree.J.EnumValueSet} statement.</p>
      */
     private static List<String> constants(Path enumFile) throws Exception {
         Assertions.assertTrue(Files.exists(enumFile), "the field enum must be emitted: " + enumFile);
-        com.github.javaparser.ast.CompilationUnit cu = SourceReader.readJp(enumFile).unit();
+        org.openrewrite.java.tree.J.CompilationUnit cu =
+                SourceReader.readSourceText(Files.readString(enumFile));
         Assertions.assertNotNull(cu, "the emitted enum must parse: " + enumFile);
         List<String> names = new java.util.ArrayList<>();
-        for (com.github.javaparser.ast.body.EnumConstantDeclaration constant
-                : cu.findAll(com.github.javaparser.ast.body.EnumConstantDeclaration.class)) {
-            names.add(constant.getNameAsString());
+        for (org.openrewrite.java.tree.J.ClassDeclaration declaration : TreeQueries.enums(cu)) {
+            if (declaration.getBody() == null) {
+                continue;
+            }
+            for (org.openrewrite.java.tree.Statement statement : declaration.getBody().getStatements()) {
+                if (statement instanceof org.openrewrite.java.tree.J.EnumValueSet values) {
+                    for (org.openrewrite.java.tree.J.EnumValue constant : values.getEnums()) {
+                        names.add(constant.getName().getSimpleName());
+                    }
+                }
+            }
         }
         Assertions.assertFalse(names.isEmpty(), "the enum's constant list must be present: " + enumFile);
         return names;

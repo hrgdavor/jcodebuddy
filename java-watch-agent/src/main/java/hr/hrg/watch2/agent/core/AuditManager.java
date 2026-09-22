@@ -4,6 +4,7 @@ package hr.hrg.watch2.agent.core;
 
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 import hr.hrg.wyhash.Wyhash64;
 
@@ -25,8 +26,12 @@ import java.util.Map;
 public class AuditManager {
     private static final Logger log = LoggerFactory.getLogger(AuditManager.class);
     private static final DateTimeFormatter DIR_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .enable(SerializationFeature.INDENT_OUTPUT);
+    // Jackson 3 removed the mutating `ObjectMapper.enable(...)` configuration methods: a mapper is
+    // configured by its builder and is then immutable. The indent flag is set the way that API requires,
+    // and the mapper type is unchanged, so nothing else in this class has to move.
+    private static final ObjectMapper MAPPER = JsonMapper.builder()
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .build();
 
     private final Path projectRoot;
     private final Path auditRoot;

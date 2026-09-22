@@ -1,16 +1,6 @@
 package hr.hrg.hipster.entity.tooling;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.Range;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.comments.Comment;
+import org.openrewrite.java.tree.J;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -52,11 +42,16 @@ import java.util.Set;
  * <h3>Verbatim means verbatim</h3>
  *
  * <p>Preserved members are cut out of the original file as <strong>text</strong>, using the parsed
- * node's source range rather than re-printing the AST. That distinction is not cosmetic: an AST
- * round-trip silently drops the member's attached javadoc, which is exactly the part a user-written
- * extension point is made of. The slice is extended backwards to include the comment attached
- * directly above the declaration, so a documented {@code TrackingStrict} survives with its
- * documentation intact.</p>
+ * declaration's character span rather than re-printing the tree. That distinction is not cosmetic: a
+ * print round-trip normalises the member's own formatting — and on this migration it even changes the
+ * separator inside a generic type — so a re-printed extension point is not the text the developer
+ * wrote. The slice is extended backwards to include the comment attached directly above the
+ * declaration, so a documented {@code TrackingStrict} survives with its documentation intact.</p>
+ *
+ * <p>Phase 6: the span comes from javac, because the LST has no positions at all. JavaParser answered
+ * {@code node.getRange()} directly; the substitute is {@link TreeQueries#memberText}, which slices the
+ * same text by the offsets javac recorded and applies the same attached-comment rule. Nothing else in
+ * this class changed — the mechanism was never about which parser produced the tree.</p>
  *
  * <p>No hint comment is emitted. DEC-020 permits one as a UX aid but makes it optional, and here it
  * would be actively harmful: the hint would sit outside every preserved member's range, so the next
@@ -103,27 +98,31 @@ public final class CooperativeCodegen {
         // parse must never be the basis for "nothing to preserve", because that is how a user's member
         // gets deleted. An unreadable file yields nothing preserved, which is the same as a fresh file
         // — and the pass that overwrites it is what the caller's own report covers.
-        SourceReader.ReadJp read = SourceReader.readJpText(text);
-        if (!read.readable()) {
+        J.CompilationUnit cu = SourceReader.readSourceText(text);
+        if (cu == null) {
             return List.of();
         }
-        CompilationUnit cu = read.unit();
 
-        for (TypeDeclaration<?> type : cu.getTypes()) {
-            if (!type.getNameAsString().equals(topLevelName)) {
+        J.ClassDeclaration topLevel = topLevelType(cu, topLevelName);
+        if (topLevel == null) {
+            return List.of();
+        }
+        List<Preserved> preserved = new ArrayList<>();
+        // No policy question arises here: only nested types are read, so a policy that disowns fields and
+        // constants is exactly right — and it keeps this listing identical to the reconciler's for the
+        // one member kind both look at.
+        for (Member member : directMembers(topLevel, Reconciliation.METHODS_AND_TYPES_ONLY)) {
+            // Only nested types: this method's contract is the extension point a developer nests inside
+            // a generated class, and nothing else (reconcileMembers owns the rest).
+            if (!"type".equals(member.kind()) || generatedNames.contains(member.name())) {
                 continue;
             }
-            List<Preserved> preserved = new ArrayList<>();
-            for (BodyDeclaration<?> member : type.getMembers()) {
-                if (!(member instanceof TypeDeclaration<?> nested)
-                        || generatedNames.contains(nested.getNameAsString())) {
-                    continue;
-                }
-                preserved.add(new Preserved(nested.getNameAsString(), verbatim(text, nested)));
+            String verbatim = TreeQueries.memberText(topLevelName, "type", member.name(), 0, text);
+            if (verbatim != null) {
+                preserved.add(new Preserved(member.name(), verbatim));
             }
-            return preserved;
         }
-        return List.of();
+        return preserved;
     }
 
     /**
@@ -207,16 +206,16 @@ public final class CooperativeCodegen {
             return new Reconciled(canonical, List.of());
         }
         String previousText = Files.readString(previousFile);
-        SourceReader.ReadJp previousRead = SourceReader.readJpText(previousText);
-        SourceReader.ReadJp canonicalRead = SourceReader.readJpText(canonical);
-        if (!previousRead.readable() || !canonicalRead.readable()) {
+        J.CompilationUnit previousCu = SourceReader.readSourceText(previousText);
+        J.CompilationUnit canonicalCu = SourceReader.readSourceText(canonical);
+        if (previousCu == null || canonicalCu == null) {
             // Unreadable on either side: the safe answer is the canonical text plus nothing preserved,
             // and the caller's read guard has already reported why.
             return new Reconciled(canonical, List.of());
         }
 
-        Map<String, String> canonicalMembers = membersByName(canonicalRead.unit(), topLevelName, canonical, policy);
-        Map<String, String> previousMembers = membersByName(previousRead.unit(), topLevelName, previousText, policy);
+        Map<String, String> canonicalMembers = membersByName(canonicalCu, topLevelName, canonical, policy);
+        Map<String, String> previousMembers = membersByName(previousCu, topLevelName, previousText, policy);
 
         List<Preserved> userOwned = new ArrayList<>();
         List<String> divergences = new ArrayList<>();
@@ -258,57 +257,118 @@ public final class CooperativeCodegen {
     }
 
     /**
+     * One direct member of a generated type: its identity, and what has to be looked up to slice its
+     * text out of the file.
+     *
+     * @param key            the namespaced shape identity — {@code t:} type, {@code m:} method,
+     *                       {@code f:} field, {@code c:} constructor, {@code e:} enum constant
+     * @param kind           the javac-side span kind: {@code type}, {@code method}, {@code constructor},
+     *                       {@code field} or {@code enum-constant}
+     * @param parameterCount the arity, for a method or constructor
+     */
+    private record Member(String key, String kind, String name, int parameterCount) {
+    }
+
+    /** The top-level type named {@code topLevelName}, or {@code null}. */
+    private static J.ClassDeclaration topLevelType(J.CompilationUnit cu, String topLevelName) {
+        for (J.ClassDeclaration declaration : TreeQueries.topLevelTypes(cu)) {
+            if (declaration.getSimpleName().equals(topLevelName)) {
+                return declaration;
+            }
+        }
+        return null;
+    }
+
+    /**
      * A member's shape identity and its verbatim text, for the top-level type named
      * {@code topLevelName}.
      *
      * <p>Only <em>direct</em> members are considered: a nested type is a member of the generated type,
-     * and its own members belong to it, not to the file's contract.</p>
+     * and its own members belong to it, not to the file's contract. Direct members are the body's own
+     * statements — never a recursive walk, which would pull in a nested type's members
+     * (MIGRATION-CAVEATS.md § 1.10).</p>
+     *
+     * <p>A member whose span cannot be located is skipped rather than given a re-printed body: the
+     * whole point of the comparison is that it is made on the developer's own text, and a printed
+     * substitute would report a spurious edit for every member.</p>
      */
-    private static Map<String, String> membersByName(CompilationUnit cu, String topLevelName, String text,
+    private static Map<String, String> membersByName(J.CompilationUnit cu, String topLevelName, String text,
                                                      Reconciliation policy) {
         Map<String, String> members = new LinkedHashMap<>();
-        for (TypeDeclaration<?> type : cu.getTypes()) {
-            if (!type.getNameAsString().equals(topLevelName)) {
-                continue;
+        J.ClassDeclaration type = topLevelType(cu, topLevelName);
+        if (type == null) {
+            return members;
+        }
+        for (Member member : directMembers(type, policy)) {
+            String verbatim = TreeQueries.memberText(topLevelName, member.kind(), member.name(),
+                    member.parameterCount(), text);
+            if (verbatim != null) {
+                // First wins, which is what a map keyed on this identity has always done: two members of
+                // one name and arity are one identity here.
+                members.putIfAbsent(member.key(), verbatim);
             }
-            for (BodyDeclaration<?> member : type.getMembers()) {
-                String key = memberKey(member, policy);
-                if (key != null) {
-                    members.putIfAbsent(key, verbatim(text, member));
-                }
-            }
-            break;
         }
         return members;
     }
 
     /**
-     * The shape identity of a member, or {@code null} for a kind this reconciliation does not own.
+     * The direct members of a generated type, in declaration order, as this reconciliation sees them.
      *
      * <p>Namespaced by kind ({@code t:} type, {@code m:} method, {@code f:} field, {@code c:}
      * constructor, {@code e:} enum constant) so a field and a method that share a name cannot collapse
      * into one identity and let the field's presence hide the method's absence.</p>
+     *
+     * <p>Three shapes carry the ported detail. A constructor is a {@link J.MethodDeclaration} with no
+     * return type — the LST has no separate constructor node — so it is recognised by
+     * {@link J.MethodDeclaration#isConstructor()} and keyed by the class name, which is what JavaParser's
+     * {@code ConstructorDeclaration.getNameAsString()} returned. A multi-name field declaration is one
+     * {@link J.VariableDeclarations} holding N declarators where JavaParser held one
+     * {@code FieldDeclaration} holding N variables; both read the <em>first</em> name as the identity, so
+     * the two agree. And an enum's constants are one {@link J.EnumValueSet} statement rather than N
+     * member declarations, so the set is expanded here.</p>
      */
-    private static String memberKey(BodyDeclaration<?> member, Reconciliation policy) {
-        if (member instanceof TypeDeclaration<?> nested) {
-            return "t:" + nested.getNameAsString();
+    private static List<Member> directMembers(J.ClassDeclaration type, Reconciliation policy) {
+        List<Member> members = new ArrayList<>();
+        if (type.getBody() == null || type.getBody().getStatements() == null) {
+            return members;
         }
-        if (member instanceof MethodDeclaration method) {
-            return "m:" + method.getNameAsString() + "/" + method.getParameters().size();
-        }
-        if (member instanceof FieldDeclaration field) {
-            if (!policy.fields() || field.getVariables().isEmpty()) {
-                return null;
+        for (org.openrewrite.java.tree.Statement statement : type.getBody().getStatements()) {
+            if (statement instanceof J.ClassDeclaration nested) {
+                members.add(new Member("t:" + nested.getSimpleName(), "type", nested.getSimpleName(), 0));
+                continue;
             }
-            return "f:" + field.getVariables().get(0).getNameAsString();
+            if (statement instanceof J.MethodDeclaration method) {
+                int arity = arityOf(method);
+                String name = method.getSimpleName();
+                members.add(method.isConstructor()
+                        ? new Member("c:" + name + "/" + arity, "constructor", name, arity)
+                        : new Member("m:" + name + "/" + arity, "method", name, arity));
+                continue;
+            }
+            if (statement instanceof J.VariableDeclarations fields) {
+                if (!policy.fields() || fields.getVariables() == null || fields.getVariables().isEmpty()) {
+                    continue;
+                }
+                String name = fields.getVariables().get(0).getSimpleName();
+                members.add(new Member("f:" + name, "field", name, 0));
+                continue;
+            }
+            if (statement instanceof J.EnumValueSet values) {
+                if (!policy.constants()) {
+                    continue;
+                }
+                for (J.EnumValue constant : values.getEnums()) {
+                    String name = constant.getName().getSimpleName();
+                    members.add(new Member("e:" + name, "enum-constant", name, 0));
+                }
+            }
         }
-        if (member instanceof ConstructorDeclaration constructor) {
-            return "c:" + constructor.getNameAsString() + "/" + constructor.getParameters().size();
-        }
-        if (member instanceof EnumConstantDeclaration constant) {
-            return policy.constants() ? "e:" + constant.getNameAsString() : null;
-        }
-        return null;
+        return members;
+    }
+
+    /** A method's declared arity, counting the LST's `J.Empty` placeholder for "none" as zero. */
+    private static int arityOf(J.MethodDeclaration method) {
+        return TreeQueries.hasNoParameters(method) ? 0 : method.getParameters().size();
     }
 
     /**
@@ -344,56 +404,5 @@ public final class CooperativeCodegen {
             return source + fragment;
         }
         return source.substring(0, index) + fragment + source.substring(index);
-    }
-
-    /**
-     * The exact original text of {@code node}, extended backwards over a comment attached directly
-     * above it.
-     *
-     * <p>Falls back to the AST printer only when the node carries no source range, which happens for
-     * a node built in memory rather than parsed — never for a member read out of a file.</p>
-     */
-    private static String verbatim(String text, Node node) {
-        Range range = node.getRange().orElse(null);
-        if (range == null) {
-            return node.toString();
-        }
-        int start = offsetOf(text, range.begin.line, range.begin.column);
-        int end = Math.min(offsetOf(text, range.end.line, range.end.column) + 1, text.length());
-
-        Comment comment = node.getComment().orElse(null);
-        if (comment != null && comment.getRange().isPresent()) {
-            Range commentRange = comment.getRange().get();
-            int commentStart = offsetOf(text, commentRange.begin.line, commentRange.begin.column);
-            int commentEnd = Math.min(
-                    offsetOf(text, commentRange.end.line, commentRange.end.column) + 1, text.length());
-            // Only a comment that is the sole thing between itself and the declaration belongs to it.
-            // A blank or whitespace run means "attached"; anything else means the comment documents
-            // something earlier in the file and would be duplicated if it were carried along.
-            if (commentEnd <= start && commentStart >= 0
-                    && text.substring(commentEnd, start).isBlank()) {
-                // Include the comment's own indentation: a javadoc's range starts at `/**`, so
-                // slicing from there would re-emit the member flush against the left margin and the
-                // next pass would see a diff that is only whitespace.
-                int lineStart = text.lastIndexOf('\n', commentStart) + 1;
-                start = text.substring(lineStart, commentStart).isBlank() ? lineStart : commentStart;
-            }
-        }
-        return text.substring(start, end);
-    }
-
-    /** Char index of a 1-based (line, column) position, clamped to the text's length. */
-    private static int offsetOf(String text, int line, int column) {
-        int offset = 0;
-        int currentLine = 1;
-        while (currentLine < line) {
-            int newline = text.indexOf('\n', offset);
-            if (newline < 0) {
-                return text.length();
-            }
-            offset = newline + 1;
-            currentLine++;
-        }
-        return Math.min(offset + column - 1, text.length());
     }
 }

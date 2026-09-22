@@ -179,62 +179,11 @@ public final class EnumConstantOrderChecker {
         if (cu == null) {
             return HeaderConfig.none();
         }
-        for (com.github.javaparser.ast.comments.Comment comment : jpComments(cu)) {
-            Optional<String> config = configLine(comment);
-            if (config.isEmpty()) {
-                continue;
-            }
-            String json = config.get().trim();
-            if (json.isEmpty() || json.charAt(0) != '{') {
-                continue;
-            }
-            return decode(json, diagnostics);
-        }
-        return HeaderConfig.none();
-    }
-
-    /**
-     * The comment texts attached to a compilation unit's prefix, in order.
-     *
-     * <p>Kept as {@link com.github.javaparser.ast.comments.Comment} so {@link #configLine} has one
-     * implementation for both parsers: the AST comment type is used only as a text carrier here, never
-     * for its position.</p>
-     */
-    private static List<com.github.javaparser.ast.comments.Comment> jpComments(J.CompilationUnit cu) {
-        List<com.github.javaparser.ast.comments.Comment> comments = new ArrayList<>();
         for (org.openrewrite.java.tree.Comment comment : cu.getPrefix().getComments()) {
-            if (comment instanceof org.openrewrite.java.tree.TextComment textComment) {
-                comments.add(new com.github.javaparser.ast.comments.LineComment(textComment.getText()));
+            if (!(comment instanceof org.openrewrite.java.tree.TextComment textComment)) {
+                continue;
             }
-        }
-        return comments;
-    }
-
-    /**
-     * {@link #readHeader(J.CompilationUnit)} for the queue files that are <strong>not yet
-     * ported</strong>.
-     *
-     * <p>Kept for the call sites that still hold a JavaParser tree — {@code FieldBoilerplateGenerator}
-     * and {@code EntityMetadataGenerator} — where the comment is reachable through
-     * {@code getAllComments()} and the JavaParser attachment rule (the last comment of a run attaches
-     * to the following declaration) makes the {@code {...}} line above {@code package} visible. It is
-     * deleted with the last of those callers.</p>
-     *
-     * @param cu a JavaParser compilation unit, from a call site that has not yet been ported
-     */
-    public static HeaderConfig readHeader(com.github.javaparser.ast.CompilationUnit cu) {
-        List<String> diagnostics = new ArrayList<>();
-        if (cu == null) {
-            return HeaderConfig.none();
-        }
-        // Note: do NOT filter on getCommentedNode().isPresent(). JavaParser attaches the last
-        // comment of a run to the following declaration, so the `{...}` config line that sits
-        // immediately above `package` is *not* an orphan. An earlier version of this method
-        // skipped exactly those comments and therefore never saw the marker at all.
-        // The risk of reading a non-header comment is bounded: configLine() only accepts a line
-        // whose trimmed content starts with '{', and a javadoc body never does.
-        for (com.github.javaparser.ast.comments.Comment comment : cu.getAllComments()) {
-            Optional<String> config = configLine(comment);
+            Optional<String> config = configLine(textComment.getText());
             if (config.isEmpty()) {
                 continue;
             }
@@ -266,22 +215,20 @@ public final class EnumConstantOrderChecker {
      * The configuration line of a two-line generator header: the JSON5 blob, or empty when the comment
      * carries none.
      *
-     * <p>Takes a {@link com.github.javaparser.ast.comments.Comment} as a text carrier only, so both
-     * parsers share one implementation. The comment's text may contain embedded newlines: the LST holds
-     * the whole two-line DEC-021 header as <em>one</em> comment, so splitting on line breaks is what
-     * finds the config line.</p>
+     * <p>Takes the comment's <strong>text</strong>: the comment's text may contain embedded newlines —
+     * the LST holds the whole two-line DEC-021 header as <em>one</em> comment — so splitting on line
+     * breaks is what finds the config line.</p>
      *
      * <p><strong>{@code &#123;@link} is not a config line.</strong> The header's first line is
-     * {@code // {@link com.example.Foo} description}, which also begins with a brace. The JavaParser
-     * version never had to distinguish the two because it scanned {@code getAllComments()}, where the
-     * two header lines arrived as separate comments and the {@code &#123;@link} one produced no
-     * {@code {…}} line at all. Concatenated into one LST comment, the first line is now a candidate —
-     * and accepting it yields a {@code malformed_generator_header} diagnostic on a perfectly good
-     * header, which the ledger tests catch. Rejecting the Javadoc-inline form is what keeps the marker
-     * readable.</p>
+     * {@code // {@link com.example.Foo} description}, which also begins with a brace. JavaParser never
+     * had to distinguish the two because it scanned {@code getAllComments()}, where the two header lines
+     * arrived as separate comments and the {@code &#123;@link} one produced no {@code {…}} line at all.
+     * Concatenated into one LST comment, the first line is now a candidate — and accepting it yields a
+     * {@code malformed_generator_header} diagnostic on a perfectly good header, which the ledger tests
+     * catch. Rejecting the Javadoc-inline form is what keeps the marker readable.</p>
      */
-    private static Optional<String> configLine(com.github.javaparser.ast.comments.Comment comment) {
-        for (String rawLine : comment.getContent().split("\\R")) {
+    private static Optional<String> configLine(String commentText) {
+        for (String rawLine : commentText.split("\\R")) {
             String line = rawLine.trim();
             if (line.startsWith("//")) {
                 line = line.substring(2).trim();

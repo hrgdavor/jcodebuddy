@@ -20,10 +20,26 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>jwa-builder-api</artifactId>
         </dependency>
+        <!-- OpenRewrite, arriving as JavaParser leaves (Phase 6 of the rewrite-migration plan).
+             `rewrite-java` is a facade needing exactly one version-specific parser, and
+             `rewrite-java-25` is the only OpenRewrite artifact the parent does not manage. -->
         <dependency>
-            <groupId>com.github.javaparser</groupId>
-            <artifactId>javaparser-core</artifactId>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-core</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-25</artifactId>
+            <version>${openrewrite.version}</version>
+        </dependency>
+        <!-- `javaparser-core` was removed here on 2026-09-22 (Phase 6 of the rewrite-migration plan):
+             every source in this module parses through OpenRewrite now, and the recorded gate
+             (`RecordBuilderProcessorTest`, 5 tests) is green without it. A module that still declares a
+             parser it no longer imports is a dependency the next reader will assume is load-bearing. -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>java-watch-core</artifactId>

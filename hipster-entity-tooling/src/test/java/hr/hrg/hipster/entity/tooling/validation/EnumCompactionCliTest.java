@@ -252,13 +252,19 @@ class EnumCompactionCliTest {
         Assertions.assertTrue(report.compactedFiles().get(0).toString().contains("src"));
     }
 
-    /** The constant names in declaration order, read back out of the source with the parser. */
+    /** The constant names in declaration order, read back out of the source through the LST. */
     private static List<String> constantNames(String source) throws Exception {
-        var parsed = new com.github.javaparser.JavaParser().parse(source);
-        var declaration = parsed.getResult().orElseThrow()
-                .findFirst(com.github.javaparser.ast.body.EnumDeclaration.class).orElseThrow();
-        return declaration.getEntries().stream()
-                .map(com.github.javaparser.ast.body.EnumConstantDeclaration::getNameAsString)
-                .toList();
+        var unit = hr.hrg.hipster.entity.tooling.SourceReader.readSourceText(source);
+        Assertions.assertNotNull(unit, "the enum must parse");
+        var declaration = hr.hrg.hipster.entity.tooling.TreeQueries.enums(unit).get(0);
+        List<String> names = new java.util.ArrayList<>();
+        for (var statement : declaration.getBody().getStatements()) {
+            if (statement instanceof org.openrewrite.java.tree.J.EnumValueSet values) {
+                for (var value : values.getEnums()) {
+                    names.add(value.getName().getSimpleName());
+                }
+            }
+        }
+        return names;
     }
 }
