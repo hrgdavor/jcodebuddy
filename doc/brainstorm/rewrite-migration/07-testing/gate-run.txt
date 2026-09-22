@@ -1,0 +1,26 @@
+
+Phase 6 — migration verification
+================================
+repository: D:\wrk\java\jcodebuddy
+
+  queue files        34
+  settled            34 (100%)
+  still importing    0
+  import-free        0
+  unclassified       0
+  exempt             11
+
+    complete        34
+
+Checks
+======
+  OK    queue-import-free: no queue file is marked complete/testing while still importing JavaParser
+  OK    staging-compiles: no hr.hrg.rewrite staging package present
+  OK    tracker-agreement: every queue file has exactly one tracker row
+  OK    tracker-vocabulary: tracker rows use the known status vocabulary
+  OK    curation-coverage: every queue file is classified in curation.js
+  OK    curation-freshness: every curation entry names a file that exists
+  OK    allowlist-honest: 11 allowlisted file(s), each with a recorded reason
+  OK    pom-dependencies: no queue module declares javaparser-core
+
+RESULT: PASS.

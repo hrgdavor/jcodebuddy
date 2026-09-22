@@ -1,0 +1,128 @@
+[
+  {
+    "benchmark": "accessorLinesOnARealLargeFile",
+    "mode": "avgt",
+    "score": 14109.397905339214,
+    "error": 382.48752119063727,
+    "unit": "ns/op"
+  },
+  {
+    "benchmark": "accessorLinesOnTheSyntheticTree",
+    "mode": "avgt",
+    "score": 2774.845939066535,
+    "error": 197.9722873849242,
+    "unit": "ns/op"
+  },
+  {
+    "benchmark": "annotationLinesOnTheSyntheticTree",
+    "mode": "avgt",
+    "score": 5193.963612957128,
+    "error": 1042.2594992902834,
+    "unit": "ns/op"
+  },
+  {
+    "benchmark": "coldReadLargestFileInRepository",
+    "mode": "avgt",
+    "score": 176282.75285714288,
+    "error": 51993.317212319365,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "coldSyntaxCheckCommittedView",
+    "mode": "avgt",
+    "score": 32183.108225015814,
+    "error": 6203.729224747577,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "coldSyntaxCheckFragment",
+    "mode": "avgt",
+    "score": 33306.76121639785,
+    "error": 2654.834235608775,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "coldSyntaxCheckLargestFileInRepository",
+    "mode": "avgt",
+    "score": 40498.299898575504,
+    "error": 5342.343209783842,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "memberTextsOnTheSyntheticTree",
+    "mode": "avgt",
+    "score": 5143.323628451498,
+    "error": 2159.7041821114212,
+    "unit": "ns/op"
+  },
+  {
+    "benchmark": "readCommittedView",
+    "mode": "avgt",
+    "score": 56141.43532163743,
+    "error": 2121.166964807621,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "readFragment",
+    "mode": "avgt",
+    "score": 56087.24461988304,
+    "error": 3608.7638586832363,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "readLargestFileInRepository",
+    "mode": "avgt",
+    "score": 164574.64571428573,
+    "error": 26924.713491769355,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "stringConcatenationAlone",
+    "mode": "avgt",
+    "score": 26.450337879250576,
+    "error": 0.6284364942349403,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "syntaxCheckAlreadyInspected",
+    "mode": "avgt",
+    "score": 0.008824305032210614,
+    "error": 0.001192435855295259,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "syntaxCheckCommittedView",
+    "mode": "avgt",
+    "score": 0.00387830838826641,
+    "error": 0.0003778184328863573,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "syntaxCheckFragment",
+    "mode": "avgt",
+    "score": 0.0023765129678173513,
+    "error": 0.0002581508895600888,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "syntaxCheckLargestFileInRepository",
+    "mode": "avgt",
+    "score": 0.0045947434324590305,
+    "error": 0.0005030231296472979,
+    "unit": "us/op"
+  },
+  {
+    "benchmark": "treeWalkOnlyOnARealLargeFile",
+    "mode": "avgt",
+    "score": 1582013.341199235,
+    "error": 551680.3439568249,
+    "unit": "ns/op"
+  },
+  {
+    "benchmark": "typesWithEnclosingOnARealLargeFile",
+    "mode": "avgt",
+    "score": 608584.0942876599,
+    "error": 175289.87980794642,
+    "unit": "ns/op"
+  }
+]

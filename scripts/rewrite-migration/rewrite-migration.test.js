@@ -19,6 +19,9 @@ import { loadTracker, checkboxFor, STATUSES, progressOf } from './model.js';
 import { MAPPINGS, mappingFor, mappingStats, OPENREWRITE_VERSION } from './mappings.js';
 import { QUEUE, ALLOWLIST, PREREQUISITES } from './curation.js';
 import { parseArgs, UsageError } from './cli.js';
+import {
+  parseSurefireXml, summarise, readGateResult, renderReport,
+} from './generate-test-report.js';
 
 describe('classifyJavaText', () => {
   test('detects an ordinary import', () => {
@@ -346,3 +349,96 @@ async function fixtureRepo(rows, { header = false } = {}) {
   writeFileSync(join(directory, 'tracker.md'), `${lines.join('\n')}\n`);
   return root;
 }
+
+/**
+ * The Phase 7 report generator. What is worth testing here is not markdown layout but the three
+ * judgement calls the page rests on: reading Surefire's attributes without assuming their order,
+ * folding a nested-class suite into the class a reader counts, and — the one that matters most —
+ * saying "this input was missing" instead of rendering a zero that reads like a result.
+ */
+describe('generate-test-report', () => {
+  test('reads a surefire suite regardless of attribute order', () => {
+    const suite = parseSurefireXml([
+      '<testsuite skipped="1" name="p.SampleTest" time="0.5" tests="4" errors="0" failures="1">',
+      '  <testcase name="aBrokenCase" classname="p.SampleTest"><failure message="x">trace</failure></testcase>',
+      '</testsuite>',
+    ].join('\n'));
+    expect(suite.name).toBe('p.SampleTest');
+    expect(suite.tests).toBe(4);
+    expect(suite.failures).toBe(1);
+    expect(suite.skipped).toBe(1);
+    expect(suite.timeMs).toBe(500);
+    expect(suite.failuresNamed).toEqual(['aBrokenCase']);
+  });
+
+  test('folds a nested-class suite onto its outer class', () => {
+    // Surefire reports `@Nested` classes as separate suites named `Outer$Inner`. Without the fold a
+    // reader counts one test class as four and concludes the suite grew.
+    const outer = parseSurefireXml('<testsuite name="p.TreeQueriesTest" tests="20" failures="0" '
+        + 'errors="0" skipped="0" time="1"/>');
+    const nested = parseSurefireXml('<testsuite name="p.TreeQueriesTest$PackageName" tests="5" '
+        + 'failures="0" errors="0" skipped="0" time="1"/>');
+    expect(outer.outerClass).toBe('TreeQueriesTest');
+    expect(nested.outerClass).toBe('TreeQueriesTest');
+    expect(nested.nested).toBe(true);
+
+    const summary = summarise([
+      { ...outer, module: 'm' }, { ...nested, module: 'm' },
+    ]);
+    expect(summary.suites).toBe(2);
+    expect(summary.rows).toHaveLength(1);
+    expect(summary.rows[0].tests).toBe(25);
+    expect(summary.rows[0].module).toBe('m');
+    expect(summary.total).toBe(25);
+  });
+
+  test('yields nothing for a report it cannot read, rather than a suite of zeros', () => {
+    // A truncated write mid-build is the real case. A zero-filled row would say "this class ran and
+    // asserted nothing", which is a claim; null says "no report", which is the truth.
+    expect(parseSurefireXml('<testsuite name="p.Half')).toBeNull();
+    expect(parseSurefireXml('<testsuite tests="3" failures="0" errors="0" skipped="0" time="0"/>'))
+        .toBeNull();
+  });
+
+  test('counts the gate verdicts from the gate\'s own line shape', () => {
+    const gate = readGateResult([
+      'Checks',
+      '======',
+      '  OK    queue-import-free: nothing left to port',
+      '  WARN  stale-entries: 1 entry names a moved file',
+      '  FAIL  curation-coverage: a/src/Main.java is unclassified',
+      '',
+      'RESULT: FAIL — 1 failing check(s).',
+    ].join('\n'));
+    expect(gate.present).toBe(true);
+    expect(gate.verdict).toBe('RESULT: FAIL — 1 failing check(s).');
+    expect(gate.checks.map(check => check.check)).toEqual(
+        ['queue-import-free', 'stale-entries', 'curation-coverage']);
+    expect([gate.passed, gate.warnings, gate.failing]).toEqual([1, 1, 1]);
+  });
+
+  test('renders a missing gate as missing, and never as a pass', () => {
+    const summary = summarise([{ ...parseSurefireXml('<testsuite name="p.A" tests="7" failures="0" '
+        + 'errors="0" skipped="0" time="0.25"/>'), module: 'm' }]);
+    const page = renderReport({
+      generated: '2026-09-22 12:00 UTC',
+      modules: ['m'],
+      missingReports: ['other-module'],
+      emptyReports: ['no-tests-module'],
+      summary,
+      gate: readGateResult(null),
+      benchmarks: { present: false, path: 'benchmarks/latest.json', rows: [] },
+    });
+    expect(page).toContain('**7 tests across 1 test class');
+    expect(page).toContain('No captured gate run was supplied');
+    expect(page).not.toMatch(/RESULT: PASS/);
+    // The module with no reports is named, so the page cannot be read as a whole-reactor claim.
+    expect(page).toContain('`other-module`');
+    // And a module that ran with nothing to run is not reported as untested: Surefire wrote the
+    // directory and no XML, which means "zero test classes", not "nobody looked".
+    expect(page).toContain('Ran with no test classes');
+    expect(page).toContain('`no-tests-module`');
+    expect(page).toContain('No benchmark results');
+  });
+});
+

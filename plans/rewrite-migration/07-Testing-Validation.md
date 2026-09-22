@@ -1,9 +1,10 @@
 # Phase 7: Testing & Validation
 
-> **Not started.** The deliverables below are the plan as written; § *Status* at the end states what exists
-> today and the six decisions the re-scope has to make before any of it is implemented. Read that section
-> first — several files named here are sketches that never existed, and two deliverables compare against
-> JavaParser, which the migration removed.
+> **Delivered** (2026-09-22). The deliverables below are the plan as written and are kept as the record of
+> what was planned; several files named here are sketches that never existed, and two deliverables compare
+> against JavaParser, which Phase 6 removed. Section *Status* at the end states what was built instead: the
+> real test classes, the generated report, the absolute benchmarks, the three production defects the new
+> tests found, and every place this page and the delivered code disagree. Read that section first.
 
 ## Overview
 
@@ -278,69 +279,169 @@ All tests must verify:
 
 ## Status
 
-**Current**: **Next — re-scope before starting** (2026-09-22). Prerequisites are met: Phase 6 is complete
-(34/34 files ported, `javaparser-core` declared by no module, `verify-migration.js` `RESULT: PASS`) and
-Phase 5's automation layer is now delivered, so "integration tests for workflows" finally has a subject.
-The repository already carries most of what this phase's deliverables ask for, in a different shape: the
-whole reactor runs **1231 tests green** (1164 after Phase 6 plus Phase 5's 67), the migrated tooling keeps
-its recorded module gates (`hipster-entity-tooling` 361, `merge-java` 601, `hipster-entity-core` 88,
-`jwa-builder` 20, `project-automation` 81), and `doc/brainstorm/rewrite-migration/07-testing/` does not
-exist yet. `jwa-sidecar` and `java-watch-agent` carry no tests at all — their gate is that they compile —
-so "unit tests for each migrated component" would start by creating them.
+**Delivered** (2026-09-22), after the re-scope the previous revision of this section demanded. The tests are
+real code in module `src/test/java` (not prose in a docs tree), the report is generated from the artifacts a
+build leaves behind rather than written by hand, and the benchmarks are absolute baselines. Three production
+defects were found by the new tests and fixed in the same change; committed output stayed byte-identical.
 
-**Six things the re-scope has to decide, because the plan was written against code that does not exist:**
+Reactor total moved from **1231 to 1326 tests, 0 failures**, and `bun run
+scripts/rewrite-migration/verify-migration.js` reports **`RESULT: PASS.`** with 8/8 checks OK.
 
-1. **The unit-test file list names Phase 2's sketches.** `AstVisitorTests`, `AstManipulatorTests`,
-   `CompilationUnitAdapterTests`, `NodeTraversalTests`, `AstPrinterTests`, `SourceManipulationTests`,
-   `TypeUtilsTests` are classes in a docs tree that never compiled. Their working equivalents are
-   `TreeQueries` (traversal, kinds, annotations, type text), `JavaSyntaxCheck` (positions, which the plan
-   did not anticipate needing javac for) and `SourceReader`, already covered by `SourceReaderTest`,
-   `ParseGuardTest`, `AddonAndInheritanceTest` and the per-generator suites. The list has to be rewritten
-   against real class names or it will be implemented as a set of tests for nothing.
-2. **`AutomationIntegrationTests` is the one deliverable that is now straightforward.**
-   `project-automation/.../automation/` exists with 67 tests; what a Phase 7 integration test can add is an
-   end-to-end chained run over a real source tree, using a registered production transformation. Note that
-   **no production `Transformation` is registered yet** (`05-Automation.md` § *Status*), so this phase either
-   registers the first one or keeps the test-layer transformation.
-3. **The comparative benchmarks are impossible as written.** `ParseBenchmark`/`TransformationBenchmark`
-   compare JavaParser with OpenRewrite, but Phase 6 removed `javaparser-core` from every module and
-   `verify-migration.js` fails if one declares it again. Re-adding it as a test-only dependency to measure
-   against it would defeat the migration's own gate; the honest re-scope is absolute measurements
-   (parse/transform time and memory against recorded baselines) or no benchmark at all. JMH itself is
-   available: `jmh-core` and `jmh-generator-annprocess` are managed in the root POM.
-4. **The regression deliverable's comparison baseline is gone** for the same reason. "Compare with
-   JavaParser output" is now covered by something stronger the tree already has: the byte-identical
-   regeneration tests (`ExampleRegenerationTest`, `FieldEnumLedgerRegenerationTest`,
-   `MetadataSourcePathTest`) and the compile gates (`GeneratedSourceCompilesTest`, `AllLevelsCompileTest`,
-   `GeneratedAdapterRoundTripTest`).
-5. **Most edge cases already have a home.** Empty and malformed source:
-   `SourceFactsTest`, `ParseGuardTest`, `SourceReaderTest`, `UnresolvedTypeNameTest`. Deep hierarchies and
-   generics: `PolymorphicGenerationTest`, `AddonAndInheritanceTest`, `DeepTrackingWiringTest`,
-   `AllLevelsCompileTest`. Annotations: `ViewAnnotationRuleTest`, `AuditableRuleTest`,
-   `UnifiedDiffTest`. Large files and annotation-heavy files are the parts with no coverage today.
-6. **Mockito is not available.** It is not in the root POM's `dependencyManagement` and the offline
-   repository is the only source of artifacts, so "Mockito for Mocking" would need a new dependency. The
-   suite currently mocks nothing: the ported code takes its collaborators as constructor arguments or
-   parameters, which is why it does not need to.
+### What exists now
 
-The coverage and performance targets above (80% coverage, "within 20% of JavaParser") are the plan's
-original numbers and are not measurements of anything. Keep them only if a tool is chosen to measure them —
-the repository has no coverage tool configured.
+| Deliverable | Path | Measured |
+| --- | --- | --- |
+| Position queries (`TreeQueries`) | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java` | 40 tests |
+| Validity and positions (`JavaSyntaxCheck`) | `.../JavaSyntaxCheckTest.java` | 22 tests |
+| Read-path entry points (`SourceReader`) | `.../SourceReaderTest.java`, nested `OtherEntryPoints` | +4 tests (16 in the class) |
+| Large and annotation-heavy sources | `.../LargeSourceEdgeCaseTest.java` | 4 tests |
+| Regression sweep over the real tree | `.../MigrationCompletenessTest.java` | 3 tests over 283 files |
+| Automation integration | `project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java` | 4 tests |
+| Agent tool seam | `java-watch-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java` | 18 tests (module had none) |
+| JMH benchmarks | `.../ReadPathJmhBenchmark.java`, `.../PositionQueryJmhBenchmark.java` | 18 results, `jmh` profile |
+| Benchmark runner (Bun) | `scripts/rewrite-migration/run-tooling-benchmarks.js` | refuses a non-25 JVM |
+| Report generator (Bun) | `scripts/rewrite-migration/generate-test-report.js` | +5 Bun tests, 35 in the file |
+| Generated report | `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md` | 1326 tests, 128 suites |
+| Benchmark write-up | `doc/brainstorm/rewrite-migration/07-testing/benchmarks/BenchmarkReport.md` | rendered from `benchmarks.json` |
+| Captured gate run | `doc/brainstorm/rewrite-migration/07-testing/gate-run.txt` | the input the report reads |
 
-**Next**: after the re-scope, Phase 7 completion finishes the migration; Phase 8 (Documentation) follows.
+Per module: `hipster-entity-tooling` 361 to 434, `project-automation` 81 to 85, `java-watch-agent` 0 to 18;
+every other module unchanged (`merge-java` 601, `hipster-entity-core` 88, `hipster-entity-test` 31,
+`hipster-entity-jackson` 26, `jwa-builder` 20, `metadata-arena` 8, `metadata-server` 5, `hipster-entity-api` 4,
+`java-watch-core` 3, `java-watch-scp` 3, `hipster-ioc-test` 0).
+
+### The six decisions, answered
+
+1. **The unit-test list was rewritten against real class names.** The plan's `AstVisitorTests`,
+   `NodeTraversalTests`, `AstPrinterTests`, `TypeUtilsTests` and friends name Phase 2 sketches that never
+   compiled. What exists instead is one suite per class the migration actually produced: `TreeQueriesTest`
+   (32 names that had never been called directly by any test, plus the quirks they have),
+   `JavaSyntaxCheckTest`, and the four `SourceReader` entry points no generator test reached
+   (`readUnit`, `problemsIn`, `readFragmentUnit`, `reportUnparseable`).
+2. **The automation integration test runs a chain over a generated tree.** `AutomationChainIntegrationTest`
+   drives `EntityRegenerationWatcher.onBatch` to produce real committed-shaped source, asserts every file it
+   wrote is readable by the same reader that wrote it, then runs a three-step `applyAllSequential` chain over
+   the whole tree and compares the engine's structural facts with `TreeQueries`' own count of the same file.
+   The transformations are declared in the test and registered by `new`, in source-visible order (AGENTS.md
+   section 1). **No production `Transformation` was invented for it**: Phase 5 shipped the engine with none
+   registered, and a phase about testing is the wrong place to add a feature.
+3. **Comparative benchmarks are gone; absolute baselines are in.** `javaparser-core` is declared by no module
+   and `verify-migration.js` fails if one declares it again, so re-adding it as a test-only dependency to
+   measure against would break the migration's own gate. Two JMH classes measure the read path and the
+   position queries instead, following the repository's existing convention (module `jmh` profile,
+   `-proc:full`, `*JmhBenchmark` in `src/test/java`). Headline numbers, JDK 25.0.3, one fork: a read costs
+   roughly 30-55 ms regardless of file size (56 ms for a five-line fragment, 165 ms for the largest file in
+   the repository), the F-34 javac guard is about 60% of a cold read and about 0% of a warm one, and a cached
+   position lookup is nanoseconds. Full table and findings: `benchmarks/BenchmarkReport.md`.
+4. **Regression comparison without JavaParser is stronger than the plan's version.** Instead of diffing two
+   parsers' output, `MigrationCompletenessTest` sweeps all 283 `src/main/java` files of 17 modules and asserts,
+   per file: javac validity agrees with `SourceReader.readText().readable()` in both directions, every recorded
+   type/member/annotation line actually declares the name it was recorded for, every span is a valid half-open
+   range inside the file, and the LST's type and method counts match javac's. The byte-identical regeneration
+   tests (`ExampleRegenerationTest`, `FieldEnumLedgerRegenerationTest`, `MetadataSourcePathTest`) remain the
+   output comparison, and they are what proved the three fixes below changed no committed file.
+5. **The edge cases that fail safely today are pinned, not wished for.** `LargeSourceEdgeCaseTest` covers a
+   ~1 MB interface with 2000 accessor pairs (positions asserted arithmetically, member text asserted verbatim
+   on both sides of the 32767-byte boundary), a 1001-arm `switch`, and seven-level nesting. Empty and
+   malformed source, deep hierarchies, generics and annotations already had homes
+   (`SourceFactsTest`, `ParseGuardTest`, `UnresolvedTypeNameTest`, `PolymorphicGenerationTest`,
+   `AddonAndInheritanceTest`, `DeepTrackingWiringTest`, `ViewAnnotationRuleTest`), and are listed rather than
+   duplicated. Nothing here asserts a duration except a hang-detector ceiling of 60 s.
+6. **Mockito: not used, and the plan's reason was wrong.** `mockito-core` 5.13.0 *is* in the offline
+   repository, so "not available" was a factual error. The honest reason is that the suite mocks nothing: the
+   ported code takes its collaborators as constructor arguments or parameters, so a mock would only stand in
+   for a real object that is cheaper to construct. The agent tests follow the same rule with a hand-written
+   `StubTool` implementing the `ActionTool` SPI.
+
+The plan's 80% coverage target and "within 20% of JavaParser" were dropped: the repository has no coverage
+tool configured, and the second number has no denominator left. Neither is a measurement of anything.
+
+### Issues found
+
+Three production defects, all in the position-lookup half, all fixed and all verified against committed
+output (`ExampleRegenerationTest` still byte-identical):
+
+1. `TreeQueries.typesWithEnclosing` returned the enclosing chain innermost-first, contradicting its own
+   javadoc and `JavaSyntaxCheck.TypePosition.enclosingNames()`. Consequences: `lineOfChained` missed (returned
+   -1) and DEC-029 fully-qualified names came out reversed. Fixed with a reversed copy of the walk stack;
+   pinned by `aThreeDeepChainIsOutermostFirstResolvesItsOwnLine`.
+2. `JavaSyntaxCheck.namePositionIn` let an annotation or a qualified use steal a declaration's name line:
+   `@Foo` and `Outer.Foo` both matched before the real declaration. Fixed by rejecting a match preceded by `@`
+   or `.`; pinned by `anAnnotationNamedLikeItsTypeDoesNotStealTheNameLine` and
+   `aDeclarationNamedLikeItsOwnAnnotation`.
+3. The same scan matched inside string literals and comments, so
+   `@FieldSource(name = "birthDate") LocalDate birthDate();` reported the literal's line. Found only by the
+   2000-member scale test. Latent (no committed source uses that annotation shape) and fixed with an
+   `insideLiteralOrComment` walk reusing the existing `skipQuoted`/`skipComment` helpers; pinned by
+   `anAnnotationArgumentRepeatingTheMemberNameDoesNotStealIt`.
+
+Documented behaviour that measurement contradicted, recorded in the tests rather than changed:
+
+- `SourceReader.problemsIn` is empty even for files javac rejects (measured on the F-34 enum and on a
+  truncated method body), which is exactly why `readText().readable()` is the verdict and the messages are
+  detail. `SourceReaderTest.OtherEntryPoints` pins both halves.
+- `SourceReader.readFragmentUnit` does not throw for a fragment that is not an expression: the wrapper parses
+  it as garbage and returns it, so the javadoc's `IllegalArgumentException` promise covers only failures
+  OpenRewrite itself reports.
+- `ToolRegistry.getAllTools()` iterates `HashMap` bucket order, not registration order, and
+  `HelloTool.isApplicable()` returns true unconditionally (the `// @gen` trigger is matched in
+  `ContextualAnalyzer`/`ActionEngine`, not in the tool). Both pinned by `ToolSeamTest`; no production code
+  touched.
+- A plain inner test class contributes **zero** tests and the build stays green: the four new `SourceReader`
+  cases did not run until the class carried `@Nested`. Worth knowing before trusting a test count.
+
+### Deliberately not done
+
+- No `ValidationRule`, `AnalysisTool` or `AstVisitor` tests: those classes never existed outside the plan.
+- No `unit-tests/`, `integration-tests/`, `benchmarks/`, `edge-cases/` or `regression/` directories. Tests live
+  in the module's `src/test/java` next to the code they pin, and benchmarks in the same tree under the module's
+  `jmh` profile, matching how the other 1231 tests are organised.
+- No production `Transformation` registered to give the integration test a subject.
+- No coverage tool, no comparative benchmark, no timing assertions in unit tests.
+
+### Verification
+
+```
+cmd /c "scripts\mvn-jdk25.cmd -o -Dmaven.compiler.useIncrementalCompilation=false clean test"
+# Tests run: 1326, Failures: 0, Errors: 0, Skipped: 0 / BUILD SUCCESS
+
+bun run scripts/rewrite-migration/verify-migration.js
+# RESULT: PASS.
+
+cd scripts && bun test rewrite-migration/rewrite-migration.test.js
+# 35 pass, 0 fail
+
+bun run scripts/rewrite-migration/run-tooling-benchmarks.js
+# writes benchmarks/benchmarks.json and latest.json, then BenchmarkReport.md is rendered from them
+
+bun run scripts/rewrite-migration/generate-test-report.js --gate-out doc/brainstorm/rewrite-migration/07-testing/gate-run.txt
+# Wrote doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md: 1326 tests, 128 suites, gate RESULT: PASS.
+```
+
+Keep the gate capture out of `target/`: a `clean` build deletes it, and the generator then reports the gate as
+not supplied rather than inventing a verdict.
+
+**Next**: Phase 8 (Documentation) - the migration itself is complete with this phase.
 
 ## Quick Reference
 
-Test files to create:
-- Unit tests for each component
-- Integration tests for workflows
-- Performance benchmarks
-- Edge case tests
-- Regression tests
+Test files delivered:
+- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java`
+- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheckTest.java`
+- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/LargeSourceEdgeCaseTest.java`
+- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/MigrationCompletenessTest.java`
+- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java` (extended)
+- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ReadPathJmhBenchmark.java`
+- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/PositionQueryJmhBenchmark.java`
+- `project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java`
+- `java-watch-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java`
 
-Test directories:
-- `unit-tests/`
-- `integration-tests/`
-- `benchmarks/`
-- `edge-cases/`
-- `regression/`
+Scripts and reports:
+- `scripts/rewrite-migration/run-tooling-benchmarks.js`
+- `scripts/rewrite-migration/generate-test-report.js`
+- `scripts/rewrite-migration/rewrite-migration.test.js` (extended)
+- `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md`
+- `doc/brainstorm/rewrite-migration/07-testing/benchmarks/BenchmarkReport.md`
+- `doc/brainstorm/rewrite-migration/07-testing/benchmarks/benchmarks.json`
+- `doc/brainstorm/rewrite-migration/07-testing/gate-run.txt`
+

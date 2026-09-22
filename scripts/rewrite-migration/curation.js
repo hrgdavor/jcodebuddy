@@ -753,6 +753,31 @@ export const ALLOWLIST = {
       '(a partial unit mistaken for a readable file) that the port must not ' +
       'reintroduce. Update the wording when the parser changes, not the test.',
   },
+  // Phase 7 wrote these two files from scratch. Neither ever parsed with the retired
+  // library; each names it once, in the javadoc that says which old behaviour the test
+  // exists to prevent. They are exempt for the same reason `ParseGuardTest` is.
+  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java': {
+    status: 'exempt',
+    reason:
+      'Written after the port, by the testing phase, and built entirely on OpenRewrite. ' +
+      'It names JavaParser twice, both in prose: the `findAll` assertion records that ' +
+      'the old node stream included the root, and the enclosing-chain assertion records ' +
+      'that the reversed chain was a JavaParser-era defect the port inherited. Neither ' +
+      'sentence is a dependency; both are the provenance of an expectation a reader ' +
+      'would otherwise assume was arbitrary.',
+    deferredTo:
+      'When the position-lookup contract stops being shared with anything that remembers ' +
+      'the old parser, the wording can drop the names and the assertions stay.',
+  },
+  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ReadPathJmhBenchmark.java': {
+    status: 'exempt',
+    reason:
+      'The Phase 7 read-path benchmark. One prose mention, in the comment explaining why ' +
+      'the numbers are absolute rather than a delta: the alternative implementation is ' +
+      'gone, so there is nothing left to compare against.',
+    deferredTo:
+      'Never for that sentence while the benchmark is the baseline it established.',
+  },
 
   // The already-ported reference implementation. These files use OpenRewrite and
   // mention JavaParser only while explaining a JavaParser behaviour they had to

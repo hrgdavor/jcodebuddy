@@ -119,7 +119,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 7: Testing & Validation
 
-**Status**: **Next** — prerequisites met (Phase 5 is delivered and Phase 6 is complete); re-scope against the classes that exist before starting (verified 2026-09-22)
+**Status**: **Delivered** (2026-09-22) — re-scoped against the classes that exist, then implemented: 95 new tests across three modules, generated `TEST-REPORT.md`, absolute JMH baselines, three production defects found and fixed. Reactor `clean test`: 1326 tests, 0 failures.
 
 **Goal**: Comprehensive testing and validation
 
@@ -147,33 +147,42 @@ made the plan's status lines misleading.
 | 4 — Validation | **Delivered** | Its own heading says so, and the tree agrees: `EntityRulesValidator` plus `EntityRule`, `MarkerEntityRule`, `ViewAnnotationRule`, `ViewInterfaceRule`, `AuditableRule`, `EntityFieldEnumOrderRule` and `EnumConstantOrderChecker` are all ported and green. |
 | 5 — Automation | **Delivered** (2026-09-22) | The eleven classes are in `project-automation/src/main/java/hr/hrg/jcodebuddy/automation/` (`Transformation`, `TransformationRegistry`, `AutomationEngine`, `BatchProcessor` + `BatchReport`, `ProjectAutomation`, `TransformationResult`, `ValidationResult`, `AnalysisResult`, `TransformationException`, `SourceFiles`, `SourceFacts`) with 67 tests. The ten sketches in `05-automation/` were reviewed line by line and rewritten: two registries became one, the reflective registration overload and the empty `initialize()` are gone, `apply` returns a result rather than a `String`, writes are opt-in, and the regex-based counting / whole-path glob / hard-coded thread count / stdout reporting were replaced. `ValidationException` had no caller and was deleted. Delivery record: `05-Automation.md` § *Status*. |
 | 6 — Migration of Existing Tooling | **COMPLETE** (2026-09-22) | 34/34 queue files ported; `javaparser-core` declared by no module; `verify-migration.js` `RESULT: PASS`; whole reactor `clean test` green (1164 tests at that point; 1231 after Phase 5). Delivery record: `06-Migration-Checklist.md` § *Delivery record*. |
-| 7 — Testing & Validation | **Next** | Prerequisites are met: Phase 6 is complete and Phase 5's engine now exists, so its "unit tests for each migrated component" and "integration tests for full workflows" have a real subject. Its plan still needs re-scoping, because it was written against the *sketch* API (`register(String, Class)`, `process` returning `void`); `07-Testing-Validation.md` § *Status* says what to expect. |
+| 7 — Testing & Validation | **Delivered** (2026-09-22) | Re-scoped first, because its deliverables named Phase 2 sketches (`AstVisitorTests`, `TypeUtilsTests`) and two of them compared against JavaParser, which Phase 6 removed. What exists: `TreeQueriesTest` (40), `JavaSyntaxCheckTest` (22), `LargeSourceEdgeCaseTest` (4), `MigrationCompletenessTest` (3 over 283 real files), four more `SourceReader` entry-point cases, `AutomationChainIntegrationTest` (4, a chain over a generated tree), `ToolSeamTest` (18, `java-watch-agent`'s first tests), two `*JmhBenchmark` classes with 18 measured results, and Bun-rendered `TEST-REPORT.md` / `BenchmarkReport.md`. Reactor total 1231 to **1326 tests, 0 failures**, gate `RESULT: PASS`. The new tests found and fixed three production defects in the position-lookup half (reversed enclosing chain; `@Foo`/`Outer.Foo` stealing a name line; a match inside a string literal), with committed output byte-identical. Delivery record: `07-Testing-Validation.md` § *Status*. |
 
-**Two consequences for whoever picks up Phase 7.** First, the "20 weeks / 5 months" timeline above was
-never a used estimate and should not be read as remaining work: Phases 1–5 and 6 are done. Second, Phase 7
-should be re-scoped against what exists rather than against its own deliverables list, because that list
-was written against Phase 5's sketches.
+**With Phase 7 delivered, the migration itself is complete.** The "20 weeks / 5 months" timeline above was
+never a used estimate and should not be read as remaining work. Phase 8 (Documentation) is the only phase
+left, and it is about writing down a finished migration rather than about the parser.
 
 ---
 
 ## Current status
 
-**Phase**: Phase 5 and Phase 6 are complete; Phase 7 is the next phase, to be re-scoped (see the table above).
+**Phase**: Phases 1–7 are complete. Phase 8 (Documentation) is the only one left.
 
 **Verified in this session**:
-- the whole reactor builds and its tests pass: `1231` tests, `0` failures, `0` errors, counted from the
-  fresh surefire reports of a single `clean test` (1164 after Phase 6, plus the 67 that Phase 5 added).
+- the whole reactor builds and its tests pass: `1326` tests, `0` failures, `0` errors, counted from the
+  fresh surefire reports of a single `clean test` (1231 before Phase 7, plus the 95 it added:
+  `hipster-entity-tooling` 361 to 434, `project-automation` 81 to 85, `java-watch-agent` 0 to 18).
   The largest module is `merge-java` (601), which is also the last in the reactor — the earlier "601
   tests" figure in this file was that module's own total mistaken for the reactor's;
 - `verify-migration.js` reports `RESULT: PASS` with all eight checks green and no `pom-dependencies`
-  warning — no module declares `javaparser-core`;
-- three pre-existing failures that blocked a whole-reactor run were fixed: `java-watch-scp`'s
-  `ConfigTest` (a mixed-separator path from a `~` expansion), `metadata-server`'s
+  warning — no module declares `javaparser-core`. Phase 7 added two `curation.js` allowlist entries for
+  its own new files, which name the retired library only in prose;
+- `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md` is generated, not written: it is rendered
+  by Bun from the surefire XML of that build, the captured gate run and `benchmarks/latest.json`, and it
+  states a missing input as missing rather than rendering it as zero;
+- three production defects in the position-lookup half were found by the new tests and fixed
+  (`TreeQueries.typesWithEnclosing` returned the enclosing chain reversed; `JavaSyntaxCheck.namePositionIn`
+  let `@Foo`, `Outer.Foo` and a string literal steal a declaration's name line). Committed generated
+  output stayed byte-identical, which `ExampleRegenerationTest` asserts;
+- three pre-existing failures that blocked a whole-reactor run were fixed earlier in the migration:
+  `java-watch-scp`'s `ConfigTest` (a mixed-separator path from a `~` expansion), `metadata-server`'s
   `MetadataServerTest.httpForyRoundTrip` (Fory 1.3.0 cannot write a null into an object field; the
   envelope now crosses as a map) and `java-watch-run-sample`'s `copy-dependencies` binding
   (`generate-resources` → `package`, per MDEP-187);
-- Phase 5's engine is in the tree with 67 tests of its own, and no production `Transformation` is
-  registered yet — that is the intended state, not an omission (see `05-Automation.md` § *Status*).
+- Phase 5's engine is in the tree with 67 tests of its own, plus the 4 integration tests Phase 7 added.
+  No production `Transformation` is registered — that is the intended state, not an omission (see
+  `05-Automation.md` § *Status*); Phase 7's integration test declares its own rather than inventing one.
 
 ---
 
@@ -296,7 +305,7 @@ version-specific parser. `javaparser-core` is declared by no module — that is 
 
 ## Approval Required
 
-Historical: this section is the plan's original gate, and the gate was passed — Phases 1–6 have been
+Historical: this section is the plan's original gate, and the gate was passed — Phases 1–7 have been
 executed. It is kept only so the sequence is on record.
 
 1. Review this plan document
@@ -306,7 +315,7 @@ executed. It is kept only so the sequence is on record.
 
 ---
 
-**Document Version**: 1.1  
+**Document Version**: 1.2  
 **Last Updated**: 2026-09-22  
-**Status**: Phases 1–6 delivered; Phase 7 (Testing & Validation) is next and needs re-scoping — see
+**Status**: Phases 1–7 delivered; the migration is complete. Phase 8 (Documentation) remains — see
 § *Phase status*.

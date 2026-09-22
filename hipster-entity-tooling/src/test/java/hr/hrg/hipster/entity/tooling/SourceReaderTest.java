@@ -310,4 +310,108 @@ class SourceReaderTest {
         J.MethodDeclaration name = methods.get(1);
         Assertions.assertFalse(TreeQueries.isVoidReturn(name), "a real return type is not void");
     }
+
+    /**
+     * The four entry points this class documents itself around, tested directly.
+     *
+     * <p>{@link SourceReader#read(Path)} and {@link SourceReader#readSourceText(String)} were reached by
+     * every generator test in the module; these four were reached by none. Three of them are the reason
+     * the class exists at all — {@link SourceReader#readUnit(Path)} is the seam a caller outside the
+     * package uses, {@link SourceReader#problemsIn(String)} is the detail behind a refusal — measured
+     * here, often empty even when the file is refused — and
+     * {@link SourceReader#reportUnparseable} is where the fail-safe becomes a line a human
+     * reads — so an untested trio on a class whose whole job is failure handling is the gap this closes.</p>
+     */
+    @org.junit.jupiter.api.Nested
+    class OtherEntryPoints {
+
+        /** A file on disk, read the way a caller outside this package reads one. */
+        @org.junit.jupiter.api.Test
+        void readUnitReturnsATreeOrNothingNeverAPartialOne(@org.junit.jupiter.api.io.TempDir Path dir)
+                throws Exception {
+            Path good = dir.resolve("Good.java");
+            Files.writeString(good, "package p;\npublic class Good { void m() { } }\n");
+            Path broken = dir.resolve("Broken.java");
+            Files.writeString(broken, "package p;\npublic enum Broken_ {\n    id(java.lang.Long.class;\n}\n");
+
+            Assertions.assertNotNull(SourceReader.readUnit(good), "a readable file yields its tree");
+            Assertions.assertNull(SourceReader.readUnit(broken),
+                    "a file javac recovers from yields nothing, not a half-tree that looks complete");
+            Assertions.assertNull(SourceReader.readUnit(dir.resolve("Absent.java")),
+                    "a missing file is not an error and yields nothing either");
+            Assertions.assertNull(SourceReader.readUnit(null));
+        }
+
+        @org.junit.jupiter.api.Test
+        void problemsAreDetailAndNeverTheVerdict() {
+            Assertions.assertEquals(List.of(), SourceReader.problemsIn(
+                    "package p;\npublic class Clean { }\n"), "a clean file has nothing to report");
+            Assertions.assertEquals(List.of("the source was null"), SourceReader.problemsIn(null),
+                    "and a null source is reported as itself rather than as an empty list");
+
+            // The asymmetry that matters. OpenRewrite recovers from this fixture and reports nothing, so
+            // `problemsIn` comes back empty while `readText` refuses: a caller may use the messages as
+            // detail, and must use `readable()` as the verdict. Pinned because the obvious implementation
+            // of "why did this fail?" is `if (problems.isEmpty()) it is fine`, which is exactly F-34.
+            String recovered = "package p;\npublic enum Broken_ {\n    id(java.lang.Long.class;\n}\n";
+            Assertions.assertFalse(SourceReader.readText(recovered).readable(),
+                    "the read must refuse it");
+            Assertions.assertTrue(SourceReader.readText(recovered).unparseable(),
+                    "and say so through the dedicated flag, not through a null unit alone");
+
+            // A failure OpenRewrite does not report either. Measured: a truncated method body produces no
+            // message at all, even though javac rejects the file — so `problemsIn` is not a validator and
+            // cannot be used as one. Two shapes now pin this: the F-34 enum above, and this.
+            List<String> truncated = SourceReader.problemsIn(
+                    "package p;\npublic class C { void m() { x( }\n}\n");
+            Assertions.assertTrue(truncated.isEmpty(),
+                    "measured: the parser's own list is empty for a file javac rejects, which is exactly "
+                            + "why the verdict comes from readable() (" + truncated + ")");
+            Assertions.assertFalse(SourceReader.readText(
+                            "package p;\npublic class C { void m() { x( }\n}\n").readable(),
+                    "and the verdict does reject it");
+        }
+
+        @org.junit.jupiter.api.Test
+        void theFragmentWrapperHoldsTheExpressionAndNonsenseIsRecoveredNotRefused() {
+            // `new Class<?>[0]` is the case the javadoc names: an expression JavaParser used to parse
+            // through the leaked parser accessor.
+            J.CompilationUnit wrapper = SourceReader.readFragmentUnit("new Class<?>[0]");
+            Assertions.assertNotNull(wrapper);
+            List<J.MethodDeclaration> methods = TreeQueries.methodsOf(TreeQueries.classes(wrapper).get(0));
+            Assertions.assertEquals(List.of(), methods, "the wrapper holds a field, not a method");
+            Assertions.assertTrue(wrapper.printAll().contains("new Class<?>[0]"),
+                    "the fragment survives the wrapper unchanged, which is what lets the caller pull it "
+                            + "back out: " + wrapper.printAll());
+
+            // Measured against the javadoc, which promises an IllegalArgumentException "if the fragment
+            // does not parse": a fragment that is *not* an expression still parses inside the wrapper, as
+            // garbage, and is returned. The exception branch only fires when OpenRewrite itself reports a
+            // failure. Stated here because the difference matters to a caller that reads the javadoc and
+            // assumes a non-null answer means "this was a valid expression" — it does not.
+            J.CompilationUnit nonsense = SourceReader.readFragmentUnit("this is not an expression at all");
+            Assertions.assertNotNull(nonsense, "the wrapper recovers rather than refusing");
+            Assertions.assertFalse(TreeQueries.classes(nonsense).isEmpty(),
+                    "and hands back the wrapper, leaving the caller to check the shape it asked for");
+        }
+
+        @org.junit.jupiter.api.Test
+        void theFailSafeReportSaysWhatWasNotDone() {
+            DivergenceReporter divergences = new DivergenceReporter();
+            SourceReader.reportUnparseable(divergences, "source_not_parsed", "hr/Person_.java",
+                    "the parser recovered from a syntax error", "regenerate hr/Person_.java");
+
+            List<String> lines = divergences.ofKind("source_not_parsed");
+            Assertions.assertEquals(1, lines.size(), "one DEC-022 line, in the reporter's own order");
+            String line = lines.get(0);
+            Assertions.assertTrue(line.contains("location=hr/Person_.java"), line);
+            Assertions.assertTrue(line.contains("unparseable source"), line);
+            Assertions.assertTrue(line.contains("did NOT regenerate hr/Person_.java"),
+                    "the action names the consequence, because that is the half a reader acts on: " + line);
+
+            // The null reporter is a real caller shape (a run with no divergence channel), and it must
+            // stay a no-op rather than turning a read failure into a crash.
+            SourceReader.reportUnparseable(null, "source_not_parsed", "x", "y", "z");
+        }
+    }
 }

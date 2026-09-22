@@ -746,7 +746,15 @@ public final class TreeQueries {
 
             @Override
             public J.ClassDeclaration visitClassDeclaration(J.ClassDeclaration type, ExecutionContext ctx) {
-                found.add(new EnclosedType(type, new ArrayList<>(stack)));
+                // The copy is reversed on the way out, and that is not cosmetic. `ArrayDeque`'s iterator
+                // starts at the head, and `push` inserts at the head, so a raw `new ArrayList<>(stack)` is
+                // innermost-first: for `class Shape { class Nested { record Deep() {} } }` it reported
+                // `[Nested, Shape]`. Every consumer wants outermost first — `lineOfChained` matches that
+                // chain against javac's, which is outermost-first (see SourceReaderTest), and DEC-029's
+                // FQN is `String.join(".", chain) + "." + name`, so the reversed order produced
+                // `p.Nested.Shape.Deep` and a line of -1 for any type nested three deep. Two levels hid
+                // it: `[Shape]` is its own reverse.
+                found.add(new EnclosedType(type, reversedCopy(stack)));
                 stack.push(type);
                 try {
                     return super.visitClassDeclaration(type, ctx);
@@ -756,6 +764,13 @@ public final class TreeQueries {
             }
         }.visit(cu, VISIT_CONTEXT);
         return found;
+    }
+
+    /** The stack's contents, outermost first — the order every consumer of this chain expects. */
+    private static List<J.ClassDeclaration> reversedCopy(java.util.Deque<J.ClassDeclaration> stack) {
+        List<J.ClassDeclaration> chain = new ArrayList<>(stack);
+        Collections.reverse(chain);
+        return chain;
     }
 
     /**

@@ -52,7 +52,7 @@
 
         <!-- `javaparser-core` was removed here on 2026-09-22, at the end of Phase 6 of the
              rewrite-migration plan: every source in this module — main and test — now reads and writes
-             Java through OpenRewrite, and the module's gate (`clean test`, 362 tests) is green without
+             Java through OpenRewrite, and the module's gate (`clean test`, 434 tests) is green without
              it. `DependencyBoundaryTest`, which asserted that this POM declared the dependency without
              pinning a version, was retired in the same change: the single-sourcing property becomes
              vacuous when there is no dependency to single-source, which is what its own javadoc said
@@ -70,6 +70,15 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JMH, at test scope and outside the `jmh` profile, exactly as hipster-entity-core has it: the
+             profile adds the annotation processor and `-proc:full`, but the benchmark sources themselves
+             must compile in a plain `clean test` too, or a broken benchmark would only be noticed by
+             whoever happens to run the profile. -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -91,6 +100,20 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- The JMH annotation processor emits `*_jmhTest` classes into the test output, and
+                         that name matches surefire's default `**/*Test` include. Excluded here, exactly as
+                         in hipster-entity-core, so a plain `clean test` never tries to run a benchmark
+                         harness as a test. -->
+                    <excludes>
+                        <exclude>**/jmh_generated/**</exclude>
+                        <exclude>**/*_jmhTest.class</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -123,6 +146,51 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>jmh</id>
+            <properties>
+                <jmh.version>1.37</jmh.version>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.openjdk.jmh</groupId>
+                    <artifactId>jmh-core</artifactId>
+                    <version>${jmh.version}</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.openjdk.jmh</groupId>
+                    <artifactId>jmh-generator-annprocess</artifactId>
+                    <version>${jmh.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <!-- Copied from hipster-entity-core's `jmh` profile, including the reason:
+                                  JDK 23+ does not run annotation processors discovered on the classpath
+                                  unless processing is asked for explicitly, so without `-proc:full` the
+                                  benchmark sources compile, the build stays green, and the harness the
+                                  benchmark needs silently does not exist (note F-49). Profile-scoped for
+                                  the same reason - a processor-free compile is the right default for
+                                  every other build of this module. -->
+                            <compilerArgs>
+                                <arg>-proc:full</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>${exec.maven.plugin.version}</version>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>junit5</id>
             <activation>

@@ -601,6 +601,16 @@ final class JavaSyntaxCheck {
      * the annotation, and an unbounded search would return the annotation's occurrence — reporting the
      * annotation's line while looking authoritative. Staying inside the declaration's span also means a
      * following declaration can never supply the match.</p>
+     *
+     * <p>Staying inside the span is <em>not</em> enough on its own, and that was a defect until Phase 7
+     * tested this class directly: javac's start position for a declaration <em>includes its
+     * annotations</em> — which is exactly why {@code declarationLine} and {@code nameLine} differ at all —
+     * so for {@code @GenerateBuilder record GenerateBuilder() {}} the first whole-token match inside the
+     * record's own span is the annotation above it, and the record's line came out one to three lines
+     * early. Two shapes are therefore rejected: an occurrence introduced by {@code @} or {@code .}, and an
+     * occurrence inside a literal or comment — see {@link #insideLiteralOrComment}, which is the case an
+     * annotation argument that repeats the member's name. The annotation collector on the path above
+     * deliberately keeps the {@code @}: it is reporting the annotation, not a declaration.</p>
      */
     private static long namePositionIn(String source, String simpleName, long start, long end) {
         if (start < 0 || end > source.length()) {
@@ -609,14 +619,55 @@ final class JavaSyntaxCheck {
         String region = source.substring((int) start, (int) end);
         for (int index = region.indexOf(simpleName); index >= 0; index = region.indexOf(simpleName, index + 1)) {
             boolean leftFree = index == 0 || !Character.isJavaIdentifierPart(region.charAt(index - 1));
+            // `@Name` is an annotation reference and `Outer.Name` is a use of a nested type; neither is
+            // ever how a declaration spells its own name.
+            boolean belongsToSomethingElse = index > 0
+                    && (region.charAt(index - 1) == '@' || region.charAt(index - 1) == '.');
             int after = index + simpleName.length();
             boolean rightFree = after >= region.length()
                     || !Character.isJavaIdentifierPart(region.charAt(after));
-            if (leftFree && rightFree) {
+            if (leftFree && rightFree && !belongsToSomethingElse
+                    && !insideLiteralOrComment(region, index)) {
                 return start + index;
             }
         }
         return start;
+    }
+
+    /**
+     * Whether an offset inside a declaration's own span falls in a string, character literal or comment.
+     *
+     * <p>The declaration's span includes its <em>annotations and their arguments</em>, because that is
+     * what javac's start position means — and an argument is free to repeat the name it annotates.
+     * {@code @FieldSource(name = "birthDate") LocalDate birthDate();} is the ordinary shape in this
+     * project, not a corner case, and the naive scan returned the literal inside the annotation: an
+     * accessor one to three lines early, at a line whose text mentions the field so it still reads as
+     * plausible. Phase 7's large-fixture test found it. The whole span is walked with the same two
+     * skip helpers {@link #fieldDeclarationEnd} uses, so the answer is consistent with the offsets the
+     * spans themselves are built from.</p>
+     */
+    private static boolean insideLiteralOrComment(String region, int index) {
+        int cursor = 0;
+        while (cursor < region.length() && cursor <= index) {
+            char c = region.charAt(cursor);
+            if (c == '"' || c == '\'') {
+                int literalEnd = skipQuoted(region, cursor);
+                if (index <= literalEnd) {
+                    return true;
+                }
+                cursor = literalEnd + 1;
+            } else if (c == '/' && cursor + 1 < region.length()
+                    && (region.charAt(cursor + 1) == '/' || region.charAt(cursor + 1) == '*')) {
+                int commentEnd = skipComment(region, cursor);
+                if (index <= commentEnd) {
+                    return true;
+                }
+                cursor = commentEnd + 1;
+            } else {
+                cursor++;
+            }
+        }
+        return false;
     }
 
     /** Whether a javac diagnostic code is about resolution/typing rather than syntax. */
