@@ -1,5 +1,20 @@
 # Phase 6 — Migration Guide
 
+> **Status: Phase 6 is COMPLETE (2026-09-22).** Every file in the queue is ported and
+> `javaparser-core` is declared by no module, so this guide is now a **record of how the port was done**
+> rather than a set of instructions to follow. It is kept because the next migration — Phase 7, or any
+> future move between parsers — needs the procedure and the traps in one place.
+>
+> Three sections describe a state that no longer exists, and are marked where they appear:
+> **§ 2's warning about removing `javaparser-core`** (it is gone), **§ 6's prerequisites** (resolved by
+> deleting the staging package, not by repairing it) and **§ 7's allowlist** (its entries changed: the
+> two guards that belonged to the JavaParser bridge were re-expressed or retired, and the entries that
+> remain are prose and OpenRewrite's own `JavaParser`). **§ 9's suggested order** is history: the order
+> was followed and finished.
+>
+> What is *not* historical is everything about how a port fails: § 1's traps and § 4's four traps are
+> measured findings, and `MIGRATION-CAVEATS.md` extends them to eleven.
+
 How to port a file in this repository from JavaParser to OpenRewrite, and how to
 tell whether the port is correct.
 
@@ -102,6 +117,13 @@ Copy that comment; it is the answer to "why is this one pinned?".
 is ported.** Removing it early breaks the allowlisted regression guards
 (§ 7), and `verify-migration.js` warns — rather than fails — on a module that still
 declares it, because a module can legitimately be mid-migration.
+
+> **Done (2026-09-22).** The last file is ported and the dependency is gone from every module, including
+> the root POM's managed entry and its `<javaparser.version>` property. Two things that were only
+> discoverable by doing it: removing `javaparser-core` from `jwa-builder` immediately broke
+> `jwa-sidecar`, which had been using it **transitively** (the same thing had happened one level up, to
+> `java-watch-agent`), and the allowlisted guard this paragraph refers to was *re-expressed* against the
+> LST path rather than deleted — see § 7.
 
 ---
 
@@ -457,7 +479,15 @@ page, which also documents `JavaTemplate` and the debugger approach.
 
 ---
 
-## 6. Prerequisites: fix these before porting
+## 6. Prerequisites: fix these before porting — RESOLVED
+
+> **Resolved (2026-09-22), and not by repairing them.** The staging package was **deleted** rather than
+> fixed: nothing outside `project-automation` referenced it, and `project-automation`'s own live classes
+> did not either — so the "Phase-0 repair work" this section describes turned out to be a deletion.
+> `MIGRATION-CAVEATS.md` § 4.3 records the two measurements that justified it. The second prerequisite
+> below (the plan's file list) was handled as described: `Checklist.md` became the work list. What
+> follows is the state as it was found, kept because it is how the phantom `TypeTree` API was caught —
+> the same imagined API the Phase 2 sketches are written against.
 
 `verify-migration.js` currently **fails** on two checks. Both are real, and both
 must be cleared before the first file is ported, because a port cannot be verified
@@ -505,19 +535,28 @@ Some files legitimately keep a JavaParser reference and must **not** be ported.
 failing or silently dropping them, because "found nothing" and "found something I
 chose to ignore" are different answers.
 
-Two are worth understanding before you touch anything near them:
+Two are worth understanding before you touch anything near them — **both are now settled, and the shape
+of their retirement is the lesson**:
 
-- **`DependencyBoundaryTest.java`** asserts that `javaparser-core` is declared
+- **`DependencyBoundaryTest.java`** asserted that `javaparser-core` is declared
   with **no version of its own** and that the root POM is the single place the
   version appears. That is the regression guard for note F-23 (the local
   repository holds eleven JavaParser versions; an ad-hoc classpath picked an old
   one; the generator then silently produced **nothing** for five example files).
-  It is also the test that polices the `pom-dependencies` warning. Retire it in
-  the commit that removes the dependency — not before.
-- **`SourceReaderTest.java`** asserts the configured language level is `JAVA_25`.
-  When `javaparser-core` goes, re-express it as *"a record, a switch expression
-  and a sealed type all parse cleanly"* — that preserves the property without
+  It is also the test that policed the `pom-dependencies` warning. **Retired in the
+  commit that removed the dependency**, which is what its own `deferredTo` said to
+  do: the single-sourcing property is vacuous when there is no dependency to
+  single-source.
+- **`SourceReaderTest.java`** asserted the configured language level is `JAVA_25`.
+  It was **re-expressed rather than deleted**, as this section proposed:
+  `aCleanFileReadsAndARecoveredSyntaxErrorDoesNot` keeps the property that mattered
+  — a parser that recovers from a syntax error is not a readable file — without
   naming the library.
+
+The entries that remain are of two kinds, and neither is a hole: prose that records what the port
+replaced (the provenance the DEC-019 row below depends on), and files where the `JavaParser` in question
+is **OpenRewrite's own** `org.openrewrite.java.JavaParser` — the name collision this guide's § 1.1 warns
+about. `verify-migration.js` reports the count and each reason.
 
 Each allowlist entry carries a `deferredTo` naming the condition that removes it.
 An entry whose file no longer mentions JavaParser is reported as
