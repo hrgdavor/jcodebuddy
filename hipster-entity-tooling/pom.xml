@@ -14,7 +14,8 @@
     <packaging>jar</packaging>
 
     <name>hipster-entity-tooling</name>
-    <description>Tooling module with JavaParser helpers for code generation and analysis.</description>
+    <description>Entity tooling: reads Java through OpenRewrite and generates committed, navigable source
+        (metadata, field enums, builders, records, validators) plus the module's class index.</description>
 
     <dependencies>
         <dependency>

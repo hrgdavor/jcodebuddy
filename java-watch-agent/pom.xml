@@ -13,7 +13,8 @@
 
     <artifactId>java-watch-agent</artifactId>
     <name>Java Watch Agent</name>
-    <description>Agent module for Java Watch2 that uses JavaParser for analysis</description>
+    <description>Agent module for Java Watch2: detects @gen markers, completes records and classes through
+        jwa-builder's OpenRewrite-based processors, and audits the resulting file changes.</description>
 
     <dependencies>
         <dependency>
