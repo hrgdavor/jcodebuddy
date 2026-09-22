@@ -214,8 +214,15 @@ public final class SourceReader {
      * <p>Exists so a caller that wants the parser's own words can have them, without being handed the
      * parser itself. The messages are the {@link ParseExceptionResult} markers OpenRewrite attaches to
      * a failed tree, plus the exception message when the parse threw.</p>
+     *
+     * <p><strong>Public</strong> because reporting "why" is a real caller need rather than a debugging
+     * aid: {@code project-automation}'s validation reports a file it could not read, and a report line
+     * that says only "unreadable" sends a reader to inspect a file the parser may already have described.
+     * The list can still be empty for source that {@link #readText(String)} rejects — the recovered-syntax
+     * case § 1.1 of {@code MIGRATION-CAVEATS.md} records, where the parser succeeds and javac is the only
+     * witness — so a caller must treat "readable" as the verdict and these messages as detail.</p>
      */
-    static List<String> problemsIn(String source) {
+    public static List<String> problemsIn(String source) {
         if (source == null) {
             return List.of("the source was null");
         }

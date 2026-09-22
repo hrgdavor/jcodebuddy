@@ -285,7 +285,7 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 
 ### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java`
 
-**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 360
+**Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 367
 
 **JavaParser surface on disk**:
 
