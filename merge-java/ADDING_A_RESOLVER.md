@@ -9,6 +9,16 @@ The pattern is executed as a test in
 `src/test/java/com/codebuddy/merge/ResolverExtensionTest.java`, so if this
 document and the code ever disagree, that test fails.
 
+> **Where the conflict comes from.** A resolver is usually needed because a real
+> file stayed conflicted: `MergeFileTool` fixes what it can and copies every
+> block it cannot into a private fixture workspace whose `AGENTS.md` drives the
+> loop — *anonymize the case, build the resolver from the anonymized fixture
+> only (following this guide), then re-verify it on the original with
+> `MergeFileTool.reverify`*. See
+> [docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md). Proprietary user
+> code never enters this repository; the steps below are identical whether the
+> fixture arrived through that loop or was invented by hand.
+
 ## The three steps
 
 ### 1. Add the conflict type

@@ -135,6 +135,29 @@ System.out.println(resolution.getResolvedCode());  // all three imports, once ea
 System.out.println(resolution.getExplanation());   // why
 ```
 
+## The conflict-file tool
+
+The entry points above all start from three versions of a file. `MergeFileTool`
+starts from **one file that already carries conflict markers** - the situation a
+developer or an agent is actually in mid-merge:
+
+```
+java -cp … com.codebuddy.merge.MergeFileTool src/main/java/com/example/demo/OrderService.java --apply
+```
+
+Every `<<<<<<< … >>>>>>>` block is parsed, classified and resolved through the
+ordinary pipeline (history replay and verification gate included), and written
+back only when the answer provably covers the whole block. Dry run by default;
+exit status `0/1/2` for CI. Whatever cannot be resolved automatically is copied
+into a **temporary private workspace** - `.gitignore *`, the original never
+committable - together with an `AGENTS.md` that binds any LLM agent opening it:
+anonymize the case first, build and test the new resolver on the *anonymized*
+fixture per [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md), then re-verify it
+against the original case with `MergeFileTool.reverify(caseDir, resolver)`.
+Proprietary user code never enters this repository; only the anonymized fixture
+may. Full flow, layout and privacy model:
+[docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md).
+
 ## How the memory works
 
 Recorded decisions live beside the module, one directory per branch, and are
@@ -235,7 +258,14 @@ merge-java/
     │   ├── Conflict.java / ConflictResolution.java / FixPath.java
     │   ├── ConflictSignature.java             conflict identity
     │   ├── BranchConflictStore.java           per-branch decision history
+    │   ├── MergeFileTool.java                 marker-file entry point + CLI + fixture loop
+    │   ├── ConflictMarkerParser.java          git conflict markers -> blocks + whole versions
+    │   ├── ConflictFixtureWriter.java         the private fixture workspace
+    │   ├── RepositoryProbe.java               branch + staged base through JGit
+    │   ├── FixtureAgentInstructions.java      copies the workspace AGENTS.md
     │   └── *ConflictResolver.java             ten resolvers
+    ├── main/resources/com/codebuddy/merge/
+    │   └── FIXTURE_AGENTS.md                  instructions bundled into every workspace
     └── test/java/com/codebuddy/merge/
         ├── AbstractResolverTest.java          reusable resolver contract tests
         ├── ConflictFixtures.java              one sample conflict per type
@@ -273,12 +303,14 @@ the parent's level with no override.
 > verify it, and the traps. Leaving it to drift is what produced the Java 21
 > override this module briefly needed.
 
-Roughly six hundred tests covering resolver behaviour, detection, region attribution,
+Roughly seven hundred tests covering resolver behaviour, detection, region attribution,
 conflict composition, the verification gate, history persistence and replay, the
 registry contract, the extension pattern, type-aware parameter comparison, the batch
 facade, the JGit workflow against a real repository, a fixture rebuilt as a real git
-repository, and the JSON-to-HTML report (the renderer test skips itself when Bun is
-not installed). Run `mvn test` for the number rather than trusting one written here.
+repository, the conflict-file tool (marker parsing, application rule, private fixture
+workspaces, repository probing), and the JSON-to-HTML report (the renderer test skips
+itself when Bun is not installed). Run `mvn test` for the number rather than trusting
+one written here.
 
 The fixture generator has its own harness, which runs without Maven:
 
@@ -301,8 +333,10 @@ is needed. Versions of OpenRewrite come from the parent POM.
 
 Detection, classification, resolution, fix paths, history and verification are
 implemented and tested. So is the loop the module was built for: `MergeWorkflow`
-keeps a branch up to date through JGit, `MergeBatch` handles many files at once, and
-`MergeReportWriter` plus a Bun script produce a reviewer-facing report.
+keeps a branch up to date through JGit, `MergeBatch` handles many files at once,
+`MergeReportWriter` plus a Bun script produce a reviewer-facing report, and
+`MergeFileTool` fixes a marker-carrying file in place - preparing everything it
+cannot fix as a private, anonymization-first fixture for the next resolver.
 
 Overload comparison is now **type-aware**: it compares resolved parameter types, so
 two spellings of one signature are recognised as one. Only that resolver needs type
@@ -322,6 +356,7 @@ automatically, by design. The reasoning, with worked examples, is in
 |---|---|
 | [QUICKSTART.md](QUICKSTART.md) | Runnable examples for each capability |
 | [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md) | The extension pattern |
+| [docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md) | **`MergeFileTool`**: fixing a marker-carrying file, and the private fixture loop that turns what stays broken into a new resolver |
 | [docs/THREE_WAY_FIXTURES.md](docs/THREE_WAY_FIXTURES.md) | How to add a merge case as real source files, and why |
 | [docs/WHAT_IS_BASE.md](docs/WHAT_IS_BASE.md) | **What `base` means**: the last-synced upstream state, not Git's merge base |
 | [VERSION_MAINTENANCE.md](VERSION_MAINTENANCE.md) | **The half-yearly version-update obligation**: what to bump, how to verify, and the traps |

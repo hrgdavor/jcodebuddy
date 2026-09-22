@@ -4,6 +4,21 @@
 
 ### Added
 
+- **`MergeFileTool`** — the marker-file entry point: give it a path to a file
+  carrying git conflict markers and it resolves every block it safely can
+  (single automatic answer, gate passed, resolution covers the whole block) and
+  prepares everything that remains as a **private fixture workspace** under
+  `${java.io.tmpdir}` — `.gitignore *`, the original file, whole-file three-way
+  reconstructions, per-case slices and manifests, plus a bundled `AGENTS.md`
+  that binds any LLM agent to the anonymize → build → re-verify loop. Only the
+  anonymized fixture may ever enter this repository; `MergeFileTool.reverify`
+  closes the loop by running a candidate resolver against the *original* case
+  through the same verification gate. Dry by default, CI-shaped exit codes,
+  diff3 bases and the git index stage-1 base honoured, never fabricated. With
+  `ConflictMarkerParser` (merge + diff3 markers, loud on corrupt blocks),
+  `ConflictFixtureWriter`, `RepositoryProbe` (branch + staged base through
+  JGit) and `FixtureAgentInstructions`. Documented in
+  `docs/CONFLICT_FILE_TOOL.md`.
 - **Conflict composition** (`Region`, `MergeReport.getIndependentlyApplicable()`).
   A file that is mostly mechanical used to be reported as wholly manual, because
   any unrecognised change replaced the recognised conflicts rather than joining
