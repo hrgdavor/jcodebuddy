@@ -273,8 +273,20 @@ All tests must verify:
 
 ## Status
 
-**Current**: Ready for implementation
-**Next**: After Phase 7 completion, migration is complete
+**Current**: **Next — re-scope before starting** (2026-09-22). Its prerequisites are met: Phase 6 is
+complete (34/34 files ported, `javaparser-core` declared by no module, `verify-migration.js`
+`RESULT: PASS`), and the repository already carries what this phase's deliverables ask for in a different
+shape — the whole reactor runs `601` tests green, and the migrated tooling keeps its recorded gates
+(`hipster-entity-tooling` 361, `jwa-builder` 20, `jwa-sidecar` 3).
+
+The re-scope is needed for one concrete reason: this plan's unit/integration/benchmark deliverables are
+written against the **Phase 5 automation layer** (`AutomationEngine`, `BatchProcessor`,
+`TransformationRegistry`) which was never materialised — see `PLAN-SUMMARY.md` § *Phase status* and
+`05-Automation.md`. What is testable today is the ported tooling and its artifact contracts, including
+the example's byte-identical regeneration, the R1 ledger and compaction round trip, and the generated
+source's compile gates. Anything phrased as "test the workflow engine" has to be re-phrased against those
+before it can be implemented.
+**Next**: after the re-scope, Phase 7 completion finishes the migration.
 
 ## Quick Reference
 

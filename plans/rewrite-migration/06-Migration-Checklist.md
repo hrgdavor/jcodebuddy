@@ -250,8 +250,72 @@ All migrated code must comply with:
 
 ## Status
 
-**Current**: Deliverables complete — see the note below.
-**Next**: Clear prerequisites P0-1..P0-3, then port in the order `Checklist.md` prints.
+**Current**: **COMPLETE** (2026-09-22). Every `com.github.javaparser` consumer in the queue is ported,
+`javaparser-core` is declared by no module, and the phase gate passes with no warnings.
+**Next**: Phase 7 (`07-Testing-Validation.md`). Two pre-existing failures outside this phase are recorded
+below and block only a whole-reactor `clean test`.
+
+### Delivery record (added on completion)
+
+**Result of the phase gate:**
+
+```
+bun run scripts/rewrite-migration/verify-migration.js
+  queue files 41 · settled 34 (100%) · still importing 0 · exempt 9
+  OK  queue-import-free · staging-compiles · tracker-agreement · tracker-vocabulary
+  OK  curation-coverage · curation-freshness · allowlist-honest
+  OK  pom-dependencies: no queue module declares javaparser-core
+  RESULT: PASS.
+```
+
+**What was delivered, beyond § Deliverables:**
+
+- The four deliverables exist: `Checklist.md` (generated), `tracker.md` (hand-maintained),
+  `MIGRATION-GUIDE.md`, and the four scripts as JavaScript under `scripts/rewrite-migration/` rather than
+  `06-migration/scripts/*.sh` — this checkout is Windows with Bun tooling, and `scripts/*.sh` would not be
+  executable or verifiable here.
+- Two documents the plan did not ask for, because the phase needed them:
+  [`MIGRATION-CAVEATS.md`](../../doc/brainstorm/rewrite-migration/06-migration/MIGRATION-CAVEATS.md) — the
+  eleven silent traps, the model differences, the resolved emission decision and the verification
+  checklist a resolver works from — and
+  [`FOLLOWUP-06-Emission.md`](../../doc/brainstorm/rewrite-migration/06-migration/FOLLOWUP-06-Emission.md),
+  the brief that framed the one decision this phase could not take mechanically (now closed).
+- 34 files ported. The hub (`EntityMetadataGenerator`) and its satellites (`MetadataLocations`,
+  `ClassIndex`, `TypeFacts`, `CooperativeCodegen`), the field-enum emitter and the compaction CLI, the
+  `jwa-builder` / `jwa-sidecar` / `java-watch-agent` clusters, and the tests that read JavaParser trees.
+- The JavaParser *bridges* are deleted, not merely unused: `SourceReader`'s whole JavaParser half plus the
+  JavaParser overloads that existed only to serve the un-ported callers. Two guard assertions were dealt
+  with rather than dropped — see `MIGRATION-CAVEATS.md` § 4.6.
+- `javaparser-core` removed from `hipster-entity-tooling`, `jwa-builder` and `java-watch-agent`, and the
+  root POM's now-unused `dependencyManagement` entry and `<javaparser.version>` property with it.
+
+**Deviations from this plan, and why:**
+
+1. **The emission strategy is text, not `JavaTemplate`.** The plan's § Architecture Compliance allows
+   either; what it could not anticipate is that the printer's output is itself a committed contract
+   (`ExampleRegenerationTest` compares the regenerated example byte-for-byte, and DIV-020's cooperative
+   codegen recognises the generator's own previous output by that text). Building trees and printing them
+   with OpenRewrite's printer would have regenerated every committed field enum with different bytes.
+   The full reasoning, including the five printer artefacts that had to be reproduced, is in
+   `MIGRATION-CAVEATS.md` § 4.2.
+2. **`project-automation`'s staging package was deleted rather than ported** (P0-1..P0-3). Nothing outside
+   it referenced it and its own module's live classes did not either; it was written against an API that
+   was imagined rather than read.
+3. **`java-watch-agent` needed three lines of repair before it could be ported at all.** It had never
+   compiled: two imports for `ActionTool`'s nested types, and one Jackson 3 call. The plan listed its five
+   files as ordinary work.
+
+**Known failures outside this phase** (recorded here so they are not read as regressions; both reproduce
+without any of this phase's changes):
+
+- `metadata-server` — `MetadataServerTest.httpForyRoundTrip` fails with an HTTP 500 in isolation.
+- `java-watch-scp` — `ConfigTest.testSshConfigResolution` compares a path with `/` against one with `\`,
+  so it fails on Windows. It stops a whole-reactor `clean test` before the reactor reaches the modules this
+  phase touched.
+
+**How green-ness was established**: `clean test` on `hipster-entity-tooling` (361), `jwa-builder` (20)
+and `jwa-sidecar` (3), which is every module this phase touched plus their dependencies; the whole reactor
+with `-DskipTests clean package`; and the phase gate, checklist and migration report above.
 
 ### Implementation note (added on delivery)
 

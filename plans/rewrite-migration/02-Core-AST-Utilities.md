@@ -141,8 +141,20 @@ All code must comply with:
 
 ## Status
 
-**Current**: Ready for implementation
-**Next**: After Phase 2 completion, proceed to Phase 3
+**Current**: **Delivered as specified, and superseded in practice** (verified 2026-09-22). The four
+sketches (`AstPrinter`, `NodeTraversal`, `SourceManipulation`, `TypeUtils`) and their four test sketches
+exist under `doc/brainstorm/rewrite-migration/02-utilities/`. The working equivalents were written during
+Phase 6, where they are actually used: `TreeQueries` (traversal, kind, annotation and member queries),
+`JavaSyntaxCheck` (positions — which this plan did not anticipate needing javac for) and
+`TypeLiterals` / `JdkImportSupport` (type text and class literals).
+**Next**: nothing here; Phase 6 is complete and Phase 7 is next (see `PLAN-SUMMARY.md` § *Phase status*).
+
+**Do not compile these sketches as they stand.** `02-utilities/util/TypeUtils.java` is written against
+`TypeTree`, `JType` and `JTypeParameter` — types that **exist nowhere in the repository**, and the same
+imagined API that made `project-automation`'s staging package fail to compile before it was deleted
+(`MIGRATION-CAVEATS.md` § 4.3). They are design notes about *what* a utility layer needs, not a starting
+point; the LST's own types (`J.ParameterizedType`, `J.Identifier`, `J.Primitive`, `J.TypeParameter`) are
+what a real implementation uses, as `TreeQueries` and `TypeLiterals` do.
 
 ## Quick Reference
 

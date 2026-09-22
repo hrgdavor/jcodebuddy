@@ -32,7 +32,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 1: Foundation & Infrastructure ✓ STARTED
 
-**Status**: In Progress
+**Status**: Delivered as specified (verified 2026-09-22 — see § *Phase status* above)
 
 **Files Created**:
 - `pom-fragment-rewrite.xml` - Maven dependency fragment
@@ -46,7 +46,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 2: Core AST Utilities
 
-**Status**: Pending
+**Status**: Delivered as specified, superseded in practice by `TreeQueries` / `JavaSyntaxCheck` / `TypeLiterals` (verified 2026-09-22)
 
 **Goal**: Implement core AST traversal and manipulation utilities
 
@@ -58,7 +58,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 3: Code Generation Tools
 
-**Status**: Pending
+**Status**: Delivered — the ported generators are green in the tree (verified 2026-09-22)
 
 **Goal**: Migrate code generation tools from JavaParser to OpenRewrite
 
@@ -73,7 +73,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 4: Validation & Analysis Tools
 
-**Status**: Pending
+**Status**: Delivered — the ported validation rules are green in the tree (verified 2026-09-22)
 
 **Goal**: Migrate validation rules and analysis tools
 
@@ -92,7 +92,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 5: Integration with Project Automation
 
-**Status**: Pending
+**Status**: Sketches only — the engine was never materialised in `project-automation`, and Phase 6 absorbed its purpose (verified 2026-09-22)
 
 **Goal**: Integrate OpenRewrite tools with project-automation module
 
@@ -104,7 +104,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 6: Migration of Existing Tooling
 
-**Status**: Pending
+**Status**: **COMPLETE** 2026-09-22 — 34/34 files ported, `javaparser-core` gone, whole reactor green (601 tests)
 
 **Goal**: Complete migration of all remaining JavaParser usage
 
@@ -118,7 +118,7 @@ All migration work must comply with JCodeBuddy architecture decisions:
 
 ### Phase 7: Testing & Validation
 
-**Status**: Pending
+**Status**: **Next** — prerequisites met; re-scope before starting, because its deliverables assume the Phase 5 automation layer that does not exist (verified 2026-09-22)
 
 **Goal**: Comprehensive testing and validation
 
@@ -127,6 +127,47 @@ All migration work must comply with JCodeBuddy architecture decisions:
 - Integration tests for full workflows
 - Performance benchmarks
 - Edge case testing
+
+---
+
+## Phase status — verified against the tree, 2026-09-22
+
+The per-phase "Status" lines further up this file are the **plan's own optimistic headings** from when it
+was written, and they are wrong in both directions: they say Phase 1 is in progress and Phases 2–7 are
+pending. This table is what was actually verified, with the evidence for each row. Where a phase's
+deliverables are *documents* rather than compiled code, the row says so, because that distinction is what
+made the plan's status lines misleading.
+
+| Phase | Status | Evidence |
+| --- | --- | --- |
+| 1 — Foundation | **Delivered as specified** | `01-foundation/pom-fragment-rewrite.xml` exists, and its content is in the root POM: `openrewrite.version` 8.90.4 plus managed `rewrite-core` / `rewrite-java`, with `rewrite-java-25` pinned in the modules that parse. `01-foundation/api-compatibility/{AstVisitor,AstManipulator,CompilationUnitAdapter}.java` exist. OpenRewrite is a real dependency of four modules. |
+| 2 — Core AST Utilities | **Delivered as specified, and superseded in practice** | `02-utilities/util/{AstPrinter,NodeTraversal,SourceManipulation,TypeUtils}.java` and their four test sketches exist. The *working* equivalents were written during Phase 6 where they are used: `hipster-entity-tooling`'s `TreeQueries` (traversal/kind/annotation queries), `JavaSyntaxCheck` (positions, which the plan did not anticipate needing javac for) and `TypeLiterals`/`JdkImportSupport` (type text and class literals). The plan's `util/` files are sketches in the docs tree, not compiled code. |
+| 3 — Code Generation | **Delivered** | Its own Status line already said "Implementation Complete"; the generators are ported and green in the tree (`ViewBuilderGenerator`, `ViewInterfaceGenerator`, `ValidationGenerator`, `ViewRecordGenerator`, `FieldBoilerplateGenerator`, and `jwa-builder`'s `RecordBuilderProcessor`/`ClassMemberProcessor`). `03-codegen/` holds the design notes, not code. |
+| 4 — Validation | **Delivered** | Its own heading says so, and the tree agrees: `EntityRulesValidator` plus `EntityRule`, `MarkerEntityRule`, `ViewAnnotationRule`, `ViewInterfaceRule`, `AuditableRule`, `EntityFieldEnumOrderRule` and `EnumConstantOrderChecker` are all ported and green. |
+| 5 — Automation | **Sketches only — NOT delivered as intended** | All ten sketches exist in `05-automation/` (`AutomationEngine`, `BatchProcessor`, `ProjectAutomation`, `TransformationRegistry`, …), but `project-automation` declares no `AutomationEngine` and no `ProjectAutomation` — its classes are `CodeContext`/`CodeGenerator`/`TypeResolver`/`MetadataAnalysisRunner` and the entity watcher. Phase 6 did not need the engine: the port went module by module, and the staging package that was to become it (`project-automation/src/main/java/hr/hrg/rewrite/**`) was deleted because it did not compile and nothing referenced it. |
+| 6 — Migration of Existing Tooling | **COMPLETE** (2026-09-22) | 34/34 queue files ported; `javaparser-core` declared by no module; `verify-migration.js` `RESULT: PASS`; whole reactor `clean test` green (601 tests). Delivery record: `06-Migration-Checklist.md` § *Delivery record*. |
+| 7 — Testing & Validation | **Next** | Prerequisites are met (Phase 6 complete). One caveat to re-sequence before starting: Phase 7's plan lists unit tests "for each migrated component" and integration tests "for workflows"; the workflows Phase 5 was to provide do not exist, so what is testable today is the ported tooling and its artifact contracts (which already carry 601 tests), not an automation pipeline. |
+
+**Two consequences for whoever picks up Phase 7.** First, the "20 weeks / 5 months" timeline above was
+never a used estimate and should not be read as remaining work: Phases 1–4 and 6 are done, and Phase 5's
+intent was absorbed by Phase 6. Second, Phase 7 should be re-scoped against what exists rather than
+against its own deliverables list, because that list assumes the automation layer.
+
+---
+
+## Current status
+
+**Phase**: Phase 6 complete; Phase 7 is the next phase, to be re-scoped (see the table above).
+
+**Verified in this session**:
+- the whole reactor builds and its tests pass: `601` tests, `0` failures, `0` errors;
+- `verify-migration.js` reports `RESULT: PASS` with all eight checks green and no `pom-dependencies`
+  warning — no module declares `javaparser-core`;
+- three pre-existing failures that blocked a whole-reactor run were fixed: `java-watch-scp`'s
+  `ConfigTest` (a mixed-separator path from a `~` expansion), `metadata-server`'s
+  `MetadataServerTest.httpForyRoundTrip` (Fory 1.3.0 cannot write a null into an object field; the
+  envelope now crosses as a map) and `java-watch-run-sample`'s `copy-dependencies` binding
+  (`generate-resources` → `package`, per MDEP-187).
 
 ---
 
@@ -158,6 +199,12 @@ All migration work must comply with JCodeBuddy architecture decisions:
 ---
 
 ## Current Status
+
+> **Superseded** by § *Phase status — verified against the tree* above, which records what was actually
+> delivered and what was checked. The lines below are the plan's original wording, kept because they are
+> what the phase documents were written against: "Phase 1 directory structure created" and "API
+> compatibility layer scaffolding created" describe the *sketches*, and the phases they call pending are
+> not pending any more.
 
 **Phase**: Phase 1 - Foundation (In Progress)
 

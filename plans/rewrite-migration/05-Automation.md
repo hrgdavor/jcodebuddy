@@ -233,8 +233,16 @@ All automation code must comply with:
 
 ## Status
 
-**Current**: Ready for implementation
-**Next**: After Phase 5 completion, proceed to Phase 6
+**Current**: **Sketches only — NOT delivered as intended** (verified 2026-09-22). All ten sketches exist
+under `doc/brainstorm/rewrite-migration/05-automation/`, but `project-automation` declares no
+`AutomationEngine` and no `ProjectAutomation`: its classes are `CodeContext`/`CodeGenerator`/`TypeResolver`/
+`MetadataAnalysisRunner` and the entity watcher. Phase 6 did not need the engine — it ported the modules
+one by one — and the staging package that was to become it
+(`project-automation/src/main/java/hr/hrg/rewrite/**`) was deleted because it did not compile and nothing
+referenced it.
+**Next**: nothing is blocked on this; Phase 6 is complete and Phase 7 is next. **Phase 7 should be
+re-scoped before it starts**, because its deliverables assume the automation layer this phase was to
+provide (see `PLAN-SUMMARY.md` § *Phase status*).
 
 ## Quick Reference
 

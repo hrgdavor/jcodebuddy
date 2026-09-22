@@ -1,200 +1,61 @@
-# Phase 4: Validation & Analysis Tools - Implementation Complete
+# Phase 4: Validation & Analysis Tools
 
-## Status: ✅ COMPLETE
+> **Rewritten on 2026-09-22.** This file used to open with "Phase 4 has been successfully implemented"
+> and then link to eighteen files under `project-automation/src/main/java/hr/hrg/rewrite/validation/`.
+> Those files no longer exist, and the reason matters: they were the *staging* copies, they never
+> compiled, and one of the types they referenced — `hr.hrg.hipster.entity.tooling.TypeTree` — **exists
+> nowhere in the repository**. Phase 6 deleted the package on those grounds (`06-Migration-Checklist.md`
+> § *Delivery record*, `MIGRATION-CAVEATS.md` § 4.3). The API examples further down this file
+> (`validator.validateAll(sourceFile)`, `analyzer.analyze(sourceFile)`,
+> `generator.generateAccessors(sourceFile)`) were never real either: they describe the imagined surface
+> of the staging package, which is what "written against an API that was imagined rather than read"
+> means. What follows is what Phase 4 actually delivered.
 
-Phase 4 has been successfully implemented. All validation rules and analysis tools have been migrated from JavaParser to OpenRewrite.
+## Status
 
-## Implementation Summary
+**Delivered — in `hipster-entity-tooling`, not in `project-automation`.** Every validation rule the plan
+names exists today as a ported class under
+`hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/`, and the module's gate is
+green (361 tests, including the ledger and rule tests). The scaffolding this document used to describe was
+removed, not migrated.
 
-### 1. Base Interfaces Created
+## Where each named class lives now
 
-- [`ValidationResult.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/ValidationResult.java)
-- [`AnalysisResult.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/AnalysisResult.java)
-- [`ToolResult.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/ToolResult.java)
+| Name in the plan | Reality today |
+| --- | --- |
+| `EntityRulesValidator` | `hipster-entity-tooling/.../validation/EntityRulesValidator.java` — ported |
+| `EntityRule` | `hipster-entity-tooling/.../validation/EntityRule.java` — the rule interface, ported |
+| `AuditableRule` | `hipster-entity-tooling/.../validation/AuditableRule.java` — ported |
+| `MarkerEntityRule` | `hipster-entity-tooling/.../validation/MarkerEntityRule.java` — ported |
+| `ViewInterfaceRule` | `hipster-entity-tooling/.../validation/ViewInterfaceRule.java` — ported |
+| `ViewAnnotationRule` | `hipster-entity-tooling/.../validation/ViewAnnotationRule.java` — ported |
+| `EnumConstantOrderChecker` | `hipster-entity-tooling/.../validation/EnumConstantOrderChecker.java` — ported |
+| `EnumCompactionCli` | `hipster-entity-tooling/.../validation/EnumCompactionCli.java` — ported (compaction) |
+| `JavaParserTool` | Renamed to `hipster-entity-tooling/.../validation/SourceQuery.java` during the port |
+| `ContextualAnalyzer` | `java-watch-agent/.../agent/core/ContextualAnalyzer.java` — ported (it is an agent tool, not a rule) |
+| `AccessorGenerator`, `BuilderGenerator`, `ConstructorGenerator` | `java-watch-agent/.../agent/tools/` — ported; they now delegate to `jwa-builder`'s `ClassMemberProcessor` |
+| `ValidationResult`, `AnalysisResult` | Exist only as sketches in `doc/brainstorm/rewrite-migration/05-automation/`; nothing compiles them, and the ported rules return their own types (`EntityRulesValidator.ValidationIssue`, `DivergenceReporter` entries) |
+| `ToolResult`, `AnnotationChecker`, `MethodChecker`, `FieldChecker`, `README.md` | **Never existed in compilable form.** They were staging-only, or (for the checkers) plan sketches with no implementation anywhere |
 
-### 2. Helper Classes Created
+The rule that replaced the last row's intent is worth naming, because it is better than what the plan
+proposed: a "checker per node type" (`AnnotationChecker`, `MethodChecker`, `FieldChecker`) is exactly the
+shape the LST makes unnecessary — one `J.ClassDeclaration` covers classes, records, enums, interfaces and
+annotations, and one `J.MethodDeclaration` covers methods *and* constructors. `TreeQueries` owns those
+kind and shape questions, and each rule states its own condition on top.
 
-- [`AnnotationChecker.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/AnnotationChecker.java)
-- [`MethodChecker.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/MethodChecker.java)
-- [`FieldChecker.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/FieldChecker.java)
+## What the port actually validated
 
-### 3. Validation Rules Migrated
+Two things this plan did not anticipate, both of which the port had to answer before the rules could run:
 
-- [`AuditableRule.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/AuditableRule.java) - Validates Auditable interface implementation
-- [`MarkerEntityRule.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/MarkerEntityRule.java) - Validates marker entity rules
-- [`ViewInterfaceRule.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/ViewInterfaceRule.java) - Validates view interface structure
-- [`ViewAnnotationRule.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/ViewAnnotationRule.java) - Validates view annotations
-- [`EntityRulesValidator.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/EntityRulesValidator.java) - Validates all entity rules together
+1. **Positions.** Every rule that reports a location needs a line, and the LST exposes none at all. The
+   answer is `JavaSyntaxCheck` (one javac parse per source text, memoised) behind
+   `TreeQueries.lineOf` / `methodLineOf` / `annotationLineOf` / `memberLineOf` / `caseLines` — see
+   `MIGRATION-CAVEATS.md` § 4.5.
+2. **Readability.** A parser recovers from a syntax error and returns a well-formed tree, so "it parsed"
+   is not "the file is readable". `SourceReader` asks javac for the syntax verdict, and every rule reads
+   through it (`MIGRATION-CAVEATS.md` § 1.1).
 
-### 4. Analysis Tools Migrated
+## Next
 
-- [`ContextualAnalyzer.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/ContextualAnalyzer.java) - Performs contextual analysis
-- [`AccessorGenerator.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/AccessorGenerator.java) - Generates accessors
-- [`BuilderGenerator.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/BuilderGenerator.java) - Generates builders
-- [`ConstructorGenerator.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/ConstructorGenerator.java) - Generates constructors
-
-### 5. Other Tools Migrated
-
-- [`JavaParserTool.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/JavaParserTool.java) - Generic JavaParser tool for validation
-- [`EnumCompactionCli.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/EnumCompactionCli.java) - Command-line interface for enum compaction
-- [`EnumConstantOrderChecker.java`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/EnumConstantOrderChecker.java) - Checks enum constant order
-
-### 6. Documentation
-
-- [`README.md`](../../project-automation/src/main/java/hr/hrg/rewrite/validation/README.md) - Phase 4 documentation
-
-## Implementation Details
-
-### Architecture Compliance
-
-All implementations comply with JCodeBuddy architecture decisions:
-
-- **DEC-019**: Source-visible wiring - No reflection-driven discovery
-- **DEC-020**: Cooperative codegen - Preserve user edits
-- **DEC-021**: Generator class-file header format
-- **DEC-022**: Refactor-sensitive naming contracts
-- **DEC-029**: Class index by FQN
-
-### File Header Format
-
-Each file follows DEC-021 with two-line header:
-```java
-// {@link <fqn> <one-line description>.
-// {enabled:true, blockMarker: "implicit"}
-```
-
-### Validation Strategy
-
-The validation framework uses:
-- OpenRewrite visitor pattern for AST traversal
-- TypeTree-based type checking
-- AnnotationTree-based annotation detection
-- MethodTree-based method validation
-- FieldTree-based field validation
-
-### Validation Flow
-
-1. **Parse source file** → `SourceFile`
-2. **Extract types** → `List<TypeTree>`
-3. **Validate each type** → `ValidationResult`
-4. **Aggregate results** → Combined `ValidationResult`
-
-## Usage Examples
-
-### Entity Rules Validation
-
-```java
-EntityRulesValidator validator = new EntityRulesValidator();
-ValidationResult result = validator.validateAll(sourceFile);
-if (!result.isValid()) {
-    System.out.println("Errors: " + result.getErrors());
-}
-```
-
-### Contextual Analysis
-
-```java
-ContextualAnalyzer analyzer = new ContextualAnalyzer();
-AnalysisResult result = analyzer.analyze(sourceFile);
-Map<String, Object> analysis = result.getAnalysis();
-```
-
-### Accessor Generation
-
-```java
-AccessorGenerator generator = new AccessorGenerator();
-CompilationUnit accessors = generator.generateAccessors(sourceFile);
-```
-
-## Testing Strategy
-
-Each tool implements:
-- Positive tests - Validate correct code
-- Negative tests - Validate incorrect code
-- Edge case tests - Handle edge cases
-- Performance tests - Validate performance with large files
-
-## Integration
-
-### Phase 2 Dependencies
-- Uses AST traversal utilities
-- Uses type manipulation utilities
-- Uses source printing utilities
-
-### Phase 3 Dependencies
-- Uses generated code structure
-- Uses view interface generator
-- Uses field boilerplate generator
-
-### Phase 6 Usage
-- Batch validation of codebase
-- Migration verification
-- Quality assurance checks
-
-## Next Steps
-
-After Phase 4 completion, proceed to:
-1. **Phase 5**: Integration with Project Automation
-2. **Phase 6**: Migration of Existing Tooling
-3. **Phase 7**: Testing & Validation
-
-## Files Created
-
-| File | Path |
-|------|------|
-| ValidationResult.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/ValidationResult.java` |
-| AnalysisResult.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/AnalysisResult.java` |
-| ToolResult.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/ToolResult.java` |
-| AnnotationChecker.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/AnnotationChecker.java` |
-| MethodChecker.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/MethodChecker.java` |
-| FieldChecker.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/FieldChecker.java` |
-| AuditableRule.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/AuditableRule.java` |
-| MarkerEntityRule.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/MarkerEntityRule.java` |
-| ViewInterfaceRule.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/ViewInterfaceRule.java` |
-| ViewAnnotationRule.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/ViewAnnotationRule.java` |
-| EntityRulesValidator.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/EntityRulesValidator.java` |
-| ContextualAnalyzer.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/ContextualAnalyzer.java` |
-| AccessorGenerator.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/AccessorGenerator.java` |
-| BuilderGenerator.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/BuilderGenerator.java` |
-| ConstructorGenerator.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/ConstructorGenerator.java` |
-| JavaParserTool.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/JavaParserTool.java` |
-| EnumCompactionCli.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/EnumCompactionCli.java` |
-| EnumConstantOrderChecker.java | `project-automation/src/main/java/hr/hrg/rewrite/validation/EnumConstantOrderChecker.java` |
-| README.md | `project-automation/src/main/java/hr/hrg/rewrite/validation/README.md` |
-
-## Quick Reference
-
-| Tool | Purpose |
-|------|---------|
-| ValidationResult | Validation result container |
-| AnalysisResult | Analysis result container |
-| ToolResult | Tool result interface |
-| AnnotationChecker | Annotation checking utility |
-| MethodChecker | Method checking utility |
-| FieldChecker | Field checking utility |
-| AuditableRule | Auditable interface validation |
-| MarkerEntityRule | Marker entity validation |
-| ViewInterfaceRule | View interface validation |
-| ViewAnnotationRule | View annotation validation |
-| EntityRulesValidator | Combined entity validation |
-| ContextualAnalyzer | Contextual analysis |
-| AccessorGenerator | Accessor generation |
-| BuilderGenerator | Builder generation |
-| ConstructorGenerator | Constructor generation |
-| JavaParserTool | Generic tool |
-| EnumCompactionCli | CLI for enum compaction |
-| EnumConstantOrderChecker | Enum order checking |
-
-## Milestone Achieved
-
-✅ **Phase 4 Complete** - All validation rules and analysis tools migrated
-
-## Notes
-
-- Implementation follows DEC-019 through DEC-029
-- All files have proper generator headers
-- Cooperative codegen pattern used
-- User edits preserved
-- No reflection-driven discovery
-- Source-visible wiring maintained
-
+Phase 6 is complete; Phase 7 is next and needs re-scoping, because its deliverables assume the Phase 5
+automation layer that was never built. See `PLAN-SUMMARY.md` § *Phase status*.

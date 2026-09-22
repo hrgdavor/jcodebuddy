@@ -182,5 +182,9 @@ All code must comply with:
 
 ## Status
 
-**Current**: Ready for implementation
-**Next**: After Phase 1 completion, proceed to Phase 2
+**Current**: **Delivered as specified** (verified 2026-09-22). The dependency fragment's content is in the
+root POM — `openrewrite.version` 8.90.4, managed `rewrite-core` and `rewrite-java`, `rewrite-java-25`
+pinned where a parser is needed — and the three `api-compatibility` sketches exist under
+`doc/brainstorm/rewrite-migration/01-foundation/`. OpenRewrite is a real dependency of four modules.
+**Next**: nothing here. Phase 6 is complete and Phase 7 is next; see `PLAN-SUMMARY.md` § *Phase status*,
+reconciled against the tree on the same date.

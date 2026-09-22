@@ -211,8 +211,12 @@ After completing Phase 3:
 
 ## Status Update
 
-**Current**: Phase 3 Implementation Complete
-**Next**: After Phase 3 completion, proceed to Phase 4 (Validation)
+**Current**: **Delivered** (confirmed against the tree 2026-09-22). The generators named here are ported
+and green in `hipster-entity-tooling` (`ViewBuilderGenerator`, `ViewInterfaceGenerator`,
+`ValidationGenerator`, `ViewRecordGenerator`, `FieldBoilerplateGenerator`) and in `jwa-builder`
+(`RecordBuilderProcessor`, `ClassMemberProcessor`, `BuilderTransformationEngine`). `03-codegen/` holds the
+design notes and usage guide, not code.
+**Next**: nothing here; Phase 6 is complete and Phase 7 is next (see `PLAN-SUMMARY.md` § *Phase status*).
 
 ## Quick Reference
 
