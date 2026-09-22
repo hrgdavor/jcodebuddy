@@ -41,7 +41,16 @@
                 <executions>
                     <execution>
                         <id>copy-runtime-deps</id>
-                        <phase>generate-resources</phase>
+                        <!-- `package`, not `generate-resources`. `copy-dependencies` resolves its inputs
+                             as artifacts, and in a reactor a sibling module's artifact does not exist
+                             until that module has been packaged: bound to `generate-resources` this
+                             failed every `clean compile` and `clean test` of the reactor with
+                             "Artifact has not been packaged yet … see MDEP-187", which meant a
+                             whole-reactor test run could never reach the modules after this one. The
+                             plugin's own guidance is to run it after packaging, and this module's purpose
+                             — a runnable sample with its runtime jars in `lib/` — is exactly a
+                             post-package step. -->
+                        <phase>package</phase>
                         <goals>
                             <goal>copy-dependencies</goal>
                         </goals>

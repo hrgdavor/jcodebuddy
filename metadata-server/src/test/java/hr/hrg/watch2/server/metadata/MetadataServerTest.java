@@ -132,7 +132,20 @@ class MetadataServerTest {
         httpTransport = new HttpTransport(port, provider);
         httpTransport.start();
 
-        org.apache.fory.Fory fory = org.apache.fory.Fory.builder().build();
+        // The client's codec comes from the published contract, not from `Fory.builder()`.
+        //
+        // This test used to build a default-configured Fory here, and it failed on every run with an
+        // HTTP 500 whose server-side cause was `SerializationException: NullPointerException` inside
+        // Fory's `DeferedLazySerializer`. The reason is that Fory's wire format is not self-describing:
+        // the transport configures `withNumberCompressed(true)` and `withRefTracking(false)`, and a
+        // client built from the defaults mis-parses the frames — the server then serialises a request
+        // graph it half-understood, reaches a value whose runtime class has no serializer, and Fory's
+        // deferred lookup answers `null` instead of reporting the configuration mismatch.
+        //
+        // So the assertion this test makes is "the documented codec round-trips over HTTP". If it is ever
+        // weakened back to `Fory.builder().build()`, it fails again — which is the point: the flags are
+        // part of the protocol, and `ForyCodec` is where a client learns them.
+        org.apache.fory.Fory fory = hr.hrg.watch2.server.metadata.transport.ForyCodec.newFory();
         fory.register(JsonRpcRequest.class);
         fory.register(JsonRpcResponse.class);
         fory.register(JsonRpcError.class);
@@ -208,7 +221,9 @@ class MetadataServerTest {
         unixForyTransport = new UnixSocketTransport(sock, UnixSocketTransport.Protocol.FORY, provider);
         unixForyTransport.start();
 
-        org.apache.fory.Fory fory = org.apache.fory.Fory.builder().build();
+        // The same published codec as the HTTP case above (see the comment there for why the defaults
+        // cannot interoperate with a transport-configured Fory).
+        org.apache.fory.Fory fory = hr.hrg.watch2.server.metadata.transport.ForyCodec.newFory();
         byte[] reqBytes = fory.serialize(Map.of(
             "jsonrpc", "2.0",
             "id", "4",

@@ -32,7 +32,9 @@ public class HttpTransport {
     public HttpTransport(int port, MetadataProvider provider) {
         this.port = port;
         this.provider = provider;
-        this.fory = Fory.builder().withNumberCompressed(true).withRefTracking(false).build();
+        // `ForyCodec`, not `Fory.builder()`: the wire format depends on the builder's flags, and a
+        // client that guesses the defaults mis-parses this server's frames (see ForyCodec).
+        this.fory = ForyCodec.newFory();
         this.fory.register(JsonRpcRequest.class);
         this.fory.register(JsonRpcResponse.class);
         this.fory.register(JsonRpcError.class);
@@ -85,10 +87,12 @@ public class HttpTransport {
         public void handle(HttpExchange exchange) throws IOException {
             try {
                 byte[] body = exchange.getRequestBody().readAllBytes();
-                Object req = fory.deserialize(body);
-                JsonRpcRequest jReq = mapper.convertValue(req, JsonRpcRequest.class);
+                // The wire carries a map, not the model object: Fory 1.3.0 cannot write a null into an
+                // object field, and a JSON-RPC response always has one (JsonRpcResponse.toWireMap).
+                Object wireRequest = fory.deserialize(body);
+                JsonRpcRequest jReq = mapper.convertValue(wireRequest, JsonRpcRequest.class);
                 JsonRpcResponse res = dispatcher.dispatch(jReq);
-                byte[] out = fory.serialize(res);
+                byte[] out = fory.serialize(res.toWireMap());
                 exchange.getResponseHeaders().set("Content-Type", "application/x-fory");
                 exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
                 exchange.sendResponseHeaders(200, out.length);
@@ -97,7 +101,6 @@ public class HttpTransport {
                 }
             } catch (Exception e) {
                 log.error("Fory-RPC error", e);
-                e.printStackTrace();
                 exchange.sendResponseHeaders(500, 0);
                 exchange.close();
             }

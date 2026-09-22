@@ -16,6 +16,7 @@ import java.net.StandardSocketOptions;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,7 +39,9 @@ public class UnixSocketTransport {
         this.socketPath = socketPath;
         this.protocol = protocol;
         this.provider = provider;
-        this.fory = Fory.builder().withNumberCompressed(true).withRefTracking(false).build();
+        // The same codec as the HTTP transport, from the same factory: the two transports share a wire
+        // format, so they must share its configuration (see ForyCodec).
+        this.fory = ForyCodec.newFory();
         this.fory.register(JsonRpcRequest.class);
         this.fory.register(JsonRpcResponse.class);
         this.fory.register(JsonRpcError.class);
@@ -150,10 +153,12 @@ public class UnixSocketTransport {
                 break;
             }
             byte[] payload = dis.readNBytes(len);
-            Object req = fory.deserialize(payload);
-            JsonRpcRequest jReq = mapper.convertValue(req, JsonRpcRequest.class);
+            // The wire carries a map, not the model object — see JsonRpcResponse.toWireMap for the
+            // measured reason (Fory 1.3.0 cannot write a null into an object field).
+            Object wireRequest = fory.deserialize(payload);
+            JsonRpcRequest jReq = mapper.convertValue(wireRequest, JsonRpcRequest.class);
             JsonRpcResponse res = dispatcher.dispatch(jReq);
-            byte[] outBytes = fory.serialize(res);
+            byte[] outBytes = fory.serialize(res.toWireMap());
             dos.writeInt(outBytes.length);
             dos.write(outBytes);
             dos.flush();

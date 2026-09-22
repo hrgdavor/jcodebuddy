@@ -563,7 +563,14 @@ public class WatchScpConfig {
                         }
                     } else if (key.equalsIgnoreCase("IdentityFile") && (keyPath == null || keyPath.isEmpty())) {
                         if (value.startsWith("~")) {
-                            value = home + value.substring(1).replace('\\', '/').replace("//", "/");
+                            // The tilde is expanded to the home directory and the RESULT is normalised to
+                            // forward slashes, which is the form an SSH config speaks. Normalising only
+                            // the tail (`value.substring(1)`) left the home part with its platform
+                            // separators, so on Windows the path came out mixed — `C:\Users\me/.ssh/key` —
+                            // and `ConfigTest.testSshConfigResolution`, which asserts the normalised form,
+                            // failed on every Windows run. The `//` collapse then handles a home directory
+                            // that already ends with a separator.
+                            value = (home + value.substring(1)).replace('\\', '/').replace("//", "/");
                         }
                         keyPath = value;
                     }
