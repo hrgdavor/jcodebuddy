@@ -252,8 +252,8 @@ All migrated code must comply with:
 
 **Current**: **COMPLETE** (2026-09-22). Every `com.github.javaparser` consumer in the queue is ported,
 `javaparser-core` is declared by no module, and the phase gate passes with no warnings.
-**Next**: Phase 7 (`07-Testing-Validation.md`). Two pre-existing failures outside this phase are recorded
-below and block only a whole-reactor `clean test`.
+**Next**: Phase 7 (`07-Testing-Validation.md`). The three pre-existing failures that blocked a
+whole-reactor `clean test` were found and fixed during this phase; there are no known failures left.
 
 ### Delivery record (added on completion)
 
@@ -305,17 +305,24 @@ bun run scripts/rewrite-migration/verify-migration.js
    compiled: two imports for `ActionTool`'s nested types, and one Jackson 3 call. The plan listed its five
    files as ordinary work.
 
-**Known failures outside this phase** (recorded here so they are not read as regressions; both reproduce
-without any of this phase's changes):
+**Pre-existing failures found and fixed** (none of the three was caused by this phase; each reproduced
+without its changes, and each stopped the reactor before it reached the modules this phase touched):
 
-- `metadata-server` — `MetadataServerTest.httpForyRoundTrip` fails with an HTTP 500 in isolation.
-- `java-watch-scp` — `ConfigTest.testSshConfigResolution` compares a path with `/` against one with `\`,
-  so it fails on Windows. It stops a whole-reactor `clean test` before the reactor reaches the modules this
-  phase touched.
+1. `metadata-server` — `MetadataServerTest.httpForyRoundTrip` failed with an HTTP 500. Two causes: a
+   codec-flag mismatch between the two transports, and Fory 1.3.0 being unable to write a `null` into an
+   object field under any configuration (only 1.3.0 is in the offline repository, so an upgrade was not an
+   option). The envelope now crosses as a map through one `ForyCodec`.
+2. `java-watch-scp` — `ConfigTest.testSshConfigResolution` compared a path with `/` against one with `\`,
+   because a `~` expansion concatenated a home directory with a mixed-separator remainder.
+3. `java-watch-run-sample` — `copy-dependencies` was bound to `generate-resources`, which runs before the
+   module's own classes exist (MDEP-187); it is bound to `package`.
 
-**How green-ness was established**: `clean test` on `hipster-entity-tooling` (361), `jwa-builder` (20)
-and `jwa-sidecar` (3), which is every module this phase touched plus their dependencies; the whole reactor
-with `-DskipTests clean package`; and the phase gate, checklist and migration report above.
+**How green-ness was established**: `clean test` on the whole reactor — **1164 tests, 0 failures** — plus
+the phase gate, the generated checklist (`--check`) and the migration report. The per-module counts at
+that point were `hipster-entity-tooling` 361, `merge-java` 601, `hipster-entity-core` 88, `hipster-entity-test` 31,
+`hipster-entity-jackson` 26, `jwa-builder` 20, `metadata-arena` 8, `metadata-server` 5, `hipster-entity-api` 4,
+`java-watch-core` 3, `java-watch-scp` 3 — `project-automation` 14 at the time, 81 after Phase 5.
+`jwa-sidecar` and `java-watch-agent` carry no tests; their gate is that they compile.
 
 ### Implementation note (added on delivery)
 

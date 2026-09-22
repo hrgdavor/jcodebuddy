@@ -1,5 +1,10 @@
 # Phase 7: Testing & Validation
 
+> **Not started.** The deliverables below are the plan as written; § *Status* at the end states what exists
+> today and the six decisions the re-scope has to make before any of it is implemented. Read that section
+> first — several files named here are sketches that never existed, and two deliverables compare against
+> JavaParser, which the migration removed.
+
 ## Overview
 
 Comprehensive testing and validation of the entire migration. This phase ensures all functionality is preserved, performance is acceptable, and edge cases are handled correctly.
@@ -273,20 +278,56 @@ All tests must verify:
 
 ## Status
 
-**Current**: **Next — re-scope before starting** (2026-09-22). Its prerequisites are met: Phase 6 is
-complete (34/34 files ported, `javaparser-core` declared by no module, `verify-migration.js`
-`RESULT: PASS`), and the repository already carries what this phase's deliverables ask for in a different
-shape — the whole reactor runs `601` tests green, and the migrated tooling keeps its recorded gates
-(`hipster-entity-tooling` 361, `jwa-builder` 20, `jwa-sidecar` 3).
+**Current**: **Next — re-scope before starting** (2026-09-22). Prerequisites are met: Phase 6 is complete
+(34/34 files ported, `javaparser-core` declared by no module, `verify-migration.js` `RESULT: PASS`) and
+Phase 5's automation layer is now delivered, so "integration tests for workflows" finally has a subject.
+The repository already carries most of what this phase's deliverables ask for, in a different shape: the
+whole reactor runs **1231 tests green** (1164 after Phase 6 plus Phase 5's 67), the migrated tooling keeps
+its recorded module gates (`hipster-entity-tooling` 361, `merge-java` 601, `hipster-entity-core` 88,
+`jwa-builder` 20, `project-automation` 81), and `doc/brainstorm/rewrite-migration/07-testing/` does not
+exist yet. `jwa-sidecar` and `java-watch-agent` carry no tests at all — their gate is that they compile —
+so "unit tests for each migrated component" would start by creating them.
 
-The re-scope is needed for one concrete reason: this plan's unit/integration/benchmark deliverables are
-written against the **Phase 5 automation layer** (`AutomationEngine`, `BatchProcessor`,
-`TransformationRegistry`) which was never materialised — see `PLAN-SUMMARY.md` § *Phase status* and
-`05-Automation.md`. What is testable today is the ported tooling and its artifact contracts, including
-the example's byte-identical regeneration, the R1 ledger and compaction round trip, and the generated
-source's compile gates. Anything phrased as "test the workflow engine" has to be re-phrased against those
-before it can be implemented.
-**Next**: after the re-scope, Phase 7 completion finishes the migration.
+**Six things the re-scope has to decide, because the plan was written against code that does not exist:**
+
+1. **The unit-test file list names Phase 2's sketches.** `AstVisitorTests`, `AstManipulatorTests`,
+   `CompilationUnitAdapterTests`, `NodeTraversalTests`, `AstPrinterTests`, `SourceManipulationTests`,
+   `TypeUtilsTests` are classes in a docs tree that never compiled. Their working equivalents are
+   `TreeQueries` (traversal, kinds, annotations, type text), `JavaSyntaxCheck` (positions, which the plan
+   did not anticipate needing javac for) and `SourceReader`, already covered by `SourceReaderTest`,
+   `ParseGuardTest`, `AddonAndInheritanceTest` and the per-generator suites. The list has to be rewritten
+   against real class names or it will be implemented as a set of tests for nothing.
+2. **`AutomationIntegrationTests` is the one deliverable that is now straightforward.**
+   `project-automation/.../automation/` exists with 67 tests; what a Phase 7 integration test can add is an
+   end-to-end chained run over a real source tree, using a registered production transformation. Note that
+   **no production `Transformation` is registered yet** (`05-Automation.md` § *Status*), so this phase either
+   registers the first one or keeps the test-layer transformation.
+3. **The comparative benchmarks are impossible as written.** `ParseBenchmark`/`TransformationBenchmark`
+   compare JavaParser with OpenRewrite, but Phase 6 removed `javaparser-core` from every module and
+   `verify-migration.js` fails if one declares it again. Re-adding it as a test-only dependency to measure
+   against it would defeat the migration's own gate; the honest re-scope is absolute measurements
+   (parse/transform time and memory against recorded baselines) or no benchmark at all. JMH itself is
+   available: `jmh-core` and `jmh-generator-annprocess` are managed in the root POM.
+4. **The regression deliverable's comparison baseline is gone** for the same reason. "Compare with
+   JavaParser output" is now covered by something stronger the tree already has: the byte-identical
+   regeneration tests (`ExampleRegenerationTest`, `FieldEnumLedgerRegenerationTest`,
+   `MetadataSourcePathTest`) and the compile gates (`GeneratedSourceCompilesTest`, `AllLevelsCompileTest`,
+   `GeneratedAdapterRoundTripTest`).
+5. **Most edge cases already have a home.** Empty and malformed source:
+   `SourceFactsTest`, `ParseGuardTest`, `SourceReaderTest`, `UnresolvedTypeNameTest`. Deep hierarchies and
+   generics: `PolymorphicGenerationTest`, `AddonAndInheritanceTest`, `DeepTrackingWiringTest`,
+   `AllLevelsCompileTest`. Annotations: `ViewAnnotationRuleTest`, `AuditableRuleTest`,
+   `UnifiedDiffTest`. Large files and annotation-heavy files are the parts with no coverage today.
+6. **Mockito is not available.** It is not in the root POM's `dependencyManagement` and the offline
+   repository is the only source of artifacts, so "Mockito for Mocking" would need a new dependency. The
+   suite currently mocks nothing: the ported code takes its collaborators as constructor arguments or
+   parameters, which is why it does not need to.
+
+The coverage and performance targets above (80% coverage, "within 20% of JavaParser") are the plan's
+original numbers and are not measurements of anything. Keep them only if a tool is chosen to measure them —
+the repository has no coverage tool configured.
+
+**Next**: after the re-scope, Phase 7 completion finishes the migration; Phase 8 (Documentation) follows.
 
 ## Quick Reference
 
