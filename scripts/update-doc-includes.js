@@ -1,5 +1,7 @@
 /* global Bun */
-// DEPRECATED - superseded by scripts/inject-examples.mjs + test-fixtures.js, whose
+// DEPRECATED - superseded by the published @hrg/inject-examples package (run
+// from the repository root as `npm run inject:examples` / `check:examples`),
+// whose
 // injection marker is a whole line that is nothing but a self-labelled link to its
 // source, optionally with a #region:name fragment. All documents have been migrated
 // to that format; this file is kept because DEC-027 cites it as the evidence that

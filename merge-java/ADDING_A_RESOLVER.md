@@ -204,8 +204,10 @@ resolver decides, the canonical sample, worked examples, when it declines, what
 it emits.
 
 **Write no example code by hand.** Every fenced block in a resolver page is
-materialized from test material through the repository's example-injection
-mechanism (`scripts/inject-examples.mjs`): mark the test methods you want to
+materialized from test material through the published
+`@hrg/inject-examples` package, which the root `package.json` depends on and
+the root npm scripts run through `npx` (run `npm install` once at the
+repository root): mark the test methods you want to
 show with `//#region your-region-name` / `//#endregion` comments, add the
 fixture regions the guide's steps already produced (`ConflictFixtures` holds
 the canonical sample as a `//#region <type>-sample` block), and reference them
@@ -214,8 +216,13 @@ labelled with its own target path (`[path](path#region:name)`), pointing at
 material under `src/test/`. Then materialize with:
 
 ```
-node scripts/inject-examples.mjs merge-java/docs/resolvers
+npm run inject:examples
 ```
+
+`npm run check:examples` compares without writing (the CI mode). Both scripts
+point the CLI at the whole `docs/resolvers/` directory, so a new page there needs
+no script change: the directory is walked, and every `*.md` below it is
+processed in the same run.
 
 `ResolverDocsTest` then re-verifies in the Java build that every rendered block
 still equals its source, so a doc example can only change by changing the test
@@ -232,5 +239,5 @@ that goes stale. See [docs/resolvers/README.md](docs/resolvers/README.md).
 - [ ] Fixture added to `ConflictFixtures`
 - [ ] Test extends `AbstractResolverTest`
 - [ ] Detection added and covered
-- [ ] `docs/resolvers/<resolver-name>/README.md` written, examples included from tests, injection script run
+- [ ] `docs/resolvers/<resolver-name>/README.md` written, examples included from tests, `npm run inject:examples` run
 - [ ] `mvn -f merge-java/pom.xml test` passes

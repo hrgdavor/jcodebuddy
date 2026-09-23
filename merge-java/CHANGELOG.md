@@ -6,10 +6,11 @@
 
 - **Resolver reference documentation** (`docs/resolvers/`) — one folder per
   registered resolver with a README detailing its decision logic, and every
-  example **included verbatim from test material** through the repository's
-  example-injection mechanism (`scripts/inject-examples.mjs`: an injection
+  example **included verbatim from test material** through the published
+  `@hrg/inject-examples` package, which the root npm scripts drive with `npx`
+  (`npm run inject:examples` / `npm run check:examples`). An injection
   marker is a single line that is nothing but a self-labelled link to its
-  source, optionally with a `#region:name` fragment): the canonical
+  source, optionally with a `#region:name` fragment: the canonical
   per-type samples in `ConflictFixtures` (now named `//#region` blocks), the
   marked test methods that validate each behaviour, and the whole-file
   three-way fixtures. `ResolverDocsTest` makes drift a build failure: folders

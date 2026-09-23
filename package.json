@@ -1,0 +1,12 @@
+{
+  "name": "jcodebuddy-doc-tools",
+  "private": true,
+  "description": "Documentation tooling for the jcodebuddy repository. The Java modules build with Maven (see merge-java/, hipster-entity-example/); this manifest exists only so the repository can depend on the published @hrg/inject-examples CLI and drive it from the root npm scripts.",
+  "scripts": {
+    "inject:examples": "npx --yes @hrg/inject-examples merge-java/docs/resolvers doc-hipster-entity/architecture/materialization-levels.md",
+    "check:examples": "npx --yes @hrg/inject-examples --check merge-java/docs/resolvers doc-hipster-entity/architecture/materialization-levels.md"
+  },
+  "dependencies": {
+    "@hrg/inject-examples": "^1.0.1"
+  }
+}

@@ -1,4 +1,22 @@
-# Port report: finishing the move from `update-doc-includes.js` to `scripts/inject-examples.mjs`
+# Port report: finishing the move from `update-doc-includes.js` to the published injection CLI
+
+> **Status (2026-09-23): the port happened.** The tool now lives as its own
+> project, packaged as `@hrg/inject-examples` (`cli.mjs` + `index.mjs`), and
+> implements the recommendations below: `--lenient` with a non-zero exit on
+> skips (F3), fence-aware marker discovery (F5), strict unique region names,
+> EOL/normalisation handling, gitignore-aware skipping, `--dry-run`,
+> `--root`, exit-code contract. `~suffix` short paths (F1) and mid-line
+> directives stay retired; of glob CLI patterns (F2) only the directory half
+> landed, in `@hrg/inject-examples` 1.0.1 — the CLI now takes any number of
+> files and directories, expanding a directory to every `*.md` below it,
+> recursively, and exits with the worst code of the run (patterns such as
+> `docs/**/*.md` are still the shell's job). This
+> repository consumes the **published** package: the root `package.json`
+> declares `@hrg/inject-examples` as an npm dependency and its `inject:examples`
+> / `check:examples` scripts run the package CLI through `npx` in one call over
+> the whole docs tree (the repository has no wrapper of its own; the vendored
+> `test-fixtures.js` is deleted).
+> The rest of this file is the original handoff, kept for reference.
 
 **Audience:** an agent working in a project that already contains the *new* injection
 mechanism (`scripts/inject-examples.mjs` + root `test-fixtures.js`) but not the old one.

@@ -16,8 +16,9 @@ package com.codebuddy.merge;
  * three constants - base, branch 1 (ours), branch 2 (theirs). The resolver
  * documentation under {@code docs/resolvers/} includes those regions verbatim
  * through the repository's example-injection markers
- * ({@code scripts/inject-examples.mjs}), and {@code ResolverDocsTest} fails
- * the build when a rendered example and the fixture here disagree. Editing a
+ * ({@code npm run inject:examples} from the repository root, backed by the
+ * published {@code @hrg/inject-examples} package), and {@code ResolverDocsTest}
+ * fails the build when a rendered example and the fixture here disagree. Editing a
  * string below therefore edits the documentation example with it; there is no
  * second copy to forget.
  */

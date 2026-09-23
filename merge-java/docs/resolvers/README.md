@@ -56,16 +56,23 @@ proposing, never applying, solutions). Planned as Phase 13 in the
 ## How the examples are sourced
 
 Every fenced code block in a resolver README is materialized from a file under
-`merge-java/src/test/` through the repository's example-injection mechanism
-([`scripts/inject-examples.mjs`](../../../scripts/inject-examples.mjs), marker
-rules in [`test-fixtures.js`](../../../test-fixtures.js)).
+`merge-java/src/test/` through the published
+[`@hrg/inject-examples`](https://github.com/hrgdavor/inject-examples) package:
+the root `package.json` declares it as a dependency, and two root npm scripts
+run its CLI through `npx` — `npm run inject:examples` rewrites the blocks, and
+`npm run check:examples` only compares them. Each script makes a single call,
+naming the whole `docs/resolvers/` tree and the other marker documents of the
+repository: the CLI takes any number of files and directories, expanding a
+directory to every `*.md` below it, recursively (run `npm install` once at the
+repository root first).
 
 An example starts with an *injection marker*: a line that is nothing but a
 markdown link labelled with its own target path, optionally with a
 `#region:name` fragment on the target to inject part of a larger file.
-Paths resolve relative to the document first and to the repository root second,
-so every marker doubles as a working link to its source. The fenced code block
-immediately below the marker holds the current content of that file or region.
+Paths resolve relative to the document holding the marker — the root the package
+defaults to — so every marker doubles as a working link to its source. The
+fenced code block immediately below the marker holds the current content of that
+file or region.
 The next block is a live marker, exactly as it appears in the raw markdown of
 every README here, materialized from the canonical `IMPORT_ADD` sample:
 
@@ -90,11 +97,13 @@ Re-materializing every block after editing a fixture or a marked test is one
 command from the repository root:
 
 ```
-node scripts/inject-examples.mjs merge-java/docs/resolvers
+npm run inject:examples
 ```
 
-With `--check` the same comparison runs without writing and exits non-zero when
-a block is stale — the mode for CI.
+`npm run check:examples` runs the same comparison without writing and exits
+non-zero when a block is stale — the mode for CI. A new resolver page under
+`docs/resolvers/` is picked up by both scripts with no further wiring, because
+the directory is walked rather than listed.
 
 ### The rules this directory enforces
 

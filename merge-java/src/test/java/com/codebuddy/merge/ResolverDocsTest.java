@@ -26,13 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The READMEs under {@code docs/resolvers/} carry injection markers — lines
  * that are nothing but a markdown link labelled with its own target path,
- * optionally with a {@code #region:name} fragment — that
- * {@code scripts/inject-examples.mjs} (Node, through the repository-root
- * {@code test-fixtures.js}) materializes into the fenced block below each
- * marker. Marker paths resolve relative to the document first and to the
- * repository root second, so every marker doubles as a working link to its
- * source. This test re-checks the same relationship inside the Java build, so
- * a stale example fails {@code mvn test} even where Node is not run:
+ * optionally with a {@code #region:name} fragment — that the
+ * {@code @hrg/inject-examples} package (Node, declared as a dependency of the
+ * repository root's {@code package.json} and run through {@code npx} by the
+ * root {@code inject:examples} script) materializes into the fenced
+ * block below each marker. Marker paths resolve relative to the document, so
+ * every marker doubles as a working link to its source. This test re-checks
+ * the same relationship inside the Java build, so a stale example fails
+ * {@code mvn test} even where Node is not run:
  *
  * <ul>
  *   <li>every registered resolver has a documentation folder, and every folder
@@ -42,13 +43,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>every marker resolves to a real file under {@code src/test/} — the
  *       examples come from test fixtures and tests, never from prose or from
  *       main sources;</li>
- *   <li>marker lines are unique per document (the injection script rejects
- *       duplicates) and every region name a marker references starts exactly
- *       once in its file — the script takes the first match, so an ambiguous
- *       name would silently shadow a second region;</li>
+ *   <li>marker lines are unique per document (documentation policy — the same
+ *       source is shown once) and every region name a marker references starts
+ *       exactly once in its file, which the package enforces too: it rejects
+ *       ambiguous region names instead of guessing;</li>
  *   <li>every rendered block matches its source byte for byte (same semantics
- *       as {@code resolveMarker}: whole file minus one trailing newline, or
- *       the lines strictly between the region markers);</li>
+ *       as the package: whole file minus its trailing newlines, or the lines
+ *       strictly between the region markers);</li>
  *   <li>in the per-resolver READMEs every fenced code block is an injection
  *       block — a hand-written example is the copy that goes stale, so it is
  *       not accepted;</li>
@@ -56,26 +57,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </ul>
  *
  * <p>After editing a fixture or a marked test, re-run
- * {@code node scripts/inject-examples.mjs merge-java/docs/resolvers} from the
- * repository root; the failure messages here name the offending block.
+ * {@code npm run inject:examples} from the repository root; the failure
+ * messages here name the offending block.
  */
 class ResolverDocsTest {
 
     /** Surefire's working directory is the module basedir. */
     private static final Path MODULE_DIR = Path.of("").toAbsolutePath();
-    private static final Path REPO_ROOT = MODULE_DIR.getParent();
     private static final Path DOCS_DIR = MODULE_DIR.resolve("docs").resolve("resolvers");
     private static final Path INDEX = DOCS_DIR.resolve("README.md");
     private static final Path TEST_ROOT = MODULE_DIR.resolve("src").resolve("test");
 
-    /** Same whole-line shape {@code findMarkers} in test-fixtures.js accepts. */
+    /** Same whole-line shape the {@code @hrg/inject-examples} package accepts. */
     private static final Pattern MARKER_LINE = Pattern.compile("^\\[([^\\]]+)]\\(([^)\\s]+)\\)$");
     /** Same region markers {@code resolveMarker} understands. */
     private static final Pattern REGION_END =
         Pattern.compile("^\\s*(?://|/\\*+|<!--|#)\\s*#?endregion\\b");
     /** A markdown link target. */
     private static final Pattern MD_LINK = Pattern.compile("\\[[^\\]]*]\\(([^)\\s]+)\\)");
-    /** The fence token both the injection script and this test scan for. */
+    /** The fence token both the injection CLI and this test scan for. */
     private static final String FENCE = "```";
 
     /** One parsed injection marker. */
@@ -173,16 +173,17 @@ class ResolverDocsTest {
                 checked++;
                 String where = doc.getFileName() + ":" + (i + 1);
                 if (!seen.add(marker.raw())) {
-                    problems.add(where + ": duplicate marker line - the injection script "
-                        + "rejects duplicates, and only the first would ever be served: "
+                    problems.add(where + ": duplicate marker line - documentation policy: "
+                        + "one marker per shown source, this one repeats: "
                         + marker.raw());
                     continue;
                 }
 
                 Path source = resolveSource(doc.getParent(), marker.path());
                 if (source == null) {
-                    problems.add(where + ": included file does not exist (looked relative to "
-                        + "the document and the repository root): " + marker.path());
+                    problems.add(where + ": included file does not exist relative to the "
+                        + "document (the package resolves marker paths the same way): "
+                        + marker.path());
                     continue;
                 }
                 Path testRoot = TEST_ROOT.toAbsolutePath().normalize();
@@ -204,7 +205,7 @@ class ResolverDocsTest {
                 if (!block.equals(snippet)) {
                     problems.add(where + ": rendered block is out of sync with " + marker.path()
                         + (marker.region() == null ? "" : "#" + marker.region())
-                        + " - re-run: node scripts/inject-examples.mjs merge-java/docs/resolvers");
+                        + " - re-run: npm run inject:examples");
                 }
             }
         }
@@ -217,8 +218,11 @@ class ResolverDocsTest {
      * Parses one line as an injection marker: the trimmed line is exactly
      * {@code [label](target)}, the label is the target's path, and the target
      * carries no fragment or a {@code #region:name} fragment — the same rules
-     * {@code findMarkers} in test-fixtures.js applies. Returns null for every
-     * other line, including ordinary prose links.
+     * the {@code @hrg/inject-examples} package applies (which additionally
+     * ignores marker-shaped lines inside fenced blocks; the fenced blocks of
+     * these READMEs are injection blocks whose contents are Java, never
+     * markdown links). Returns null for every other line, including ordinary
+     * prose links.
      */
     private static Marker parseMarker(String line) {
         Matcher m = MARKER_LINE.matcher(line.trim());
@@ -248,16 +252,16 @@ class ResolverDocsTest {
     }
 
     /**
-     * The current content of a file or region, mirroring {@code resolveMarker}
-     * in test-fixtures.js: a whole file minus one trailing newline, or the
-     * lines strictly between the region markers. Returns null when a problem
-     * was recorded instead.
+     * The current content of a file or region, mirroring the package's
+     * {@code resolveMarker}: a whole file with CRLF endings normalised and its
+     * trailing newlines dropped, or the lines strictly between the region
+     * markers. Returns null when a problem was recorded instead.
      */
     private static String snippetOf(Path source, String region, String where,
                                     List<String> problems) {
-        String text = read(source);
+        String text = read(source).replace("\r\n", "\n");
         if (region == null) {
-            if (text.endsWith("\n")) {
+            while (text.endsWith("\n")) {
                 text = text.substring(0, text.length() - 1);
             }
             return text;
@@ -278,8 +282,8 @@ class ResolverDocsTest {
         }
         if (starts.size() > 1) {
             problems.add(where + ": region '" + region + "' starts " + starts.size()
-                + " times in " + source + "; a region name must be unique per file - the "
-                + "injection script would silently serve the first match only");
+                + " times in " + source + "; a region name must be unique per file - "
+                + "@hrg/inject-examples rejects ambiguous names");
             return null;
         }
 
@@ -304,8 +308,8 @@ class ResolverDocsTest {
 
     /**
      * The content of the fenced block that follows a marker (blank lines
-     * between are allowed), mirroring the injection script's fence handling:
-     * the opening fence is the first line starting with the fence token, the
+     * between are allowed), mirroring the package's fence handling: the
+     * opening fence is the first line starting with the fence token, the
      * closing fence is the next such line. Returns null when a problem was
      * recorded instead.
      */
@@ -332,17 +336,10 @@ class ResolverDocsTest {
         return null;
     }
 
-    /** Same resolution order as the injection script: document dir, then repository root. */
+    /** Same resolution as the package CLI: marker paths are document-relative. */
     private static Path resolveSource(Path mdDir, String ref) {
         Path fromDoc = mdDir.resolve(ref).toAbsolutePath().normalize();
-        if (Files.isRegularFile(fromDoc)) {
-            return fromDoc;
-        }
-        Path fromRoot = REPO_ROOT.resolve(ref).toAbsolutePath().normalize();
-        if (Files.isRegularFile(fromRoot)) {
-            return fromRoot;
-        }
-        return null;
+        return Files.isRegularFile(fromDoc) ? fromDoc : null;
     }
 
     // ------------------------------------------------------- per-resolver rules
