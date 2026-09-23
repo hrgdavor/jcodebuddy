@@ -37,6 +37,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         return List.of(ConflictType.IMPORT_ADD, ConflictType.PACKAGE_CHANGE);
     }
 
+    //#region adopts-wider-type
     @Test
     @DisplayName("adopts the wider type declared on branch 2")
     void adoptsWiderType() {
@@ -54,7 +55,9 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getExplanation().contains("double"),
             "the explanation must name the adopted type: " + resolution.getExplanation());
     }
+    //#endregion
 
+    //#region adopts-one-sided-widening
     @Test
     @DisplayName("adopts the wider type when branch 2 is the wider one")
     void adoptsWiderTypeFromBranch2() {
@@ -67,7 +70,9 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
             resolution.getResolutionStrategy());
         assertTrue(resolution.getResolvedCode().contains("long count"));
     }
+    //#endregion
 
+    //#region escalates-unrelated-types
     @Test
     @DisplayName("escalates unrelated types to a reviewer")
     void escalatesUnrelatedTypes() {
@@ -80,7 +85,9 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
             "int and String have no widening relationship");
         assertFalse(resolution.getAlternativePaths().isEmpty());
     }
+    //#endregion
 
+    //#region declines-when-types-agree
     @Test
     @DisplayName("declines when both branches agree on the type")
     void declinesWhenTypesAgree() {
@@ -90,6 +97,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(conflict).getKind(),
             "an agreed type change is not this resolver's conflict");
     }
+    //#endregion
 
     @ParameterizedTest
     @CsvSource({
@@ -108,6 +116,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
             "widens(" + wider + ", " + narrower + ") should be " + expected);
     }
 
+    //#region widening-is-directional
     @Test
     @DisplayName("widening is directional")
     void wideningIsDirectional() {
@@ -116,6 +125,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         assertTrue(TypeChangeConflictResolver.widens("double", "long"));
         assertFalse(TypeChangeConflictResolver.widens("long", "double"));
     }
+    //#endregion
 
     @Test
     @DisplayName("declines when no typed declaration is present")
@@ -170,6 +180,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
             "widens(" + wider + ", " + narrower + ") should be " + expected);
     }
 
+    //#region adopts-collection-supertype
     @Test
     @DisplayName("adopts a collection supertype when one branch widens the declaration")
     void adoptsCollectionSupertype() {
@@ -188,6 +199,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getResolvedCode().contains("Collection"),
             "the supertype declaration must be adopted: " + resolution.getResolvedCode());
     }
+    //#endregion
 
     @Test
     @DisplayName("treats varargs and an array parameter as the same type")
@@ -199,6 +211,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         assertFalse(TypeChangeConflictResolver.widens("String[]", "String..."));
     }
 
+    //#region ignores-generic-arguments
     @Test
     @DisplayName("ignores generic arguments when classifying widening")
     void ignoresGenericArguments() {
@@ -207,6 +220,7 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         assertTrue(TypeChangeConflictResolver.widens("Collection<String>", "List<String>"));
         assertTrue(TypeChangeConflictResolver.widens("Collection", "List<String>"));
     }
+    //#endregion
 
     @Test
     @DisplayName("declines when the two branches agree on a generic type")

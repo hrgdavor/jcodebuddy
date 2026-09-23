@@ -33,6 +33,7 @@ class PackageChangeConflictResolverTest extends AbstractResolverTest {
         return List.of(ConflictType.IMPORT_ADD, ConflictType.TYPE_CHANGE);
     }
 
+    //#region escalates-two-different-destinations
     @Test
     @DisplayName("escalates two different destinations and remembers the choice")
     void escalatesTwoDifferentDestinations() {
@@ -45,7 +46,9 @@ class PackageChangeConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getExplanation().contains("com.example.billing"));
         assertTrue(resolution.getExplanation().contains("com.example.ledger"));
     }
+    //#endregion
 
+    //#region adopts-one-sided-move
     @Test
     @DisplayName("adopts a move when only one branch moved the class")
     void adoptsOneSidedMove() {
@@ -63,7 +66,9 @@ class PackageChangeConflictResolverTest extends AbstractResolverTest {
             resolution.getResolutionStrategy());
         assertTrue(resolution.getResolvedCode().contains("com.example.billing"));
     }
+    //#endregion
 
+    //#region declines-when-packages-agree
     @Test
     @DisplayName("declines when the package declarations agree")
     void declinesWhenPackagesAgree() {
@@ -72,6 +77,7 @@ class PackageChangeConflictResolverTest extends AbstractResolverTest {
 
         assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(conflict).getKind());
     }
+    //#endregion
 
     @Test
     @DisplayName("declines when no package declaration is present")
@@ -90,6 +96,7 @@ class PackageChangeConflictResolverTest extends AbstractResolverTest {
         assertTrue(PackageChangeConflictResolver.firstPackage("int x = 1;").isEmpty());
     }
 
+    //#region flags-imports-to-update
     @Test
     @DisplayName("flags imports that must be re-pointed after a move")
     void flagsImportsToUpdate() {
@@ -105,4 +112,5 @@ class PackageChangeConflictResolverTest extends AbstractResolverTest {
                 path.getDescription().toLowerCase().contains("import")),
             "a package move implies import updates: " + fixPaths);
     }
+    //#endregion
 }

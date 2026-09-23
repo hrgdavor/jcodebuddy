@@ -1,4 +1,12 @@
 /* global Bun */
+// DEPRECATED - superseded by scripts/inject-examples.mjs + test-fixtures.js, whose
+// injection marker is a whole line that is nothing but a self-labelled link to its
+// source, optionally with a #region:name fragment. All documents have been migrated
+// to that format; this file is kept because DEC-027 cites it as the evidence that
+// scripts/ already ran Bun JavaScript side tools, and because two of its features
+// have no successor yet: glob CLI patterns and ~suffix short-path lookup (which in
+// practice stopped working once .kilo/worktrees copies made short paths ambiguous).
+// Do not add new INCLUDE directives - use injection markers instead.
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { dirname, resolve, relative, join, sep } from 'path';
 import { fileURLToPath } from 'url';

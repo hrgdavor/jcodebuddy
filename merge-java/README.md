@@ -46,6 +46,12 @@ Three kinds of outcome fall out of this:
 - **REVIEW** - correct as far as the tool can tell, but a human confirms.
 - **MANUAL** - no safe automatic answer; the fix paths describe the choices.
 
+Every resolver has a detailed page under
+[docs/resolvers/](docs/resolvers/README.md): what it decides, when it declines,
+and worked examples **included verbatim from the test fixtures and the tests
+that validate them** — the build re-checks every rendered block, so the
+documentation cannot drift from the fixtures.
+
 ### Composing rather than replacing
 
 A file can be mostly mechanical and still contain one thing no resolver understands,
@@ -242,6 +248,13 @@ merge-java/
 ├── IMPLEMENTATION_PLAN.md
 ├── CHANGELOG.md
 ├── QUICKSTART.md
+├── docs/
+│   ├── CONFLICT_FILE_TOOL.md
+│   ├── THREE_WAY_FIXTURES.md
+│   ├── WHAT_IS_BASE.md
+│   └── resolvers/                       <- one folder per resolver; examples
+│       ├── README.md                       included from test fixtures, sync
+│       └── <resolver-name>/README.md       enforced by ResolverDocsTest
 ├── .jcodebuddy/
 │   ├── README.md
 │   ├── metadata/schema.json
@@ -268,8 +281,9 @@ merge-java/
     │   └── FIXTURE_AGENTS.md                  instructions bundled into every workspace
     └── test/java/com/codebuddy/merge/
         ├── AbstractResolverTest.java          reusable resolver contract tests
-        ├── ConflictFixtures.java              one sample conflict per type
-        └── *Test.java                         431 tests
+        ├── ConflictFixtures.java              one sample conflict per type, as doc-includable regions
+        ├── ResolverDocsTest.java              keeps docs/resolvers in sync with what it includes
+        └── *Test.java                         the suite
 ```
 
 ## Adding a resolver
@@ -278,7 +292,11 @@ See [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md). In short: add a
 `ConflictType` with its `Handling`, extend `AbstractConflictResolver`
 implementing three methods, and add one line to
 `ConflictResolvers.defaultResolvers()`. A registry test fails and names the type
-if you forget the last step.
+if you forget the last step. Then add its page under
+[docs/resolvers/](docs/resolvers/README.md): `ResolverDocsTest` fails while a
+registered resolver has no folder (or a folder has no registered resolver), and
+keeps every example in those pages byte-identical with the fixture or test it
+is included from.
 
 ## Tests
 
@@ -350,12 +368,21 @@ Structural, API and overlapping-body conflicts are **never** resolved
 automatically, by design. The reasoning, with worked examples, is in
 [`DESIGN_NEVER_AUTO_RESOLVED.md`](DESIGN_NEVER_AUTO_RESOLVED.md).
 
+And no registry of resolvers is ever complete: there will always be conflict
+shapes automation cannot solve. The next step is therefore a **UI helper and
+analysis display** — first an analysis of what was resolved, so every applied
+decision is reviewable; then the same interface extended to help the user
+resolve the manual cases, potentially with an LLM analysing a conflict and
+proposing (never applying) a solution. Planned as Phase 13 in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
+
 ## Documents
 
 | Document | Contents |
 |---|---|
 | [QUICKSTART.md](QUICKSTART.md) | Runnable examples for each capability |
 | [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md) | The extension pattern |
+| [docs/resolvers/](docs/resolvers/README.md) | **Resolver reference**: one folder per resolver with its decision logic in detail and examples included verbatim from test fixtures — drift fails the build |
 | [docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md) | **`MergeFileTool`**: fixing a marker-carrying file, and the private fixture loop that turns what stays broken into a new resolver |
 | [docs/THREE_WAY_FIXTURES.md](docs/THREE_WAY_FIXTURES.md) | How to add a merge case as real source files, and why |
 | [docs/WHAT_IS_BASE.md](docs/WHAT_IS_BASE.md) | **What `base` means**: the last-synced upstream state, not Git's merge base |

@@ -193,6 +193,36 @@ add(conflicts, detectConstructorParamConflicts(filePath, baseCode, branch1Code, 
 Then extend `ConflictDetectionServiceTest.everyDetectedConflictIsActioned`,
 which asserts that anything detection can produce has a registered resolver.
 
+## 6. Document it
+
+Create `docs/resolvers/<resolver-name-in-kebab-case>/README.md` — the folder
+name is the resolver's simple class name in kebab-case
+(`ConstructorParamAddResolver` → `constructor-param-add-resolver/`), and
+`ResolverDocsTest` fails while a registered resolver has no folder or a folder
+has no registered resolver. Copy the shape of any existing page there: what the
+resolver decides, the canonical sample, worked examples, when it declines, what
+it emits.
+
+**Write no example code by hand.** Every fenced block in a resolver page is
+materialized from test material through the repository's example-injection
+mechanism (`scripts/inject-examples.mjs`): mark the test methods you want to
+show with `//#region your-region-name` / `//#endregion` comments, add the
+fixture regions the guide's steps already produced (`ConflictFixtures` holds
+the canonical sample as a `//#region <type>-sample` block), and reference them
+with *injection markers* — single lines that are nothing but a markdown link
+labelled with its own target path (`[path](path#region:name)`), pointing at
+material under `src/test/`. Then materialize with:
+
+```
+node scripts/inject-examples.mjs merge-java/docs/resolvers
+```
+
+`ResolverDocsTest` then re-verifies in the Java build that every rendered block
+still equals its source, so a doc example can only change by changing the test
+it came from. If a page needs an example the tests do not have, write the test
+first — a doc example that is not a passing test's fixture is exactly the copy
+that goes stale. See [docs/resolvers/README.md](docs/resolvers/README.md).
+
 ## Checklist
 
 - [ ] `ConflictType` constant added with its `Handling`
@@ -202,4 +232,5 @@ which asserts that anything detection can produce has a registered resolver.
 - [ ] Fixture added to `ConflictFixtures`
 - [ ] Test extends `AbstractResolverTest`
 - [ ] Detection added and covered
+- [ ] `docs/resolvers/<resolver-name>/README.md` written, examples included from tests, injection script run
 - [ ] `mvn -f merge-java/pom.xml test` passes

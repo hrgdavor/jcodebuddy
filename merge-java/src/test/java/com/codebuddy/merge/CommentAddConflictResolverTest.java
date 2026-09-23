@@ -34,6 +34,7 @@ class CommentAddConflictResolverTest extends AbstractResolverTest {
             ConflictType.API_INCOMPATIBILITY);
     }
 
+    //#region keeps-both-branches-comments
     @Test
     @DisplayName("keeps the documentation from both branches")
     void keepsBothBranchesComments() {
@@ -43,7 +44,9 @@ class CommentAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getResolvedCode().contains("branch 1 explains the running total"));
         assertTrue(resolution.getResolvedCode().contains("branch 2 records the currency"));
     }
+    //#endregion
 
+    //#region drops-duplicate-comments
     @Test
     @DisplayName("drops a comment both branches wrote identically")
     void dropsDuplicateComments() {
@@ -57,7 +60,9 @@ class CommentAddConflictResolverTest extends AbstractResolverTest {
         int occurrences = resolved.split("shared explanation", -1).length - 1;
         assertEquals(1, occurrences, "an identical comment must not be duplicated: " + resolved);
     }
+    //#endregion
 
+    //#region declines-when-no-comments-present
     @Test
     @DisplayName("declines when neither branch added a comment")
     void declinesWhenNoCommentsPresent() {
@@ -66,7 +71,9 @@ class CommentAddConflictResolverTest extends AbstractResolverTest {
 
         assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(conflict).getKind());
     }
+    //#endregion
 
+    //#region recognises-comment-forms
     @Test
     @DisplayName("recognises line and block comments")
     void recognisesCommentForms() {
@@ -77,7 +84,9 @@ class CommentAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(comments.contains("block comment"), "block comments must be found: " + comments);
         assertTrue(comments.contains("javadoc line"), "javadoc lines must be found: " + comments);
     }
+    //#endregion
 
+    //#region recommends-keeping-both
     @Test
     @DisplayName("recommends keeping both branches' documentation")
     void recommendsKeepingBoth() {
@@ -86,4 +95,5 @@ class CommentAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(primary.getRecommended().startsWith("Keep both"),
             "was " + primary.getRecommended());
     }
+    //#endregion
 }

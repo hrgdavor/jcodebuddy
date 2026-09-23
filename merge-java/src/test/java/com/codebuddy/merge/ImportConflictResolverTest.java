@@ -37,6 +37,7 @@ class ImportConflictResolverTest extends AbstractResolverTest {
             ConflictType.STRUCTURAL_CHANGE);
     }
 
+    //#region keeps-both-branches-imports
     @Test
     @DisplayName("keeps the imports added by both branches instead of reporting a conflict")
     void keepsBothBranchesImports() {
@@ -53,7 +54,9 @@ class ImportConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getResolvedCode().contains("import java.util.List;"),
             "the shared import must survive exactly once");
     }
+    //#endregion
 
+    //#region does-not-duplicate-shared-imports
     @Test
     @DisplayName("does not duplicate a shared import")
     void doesNotDuplicateSharedImports() {
@@ -63,7 +66,9 @@ class ImportConflictResolverTest extends AbstractResolverTest {
         int occurrences = resolved.split("import java.util.List;", -1).length - 1;
         assertEquals(1, occurrences, "a shared import must appear once, was " + resolved);
     }
+    //#endregion
 
+    //#region distinguishes-static-imports
     @Test
     @DisplayName("treats static imports as distinct from ordinary imports")
     void distinguishesStaticImports() {
@@ -78,7 +83,9 @@ class ImportConflictResolverTest extends AbstractResolverTest {
             "the static import must be preserved with its modifier, was " + resolved);
         assertTrue(resolved.contains("java.util.Objects"), "the plain import must be preserved");
     }
+    //#endregion
 
+    //#region declines-when-no-imports-present
     @Test
     @DisplayName("declines when neither side contributes an import")
     void declinesWhenNoImportsPresent() {
@@ -91,6 +98,7 @@ class ImportConflictResolverTest extends AbstractResolverTest {
         assertFalse(resolution.getAlternativePaths().isEmpty(),
             "the manual fallback must still offer options");
     }
+    //#endregion
 
     @Test
     @DisplayName("extracts imports with their fully-qualified names")

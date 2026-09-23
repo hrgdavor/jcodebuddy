@@ -4,6 +4,21 @@
 
 ### Added
 
+- **Resolver reference documentation** (`docs/resolvers/`) — one folder per
+  registered resolver with a README detailing its decision logic, and every
+  example **included verbatim from test material** through the repository's
+  example-injection mechanism (`scripts/inject-examples.mjs`: an injection
+  marker is a single line that is nothing but a self-labelled link to its
+  source, optionally with a `#region:name` fragment): the canonical
+  per-type samples in `ConflictFixtures` (now named `//#region` blocks), the
+  marked test methods that validate each behaviour, and the whole-file
+  three-way fixtures. `ResolverDocsTest` makes drift a build failure: folders
+  and registry must match in both directions, every include must resolve under
+  `src/test/`, every rendered block must equal its source, fenced blocks in
+  resolver READMEs must be include blocks (no hand-written examples), and
+  every relative link must resolve. New examples enter the docs only by first
+  entering the tests — e.g. the partly-overlapping method-body edit
+  (`reportsOverlappingButDifferentEdits`) added for the method-body page.
 - **`MergeFileTool`** — the marker-file entry point: give it a path to a file
   carrying git conflict markers and it resolves every block it safely can
   (single automatic answer, gate passed, resolution covers the whole block) and

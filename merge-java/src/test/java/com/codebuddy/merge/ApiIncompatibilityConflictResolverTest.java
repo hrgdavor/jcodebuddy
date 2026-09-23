@@ -36,6 +36,7 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
         return List.of(ConflictType.IMPORT_ADD, ConflictType.COMMENT_ADD);
     }
 
+    //#region never-automatically-resolves
     @Test
     @DisplayName("never changes a public contract automatically")
     void neverAutomaticallyResolves() {
@@ -46,7 +47,9 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
         assertEquals(ConflictResolution.MANUAL_MARKER, resolution.getResolvedCode());
         assertFalse(resolution.isReplayable());
     }
+    //#endregion
 
+    //#region names-return-type-difference
     @Test
     @DisplayName("names the return type difference")
     void namesReturnTypeDifference() {
@@ -56,7 +59,9 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
         assertTrue(edits.stream().anyMatch(edit -> edit.contains("return type")),
             "the return type change must be named: " + edits);
     }
+    //#endregion
 
+    //#region names-narrowed-visibility
     @Test
     @DisplayName("names a narrowed visibility")
     void namesNarrowedVisibility() {
@@ -71,7 +76,9 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
         assertTrue(edits.stream().anyMatch(edit -> edit.contains("visibility")),
             "the visibility change must be named: " + edits);
     }
+    //#endregion
 
+    //#region names-dropped-exception
     @Test
     @DisplayName("names a dropped checked exception")
     void namesDroppedException() {
@@ -86,7 +93,9 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
         assertTrue(edits.stream().anyMatch(edit -> edit.contains("exception")),
             "the dropped exception must be named: " + edits);
     }
+    //#endregion
 
+    //#region names-parameter-change
     @Test
     @DisplayName("names a parameter list change")
     void namesParameterChange() {
@@ -101,7 +110,9 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
         assertTrue(edits.stream().anyMatch(edit -> edit.contains("parameters")),
             "the parameter change must be named: " + edits);
     }
+    //#endregion
 
+    //#region always-reports-something
     @Test
     @DisplayName("always reports something, even for an unparsable declaration")
     void alwaysReportsSomething() {
@@ -112,7 +123,9 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
 
         assertFalse(edits.isEmpty(), "a reviewer must never be told nothing");
     }
+    //#endregion
 
+    //#region warns-about-callers
     @Test
     @DisplayName("warns that callers outside the merge may break")
     void warnsAboutCallers() {
@@ -122,4 +135,5 @@ class ApiIncompatibilityConflictResolverTest extends AbstractResolverTest {
         assertTrue(primary.getImpact().contains("Callers"),
             "the impact must warn about external callers: " + primary.getImpact());
     }
+    //#endregion
 }

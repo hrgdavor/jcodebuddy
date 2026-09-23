@@ -34,6 +34,7 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
         return List.of(ConflictType.IMPORT_ADD, ConflictType.VARIABLE_RENAME);
     }
 
+    //#region keeps-independent-constants
     @Test
     @DisplayName("keeps constants that were added independently on each branch")
     void keepsIndependentConstants() {
@@ -44,7 +45,9 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getResolvedCode().contains("TIMEOUT_MS"));
         assertTrue(resolution.getResolvedCode().contains("RETRY_DELAY_MS"));
     }
+    //#endregion
 
+    //#region escalates-on-differing-values
     @Test
     @DisplayName("escalates when both branches define the same constant differently")
     void escalatesOnDifferingValues() {
@@ -61,7 +64,9 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getExplanation().contains("LIMIT"),
             "the explanation must name the offending constant: " + resolution.getExplanation());
     }
+    //#endregion
 
+    //#region treats-identical-definition-as-duplicate
     @Test
     @DisplayName("treats an identically-defined constant as a duplicate")
     void treatsIdenticalDefinitionAsDuplicate() {
@@ -74,7 +79,9 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
         assertEquals(ConflictResolution.ResolutionKind.AUTO, resolver.resolve(conflict).getKind(),
             "identical additions need no human decision");
     }
+    //#endregion
 
+    //#region declines-when-no-constants-present
     @Test
     @DisplayName("declines when neither side adds a constant")
     void declinesWhenNoConstantsPresent() {
@@ -83,6 +90,7 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
 
         assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(conflict).getKind());
     }
+    //#endregion
 
     @Test
     @DisplayName("extracts constant names and their declarations")
@@ -94,6 +102,7 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(constants.containsKey("NAME"), "was " + constants.keySet());
     }
 
+    //#region extracts-enum-members
     @Test
     @DisplayName("extracts enum members")
     void extractsEnumMembers() {
@@ -103,7 +112,9 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(constants.containsKey("PENDING"), "was " + constants.keySet());
         assertTrue(constants.containsKey("ACTIVE"), "was " + constants.keySet());
     }
+    //#endregion
 
+    //#region recommends-keeping-both
     @Test
     @DisplayName("recommends keeping both when nothing collides")
     void recommendsKeepingBoth() {
@@ -111,4 +122,5 @@ class ConstantAddConflictResolverTest extends AbstractResolverTest {
             resolver.getFixPaths(ConflictFixtures.sample(ConflictType.CONSTANT_ADD)).get(0);
         assertEquals("Keep both", primary.getRecommended());
     }
+    //#endregion
 }

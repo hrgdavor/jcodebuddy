@@ -73,6 +73,7 @@ class ThreeWayFixtureTest {
         assertFalse(ours.agreesWith(theirs), "but they are not the same change either");
     }
 
+    //#region computed-change-agrees-with-the-diff
     @Test
     @DisplayName("the computed change agrees with the diff a human would read")
     void computedChangeAgreesWithTheDiff() {
@@ -92,7 +93,9 @@ class ThreeWayFixtureTest {
         assertEquals(theirsRemovedInDiff, theirsRemovedComputed,
             "and so must the documented removal");
     }
+    //#endregion
 
+    //#region composes-independent-changes
     @Test
     @DisplayName("composes the two independent changes instead of reporting a conflict")
     void composesIndependentChanges() {
@@ -113,7 +116,9 @@ class ThreeWayFixtureTest {
                 + "dropping it could break a use on our branch: " + resolved);
         assertNotEquals(fixture.base(), resolved, "something must actually change");
     }
+    //#endregion
 
+    //#region default-policy-keeps-the-import
     @Test
     @DisplayName("the default policy keeps an import one side removed")
     void defaultPolicyKeepsTheImport() {
@@ -131,7 +136,9 @@ class ThreeWayFixtureTest {
             "the explanation must name the policy that decided it: "
                 + resolution.getExplanation());
     }
+    //#endregion
 
+    //#region removal-policy-honours-the-removal
     @Test
     @DisplayName("configuring REMOVAL_WINS honours the removal and escalates it")
     void removalPolicyHonoursTheRemoval() {
@@ -152,6 +159,7 @@ class ThreeWayFixtureTest {
         assertTrue(resolution.getExplanation().contains("REMOVAL_WINS"),
             "the explanation must name the policy: " + resolution.getExplanation());
     }
+    //#endregion
 
     @Test
     @DisplayName("both policies produce a structurally valid import block")
@@ -172,6 +180,7 @@ class ThreeWayFixtureTest {
         }
     }
 
+    //#region policy-is-the-only-difference
     @Test
     @DisplayName("the policy is the only difference between the two outcomes")
     void policyIsTheOnlyDifference() {
@@ -187,7 +196,9 @@ class ThreeWayFixtureTest {
         assertEquals(keptWithout, dropped,
             "the policies must differ only in whether the clashing import is present");
     }
+    //#endregion
 
+    //#region merged-imports-remain-valid
     @Test
     @DisplayName("the merged import block is still syntactically valid")
     void mergedImportsRemainValid() {
@@ -202,6 +213,7 @@ class ThreeWayFixtureTest {
             }
         }
     }
+    //#endregion
 
     @Test
     @DisplayName("both branches making the same change is agreement, applied once")

@@ -34,6 +34,7 @@ class RenameConflictResolverTest extends AbstractResolverTest {
         return List.of(ConflictType.IMPORT_ADD, ConflictType.COMMENT_ADD);
     }
 
+    //#region offers-competing-names
     @Test
     @DisplayName("never renames silently, but offers the competing names")
     void offersCompetingNames() {
@@ -50,7 +51,9 @@ class RenameConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getExplanation().contains("invoice"),
             "branch 2's name must be named: " + resolution.getExplanation());
     }
+    //#endregion
 
+    //#region recommends-base-compatible-name
     @Test
     @DisplayName("recommends the name that matches the base branch")
     void recommendsBaseCompatibleName() {
@@ -66,7 +69,9 @@ class RenameConflictResolverTest extends AbstractResolverTest {
         assertTrue(primary.getRecommended().contains("order"),
             "the base-compatible name minimises the diff: " + primary.getRecommended());
     }
+    //#endregion
 
+    //#region declines-when-names-agree
     @Test
     @DisplayName("declines when both branches use the same name")
     void declinesWhenNamesAgree() {
@@ -76,6 +81,7 @@ class RenameConflictResolverTest extends AbstractResolverTest {
         assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(conflict).getKind(),
             "an agreed rename is not a conflict");
     }
+    //#endregion
 
     @Test
     @DisplayName("declines when nothing is declared")
@@ -95,13 +101,16 @@ class RenameConflictResolverTest extends AbstractResolverTest {
             RenameConflictResolver.firstDeclaredName("final long count;").orElseThrow());
     }
 
+    //#region ignores-control-flow-keywords
     @Test
     @DisplayName("does not treat control-flow keywords as declarations")
     void ignoresControlFlowKeywords() {
         assertTrue(RenameConflictResolver.firstDeclaredName("if (ready) { return; }").isEmpty(),
             "an if-statement is not a declaration");
     }
+    //#endregion
 
+    //#region offers-to-remember-decision
     @Test
     @DisplayName("offers to remember the decision")
     void offersToRememberDecision() {
@@ -110,4 +119,5 @@ class RenameConflictResolverTest extends AbstractResolverTest {
         assertTrue(fixPaths.stream().anyMatch(path -> path.getDescription().toLowerCase().contains("sticky")),
             "the reviewer must be able to make the choice permanent: " + fixPaths);
     }
+    //#endregion
 }

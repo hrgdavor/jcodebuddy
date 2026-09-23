@@ -130,6 +130,7 @@ class MergeConflictResolverTest {
 
     // ------------------------------------------------------- sticky replay
 
+    //#region replays-sticky-decision
     @Test
     @DisplayName("replays a sticky decision recorded by a previous run")
     void replaysStickyDecision() {
@@ -173,6 +174,7 @@ class MergeConflictResolverTest {
         assertEquals(conflict.getFilePath(), replayed.getFilePath(),
             "the replayed decision must be re-anchored to the incoming file");
     }
+    //#endregion
 
     @Test
     @DisplayName("does not change the decision when replaying for another file")

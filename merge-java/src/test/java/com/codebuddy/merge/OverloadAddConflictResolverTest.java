@@ -47,6 +47,7 @@ class OverloadAddConflictResolverTest extends AbstractResolverTest {
         return resolver.resolve(conflict.withTypeContext(TestTypeContexts.jdk()));
     }
 
+    //#region keeps-distinct-overloads
     @Test
     @DisplayName("keeps both methods when the parameter lists differ")
     void keepsDistinctOverloads() {
@@ -63,7 +64,9 @@ class OverloadAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getResolvedCode().contains("process(String id, boolean force)"),
             "branch 2's overload must survive");
     }
+    //#endregion
 
+    //#region escalates-on-identical-signatures
     @Test
     @DisplayName("escalates when both branches add the same parameter list")
     void escalatesOnIdenticalSignatures() {
@@ -80,7 +83,9 @@ class OverloadAddConflictResolverTest extends AbstractResolverTest {
         assertTrue(resolution.getExplanation().contains("same"),
             "the explanation must say why: " + resolution.getExplanation());
     }
+    //#endregion
 
+    //#region escalates-without-type-context
     @Test
     @DisplayName("escalates to manual when no type context is supplied")
     void escalatesWithoutTypeContext() {
@@ -97,7 +102,9 @@ class OverloadAddConflictResolverTest extends AbstractResolverTest {
                 .anyMatch(path -> path.getJustification().contains("type context")),
             "the reviewer must be told how to fix it: " + resolution.getAlternativePaths());
     }
+    //#endregion
 
+    //#region resolves-equivalent-parameter-spellings
     @Test
     @DisplayName("resolves the same parameter written differently")
     void resolvesEquivalentParameterSpellings() {
@@ -117,7 +124,9 @@ class OverloadAddConflictResolverTest extends AbstractResolverTest {
             "resolved types make these one signature, so keeping both would not compile: "
                 + resolution.getExplanation());
     }
+    //#endregion
 
+    //#region keeps-overloads-with-different-resolved-types
     @Test
     @DisplayName("keeps overloads whose resolved parameter types genuinely differ")
     void keepsOverloadsWithDifferentResolvedTypes() {
@@ -133,7 +142,9 @@ class OverloadAddConflictResolverTest extends AbstractResolverTest {
             "List<String> and List<Integer> are different parameter types: "
                 + resolution.getExplanation());
     }
+    //#endregion
 
+    //#region declines-for-different-method-names
     @Test
     @DisplayName("declines when it is not the same method name")
     void declinesForDifferentMethodNames() {
@@ -146,6 +157,7 @@ class OverloadAddConflictResolverTest extends AbstractResolverTest {
         assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(conflict).getKind(),
             "two different method names are not an overload conflict");
     }
+    //#endregion
 
     @Test
     @DisplayName("declines when no method declaration is present")

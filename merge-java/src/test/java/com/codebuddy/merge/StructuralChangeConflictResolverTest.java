@@ -35,6 +35,7 @@ class StructuralChangeConflictResolverTest extends AbstractResolverTest {
             ConflictType.CONSTANT_ADD);
     }
 
+    //#region always-requires-human-decision
     @Test
     @DisplayName("always hands structural change to a human")
     void alwaysRequiresHumanDecision() {
@@ -48,7 +49,9 @@ class StructuralChangeConflictResolverTest extends AbstractResolverTest {
         assertFalse(resolution.getAlternativePaths().isEmpty(),
             "a refusal must still tell the reviewer what the options are");
     }
+    //#endregion
 
+    //#region emits-manual-marker
     @Test
     @DisplayName("emits the manual marker as the resolved code")
     void emitsManualMarker() {
@@ -58,7 +61,9 @@ class StructuralChangeConflictResolverTest extends AbstractResolverTest {
         assertEquals(ConflictResolution.MANUAL_MARKER, resolution.getResolvedCode(),
             "the caller must be able to detect that nothing was applied");
     }
+    //#endregion
 
+    //#region describes-both-sides
     @Test
     @DisplayName("describes what each branch does that the other does not")
     void describesBothSides() {
@@ -73,7 +78,9 @@ class StructuralChangeConflictResolverTest extends AbstractResolverTest {
         assertTrue(primary.getImpact().contains("unique"),
             "the impact must quantify what would be discarded: " + primary.getImpact());
     }
+    //#endregion
 
+    //#region never-sticky
     @Test
     @DisplayName("never marks a structural resolution as replayable")
     void neverSticky() {
@@ -84,7 +91,9 @@ class StructuralChangeConflictResolverTest extends AbstractResolverTest {
             "a one-off structural decision must not be replayed blindly");
         assertFalse(resolution.isReplayable());
     }
+    //#endregion
 
+    //#region offers-manual-escape-hatch
     @Test
     @DisplayName("always offers the manual escape hatch")
     void offersManualEscapeHatch() {
@@ -95,6 +104,7 @@ class StructuralChangeConflictResolverTest extends AbstractResolverTest {
                 path.getDescription().contains("by hand")),
             "the reviewer must always be able to take it over: " + fixPaths);
     }
+    //#endregion
 
     @Test
     @DisplayName("handles identical branches without incident")

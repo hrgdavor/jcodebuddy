@@ -7,6 +7,8 @@ Status legend: **[done]**, **[partial]**, **[todo]**.
 > recorded in [`IMPROVEMENTS_DELIVERED.md`](IMPROVEMENTS_DELIVERED.md), which is
 > the authority on what has been built. The one substantial item still outstanding
 > is WS2 step 2: replacing the token-based scanner with OpenRewrite's AST.
+> Forward planning resumes in this file with **Phase 13 — analysis display and
+> UI helper**.
 
 ## Goal
 
@@ -196,6 +198,46 @@ output is self-contained.
   CI exit code.
 - **Type resolver gaps**: JDK supertype chains, varargs/array equivalence, generic
   canonicalisation.
+
+## Phase 13 — Analysis display and UI helper [todo]
+
+> **Why this phase exists: the registry is never complete.** There will always be
+> conflict shapes no automatic resolver solves. Three types are manual by design
+> ([`DESIGN_NEVER_AUTO_RESOLVED.md`](DESIGN_NEVER_AUTO_RESOLVED.md)), new shapes
+> keep arriving with every base-branch update, and the fixture loop behind
+> `MergeFileTool` converts only *recurring* shapes into resolvers — one case at a
+> time, after the fact. Automation shrinks the pile; it does not empty it. So the
+> next step in merge-java is not more resolvers first, but a **UI helper and
+> analysis display** that makes what the module already knows visible and
+> actionable for the human who decides.
+
+**Step 1 — analysis of resolved conflicts, for review.** Today an automatic or
+review resolution is applied and reported as counts (`MergeReport`, and the
+Phase 11 HTML rendering). The user sees *that* something was resolved, not *what
+was decided and why*: the strategy, the explanation, the fix paths that were not
+taken, the verification-gate outcome, the sticky decisions that were replayed.
+Step 1 renders exactly that per conflict — base / branch 1 / branch 2 beside the
+resolved code, with the resolver's explanation and fix paths — so every applied
+resolution is reviewable after the fact. Read-only first: reviewing what the
+tool did must not require trusting it.
+
+**Step 2 — extend the same interface to help the user resolve.** The manual
+cases already carry machine-readable fix paths: named options, a recommendation,
+a justification, an impact. The review display becomes an action display: pick a
+fix path, edit the proposed result, accept — and the decision flows back into
+`BranchConflictStore` so it replays like any sticky choice on the next update.
+
+**Step 3 — LLM assistance as a proposer, never an applier.** The same interface
+can hand a conflict — the three sides, the detected type, the fix paths, the
+surrounding context — to an LLM and show its analysis and proposed resolution
+*as one more fix path*, subject to the same verification gate and the same human
+decision. The boundary from `DESIGN_NEVER_AUTO_RESOLVED.md` holds unchanged: an
+LLM proposal is input to the human decision, not a substitute for it, and
+nothing it proposes is applied without passing the gate.
+
+Rendering follows the established report constraints (DEC-027/029): Bun renders
+from the module's JSON metadata, one self-contained HTML file, framework-free
+vanilla JS, no network at view time.
 
 ---
 

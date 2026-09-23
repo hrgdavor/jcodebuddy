@@ -108,7 +108,7 @@ analysis and inlined. In such cases a builder (level `BUILDER`) is
 sufficient, and forcing a record adds unnecessary allocation and
 coupling.
 
-<!-- INCLUDE:~iface/Person.java#DOCS -->
+[../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java](../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java#region:DOCS)
 ```java
 @View(gen = hr.hrg.hipster.entity.api.GenLevel.META)
 interface Person{
@@ -119,7 +119,7 @@ interface Person{
 
 Start point V2 (record)
 
-<!-- INCLUDE:~record/Person.java#DOCS -->
+[../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java](../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java#region:DOCS)
 ```java
 record Person(
     String name,
