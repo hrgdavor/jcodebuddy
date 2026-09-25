@@ -77,6 +77,11 @@ webview/webview-jetbrains/bin
 # target/ is covered by the root `target/` rule above.
 webview/zed/*/extension.wasm
 
+# The standalone host publishes its port and token path inside the project it serves. Derived and
+# per-machine, so it is ignored - but only this subtree: a module's `.jcodebuddy/context` and
+# `.jcodebuddy/reports` are contracts and stay visible (DEC-026).
+.jcodebuddy/webview
+
 # Agent harness state. `.kilo/plans` holds untracked per-round plans; the tool's own
 # config (package.json, node_modules) is covered above.
 .kilo/plans

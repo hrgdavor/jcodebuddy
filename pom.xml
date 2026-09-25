@@ -55,10 +55,13 @@
         <module>java-watch-scp</module>
         <module>java-watch-run</module>
         <module>java-watch-run-sample</module>
-        <!-- The webview product: the host-neutral core and the LSP sidecar. Its two editor hosts are
-             not Maven modules (webview-jetbrains is a Gradle IntelliJ Platform build, webview-vscode
-             is a Node package), which is why only the Java half appears here. -->
+        <!-- The webview product: the host-neutral core, the standalone host, and the LSP sidecar. Its two
+             editor hosts are not Maven modules (webview-jetbrains is a Gradle IntelliJ Platform build,
+             webview-vscode is a Node package), which is why only the Java half appears here. -->
         <module>webview/core/webview-core</module>
+        <!-- webviewd is the reference host of that contract and the only one that needs no editor
+             (webview/PLAN-webview-suite.md, Phase 2). -->
+        <module>webview/core/webviewd</module>
         <module>jwa-builder-api</module>
         <module>jwa-builder</module>
         <!-- The LSP sidecar lives with the webview product, not at the repository root: it is the same

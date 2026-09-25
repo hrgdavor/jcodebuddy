@@ -1,7 +1,8 @@
 # Plan — grow `webview` from two IDE plugins into one product: a localhost page host, an LSP sidecar, and a ZED host
 
-Status: **Phases 0 and 1 delivered (2026-09-25); Phase 2 onward not started.** Phase 0's results and two
-corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md).
+Status: **Phases 0, 1 and 2 delivered (2026-09-25); Phase 3 onward not started.** Phase 0's results and two
+corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); Phase 2's host and its API
+are in [`core/webviewd`](core/webviewd) and [`doc/webview-host-api.md`](doc/webview-host-api.md).
 Scope: the whole `webview/` product (today: `webview-jetbrains`, `webview-vscode`, `doc/`, `examples/`) plus the
 sidecar material that is being folded into it (`jwa-sidecar`, and the JWA/JSWA IDE clients).
 Written against: JDK 25 (`C:\Program Files\Java\jdk-25`; the shell's default `java` is 1.8, `JAVA_HOME` is 21 —
@@ -101,19 +102,27 @@ webview/
     webview-edit-api.md           NEW: the write contract (digest, dryRun, undo)
     webview-page-authoring.md     extended: the ladder gains "editor host" and "edit" rungs
   core/
-    webview-core/                 NEW Maven module (JDK 25)
-      page server                 serves a project subtree + the generated pages (/file/, /page/)
+    webview-core/                 DELIVERED Maven module (JDK 25)
+      page server                 serves a project subtree + the generated pages (/file/, /page/) — delivered
       command layer               the ONE place a path becomes an open editor / a write (port of NavigatorService)
-      api/v1 surface              /open /health /applyEdit /diff /watch /events
-      security                    token, allow-list, CORS, rate limit, path jail + symlink rules
-      hosts                       EditorHost SPI + NullHost (headless), ZedCliHost, VscodeCliHost, ...
+      api/v1 surface              /open /health /applyEdit /diff /watch /events (the frozen /open and /health
+                                  are delivered by webviewd; the write half is Phase 3)
+      security                    token, allow-list, CORS, rate limit, path jail + symlink rules — delivered
+      hosts                       EditorHost SPI + NullHost (headless) — delivered; ZedCliHost is delivered in
+                                  webviewd, VscodeCliHost still to come
+    webviewd/                     DELIVERED Maven module (JDK 25): the standalone host — loopback HTTP, the
+                                  frozen routes, /page/ with the injected bridge, the manifest, the descriptor,
+                                  and the host adapters it can attach
     webview-lsp/                  NEW Maven module: stdio LSP shim over the same command layer
   jwa-sidecar/                    MOVED here (from repo root), retargeted onto webview-core
   webview-jetbrains/              unchanged behaviour, one-line switch to core's command layer
   webview-vscode/                 unchanged behaviour, one-line switch to core's command layer
-  zed/                            NEW
-    webview-zed-dev-extension/    Rust wasm extension: process:exec + language_servers registration
-    settings-snippet.json         Tier 1 configuration a user pastes into Zed (nothing else needed)
+  zed/
+    webview-zed-dev-extension/    DELIVERED Rust wasm extension: registers the language-server name so
+                                  lsp.webview-sidecar.binary is legal, and returns the command for Zed to spawn
+    phase0/                       the Phase 0 apparatus (stub LSP server, DB probe, scratch targets)
+    settings-snippet.json         Tier 1 configuration a user pastes into Zed — **only useful with the
+                                  extension above**, which Phase 0 proved is required (A′)
   examples/                       unchanged; smoke test extended to the whole verb set (§7)
 ```
 
@@ -319,12 +328,53 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 - The `EditorHost` adapters, each reporting its own capabilities:
   * `LspHost` — speaks through an attached language server; registered here but only *complete* in Phase 5, so it
     reports `open`/`edit` as unavailable until then;
-  * `ZedCliHost` — `Zed.exe <abs>:<line>:<column>` (`-e`/`-a` per Phase 0), falling back to
-    `zed://file/<path>:<line>:<column>`, `open` available only when the CLI is found;
+  * `ZedCliHost` — `Zed.exe <abs>` — **corrected by Phase 0:** the `:line:column` spelling and the `zed://`
+    fallback are out (the CLI refuses the positional form on Windows, `os error 123`, and the URL form's
+    delivery is unverified), so this adapter opens the file and reports `lineNavigation: file-only`;
   * `NullHost` — headless: every editor verb reports unavailable, writes still work.
-- **Gate:** the examples' pages open in Chrome; clicking a field lands the caret in a running Zed through the CLI
-  adapter; `/health` reports the host and its capabilities; a CI job with no editor asserts the same pages degrade
-  to the clipboard rather than erroring.
+- **Gate:** the examples' pages open in Chrome; `/health` reports the host and its capabilities; a CI job with no
+  editor asserts the same pages degrade to the clipboard rather than erroring. **Amended by Phase 0:** the
+  original wording also asked that "clicking a field lands the caret in a running Zed through the CLI adapter",
+  which is impossible on Windows — `zed <file>:<line>:<column>` fails to parse (`os error 123`, §5.3/B), so the
+  CLI adapter can open a file and nothing more. The caret half therefore moves to the LSP tier (Phase 4's
+  extension + Phase 5's `LspHost`), and this phase's Zed requirement is "the CLI adapter opens the file in the
+  running Zed, and `/health` says that is all it can do". The clipboard rung stays the floor for both
+  `openFile`-less browsers and caret-less hosts.
+
+> **Delivered 2026-09-25** as [`core/webviewd`](core/webviewd) — a Maven module (JDK 25, no dependencies beyond
+> webview-core and JUnit) that packages a shaded `webviewd.jar` with **27 tests of its own**, all green, plus
+> core's 97.
+>
+> What it does: binds loopback on an ephemeral port by default and publishes it in
+> `.jcodebuddy/webview/host.json` (with a generated token in a sibling file, never in the descriptor); serves
+> the frozen `GET /open` and `GET /health` with the shared document; serves project files at `/file/` and the
+> same files with the bridge injected at `/page/`; publishes the manifest at `/.well-known/webview.json`; uses
+> core's origin allow-list, token, path jail and 20-per-20s limiter rather than a second copy of them.
+>
+> **Verified against the binary, not only in tests:** on an ephemeral port, `/health` answered
+> `{"plugin":"hr.hrg.webview.webviewd","port":…,"allowedOrigins":2,"tokenRequired":true,"bridgeVersion":1,"capabilities":["open"]}`;
+> `/open` answered `403` with no credentials, `404` headless (an honest failure, not a silent no-op), `403` for a
+> path escaping the project, `429` for the 21st call, `405` for a `POST`; `/file/` served the examples' real
+> `site.css` and `nav-client.js` with the right content types and refused a path outside the project; `/page/`
+> served the real 271-line `entity-reference.html` **with `window.openFile` injected**; CORS was echoed to the
+> host's own origin and absent for a foreign one; `OPTIONS` preflight answered `204`; a second instance exited
+> `2` with the conflict message; and a restart after a *hard* kill started anyway, proving a stale descriptor
+> does not block (`isLive()` asks the operating system, not the file).
+>
+> Two decisions worth naming, both recorded in [`doc/webview-host-api.md`](doc/webview-host-api.md):
+>
+> 1. **The host trusts its own origin by default** (plus anything `--allowed-origins` names). An IDE host denies
+>    everyone until configured; a host that *serves* the pages must trust the pages it serves, or every example
+>    would need a token pasted into it. Another page on another port is still refused.
+> 2. **`host.lineNavigation` exists** because `open` alone would be a half-truth on Zed: the CLI adapter reports
+>    `file-only`, so `/health` and the manifest say `open` while the manifest also says the line is not applied.
+>    That is Phase 0's measurement turned into an API field rather than a footnote.
+>
+> Still open from this phase: **`LspHost`** (Phase 5, and only reachable through Phase 4's extension), the
+> `POST /api/v1/...` surface and the write verbs (Phase 3), and `--open` launching a browser — implemented with
+> `Desktop.browse` and a printed URL fallback, but not exercised here because this session has no browser to
+> observe. The examples' pages were fetched over HTTP and their bridge injection checked, which is the half a
+> headless run can prove.
 
 ### Phase 3 — The edit verbs, headless first (3–4 days)
 - Implement §6.2 in `webview-core` (digest, atomic write, line-ending preservation, checkpoints, `/undo`,
@@ -369,10 +419,12 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > `Failed to start language server "webview-sidecar"`, which is the loud, documented failure the README predicts,
 > not a silent one. Also checked while it ran: no Zed-side deserialization errors were attributed to our server
 > and jdtls kept running, so registering for Java adds a server rather than displacing one.
-> **Still open from this gate:** that closing the window *stops* the process (the plan's own claim; Zed owns the
-> child, so it should — to be observed), and `process:exec` for launching the standalone host when no file of the
-> registered language is opened at all — the language-server route only starts the host once such a buffer exists,
-> which is exactly the gap the CLI/URL tier was supposed to cover and Phase 0 showed it cannot cover positions.
+> **Still open from this gate:** `process:exec` for launching the standalone host when no file of the
+> registered language is opened at all — the language-server route only starts the host once such a buffer
+> exists, which is exactly the gap the CLI/URL tier was supposed to cover and Phase 0 showed it cannot cover
+> positions. **Closed later the same day:** quitting Zed stopped the sidecar (its `java -jar …` process was gone
+> and port 7979 refused connections), so "closing the window stops it" is measured rather than assumed — Zed owns
+> the child process.
 
 ### Phase 5 — LSP sidecar parity, the ZED LSP host, + ACP exploration (2–3 days, partially spiked)
 - Finish `LspHost` (the send side, started in Phase 2): `window/showDocument` for navigation and
@@ -444,6 +496,10 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
    is the smaller change; proxying is a later option that would make the "one implementation" claim absolute.
 4. **Is `webviewd` a separate binary** (shaded jar, like `jwa-sidecar` today) **or the same jar as the LSP
    sidecar** started with a flag (`--host`, `--lsp`, `--acp`)? This plan assumes one shaded jar, three modes.
+   **Interim answer, 2026-09-25:** Phase 2 shipped it as its own module with its own shaded `webviewd.jar`,
+   because the sidecar already exists as its own jar and neither entry point needed the other's dependencies.
+   Folding them together is now a packaging decision rather than a design one, and nothing in `webviewd`
+   prevents it (its `main` takes flags already).
 5. **Which of `vscode-jwa`/`vscode-jswa`/`intellij-jwa`/`intellij-jswa` also move under `webview/`?** They are
    sidecar clients and would use the same host adapters, but they belong to the JWA/JSWA products. This plan moves
    only `jwa-sidecar`.
@@ -453,6 +509,12 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 ```bash
 # core + sidecar (JDK 25; the shell default java is 8 and JAVA_HOME is 21)
 JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -pl webview/core/webview-core,webview/jwa-sidecar -am verify
+# the standalone host: its own 27 tests plus core's 97
+JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -pl webview/core/webviewd -am verify
+# run it: port 0 publishes an ephemeral port in .jcodebuddy/webview/host.json, and the token file sits beside it
+"C:/Program Files/Java/jdk-25/bin/java.exe" -jar webview/core/webviewd/target/webviewd.jar \
+    --project <dir> --port 0 --host auto
+# then: GET /health, GET /.well-known/webview.json, GET /page/<percent-encoded absolute path>?token=<from the token file>
 # pages, all four hosts' contracts, headless parity
 node webview/check-links.mjs
 node webview/examples/smoke-test.mjs
