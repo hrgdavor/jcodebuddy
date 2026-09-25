@@ -264,6 +264,10 @@ as everything else, which removes today's wildcard-CORS hole. **Decided 2026-09-
 and `/jump` survives that release as a **deprecated alias** of the new route — the JWA/JSWA clients are migrated
 off it before it is withdrawn. The `jwa-sidecar.txt` addon-file mechanism and the
 JWA builder code actions are preserved as they are — this plan changes the sidecar's *transport*, not its tools.
+**Corrected 2026-09-25:** the addon-file mechanism has **no implementation to preserve** — nothing in the
+repository's history ever read that file, and `modules.md` had recorded it as done. The builder code actions do
+exist; see [the Phase 1 record](#phase-1--extract-the-shared-core-and-put-the-sidecar-with-the-product) and
+[`jwa-sidecar/modules.md`](jwa-sidecar/modules.md).
 
 ## 7. Phases
 
@@ -501,7 +505,10 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   `experimental/runnables` with an array and tolerate Zed's worktree-trust delay (Phase 0).
 - Confirm behaviour per host — Zed (verbs confirmed in Phase 0; registration needs Phase 4's extension), JetBrains
   via `LSP4IJ`, VS Code, Neovim — and record the support matrix in `webview-host-api.md`. Keep the JWA builder
-  code actions and the addon-file mechanism working.
+  code actions working. **Corrected 2026-09-25:** there is no `jwa-sidecar.txt` addon-file mechanism to keep
+  working (it was never implemented, see the Phase 1 record); if it is wanted, it is new work — a classloader
+  over the listed GAVs and paths plus an SPI for what an addon contributes, per
+  [`jwa-sidecar/modules.md`](jwa-sidecar/modules.md).
 - **Gate (the request's headline case):** with the sidecar registered as Zed's language server — via Phase 4's
   extension, since Phase 0 proved settings alone cannot register it — and **no CLI invocation at all**, clicking a
   location link in the browser window beside Zed moves Zed's caret to the line; and an `applyEdit` from the page
@@ -572,8 +579,12 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
    language server is attached — both observed, not inferred.
 5. `applyEdit` refuses a stale digest, refuses a path outside the project, is atomic, and is undoable byte-for-byte.
 6. The sidecar no longer answers any state-changing route with `Access-Control-Allow-Origin: *`.
-7. `jwa-sidecar` lives under `webview/`, builds from the parent POM, and its JWA code actions and addon-file
-   loading still work.
+7. `jwa-sidecar` lives under `webview/`, builds from the parent POM, and its JWA code actions still exist —
+   the "Sync Builder" action in `JwaTextDocumentService`, which has no test yet.
+   **Corrected 2026-09-25:** the criterion also asked that "addon-file loading still work"; there is no such
+   loading, and there never was (no code in any language references `jwa-sidecar.txt`, in the whole history), so
+   that half of the criterion was unachievable as written. The sidecar's `pom.xml` depends on `jwa-builder`
+   directly, which is what the "reference implementation" in its README actually describes.
 8. Every capability claim in the READMEs is covered by a test or a dated, version-named verification note.
 
 ## 9. Risks

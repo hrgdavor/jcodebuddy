@@ -79,9 +79,22 @@ Maven's dependency management handles sub-modules as distinct units. By separati
 
 ## Configuration: `jwa-sidecar.txt`
 
-The sidecar dynamically loads addons based on a project-level configuration file named `jwa-sidecar.txt`.
+> **Status: documented format, not implemented.** No code in this repository reads this file, and none ever has
+> — a search of the whole history for its name finds only the documents that describe it. It stays written down
+> because it is the intended design; it is labelled because a reader who followed it today would find that
+> adding a line to `jwa-sidecar.txt` changes nothing.
+>
+> **What actually happens today:** `jwa-builder` and `jwa-builder-api` are *compile-time dependencies* of the
+> sidecar (see [its `pom.xml`](pom.xml)), so the builder is inside the shaded jar and its code action is offered
+> to every client. Adding another worker means adding it to that POM and rebuilding the sidecar — not editing a
+> file in the project being edited.
+>
+> **What implementing this would take:** a classloader over the listed paths and GAVs, and an SPI describing what
+> an addon contributes. No such SPI exists: the builder is called directly by `JwaTextDocumentService`, which is
+> exactly why the file has no consumer. [`modules.md`](modules.md) records it as an open item rather than a
+> finished one.
 
-### Format
+### Format (intended)
 One artifact per line (standard Maven GAV format) or a local path.
 
 ```text

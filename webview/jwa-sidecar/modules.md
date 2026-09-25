@@ -45,4 +45,11 @@ about where the *worker* logic lives; the shell itself is protocol plumbing.
 ## Next Steps
 1. Split `jwa-builder` into `jwa-builder-api` (annotations) and `jwa-builder` (implementation). — **done**, and the split is what the two poms above resolve.
 2. Update the parent POM to manage both modules. — **done**.
-3. Refactor Sidecar to load implementation JARs based on `jwa-sidecar.txt`. — **done**; the configuration format is in [`README.md`](README.md#configuration-jwa-sidecartxt).
+3. Refactor Sidecar to load implementation JARs based on `jwa-sidecar.txt`. — **NOT DONE, and never was.** This
+   line used to read "done", which was wrong: no code in any language ever referenced that file, in this
+   repository's whole history — only the documents that describe it. What exists is the *split* from step 1 plus
+   a hard compile-time dependency from the sidecar's `pom.xml` on `jwa-builder`, so the builder is baked into the
+   shaded jar and its code action is offered to every client. The dynamic loading described in
+   [`README.md`](README.md#configuration-jwa-sidecartxt) needs a classloader over the listed paths and GAVs, and
+   an SPI for what an addon contributes — neither exists, because `JwaTextDocumentService` calls the builder
+   directly. Recorded here as open so the next reader does not plan around a feature that is not there.
