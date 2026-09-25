@@ -354,6 +354,26 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   discoverable from Zed's side, and closing the window stops it. Documented as *experimental*, with the exact Zed
   version it was verified against.
 
+> **Registration half delivered 2026-09-25**, and it is the half Phase 0 proved was missing:
+> [`zed/webview-zed-dev-extension`](zed/webview-zed-dev-extension) — `extension.toml` registering
+> `[language_servers.webview-sidecar]` for Java plus a `language_server_command` that resolves
+> `JCB_WEBVIEW_SIDECAR` → `webviewd --lsp` → `JCB_WEBVIEW_JAVA`/`$JAVA_HOME/bin/java` `-jar
+> webview/jwa-sidecar/target/jwa-sidecar.jar`. It uses **no** `process:exec` (Zed spawns the command; the
+> extension never does) and it renders nothing (no Zed extension can). **Observed on 1.21.0, Windows, by the
+> maintainer:** installed as a dev extension; opening a `.java` file made Zed log
+> `starting language server process. binary path: "C:\Program Files\Java\jdk-25\bin\java.exe", args: ["-jar",
+> …\webview\jwa-sidecar\target\jwa-sidecar.jar"]`; the sidecar stayed up (`java -jar …jwa-sidecar.jar` visible as
+> a live process) and its jump service answered — **port 7979 listening** — which is Tier 1's registration
+> problem actually solved, with no adapter hijacked and no settings-only trick. The `lsp.webview-sidecar.binary`
+> override was needed for the JDK: with the default chain (PATH `java` 1.8 / `JAVA_HOME` 21) Zed logged
+> `Failed to start language server "webview-sidecar"`, which is the loud, documented failure the README predicts,
+> not a silent one. Also checked while it ran: no Zed-side deserialization errors were attributed to our server
+> and jdtls kept running, so registering for Java adds a server rather than displacing one.
+> **Still open from this gate:** that closing the window *stops* the process (the plan's own claim; Zed owns the
+> child, so it should — to be observed), and `process:exec` for launching the standalone host when no file of the
+> registered language is opened at all — the language-server route only starts the host once such a buffer exists,
+> which is exactly the gap the CLI/URL tier was supposed to cover and Phase 0 showed it cannot cover positions.
+
 ### Phase 5 — LSP sidecar parity, the ZED LSP host, + ACP exploration (2–3 days, partially spiked)
 - Finish `LspHost` (the send side, started in Phase 2): `window/showDocument` for navigation and
   `workspace/applyEdit` for edits, with the reference host being the sidecar itself. Answer

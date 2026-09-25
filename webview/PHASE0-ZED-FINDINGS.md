@@ -144,12 +144,35 @@ denied. (os error -2147024891)`, so a second instance is started instead. The pl
 works on Windows (§5.3) is therefore **unconfirmed**, and the position fragment's meaning (does Zed read
 `:8:5` in a URL?) is untested.
 
-## D — dev extension: not run
+## D — dev extension: written, installed and observed the same day
 
-`cargo` and `rustup` are installed (`C:\Users\hrg\.cargo\bin`), so the Phase 4 crate can be built here, but
-installing it as a dev extension is a Zed UI action (`zed: extensions` → *Install Dev Extension*) and belongs to
-the maintainer. The two questions Phase 4's gate asks — does Zed start it, and does closing the window stop it —
-remain open. Given A′, this experiment is now on the critical path rather than an optional extra.
+`cargo` and `rustup` are installed (`C:\Users\hrg\.cargo\bin`), and the `wasm32-wasip2` target is the one Zed
+compiles extensions for. The extension was written and installed the same afternoon — because A′ put it on the
+critical path — and the result is in the follow-up section below. What is still open from this experiment is only
+the "closing the window stops it" half.
+
+## Follow-up, same day: the registration gap is closed (verified)
+
+Phase 4's registration half was written the same afternoon, because A′ made it the critical path:
+[`zed/webview-zed-dev-extension`](zed/webview-zed-dev-extension) registers the language-server name
+`webview-sidecar` for Java. Observed on the same 1.21.0 build, with the maintainer installing it as a dev
+extension and opening a `.java` file:
+
+- Zed logged `starting language server process. binary path: "C:\Program Files\Java\jdk-25\bin\java.exe", …,
+  args: ["-jar", "…\webview\jwa-sidecar\target\jwa-sidecar.jar"]` — i.e. **an extension-registered name is
+  accepted**, which is the mirror image of A′'s rejection.
+- The sidecar stayed up (`java -jar …jwa-sidecar.jar` alive as a process) and its HTTP face answered:
+  **port 7979 listening**. So the sidecar is reachable from Zed with no CLI invocation and no adapter hijack.
+- Adding `lsp.webview-sidecar.binary` (the override proven in §A) was needed for the JDK: with the extension's
+  default chain — PATH `java` is 1.8 here, `JAVA_HOME` is 21, the jar needs 25 — Zed logged
+  `Failed to start language server "webview-sidecar"` instead of starting something broken. Loud failure, as the
+  README predicts.
+- No Zed-side deserialization errors were attributed to our server while it ran, and jdtls started alongside it:
+  registering for Java *adds* a server rather than displacing the project's real one.
+- The extension needs no `process:exec` capability (it returns a command; Zed spawns it) and renders nothing.
+
+Still unobserved: that closing the Zed window stops the sidecar — Zed owns the child process, so it should, but
+the plan's gate asks for observation and this note does not claim it.
 
 ## Reproducing any of this
 
