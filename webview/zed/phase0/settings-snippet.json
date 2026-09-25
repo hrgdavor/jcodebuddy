@@ -1,0 +1,19 @@
+{
+  "lsp": {
+    "rust-analyzer": {
+      "binary": {
+        "path": "C:\\nvm4w\\nodejs\\node.exe",
+        "arguments": [
+          "<REPO>\\webview\\zed\\phase0\\stub-lsp.mjs",
+          "--log", "<REPO>\\target\\phase0-stub-rs.log",
+          "--file", "<REPO>\\webview\\zed\\phase0\\scratch\\Sample.rs",
+          "--line", "8",
+          "--column", "5",
+          "--edit-line", "1",
+          "--delay", "4000"
+        ],
+        "ignore_system_version": true
+      }
+    }
+  }
+}

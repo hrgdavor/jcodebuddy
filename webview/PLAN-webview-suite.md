@@ -1,6 +1,7 @@
 # Plan — grow `webview` from two IDE plugins into one product: a localhost page host, an LSP sidecar, and a ZED host
 
-Status: **Phase 1 delivered (2026-09-25); Phases 0 and 2 onward not started.**
+Status: **Phases 0 and 1 delivered (2026-09-25); Phase 2 onward not started.** Phase 0's results and two
+corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md).
 Scope: the whole `webview/` product (today: `webview-jetbrains`, `webview-vscode`, `doc/`, `examples/`) plus the
 sidecar material that is being folded into it (`jwa-sidecar`, and the JWA/JSWA IDE clients).
 Written against: JDK 25 (`C:\Program Files\Java\jdk-25`; the shell's default `java` is 1.8, `JAVA_HOME` is 21 —
@@ -79,7 +80,7 @@ no host that works without an editor.
 | --- | --- | --- | --- | --- |
 | D1 | Where the page is served from | **A standalone sidecar is the canonical host.** IDE plugins become thin adapters that either proxy to it or keep injecting into their own webview | The page must work with no editor; only a separate process can exist in all cases. Avoids a *third* copy of bridge/auth code in ZED | proposed |
 | D2 | How the webview gets a host per editor | JetBrains/VS Code: **unchanged injection** (keep working exactly as today). ZED: **no embedded webview exists**, so the standalone window is the webview | Do not regress two working hosts to gain a third. Zed extensions cannot create UI panels (see §5) | proposed |
-| D3 | ZED integration order | **Tier 1 LSP channel (`window/showDocument` + `workspace/applyEdit`, no ZED-side code) → Tier 2 `zed` CLI adapter as the fallback when no LSP client is connected → Tier 3 Zed extension (`process:exec` / language-server registration) for distribution → Tier 4 ACP/MCP as a separate surface** | Tier 1 is *confirmed working in Zed's source* (§5.5) and needs no ZED cooperation. Tier 2 is trivial and always available. Tier 3 is only about making the sidecar start automatically | proposed |
+| D3 | ZED integration order | **Tier 1 LSP channel (`window/showDocument` + `workspace/applyEdit`) → Tier 2 `zed` CLI adapter as the fallback when no LSP client is connected → Tier 3 Zed extension (`process:exec` / language-server registration) for distribution → Tier 4 ACP/MCP as a separate surface** | Tier 1's *verbs* are confirmed working on the installed 1.21.0 (§5.5, Phase 0) and need no ZED cooperation. **Corrected 2026-09-25:** the registration half of Tier 1 needs an **extension** — Zed refuses config-only custom server names (§5.4, A′) — so Tier 3 is a prerequisite for Tier 1, not merely distribution; and Tier 2 cannot place a caret on Windows (§5.3, B), so it can only open files | proposed, **corrected** |
 | D4 | Is a ZED plugin that "opens a port" possible | **Yes, but not as a webview.** Zed extensions are Rust→`wasm32-wasip2`, cannot create panels/views, and their granted capabilities are only `process:exec`, `download_file`, `npm:install`. So: an extension may **launch our sidecar** (Tier 3), never host a page | Zed docs, [Developing Extensions](https://zed.dev/docs/extensions/developing-extensions), [Extension Capabilities](https://zed.dev/docs/extensions/capabilities) | **confirmed** |
 | D5 | ACP as the integration | **Deferred to an exploration phase, and explicitly not the webview's transport.** Zed deprecated ACP *extensions* in favour of the [ACP Registry](https://agentclientprotocol.com/registry) as of Zed v1.5.0 (we run 1.21.0), and ACP's content model has no HTML (§5.6) | Zed docs, [Agent Server Extensions](https://zed.dev/docs/extensions/agent-servers); the window is served over HTTP, and ACP would only ever be an agent-tool face | **confirmed (deprecation + no HTML)** |
 | D6 | "File changes from the webview" | A **digest-guarded edit API** (`/api/v1/applyEdit`) that writes to disk through one command layer, with `dryRun`, and never merges silently | Ambiguous in the request — see §10 Q1. This choice is the conservative default: the browser cannot clobber a file the reader did not see | proposed |
@@ -118,7 +119,8 @@ webview/
 
 ## 5. What ZED actually allows — the findings this plan rests on
 
-Verified from Zed's own documentation on the machine's Zed **1.21.0**:
+Verified from Zed's own documentation on the machine's Zed **1.21.0**, and — where marked **measured** — by
+Phase 0's experiments against the installed build ([`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md)):
 
 1. **No embeddable webview, and no custom UI.** Extensions can provide languages, debuggers, themes, icon
    themes, snippets, and MCP servers — nothing that renders an arbitrary page
@@ -130,17 +132,30 @@ Verified from Zed's own documentation on the machine's Zed **1.21.0**:
    `granted_extension_capabilities` ([Extension Capabilities](https://zed.dev/docs/extensions/capabilities)).
    Language-server, context-server and debugger extensions are the ones that require Rust code, and a manifest can
    register a **language server** — a long-lived child process Zed owns. That is the only honest reading of "a
-   plugin that opens a port": **the extension starts our sidecar; the sidecar owns the port.**
-3. **ZED can be told to open a file at a line from outside**: `zed myfile.txt:42:10` (also `:42`), with
-   `-e/--existing`, `-a/--add`, `-n/--new`, and `--wait`
-   ([CLI Reference](https://zed.dev/docs/reference/cli)). The CLI also opens `zed://`, `file://` and `ssh://`
-   URLs; on this machine `zed://` is registered as a protocol handler for `Zed.exe`, so a page can navigate ZED
-   with a link as well as with a subprocess.
+   plugin that opens a port": **the extension starts our sidecar; the sidecar owns the port.** Item 4 below makes
+   this mandatory rather than optional.
+3. **Getting a file into ZED from outside works for opening, not for positions.** The CLI takes paths, `-e/--existing`,
+   `-a/--add`, `-n/--new`, `-r/--reuse` and `--wait`, and it opens `zed://`, `file://` and `ssh://` URLs; on this
+   machine `zed://` is registered as a protocol handler for `Zed.exe`
+   ([CLI Reference](https://zed.dev/docs/reference/cli)). **Measured: the documented `path:line[:column]` form
+   does not work on Windows in 1.21.0** — `windows_only_instance` logs `error parsing path argument … (os error
+   123)` for `:42` and `:42:10`, absolute or relative, while a plain path parses. The `zed://` form parses without
+   error but whether an *already running* window receives it is **unverified**. Navigation therefore has to be the
+   LSP channel; the CLI/URL tier only opens files.
 4. **A custom language server can be configured without publishing an extension** via `"lsp": { "<name>": {
    "binary": { "path": …, "arguments": […], "env": {…} } } }`, with `initialization_options` and `settings`
    ([Configuring Languages](https://zed.dev/docs/configuring-languages)). This is Tier 1.
-5. **And Zed's LSP client really does honour `window/showDocument` — with the selection — and
-   `workspace/applyEdit`.** Confirmed in Zed's source, not just its advertised capabilities:
+   **CORRECTED 2026-09-25 by Phase 0 — this is false on 1.21.0.** The `lsp` key accepts only names an extension
+   or a built-in adapter has registered; an arbitrary name is silently ignored
+   ([zed#52653](https://github.com/zed-industries/zed/issues/52653), closed *not planned*: *"Zed currently only
+   allows LSP names that an extension or built-in adapter has registered"*). **Measured:** a project settings file
+   naming `jcb-phase0-md` for `Markdown` started nothing, while
+   `lsp.rust-analyzer.binary.path` → our stub did start it. So Tier 1 requires a **registration extension** in
+   front of it; the cheap shape is [zed-customlsp](https://github.com/zhcn000000/zed-customlsp)'s — an extension
+   that registers the id and lets settings supply the binary. Phase 4's extension is a prerequisite, not a
+   distribution nicety, and its `settings-snippet.json` is only useful alongside it.
+5. **Zed's LSP client really does honour `window/showDocument` — with the selection — and
+   `workspace/applyEdit`.** Read in Zed's source:
    * `crates/lsp/src/lsp.rs` advertises `window.show_document.support = true` and `workspace.applyEdit = true` in
      its initialize params ([file](https://github.com/zed-industries/zed/blob/main/crates/lsp/src/lsp.rs),
      `default_initialize_params`).
@@ -152,11 +167,17 @@ Verified from Zed's own documentation on the machine's Zed **1.21.0**:
      `RegisterCapability`, `UnregisterCapability`, `WorkDoneProgressCreate`, the refresh requests, and
      `ShowMessageRequest`.
 
+   **Measured on the installed 1.21.0 (Phase 0), not just read on `main`:** the client advertises both
+   capabilities in its own `initialize`; `window/showDocument` with a selection and `takeFocus` answered
+   `{"success":true}` and the caret was observed at the requested position; `workspace/applyEdit` answered
+   `{"applied":true}`, sent `textDocument/didChange` back to the server, and left the bytes on disk untouched
+   while Zed's own database held the modified buffer — i.e. the edit landed in the buffer and its undo stack.
    **Consequence for this plan:** the sidecar's *existing* `JwaLanguageServer.jump` already sends exactly this
-   `ShowDocument` request, so **the LSP tier (Tier 1) works from Zed with no CLI process and no extension** — the
-   CLI adapter and the extension are robustness and auto-start paths, not the only way in. It also means the write path (§6.2) has a
-   native-host route: `workspace/applyEdit` lets Zed apply the change to its own buffer and undo stack. This was
-   read on `main`; the plan verifies it against the installed 1.21.0 in Phase 0 before relying on it.
+   `ShowDocument` request, so the **verbs** of Tier 1 need no CLI process; but per item 4 the *registration* does
+   need an extension, so "no extension" was wrong. The write path (§6.2) has a native-host route confirmed:
+   `workspace/applyEdit` lets Zed apply the change to its own buffer and undo stack. One compatibility requirement
+   comes with it: Zed asks Rust-scoped servers for `experimental/runnables` and logs an error if the answer is not
+   an array, so `webviewd --lsp` must answer it.
 6. **ACP is a JSON-RPC 2.0 protocol whose UI vocabulary is markdown-and-tool-calls, not HTML.** The spec is at
    **v1** with a v2 draft ([ACP overview](https://agentclientprotocol.com/protocol/v1/overview),
    [content](https://agentclientprotocol.com/protocol/v1/content)); the flow is `initialize` → `session/new` or
@@ -164,12 +185,12 @@ Verified from Zed's own documentation on the machine's Zed **1.21.0**:
    terminal methods, and its `ContentBlock` is deliberately the **MCP** `ContentBlock` (text / image / audio /
    resource / resource_link). There is **no HTML, iframe or webview content type** — so ACP can never be how a
    rich page reaches the user; the localhost window does that. There are official **Java** and Kotlin libraries
-   (relevant, since the sidecar is Java), and the listed clients include Zed and **JetBrains**.
-   **Consequence:** ACP is an optional *second* face for the sidecar — a way for an agent panel to call the same
-   command layer as a tool — not a transport for the webview. This is why §D5 defers it.
-5. **ACP extensions are deprecated** in favour of the ACP Registry (Zed v1.5.0+,
-   [Agent Server Extensions](https://zed.dev/docs/extensions/agent-servers)). ACP is an Agent-Panel integration;
-   it is planned here as an exploration, not as the webview's transport.
+   (relevant, since the sidecar is Java), and the listed clients include Zed and **JetBrains**. Note also that
+   **ACP extensions are deprecated** in favour of the ACP Registry (Zed v1.5.0+,
+   [Agent Server Extensions](https://zed.dev/docs/extensions/agent-servers)), which is a second reason it is an
+   exploration rather than a foundation. **Consequence:** ACP is an optional *second* face for the sidecar — a way
+   for an agent panel to call the same command layer as a tool — not a transport for the webview. This is why §D5
+   defers it.
 
 ## 6. The API this plan adds
 
@@ -252,6 +273,26 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   each experiment. A is expected to pass; if it does not, Tier 1 moves to the CLI and the extension becomes the
   auto-start path instead.
 
+> **Delivered 2026-09-25** — [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md), with the apparatus in
+> [`zed/phase0/`](zed/phase0). A **passed** and the verbs are confirmed against the installed build; B **failed**
+> on Windows; C is unverified; D was not run. Two amendments to the plan come out of it, both of which the phase
+> was written to catch:
+>
+> 1. **A config-only custom language server is impossible in 1.21.0.** Zed accepts only LSP names that an
+>    extension or a built-in adapter registered ([zed#52653](https://github.com/zed-industries/zed/issues/52653),
+>    closed *not planned*), so `"lsp": {"<name>": {"binary": …}}` works **only as an override for a registered
+>    name** — proven here by pointing `lsp.rust-analyzer.binary` at the stub. §5.4 and §D3 are corrected above
+>    and below; Phase 4's extension is now a **prerequisite for the LSP tier**, not a distribution nicety, and
+>    the `settings-snippet.json` deliverable is only useful alongside it.
+> 2. **`zed <file>:<line>:<column>` does not work on Windows** — `zed::zed::windows_only_instance` logs
+>    `error parsing path argument … (os error 123)` for the absolute, relative, line-only and line+column forms,
+>    while a plain path parses. Tier 2 therefore cannot carry navigation on Windows; it degrades to opening a
+>    file, and `zed://` (C) is the only candidate for more once someone tests it.
+>
+> Also recorded there because they will bite the sidecar: Zed's **worktree-trust gate** delays the language
+> server start; Zed asks Rust-scoped servers for **`experimental/runnables`** and a `null` reply is a visible
+> error; and a **BOM** in `.zed/settings.json` makes Zed discard the whole file.
+
 ### Phase 1 — Extract `webview-core`, unify the three copies of the security model (2–3 days)
 - New Maven module `webview/core/webview-core` (JDK 25, no IntelliJ/VSCode dependency), containing: path jail,
   token + allow-list auth, CORS policy, rate limiter (the existing `RateLimiter`/`Clock` move here), the
@@ -299,25 +340,32 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   is refused in every host; (d) applying through the JetBrains host appears in the IDE's own undo stack; (e) an
   edit sent through the LSP channel appears in Zed's buffer and is undone with Zed's own undo.
 
-### Phase 4 — ZED tier 3: the dev extension, so the host starts itself (2–3 days)
-- `webview/zed/webview-zed-dev-extension/`: `extension.toml` + a minimal Rust crate that (i) declares the
-  language-server entry so Zed starts `webviewd --lsp` for the workspace, and/or (ii) uses `process:exec` to
-  launch the standalone host, with `granted_extension_capabilities` documented in the README.
-- Ship `settings-snippet.json` for users who prefer no extension at all (Tier 1: `lsp.<name>.binary.path` and
-  nothing else).
+### Phase 4 — ZED tier 3: the extension, so Zed can address the host at all (2–3 days, promoted by Phase 0)
+- `webview/zed/webview-zed-dev-extension/`: `extension.toml` + a minimal Rust crate that (i) **registers the
+  language-server id** so `lsp.<id>.binary` in settings becomes legal (§5.4 — without this, Zed ignores the name
+  entirely) and (ii) declares the language-server entry so Zed starts `webviewd --lsp` for the workspace, and/or
+  (iii) uses `process:exec` to launch the standalone host, with `granted_extension_capabilities` documented in the
+  README. The cheap registration-only shape is
+  [zed-customlsp](https://github.com/zhcn000000/zed-customlsp): register the id, return the command, let settings
+  supply the binary.
+- Ship `settings-snippet.json` for users who have the extension but want to point it at their own build — **not**
+  as a substitute for it: Phase 0 proved a snippet alone starts nothing.
 - **Gate:** installed as a dev extension, opening the project starts the host without a terminal, the port is
   discoverable from Zed's side, and closing the window stops it. Documented as *experimental*, with the exact Zed
   version it was verified against.
 
 ### Phase 5 — LSP sidecar parity, the ZED LSP host, + ACP exploration (2–3 days, partially spiked)
 - Finish `LspHost` (the send side, started in Phase 2): `window/showDocument` for navigation and
-  `workspace/applyEdit` for edits, with the reference host being the sidecar itself.
-- Confirm behaviour per host — Zed (already confirmed in source, re-observed in Phase 0), JetBrains via `LSP4IJ`,
-  VS Code, Neovim — and record the support matrix in `webview-host-api.md`. Keep the JWA builder code actions and
-  the addon-file mechanism working.
-- **Gate (the request's headline case):** with the sidecar registered as Zed's language server and **no CLI
-  invocation at all**, clicking a location link in the browser window beside Zed moves Zed's caret to the line;
-  and an `applyEdit` from the page appears in Zed's buffer and is undone by Zed's own undo.
+  `workspace/applyEdit` for edits, with the reference host being the sidecar itself. Answer
+  `experimental/runnables` with an array and tolerate Zed's worktree-trust delay (Phase 0).
+- Confirm behaviour per host — Zed (verbs confirmed in Phase 0; registration needs Phase 4's extension), JetBrains
+  via `LSP4IJ`, VS Code, Neovim — and record the support matrix in `webview-host-api.md`. Keep the JWA builder
+  code actions and the addon-file mechanism working.
+- **Gate (the request's headline case):** with the sidecar registered as Zed's language server — via Phase 4's
+  extension, since Phase 0 proved settings alone cannot register it — and **no CLI invocation at all**, clicking a
+  location link in the browser window beside Zed moves Zed's caret to the line; and an `applyEdit` from the page
+  appears in Zed's buffer and is undone by Zed's own undo. (Phase 0 measured the first half and left the undo
+  half unobserved; this gate must not treat it as already proven.)
 - ACP: a timed spike (≤1 day) that registers `webviewd --acp` as a **custom agent** (`agent_servers:
   {"<id>": {"type": "custom", "command": …, "args": ["--acp"], "env": {}}}`), answers `initialize` / `session/new`
   / `session/prompt` and exposes one tool that calls the same command layer as `/api/v1` (using the official Java
@@ -392,9 +440,14 @@ node webview/examples/smoke-test.mjs
 cd webview/webview-jetbrains && ./gradlew test buildPlugin
 # VS Code host
 cd webview/webview-vscode && npm test
-# ZED (Windows)
+# ZED (Windows). Run these from a normal shell, not from an agent session: a second process cannot reach a
+# running Zed's CLI endpoint there ("error connecting to cli: Access is denied"), and `--user-data-dir` gives an
+# isolated instance whose logs are readable.
 "C:/Users/hrg/AppData/Local/Programs/Zed/bin/Zed.exe" --version    # expect 1.21.0
-"C:/Users/hrg/AppData/Local/Programs/Zed/bin/Zed.exe" <file>:<line>:<column>
+"C:/Users/hrg/AppData/Local/Programs/Zed/bin/Zed.exe" <file>       # opens; NO position suffix works on Windows
+# Phase 0 apparatus (see webview/zed/phase0/README.md)
+node webview/zed/phase0/self-test-client.mjs                        # prove the stub, no editor needed
+node webview/zed/phase0/probe-zed-db.mjs "Sample"                   # what Zed persisted for a buffer/caret
 ```
 
 ## 12. Suggested order of work, in one line
@@ -402,3 +455,6 @@ cd webview/webview-vscode && npm test
 Phase 0 → Phase 1 → Phase 2 → *(answer Q1)* → Phase 3 → Phase 4 → Phase 5 → Phase 6.
 Phases 1 and 2 deliver the request's two hard parts (a pluggable sidecar webview, and a side-by-side ZED window
 that can drive the editor) without touching the frozen page contract or either working IDE host.
+Phase 0 has since shown that **Phase 4's extension is what makes Zed able to address the sidecar at all** (§5.4,
+A′), so it is no longer the last ZED phase but a precondition for Phase 5's gate; and that on Windows the CLI can
+open a file but cannot place a caret (§5.3, B), so nothing may depend on Tier 2 for navigation.
