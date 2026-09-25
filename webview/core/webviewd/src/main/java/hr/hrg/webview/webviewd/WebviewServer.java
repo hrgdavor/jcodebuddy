@@ -145,11 +145,35 @@ public final class WebviewServer implements AutoCloseable {
         return instance;
     }
 
-    /** The adapter the config asks for; {@code --host zed-cli} refuses to fall back silently. */
+    /** The adapter the config asks for; an explicit choice refuses to fall back silently. */
     public static EditorHost selectHost(WebviewdConfig config) {
+        return selectHost(config, new HttpSidecarClient(config.sidecarPort(), config.sidecarToken()));
+    }
+
+    /**
+     * The same decision with the sidecar bridge supplied, which is what lets the preference order be tested
+     * without a sidecar process: {@code auto} takes the LSP route when an editor is attached to it, because
+     * that is the only route on Windows that can place a caret.
+     */
+    static EditorHost selectHost(WebviewdConfig config, SidecarClient sidecar) {
         return switch (config.host()) {
             case NONE -> NullHost.INSTANCE;
+            case LSP -> {
+                LspHost lsp = LspHost.discover(sidecar);
+                if (!lsp.isAvailable()) {
+                    throw new IllegalStateException("--host lsp was requested but the sidecar at "
+                            + lsp.sidecarDescription() + " advertises no navigation capability: it is either"
+                            + " not running (start it, or the Zed extension starts it) or no LSP client has"
+                            + " attached yet. Its /health must list \"open\" before this host will route to it");
+                }
+                yield lsp;
+            }
             case AUTO -> {
+                // LSP first: it is the only adapter on Windows that can place a caret (Phase 0, section B).
+                LspHost lsp = LspHost.discover(sidecar);
+                if (lsp.isAvailable()) {
+                    yield lsp;
+                }
                 ZedCliHost zed = ZedCliHost.detect();
                 yield zed.isAvailable() ? zed : NullHost.INSTANCE;
             }
@@ -235,17 +259,15 @@ public final class WebviewServer implements AutoCloseable {
 
     /**
      * How precisely this host can reach a position: {@code exact}, {@code file-only} or {@code none}. A page
-     * reads it instead of assuming that {@code open} implies a caret.
+     * reads it instead of assuming that {@code open} implies a caret. Since 2026-09-25 the answer comes from
+     * the adapter itself ({@link EditorHost#lineNavigation()}), so a new adapter cannot forget it.
      */
     public String lineNavigation() {
         return lineNavigationOf(host);
     }
 
     static String lineNavigationOf(EditorHost host) {
-        if (!host.isAvailable()) {
-            return "none";
-        }
-        return host instanceof ZedCliHost zed ? zed.lineNavigation() : "exact";
+        return host.lineNavigation();
     }
 
     private String lineNavigationNote() {
@@ -253,13 +275,7 @@ public final class WebviewServer implements AutoCloseable {
     }
 
     static String lineNavigationNoteOf(EditorHost host) {
-        return switch (lineNavigationOf(host)) {
-            case "none" -> "no editor adapter is attached; navigation verbs are refused and a page should fall"
-                    + " back to the clipboard";
-            case "file-only" -> "the adapter opens the file but cannot place a caret: the Zed CLI on Windows"
-                    + " refuses the documented path:line:column form (webview/PHASE0-ZED-FINDINGS.md, section B)";
-            default -> "the adapter places the caret on the requested line and column";
-        };
+        return host.lineNavigationNote();
     }
 
     /** The descriptor that lets a page find this host without being told the port. */

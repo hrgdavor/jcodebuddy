@@ -71,7 +71,7 @@ class WebviewServerTest {
 
     private WebviewServer start(EditorHost host) throws IOException {
         WebviewdConfig config = new WebviewdConfig(project, 0, false, ALLOWED_ORIGIN, TOKEN,
-                WebviewdConfig.HostChoice.NONE, false);
+                WebviewdConfig.HostChoice.NONE, WebviewdConfig.DEFAULT_SIDECAR_PORT, "", false);
         server = WebviewServer.start(config, host);
         return server;
     }
@@ -293,6 +293,33 @@ class WebviewServerTest {
         assertEquals("recording", descriptor.host().name());
         assertNotNull(descriptor.tokenPathAsPath(project));
         assertFalse(descriptor.toJson().contains(TOKEN), "the descriptor never carries the secret");
+    }
+
+    @Test
+    void anLspHostIsReportedAsExactAndSurvivesTheRoundTripThroughHealth() throws Exception {
+        // The spike's claim in one test: when navigation goes over LSP, the host advertises open AND says the
+        // caret is placed exactly, because Phase 0 measured Zed honouring the selection.
+        start(LspHost.discover(FakeSidecar.withEditorAttached()));
+
+        String health = get("/health").body();
+        assertTrue(health.contains("\"capabilities\":[\"open\",\"select\"]"), health);
+
+        String manifest = get(WebviewServer.MANIFEST_ROUTE).body();
+        assertTrue(manifest.contains("\"name\": \"lsp\""), manifest);
+        assertTrue(manifest.contains("\"lineNavigation\": \"exact\""), manifest);
+        assertFalse(manifest.contains("file-only"), "the LSP route does not have the CLI's limitation");
+    }
+
+    @Test
+    void anUnattachedLspHostIsReportedAsUnavailableRatherThanAsAnOpenVerb() throws Exception {
+        FakeSidecar unattached = new FakeSidecar();
+        unattached.healthBody = FakeSidecar.health("");
+        start(LspHost.discover(unattached));
+
+        assertTrue(get("/health").body().contains("\"capabilities\":[]"));
+        String manifest = get(WebviewServer.MANIFEST_ROUTE).body();
+        assertTrue(manifest.contains("\"lineNavigation\": \"none\""), manifest);
+        assertEquals(404, get("/open?filePath=src/A.java&token=" + TOKEN).statusCode());
     }
 
     @Test

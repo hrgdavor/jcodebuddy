@@ -160,6 +160,38 @@ public class SidecarAppJumpServiceTest {
         assertTrue(drain(connection).contains("Missing uri parameter"));
     }
 
+    /**
+     * The capabilities are a promise, so they are withheld until one can be kept.
+     *
+     * <p>Corrected 2026-09-25: this document used to advertise {@code jump} and {@code showDocument}
+     * unconditionally, while {@code /jump} answers {@code NO_HOST} until an LSP client has completed
+     * {@code initialize}. webviewd now decides from this document whether to route navigation here at all, so
+     * an unconditional promise would have become a page offering a link that cannot work.
+     */
+    @Test
+    public void theHealthDocumentAdvertisesNothingUntilAnEditorIsAttached() throws Exception {
+        JwaLanguageServer server = new JwaLanguageServer();
+        int port = freePort();
+        SidecarApp.startJumpService(server, port,
+                new RateLimiter(Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS, Clock.SYSTEM),
+                null, "");
+
+        String detached = drain(get(port, "/health", null, null));
+        assertTrue(detached, detached.contains("\"capabilities\":[]"));
+
+        // Attach a client and complete initialize, which is where the project root comes from: that pair is
+        // exactly the state a jump can land in.
+        server.connect((JwaLanguageClient) java.lang.reflect.Proxy.newProxyInstance(
+                JwaLanguageClient.class.getClassLoader(), new Class<?>[] {JwaLanguageClient.class},
+                (proxy, method, arguments) -> null));
+        org.eclipse.lsp4j.InitializeParams params = new org.eclipse.lsp4j.InitializeParams();
+        params.setRootUri("file:///D:/wrk/project");
+        server.initialize(params).get();
+
+        String attached = drain(get(port, "/health", null, null));
+        assertTrue(attached, attached.contains("\"capabilities\":[\"open\",\"select\"]"));
+    }
+
     @Test
     public void theServiceBindsTheLoopbackAddressOnly() throws IOException {
         int port = start(null, "");

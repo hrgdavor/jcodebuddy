@@ -57,6 +57,20 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
             return NavigationOutcome.refused(NavigationOutcome.Reason.NO_HOST, uri,
                     "the client has not completed initialize yet");
         }
+        // Corrected 2026-09-25 by the LSP navigation spike: this delegated to Navigator.openUrl(uri)
+        // unconditionally, which takes the line from a "#L42" fragment and otherwise defaults to 1. The
+        // sidecar's own /jump handler parsed ?line=&column= and passed them here, where they were dropped - so
+        // a page asking for line 7 watched the editor open the file at line 1. The explicit position wins; the
+        // fragment stays the fallback for a caller that only had a link to send.
+        if (line > 1 || column > 1) {
+            String withoutFragment = uri;
+            int hash = uri.indexOf('#');
+            if (hash >= 0) {
+                withoutFragment = uri.substring(0, hash);
+            }
+            String localPath = hr.hrg.webview.core.UrlNormalizer.localPathOf(withoutFragment);
+            return navigator.open(localPath != null ? localPath : withoutFragment, line, column);
+        }
         return navigator.openUrl(uri);
     }
 
@@ -200,6 +214,19 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
 
     public JwaLanguageClient getClient() {
         return client;
+    }
+
+    /**
+     * True when a jump can actually land: a client is connected <em>and</em> it has completed
+     * {@code initialize}, which is where the project root comes from.
+     *
+     * <p>The distinction matters to a page. Before this existed, the sidecar's {@code /health} advertised its
+     * capabilities unconditionally, so a page that trusted it would offer navigation at a moment when
+     * {@code /jump} could only answer {@code NO_HOST} — the same "capability that is advertised but not
+     * implemented turns a fallback into a dead link" problem the contract names in section 4.
+     */
+    public boolean isEditorAttached() {
+        return client != null && projectRoot != null;
     }
 
     /** The project root the path jail was built from, or null when the client sent none. */

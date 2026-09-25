@@ -41,6 +41,28 @@ public interface EditorHost {
     Set<String> capabilities();
 
     /**
+     * How precisely this host reaches a position: {@code "exact"}, {@code "file-only"} or {@code "none"}.
+     *
+     * <p>This exists because {@link #CAP_OPEN} alone is a half-truth. Phase 0 measured that Zed's CLI refuses
+     * the documented {@code path:line:column} form on Windows, so that adapter opens the file and cannot place
+     * a caret; a host that advertised {@code open} and said nothing else would leave a page unable to tell
+     * "the caret is there" from "you are looking at the top of the file". The default assumes a host is exact
+     * only while it can act at all, and every adapter that cannot be exact overrides this.
+     */
+    default String lineNavigation() {
+        return isAvailable() ? "exact" : "none";
+    }
+
+    /** One sentence a page or a manifest can show for {@link #lineNavigation()}; never null. */
+    default String lineNavigationNote() {
+        return switch (lineNavigation()) {
+            case "exact" -> "this host places the caret on the requested line and column";
+            case "file-only" -> "this host opens the file but does not apply the line and column";
+            default -> "no editor is attached, so navigation is refused";
+        };
+    }
+
+    /**
      * Opens {@code absolutePath} and puts the caret on a one-based line and column.
      *
      * <p>Named {@code openFileAt} rather than {@code open} because an IDE host already has a public

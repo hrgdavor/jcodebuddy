@@ -174,6 +174,46 @@ extension and opening a `.java` file:
 Still unobserved: that closing the Zed window stops the sidecar — Zed owns the child process, so it should, but
 the plan's gate asks for observation and this note does not claim it.
 
+## Spike follow-up, same day: the caret path over LSP, and the bug it exposed
+
+The extra session this note's sections A and B made possible: drive `webviewd` → the sidecar → Zed and watch
+the caret. It works, and it was broken in a way no test in the repository noticed.
+
+- **Measured, end to end:** `webviewd --host lsp` answered a page's
+  `GET /open?filePath=…/Sample.rs&line=7&column=5` with `200`, and Zed's caret was observed **on line 7**; a
+  second request opened `Sample.java` **at line 8**. No CLI process was involved: the path is page → `webviewd`
+  → the sidecar's loopback `/jump` → LSP `window/showDocument` (with a selection) → Zed, which is §5.5's
+  mechanism and §6.3's intended shape.
+- **The bug it found.** `SidecarApp` parsed `/jump`'s `line`/`column` and passed them to
+  `JwaLanguageServer.jump`, which dropped them and called `Navigator.openUrl(uri)` — a helper that reads the line
+  from a `#L42` fragment and otherwise defaults to 1. A fake client speaking LSP as Zed recorded the evidence:
+
+  ```
+  -> HTTP GET /jump?uri=…Sample.rs&line=7&column=5
+  <- NOTIFICATION mytool/jump          {"line":1,"column":1}
+  <- REQUEST  window/showDocument id=1 selection={"start":{"line":0,"character":0},…}
+  ```
+
+  i.e. the file opened and the caret went to the top — the half-success the live observation showed. The
+  diagnostic is kept as [`jwa-sidecar/tools/fake-zed-client.mjs`](jwa-sidecar/tools/fake-zed-client.mjs)
+  (it answers the sidecar's `showDocument` request and logs every message), and the fix is pinned by
+  `SidecarJumpPositionTest`, which asserts both the notification and the zero-based selection.
+- **The sidecar's `/health` was over-promising.** It advertised `jump` and `showDocument` before any client had
+  completed `initialize`, while `/jump` could only answer `NO_HOST`. It now reports the contract's keys
+  (`open`, `select`) only while a client is attached — which is also what lets `webviewd`'s LSP adapter decide,
+  honestly and without a socket of its own, whether navigation may be offered.
+- **The trust gate blocks automation.** A *fresh* data directory saw
+  `Worktree "…" is not trusted` → `Waiting for worktree … before starting language server rust-analyzer`, and the
+  server did not start until the isolated instance allowed it (`session.trust_all_worktrees` in that instance's
+  own config directory). Anything that assumes "open the project and the host is up" is wrong on first run.
+- **Two processes cost a handshake.** Because the sidecar refuses unconfigured callers (deliberately), the run
+  needed the sidecar spawned with `-Djwa.sidecar.token=…` *and* `webviewd` given `--sidecar-token`. One process
+  holding both faces would need neither — see the plan's question 4.
+
+Still unobserved in this whole note: that a `workspace/applyEdit` arriving from the sidecar is undone by Zed's
+own `Ctrl+Z` (the buffer half is measured; the undo half is not), and the `zed://` URL form's delivery to a
+running window.
+
 ## Reproducing any of this
 
 ```powershell

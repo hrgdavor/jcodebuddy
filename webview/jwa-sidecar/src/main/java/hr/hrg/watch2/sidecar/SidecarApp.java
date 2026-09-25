@@ -182,9 +182,16 @@ public class SidecarApp {
                 // (it used to answer three of the four, and neither of the two newer ones). Sent as its own
                 // bytes rather than through the mapper: writeValueAsBytes(String) would quote and escape the
                 // document into a JSON string.
+                //
+                // The capabilities are the contract's verb keys, not this host's internal route names, and
+                // they are withheld until a client has completed initialize: advertising "open" while /jump
+                // can only answer NO_HOST is exactly the dead-link failure the link contract's section 4
+                // forbids. This was corrected on 2026-09-25, when webviewd started deciding from this
+                // document whether to route navigation here at all.
+                Set<String> capabilities = server.isEditorAttached() ? Set.of("open", "select") : Set.of();
                 byte[] body = HostHealth.of(HostHealth.PLUGIN_SIDECAR, port,
                         allowedOrigins.values().size(), !configuredToken.isEmpty(),
-                        Set.of("jump", "showDocument")).toJson().getBytes(StandardCharsets.UTF_8);
+                        capabilities).toJson().getBytes(StandardCharsets.UTF_8);
                 respond(exchange, 200, body);
             } finally {
                 exchange.close();

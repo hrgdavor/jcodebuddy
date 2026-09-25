@@ -1,8 +1,10 @@
 # Plan — grow `webview` from two IDE plugins into one product: a localhost page host, an LSP sidecar, and a ZED host
 
-Status: **Phases 0, 1 and 2 delivered (2026-09-25); Phase 3 onward not started.** Phase 0's results and two
-corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); Phase 2's host and its API
-are in [`core/webviewd`](core/webviewd) and [`doc/webview-host-api.md`](doc/webview-host-api.md).
+Status: **Phases 0, 1 and 2 delivered (2026-09-25), plus Phase 5's navigation half as a spike; the write verbs
+(Phase 3), the extension's `process:exec` half and Phase 6 are not started.** Phase 0's results and two
+corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); Phase 2's host and the LSP
+navigation path are in [`core/webviewd`](core/webviewd) and
+[`doc/webview-host-api.md`](doc/webview-host-api.md).
 Scope: the whole `webview/` product (today: `webview-jetbrains`, `webview-vscode`, `doc/`, `examples/`) plus the
 sidecar material that is being folded into it (`jwa-sidecar`, and the JWA/JSWA IDE clients).
 Written against: JDK 25 (`C:\Program Files\Java\jdk-25`; the shell's default `java` is 1.8, `JAVA_HOME` is 21 —
@@ -438,6 +440,44 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   location link in the browser window beside Zed moves Zed's caret to the line; and an `applyEdit` from the page
   appears in Zed's buffer and is undone by Zed's own undo. (Phase 0 measured the first half and left the undo
   half unobserved; this gate must not treat it as already proven.)
+
+> **The gate's first half was delivered the same day as a spike, and it is measured:** a page's
+> `GET /open?filePath=…&line=7&column=5` on `webviewd` (`--host lsp`) reached Zed's caret on line 7, and a second
+> request opened a different file at line 8 — with **no CLI process involved**. The chain is page → `webviewd` →
+> the sidecar's `/jump` → LSP `window/showDocument` with a selection → Zed. `webviewd`'s manifest reported
+> `"host": {"name": "lsp", "lineNavigation": "exact"}` and its `/health` reported `["open","select"]`, both read
+> from the sidecar's own capability document.
+>
+> **The spike earned its keep by finding a bug that would have made the gate a lie.** `SidecarApp` parsed
+> `/jump`'s `line` and `column` and passed them to `JwaLanguageServer.jump`, which **ignored them** and delegated
+> to `Navigator.openUrl(uri)` — a helper that takes the line from a `#L42` fragment and otherwise defaults to 1.
+> The observed symptom was exactly the confusing half-success this phase exists to catch: the file opened and the
+> caret stayed at the top. It survived Phase 1's tests because those tests only asked the endpoint questions it
+> answers with `403`/`NO_HOST`; it was caught by a diagnostic that speaks LSP *as Zed* and logs what the sidecar
+> actually sends (kept as [`jwa-sidecar/tools/fake-zed-client.mjs`](jwa-sidecar/tools/fake-zed-client.mjs)), and
+> it is now pinned by `SidecarJumpPositionTest`, which asserts both the `mytool/jump` notification and the
+> zero-based `showDocument` selection. The fix also settled `openUrl`'s role: the explicit query position wins,
+> the fragment stays the fallback for a caller that only had a link.
+>
+> **Two more things the spike measured, both now part of the design:**
+>
+> 1. **The sidecar's `/health` was lying**, advertising `jump` and `showDocument` before any client had
+>    completed `initialize`, when `/jump` could only answer `NO_HOST`. It now reports the contract's verb keys
+>    (`open`, `select`) only while a client is attached, and `webviewd`'s LSP adapter reads that document —
+>    re-reading it after a short TTL, because Zed attaches and detaches without telling anyone. Without this,
+>    `--host auto` would have preferred a sidecar that could not act.
+> 2. **A two-process deployment needs a shared secret.** The sidecar denies unconfigured callers (Phase 1's
+>    deliberate fix), so `webviewd` must be given the sidecar's token (`--sidecar-token`, defaulting to the
+>    `jwa.sidecar.token` system property) and the sidecar must be spawned with it. That is the strongest argument
+>    yet for question 4's one-jar/one-process answer: a single process serving pages and holding the LSP
+>    connection needs no handshake at all. The version in the source tree today is two processes, and the hop
+>    between them is a plain loopback HTTP call to `/jump`.
+>
+> **Still open from this gate:** the `applyEdit` half (Phase 3 owns the write contract; the LSP transport for it
+> is Phase 5), the undo observation, and `process:exec` for starting a host when no buffer of the registered
+> language is open. The spike also had to pass Zed's **worktree-trust gate** in a fresh data directory — a
+> language server does not start until the worktree is trusted, which the isolated run had to allow explicitly
+> (`session.trust_all_worktrees` in the instance's own config), and which no host may assume away.
 - ACP: a timed spike (≤1 day) that registers `webviewd --acp` as a **custom agent** (`agent_servers:
   {"<id>": {"type": "custom", "command": …, "args": ["--acp"], "env": {}}}`), answers `initialize` / `session/new`
   / `session/prompt` and exposes one tool that calls the same command layer as `/api/v1` (using the official Java
@@ -499,7 +539,10 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
    **Interim answer, 2026-09-25:** Phase 2 shipped it as its own module with its own shaded `webviewd.jar`,
    because the sidecar already exists as its own jar and neither entry point needed the other's dependencies.
    Folding them together is now a packaging decision rather than a design one, and nothing in `webviewd`
-   prevents it (its `main` takes flags already).
+   prevents it (its `main` takes flags already). **The LSP spike then argued for folding:** with two processes,
+   navigation from a page needs a shared secret configured at the sidecar's spawn *and* passed to `webviewd`
+   (see the Phase 5 record), because the sidecar refuses unconfigured callers by design; one process holding the
+   HTTP surface and the LSP connection would need no handshake, no `/jump` hop and no token in two places.
 5. **Which of `vscode-jwa`/`vscode-jswa`/`intellij-jwa`/`intellij-jswa` also move under `webview/`?** They are
    sidecar clients and would use the same host adapters, but they belong to the JWA/JSWA products. This plan moves
    only `jwa-sidecar`.

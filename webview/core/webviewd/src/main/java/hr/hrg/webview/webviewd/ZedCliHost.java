@@ -119,9 +119,22 @@ public final class ZedCliHost implements EditorHost {
         return false;
     }
 
-    /** The manifest's spelling of {@link #appliesPosition()}. */
+    /**
+     * The manifest's spelling of {@link #appliesPosition()}. Overrides {@link EditorHost#lineNavigation()}
+     * because this adapter is available *and* imprecise: the default would call it {@code exact}.
+     */
+    @Override
     public String lineNavigation() {
-        return appliesPosition() ? "exact" : "file-only";
+        return isAvailable() ? (appliesPosition() ? "exact" : "file-only") : "none";
+    }
+
+    @Override
+    public String lineNavigationNote() {
+        return isAvailable()
+                ? "the Zed CLI opens the file but cannot place a caret: Zed 1.21.0 on Windows refuses the "
+                        + "documented path:line:column form (webview/PHASE0-ZED-FINDINGS.md, section B), so "
+                        + "the caret path on Zed is the LSP channel"
+                : "no Zed CLI was found on the PATH, so navigation is refused";
     }
 
     @Override
