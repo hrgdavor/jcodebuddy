@@ -47,7 +47,7 @@ function activate(context) {
 
     // 3. Last fallback (development mode)
     if (!fs.existsSync(jarPath)) {
-        jarPath = path.join(context.extensionPath, '..', 'jwa-sidecar', 'target', 'jwa-sidecar.jar');
+        jarPath = path.join(context.extensionPath, '..', 'webview', 'jwa-sidecar', 'target', 'jwa-sidecar.jar');
     }
 
     const javaPath = findJavaExecutable();

@@ -1,0 +1,61 @@
+{
+    "note": "The authorization decision tables every webview host must agree on. Consumed by webview-core's Java test (ConformanceVectorsTest) and by webview-vscode's Node test (src/test/BridgePolicy.test.js). A host that disagrees with a vector is wrong, not different.",
+    "healthKeys": {
+        "note": "The keys of the GET /health document, in order. Java builds that document with webview-core's HostHealth and TypeScript with webview-vscode's healthDocument(); this list is the one definition both sides assert against, so a host cannot add a key the others do not answer with. The first four are the original keys; bridgeVersion and capabilities were added on 2026-09-25 and are additive.",
+        "keys": ["plugin", "port", "allowedOrigins", "tokenRequired", "bridgeVersion", "capabilities"]
+    },
+    "allowedOrigins": [
+        { "allowed": "", "origin": "http://localhost:3000", "expected": false },
+        { "allowed": "", "origin": null, "expected": false },
+        { "allowed": "   ,  , ", "origin": "http://localhost:3000", "expected": false },
+        { "allowed": "http://localhost:3000", "origin": "http://localhost:3000", "expected": true },
+        { "allowed": "http://localhost:3000", "origin": "HTTP://LocalHost:3000", "expected": true },
+        { "allowed": "http://localhost:3000", "origin": "http://localhost:3000/", "expected": true },
+        { "allowed": "http://localhost:3000", "origin": "http://localhost:3001", "expected": false },
+        { "allowed": "http://localhost:3000", "origin": "http://localhost:3000.evil.com", "expected": false },
+        { "allowed": "http://localhost:3000", "origin": "http://evil.com/http://localhost:3000", "expected": false },
+        { "allowed": "http://localhost:3000", "origin": null, "expected": false },
+        { "allowed": "http://localhost:3000", "origin": "", "expected": false },
+        { "allowed": "http://localhost:3000", "origin": "   ", "expected": false },
+        { "allowed": "file://", "origin": "file://", "expected": true },
+        { "allowed": "file://", "origin": "null", "expected": false },
+        { "allowed": "http://localhost:3000, file://, https://example.com", "origin": "https://example.com", "expected": true },
+        { "allowed": "http://localhost:3000, file://, https://example.com", "origin": "https://evil.com", "expected": false }
+    ],
+    "cors": [
+        { "allowed": "", "origin": "http://localhost:3000", "sends": false, "echoes": null },
+        { "allowed": "http://localhost:3000", "origin": "http://localhost:3000", "sends": true, "echoes": "http://localhost:3000" },
+        { "allowed": "http://localhost:3000", "origin": "https://evil.example", "sends": false, "echoes": null },
+        { "allowed": "http://localhost:3000", "origin": null, "sends": false, "echoes": null }
+    ],
+    "rateLimit": [
+        {
+            "note": "A refused call is not recorded, so a refused burst cannot keep the window full.",
+            "limit": 3,
+            "windowMillis": 1000,
+            "tryAt": [0, 0, 0, 0],
+            "expected": [true, true, true, false]
+        },
+        {
+            "note": "An event exactly one window old is still inside the window; one millisecond later it is not.",
+            "limit": 1,
+            "windowMillis": 1000,
+            "tryAt": [0, 1000, 1001],
+            "expected": [true, false, true]
+        },
+        {
+            "note": "50 refused attempts leave the window holding only the one accepted call.",
+            "limit": 1,
+            "windowMillis": 1000,
+            "tryAt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1001],
+            "expected": [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true]
+        },
+        {
+            "note": "Twenty per twenty seconds is the production policy; the twenty-first call is refused.",
+            "limit": 20,
+            "windowMillis": 20000,
+            "tryAt": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "expected": [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false]
+        }
+    ]
+}

@@ -65,13 +65,25 @@ Implemented a mini-service within the Sidecar that listens for navigation reques
 - [x] Custom LSP Notification (`mytool/jump`).
 - [x] Extended Client/Server interfaces for bidirectional custom messaging.
 - [x] HTTP Bridge (port 7979) with CORS support.
+- [x] **Authorized, loopback-only and rate limited** (2026-09-25): the bridge now uses `webview-core`'s
+      `AllowedOrigins`, `RateLimiter` and `Navigator`, and denies every caller until a token or an allowed
+      origin is configured. The original wildcard CORS with no authentication would have let any page in the
+      user's browser drive the editor, and passing no address to `HttpServer.create` bound every interface
+      rather than loopback.
+
+### Phase 4: Move under `webview/` (COMPLETED 2026-09-25)
+The sidecar is the LSP transport of the webview product, so it moved from the repository root to
+`webview/jwa-sidecar` and depends on `webview-core` for path resolution, the project jail and the rate limit.
+Navigation now reports an outcome instead of assuming success, which is what lets the HTTP caller answer 404 for
+a file that does not exist rather than a cheerful "ok". See [`../PLAN-webview-suite.md`](../PLAN-webview-suite.md).
 
 ## Future Refinement
 - [ ] Handle indentation configuration from client properly (currently defaulted to 4 spaces).
 - [ ] Add more tools (e.g., toString/equals generator) following the same surgical pattern.
 
-### Phase 4: Integration
-Add `lsp4j` dependency to `jwa-sidecar/pom.xml` and wire the existing `RecordBuilderProcessor` into the LSP request handlers.
+### Integration
+`lsp4j` is already a dependency and `RecordBuilderProcessor` is wired into the LSP request handlers — this
+step is done; it is kept here because the numbering above refers to it.
 
 ---
 

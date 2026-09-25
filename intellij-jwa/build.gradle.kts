@@ -22,7 +22,7 @@ dependencies {
 
 // Automatically bundle the sidecar JAR during build
 val copySidecarJar by tasks.registering(Copy::class) {
-    from("../jwa-sidecar/target/jwa-sidecar.jar")
+    from("../webview/jwa-sidecar/target/jwa-sidecar.jar")
     into("build/resources/main/sidecar")
 }
 

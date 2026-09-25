@@ -88,7 +88,7 @@ public class JwaLspServerDescriptor extends ProjectWideLspServerDescriptor {
         // 4. Try relative path (development)
         String basePath = getProject().getBasePath();
         if (basePath != null) {
-            Path devPath = Paths.get(basePath, "jwa-sidecar/target/jwa-sidecar.jar");
+            Path devPath = Paths.get(basePath, "webview", "jwa-sidecar", "target", "jwa-sidecar.jar");
             if (Files.exists(devPath)) return devPath;
         }
 

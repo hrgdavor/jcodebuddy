@@ -5,7 +5,7 @@ Interactive Record Builder and JWA Integration for Visual Studio Code.
 ## Features
 - **Sync Builder**: Real-time record generation via Code Actions (Lightbulbs).
 - **Remote Jump**: Navigation support for the JWA jump protocol.
-- **LSP Integration**: Leverages the [jwa-sidecar](../jwa-sidecar) for high-performance Java source manipulation.
+- **LSP Integration**: Leverages the [jwa-sidecar](../webview/jwa-sidecar) for high-performance Java source manipulation.
 
 ## Configuration
 

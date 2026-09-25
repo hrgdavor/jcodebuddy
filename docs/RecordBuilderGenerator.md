@@ -142,7 +142,7 @@ public record User(String name, int age) { }
 
 The marker lives in the lightweight `jwa-builder-api` module, so a project that
 only wants the annotations never pulls in the transformation engine — see
-[`jwa-sidecar/README.md`](../jwa-sidecar/README.md) for the two-module pattern.
+[`jwa-sidecar/README.md`](../webview/jwa-sidecar/README.md) for the two-module pattern.
 
 ## Why the previous implementation was replaced
 
@@ -180,5 +180,5 @@ grouping, indentation relative to the record, byte-preservation) and
   querying and splicing source, and why positions come from javac.
 - [`README.java_watch_2.md`](../README.java_watch_2.md) — where `jwa-builder`
   sits in the Java Watch ecosystem.
-- [`jwa-sidecar/README.md`](../jwa-sidecar/README.md) — the `-api` /
+- [`jwa-sidecar/README.md`](../webview/jwa-sidecar/README.md) — the `-api` /
   implementation split, and how the sidecar loads a worker module.

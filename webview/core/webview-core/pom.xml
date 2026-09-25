@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <!-- Lives three levels down so the webview product keeps its hosts, its protocols and its
+             core together; see webview/PLAN-webview-suite.md, decision D9. -->
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>webview-core</artifactId>
+    <name>WebView Core</name>
+    <description>
+        Host-neutral logic shared by every webview host: the injected window.openFile bridge, the
+        payload it sends, the origin allow-list, the sliding-window rate limiter, the address-bar
+        normaliser, the project path jail, the EditorHost SPI, and the Navigator that funnels every
+        transport through one place. No IntelliJ, no VS Code, no HTTP framework - only the JDK, Gson
+        for the bridge payload and JUnit for the tests, so it builds and tests in the Maven reactor
+        with no IDE and no Gradle.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JUnit 5 as well as 4, because TemporaryFolder and the assertion style in the ported
+             webview-jetbrains tests are JUnit 4 while a temporary directory with a symlink in it is
+             clearer in JUnit 5. Surefire 3.2.5 then runs the suite on the JUnit Platform via its
+             JUnitPlatformProvider - and that provider IGNORES JUnit 4 tests unless the vintage engine
+             is present, which reports "Tests run: 0" with no failure. The vintage engine is therefore
+             not optional here; see the note in the root POM's `junit5` profile. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+              javac warns that the module-info-less jars on the classpath (Gson) are "automatic
+              modules" and that this jar itself has no module-info. Neither matters for a plain
+              classpath library, and the webview-jetbrains Gradle build consumes this jar as an
+              ordinary classpath entry, so the warning is turned off rather than answered with a
+              module-info that would break that consumer.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgs>
+                        <arg>-Xlint:-module</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

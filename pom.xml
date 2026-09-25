@@ -31,6 +31,12 @@
         <mcp.version>2.0.0</mcp.version>
         <openrewrite.version>8.90.4</openrewrite.version>
 
+        <!-- The webview hosts parse the bridge payload with Gson: webview-core does it in Java, and
+             the JetBrains plugin already had Gson on its classpath from the platform. Pinned rather
+             than left to the platform, because webview-core is also consumed outside an IDE (the
+             jwa-sidecar) where nothing else supplies it. -->
+        <gson.version>2.10.1</gson.version>
+
         <junit.version>4.13.2</junit.version>
         <junit5.version>5.10.2</junit5.version>
         <junit.platform.version>1.10.2</junit.platform.version>
@@ -49,9 +55,16 @@
         <module>java-watch-scp</module>
         <module>java-watch-run</module>
         <module>java-watch-run-sample</module>
+        <!-- The webview product: the host-neutral core and the LSP sidecar. Its two editor hosts are
+             not Maven modules (webview-jetbrains is a Gradle IntelliJ Platform build, webview-vscode
+             is a Node package), which is why only the Java half appears here. -->
+        <module>webview/core/webview-core</module>
         <module>jwa-builder-api</module>
         <module>jwa-builder</module>
-        <module>jwa-sidecar</module>
+        <!-- The LSP sidecar lives with the webview product, not at the repository root: it is the same
+             product (pages, navigation, edits), reached over LSP instead of over a webview. See
+             webview/PLAN-webview-suite.md, decision D9. -->
+        <module>webview/jwa-sidecar</module>
         <module>java-watch-agent</module>
         <module>hipster-entity-api</module>
         <module>hipster-entity-core</module>
@@ -103,6 +116,12 @@
             </dependency>
 
             <dependency>
+                <groupId>com.google.code.gson</groupId>
+                <artifactId>gson</artifactId>
+                <version>${gson.version}</version>
+            </dependency>
+
+            <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
@@ -143,6 +162,19 @@
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit5.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- Needed by any module that has BOTH JUnit 4 and JUnit 5 tests, which is the state
+                 webview-core is in after the bridge classes moved there from the JetBrains plugin:
+                 surefire 3.2.5 auto-selects its JUnitPlatformProvider as soon as an engine is on the
+                 test classpath, and that provider silently ignores JUnit 4 tests - the run reports
+                 "Tests run: 0" and BUILD SUCCESS, which is worse than a failure. The vintage engine
+                 makes the JUnit 4 half visible to the Platform. It was added on 2026-09-25 and is
+                 used by webview-core only. -->
+            <dependency>
+                <groupId>org.junit.vintage</groupId>
+                <artifactId>junit-vintage-engine</artifactId>
                 <version>${junit5.version}</version>
                 <scope>test</scope>
             </dependency>

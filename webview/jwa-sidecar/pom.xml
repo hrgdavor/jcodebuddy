@@ -8,14 +8,25 @@
         <groupId>hr.hrg.jcodebuddy</groupId>
         <artifactId>jcodebuddy-parent</artifactId>
         <version>1.0-SNAPSHOT</version>
-        <relativePath>../pom.xml</relativePath>
+        <!-- The module moved under webview/ - it is the same product as the webview hosts, reached over
+             LSP instead of over a webview - so the parent is one level up, not at the repository root.
+             See webview/PLAN-webview-suite.md, decision D9. -->
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>jwa-sidecar</artifactId>
     <name>JWA Sidecar</name>
-    <description>Sidecar utility for JWA Agent synchronization and monitoring</description>
+    <description>LSP sidecar for JWA Agent synchronization and monitoring, and the LSP transport of the
+        webview product: it drives an editor from a page over window/showDocument and workspace/applyEdit.</description>
 
     <dependencies>
+        <!-- The host-neutral half of the webview product: the origin allow-list, the rate limiter and the
+             path jail that this sidecar's HTTP surface previously did without, and the Navigator that
+             gives its LSP navigation the same semantics as every other host. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>webview-core</artifactId>
+        </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>java-watch-core</artifactId>
