@@ -277,6 +277,21 @@ class WriteApiTest {
     }
 
     @Test
+    void theUndoHistoryIsJournalledNextToTheDescriptorSoItSurvivesARestart() throws Exception {
+        Path file = write("src/A.java", "one\ntwo\n");
+        start();
+
+        post("/api/v1/applyEdit", editBody("src/A.java", SourceDigest.of(Files.readAllBytes(file)), false), TOKEN);
+
+        Path journal = HostDescriptor.directoryOf(project).resolve("checkpoints");
+        assertTrue(Files.isDirectory(journal), "webviewd journals its checkpoints: " + journal);
+        try (var entries = Files.walk(journal)) {
+            assertTrue(entries.anyMatch(path -> path.toString().endsWith(".entry")),
+                    "an applied write leaves a state on disk, not only in memory");
+        }
+    }
+
+    @Test
     void theEventStreamAnswersWithSseHeadersAndStaysOpen() throws Exception {
         write("src/A.java", "one\n");
         start();

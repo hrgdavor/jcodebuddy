@@ -102,7 +102,13 @@ public final class WebviewServer implements AutoCloseable {
                 Clock.SYSTEM);
         this.navigator = new Navigator(config.project().toString(), host, true, limiter);
         this.pageServer = new PageServer(config.project().toString(), true);
-        this.editService = new EditService(config.project().toString(), new CheckpointStore(), limiter);
+        this.editService = new EditService(config.project().toString(),
+                // Journalled, so a page that reloads — or a host that restarts — still has its undo. The files
+                // live with the descriptor, under the project's .jcodebuddy/webview/, which git ignores.
+                CheckpointStore.persistent(
+                        HostDescriptor.directoryOf(config.project()).resolve("checkpoints"),
+                        CheckpointStore.DEFAULT_LIMIT),
+                limiter);
         this.writeSurface = new WriteSurface(editService, host);
         this.origins = origins;
         this.token = token;
