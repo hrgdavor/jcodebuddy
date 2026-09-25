@@ -93,7 +93,12 @@ the reason a file changed.
    without a newline still does. Otherwise every edit would show up as a whole-file change in the reader's
    version control.
 5. **Every applied write is checkpointed**, bounded per file (20 states by default — an unbounded history in a
-   long-running host is a leak).
+   long-running host is a leak), **and journalled to disk** under `.jcodebuddy/webview/checkpoints/` (ignored by
+   git, like the descriptor). One small file per state, not one rewritten journal: a rewrite is the single
+   operation that can lose the whole history to an interruption. The history therefore survives a page reload and
+   a host restart — the alternative was telling a reader "nothing to undo" about a change they can see. The
+   in-memory store remains the default for a caller with nowhere to write, and a journal that cannot be written
+   is reported rather than allowed to break an edit the reader already accepted.
 6. **An undo is digest-guarded too.** It is a write like any other, so it refuses (`409 stale`) when the file
    changed since this host wrote it: restoring the checkpoint would silently discard the reader's own edit in
    their editor. The checkpoint is kept, so the page can decide and try again.
@@ -151,9 +156,10 @@ data: {"paths":["src/A.java","webview/PLAN-webview-suite.md"]}
   `409 no-disk-write`, naming `webviewd` as the host that owns the file. The digest guard, the parse and the
   statuses live in `BridgePolicy.ts` and are asserted by `npm run test:unit` (161 assertions), which needs no VS
   Code download. Its `/health` now advertises `edit` alongside `open` and `serveFile`.
-- **Checkpoint persistence.** The undo history lives in `webviewd`'s process; a restart forgets it, which is
-  documented rather than hidden. (The plugin builds its own `EditService` per project, so its history is
-  separate.)
+- **Checkpoint persistence is implemented** (2026-09-25): `webviewd` journals every state under
+  `.jcodebuddy/webview/checkpoints/`, one file per state, bounded per file. `CheckpointStore.persistent(dir, n)`
+  is the switch and the in-memory store stays the default; 7 core tests cover the round trip, the invalidation of
+  a pending redo on disk, the bound applying to the journal too, and that an in-memory store writes nothing.
 - **`/jump` is still a separate route.** Plan § 6.3 folds it into `POST /api/v1/open`; that has not happened,
   and `webviewd`'s LSP adapter still calls it. The sidecar's `/applyEdit` route is the same kind of temporary
   bridge between the two processes, and would disappear with them (plan question 4).
