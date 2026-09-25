@@ -13,7 +13,7 @@ source line a reader clicks.
 - **WebView tool window** — displays HTML files in a JCEF (Java Chromium Embedded Framework) browser inside the IDE.
 - **Keyboard shortcut** — toggle the tool window with `Ctrl+Alt+Shift+W`.
 - **Context menu integration** — right-click an `.html` file in the Project view, the editor or an editor tab and choose **Open in WebView Explorer**.
-- **JavaScript bridge** — every loaded page gets `window.openFile(path, line, column)`, which opens the file in an editor, puts the caret on the line and centers it. This is the path the generated entity index uses ([DEC-027 § 7](doc-hipster-entity/architecture/decisions/DEC-027.md)).
+- **JavaScript bridge** — every loaded page gets `window.openFile(path, line, column)`, which opens the file in an editor, puts the caret on the line and centers it. This is the path the generated entity index uses ([DEC-027 § 7](../../doc-hipster-entity/architecture/decisions/DEC-027.md)).
 - **HTTP bridge (fallback)** — `GET /open?filePath=…&line=…&column=…` for a browser that does not have the injected function. Off until a port is configured, loopback-only, and denied unless the caller is authorized; see [HTTP bridge](#http-bridge).
 - **IDE-styled scrollbars** and a `data:` splash page on first open.
 - **Persistent state** — remembers the last opened URL per project.
@@ -171,11 +171,16 @@ Swing component tree to find the browser.
 
 ## Further reading
 
+- [`webview/doc/webview-page-authoring.md`](../doc/webview-page-authoring.md) — how to build a page that
+  navigates a project: the client ladder, the two link-base spellings, offline syntax highlighting,
+  verification and troubleshooting.
+- [`webview/examples/`](../examples/README.md) — the same navigator as one self-contained file and as a
+  page + `assets/` folder, with a smoke test that verifies every link.
 - [`plan.reimplement.md`](plan.reimplement.md) — the rewrite plan and the findings behind the current
   design, including the JCEF dependency bug (F8).
-- [`scripts/entity-html/README.md`](../scripts/entity-html/README.md) — the renderer whose links this
+- [`scripts/entity-html/README.md`](../../scripts/entity-html/README.md) — the renderer whose links this
   plugin opens.
-- [`doc-hipster-entity/architecture/decisions/DEC-027.md`](../doc-hipster-entity/architecture/decisions/DEC-027.md) § 7 —
+- [`doc-hipster-entity/architecture/decisions/DEC-027.md`](../../doc-hipster-entity/architecture/decisions/DEC-027.md) § 7 —
   the link contract.
 
 ## License

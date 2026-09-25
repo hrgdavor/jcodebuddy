@@ -1,0 +1,117 @@
+/* ============================================================================
+   site.css — the shell of the with-assets example.
+
+   Everything visual that is not a syntax token lives here, so a project can
+   swap this one file for its own house style and keep the navigation client
+   and the syntax theme untouched.
+
+   Layout contract the pages rely on:
+     header.top             sticky bar holding #bridge-status and #syntax-status
+     #layout / #nav / main  sidebar + content grid, collapses under 980px
+     [data-bridge-status]   any element the nav client paints the current mode on
+     #toast                 created by the nav client on first use
+   ========================================================================== */
+:root {
+  --bg: #04191b; --surface: #0a2427; --surface2: #0f3134; --border: #1c4a4e;
+  --text: #d8f2f0; --dim: #83b6b8; --accent: #2ee6d0; --accent-dim: #0b4f4c;
+  --green: #5fd6a8; --yellow: #dcc46a; --orange: #e0a76c; --red: #e07a7a;
+  --head-cell: #0d2e31; --filled: #0b2a2d;
+  --border-green: #2a6a58; --border-orange: #6a5133; --border-red: #6a3a3a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.55;
+}
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); }
+a:hover { border-bottom-color: var(--accent); }
+
+header.top {
+  position: sticky; top: 0; z-index: 20; background: var(--bg);
+  border-bottom: 1px solid var(--border); padding: .7rem 1.2rem .6rem;
+  display: flex; flex-wrap: wrap; gap: .8rem; align-items: baseline;
+}
+header.top h1 { font-size: 1.05rem; font-weight: 700; }
+header.top h1 span { color: var(--accent); }
+.top-sub { color: var(--dim); font-size: .8rem; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.pill { font-size: .74rem; padding: .2rem .5rem; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--dim); white-space: nowrap; }
+.pill.ready { color: var(--green); border-color: var(--border-green); }
+.pill.absent { color: var(--orange); border-color: var(--border-orange); }
+.pill.pending { color: var(--yellow); border-color: var(--border-orange); }
+
+/* small breadcrumb trail, one copy per page */
+.crumbs { color: var(--dim); font-size: .78rem; margin-bottom: .6rem; }
+.crumbs a { color: var(--dim); }
+.crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 .35rem; opacity: .6; }
+
+#layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
+#nav { position: sticky; top: 52px; max-height: calc(100vh - 64px); overflow: auto;
+  padding: .9rem .6rem 2rem 1.2rem; border-right: 1px solid var(--border); font-size: .84rem; }
+#nav .nav-title { text-transform: uppercase; letter-spacing: .1em; font-size: .68rem;
+  color: var(--dim); margin: .9rem 0 .35rem; }
+#nav .nav-title:first-child { margin-top: 0; }
+#nav a { display: block; padding: .22rem .4rem; border-radius: 5px; border-bottom: none; color: var(--dim); }
+#nav a:hover { color: var(--text); background: var(--surface2); }
+#nav a[aria-current="page"] { color: var(--accent); background: var(--surface2); }
+#nav a.generated::after { content: 'gen'; float: right; font-size: .62rem; letter-spacing: .06em;
+  color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 999px; padding: 0 .3rem; }
+#nav .nav-note { color: var(--dim); font-size: .72rem; margin: .5rem .4rem 0; }
+
+main { padding: 1rem 1.4rem 4rem; min-width: 0; max-width: 62rem; }
+main section { margin-bottom: 2.2rem; scroll-margin-top: 60px; }
+h1 { font-size: 1.5rem; margin: .2rem 0 .8rem; }
+h2 { font-size: 1.18rem; margin: 1.6rem 0 .6rem; padding-bottom: .25rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.2rem 0 .4rem; color: var(--accent); }
+p { margin: .6rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .18rem 0; }
+blockquote { border-left: 3px solid var(--accent-dim); padding: .1rem .9rem; margin: .8rem 0; color: var(--dim); }
+hr { border: none; border-top: 1px solid var(--border); margin: 1.4rem 0; }
+
+code { font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; font-size: .85em;
+  color: var(--yellow); background: var(--surface2); padding: .05rem .3rem; border-radius: 4px; }
+pre { background: var(--syntax-background, var(--surface)); border: 1px solid var(--border); border-radius: 8px;
+  padding: .7rem .8rem; overflow-x: auto; margin: .8rem 0; }
+pre code { background: none; color: var(--syntax-foreground, var(--text)); padding: 0; font-size: .8rem;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; }
+
+table { border-collapse: separate; border-spacing: 0; margin: .9rem 0; font-size: .84rem; width: 100%;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+th, td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+  padding: .35rem .55rem; text-align: left; vertical-align: top; }
+th { background: var(--head-cell); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+th:last-child, td:last-child { border-right: none; }
+tbody tr:hover td { background: var(--filled); }
+
+/* any element carrying data-open; the page decides how a link looks */
+.file-link { cursor: pointer; color: var(--accent); border-bottom: 1px dashed var(--accent-dim);
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; font-size: .84em; }
+.file-link:hover { border-bottom-style: solid; }
+.badge { font-size: .68rem; padding: .05rem .35rem; border-radius: 999px; border: 1px solid var(--border);
+  color: var(--dim); background: var(--surface2); }
+.demo { border: 1px solid var(--border); border-radius: 8px; padding: .8rem .9rem; margin: .8rem 0;
+  background: var(--surface); }
+.demo h3 { margin-top: 0; }
+.demo .demo-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+.legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .2rem .8rem;
+  font-size: .8rem; margin: .5rem 0; }
+.legend span { font-family: 'Cascadia Code', Consolas, monospace; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .8rem; margin: .9rem 0; }
+.card { border: 1px solid var(--border); border-radius: 8px; padding: .7rem .8rem; background: var(--surface); }
+.card h3 { margin: 0 0 .3rem; font-size: .95rem; }
+.card p { margin: .2rem 0; font-size: .82rem; color: var(--dim); }
+.card .card-kind { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
+
+footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; color: var(--dim); font-size: .78rem; }
+#toast { position: fixed; right: 1rem; bottom: 1rem; max-width: 70vw; background: var(--surface2);
+  color: var(--text); border: 1px solid var(--accent-dim); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: .55rem .7rem; font-size: .8rem; opacity: 0; transform: translateY(6px);
+  transition: opacity .18s ease, transform .18s ease; pointer-events: none; z-index: 50; }
+#toast.show { opacity: 1; transform: translateY(0); }
+@media (max-width: 980px) {
+  #layout { grid-template-columns: 1fr; }
+  #nav { position: static; max-height: none; border-right: none; }
+}

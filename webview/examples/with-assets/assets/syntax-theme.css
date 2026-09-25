@@ -1,0 +1,117 @@
+/* ============================================================================
+   syntax-theme.css — microlighter's rendering half.
+
+   This file is the mechanism, and it does not change between themes. It has
+   exactly one job: map the semantic categories microlighter derives from
+   TextMate scopes onto the CSS Custom Highlight pseudo-element.
+
+   A THEME is only the block of --syntax-* custom properties below. To add one,
+   copy that block, rename the selector, and set `data-syntax-theme="<name>"` on
+   <body> or on any container:
+
+       [data-syntax-theme="vesper"] { --syntax-keyword: #a0a0a0; ... }
+
+   The category names are not arbitrary. microlighter flattens a scope like
+   `keyword.control.doctype` down to one of ~20 buckets, and these are the
+   buckets that can actually occur:
+
+     comment quote keyword storage at-rule doctype important section
+     operator punctuation string regexp attribute-value link raw
+     numeric boolean constant symbol character-entity anchor entity
+     function decorator animation type support variable interpolation
+     property key attribute-name tag selector inserted deleted
+
+   The rule list below is the upstream `github` theme's list, with the colours
+   retuned for this example's dark shell (upstream ships light-dark() pairs in
+   themes/github.css — copy those verbatim if your page follows the OS scheme).
+   ========================================================================== */
+[data-syntax-theme] {
+  --syntax-background: #08272a;
+  --syntax-foreground: #d8f2f0;
+  --syntax-comment: #6f9fa2;
+  --syntax-keyword: #ff8a7a;
+  --syntax-operator: #a8d9d6;
+  --syntax-string: #8ee6a0;
+  --syntax-constant: #f0c674;
+  --syntax-function: #7fd6ff;
+  --syntax-type: #2ee6d0;
+  --syntax-variable: #e0a76c;
+  --syntax-property: #9ad9ff;
+  --syntax-tag: #7ee787;
+  --syntax-selector: #d2a8ff;
+  --syntax-inserted: #5fd6a8;
+  --syntax-deleted: #e07a7a;
+}
+
+/* A second theme in the same file, to show that a theme is only the variables.
+   Pick it with data-syntax-theme="solarized" on <body>. */
+[data-syntax-theme="solarized"] {
+  --syntax-background: #002b36;
+  --syntax-foreground: #93a1a1;
+  --syntax-comment: #586e75;
+  --syntax-keyword: #859900;
+  --syntax-operator: #93a1a1;
+  --syntax-string: #2aa198;
+  --syntax-constant: #d33682;
+  --syntax-function: #268bd2;
+  --syntax-type: #b58900;
+  --syntax-variable: #cb4b16;
+  --syntax-property: #268bd2;
+  --syntax-tag: #859900;
+  --syntax-selector: #6c71c4;
+  --syntax-inserted: #859900;
+  --syntax-deleted: #dc322f;
+}
+
+/* The theme owns the code block's own background and text colour too, so a
+   themed block does not depend on the shell's palette. */
+[data-syntax-theme] pre:has(code) {
+  background-color: var(--syntax-background);
+  color: var(--syntax-foreground);
+}
+
+::highlight(comment),
+::highlight(quote) { color: var(--syntax-comment); }
+
+::highlight(keyword),
+::highlight(storage),
+::highlight(at-rule),
+::highlight(doctype),
+::highlight(important),
+::highlight(section) { color: var(--syntax-keyword); }
+
+::highlight(operator),
+::highlight(punctuation) { color: var(--syntax-operator); }
+
+::highlight(string),
+::highlight(regexp),
+::highlight(attribute-value),
+::highlight(link),
+::highlight(raw) { color: var(--syntax-string); }
+
+::highlight(numeric),
+::highlight(boolean),
+::highlight(constant),
+::highlight(symbol),
+::highlight(character-entity),
+::highlight(anchor),
+::highlight(entity) { color: var(--syntax-constant); }
+
+::highlight(function),
+::highlight(decorator),
+::highlight(animation) { color: var(--syntax-function); }
+
+::highlight(type),
+::highlight(support) { color: var(--syntax-type); }
+
+::highlight(variable),
+::highlight(interpolation) { color: var(--syntax-variable); }
+
+::highlight(property),
+::highlight(key),
+::highlight(attribute-name) { color: var(--syntax-property); }
+
+::highlight(tag) { color: var(--syntax-tag); }
+::highlight(selector) { color: var(--syntax-selector); }
+::highlight(inserted) { color: var(--syntax-inserted); }
+::highlight(deleted) { color: var(--syntax-deleted); }

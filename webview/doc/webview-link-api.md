@@ -5,8 +5,8 @@ performs the navigation**. It is deliberately small, and deliberately the same f
 document generator writes one call and works in JetBrains today and in VS Code, or in any other host, the
 day that plugin exists.
 
-It is not aspirational: **two hosts already implement it** — `webview-jetbrains` ("WebView Explorer") and
-`webview-vscode`, which was written as a port and speaks the same API. The only difference a page can
+It is not aspirational: **two hosts already implement it** — `webview/webview-jetbrains` ("WebView Explorer") and
+`webview/webview-vscode`, which was written as a port and speaks the same API. The only difference a page can
 observe is the port each one listens on, which is why a page must not hard-code one (see § 3.1).
 
 Audience: anyone generating a clickable document (an HTML report, a rendered Markdown page, a review
@@ -68,7 +68,7 @@ should grow.
 
 ## 2. How the JetBrains host implements it
 
-`webview-jetbrains` injects the function into every page its tool window loads, after each main-frame load
+`webview/webview-jetbrains` injects the function into every page its tool window loads, after each main-frame load
 (`WebViewBridge`). The injected script is, in full:
 
 ```js
@@ -113,8 +113,8 @@ GET http://127.0.0.1:<port>/health
 
 | Host                | Default port | Setting                 |
 | ------------------- | ------------ | ----------------------- |
-| `webview-jetbrains` | **18881**    | `webview.explorer.port` |
-| `webview-vscode`    | **18882**    | `webviewExplorer.port`  |
+| `webview/webview-jetbrains` | **18881**    | `webview.explorer.port` |
+| `webview/webview-vscode`    | **18882**    | `webviewExplorer.port`  |
 
 A generated page therefore carries a **configured** port (`data-bridge-port` in this repository's pages,
 `--bridge-port` on the Markdown viewer's CLI), never a constant: a page that assumed 18881 would work in
@@ -256,7 +256,7 @@ absolute path** (`scripts/entity-html/entity-html.test.js` asserts exactly that 
 * **A future host (a browser extension, an LSP sidecar, another editor) has two ways to comply**, and both
   are acceptable: inject a `window.openFile` with the same signature, or implement the `/open` endpoint.
   The repository's pages work with either, unchanged, because they try the function first and the endpoint
-  second — which is exactly how `webview-vscode` works today.
+  second — which is exactly how `webview/webview-vscode` works today.
 * **What is deliberately not in the API:** no URL scheme of our own (`jcodebuddy://…`) because it needs
   registration per OS and per host; no `postMessage` protocol because it needs a cooperating parent
   window; and no `data-column` attribute until something actually needs a column.
@@ -282,11 +282,11 @@ Existing implementations to read, in this order:
 
 | Concern                                              | JetBrains                                               |
 | ---------------------------------------------------- | ------------------------------------------------------- |
-| the injected function and version probe              | `webview-jetbrains/.../bridge/WebViewBridge.java`       |
-| payload parsing, unknown-kind tolerance              | `webview-jetbrains/.../bridge/BridgeMessage.java`       |
-| path resolution, rate limit, editor opening          | `webview-jetbrains/.../bridge/NavigatorService.java`    |
-| the HTTP fallback, auth, CORS, `/health`             | `webview-jetbrains/.../services/HttpBridgeService.java` |
-| the same API in a second host                        | `webview-vscode/README.md`                              |
+| the injected function and version probe              | `webview/webview-jetbrains/.../bridge/WebViewBridge.java`       |
+| payload parsing, unknown-kind tolerance              | `webview/webview-jetbrains/.../bridge/BridgeMessage.java`       |
+| path resolution, rate limit, editor opening          | `webview/webview-jetbrains/.../bridge/NavigatorService.java`    |
+| the HTTP fallback, auth, CORS, `/health`             | `webview/webview-jetbrains/.../services/HttpBridgeService.java` |
+| the same API in a second host                        | `webview/webview-vscode/README.md`                              |
 | a page that uses all of it, with the fallback ladder | `scripts/entity-html/render.js`                         |
 | a second, smaller page that uses it                  | `scripts/markdown-view/` (README and `render.js`)       |
 

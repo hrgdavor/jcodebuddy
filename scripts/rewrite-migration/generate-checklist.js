@@ -290,11 +290,11 @@ function renderChecklist(model, generatedAt) {
   push('| Plan says | Reality |');
   push('| --- | --- |');
   push(
-    '| `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` | ' +
+    '| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` | ' +
       'does not exist |',
   );
   push(
-    '| `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` | ' +
+    '| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` | ' +
       'the real file is `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |',
   );
   push(

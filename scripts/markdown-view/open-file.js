@@ -1,7 +1,7 @@
 /**
  * The client half of the WebView link contract — the same ladder the generated entity page uses.
  *
- * Read `doc/webview-link-api.md` for the contract itself; this file is a compact, self-contained
+ * Read `webview/doc/webview-link-api.md` for the contract itself; this file is a compact, self-contained
  * implementation of it, and the reason the Markdown viewer works in three different hosts:
  *
  *   1. the IDE's own webview injects `window.openFile(path, line, column)`  -> call it;

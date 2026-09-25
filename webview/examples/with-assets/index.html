@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebView project navigator — assets variant</title>
+
+<!--
+  ============================================================================
+  EXAMPLE B — index.html, THE HAND-WRITTEN LANDING PAGE
+  ============================================================================
+
+  Same job as webview/examples/self-contained/index.html, opposite
+  trade-off: nothing is inlined. The page loads four assets from ./assets/, and
+  the three pages it links to are separate files:
+
+      with-assets/
+        index.html                  <- this page: the manual landing page
+        pages/guide.html            <- a manual deep-dive, same shell
+        pages/entity-reference.html <- GENERATED: a type reference
+        assets/site.css             <- shell styling
+        assets/syntax-theme.css     <- microlighter's ::highlight() mechanism + themes
+        assets/nav-client.js        <- the navigation ladder (webview/doc/webview-link-api.md)
+        assets/highlight-runner.js  <- calls microlighter, reports status
+        assets/microlighter.js      <- vendor: microlighter 2.2.0 + 7 grammars
+
+  Choose the asset form when you want to edit CSS or JavaScript on their own, or
+  when several pages share one shell and one client — every page then needs a
+  one-line <script> and a one-line <link>, and a fix lands in all of them at
+  once. Choose the self-contained form when a single file has to travel: an
+  attachment, a CI artifact, a zip someone unpacks.
+
+  Both forms obey the same three rules:
+    * no network at view time (no CDN, no node_modules, no <script src> off-box)
+    * no absolute path in the artifact — data-link-base="../../../.." points at the
+      project root relative to assets/nav-client.js, so a clone or a moved tree
+      still resolves
+    * no dead-looking link — the clipboard is always the last rung
+-->
+
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/syntax-theme.css">
+</head>
+
+<body data-syntax-theme="default">
+
+<header class="top">
+  <h1>Project navigator <span>&middot; assets variant</span></h1>
+  <div class="top-sub">
+    <span id="bridge-status" class="pill pending" data-bridge-status>IDE bridge: probing&hellip;</span>
+    <span id="syntax-status" class="pill pending" data-syntax-status>Syntax: not yet run</span>
+    <span class="pill">
+      theme:
+      <a href="#" data-theme-set="default">default</a>
+      <a href="#" data-theme-set="solarized">solarized</a>
+    </span>
+    <span class="pill">assets: 4 files</span>
+  </div>
+</header>
+
+<div id="layout">
+  <nav id="nav">
+    <div class="nav-title">This page</div>
+    <a href="#why">Why assets instead of one file</a>
+    <a href="#wiring">The four lines of wiring</a>
+    <div class="nav-title">Other pages</div>
+    <a href="pages/guide.html">Guide <span class="badge">manual</span></a>
+    <a class="generated" href="pages/entity-reference.html">Entity reference</a>
+    <div class="nav-title">Real files</div>
+    <a href="../self-contained/index.html" data-open="webview/examples/self-contained/index.html" data-line="1">the self-contained twin</a>
+    <a href="../../../webview/doc/webview-page-authoring.md" data-open="webview/doc/webview-page-authoring.md" data-line="1">page authoring guide</a>
+    <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="18">frozen link API</a>
+    <div class="nav-note">
+      Every link marked with an arrow is a real location link: it asks the IDE
+      to open that file at that line. The others are ordinary page-to-page
+      navigation inside this folder.
+    </div>
+  </nav>
+
+  <main>
+    <section id="top">
+      <h1>One shell, several pages, four assets</h1>
+      <p>
+        This is the same navigator as the <span class="badge">self-contained</span> example, split into
+        files. The manual landing page you are reading, a manual
+        <a href="pages/guide.html">guide</a>, and a generated
+        <a href="pages/entity-reference.html">entity reference</a> all sit on one shell and one navigation
+        client. Editing <code>assets/site.css</code> restyles all three; fixing
+        <code>assets/nav-client.js</code> fixes all three; adding a language to
+        <code>assets/microlighter.js</code> highlights it on all three.
+      </p>
+      <p>
+        That shared shell is the actual reason to pick this form. The
+        <a href="../self-contained/index.html" data-open="webview/examples/self-contained/index.html" data-line="1">self-contained
+        twin</a> is better when one file must travel alone; this form is better when a project has more
+        than one page, which a project navigator always does.
+      </p>
+    </section>
+
+    <section id="why">
+      <h2>Why assets instead of one file</h2>
+      <table>
+        <thead><tr><th></th><th><code>self-contained/</code></th><th><code>with-assets/</code></th></tr></thead>
+        <tbody>
+          <tr><td>files to copy</td><td>1</td><td>4 assets + N pages</td></tr>
+          <tr><td>restyle every page</td><td>edit each file</td><td>edit <code>site.css</code> once</td></tr>
+          <tr><td>several pages share a client</td><td>no sharing</td><td>yes — one <code>&lt;script src&gt;</code> per page</td></tr>
+          <tr><td>travels as an attachment or CI artifact</td><td>yes, perfect</td><td>needs the folder (or a zip of it)</td></tr>
+          <tr><td>reviewable diff when the client changes</td><td>the whole page lights up</td><td>only <code>nav-client.js</code> changes</td></tr>
+          <tr><td>regenerate one page without touching the shell</td><td>no</td><td>yes — the generator overwrites its own page only</td></tr>
+        </tbody>
+      </table>
+      <p>
+        That last row is the one that decides it for a project with generated pages. A generator that owns
+        <code>pages/entity-reference.html</code> must be able to rewrite that file without touching the
+        manual prose around it, and it must not have to re-emit a stylesheet to do it.
+      </p>
+      <blockquote>
+        Both forms are offline and both keep absolute paths out. A <code>&lt;script src="assets/…"&gt;</code>
+        is a <em>local</em> reference, not a network one — the rule the generated reports follow is
+        "no network at view time", not "no separate files". What is forbidden is a CDN, a bundler
+        (<code>node_modules</code>) or an <code>http(s)://</code> asset, because the JCEF webview opens
+        the page with no server and no guarantee of a network.
+      </blockquote>
+    </section>
+
+    <section id="wiring">
+      <h2>The four lines of wiring</h2>
+      <p>
+        A page that joins this shell needs four tags. Two are the stylesheets, two are the scripts; the
+        two scripts carry their configuration as attributes, so there is nothing to register and no
+        initialisation call to remember.
+      </p>
+<pre><code class="language-html">&lt;link rel="stylesheet" href="assets/site.css"&gt;
+&lt;link rel="stylesheet" href="assets/syntax-theme.css"&gt;
+
+&lt;body data-syntax-theme="default"&gt;
+
+&lt;!-- data-link-base is resolved against THIS script's own src, so it is the
+     same string on a page at the root and on a page three folders deep. --&gt;
+&lt;script id="nav-client"
+        src="assets/nav-client.js"
+        data-link-base="../../../.."     &lt;!-- from assets/ up to the repository root --&gt;
+        data-bridge-port="18881"&gt;&lt;/script&gt;
+
+&lt;script id="highlight-runner" src="assets/highlight-runner.js"&gt;&lt;/script&gt;
+&lt;script id="microlighter" src="assets/microlighter.js"&gt;&lt;/script&gt;</code></pre>
+      <p>
+        Order matters for exactly one pair: <code>microlighter.js</code> defines
+        <code>window.microlighter</code>, and <code>highlight-runner.js</code> calls it. Put the vendor
+        script first. The nav client is independent of both and can go anywhere.
+      </p>
+      <p>
+        <code>data-bridge-port</code> is the loopback port of the IDE's HTTP bridge — 18881 for
+        <code>webview/webview-jetbrains</code>, 18882 for <code>webview/webview-vscode</code>. It is a deployment detail, so
+        do not invent it: <code>GET /health</code> answers without credentials and tells you whether a
+        bridge is really listening.
+      </p>
+      <p>
+        Then put a location on whatever element you like — a table cell, a list item, a
+        <code>&lt;code&gt;</code> span — and the delegated handler in the nav client does the rest:
+      </p>
+<pre><code class="language-html">&lt;span class="file-link"
+      data-open="webview/webview-jetbrains/README.md"
+      data-line="63"
+      data-member="window.openFile"
+      data-role="doc-section"&gt;webview/webview-jetbrains/README.md:63&lt;/span&gt;</code></pre>
+      <div class="demo">
+        <div class="demo-label">Live — these resolve through assets/nav-client.js</div>
+        <ul>
+          <li><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="63" data-member="window.openFile">webview/webview-jetbrains/README.md:63</span></li>
+          <li><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="93" data-member="open">scripts/markdown-view/open-file.js:93</span></li>
+          <li><span class="file-link" data-open="webview/examples/with-assets/pages/entity-reference.html" data-line="1">the generated page in this folder</span></li>
+        </ul>
+        <p class="demo-label" id="resolved-sample">resolved: …</p>
+      </div>
+
+      <h3>What the generator owns</h3>
+      <p>
+        <a href="pages/entity-reference.html">pages/entity-reference.html</a> is written as if a build step
+        produced it: one <code>&lt;table&gt;</code> of types, every row carrying
+        <code>data-open</code>/<code>data-line</code>, and the same four wiring tags. When your generator
+        runs it overwrites that file and nothing else — which is the whole point of the split. The rule it
+        must follow is "resolve or leave alone": a name it cannot resolve to a file and a line is printed
+        as text.
+      </p>
+    </section>
+  </main>
+</div>
+
+<footer class="bottom">
+  with-assets example. Assets: <code>site.css</code>, <code>syntax-theme.css</code>,
+  <code>nav-client.js</code>, <code>highlight-runner.js</code>, <code>microlighter.js</code>.
+  Highlighting by <a href="https://github.com/davatron5000/microlighter">microlighter</a> 2.2.0 (MIT).
+  Navigation contract: <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="1">webview/doc/webview-link-api.md</a>.
+</footer>
+
+<!-- data-link-base="../../../.." is resolved against THIS script's src (assets/nav-client.js),
+     so it means "one level above assets/", i.e. the project root. Every page in
+     this folder writes the same value regardless of its own depth. -->
+<script id="nav-client"
+        src="assets/nav-client.js"
+        data-link-base="../../../.."
+        data-bridge-port="18881"></script>
+<script id="microlighter" src="assets/microlighter.js"></script>
+<script id="highlight-runner" src="assets/highlight-runner.js"></script>
+
+<script id="page-extras">
+// Page-specific nicety: show what a link resolves to, so a reader can see the
+// base arithmetic without opening DevTools. Nothing here is required by the
+// navigation contract.
+(function () {
+  var sample = document.getElementById('resolved-sample');
+  if (!sample || !window.jcbNav) { return; }
+  var links = window.jcbNav.links();
+  sample.textContent = 'resolved: ' + links.slice(0, 2).map(function (link) {
+    return link.open + ' -> ' + link.resolved;
+  }).join('   |   ');
+})();
+</script>
+
+</body>
+</html>

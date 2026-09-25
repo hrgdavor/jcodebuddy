@@ -62,7 +62,7 @@ Options:
   --out <file>          output file (default: <metadata>/index.html)
   --packages <a.b,c.d>  only render views in these packages (default: every view in the metadata)
   --title <text>        page title (default: "<module> — entity reference")
-  --bridge-port <n>     webview-jetbrains HTTP bridge port for the browser fallback, 0 to disable
+  --bridge-port <n>     webview/webview-jetbrains HTTP bridge port for the browser fallback, 0 to disable
                         (default: ${DEFAULT_BRIDGE_PORT})
   --soft                exit 0 even when the link check reports a divergence
   --quiet               print only the output path and the link-check summary

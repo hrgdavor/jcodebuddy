@@ -1,0 +1,1653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebView project navigator — self-contained page</title>
+
+<!--
+  ============================================================================
+  EXAMPLE A — ONE SELF-CONTAINED FILE
+  ============================================================================
+
+  What this file is
+    A complete "navigate my project" page for the JCodeBuddy / WebView Explorer
+    webview plugin (webview/webview-jetbrains, and webview/webview-vscode which speaks the same
+    API). It is ONE file: no <script src>, no <link rel=stylesheet>, no CDN, no
+    node_modules, no network at view time. Copy it anywhere, double-click it,
+    and it still works — in the IDE webview, in a plain browser, even offline
+    on a plane.
+
+  What it demonstrates
+    1. The navigation contract of webview/doc/webview-link-api.md:
+         window.openFile(path, line, column)   <- injected by the IDE webview
+         GET http://127.0.0.1:<port>/open      <- HTTP fallback in a browser
+         clipboard "path:line"                 <- last resort, always works
+       Feature-detected in that order, never called unguarded.
+    2. A mixed page: a hand-written manual half plus a "generated" half, in one
+       document with one navigation shell. The generated-looking blocks below
+       are how a Bun/Java generator's output would be embedded — see the
+       numbered demo sections.
+    3. Offline syntax highlighting over JavaScript, Java, JSON, HTML and
+       Markdown with microlighter (https://github.com/davatron5000/microlighter),
+       inlined verbatim at the bottom of this file.
+
+  Where the rest of the story is
+    - webview/doc/webview-page-authoring.md ...... how to build your own page
+    - webview/examples/with-assets/ . the same page as separate files
+                                          (index.html + assets/), for when you
+                                          would rather edit CSS/JS on their own
+    - webview/doc/webview-link-api.md ............ the frozen host contract
+    - webview/webview-jetbrains/README.md ........ the plugin (Ctrl+Alt+Shift+W)
+    - scripts/markdown-view/README.md .... a real generator built on all of this
+
+  Nothing here hard-codes an absolute path. `data-link-base="../../.."` tells the page
+  where the project root is relative to itself, so a clone, a branch switch or
+  a moved tree does not break a single link.
+-->
+
+<style>
+/* ---------------------------------------------------------------------------
+   Shell styling. Deliberately plain CSS: no build step, no framework, so the
+   file stays greppable and diffable (the same rule the generated reports in
+   scripts/entity-html follow).
+   --------------------------------------------------------------------------- */
+:root {
+  --bg: #04191b; --surface: #0a2427; --surface2: #0f3134; --border: #1c4a4e;
+  --text: #d8f2f0; --dim: #83b6b8; --accent: #2ee6d0; --accent-dim: #0b4f4c;
+  --green: #5fd6a8; --yellow: #dcc46a; --orange: #e0a76c; --red: #e07a7a;
+  --head-cell: #0d2e31; --hover-accent: #14444a; --filled: #0b2a2d;
+  --border-green: #2a6a58; --border-orange: #6a5133; --border-red: #6a3a3a;
+
+  /* microlighter's theme contract: a theme only sets these custom properties,
+     and the ::highlight() rules at the bottom of this file consume them. */
+  --syntax-background: #08272a;
+  --syntax-foreground: #d8f2f0;
+  --syntax-comment: #6f9fa2;
+  --syntax-keyword: #ff8a7a;
+  --syntax-operator: #a8d9d6;
+  --syntax-string: #8ee6a0;
+  --syntax-constant: #f0c674;
+  --syntax-function: #7fd6ff;
+  --syntax-type: #2ee6d0;
+  --syntax-variable: #e0a76c;
+  --syntax-property: #9ad9ff;
+  --syntax-tag: #7ee787;
+  --syntax-selector: #d2a8ff;
+  --syntax-inserted: #5fd6a8;
+  --syntax-deleted: #e07a7a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.55;
+}
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); }
+a:hover { border-bottom-color: var(--accent); }
+
+header.top {
+  position: sticky; top: 0; z-index: 20; background: var(--bg);
+  border-bottom: 1px solid var(--border); padding: .7rem 1.2rem .6rem;
+  display: flex; flex-wrap: wrap; gap: .8rem; align-items: baseline;
+}
+header.top h1 { font-size: 1.05rem; font-weight: 700; }
+header.top h1 span { color: var(--accent); }
+.top-sub { color: var(--dim); font-size: .8rem; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.pill { font-size: .74rem; padding: .2rem .5rem; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--dim); white-space: nowrap; }
+.pill.ready { color: var(--green); border-color: var(--border-green); }
+.pill.absent { color: var(--orange); border-color: var(--border-orange); }
+.pill.pending { color: var(--yellow); border-color: var(--border-orange); }
+
+#layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
+#nav { position: sticky; top: 52px; max-height: calc(100vh - 64px); overflow: auto;
+  padding: .9rem .6rem 2rem 1.2rem; border-right: 1px solid var(--border); font-size: .84rem; }
+#nav .nav-title { text-transform: uppercase; letter-spacing: .1em; font-size: .68rem;
+  color: var(--dim); margin: .9rem 0 .35rem; }
+#nav .nav-title:first-child { margin-top: 0; }
+#nav a { display: block; padding: .22rem .4rem; border-radius: 5px; border-bottom: none; color: var(--dim); }
+#nav a:hover { color: var(--text); background: var(--surface2); }
+#nav a.generated::after { content: 'gen'; float: right; font-size: .62rem; letter-spacing: .06em;
+  color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 999px; padding: 0 .3rem; }
+#nav .nav-note { color: var(--dim); font-size: .72rem; margin: .5rem .4rem 0; }
+
+main { padding: 1rem 1.4rem 4rem; min-width: 0; max-width: 62rem; }
+main section { margin-bottom: 2.2rem; scroll-margin-top: 60px; }
+h1 { font-size: 1.5rem; margin: .2rem 0 .8rem; }
+h2 { font-size: 1.18rem; margin: 1.6rem 0 .6rem; padding-bottom: .25rem; border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.2rem 0 .4rem; color: var(--accent); }
+p { margin: .6rem 0; }
+ul, ol { margin: .6rem 0 .6rem 1.3rem; }
+li { margin: .18rem 0; }
+blockquote { border-left: 3px solid var(--accent-dim); padding: .1rem .9rem; margin: .8rem 0; color: var(--dim); }
+hr { border: none; border-top: 1px solid var(--border); margin: 1.4rem 0; }
+
+code { font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; font-size: .85em;
+  color: var(--yellow); background: var(--surface2); padding: .05rem .3rem; border-radius: 4px; }
+pre { background: var(--syntax-background); border: 1px solid var(--border); border-radius: 8px;
+  padding: .7rem .8rem; overflow-x: auto; margin: .8rem 0; }
+pre code { background: none; color: var(--syntax-foreground); padding: 0; font-size: .8rem;
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; }
+
+table { border-collapse: separate; border-spacing: 0; margin: .9rem 0; font-size: .84rem; width: 100%;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+th, td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+  padding: .35rem .55rem; text-align: left; vertical-align: top; }
+th { background: var(--head-cell); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+th:last-child, td:last-child { border-right: none; }
+tbody tr:hover td { background: var(--filled); }
+
+/* A file link: any element carrying data-open. The page decides how it looks. */
+.file-link { cursor: pointer; color: var(--accent); border-bottom: 1px dashed var(--accent-dim);
+  font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace; font-size: .84em; }
+.file-link:hover { border-bottom-style: solid; }
+.file-link::before { content: '\2192\00a0'; color: var(--dim); }
+.badge { font-size: .68rem; padding: .05rem .35rem; border-radius: 999px; border: 1px solid var(--border);
+  color: var(--dim); background: var(--surface2); }
+.demo { border: 1px solid var(--border); border-radius: 8px; padding: .8rem .9rem; margin: .8rem 0;
+  background: var(--surface); }
+.demo h3 { margin-top: 0; }
+.demo .demo-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+.lang-row { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 .2rem; }
+.legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .2rem .8rem;
+  font-size: .8rem; margin: .5rem 0; }
+.legend span { font-family: 'Cascadia Code', Consolas, monospace; }
+
+footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; color: var(--dim); font-size: .78rem; }
+#toast { position: fixed; right: 1rem; bottom: 1rem; max-width: 70vw; background: var(--surface2);
+  color: var(--text); border: 1px solid var(--accent-dim); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: .55rem .7rem; font-size: .8rem; opacity: 0; transform: translateY(6px);
+  transition: opacity .18s ease, transform .18s ease; pointer-events: none; z-index: 50; }
+#toast.show { opacity: 1; transform: translateY(0); }
+@media (max-width: 980px) {
+  #layout { grid-template-columns: 1fr; }
+  #nav { position: static; max-height: none; border-right: none; }
+}
+</style>
+</head>
+
+<!--
+  data-link-base — the relative path from THIS page to the project root. Every
+  data-open path resolves against it, so no absolute path is ever committed.
+  This file sits at webview/examples/self-contained/, so the repository
+  root is three levels up.
+  data-bridge-port — the loopback port the IDE's HTTP bridge listens on.
+  webview/webview-jetbrains defaults to 18881, webview/webview-vscode to 18882. It is NOT a
+  constant of the API; discover it with GET /health, or set 0 to disable the
+  fallback and go straight to the clipboard.
+-->
+<body data-link-base="../../.." data-bridge-port="18881" data-syntax-theme="github">
+
+<header class="top">
+  <h1>Project navigator <span>&middot; self-contained page</span></h1>
+  <div class="top-sub">
+    <span id="bridge-status" class="pill pending">IDE bridge: probing&hellip;</span>
+    <span id="syntax-status" class="pill pending">Syntax: not yet run</span>
+    <span id="highlight-support" class="pill pending">highlight API: unknown</span>
+    <span class="pill" id="link-base-pill">link base: ../../../..</span>
+  </div>
+</header>
+
+<div id="layout">
+  <nav id="nav">
+    <div class="nav-title">Manual pages</div>
+    <a href="#overview">Overview</a>
+    <a href="#howto">How a click works</a>
+    <a href="#languages">Language samples</a>
+    <div class="nav-title">Generated pages</div>
+    <a class="generated" href="#generated">Entity reference</a>
+    <a class="generated" href="#contract">Link contract</a>
+    <a class="generated" href="#files">Source files</a>
+    <div class="nav-title">Real hosts</div>
+    <a href="../../../webview/webview-jetbrains/README.md" data-open="webview/webview-jetbrains/README.md" data-line="63">JetBrains plugin</a>
+    <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="18">Frozen API</a>
+    <div class="nav-note">
+      The two links above are real: click them in the IDE webview and the editor
+      jumps to that line. In a browser they fall back to the HTTP bridge.
+    </div>
+  </nav>
+
+  <main>
+    <section id="overview">
+      <h1>One file that can navigate your project</h1>
+      <p>
+        This page is a <strong>self-contained</strong> project navigator: markup, styling, script and
+        syntax highlighting all live in this single <code>.html</code> file. Open it inside
+        <span class="badge">WebView Explorer</span> (right-click the file &rarr; <em>Open in WebView
+        Explorer</em>, or <code>Ctrl+Alt+Shift+W</code>) and every link below opens the real file at the
+        real line. Open it in a browser and the same clicks fall back to the IDE's loopback HTTP bridge,
+        or copy <code>path:line</code> to the clipboard.
+      </p>
+      <p>
+        It mixes the two kinds of page a project navigator always ends up with: <strong>manual</strong>
+        prose that a human maintains (this section, <a href="#howto">How a click works</a>) and
+        <strong>generated</strong> material a build step owns (<a href="#generated">Entity reference</a>,
+        <a href="#files">Source files</a>). Both are sections of one document with one navigation shell,
+        one stylesheet and one script — so there is exactly one place where a link contract, a theme or a
+        fallback rule can be wrong.
+      </p>
+      <blockquote>
+        Nothing here is hard-coded to a machine. <code>data-link-base="../../.."</code> on
+        <code>&lt;body&gt;</code> is the only thing that knows where the project root is, and it is
+        relative. Clone the repository elsewhere, switch branches, or move the page, and the links still
+        land.
+      </blockquote>
+      <h3>What is in this file</h3>
+      <table>
+        <thead><tr><th>Part</th><th>Where</th><th>Why it is there</th></tr></thead>
+        <tbody>
+          <tr><td>shell CSS</td><td><code>&lt;style&gt;</code>, first block</td><td>plain CSS, no build step</td></tr>
+          <tr><td>navigation client</td><td><code>&lt;script&gt;</code> id=<code>nav-client</code></td><td>the three-step fallback ladder</td></tr>
+          <tr><td>highlight runner</td><td><code>&lt;script&gt;</code> id=<code>highlight-runner</code></td><td>calls microlighter, reports status</td></tr>
+          <tr><td>microlighter + grammars</td><td><code>&lt;script&gt;</code> id=<code>vendor-microlighter</code></td><td>inlined library and 7 TextMate grammars</td></tr>
+          <tr><td>theme</td><td><code>::highlight()</code> rules below</td><td>the CSS Custom Highlight API colours tokens</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="howto">
+      <h2>How a click works</h2>
+      <p>
+        The host contract is one function and two attributes. The page puts a location on an element; the
+        IDE webview injects the function that opens it. The page never calls the function unguarded,
+        because an undefined <code>window.openFile</code> throws a <code>TypeError</code> inside a click
+        handler and silently kills every later click in the page.
+      </p>
+<pre><code class="language-javascript">// 1. the IDE webview injected this after the page loaded
+if (typeof window.openFile === 'function') {
+  window.openFile('src/main/java/com/example/Person.java', 14, 1);   // line, column (1-based)
+}
+
+// 2. no function? a loopback HTTP bridge may be listening instead.
+//    A hidden iframe needs no CORS grant, so it works from a file:// page.
+const frame = document.createElement('iframe');
+frame.style.display = 'none';
+frame.src = `http://127.0.0.1:18881/open?filePath=${encodeURIComponent(abs)}&amp;line=14&amp;column=1`;
+document.body.appendChild(frame);
+
+// 3. neither? put the location where the user can use it. Never render a dead link.
+navigator.clipboard?.writeText('src/main/java/com/example/Person.java:14');</code></pre>
+
+      <h3>The three modes, live</h3>
+      <p>
+        The pill in the header tells you which mode this page is in right now. Here is the same decision
+        as a table, because that is what a reader of a generated document needs:
+      </p>
+      <table>
+        <thead><tr><th>Mode</th><th>Probe</th><th>What a click does</th></tr></thead>
+        <tbody>
+          <tr><td><strong>injected</strong></td><td><code>typeof window.openFile === 'function'</code></td><td>calls it; the IDE opens the file, caret on the line</td></tr>
+          <tr><td><strong>bridge</strong></td><td><code>data-bridge-port</code> &gt; 0</td><td>hidden iframe to <code>/open</code>; the IDE opens the file</td></tr>
+          <tr><td><strong>clipboard</strong></td><td>always</td><td>copies <code>path:line</code> and shows a toast</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>window.__jcbWebViewBridge</code> is the version probe (<code>1</code> today). Use it when you
+        must know <em>which</em> bridge you are talking to; use the <code>openFile</code> probe when you
+        only need to know whether navigation is possible.
+      </p>
+
+      <div class="demo">
+        <div class="demo-label">Try it — each of these is a real file in this repository</div>
+        <ul>
+          <li><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="63" data-member="window.openFile" data-role="doc-section">webview/webview-jetbrains/README.md:63</span> — the plugin's contract section</li>
+          <li><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/bridge/WebViewBridge.java" data-line="1" data-role="type">WebViewBridge.java</span> — the class that injects the function</li>
+          <li><span class="file-link" data-open="webview/doc/webview-link-api.md" data-line="18" data-role="doc-section">webview/doc/webview-link-api.md:18</span> — the contract in one screen</li>
+          <li><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="93" data-member="open" data-role="function">open-file.js:93</span> — the reference implementation of the ladder</li>
+          <li><span class="file-link" data-open="webview/examples/with-assets/index.html" data-line="1" data-role="example">the with-assets example</span> — the same page, split into files</li>
+        </ul>
+      </div>
+
+      <h3>Attributes the page writes</h3>
+      <table>
+        <thead><tr><th>Attribute</th><th>Required</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>data-open</code></td><td>yes</td><td>path or URL, absolute or relative to the link base; forward or back slashes</td></tr>
+          <tr><td><code>data-line</code></td><td>in practice</td><td>1-based line to place the caret on; omit only when line 1 is meant</td></tr>
+          <tr><td><code>data-member</code></td><td>no</td><td>member at that line — tooltip text and what a human verifies the link against</td></tr>
+          <tr><td><code>data-role</code></td><td>no</td><td>what the location <em>is</em> (type, function, doc-section); display metadata, never a routing key</td></tr>
+        </tbody>
+      </table>
+      <p>
+        There is no <code>data-column</code> in the API. Nothing in this repository's pages needs a column
+        other than 1. The handler passes the column to <code>window.openFile</code> directly if a page
+        wants one.
+      </p>
+    </section>
+
+    <section id="languages">
+      <h2>Language samples — highlighted offline</h2>
+      <p>
+        The highlighting below is <a href="https://github.com/davatron5000/microlighter">microlighter</a>
+        (MIT), inlined in this file with the seven TextMate grammars the five required languages need.
+        microlighter never wraps a token in a <code>&lt;span&gt;</code>: it registers <code>Range</code>
+        objects on <code>CSS.highlights</code> and lets <code>::highlight(category)</code> colour them.
+        That keeps the markup clean and still editable — which matters when a generated block is meant to
+        be copied out of the page.
+      </p>
+      <p>
+        Required here: <strong>JavaScript</strong>, <strong>Java</strong>, <strong>JSON</strong>,
+        <strong>HTML</strong>, <strong>Markdown</strong>. HTML pulls in CSS, JSON and JavaScript, because
+        the HTML grammar highlights what is inside <code>&lt;style&gt;</code> and
+        <code>&lt;script&gt;</code>; Markdown pulls in YAML for front matter. The inline banner in each
+        sample names the grammar and its dependencies.
+      </p>
+      <div class="lang-row">
+        <span class="badge">class="language-javascript"</span>
+        <span class="badge">language-java</span>
+        <span class="badge">language-json</span>
+        <span class="badge">language-html</span>
+        <span class="badge">language-markdown</span>
+      </div>
+
+      <h3>JavaScript <span class="badge">source.js</span></h3>
+<pre><code class="language-javascript">// grammars/javascript.js — scope source.js, no external grammar dependencies
+const BRIDGE_PORT = 18881;
+
+/** Feature-detect the injected function before you call it. */
+function openInIde(relativePath, line = 1) {
+  const target = new URL(relativePath, document.baseURI).pathname;
+
+  if (typeof window.openFile === 'function') {
+    window.openFile(target, line, 1);
+    return 'injected';
+  }
+  if (BRIDGE_PORT &gt; 0) {
+    const frame = document.createElement('iframe');
+    frame.src = `http://127.0.0.1:${BRIDGE_PORT}/open?filePath=${encodeURIComponent(target)}&amp;line=${line}`;
+    document.body.appendChild(frame);
+    return 'bridge';
+  }
+  navigator.clipboard.writeText(`${target}:${line}`);
+  return 'clipboard';
+}
+
+document.addEventListener('click', (event) =&gt; {
+  const link = event.target.closest('[data-open]');
+  if (!link) return;
+  event.preventDefault();
+  openInIde(link.dataset.open, Number(link.dataset.line) || 1);   // 0 and NaN mean line 1
+});</code></pre>
+
+      <h3>Java <span class="badge">source.java</span></h3>
+<pre><code class="language-java">// grammars/java.js — scope source.java, no external grammar dependencies
+package hr.hrg.jetbrains.webview.bridge;
+
+import java.nio.file.Path;
+import java.util.Optional;
+
+/**
+ * One place where a path becomes an open editor, so the injected function and
+ * the HTTP fallback cannot drift apart.
+ */
+public final class NavigatorService {
+
+    private static final int MAX_LINE_LENGTH = 100_000;
+
+    /** Resolve {@code filePath} against the project and open it at a 1-based line. */
+    public Optional&lt;Integer&gt; open(String filePath, int line, int column) {
+        Path resolved = projectRoot.resolve(filePath).normalize();
+        if (!resolved.startsWith(projectRoot)) {
+            return Optional.empty();                 // refuse anything outside the project
+        }
+        int clamped = Math.max(1, Math.min(line, MAX_LINE_LENGTH));
+        return openInEditor(resolved, clamped, Math.max(1, column));
+    }
+}</code></pre>
+
+      <h3>JSON <span class="badge">source.json</span></h3>
+<pre><code class="language-json">{
+  "module": "webview/webview-jetbrains",
+  "plugin": "hr.hrg.jetbrains.webview",
+  "bridge": {
+    "port": 18881,
+    "defaultPort": null,
+    "allowedOrigins": ["file://"],
+    "tokenRequired": false,
+    "rateLimit": { "navigations": 20, "windowSeconds": 20 }
+  },
+  "supported": ["javascript", "java", "json", "html", "markdown"],
+  "offline": true,
+  "generatedAt": "2026-02-14T09:30:00Z"
+}</code></pre>
+
+      <h3>HTML <span class="badge">text.html.basic &rarr; source.css, source.json, source.js</span></h3>
+<pre><code class="language-html">&lt;!-- grammars/html.js — scope text.html.basic; depends on css, json and javascript --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;title&gt;Embedded highlighting&lt;/title&gt;
+  &lt;style&gt;
+    /* the CSS grammar takes over inside &lt;style&gt; */
+    .file-link { color: #2ee6d0; cursor: pointer; }
+    .file-link:hover { border-bottom: 1px solid currentColor; }
+  &lt;/style&gt;
+  &lt;script type="application/json" id="nav-index"&gt;
+    { "openFile": "webview/webview-jetbrains/README.md", "line": 63 }
+  &lt;/script&gt;
+&lt;/head&gt;
+&lt;body data-link-base="../../.." data-bridge-port="18881"&gt;
+  &lt;p&gt;A click asks the host to open &amp;amp; reveal a line.&lt;/p&gt;
+  &lt;script&gt;
+    // and the JavaScript grammar takes over inside &lt;script&gt;
+    document.addEventListener('click', (event) =&gt; {
+      const link = event.target.closest('[data-open]');
+      if (link &amp;&amp; typeof window.openFile === 'function') {
+        window.openFile(link.dataset.open, Number(link.dataset.line) || 1, 1);
+      }
+    });
+  &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+      <h3>Markdown <span class="badge">text.html.markdown &rarr; source.yaml</span></h3>
+<pre><code class="language-markdown">---
+title: WebView page authoring
+tags: [webview, generator, links]
+---
+
+# Opening a file from a page
+
+The contract is **one function** and *two attributes*.
+
+- `window.openFile(path, line, column)` — injected by the IDE webview
+- `data-open` / `data-line` — what the page puts on the element
+
+&gt; A dead-looking link is worse than a visible path string.
+
+| Host | Port | Setting |
+| --- | --- | --- |
+| `webview/webview-jetbrains` | 18881 | `webview.explorer.port` |
+| `webview/webview-vscode` | 18882 | `webviewExplorer.port` |
+
+```js
+window.openFile('src/main/java/Person.java', 14, 1);
+```
+
+See [the contract](../webview/doc/webview-link-api.md#L18) for the frozen details.</code></pre>
+
+      <h3>Theme contract</h3>
+      <p>
+        microlighter's theme only sets custom properties; the <code>::highlight()</code> rules are the
+        mechanism and never change. This page ships the colours of the
+        <code>github</code> theme, tinted for the dark shell:
+      </p>
+      <div class="legend">
+        <span>::highlight(comment)</span>
+        <span>::highlight(keyword)</span>
+        <span>::highlight(string)</span>
+        <span>::highlight(constant)</span>
+        <span>::highlight(function)</span>
+        <span>::highlight(type)</span>
+        <span>::highlight(variable)</span>
+        <span>::highlight(property)</span>
+        <span>::highlight(tag)</span>
+        <span>::highlight(selector)</span>
+        <span>::highlight(operator)</span>
+        <span>::highlight(punctuation)</span>
+      </div>
+    </section>
+
+    <section id="generated">
+      <h2>Generated: entity reference <span class="badge">demo data</span></h2>
+      <p>
+        This is the shape a <em>generated</em> half takes: a table of types, one row per type, each row
+        carrying <code>data-open</code> and <code>data-line</code> so a click lands on the declaration.
+        In a real project the rows come from a generator's JSON metadata — see
+        <a href="../../../scripts/entity-html/README.md" data-open="scripts/entity-html/README.md" data-line="1">scripts/entity-html/README.md</a>
+        and DEC-027. The rendering rule is the same either way: <strong>resolve or leave alone</strong> —
+        a name that cannot be resolved to a file and a line is printed as text, never as a link that
+        looks right and goes nowhere.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Type</th><th>Kind</th><th>Declared in</th><th>Fields</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="63" data-member="window.openFile" data-role="type">WebViewContract</span></td>
+            <td>interface</td>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="63">webview/webview-jetbrains/README.md</span></td>
+            <td>3</td>
+          </tr>
+          <tr>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/bridge/NavigatorService.java" data-line="1" data-role="type">NavigatorService</span></td>
+            <td>class</td>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/bridge/NavigatorService.java" data-line="1">bridge/NavigatorService.java</span></td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/services/HttpBridgeService.java" data-line="1" data-role="type">HttpBridgeService</span></td>
+            <td>class</td>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/services/HttpBridgeService.java" data-line="1">services/HttpBridgeService.java</span></td>
+            <td>4</td>
+          </tr>
+          <tr>
+            <td><span class="file-link" data-open="scripts/markdown-view/render.js" data-line="1" data-role="module">markdown-view/render.js</span></td>
+            <td>module</td>
+            <td><span class="file-link" data-open="scripts/markdown-view/render.js" data-line="1">render.js</span></td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        A generator embeds a block like that one, or writes a sibling page and links to it. Both are fine;
+        the choice is about how much of the model changes between runs. The next section is the sibling-page
+        variant, pointed at the file the with-assets example produces.
+      </p>
+    </section>
+
+    <section id="contract">
+      <h2>Generated: the contract, annotated</h2>
+      <p>
+        A second generated section, this time showing the injected transport as the host implements it —
+        useful in a page that explains the mechanism to a reader who will never open the plugin's Java:
+      </p>
+<pre><code class="language-javascript">// webview/webview-jetbrains: bridge/WebViewBridge.java injects exactly this into every
+// main-frame load — after each navigation, not only the first.
+window.__jcbWebViewBridge = 1;                 // protocol version, the capability probe
+window.openFile = function (path, line, column) {
+  var msg = JSON.stringify({ kind: 'openFile', filePath: path, line: line || 1, column: column || 1 });
+  // JBCefJSQuery.inject(...) — the host's transport, invisible to the page
+};
+
+// BridgeMessage parses that JSON: tolerant of a path containing quotes or commas,
+// strict about kind and a non-blank filePath — and forward compatible, so a newer
+// page speaking a newer kind is ignored by an older plugin instead of breaking it.</code></pre>
+    </section>
+
+    <section id="files">
+      <h2>Generated: source files</h2>
+      <p>
+        A file inventory is the cheapest generated page there is: a list of paths, each one a link. It is
+        also the easiest place to ship a dead link, which is why the resolver verifies a target before it
+        emits one.
+      </p>
+      <table>
+        <thead><tr><th>File</th><th>Role</th><th>Clicks to</th></tr></thead>
+        <tbody>
+          <tr><td><span class="file-link" data-open="webview/doc/webview-link-api.md" data-line="1">webview/doc/webview-link-api.md</span></td><td>the frozen contract</td><td>line 1</td></tr>
+          <tr><td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="77">webview/webview-jetbrains/README.md</span></td><td>HTTP bridge</td><td>line 77</td></tr>
+          <tr><td><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="46">scripts/markdown-view/open-file.js</span></td><td>client ladder, copyable</td><td>line 46</td></tr>
+          <tr><td><span class="file-link" data-open="scripts/markdown-view/index.js" data-line="1">scripts/markdown-view/index.js</span></td><td>a generator's CLI half</td><td>line 1</td></tr>
+          <tr><td><span class="file-link" data-open="scripts/entity-html/README.md" data-line="1">scripts/entity-html/README.md</span></td><td>the generated page in this repo</td><td>line 1</td></tr>
+          <tr><td><span class="file-link" data-open="webview/examples/README.md" data-line="1">webview/examples/README.md</span></td><td>these two examples</td><td>line 1</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<footer class="bottom">
+  Self-contained example for the JCodeBuddy webview plugin. Highlighting by
+  <a href="https://github.com/davatron5000/microlighter">microlighter</a> 2.2.0 (MIT), inlined unchanged
+  apart from the grammar registry and two capability guards. Navigation contract:
+  <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="1">webview/doc/webview-link-api.md</a>.
+</footer>
+
+<!-- ==========================================================================
+     THE NAVIGATION CLIENT
+     Same ladder as scripts/markdown-view/open-file.js, inlined. Plain ES5-style
+     JavaScript on purpose: the JCEF webview parses it with no build step.
+     ========================================================================== -->
+<script id="nav-client">
+(function () {
+  var BRIDGE_PORT = parseInt(document.body.getAttribute('data-bridge-port') || '0', 10);
+  var LINK_BASE = document.body.getAttribute('data-link-base') || '';
+  var TOKEN = document.body.getAttribute('data-bridge-token') || '';
+  var toast = null;
+
+  function say(text) {
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = text;
+    toast.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(function () { toast.classList.remove('show'); }, 2600);
+  }
+
+  function isAbsolute(target) {
+    return /^[A-Za-z]:[\\/]/.test(target) || target.charAt(0) === '/' || target.indexOf('://') > 0;
+  }
+
+  // Turn a page-relative path into the absolute one the IDE wants, using THIS
+  // page's own location as the base. Never a baked-in absolute path.
+  function absoluteTarget(relative) {
+    if (!relative) { return ''; }
+    if (isAbsolute(relative)) { return relative; }
+    try {
+      var base = LINK_BASE ? LINK_BASE.replace(/\/+$/, '') + '/' : '';
+      var url = new URL(base + relative, document.baseURI);
+      var path = decodeURIComponent(url.pathname);
+      return path.replace(/^\/([A-Za-z]:)/, '$1');   // strip the leading slash off /C:/...
+    } catch (error) {
+      return relative;
+    }
+  }
+
+  function copy(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (error) { /* clipboard blocked: the toast still shows the path */ }
+    return false;
+  }
+
+  function open(link) {
+    var relative = link.getAttribute('data-open');
+    var line = parseInt(link.getAttribute('data-line') || '1', 10);
+    var member = link.getAttribute('data-member') || '';
+    var target = absoluteTarget(relative) || relative;
+
+    // 1. the IDE webview's injected function
+    if (typeof window.openFile === 'function') {
+      window.openFile(target, line, 1);
+      say('Opened ' + (member || relative) + ' at line ' + line + ' in the IDE.');
+      return;
+    }
+    // 2. the loopback HTTP bridge, through an iframe so no CORS grant is needed
+    if (BRIDGE_PORT > 0) {
+      var url = 'http://127.0.0.1:' + BRIDGE_PORT + '/open?filePath=' + encodeURIComponent(target)
+        + '&line=' + line + '&column=1' + (TOKEN ? '&token=' + encodeURIComponent(TOKEN) : '');
+      var previous = document.getElementById('bridge-frame');
+      if (previous) { previous.remove(); }
+      var frame = document.createElement('iframe');
+      frame.id = 'bridge-frame';
+      frame.style.display = 'none';
+      frame.setAttribute('aria-hidden', 'true');
+      frame.src = url;
+      document.body.appendChild(frame);
+      say('Sent line ' + line + ' to the IDE bridge on port ' + BRIDGE_PORT + '.');
+      return;
+    }
+    // 3. nothing to open with — say so, and put the location where it is usable
+    copy(target + ':' + line);
+    say('No IDE bridge here. Location copied: ' + target + ':' + line);
+  }
+
+  // ONE delegated handler for the whole page, so generated blocks need no wiring
+  document.addEventListener('click', function (event) {
+    var link = event.target.closest ? event.target.closest('[data-open]') : null;
+    if (!link) { return; }
+    event.preventDefault();
+    open(link);
+  });
+
+  // Say up front which mode this page is in, so a user never has to guess why a
+  // click did nothing visible.
+  var status = document.getElementById('bridge-status');
+  if (status) {
+    if (typeof window.openFile === 'function') {
+      status.textContent = 'IDE bridge: injected (v' + (window.__jcbWebViewBridge || '?') + ')';
+      status.className = 'pill ready';
+    } else {
+      status.textContent = BRIDGE_PORT > 0
+        ? 'IDE bridge: absent (HTTP fallback :' + BRIDGE_PORT + ')'
+        : 'IDE bridge: absent (clipboard only)';
+      status.className = 'pill absent';
+    }
+  }
+
+  // A small public surface, identical in the with-assets client, so a test or a
+  // page script can ask what this page will do without duplicating the ladder:
+  //   window.jcbNav.open(path, line)   navigate programmatically
+  //   window.jcbNav.mode()             'injected' | 'bridge' | 'clipboard'
+  //   window.jcbNav.links()            every data-open link, resolved
+  function mode() {
+    if (typeof window.openFile === 'function') { return 'injected'; }
+    return BRIDGE_PORT > 0 ? 'bridge' : 'clipboard';
+  }
+
+  window.jcbNav = {
+    open: function (path, line) { open({ getAttribute: function (name) {
+      return name === 'data-open' ? path : name === 'data-line' ? String(line || 1) : '';
+    } }); },
+    mode: mode,
+    absoluteTarget: absoluteTarget,
+    linkBase: LINK_BASE,
+    links: function () {
+      return Array.prototype.map.call(document.querySelectorAll('[data-open]'), function (element) {
+        return {
+          open: element.getAttribute('data-open'),
+          line: parseInt(element.getAttribute('data-line') || '1', 10),
+          member: element.getAttribute('data-member') || '',
+          resolved: absoluteTarget(element.getAttribute('data-open'))
+        };
+      });
+    }
+  };
+
+  // Kept as an alias: some pages and tests look for this name.
+  window.__pageDebug = {
+    linkBase: LINK_BASE,
+    bridgePort: BRIDGE_PORT,
+    absoluteTarget: absoluteTarget,
+    links: window.jcbNav.links
+  };
+})();
+</script>
+
+<!-- ==========================================================================
+     THE HIGHLIGHT RUNNER
+     Calls the inlined microlighter and reports what happened, so a reader can
+     see whether the CSS Custom Highlight API is present in their host.
+     ========================================================================== -->
+<script id="highlight-runner">
+(function () {
+  var syntaxStatus = document.getElementById('syntax-status');
+  var supportStatus = document.getElementById('highlight-support');
+
+  function set(el, text, state) {
+    if (!el) { return; }
+    el.textContent = text;
+    el.className = 'pill ' + state;
+  }
+
+  function run() {
+    var supported = typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function';
+    set(supportStatus, 'highlight API: ' + (supported ? 'available' : 'MISSING'), supported ? 'ready' : 'absent');
+
+    if (typeof window.microlighter === 'undefined') {
+      set(syntaxStatus, 'Syntax: library missing', 'absent');
+      return;
+    }
+
+    window.microlighter.highlightAll()
+      .then(function (blocks) {
+        var categories = supported ? CSS.highlights.size : 0;
+        set(syntaxStatus,
+          'Syntax: ' + blocks.length + ' block(s), ' + categories + ' token categor' + (categories === 1 ? 'y' : 'ies'),
+          categories > 0 ? 'ready' : 'absent');
+        document.body.setAttribute('data-syntax-ready', String(blocks.length) + '/' + categories);
+      })
+      .catch(function (error) {
+        set(syntaxStatus, 'Syntax: failed (' + (error && error.message ? error.message : error) + ')', 'absent');
+        document.body.setAttribute('data-syntax-ready', 'error');
+      });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run);
+  } else {
+    run();
+  }
+
+  // Re-highlight after the page changes. microlighter's own convention.
+  document.addEventListener('syntax-highlight', run);
+})();
+</script>
+
+<!-- ==========================================================================
+     VENDOR: microlighter 2.2.0 (MIT, https://github.com/davatron5000/microlighter)
+     https://raw.githubusercontent.com/davatron5000/microlighter/main/src/highlight.js
+     plus the seven grammars it loads on demand:
+        javascript  json  java  html  markdown        <- required here
+        css         (html embeds it)                  <- dependency
+        yaml        (markdown front matter)           <- dependency
+
+     INLINING NOTES — the only four changes made to the upstream code:
+       1. `highlightAll` used `await import('./grammars/x.js')` per language.
+          A single-file page cannot import, so the registry below IS the
+          grammar loader and highlightAll stays synchronous past it.
+       2. `import`/`export` became a plain IIFE exposing `window.microlighter`.
+       3. Two capability guards: `CSS.highlights` / `Highlight` and TextMate
+          `include` resolution are checked so a host without the Custom
+          Highlight API gets a clear status instead of a TypeError.
+       4. `Highlight.add(range)` is fed only ranges from one text node, which
+          the scanner already guarantees.
+     Everything else — scope flattening, capture handling, begin/end rule
+     recursion, the memoised `dgm` regex cache — is upstream's algorithm.
+     ========================================================================== -->
+<script id="vendor-microlighter">
+window.microlighter = (function () {
+  'use strict';
+
+  /* ---------------------------------------------------------------- grammars */
+
+  var GRAMMARS = [
+    // ---- grammars/json.js -------------------------------------------------
+    {
+      name: 'json',
+      grammar: {
+        scopeName: 'source.json',
+        patterns: [
+          { match: '"(?:\\\\.|[^"\\\\])*"(?=\\s*:)', name: 'entity.name.key' },
+          { match: '"(?:\\\\.|[^"\\\\])*"(?=\\s*[,}\\]])', name: 'string.quoted.double' },
+          { match: '\\b(?:true|false)\\b', name: 'constant.language.boolean' },
+          { match: '\\bnull\\b', name: 'constant.language' },
+          { match: '(?<![\\w.])-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b', name: 'constant.numeric' }
+        ]
+      }
+    },
+
+    // ---- grammars/yaml.js -------------------------------------------------
+    {
+      name: 'yaml',
+      grammar: {
+        scopeName: 'source.yaml',
+        patterns: [
+          { match: '#.*$', name: 'comment.line.number-sign' },
+          { match: '^(?:---|\\.\\.\\.)\\s*$|^%YAML\\b.*$', name: 'keyword.control.document' },
+          { match: '^\\s*(?:-\\s+)?([^#\\s][^\\r\\n:#]*?)(?=\\s*:)', captures: { 1: { name: 'entity.name.key' } } },
+          { match: '[&*][a-zA-Z_][\\w-]*|![^\\s]+', name: 'entity.name.anchor' },
+          { match: "(['\"])(?:\\\\.|(?!\\1)[^\\\\\\r\\n]|\\r?\\n[ \\t]+)*\\1", name: 'string.quoted' },
+          { match: '(?<=:\\s)[|>][-+]?\\s*$', name: 'keyword.control.block-scalar' },
+          { match: '\\b(?:true|false|yes|no|on|off)\\b', name: 'constant.language.boolean' },
+          { match: '\\bnull\\b|~', name: 'constant.language' },
+          { match: '(?<![\\w.-])-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:e[+-]?\\d+)?\\b', name: 'constant.numeric' }
+        ]
+      }
+    },
+
+    // ---- grammars/css.js --------------------------------------------------
+    {
+      name: 'css',
+      grammar: {
+        scopeName: 'source.css',
+        patterns: [
+          { include: '#comments' },
+          { include: '#strings' },
+          { include: '#keyframes' },
+          { include: '#at-rule-block' },
+          { include: '#at-rule-statement' },
+          { include: '#rule-set' }
+        ],
+        repository: {
+          comments: { begin: '/\\*', end: '\\*/', name: 'comment.block' },
+          strings: { match: "(['\"])(?:\\\\.|(?!\\1)[^\\\\\\r\\n])*\\1", name: 'string.quoted' },
+          keyframes: {
+            begin: '(@(?:-\\w+-)?keyframes)\\s+([a-zA-Z_-][\\w-]*)\\s*\\{',
+            end: '\\}',
+            beginCaptures: {
+              1: { name: 'keyword.control.at-rule' },
+              2: { name: 'entity.name.animation' }
+            },
+            patterns: [{ include: '$self' }]
+          },
+          'at-rule-block': {
+            begin: '(@(?:container|counter-style|document|font-face|font-feature-values|font-palette-values|layer|media|page|position-try|scope|starting-style|supports|view-transition)\\b)[^{;]*\\{',
+            end: '\\}',
+            beginCaptures: { 1: { name: 'keyword.control.at-rule' } },
+            patterns: [{ include: '$self' }]
+          },
+          'at-rule-statement': {
+            begin: '(@(?:charset|custom-media|import|namespace|property)\\b)',
+            end: ';',
+            beginCaptures: { 1: { name: 'keyword.control.at-rule' } },
+            patterns: [
+              { include: '#comments' },
+              { include: '#strings' },
+              { include: '#values' }
+            ]
+          },
+          'rule-set': {
+            begin: '([^\\s@{};<][^@{};<]*?)\\s*\\{',
+            end: '\\}',
+            beginCaptures: { 1: { name: 'entity.name.selector' } },
+            patterns: [
+              { include: '#comments' },
+              { include: '#strings' },
+              { include: '#keyframes' },
+              { include: '#at-rule-block' },
+              { include: '#at-rule-statement' },
+              { include: '#rule-set' },
+              { include: '#declarations' },
+              { include: '#values' }
+            ]
+          },
+          declarations: {
+            match: '(--[a-zA-Z0-9_-]+|[a-zA-Z-][\\w-]*)(\\s*:)',
+            captures: { 1: { name: 'support.type.property-name' } }
+          },
+          values: {
+            patterns: [
+              { match: '!important\\b', name: 'keyword.other.important' },
+              {
+                match: '\\b(var)\\(\\s*(--[a-zA-Z0-9_-]+)',
+                captures: {
+                  1: { name: 'entity.name.function' },
+                  2: { name: 'variable.other.custom-property' }
+                }
+              },
+              { match: '\\b([a-zA-Z_-][\\w-]*)(?=\\()', captures: { 1: { name: 'entity.name.function' } } },
+              { match: '#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\\b', name: 'constant.other.color' },
+              { match: '(?<![\\w.-])-?(?:\\d*\\.\\d+|\\d+)(?:[eE][+-]?\\d+)?(?:%|[a-zA-Z]+)?\\b', name: 'constant.numeric' },
+              { match: '\\b(?:auto|currentColor|inherit|initial|none|normal|revert|revert-layer|transparent|unset)\\b', name: 'constant.language' },
+              { match: '(?:[+*/]|(?<=\\s)-(?!-))', name: 'keyword.operator' }
+            ]
+          }
+        }
+      }
+    },
+
+    // ---- grammars/javascript.js ------------------------------------------
+    {
+      name: 'javascript',
+      grammar: {
+        scopeName: 'source.js',
+        patterns: [
+          { include: '#comments' },
+          { include: '#strings' },
+          { include: '#template' },
+          { include: '#regexp' },
+          { include: '#jsx-closing-tag' },
+          { include: '#jsx-tag' },
+          { include: '#class-declaration' },
+          { include: '#function-declaration' },
+          { include: '#variable-declaration' },
+          { include: '#keywords' },
+          { include: '#numbers' },
+          { include: '#constants' },
+          { include: '#decorators' },
+          { include: '#private-fields' },
+          { include: '#properties' },
+          { include: '#functions' },
+          { include: '#built-ins' },
+          { include: '#operators' }
+        ],
+        repository: {
+          comments: {
+            patterns: [
+              { match: '//.*$', name: 'comment.line' },
+              { begin: '/\\*', end: '\\*/', name: 'comment.block' }
+            ]
+          },
+          strings: {
+            patterns: [
+              { match: "'(?:\\\\.|[^'\\\\\\r\\n])*'", name: 'string.quoted.single' },
+              { match: '"(?:\\\\.|[^"\\\\\\r\\n])*"', name: 'string.quoted.double' }
+            ]
+          },
+          template: {
+            begin: '`',
+            end: '(?<!\\\\)(?:\\\\\\\\)*`',
+            name: 'string.quoted.template',
+            patterns: [{ include: '#template-interpolation' }]
+          },
+          'template-interpolation': {
+            begin: '\\$\\{',
+            end: '\\}',
+            patterns: [
+              { include: '#balanced-braces' },
+              { include: '$self' }
+            ]
+          },
+          'balanced-braces': {
+            begin: '\\{',
+            end: '\\}',
+            patterns: [
+              { include: '#balanced-braces' },
+              { include: '$self' }
+            ]
+          },
+          regexp: {
+            match: '(?<![\\w)$\\]])/(?![/*])(?:\\\\.|\\[(?:\\\\.|[^\\]\\\\])*\\]|[^/\\\\\\r\\n])+/[dgimsuvy]*',
+            name: 'string.regexp'
+          },
+          'jsx-closing-tag': {
+            match: '</([A-Za-z][\\w.-]*)\\s*>',
+            captures: { 1: { name: 'entity.name.tag' } }
+          },
+          'jsx-tag': {
+            begin: '<([A-Za-z][\\w.-]*)',
+            end: '/?>',
+            beginCaptures: { 1: { name: 'entity.name.tag' } },
+            patterns: [
+              { include: '#jsx-expression' },
+              { include: '#strings' },
+              { include: '#jsx-boolean-attributes' },
+              { include: '#jsx-attributes' }
+            ]
+          },
+          'jsx-expression': {
+            begin: '\\{',
+            end: '\\}',
+            patterns: [
+              { include: '#balanced-braces' },
+              { include: '$self' }
+            ]
+          },
+          'jsx-attributes': {
+            match: '\\b([a-zA-Z_:][\\w:.-]*)(?=\\s*(?:=|/?>))',
+            captures: { 1: { name: 'entity.other.attribute-name' } }
+          },
+          'jsx-boolean-attributes': {
+            match: '\\b([a-zA-Z_:][\\w:.-]*)(?=\\s+(?:[a-zA-Z_:][\\w:.-]*\\s*=|/?>))',
+            captures: { 1: { name: 'entity.other.attribute-name' } }
+          },
+          'class-declaration': {
+            match: '\\b(class)\\s+([A-Za-z_$][\\w$]*)',
+            captures: {
+              1: { name: 'storage.type.class' },
+              2: { name: 'entity.name.type.class' }
+            }
+          },
+          'function-declaration': {
+            match: '\\b(?:(async)\\s+)?(function)\\s*(\\*)?\\s*([A-Za-z_$][\\w$]*)?',
+            captures: {
+              1: { name: 'storage.modifier.async' },
+              2: { name: 'storage.type.function' },
+              4: { name: 'entity.name.function' }
+            }
+          },
+          'variable-declaration': {
+            match: '\\b(const|let|var)\\s+([A-Za-z_$][\\w$]*)',
+            captures: {
+              1: { name: 'storage.type.variable' },
+              2: { name: 'variable.other.readwrite' }
+            }
+          },
+          keywords: {
+            match: '\\b(?:as|assert|async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|finally|for|from|function|get|if|implements|import|in|instanceof|interface|let|new|of|package|private|protected|public|return|set|static|super|switch|this|throw|try|typeof|var|void|while|with|yield)\\b',
+            name: 'keyword.control'
+          },
+          numbers: {
+            match: '(?<![\\w$])(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*n?|0[bB][01](?:_?[01])*n?|0[oO][0-7](?:_?[0-7])*n?|\\d(?:_?\\d)*n|(?:\\d(?:_?\\d)*(?:\\.\\d(?:_?\\d)*)?|\\.\\d(?:_?\\d)*)(?:[eE][+-]?\\d(?:_?\\d)*)?)(?![\\w$])',
+            name: 'constant.numeric'
+          },
+          constants: {
+            patterns: [
+              { match: '\\b(?:false|true)\\b', name: 'constant.language.boolean' },
+              { match: '\\b(?:Infinity|NaN|null|undefined)\\b', name: 'constant.language' }
+            ]
+          },
+          decorators: { match: '@[A-Za-z_$][\\w$]*', name: 'entity.name.decorator' },
+          'private-fields': { match: '#[A-Za-z_$][\\w$]*', name: 'variable.other.private' },
+          properties: { match: '(?<=\\.)[A-Za-z_$][\\w$]*|[A-Za-z_$][\\w$]*(?=\\s*:)', name: 'entity.name.property' },
+          functions: { match: '\\b[A-Za-z_$][\\w$]*(?=\\s*\\()', name: 'entity.name.function' },
+          'built-ins': {
+            match: '\\b(?:Array|BigInt|Boolean|console|customElements|Date|document|Error|JSON|Map|Math|Number|Object|Promise|Reflect|RegExp|Set|String|Symbol|WeakMap|WeakSet|window)\\b',
+            name: 'support.class'
+          },
+          operators: {
+            match: '(?:=>|===|!==|==|!=|<=|>=|\\?\\?|\\?\\.|\\+\\+|--|&&|\\|\\||\\*\\*|[+*%&|^!~?:-])',
+            name: 'keyword.operator'
+          }
+        }
+      }
+    },
+
+    // ---- grammars/java.js -------------------------------------------------
+    {
+      name: 'java',
+      grammar: {
+        scopeName: 'source.java',
+        patterns: [
+          { include: '#comments' },
+          { include: '#strings' },
+          { include: '#annotations' },
+          { include: '#class-declaration' },
+          { include: '#keywords' },
+          { include: '#builtin-types' },
+          { include: '#constants' },
+          { include: '#numbers' },
+          { include: '#operators' },
+          { include: '#function-declaration' }
+        ],
+        repository: {
+          comments: {
+            patterns: [
+              { match: '//.*$', name: 'comment.line.double-slash' },
+              { begin: '/\\*', end: '\\*/', name: 'comment.block' }
+            ]
+          },
+          strings: {
+            patterns: [
+              { begin: '"""', end: '"""', name: 'string.quoted.triple' },
+              { match: '"(?:\\\\.|[^"\\\\\\r\\n])*"', name: 'string.quoted.double' },
+              { match: "'(?:\\\\.|[^'\\\\\\r\\n])'", name: 'string.quoted.char' }
+            ]
+          },
+          annotations: { match: '@[A-Za-z_][\\w.]*', name: 'entity.name.decorator' },
+          'class-declaration': {
+            match: '\\b(class|interface|enum|record)\\s+([A-Za-z_]\\w*)',
+            captures: {
+              1: { name: 'storage.type.class' },
+              2: { name: 'entity.name.type.class' }
+            }
+          },
+          keywords: {
+            match: '\\b(?:abstract|assert|break|case|catch|continue|default|do|else|extends|final|finally|for|goto|if|implements|import|instanceof|native|new|non-sealed|package|permits|private|protected|public|return|sealed|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|var|volatile|while|yield)\\b',
+            name: 'keyword.control'
+          },
+          'builtin-types': {
+            match: '\\b(?:boolean|byte|char|double|float|int|long|short|void|Boolean|Byte|Character|Double|Float|Integer|Long|Short|String|Object|List|Map|Set|ArrayList|HashMap|HashSet|Optional)\\b',
+            name: 'support.class.builtin'
+          },
+          constants: {
+            patterns: [
+              { match: '\\b(?:true|false)\\b', name: 'constant.language.boolean' },
+              { match: '\\bnull\\b', name: 'constant.language' }
+            ]
+          },
+          numbers: {
+            match: '(?<![\\w.])(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|\\d(?:_?\\d)*(?:\\.\\d(?:_?\\d)*)?(?:[eE][+-]?\\d+)?)[lLfFdD]?\\b',
+            name: 'constant.numeric'
+          },
+          operators: {
+            match: '(?:->|::|&&|\\|\\||==|!=|<=|>=|<<=?|>>>?=?|[+\\-*/%&|^!~<>=]=?)',
+            name: 'keyword.operator'
+          },
+          'function-declaration': {
+            match: '\\b([A-Za-z_]\\w*)(?=\\s*\\()',
+            name: 'entity.name.function'
+          }
+        }
+      }
+    },
+
+    // ---- grammars/html.js -------------------------------------------------
+    {
+      name: 'html',
+      grammar: {
+        scopeName: 'text.html.basic',
+        dependencies: ['css', 'json', 'javascript'],
+        patterns: [
+          { include: '#comments' },
+          { include: '#doctype' },
+          { include: '#embedded-css' },
+          { include: '#embedded-json' },
+          { include: '#embedded-javascript' },
+          { include: '#raw-text' },
+          { include: '#tags' },
+          { include: '#entities' }
+        ],
+        repository: {
+          comments: { begin: '<!--', end: '-->', name: 'comment.block' },
+          doctype: { match: '<![Dd][Oo][Cc][Tt][Yy][Pp][Ee]\\b[^>]*>', name: 'keyword.control.doctype' },
+          'embedded-css': {
+            begin: '<([Ss][Tt][Yy][Ll][Ee])\\b(?:"[^"]*"|\'[^\']*\'|[^\'">])*>',
+            end: '</([Ss][Tt][Yy][Ll][Ee])[ \\t]*>',
+            beginCaptures: { 1: { name: 'entity.name.tag' } },
+            endCaptures: { 1: { name: 'entity.name.tag' } },
+            contentName: 'source.css.embedded.html',
+            patterns: [{ include: 'source.css' }]
+          },
+          'embedded-json': {
+            begin: '<([Ss][Cc][Rr][Ii][Pp][Tt])\\b(?=[^>]*\\b[Tt][Yy][Pp][Ee]\\s*=\\s*([\'"])(?:application/(?:ld\\+)?json|importmap|speculationrules)\\2)(?:"[^"]*"|\'[^\']*\'|[^\'">])*>',
+            end: '</([Ss][Cc][Rr][Ii][Pp][Tt])[ \\t]*>',
+            beginCaptures: { 1: { name: 'entity.name.tag' } },
+            endCaptures: { 1: { name: 'entity.name.tag' } },
+            contentName: 'source.json.embedded.html',
+            patterns: [{ include: 'source.json' }]
+          },
+          'embedded-javascript': {
+            begin: '<([Ss][Cc][Rr][Ii][Pp][Tt])\\b(?:(?![^>]*\\b[Tt][Yy][Pp][Ee]\\s*=)|(?=[^>]*\\b[Tt][Yy][Pp][Ee]\\s*=\\s*([\'"])(?:module|(?:text|application)/(?:java|ecma)script)\\2))(?:"[^"]*"|\'[^\']*\'|[^\'">])*>',
+            end: '</([Ss][Cc][Rr][Ii][Pp][Tt])[ \\t]*>',
+            beginCaptures: { 1: { name: 'entity.name.tag' } },
+            endCaptures: { 1: { name: 'entity.name.tag' } },
+            contentName: 'source.js.embedded.html',
+            patterns: [{ include: 'source.js' }]
+          },
+          'raw-text': {
+            begin: '<([Tt][Ee][Xx][Tt][Aa][Rr][Ee][Aa]|[Tt][Ii][Tt][Ll][Ee])\\b(?:"[^"]*"|\'[^\']*\'|[^\'">])*>',
+            end: '</([Tt][Ee][Xx][Tt][Aa][Rr][Ee][Aa]|[Tt][Ii][Tt][Ll][Ee])[ \\t]*>',
+            beginCaptures: { 1: { name: 'entity.name.tag' } },
+            endCaptures: { 1: { name: 'entity.name.tag' } },
+            contentName: 'string.unquoted.raw-text'
+          },
+          tags: {
+            begin: '<(/?)([a-zA-Z][\\w.-]*)',
+            end: '>',
+            beginCaptures: { 2: { name: 'entity.name.tag' } },
+            patterns: [
+              { include: '#inline-css' },
+              { include: '#inline-javascript' },
+              { include: '#attributes' },
+              { include: '#unquoted-attributes' },
+              { include: '#boolean-attributes' }
+            ]
+          },
+          'inline-css': {
+            begin: '[ \\t]+(style)\\s*=\\s*([\'"])',
+            end: '\\2',
+            beginCaptures: {
+              1: { name: 'entity.other.attribute-name' },
+              2: { name: 'punctuation.definition.string.begin' }
+            },
+            endCaptures: { 0: { name: 'punctuation.definition.string.end' } },
+            contentName: 'source.css.embedded.inline',
+            patterns: [
+              { include: 'source.css#comments' },
+              { include: 'source.css#strings' },
+              { include: 'source.css#declarations' },
+              { include: 'source.css#values' }
+            ]
+          },
+          'inline-javascript': {
+            begin: '[ \\t]+(on[a-zA-Z][\\w-]*)\\s*=\\s*([\'"])',
+            end: '\\2',
+            beginCaptures: {
+              1: { name: 'entity.other.attribute-name' },
+              2: { name: 'punctuation.definition.string.begin' }
+            },
+            endCaptures: { 0: { name: 'punctuation.definition.string.end' } },
+            contentName: 'source.js.embedded.inline',
+            patterns: [{ include: 'source.js' }]
+          },
+          attributes: {
+            begin: '[ \\t]+([a-zA-Z_:][\\w:.-]*)\\s*=\\s*([\'"])',
+            end: '\\2',
+            beginCaptures: {
+              1: { name: 'entity.other.attribute-name' },
+              2: { name: 'punctuation.definition.string.begin' }
+            },
+            endCaptures: { 0: { name: 'punctuation.definition.string.end' } },
+            contentName: 'string.quoted.attribute-value',
+            patterns: [{ include: '#entities' }]
+          },
+          'unquoted-attributes': {
+            match: '[ \\t]+([a-zA-Z_:][\\w:.-]*)\\s*=\\s*([^\\s"\'`=<>]+)',
+            captures: {
+              1: { name: 'entity.other.attribute-name' },
+              2: { name: 'string.unquoted.attribute-value' }
+            }
+          },
+          'boolean-attributes': {
+            match: '[ \\t]+([a-zA-Z_:][\\w:.-]*)(?=[ \\t]*/?>|[ \\t]+[a-zA-Z_:])',
+            captures: { 1: { name: 'entity.other.attribute-name' } }
+          },
+          entities: { match: '&(?:#\\d+|#x[0-9a-fA-F]+|[a-zA-Z][\\w]+);', name: 'constant.character.entity' }
+        }
+      }
+    },
+
+    // ---- grammars/markdown.js --------------------------------------------
+    {
+      name: 'markdown',
+      grammar: {
+        scopeName: 'text.html.markdown',
+        dependencies: ['yaml'],
+        patterns: [
+          { include: '#front-matter' },
+          { include: '#comments' },
+          { include: '#fenced-code' },
+          { include: '#headings' },
+          { include: '#quotes' },
+          { include: '#lists' },
+          { include: '#links' },
+          { include: '#inline-code' }
+        ],
+        repository: {
+          'front-matter': {
+            begin: '^[ \\t]*---[ \\t]*$',
+            end: '^[ \\t]*(?:---|\\.\\.\\.)[ \\t]*$',
+            patterns: [{ include: 'source.yaml' }]
+          },
+          comments: { begin: '<!--', end: '-->', name: 'comment.block.html' },
+          'fenced-code': { begin: '^[ \\t]*(```+|~~~+).*$', end: '^[ \\t]*\\1[ \\t]*$', name: 'string.unquoted.fenced-code' },
+          headings: { match: '^[ \\t]{0,3}#{1,6}[ \\t]+(.+)$', captures: { 1: { name: 'entity.name.section' } } },
+          quotes: { match: '^[ \\t]*>.*$', name: 'comment.blockquote' },
+          lists: { match: '^[ \\t]*(?:[-+*]|\\d+[.)])(?=[ \\t]+)', name: 'keyword.control.list' },
+          links: { match: '!?\\[([^\\]]+)\\](\\([^\\s)]+(?:\\s+[\'"][^\'"]*[\'"])?\\))', captures: { 1: { name: 'entity.name.link' }, 2: { name: 'string.other.link' } } },
+          'inline-code': { match: '(`+)(.+?)\\1', captures: { 2: { name: 'string.other.raw' } } }
+        }
+      }
+    }
+  ];
+
+  /* ------------------------------------------------- grammar registry (1/2) */
+
+  var LANGUAGES = {};
+  var SCOPES = new Map();
+  GRAMMARS.forEach(function (entry) {
+    LANGUAGES[entry.name] = entry.grammar;
+    SCOPES.set(entry.grammar.scopeName, entry.grammar);
+  });
+
+  var ALIASES = {
+    docker: 'dockerfile', gql: 'graphql', js: 'javascript', jsx: 'javascript',
+    md: 'markdown', py: 'python', rb: 'ruby', sass: 'scss', sh: 'bash',
+    shell: 'bash', ts: 'typescript', yml: 'yaml', zsh: 'bash'
+  };
+
+  function normalizeLanguage(language, aliases) {
+    return (aliases && aliases[language]) || ALIASES[language] || language;
+  }
+
+  /* ------------------------------------------------------- scope -> category */
+  // Upstream highlight.js, unchanged: flatten a TextMate scope to the one
+  // semantic CSS highlight category it belongs to.
+  function getCategory(scope) {
+    var parts = scope.split('.');
+    var first = parts[0], second = parts[1], third = parts[2];
+    var last = parts[parts.length - 1];
+
+    if (first === 'markup' && ['quote', 'inserted', 'deleted', 'raw'].indexOf(second) !== -1) return second;
+    if (first === 'entity' && second === 'name') return third;
+    if (scope.indexOf('constant.character.entity') === 0) return 'character-entity';
+    if (parts.indexOf('numeric') !== -1) return 'numeric';
+    if (scope.indexOf('support.type.property-name') === 0) return 'property';
+    if (parts.indexOf('attribute-value') !== -1) return 'attribute-value';
+    if (scope.indexOf('string.other.link') === 0) return 'link';
+
+    if (['doctype', 'at-rule', 'important', 'regexp', 'boolean',
+         'symbol', 'operator', 'attribute-name'].indexOf(last) !== -1) return last;
+
+    if (['comment', 'string', 'constant', 'storage', 'keyword',
+         'variable', 'punctuation', 'entity', 'support'].indexOf(first) !== -1) return first;
+
+    return undefined;
+  }
+
+  /* ------------------------------------------------------------------ engine */
+
+  var highlights = new Map();
+  var noMatch = { indices: [[Infinity, Infinity]] };
+
+  function addRange(node, start, end, scope) {
+    var category = getCategory(scope);
+    if (!category || start === end || start === undefined || end === undefined) return;
+
+    var range = new Range();
+    range.setStart(node, start);
+    range.setEnd(node, end);
+
+    if (!highlights.has(category)) highlights.set(category, new Highlight());
+    highlights.get(category).add(range);
+  }
+
+  function addCaptures(node, match, captures) {
+    Object.keys(captures || {}).forEach(function (index) {
+      var offsets = match.indices[+index];
+      if (offsets) addRange(node, offsets[0], offsets[1], captures[index].name);
+    });
+  }
+
+  function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function expandEnd(pattern, beginMatch) {
+    return pattern.replace(/\\(\d+)/g, function (reference, index) {
+      return beginMatch[index] === undefined ? reference : escapeRegex(beginMatch[index]);
+    });
+  }
+
+  function getRules(rule) {
+    if (!rule) return [];
+    if (Array.isArray(rule)) return rule;
+    if (rule.match || rule.begin || rule.include) return [rule];
+    return rule.patterns || [];
+  }
+
+  function getLanguage(codeBlock) {
+    var pre = codeBlock.parentElement;
+    var fromCode = Array.prototype.slice.call(codeBlock.classList)
+      .filter(function (c) { return c.indexOf('language-') === 0; })[0];
+    var fromPre = pre ? Array.prototype.slice.call(pre.classList)
+      .filter(function (c) { return c.indexOf('language-') === 0; })[0] : undefined;
+    var language = (fromCode && fromCode.slice('language-'.length))
+      || codeBlock.dataset.language
+      || (fromPre && fromPre.slice('language-'.length))
+      || (pre && pre.dataset.language)
+      || (pre && pre.getAttribute('lang'))
+      || '';
+    return language.toLowerCase();
+  }
+
+  /* --------------------------------------------- grammar registry (2/2) */
+  // Upstream loads grammars with `await import('./grammars/x.js')`. A single
+  // file has no module loader, so the registry is already complete and the
+  // loader is the identity function. Known-but-missing scopes are still
+  // tracked so an include that cannot resolve is skipped, exactly as upstream
+  // skips a grammar whose dynamic import failed.
+  function createGrammarLoader(grammars) {
+    var attempted = new Set();
+    return function () {
+      return Promise.resolve(grammars);
+    };
+  }
+
+  /* ------------------------------------------------ public API: highlightAll */
+
+  function highlightAll(options) {
+    options = options || {};
+    var root = options.root || document;
+    var selector = options.selector || 'pre > code';
+    var aliases = options.languageAliases;
+
+    if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight !== 'function') {
+      // No Custom Highlight API: report the blocks we would have highlighted
+      // rather than throwing, so a page can show an honest status.
+      return Promise.resolve(Array.prototype.filter.call(root.querySelectorAll(selector), getLanguage));
+    }
+
+    var grammars = { languages: LANGUAGES, scopes: SCOPES };
+    var loadGrammars = createGrammarLoader(grammars);
+
+    var codeBlocks = Array.prototype.filter.call(root.querySelectorAll(selector), getLanguage);
+    var languages = codeBlocks.map(function (codeBlock) {
+      return normalizeLanguage(getLanguage(codeBlock), aliases);
+    });
+
+    return loadGrammars(languages).then(function () {
+      var regexes = new Map();
+      var matches = new Map();
+
+      // Drop the ranges of the previous scan before creating replacements.
+      highlights.forEach(function (ranges, category) {
+        if (CSS.highlights.get(category) === ranges) CSS.highlights.delete(category);
+        ranges.clear();
+      });
+
+      function exec(pattern, node, start, end) {
+        var match = matches.get(pattern);
+
+        if (!match || match.indices[0][0] < start) {
+          if (!regexes.has(pattern)) regexes.set(pattern, new RegExp(pattern, 'dgm'));
+          var regex = regexes.get(pattern);
+          regex.lastIndex = start;
+          match = regex.exec(node.data) || noMatch;
+          matches.set(pattern, match);
+        }
+
+        return match.indices[0][0] < end && match.indices[0][1] <= end ? match : null;
+      }
+
+      function resolveInclude(include, grammar, baseGrammar) {
+        if (include === '$self') return { grammar: grammar, rules: grammar.patterns };
+        if (include === '$base') return { grammar: baseGrammar, rules: baseGrammar.patterns };
+
+        if (include[0] === '#') {
+          return { grammar: grammar, rules: getRules(grammar.repository && grammar.repository[include.slice(1)]) };
+        }
+
+        var split = include.split('#');
+        var scopeName = split[0], repositoryName = split[1];
+        var includedGrammar = grammars.scopes.get(scopeName);
+        if (!includedGrammar) return null;
+
+        return {
+          grammar: includedGrammar,
+          rules: repositoryName
+            ? getRules(includedGrammar.repository && includedGrammar.repository[repositoryName])
+            : includedGrammar.patterns
+        };
+      }
+
+      function expandRules(rules, grammar, baseGrammar, activeIncludes) {
+        activeIncludes = activeIncludes || new Set();
+        var expanded = [];
+
+        rules.forEach(function (rule) {
+          if (rule.include) {
+            var includeKey = grammar.scopeName + ':' + rule.include;
+            if (activeIncludes.has(includeKey)) return;
+
+            var included = resolveInclude(rule.include, grammar, baseGrammar);
+            if (!included) return;
+
+            var nestedIncludes = new Set(activeIncludes);
+            nestedIncludes.add(includeKey);
+            expanded.push.apply(expanded, expandRules(included.rules, included.grammar, baseGrammar, nestedIncludes));
+            return;
+          }
+
+          if (rule.match || (rule.begin && rule.end)) expanded.push({ grammar: grammar, rule: rule });
+        });
+
+        return expanded;
+      }
+
+      function nextRule(node, contexts, start, end) {
+        var winner = null;
+
+        contexts.forEach(function (context) {
+          var pattern = context.rule.match || context.rule.begin;
+          var match = exec(pattern, node, start, end);
+          if (!match) return;
+
+          if (!winner || match.indices[0][0] < winner.match.indices[0][0]) {
+            winner = { grammar: context.grammar, rule: context.rule, match: match };
+          }
+        });
+
+        return winner;
+      }
+
+      function scanRegion(node, rules, start, end, grammar, baseGrammar, closing) {
+        baseGrammar = baseGrammar || grammar;
+        var contexts = expandRules(rules, grammar, baseGrammar);
+        var cursor = start;
+
+        while (cursor < end) {
+          var candidate = nextRule(node, contexts, cursor, end);
+          var endMatch = closing ? exec(closing.pattern, node, cursor, end) : null;
+          var candidateStart = candidate ? candidate.match.indices[0][0] : Infinity;
+          var endStart = endMatch ? endMatch.indices[0][0] : Infinity;
+
+          if (endMatch && (endStart < candidateStart || (endStart === candidateStart && !(closing && closing.applyEndPatternLast)))) {
+            return { contentEnd: endStart, end: endMatch.indices[0][1], match: endMatch };
+          }
+
+          if (!candidate) return { contentEnd: end, end: end, match: null };
+
+          var rule = candidate.rule, match = candidate.match, ruleGrammar = candidate.grammar;
+          if (rule.match) {
+            if (rule.name) addRange(node, match.indices[0][0], match.indices[0][1], rule.name);
+            addCaptures(node, match, rule.captures);
+            cursor = match.indices[0][1] > cursor ? match.indices[0][1] : cursor + 1;
+            continue;
+          }
+
+          var nested = scanRegion(
+            node,
+            rule.patterns || [],
+            match.indices[0][1],
+            end,
+            ruleGrammar,
+            baseGrammar,
+            { pattern: expandEnd(rule.end, match), applyEndPatternLast: rule.applyEndPatternLast }
+          );
+
+          if (rule.name) addRange(node, match.indices[0][0], nested.end, rule.name);
+          if (rule.contentName) addRange(node, match.indices[0][1], nested.contentEnd, rule.contentName);
+          addCaptures(node, match, rule.beginCaptures || rule.captures);
+          if (nested.match) addCaptures(node, nested.match, rule.endCaptures || rule.captures);
+
+          cursor = nested.end > cursor ? nested.end : cursor + 1;
+        }
+
+        return { contentEnd: end, end: end, match: null };
+      }
+
+      codeBlocks.forEach(function (codeBlock, index) {
+        var grammar = grammars.languages[languages[index]];
+        if (!grammar) return;
+
+        codeBlock.normalize();
+        var node = codeBlock.firstChild;
+        // microlighter highlights a block only when the whole block is ONE text
+        // node: no nested elements, no whitespace-only siblings.
+        if (!node || node.nodeType !== Node.TEXT_NODE || node.nextSibling) return;
+
+        matches = new Map();
+        scanRegion(node, grammar.patterns, 0, node.data.length, grammar);
+      });
+
+      highlights.forEach(function (ranges, category) {
+        if (ranges.size) CSS.highlights.set(category, ranges);
+      });
+
+      return codeBlocks;
+    });
+  }
+
+  return {
+    highlightAll: highlightAll,
+    grammars: LANGUAGES,
+    normalizeLanguage: normalizeLanguage,
+    getCategory: getCategory
+  };
+})();
+</script>
+
+<!-- ==========================================================================
+     THE THEME
+     microlighter's mechanism. These rules never change between themes; a theme
+     only sets the --syntax-* custom properties (done in :root above). The
+     category names come from microlighter's scope flattening, and the set below
+     is the github theme's rule list verbatim.
+     ========================================================================== -->
+<style id="syntax-theme">
+[data-syntax-theme] pre:has(code) {
+  background-color: var(--syntax-background);
+  color: var(--syntax-foreground);
+}
+::highlight(comment),
+::highlight(quote) { color: var(--syntax-comment); }
+
+::highlight(keyword),
+::highlight(storage),
+::highlight(at-rule),
+::highlight(doctype),
+::highlight(important),
+::highlight(section) { color: var(--syntax-keyword); }
+
+::highlight(operator),
+::highlight(punctuation) { color: var(--syntax-operator); }
+
+::highlight(string),
+::highlight(regexp),
+::highlight(attribute-value),
+::highlight(link),
+::highlight(raw) { color: var(--syntax-string); }
+
+::highlight(numeric),
+::highlight(boolean),
+::highlight(constant),
+::highlight(symbol),
+::highlight(character-entity),
+::highlight(anchor),
+::highlight(entity) { color: var(--syntax-constant); }
+
+::highlight(function),
+::highlight(decorator),
+::highlight(animation) { color: var(--syntax-function); }
+
+::highlight(type),
+::highlight(support) { color: var(--syntax-type); }
+
+::highlight(variable),
+::highlight(interpolation) { color: var(--syntax-variable); }
+
+::highlight(property),
+::highlight(key),
+::highlight(attribute-name) { color: var(--syntax-property); }
+
+::highlight(tag) { color: var(--syntax-tag); }
+::highlight(selector) { color: var(--syntax-selector); }
+::highlight(inserted) { color: var(--syntax-inserted); }
+::highlight(deleted) { color: var(--syntax-deleted); }
+</style>
+
+</body>
+</html>

@@ -1,7 +1,7 @@
-# Plan — reimplement `webview-jetbrains` on the current IntelliJ Platform plugin template
+# Plan — reimplement `webview/webview-jetbrains` on the current IntelliJ Platform plugin template
 
 Status: **implemented** (steps 1–10 done; see "Implementation record" below)
-Scope: the entire `webview-jetbrains` module (`hr.hrg.jetbrains.webview`, "WebView Explorer")
+Scope: the entire `webview/webview-jetbrains` module (`hr.hrg.jetbrains.webview`, "WebView Explorer")
 Written against: IntelliJ Platform Gradle Plugin **2.19.0**, IntelliJ IDEA **2026.2.3**, Gradle **9.2.1**,
 JDK **25** — all already pinned in this module's `gradle.properties` / `gradle/libs.versions.toml`.
 
@@ -52,7 +52,7 @@ exactly one place (`WebViewService.register`), with `PendingLoadTest` pinning th
 
 ## 1. Why this document exists
 
-`webview-jetbrains` is the module the rest of JCodeBuddy depends on for **one specific job**: it is how a
+`webview/webview-jetbrains` is the module the rest of JCodeBuddy depends on for **one specific job**: it is how a
 developer reads a generated HTML report from inside the IDE. `scripts/entity-html` renders
 `.jcodebuddy/metadata/entity/index.html`, and `hipster-entity-example/codebuddy.md` §3.10 tells the reader
 to right-click that file and choose **Open in WebView Explorer**. Link clicks in that page then have to
@@ -371,7 +371,7 @@ checker, and the rate limiter must be extractable classes with no `Project` in t
 * Changing the renderer (`scripts/entity-html/render.js`) to use success callbacks or a bridge token.
 * Porting the module to Kotlin.
 * Marketplace publishing, plugin signing, or bumping `pluginVersion` past `1.0.0`.
-* The sibling `webview-vscode` extension and the other Gradle plugin modules (`intellij-jswa` is still
+* The sibling `webview/webview-vscode` extension and the other Gradle plugin modules (`intellij-jswa` is still
   on 2.1.0 / 2024.1 — worth its own plan, not this one).
 
 ---
@@ -444,5 +444,5 @@ Each step should build green on its own.
    the default becomes `file://`).
 3. **One settings service or two** — §4.6 recommends one; confirm.
 4. **Kotlin** — §4.1.6 recommends dropping the Kotlin plugin; confirm no Kotlin source is planned.
-5. **Plan location** — this file sits in `webview-jetbrains/`. Move it to `plans__p2/` if that is the
+5. **Plan location** — this file sits in `webview/webview-jetbrains/`. Move it to `plans__p2/` if that is the
    repository's convention for plans of this size.

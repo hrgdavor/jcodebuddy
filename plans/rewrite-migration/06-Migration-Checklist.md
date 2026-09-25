@@ -116,7 +116,7 @@ Run verification script:
 - `tools/BuilderGenerator.java`
 - `tools/ConstructorGenerator.java`
 
-#### webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/
+#### webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/
 
 - `HttpBridgeStartupActivity.java`
 - `JwaTextDocumentService.java`
@@ -338,7 +338,7 @@ The four deliverables listed under § Deliverables exist:
 Four corrections to this plan were needed once the tree was scanned. Each is
 recorded in full in `Checklist.md` § *Corrections to the plan's file list*:
 
-1. **The file list is wrong.** `webview-jetbrains/.../HttpBridgeStartupActivity.java`
+1. **The file list is wrong.** `webview/webview-jetbrains/.../HttpBridgeStartupActivity.java`
    does not exist; the real path is
    `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java`.
    Six files use JavaParser **fully qualified with no import** and are invisible

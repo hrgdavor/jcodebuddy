@@ -312,7 +312,7 @@ member (DEC-027 § 4.2). It reports what it could not verify:
 
 Bun is required for the page only. A machine without it gets a `[gen] bun was not found on PATH`
 line and a complete generation pass; the JSON is the pass's deliverable and the page is a view over
-it. Opening a link needs the `webview-jetbrains` plugin: it injects `window.openFile(path, line,
+it. Opening a link needs the `webview/webview-jetbrains` plugin: it injects `window.openFile(path, line,
 column)` into the page, with the plugin's HTTP bridge (`webview.explorer.port`) and the clipboard as
 fallbacks when the page is opened outside the IDE.
 

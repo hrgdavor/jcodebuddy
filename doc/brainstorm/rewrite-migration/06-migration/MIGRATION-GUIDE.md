@@ -520,7 +520,7 @@ in `Checklist.md`.
 ### The plan's file list is wrong
 
 `plans/rewrite-migration/06-Migration-Checklist.md` § Files to Migrate names
-paths that do not exist (`webview-jetbrains/.../HttpBridgeStartupActivity.java`)
+paths that do not exist (`webview/webview-jetbrains/.../HttpBridgeStartupActivity.java`)
 and omits six files whose JavaParser use is fully qualified and therefore
 invisible to an import-based scan. `Checklist.md` § *Corrections to the plan's
 file list* has the full comparison. Use the Checklist, not the plan, as the work

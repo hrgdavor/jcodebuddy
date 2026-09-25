@@ -114,7 +114,7 @@ class LineCache {
  * @param {string} options.identity    the renderer's identity line, shown in the page footer
  * @param {string} options.moduleName  the module directory name
  * @param {string} options.linkBase    the path from the output file's directory to the link base
- * @param {number} options.bridgePort  webview-jetbrains HTTP bridge port, or 0 to disable
+ * @param {number} options.bridgePort  webview/webview-jetbrains HTTP bridge port, or 0 to disable
  * @param {string|null} options.generationRecordPath  run record path relative to the link base
  */
 export function buildPage(options) {

@@ -36,7 +36,7 @@ Based on codebase scan, JavaParser is used in:
 | `hipster-entity-tooling` | `src/main/java/hr/hrg/hipster/entity/tooling/` | View generation, boilerplate generation, metadata extraction, validation rules |
 | `jwa-builder` | `src/main/java/hr/hrg/watch2/builder/` | Record builder generation |
 | `java-watch-agent` | `src/main/java/hr/hrg/watch2/agent/` | Contextual analysis, builder generation |
-| `webview-jetbrains` | `src/main/java/hr/hrg/jetbrains/webview/` | LSP server support |
+| `webview/webview-jetbrains` | `src/main/java/hr/hrg/jetbrains/webview/` | LSP server support |
 | `project-automation` | `src/main/java/` | Various tooling utilities |
 
 ### 1.2 Key JavaParser Components Used

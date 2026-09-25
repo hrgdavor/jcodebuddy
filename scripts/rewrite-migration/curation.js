@@ -568,7 +568,7 @@ export const QUEUE = {
     openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.SourceFile'],
     note:
       'The LSP text-document service. The plan lists this under the module ' +
-      '`webview-jetbrains`, which does not exist; the real path is `jwa-sidecar`. ' +
+      '`webview/webview-jetbrains`, which does not exist; the real path is `jwa-sidecar`. ' +
       'It needs only record detection, so the parse itself is the whole port — but ' +
       'it is on an interactive path, where a parser built per request would be a ' +
       'latency regression. Keep the parser shared and reset it between parse sets.',
@@ -933,8 +933,8 @@ export const PREREQUISITES = [
       'The plan names paths that do not exist and omits files that do, so following ' +
       'it literally migrates the wrong set.',
     evidence:
-      'Listed: `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` ' +
-      'and `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` — ' +
+      'Listed: `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` ' +
+      'and `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` — ' +
       'neither exists; the real file is ' +
       'jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java. ' +
       'Also listed `hipster-entity-tooling/.../validation/JavaParserTool.java` under ' +

@@ -36,7 +36,7 @@ fails makes the pass fail, because a link to the wrong line is worse than no lin
 | `--out <file>` | output file | `<metadata>/index.html` |
 | `--packages <a.b,c.d>` | only views in these packages | every view in the metadata |
 | `--title <text>` | page title | `<module> — entity reference` |
-| `--bridge-port <n>` | `webview-jetbrains` HTTP bridge port for the browser fallback; `0` disables it | `18881` |
+| `--bridge-port <n>` | `webview/webview-jetbrains` HTTP bridge port for the browser fallback; `0` disables it | `18881` |
 | `--soft` | exit 0 even when the link check rejects a candidate | off |
 | `--quiet` | print only the output path and the link-check summary | off |
 | `--version`, `--help` | identity / usage, no rendering | — |
@@ -180,7 +180,7 @@ not carry and asserts the warning.
   `webview.explorer.allowedOrigins`), then clipboard plus a toast. The header pill says which one is
   live. **The contract itself — the exact signature, the payload, the HTTP parameters, the security
   model and the fallback ladder — is documented in
-  [`doc/webview-link-api.md`](../../doc/webview-link-api.md)**, which is the document to read if you are
+  [`webview/doc/webview-link-api.md`](../../webview/doc/webview-link-api.md)**, which is the document to read if you are
   writing another page or another plugin. For a smaller worked example of the same contract, see
   [`scripts/markdown-view/`](../markdown-view/README.md), which renders Markdown this way.
 - A cell is empty when the field genuinely has no such slot there — a `DERIVED` field has no setter,

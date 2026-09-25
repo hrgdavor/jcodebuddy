@@ -197,7 +197,7 @@ function render(model) {
   push('5. **Do not remove `javaparser-core` until the allowlisted test is re-expressed.**');
   push('   `SourceReaderTest` asserts the parser language level, which is the regression');
   push('   guard behind notes F-23/F-34.');
-  push('6. **Fix the plan’s file list.** It names `webview-jetbrains` paths that do not');
+  push('6. **Fix the plan’s file list.** It names `webview/webview-jetbrains` paths that do not');
   push('   exist and omits the seven files whose JavaParser use is fully qualified.');
   push();
 

@@ -71,7 +71,7 @@ A port cannot be verified against a build that was already broken. Record the Ja
 
 The plan names paths that do not exist and omits files that do, so following it literally migrates the wrong set.
 
-*Evidence:* Listed: `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` and `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` — neither exists; the real file is jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java. Also listed `hipster-entity-tooling/.../validation/JavaParserTool.java` under test with an extra `validation/EnumCompactionCliTest.java`; the real JavaParserTool is main-source and there is exactly one EnumCompactionCliTest. Omitted entirely: the six files whose JavaParser use is fully qualified and therefore invisible to the plan’s own scan — ViewBuilderGenerator.java and meta/InterfaceInfo.java in main, plus AddonAndInheritanceTest, CompactionRoundTripTest, SourceReaderTest and validation/EnumCompactionCliTest in test. `project-automation` is listed as "all files using JavaParser", but its `hr.hrg.rewrite` package uses none.
+*Evidence:* Listed: `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` and `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` — neither exists; the real file is jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java. Also listed `hipster-entity-tooling/.../validation/JavaParserTool.java` under test with an extra `validation/EnumCompactionCliTest.java`; the real JavaParserTool is main-source and there is exactly one EnumCompactionCliTest. Omitted entirely: the six files whose JavaParser use is fully qualified and therefore invisible to the plan’s own scan — ViewBuilderGenerator.java and meta/InterfaceInfo.java in main, plus AddonAndInheritanceTest, CompactionRoundTripTest, SourceReaderTest and validation/EnumCompactionCliTest in test. `project-automation` is listed as "all files using JavaParser", but its `hr.hrg.rewrite` package uses none.
 
 ## Dependency set
 
@@ -843,7 +843,7 @@ bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/j
 
 **Migration notes**:
 
-The LSP text-document service. The plan lists this under the module `webview-jetbrains`, which does not exist; the real path is `jwa-sidecar`. It needs only record detection, so the parse itself is the whole port — but it is on an interactive path, where a parser built per request would be a latency regression. Keep the parser shared and reset it between parse sets.
+The LSP text-document service. The plan lists this under the module `webview/webview-jetbrains`, which does not exist; the real path is `jwa-sidecar`. It needs only record detection, so the parse itself is the whole port — but it is on an interactive path, where a parser built per request would be a latency regression. Keep the parser shared and reset it between parse sets.
 
 **OpenRewrite classes involved**: `org.openrewrite.java.JavaParser`, `org.openrewrite.SourceFile`
 
@@ -1173,8 +1173,8 @@ the wrong set. The differences:
 
 | Plan says | Reality |
 | --- | --- |
-| `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` | does not exist |
-| `webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` | the real file is `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
+| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` | does not exist |
+| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` | the real file is `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
 | `hipster-entity-tooling/src/test/java/.../validation/JavaParserTool.java` | the real `JavaParserTool` is main-source, at `.../tooling/validation/JavaParserTool.java` |
 | `validation/EnumCompactionCliTest.java` listed twice | one file: `hipster-entity-tooling/src/test/java/.../validation/EnumCompactionCliTest.java` |
 | `project-automation` — "all files using JavaParser" | the `hr.hrg.rewrite` package uses no JavaParser and does not compile; it needs Phase-0 repair, not a port |
