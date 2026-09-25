@@ -6,6 +6,10 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import hr.hrg.webview.core.AllowedOrigins;
+import hr.hrg.webview.core.CheckpointStore;
+import hr.hrg.webview.core.Clock;
+import hr.hrg.webview.core.EditRequest;
+import hr.hrg.webview.core.EditService;
 import hr.hrg.webview.core.EditorHost;
 import hr.hrg.webview.core.HostHealth;
 import hr.hrg.webview.core.InjectedBridge;
@@ -13,6 +17,7 @@ import hr.hrg.webview.core.NavigationOutcome;
 import hr.hrg.webview.core.Navigator;
 import hr.hrg.webview.core.NullHost;
 import hr.hrg.webview.core.PageServer;
+import hr.hrg.webview.core.RateLimiter;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -66,6 +71,9 @@ public final class WebviewServer implements AutoCloseable {
     /** Pages served under this prefix get the bridge injected; files under {@link PageServer#ROUTE_PREFIX} do not. */
     public static final String PAGE_ROUTE_PREFIX = "/page/";
 
+    /** How long the event stream waits before sending a keep-alive comment, so a proxy does not close it. */
+    static final long EVENT_KEEPALIVE_MS = 15_000L;
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -73,6 +81,7 @@ public final class WebviewServer implements AutoCloseable {
     private final ExecutorService executor;
     private final Navigator navigator;
     private final PageServer pageServer;
+    private final EditService editService;
     private final AllowedOrigins origins;
     private final String token;
     private final Path project;
@@ -85,8 +94,13 @@ public final class WebviewServer implements AutoCloseable {
                           EditorHost host, int port, String token, AllowedOrigins origins, Path tokenFile) {
         this.server = server;
         this.executor = executor;
-        this.navigator = new Navigator(config.project().toString(), host, true);
+        // One limiter for navigation and writes together: the plan makes them the same budget, so a page that
+        // spins on writes cannot spend a different allowance from a page that spins on clicks.
+        RateLimiter limiter = new RateLimiter(Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS,
+                Clock.SYSTEM);
+        this.navigator = new Navigator(config.project().toString(), host, true, limiter);
         this.pageServer = new PageServer(config.project().toString(), true);
+        this.editService = new EditService(config.project().toString(), new CheckpointStore(), limiter);
         this.origins = origins;
         this.token = token;
         this.tokenFile = tokenFile;
@@ -140,6 +154,11 @@ public final class WebviewServer implements AutoCloseable {
         server.createContext(PageServer.ROUTE_PREFIX, instance::handleFile);
         server.createContext(PAGE_ROUTE_PREFIX, instance::handlePage);
         server.createContext(MANIFEST_ROUTE, instance::handleManifest);
+        server.createContext("/api/v1/applyEdit", instance::handleApplyEdit);
+        server.createContext("/api/v1/diff", instance::handleDiff);
+        server.createContext("/api/v1/undo", instance::handleUndo);
+        server.createContext("/api/v1/redo", instance::handleRedo);
+        server.createContext("/api/v1/events", instance::handleEvents);
         server.createContext("/", instance::handleIndex);
         server.start();
         return instance;
@@ -355,6 +374,157 @@ public final class WebviewServer implements AutoCloseable {
         send(exchange, response.httpStatus(), response.contentType(), response.body());
     }
 
+    /**
+     * {@code POST /api/v1/applyEdit}: the write contract's one entry point.
+     *
+     * <p>Two things distinguish it from {@code /open}. It requires the **token**, not merely an allowed origin:
+     * a state-changing route must not be reachable by any page the reader happens to have open (plan D8), and a
+     * page that was served by this host can present it. And it re-reads the request's {@code dryRun} flag
+     * rather than trusting a page to remember the two-step flow — absent means "propose", because a page that
+     * forgets the flag must not be the reason a file changed.
+     */
+    private void handleApplyEdit(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        String body = readBody(exchange);
+        try {
+            EditRequest request = EditApi.parse(body, true);
+            answerEdits(exchange, editService.apply(request));
+        } catch (IllegalArgumentException e) {
+            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
+                    + quote(e.getMessage()) + "}");
+        }
+    }
+
+    /** {@code POST /api/v1/diff}: the proposal step, which by definition writes nothing. */
+    private void handleDiff(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        try {
+            EditRequest request = EditApi.parse(readBody(exchange), true);
+            answerEdits(exchange, editService.propose(request));
+        } catch (IllegalArgumentException e) {
+            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
+                    + quote(e.getMessage()) + "}");
+        }
+    }
+
+    private void handleUndo(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        try {
+            answerEdits(exchange, editService.undo(pathFromBody(exchange)));
+        } catch (IllegalArgumentException e) {
+            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
+                    + quote(e.getMessage()) + "}");
+        }
+    }
+
+    private void handleRedo(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        try {
+            answerEdits(exchange, editService.redo(pathFromBody(exchange)));
+        } catch (IllegalArgumentException e) {
+            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
+                    + quote(e.getMessage()) + "}");
+        }
+    }
+
+    /**
+     * {@code GET /api/v1/events}: a stream of what changed under the project.
+     *
+     * <p>Requires the token as well: the stream names every file a page touched, which is more than the frozen
+     * contract exposes to an arbitrary origin. The loop ends when the client goes away, which is reported as an
+     * {@link IOException} on write — the normal way a server learns a browser tab closed.
+     */
+    private void handleEvents(HttpExchange exchange) throws IOException {
+        if (!authorizeWrite(exchange)) {
+            return;
+        }
+        if (!requireGet(exchange)) {
+            return;
+        }
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.getResponseHeaders().set("Connection", "keep-alive");
+        exchange.sendResponseHeaders(200, 0);
+        try (OutputStream out = exchange.getResponseBody();
+             ProjectEventStream events = ProjectEventStream.of(project)) {
+            if (events.truncated()) {
+                note("the project has more than " + ProjectEventStream.MAX_DIRECTORIES
+                        + " directories; the event stream watches the first " + events.watchedDirectoryCount());
+            }
+            while (true) {
+                String frame = events.awaitFrame(EVENT_KEEPALIVE_MS);
+                out.write(frame.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (IOException clientGone) {
+            // The page closed the stream, or the host is shutting down. Neither is an error to report.
+        }
+    }
+
+    private void answerEdits(HttpExchange exchange, EditService.Outcome outcome) throws IOException {
+        int status = EditApi.statusOf(outcome.reason());
+        if (status != 200) {
+            note("edit refused " + outcome.filePath() + ": " + EditApi.reasonName(outcome.reason())
+                    + (outcome.detail().isEmpty() ? "" : " (" + outcome.detail() + ")"));
+        }
+        sendJson(exchange, status, EditApi.bodyOf(outcome));
+    }
+
+    /** The path a body-only request names; undo and redo do not need a digest or edits. */
+    private String pathFromBody(HttpExchange exchange) throws IOException {
+        String body = readBody(exchange);
+        try {
+            EditApi.Payload payload = new com.google.gson.Gson().fromJson(body, EditApi.Payload.class);
+            if (payload == null || payload.filePath() == null || payload.filePath().isBlank()) {
+                throw new IllegalArgumentException("the request must name a filePath");
+            }
+            return payload.filePath();
+        } catch (com.google.gson.JsonSyntaxException e) {
+            throw new IllegalArgumentException("the request body is not valid JSON");
+        }
+    }
+
+    private static String readBody(HttpExchange exchange) throws IOException {
+        return new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    private void sendJson(HttpExchange exchange, int status, String json) throws IOException {
+        send(exchange, status, "application/json", json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** The smallest correct JSON string escaper for a detail message. */
+    private static String quote(String text) {
+        StringBuilder out = new StringBuilder("\"");
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            switch (c) {
+                case '"' -> out.append("\\\"");
+                case '\\' -> out.append("\\\\");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
+        }
+        return out.append('"').toString();
+    }
+
     private void handleIndex(HttpExchange exchange) throws IOException {
         if (!requireGet(exchange)) {
             return;
@@ -456,6 +626,57 @@ public final class WebviewServer implements AutoCloseable {
             exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
             exchange.getResponseHeaders().add("Vary", "Origin");
         }
+    }
+
+    /**
+     * POST only, for the write routes. A page that uses {@code fetch} with a token header is doing a
+     * non-simple request, so the preflight has to be answered rather than refused.
+     */
+    private boolean requirePost(HttpExchange exchange) throws IOException {
+        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+            if (origins.allows(exchange.getRequestHeaders().getFirst("Origin"))) {
+                applyCors(exchange);
+                exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+                exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "X-WebView-Token, Content-Type");
+                exchange.sendResponseHeaders(204, -1);
+            } else {
+                exchange.sendResponseHeaders(403, -1);
+            }
+            exchange.close();
+            return false;
+        }
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "text/plain", bytes("Method Not Allowed"));
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * The authorization for a <b>state-changing</b> route: the token, and nothing else.
+     *
+     * <p>This is deliberately stricter than {@link #authorize} (which accepts an allowed {@code Origin} as an
+     * alternative). Any page in the reader's browser can share an origin rule, and plan D8 says no
+     * state-changing route may be reachable without proving possession of the secret. A host with no token
+     * configured therefore refuses writes outright rather than falling back to the weaker rule.
+     */
+    private boolean authorizeWrite(HttpExchange exchange) throws IOException {
+        if (token == null) {
+            send(exchange, 403, "text/plain", bytes(
+                    "Forbidden: this host has no token configured, so it refuses every state-changing route"));
+            return false;
+        }
+        String presented = exchange.getRequestHeaders().getFirst("X-WebView-Token");
+        if (presented == null) {
+            presented = query(exchange.getRequestURI()).get("token");
+        }
+        if (token.equals(presented)) {
+            return true;
+        }
+        note("refused a write to " + exchange.getRequestURI().getPath() + ": token missing or wrong");
+        send(exchange, 403, "text/plain",
+                bytes("Forbidden: the token is required for state-changing routes"));
+        return false;
     }
 
     private void send(HttpExchange exchange, int status, String contentType, byte[] body) throws IOException {

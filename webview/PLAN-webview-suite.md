@@ -1,10 +1,11 @@
 # Plan — grow `webview` from two IDE plugins into one product: a localhost page host, an LSP sidecar, and a ZED host
 
-Status: **Phases 0, 1 and 2 delivered (2026-09-25), plus Phase 5's navigation half as a spike; the write verbs
-(Phase 3), the extension's `process:exec` half and Phase 6 are not started.** Phase 0's results and two
-corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); Phase 2's host and the LSP
-navigation path are in [`core/webviewd`](core/webviewd) and
-[`doc/webview-host-api.md`](doc/webview-host-api.md).
+Status: **Phases 0, 1, 2 delivered (2026-09-25) plus Phase 5's navigation half as a spike, and Phase 3's
+headless half (the write contract and its HTTP surface); the write verbs' editor-buffer paths, the page-side
+client, the extension's `process:exec` half and Phase 6 are not started.** Phase 0's results and two
+corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); the hosts and their
+contracts are in [`doc/webview-host-api.md`](doc/webview-host-api.md) and
+[`doc/webview-edit-api.md`](doc/webview-edit-api.md).
 Scope: the whole `webview/` product (today: `webview-jetbrains`, `webview-vscode`, `doc/`, `examples/`) plus the
 sidecar material that is being folded into it (`jwa-sidecar`, and the JWA/JSWA IDE clients).
 Written against: JDK 25 (`C:\Program Files\Java\jdk-25`; the shell's default `java` is 1.8, `JAVA_HOME` is 21 —
@@ -100,8 +101,8 @@ webview/
   PLAN-webview-suite.md           (this file)
   doc/
     webview-link-api.md           FROZEN read/navigate contract — unchanged
-    webview-host-api.md           NEW: the full verb set + /health capability document
-    webview-edit-api.md           NEW: the write contract (digest, dryRun, undo)
+    webview-host-api.md           DELIVERED: the full verb set + /health capability document
+    webview-edit-api.md           DELIVERED: the write contract (digest, dryRun, undo, events)
     webview-page-authoring.md     extended: the ladder gains "editor host" and "edit" rungs
   core/
     webview-core/                 DELIVERED Maven module (JDK 25)
@@ -391,6 +392,40 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   `/undo` restores the exact previous bytes (byte-compare in the test); (c) an edit whose path escapes the project
   is refused in every host; (d) applying through the JetBrains host appears in the IDE's own undo stack; (e) an
   edit sent through the LSP channel appears in Zed's buffer and is undone with Zed's own undo.
+
+> **Headless half delivered 2026-09-25** — the write contract in `webview-core` and its HTTP surface in
+> `webviewd`, with [`doc/webview-edit-api.md`](doc/webview-edit-api.md) as the reference. **(a), (b) and (c) are
+> measured**; (d) and (e) are not, and the phase is not finished without them.
+>
+> What exists: `EditService` (the one place a path becomes a write) enforces the same path jail as navigation,
+> refuses a stale digest with the current digest in the answer, writes atomically through a temp file and a move,
+> preserves the file's line endings *and* whether it ended with a newline, checkpoints every applied write, and
+> takes its rate limit from the same limiter as navigation. `POST /api/v1/{applyEdit,diff,undo,redo}` and
+> `GET /api/v1/events` expose it; the four write routes require the **token** rather than the weaker
+> origin-or-token rule that `/open` uses, per D8.
+>
+> **Verified against the running binary, not only in tests:** a proposal returned
+> `200 {applied:false, digest:<the digest the file would have>, unifiedDiff:"@@ -1,2 +1,2 @@\n one\n-two\n+TWO"}`
+> and left the file untouched; accepting it wrote the file with its terminator intact; replaying the same request
+> with the old digest answered `409`; `/undo` restored the file to a **byte-identical** hash; `/redo` reapplied
+> it; a missing token answered `403` and a `GET` on a write route `405`; and the event stream answered
+> `200 text/event-stream` and delivered `event: change data: {"paths":["src/A.java"]}` after two keep-alives.
+>
+> **Three things the work turned up, each now fixed and pinned by a test:**
+>
+> 1. **`TextEdit.lines` consumed the line terminator without returning it**, so replacing line 2 of
+>    `one\ntwo\nthree` produced `one\nTWOthree`. The replacement now carries a terminator when it lacks one.
+> 2. **An undo could silently discard the reader's own edit.** The smoke test edited the file after our write and
+>    `/undo` restored the older checkpoint, throwing that edit away — the one thing this contract refuses to do
+>    anywhere else. An undo is now digest-guarded like any other write (`409 stale`, checkpoint kept), which is
+>    enforced by `CheckpointStore` remembering the digest each checkpoint is safe against.
+> 3. **Windows reports a child's change against the parent directory's entry too**, so the first frame named
+>    `src` rather than `src/A.java`. Directories are now registered internally but never reported to a page.
+>
+> **Still open in this phase:** the editor-buffer paths (JetBrains `WriteCommandAction`, VS Code `WorkspaceEdit`)
+> and Zed's `workspace/applyEdit` — the LSP write transport the plan's gate (e) asks for — plus the page-side
+> `webview-client.js` and an example page that edits. Checkpoints are in-memory, so a restart forgets the undo
+> history; that is documented rather than hidden.
 
 ### Phase 4 — ZED tier 3: the extension, so Zed can address the host at all (2–3 days, promoted by Phase 0)
 - `webview/zed/webview-zed-dev-extension/`: `extension.toml` + a minimal Rust crate that (i) **registers the
