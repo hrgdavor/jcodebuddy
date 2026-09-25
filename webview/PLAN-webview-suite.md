@@ -394,8 +394,8 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   edit sent through the LSP channel appears in Zed's buffer and is undone with Zed's own undo.
 
 > **Headless half delivered 2026-09-25** — the write contract in `webview-core` and its HTTP surface in
-> `webviewd`, with [`doc/webview-edit-api.md`](doc/webview-edit-api.md) as the reference. **(a), (b) and (c) are
-> measured**; (d) and (e) are not, and the phase is not finished without them.
+> `webviewd`, with [`doc/webview-edit-api.md`](doc/webview-edit-api.md) as the reference. **Gate items (a), (b),
+> (c) and — later the same day — (e) are measured**; **(d)** is not, and the phase is not finished without it.
 >
 > What exists: `EditService` (the one place a path becomes a write) enforces the same path jail as navigation,
 > refuses a stale digest with the current digest in the answer, writes atomically through a temp file and a move,
