@@ -128,7 +128,7 @@ public final class LspHost implements EditorHost {
                 advertised.add(value.substring(1, value.length() - 1));
             }
         }
-        advertised.retainAll(Set.of(CAP_OPEN, CAP_SELECT, CAP_REVEAL));
+        advertised.retainAll(Set.of(CAP_OPEN, CAP_SELECT, CAP_REVEAL, CAP_EDIT));
         return advertised;
     }
 
@@ -144,6 +144,19 @@ public final class LspHost implements EditorHost {
             return false;
         }
         return sidecar.jump(absolutePath, line, column);
+    }
+
+    /**
+     * Hands the edit to the editor's buffer over LSP. Only when the sidecar advertised {@code edit}: an editor
+     * that cannot do it must not be asked, or the caller would never learn it has to write the file itself.
+     */
+    @Override
+    public boolean applyEdit(String absolutePath, java.util.List<hr.hrg.webview.core.TextEdit> edits) {
+        refresh();
+        if (!capabilities.contains(CAP_EDIT)) {
+            return false;
+        }
+        return sidecar.applyEdit(absolutePath, edits);
     }
 
     /**

@@ -18,6 +18,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -198,6 +199,81 @@ class WriteApiTest {
                 "{\"filePath\":\"src/A.java\",\"edits\":[]}", TOKEN);
         assertEquals(400, noDigest.statusCode());
         assertTrue(noDigest.body().contains("expectedDigest"), noDigest.body());
+    }
+
+    @Test
+    void anEditGoesIntoTheEditorsBufferWhenAHostCanCarryItAndLeavesTheFileAlone() throws Exception {
+        Path file = write("src/A.java", "one\ntwo\n");
+        byte[] onDisk = Files.readAllBytes(file);
+        FakeSidecar sidecar = FakeSidecar.withEditorAttached();
+        LspHost host = LspHost.discover(sidecar);
+        WebviewdConfig config = new WebviewdConfig(project, 0, false, "", TOKEN,
+                WebviewdConfig.HostChoice.LSP, WebviewdConfig.DEFAULT_SIDECAR_PORT, "sidecar-token", false);
+        server = WebviewServer.start(config, host);
+
+        HttpResponse<String> response = post("/api/v1/applyEdit",
+                editBody("src/A.java", SourceDigest.of(onDisk), false), TOKEN);
+
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("\"applied\": true"), response.body());
+        assertTrue(response.body().contains("\"target\": \"buffer\""), response.body());
+        assertTrue(response.body().contains("unchanged until the editor saves"), response.body());
+        assertArrayEquals(onDisk, Files.readAllBytes(file),
+                "the editor owns the change now; writing the file too would give two copies and two undos");
+        assertEquals(1, sidecar.edits.size(), sidecar.edits.toString());
+        assertTrue(sidecar.edits.get(0).endsWith(":2:1->TWO"), sidecar.edits.get(0));
+    }
+
+    @Test
+    void aHostThatRefusesTheBufferEditFallsBackToWritingTheFile() throws Exception {
+        Path file = write("src/A.java", "one\ntwo\n");
+        byte[] onDisk = Files.readAllBytes(file);
+        FakeSidecar sidecar = FakeSidecar.withEditorAttached();
+        sidecar.acceptEdit = false;
+        server = WebviewServer.start(new WebviewdConfig(project, 0, false, "", TOKEN,
+                WebviewdConfig.HostChoice.LSP, WebviewdConfig.DEFAULT_SIDECAR_PORT, "sidecar-token", false),
+                LspHost.discover(sidecar));
+
+        HttpResponse<String> response = post("/api/v1/applyEdit",
+                editBody("src/A.java", SourceDigest.of(onDisk), false), TOKEN);
+
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("\"applied\": true"), response.body());
+        assertFalse(response.body().contains("\"target\": \"buffer\""), response.body());
+        assertEquals("one\nTWO\n", read(file), "the fallback is this host's own write, exactly as documented");
+    }
+
+    @Test
+    void askingExplicitlyForTheBufferWithoutACapableHostIsRefusedRatherThanSilentlyWritten() throws Exception {
+        Path file = write("src/A.java", "one\ntwo\n");
+        byte[] onDisk = Files.readAllBytes(file);
+        start();
+
+        HttpResponse<String> response = post("/api/v1/applyEdit",
+                editBody("src/A.java", SourceDigest.of(onDisk), false).replace("\"dryRun\":false",
+                        "\"dryRun\":false,\"target\":\"buffer\""), TOKEN);
+
+        assertEquals(409, response.statusCode());
+        assertTrue(response.body().contains("no-buffer-edit"), response.body());
+        assertArrayEquals(onDisk, Files.readAllBytes(file));
+    }
+
+    @Test
+    void aBufferEditStillObeysTheDigestGuard() throws Exception {
+        Path file = write("src/A.java", "one\ntwo\n");
+        byte[] onDisk = Files.readAllBytes(file);
+        FakeSidecar sidecar = FakeSidecar.withEditorAttached();
+        server = WebviewServer.start(new WebviewdConfig(project, 0, false, "", TOKEN,
+                WebviewdConfig.HostChoice.LSP, WebviewdConfig.DEFAULT_SIDECAR_PORT, "sidecar-token", false),
+                LspHost.discover(sidecar));
+        Files.writeString(file, "one\nchanged-behind-your-back\n", StandardCharsets.UTF_8);
+
+        HttpResponse<String> response = post("/api/v1/applyEdit",
+                editBody("src/A.java", SourceDigest.of(onDisk), false), TOKEN);
+
+        assertEquals(409, response.statusCode());
+        assertTrue(sidecar.edits.isEmpty(), "an editor must not be asked to apply edits against content the "
+                + "page did not read");
     }
 
     @Test

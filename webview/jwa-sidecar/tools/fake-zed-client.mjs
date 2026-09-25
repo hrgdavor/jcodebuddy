@@ -48,8 +48,12 @@ child.stdout.on('data', (chunk) => {
     received.push(message);
     if (message.method && message.id !== undefined) {
       log(`<- REQUEST  ${message.method} id=${message.id}`, JSON.stringify(message.params));
-      send({ jsonrpc: '2.0', id: message.id, result: { success: true } });
-      log(`-> response to ${message.method} {"success":true}`);
+      // The answer has to match what the method expects: showDocument wants ShowDocumentResult, applyEdit wants
+      // ApplyWorkspaceEditResponse. Answering the wrong shape reads as a refusal, which is how a real client
+      // that does not implement one of them behaves too.
+      const result = message.method === 'workspace/applyEdit' ? { applied: true } : { success: true };
+      send({ jsonrpc: '2.0', id: message.id, result });
+      log(`-> response to ${message.method}`, JSON.stringify(result));
     } else if (message.method) {
       log(`<- NOTIFICATION ${message.method}`, JSON.stringify(message.params));
     } else {
@@ -83,12 +87,32 @@ log(`-> HTTP GET ${url}`);
 const response = await fetch(url, { headers: { 'X-WebView-Token': token } });
 log(`<- HTTP ${response.status}`, await response.text());
 
+await sleep(1200);
+
+// The write half of the same channel: the route webviewd calls when a host declares the edit capability.
+const editUrl = `http://127.0.0.1:${jumpPort}/applyEdit`;
+const editBody = JSON.stringify({
+  uri,
+  edits: [{ startLine: 7, startColumn: 1, endLine: 7, endColumn: 4, newText: 'renamed' }],
+});
+log(`-> HTTP POST ${editUrl}`, editBody);
+const editResponse = await fetch(editUrl, {
+  method: 'POST',
+  headers: { 'X-WebView-Token': token, 'Content-Type': 'application/json' },
+  body: editBody,
+});
+log(`<- HTTP ${editResponse.status}`, await editResponse.text());
+
 await sleep(2500);
 
 const showDocument = received.filter((m) => m.method === 'window/showDocument');
-log(`SUMMARY: ${received.length} messages; window/showDocument requests/notifications: ${showDocument.length}`);
+const applyEdit = received.filter((m) => m.method === 'workspace/applyEdit');
+log(`SUMMARY: ${received.length} messages; window/showDocument: ${showDocument.length}; workspace/applyEdit: ${applyEdit.length}`);
 for (const message of showDocument) {
   log(`  showDocument id=${message.id} params=${JSON.stringify(message.params)}`);
+}
+for (const message of applyEdit) {
+  log(`  applyEdit id=${message.id} params=${JSON.stringify(message.params)}`);
 }
 log(`SUMMARY methods seen: ${[...new Set(received.filter((m) => m.method).map((m) => m.method))].join(', ') || '(none)'}`);
 

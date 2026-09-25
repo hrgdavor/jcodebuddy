@@ -13,6 +13,7 @@ import org.eclipse.lsp4j.services.*;
 import java.net.URI;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The sidecar's LSP server.
@@ -74,9 +75,65 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
         return navigator.openUrl(uri);
     }
 
+    /**
+     * Applies edits to the client's <b>buffer</b> over LSP: {@code workspace/applyEdit}.
+     *
+     * <p>This is the counterpart of {@link #jump} for the write contract, and the reason the plan says Zed needs
+     * no plugin: the change arrives in the editor's own undo stack and the file on disk is untouched until the
+     * reader saves it. Phase 0 measured exactly that on the installed 1.21.0 — {@code applied: true}, a
+     * {@code textDocument/didChange} back from the client, and unchanged bytes on disk.
+     *
+     * <p>The edits are sent as {@code documentChanges} with a {@code null} version, which asks the client to
+     * apply them without checking its own version: the page verified the <em>file</em> with a digest, but the
+     * buffer may legitimately differ from the file (unsaved edits of the reader's own), and refusing to apply
+     * because of a version we cannot see would make the feature unusable. The positions are LSP ranges, so
+     * one-based line and column become zero-based line and character — and a Java string index and an LSP
+     * {@code character} are both UTF-16 code units, so no re-encoding is involved.
+     *
+     * @return what the client answered, false when there is no client or it refused
+     */
+    public boolean applyEdit(String uri, java.util.List<hr.hrg.webview.core.TextEdit> edits) {
+        JwaLanguageClient current = client;
+        if (current == null || edits == null || edits.isEmpty()) {
+            return false;
+        }
+        java.util.List<TextEdit> lspEdits = new java.util.ArrayList<>(edits.size());
+        for (hr.hrg.webview.core.TextEdit edit : edits) {
+            lspEdits.add(new TextEdit(
+                    new Range(new Position(edit.startLine() - 1, edit.startColumn() - 1),
+                            new Position(edit.endLine() - 1, edit.endColumn() - 1)),
+                    edit.newText()));
+        }
+        WorkspaceEdit workspaceEdit = new WorkspaceEdit();
+        // documentChanges only: lsp4j would otherwise serialise an empty "changes":{}, and a client that prefers
+        // that field over documentChanges would apply nothing while answering "applied": true.
+        workspaceEdit.setChanges(null);
+        workspaceEdit.setDocumentChanges(java.util.List.of(
+                org.eclipse.lsp4j.jsonrpc.messages.Either.forLeft(new TextDocumentEdit(
+                        new VersionedTextDocumentIdentifier(uri, (Integer) null), lspEdits))));
+        ApplyWorkspaceEditParams params = new ApplyWorkspaceEditParams(workspaceEdit, "webview");
+        try {
+            ApplyWorkspaceEditResponse response = current.applyEdit(params).get(5, TimeUnit.SECONDS);
+            if (response == null) {
+                return false;
+            }
+            if (!response.isApplied()) {
+                System.err.println("applyEdit refused by the client: " + response.getFailureReason());
+            }
+            return response.isApplied();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (Exception e) {
+            // A client that does not implement workspace/applyEdit answers with an error, or not at all. Both
+            // mean "write it yourself", which is what the caller does with a false.
+            System.err.println("applyEdit failed: " + e.getMessage());
+            return false;
+        }
+    }
+
     /** The host half of the LSP transport: what "opening a file" means for an LSP client. */
     private final class LspClientHost implements EditorHost {
-
         @Override
         public String name() {
             return "lsp";
@@ -91,7 +148,12 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
         public Set<String> capabilities() {
             // CAP_REVEAL is omitted: nothing here has been verified to honour it, and a capability that
             // is advertised but not implemented turns a page's fallback into a dead link.
-            return Set.of(CAP_OPEN, CAP_SELECT);
+            return Set.of(CAP_OPEN, CAP_SELECT, CAP_EDIT);
+        }
+
+        @Override
+        public boolean applyEdit(String absolutePath, java.util.List<hr.hrg.webview.core.TextEdit> edits) {
+            return JwaLanguageServer.this.applyEdit(toFileUri(absolutePath), edits);
         }
 
         @Override

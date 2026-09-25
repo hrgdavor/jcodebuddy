@@ -15,8 +15,10 @@ final class FakeSidecar implements SidecarClient {
     /** What {@code /health} answers; null means "the process is not there". */
     String healthBody;
     boolean acceptJump = true;
+    boolean acceptEdit = true;
     int healthCalls;
     final List<String> jumps = new ArrayList<>();
+    final List<String> edits = new ArrayList<>();
 
     /** The shared health document with the given capability list — the only part these tests vary. */
     static String health(String capabilities) {
@@ -27,7 +29,7 @@ final class FakeSidecar implements SidecarClient {
     /** A sidecar with an attached editor, which is the state the spike needs. */
     static FakeSidecar withEditorAttached() {
         FakeSidecar sidecar = new FakeSidecar();
-        sidecar.healthBody = health("\"open\",\"select\"");
+        sidecar.healthBody = health("\"edit\",\"open\",\"select\"");
         return sidecar;
     }
 
@@ -46,5 +48,12 @@ final class FakeSidecar implements SidecarClient {
     public boolean jump(String absolutePath, int line, int column) {
         jumps.add(absolutePath + ":" + line + ":" + column);
         return acceptJump;
+    }
+
+    @Override
+    public boolean applyEdit(String absolutePath, java.util.List<hr.hrg.webview.core.TextEdit> edits) {
+        edits.forEach(edit -> this.edits.add(absolutePath + ":" + edit.startLine() + ":" + edit.startColumn()
+                + "->" + edit.newText()));
+        return acceptEdit;
     }
 }

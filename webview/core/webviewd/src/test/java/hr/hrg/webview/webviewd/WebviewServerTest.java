@@ -302,7 +302,7 @@ class WebviewServerTest {
         start(LspHost.discover(FakeSidecar.withEditorAttached()));
 
         String health = get("/health").body();
-        assertTrue(health.contains("\"capabilities\":[\"open\",\"select\"]"), health);
+        assertTrue(health.contains("\"capabilities\":[\"edit\",\"open\",\"select\"]"), health);
 
         String manifest = get(WebviewServer.MANIFEST_ROUTE).body();
         assertTrue(manifest.contains("\"name\": \"lsp\""), manifest);

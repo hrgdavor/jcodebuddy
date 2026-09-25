@@ -54,7 +54,8 @@ class LspHostTest {
         LspHost host = LspHost.discover(sidecar);
 
         assertTrue(host.isAvailable());
-        assertEquals(Set.of(EditorHost.CAP_OPEN, EditorHost.CAP_SELECT), host.capabilities());
+        assertEquals(Set.of(EditorHost.CAP_OPEN, EditorHost.CAP_SELECT, EditorHost.CAP_EDIT),
+                host.capabilities());
         assertEquals("exact", host.lineNavigation(),
                 "showDocument carries a selection; Phase 0 saw the caret land on it");
         assertTrue(host.openFileAt("D:/wrk/project/src/A.java", 12, 3));

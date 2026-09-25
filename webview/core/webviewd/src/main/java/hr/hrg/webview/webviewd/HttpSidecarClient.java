@@ -90,6 +90,66 @@ public final class HttpSidecarClient implements SidecarClient {
         }
     }
 
+    @Override
+    public boolean applyEdit(String absolutePath, java.util.List<hr.hrg.webview.core.TextEdit> edits) {
+        if (edits == null || edits.isEmpty()) {
+            return false;
+        }
+        String uri = "file:///" + absolutePath.replace('\\', '/').replaceFirst("^/+", "");
+        StringBuilder json = new StringBuilder("{\"uri\":\"").append(uri).append("\",\"edits\":[");
+        for (int i = 0; i < edits.size(); i++) {
+            hr.hrg.webview.core.TextEdit edit = edits.get(i);
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append("{\"startLine\":").append(edit.startLine())
+                    .append(",\"startColumn\":").append(edit.startColumn())
+                    .append(",\"endLine\":").append(edit.endLine())
+                    .append(",\"endColumn\":").append(edit.endColumn())
+                    .append(",\"newText\":\"").append(escape(edit.newText())).append("\"}");
+        }
+        json.append("]}");
+        HttpRequest.Builder request = HttpRequest.newBuilder(base().resolve("/applyEdit"))
+                .timeout(Duration.ofSeconds(6))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json.toString(), StandardCharsets.UTF_8));
+        if (!token.isEmpty()) {
+            request.header("X-WebView-Token", token);
+        }
+        try {
+            HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            return response.statusCode() == 200 && response.body().contains("\"applied\":true");
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /** The smallest correct JSON string escaper for the edit text. */
+    private static String escape(String text) {
+        StringBuilder out = new StringBuilder(text.length() + 8);
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            switch (c) {
+                case '"' -> out.append("\\\"");
+                case '\\' -> out.append("\\\\");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
+        }
+        return out.toString();
+    }
+
     private URI base() {
         return URI.create("http://127.0.0.1:" + port);
     }

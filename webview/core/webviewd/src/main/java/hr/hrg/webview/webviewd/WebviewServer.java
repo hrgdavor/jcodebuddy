@@ -389,7 +389,30 @@ public final class WebviewServer implements AutoCloseable {
         }
         String body = readBody(exchange);
         try {
-            EditRequest request = EditApi.parse(body, true);
+            EditApi.Routed routed = EditApi.parseRouted(body, true);
+            EditRequest request = routed.request();
+            boolean hostCanEdit = host.capabilities().contains(EditorHost.CAP_EDIT);
+
+            if (routed.bufferRequested() && !hostCanEdit) {
+                sendJson(exchange, 409, EditApi.noBufferBody(host.name()));
+                return;
+            }
+            if (!request.dryRun() && !routed.diskRequested() && hostCanEdit) {
+                // Propose first: the same jail and the same digest guard as a disk write, without writing.
+                // Only then is it safe to hand the edits to an editor, because we have verified that the page
+                // is editing content it actually read.
+                EditService.Outcome proposal = editService.propose(request);
+                if (proposal.reason() != EditService.Reason.OK
+                        && proposal.reason() != EditService.Reason.NO_CHANGE) {
+                    answerEdits(exchange, proposal);
+                    return;
+                }
+                if (host.applyEdit(proposal.filePath(), request.edits())) {
+                    sendJson(exchange, 200, EditApi.bufferBodyOf(proposal));
+                    return;
+                }
+                note("host '" + host.name() + "' refused the buffer edit; writing the file instead");
+            }
             answerEdits(exchange, editService.apply(request));
         } catch (IllegalArgumentException e) {
             sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
@@ -403,7 +426,7 @@ public final class WebviewServer implements AutoCloseable {
             return;
         }
         try {
-            EditRequest request = EditApi.parse(readBody(exchange), true);
+            EditRequest request = EditApi.parseRouted(readBody(exchange), true).request();
             answerEdits(exchange, editService.propose(request));
         } catch (IllegalArgumentException e) {
             sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"

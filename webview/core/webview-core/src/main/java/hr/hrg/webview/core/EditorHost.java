@@ -24,6 +24,8 @@ public interface EditorHost {
     String CAP_REVEAL = "reveal";
     /** The capability key for {@link #select}. */
     String CAP_SELECT = "select";
+    /** The capability key for {@link #applyEdit}. */
+    String CAP_EDIT = "edit";
 
     /**
      * A short name for the logs and for {@code /health} — {@code "jetbrains"}, {@code "zed-cli"},
@@ -90,6 +92,23 @@ public interface EditorHost {
      * reader is looking at.
      */
     default boolean select(String absolutePath, TextRange range) {
+        return false;
+    }
+
+    /**
+     * Applies edits to the editor's <b>own buffer</b> rather than to the file on disk, so the reader sees the
+     * change in the editor's undo stack and decides when to save (plan § 6.2, and question 1's answer (b) for a
+     * host that declares {@link #CAP_EDIT}).
+     *
+     * <p>A host that returns true has taken responsibility for the change; the caller must not also write to
+     * disk, or the reader would get two copies of it and two undos. A host that cannot (no editor attached, a
+     * client that refuses, an LSP round trip that fails) answers false, and the caller falls back to its own
+     * write — which is why this returns a boolean rather than throwing.
+     *
+     * <p>The positions are {@link TextEdit}'s one-based line and column, resolved by the caller against the
+     * bytes it verified with a digest. The host converts them to whatever its own API wants.
+     */
+    default boolean applyEdit(String absolutePath, java.util.List<TextEdit> edits) {
         return false;
     }
 }

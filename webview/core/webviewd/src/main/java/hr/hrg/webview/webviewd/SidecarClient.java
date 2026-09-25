@@ -33,4 +33,13 @@ public interface SidecarClient {
      *         the LSP round trip that follows is described in {@link LspHost#lineNavigationNote()}
      */
     boolean jump(String absolutePath, int line, int column);
+
+    /**
+     * Asks the sidecar to have an edit applied in the editor's <b>buffer</b> over LSP, so the reader sees it in
+     * the editor's own undo stack and the file on disk is untouched until they save.
+     *
+     * @return true only when the editor reported that it applied the edit; anything else means the caller should
+     *         write the file itself
+     */
+    boolean applyEdit(String absolutePath, java.util.List<hr.hrg.webview.core.TextEdit> edits);
 }

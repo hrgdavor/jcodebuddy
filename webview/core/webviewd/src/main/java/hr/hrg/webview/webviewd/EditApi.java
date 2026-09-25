@@ -28,7 +28,7 @@ import java.util.Map;
 final class EditApi {
 
     /** The request body, with boxed fields so "absent" is distinguishable from "zero". */
-    record Payload(String filePath, String expectedDigest, List<EditDto> edits, Boolean dryRun) {
+    record Payload(String filePath, String expectedDigest, List<EditDto> edits, Boolean dryRun, String target) {
 
         record EditDto(Integer startLine, Integer startColumn, Integer endLine, Integer endColumn, String newText) {
         }
@@ -64,11 +64,31 @@ final class EditApi {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    /** A parsed request and where the caller wants it applied. */
+    record Routed(EditRequest request, String target) {
+
+        /** True when the caller explicitly asked for the editor's buffer. */
+        boolean bufferRequested() {
+            return "buffer".equals(target);
+        }
+
+        /** True when the caller explicitly asked for the file on disk. */
+        boolean diskRequested() {
+            return "disk".equals(target);
+        }
+    }
+
     private EditApi() {
     }
 
-    /** Parses a request body, or throws {@link IllegalArgumentException} with something a page can act on. */
-    static EditRequest parse(String body, boolean defaultDryRun) {
+    /**
+     * Parses a request body, or throws {@link IllegalArgumentException} with something a page can act on.
+     *
+     * <p>{@code target} is {@code auto} (the default: the editor's buffer when the host can, otherwise disk),
+     * {@code buffer} (the editor's own undo stack, never disk), or {@code disk} (this host's own write, even
+     * when an editor is attached).
+     */
+    static Routed parseRouted(String body, boolean defaultDryRun) {
         Payload payload;
         try {
             payload = GSON.fromJson(body, Payload.class);
@@ -78,7 +98,11 @@ final class EditApi {
         if (payload == null) {
             throw new IllegalArgumentException("the request body is empty");
         }
-        return payload.toRequest(defaultDryRun);
+        String target = payload.target() == null ? "auto" : payload.target().trim().toLowerCase(java.util.Locale.ROOT);
+        if (!"auto".equals(target) && !"buffer".equals(target) && !"disk".equals(target)) {
+            throw new IllegalArgumentException("target must be auto, buffer or disk, was '" + payload.target() + "'");
+        }
+        return new Routed(payload.toRequest(defaultDryRun), target);
     }
 
     /** The status a caller sees for an outcome. */
@@ -119,5 +143,36 @@ final class EditApi {
     /** The kebab-case spelling a page reads, rather than the enum's SCREAMING_CASE. */
     static String reasonName(EditService.Reason reason) {
         return reason.name().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+    }
+
+    /**
+     * The answer when the editor applied the change in its own buffer.
+     *
+     * <p>{@code target: "buffer"} is the field that matters: the file on disk still holds what
+     * {@code expectedDigest} described until the reader saves, so a page that wants to keep editing must decide
+     * whether it is tracking the buffer or the file. That is stated in the body rather than left to be
+     * discovered, and {@code digest} is the digest the buffer now has.
+     */
+    static String bufferBodyOf(EditService.Outcome proposal) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("applied", true);
+        body.put("target", "buffer");
+        body.put("digest", proposal.digest());
+        if (proposal.unifiedDiff() != null && !proposal.unifiedDiff().isEmpty()) {
+            body.put("unifiedDiff", proposal.unifiedDiff());
+        }
+        body.put("detail", "applied in the editor's buffer over LSP; the file on disk is unchanged until the "
+                + "editor saves, and the reader can undo it with the editor's own undo");
+        return GSON.toJson(body);
+    }
+
+    /** The answer when a page asked for the buffer and the attached host cannot provide one. */
+    static String noBufferBody(String hostName) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("applied", false);
+        body.put("reason", "no-buffer-edit");
+        body.put("detail", "target 'buffer' was requested but host '" + hostName
+                + "' does not declare the edit capability; ask for target 'disk' to have this host write the file");
+        return GSON.toJson(body);
     }
 }

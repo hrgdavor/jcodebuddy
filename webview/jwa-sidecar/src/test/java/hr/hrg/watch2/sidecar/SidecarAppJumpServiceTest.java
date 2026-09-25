@@ -189,7 +189,7 @@ public class SidecarAppJumpServiceTest {
         server.initialize(params).get();
 
         String attached = drain(get(port, "/health", null, null));
-        assertTrue(attached, attached.contains("\"capabilities\":[\"open\",\"select\"]"));
+        assertTrue(attached, attached.contains("\"capabilities\":[\"edit\",\"open\",\"select\"]"));
     }
 
     @Test

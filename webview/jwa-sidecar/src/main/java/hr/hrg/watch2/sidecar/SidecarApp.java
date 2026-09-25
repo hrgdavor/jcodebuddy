@@ -49,6 +49,40 @@ public class SidecarApp {
     private static final String PATH_JUMP = "/jump";
     private static final String PATH_HEALTH = "/health";
 
+    /**
+     * The route {@code webviewd} calls to have an edit applied in the client's buffer instead of on disk:
+     * {@code POST /applyEdit {uri, edits:[…]}}.
+     *
+     * <p>A write, so unlike {@code /jump} it requires the token rather than accepting an allowed origin: the
+     * same reasoning as plan D8 for the host's own surface. It exists because the process holding the editor's
+     * LSP connection is this one, and the two faces have not been folded together yet (plan question 4).
+     */
+    private static final String PATH_APPLY_EDIT = "/applyEdit";
+
+    private static int number(Object value) {
+        if (value instanceof Number number) {
+            return Math.max(1, number.intValue());
+        }
+        throw new IllegalArgumentException("line and column must be numbers");
+    }
+
+    /**
+     * The token-only rule for state-changing routes: an allowed {@code Origin} is not enough, because every page
+     * in the reader's browser shares that rule.
+     */
+    private static boolean isAuthorizedWrite(HttpExchange exchange, AllowedOrigins allowedOrigins,
+                                            String configuredToken) {
+        if (configuredToken.isEmpty()) {
+            return false;
+        }
+        String header = exchange.getRequestHeaders().getFirst("X-WebView-Token");
+        if (configuredToken.equals(header)) {
+            return true;
+        }
+        Map<String, String> params = parseQuery(exchange.getRequestURI().getQuery());
+        return configuredToken.equals(params.get("token"));
+    }
+
     public static void main(String[] args) {
         try {
             startServer(System.in, System.out);
@@ -108,6 +142,58 @@ public class SidecarApp {
         // Loopback explicitly: passing no address binds 0.0.0.0, which exposes the endpoint to the LAN.
         HttpServer httpServer = HttpServer.create(
                 new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+
+        httpServer.createContext(PATH_APPLY_EDIT, exchange -> {
+            try {
+                if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(204, -1);
+                    return;
+                }
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(405, -1);
+                    return;
+                }
+                if (!isAuthorizedWrite(exchange, allowedOrigins, configuredToken)) {
+                    respond(exchange, 403, MAPPER.writeValueAsBytes(Map.of(
+                            "error", "Forbidden: configure jwa.sidecar.allowedOrigins or jwa.sidecar.token")));
+                    return;
+                }
+                if (!server.isEditorAttached()) {
+                    respond(exchange, 404, MAPPER.writeValueAsBytes(Map.of(
+                            "error", "NO_HOST", "detail", "no LSP client has completed initialize yet")));
+                    return;
+                }
+                Map<String, Object> request = MAPPER.readValue(exchange.getRequestBody(), Map.class);
+                Object uri = request.get("uri");
+                Object rawEdits = request.get("edits");
+                if (!(uri instanceof String fileUri) || !(rawEdits instanceof java.util.List<?> list)) {
+                    respond(exchange, 400, MAPPER.writeValueAsBytes(Map.of(
+                            "error", "the body must be {uri, edits:[{startLine,startColumn,endLine,endColumn,newText}]}")));
+                    return;
+                }
+                java.util.List<hr.hrg.webview.core.TextEdit> edits = new java.util.ArrayList<>();
+                for (Object item : list) {
+                    if (!(item instanceof Map<?, ?> map)) {
+                        respond(exchange, 400, MAPPER.writeValueAsBytes(Map.of("error", "bad edit entry")));
+                        return;
+                    }
+                    Object newText = map.get("newText");
+                    edits.add(new hr.hrg.webview.core.TextEdit(
+                            number(map.get("startLine")), number(map.get("startColumn")),
+                            number(map.get("endLine")), number(map.get("endColumn")),
+                            newText == null ? "" : String.valueOf(newText)));
+                }
+                boolean applied = server.applyEdit(fileUri, edits);
+                respond(exchange, applied ? 200 : 409, MAPPER.writeValueAsBytes(Map.of(
+                        "applied", applied,
+                        "detail", applied ? "applied in the client's buffer"
+                                : "the client refused the workspace edit")));
+            } catch (Exception e) {
+                respond(exchange, 400, MAPPER.writeValueAsBytes(Map.of("error", String.valueOf(e.getMessage()))));
+            } finally {
+                exchange.close();
+            }
+        });
 
         httpServer.createContext(PATH_JUMP, exchange -> {
             String origin = exchange.getRequestHeaders().getFirst("Origin");
@@ -188,7 +274,7 @@ public class SidecarApp {
                 // can only answer NO_HOST is exactly the dead-link failure the link contract's section 4
                 // forbids. This was corrected on 2026-09-25, when webviewd started deciding from this
                 // document whether to route navigation here at all.
-                Set<String> capabilities = server.isEditorAttached() ? Set.of("open", "select") : Set.of();
+                Set<String> capabilities = server.isEditorAttached() ? Set.of("open", "select", "edit") : Set.of();
                 byte[] body = HostHealth.of(HostHealth.PLUGIN_SIDECAR, port,
                         allowedOrigins.values().size(), !configuredToken.isEmpty(),
                         capabilities).toJson().getBytes(StandardCharsets.UTF_8);
@@ -199,8 +285,7 @@ public class SidecarApp {
         });
 
         httpServer.setExecutor(null);
-        httpServer.start();
-        // Use err because out is for LSP
+        httpServer.start();        // Use err because out is for LSP
         System.err.println("Jump service started on http://127.0.0.1:" + port + PATH_JUMP
                 + (allowedOrigins.isEmpty() && configuredToken.isEmpty()
                         ? " (denying every caller until jwa.sidecar.allowedOrigins or jwa.sidecar.token is set)"

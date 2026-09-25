@@ -23,13 +23,13 @@ calling and watching something fail.
 | open a file at a line | `GET /open` (frozen) | `open` | `webviewd` (LSP and CLI adapters) + both IDE hosts |
 | serve a project file | `GET /file/<abs path>` (frozen) | `serveFile` | `webviewd`, `webview-vscode` |
 | serve a page **with the bridge injected** | `GET /page/<abs path>` | `serveFile` | `webviewd` |
+| **propose + apply an edit** | `POST /api/v1/applyEdit`, `/api/v1/diff` | `edit` | `webviewd`: the buffer when the host declares `edit`, otherwise its own atomic write |
 | reveal in the project tree | `POST /reveal` | `reveal` | Phase 3 |
-| select a range | `POST /select` | `select` | the sidecar's LSP host already reports it; no HTTP verb yet |
-| propose + apply an edit | `POST /applyEdit` | `edit` | Phase 3 |
-| show a diff of a proposal | `POST /diff` | `diff` | Phase 3 |
-| undo / redo the last applied edit | `POST /undo`, `POST /redo` | `undo` | Phase 3 |
+| select a range | `POST /select` | `select` | the LSP host reports it; no HTTP verb yet |
+| show a diff of a proposal | included in `/api/v1/diff` and in every apply response | `diff` | `webviewd` |
+| undo / redo the last applied edit | `POST /api/v1/undo`, `/api/v1/redo` | `undo` | `webviewd` (its own checkpoints; the editor's own undo is the reader's `Ctrl+Z`) |
 | notify the host a page changed | `POST /refresh` | `refresh` | Phase 3 |
-| stream file-change events (SSE) | `GET /events` | `watch` | Phase 3 |
+| stream file-change events (SSE) | `GET /api/v1/events` | `watch` | `webviewd` |
 
 `window.openFile` stays exactly as frozen in every host. A page that only needs navigation needs none of the
 rest.
@@ -166,7 +166,7 @@ names what to check.
 
 | Adapter | `lineNavigation` | Reaches the editor by |
 | --- | --- | --- |
-| `lsp` | `exact` | asking the JWA sidecar (which holds Zed's LSP connection) to send `window/showDocument` with a selection — the sidecar's `/jump` route, over loopback |
+| `lsp` | `exact` | asking the JWA sidecar (which holds Zed's LSP connection) to send `window/showDocument` with a selection — the sidecar's `/jump` route, over loopback. It also carries `edit`: the sidecar sends `workspace/applyEdit`, so a change lands in the editor's buffer and its undo stack ([edit API](webview-edit-api.md) § 6) |
 | `zed-cli` | `file-only` | `Zed.exe <absolute path>`; the documented `path:line:column` form is refused by Zed 1.21.0 on Windows ([PHASE0-ZED-FINDINGS.md](../PHASE0-ZED-FINDINGS.md) § B) |
 | `null` | `none` | nothing: every editor verb is refused and a page should fall back to the clipboard |
 

@@ -1,9 +1,9 @@
 # Plan — grow `webview` from two IDE plugins into one product: a localhost page host, an LSP sidecar, and a ZED host
 
-Status: **Phases 0, 1, 2 delivered (2026-09-25) plus Phase 5's navigation half as a spike, and Phase 3's
-headless half (the write contract and its HTTP surface); the write verbs' editor-buffer paths, the page-side
-client, the extension's `process:exec` half and Phase 6 are not started.** Phase 0's results and two
-corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); the hosts and their
+Status: **Phases 0, 1, 2 delivered (2026-09-25) plus Phase 5's navigation half as a spike, and Phase 3 with
+both its headless half and the LSP buffer path (gate (e) observed on Zed); the JetBrains/VS Code buffer paths,
+the page-side client, the extension's `process:exec` half and Phase 6 are not started.** Phase 0's results and
+two corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); the hosts and their
 contracts are in [`doc/webview-host-api.md`](doc/webview-host-api.md) and
 [`doc/webview-edit-api.md`](doc/webview-edit-api.md).
 Scope: the whole `webview/` product (today: `webview-jetbrains`, `webview-vscode`, `doc/`, `examples/`) plus the
@@ -422,10 +422,20 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > 3. **Windows reports a child's change against the parent directory's entry too**, so the first frame named
 >    `src` rather than `src/A.java`. Directories are now registered internally but never reported to a page.
 >
-> **Still open in this phase:** the editor-buffer paths (JetBrains `WriteCommandAction`, VS Code `WorkspaceEdit`)
-> and Zed's `workspace/applyEdit` — the LSP write transport the plan's gate (e) asks for — plus the page-side
-> `webview-client.js` and an example page that edits. Checkpoints are in-memory, so a restart forgets the undo
-> history; that is documented rather than hidden.
+> **Still open in this phase:** gate (d) — the JetBrains host applying an edit into the IDE's own undo stack
+> (VS Code's `WorkspaceEdit` path is the same shape) — and the page-side `webview-client.js` with an example
+> page that edits. Checkpoints are in-memory, so a restart forgets the undo history; that is documented rather
+> than hidden.
+>
+> **Gate (e) was delivered and OBSERVED the same day**, once the LSP write transport existed: the sidecar now
+> sends `workspace/applyEdit` (`documentChanges`, zero-based ranges, `version: null`), `webviewd` routes an
+> `applyEdit` to the buffer whenever the attached host declares `edit` (with `target: auto|buffer|disk` to make
+> the destination explicit, and `409 no-buffer-edit` rather than a silent fall back when a page asks for a
+> buffer no host can provide), and the digest guard still runs *before* any editor is asked. On Zed 1.21.0 the
+> maintainer observed the requested line appear in `Sample.rs` as an **unsaved** change, and **one `Ctrl+Z`
+> removed it and left the tab clean** — the editor's own undo stack, with the file on disk byte-identical
+> throughout. The two-process hop needs the sidecar's token, like the navigation hop, which is another argument
+> for question 4's one-process answer.
 
 ### Phase 4 — ZED tier 3: the extension, so Zed can address the host at all (2–3 days, promoted by Phase 0)
 - `webview/zed/webview-zed-dev-extension/`: `extension.toml` + a minimal Rust crate that (i) **registers the

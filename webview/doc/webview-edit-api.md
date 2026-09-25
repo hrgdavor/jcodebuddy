@@ -1,9 +1,10 @@
 # The edit API — proposing and applying changes from a page
 
 Status: **the headless half is implemented and tested** (2026-09-25, Phase 3): `webview-core`'s `EditService`
-and `webviewd`'s `/api/v1/*` routes. The editor-buffer halves — JetBrains' `WriteCommandAction`, VS Code's
-`WorkspaceEdit`, and Zed's `workspace/applyEdit` over LSP — are **specified here and not yet wired**, and this
-document says so at each point rather than implying parity.
+and `webviewd`'s `/api/v1/*` routes. **The editor-buffer path works over LSP and has been observed on Zed
+1.21.0**: an edit arrived in the buffer as an unsaved change and a single `Ctrl+Z` removed it. JetBrains'
+`WriteCommandAction` and VS Code's `WorkspaceEdit` are **specified here and not yet wired**, and this document
+says so at each point rather than implying parity.
 
 Decisions this implements: [the plan](../PLAN-webview-suite.md) § 6.2 (digest, `dryRun`, undo) and § 10 Q1,
 answered 2026-09-25 as **(c) then (a)**: a page proposes, the reader sees a diff, and the bytes are written only
@@ -30,11 +31,27 @@ response digest is the *future* one, so a page can render the result and chain t
 
 | Route | Method | Auth | Body | Answers |
 | --- | --- | --- | --- | --- |
-| `/api/v1/applyEdit` | POST | **token** | `{filePath, expectedDigest, edits, dryRun?}` | `200` applied, `200` `no-change`, `400` `invalid-edit`/`invalid-path`, `403` `outside-project`, `404` `not-found`, `405` non-POST, `409` `stale`, `429` `rate-limited`, `500` `not-readable` |
+| `/api/v1/applyEdit` | POST | **token** | `{filePath, expectedDigest, edits, dryRun?, target?}` | `200` applied, `200` `no-change`, `400` `invalid-edit`/`invalid-path`, `403` `outside-project`, `404` `not-found`, `405` non-POST, `409` `stale`/`no-buffer-edit`, `429` `rate-limited`, `500` `not-readable` |
 | `/api/v1/diff` | POST | **token** | same, `dryRun` forced true | as above, always `applied: false` |
 | `/api/v1/undo` | POST | **token** | `{filePath}` | `200`, `400`, `403`, `404` `nothing-to-undo`, `409` `stale`, `429` |
 | `/api/v1/redo` | POST | **token** | `{filePath}` | `200`, `400`, `403`, `404` `nothing-to-redo`, `409` `stale`, `429` |
 | `/api/v1/events` | GET | **token** | — | `200` `text/event-stream` until the client goes away |
+
+`target` decides **who performs the change**, and it is the field that makes the two possible destinations
+explicit rather than implicit:
+
+| `target` | Behaviour |
+| --- | --- |
+| `auto` (default) | the attached editor's **buffer** when the host declares `edit`, otherwise this host's own write to disk |
+| `buffer` | the editor's buffer over LSP; `409 no-buffer-edit` when no attached host can do it — never a silent fall back to disk |
+| `disk` | this host's own atomic write, even when an editor is attached |
+
+A buffer apply answers `{"applied": true, "target": "buffer", "digest": …, "unifiedDiff": …}` with a `detail`
+saying the file on disk is unchanged until the editor saves. That asymmetry is the point of the field: a page
+that keeps editing has to know whether it is tracking the **buffer** or the **file**, and the digest it gets
+back describes the buffer. The digest guard still applies first — the edits are checked against the file the
+page actually read before any editor is asked (see § 4, rule 2) — and a host that refuses falls back to the
+disk write with `target` absent, which is the documented behaviour rather than an error.
 
 **The token, not merely an allowed `Origin`.** `/open` accepts either, because it only moves a caret. A
 state-changing route accepts only the token (plan D8): the origin rule is shared by every page the reader has
@@ -107,17 +124,23 @@ data: {"paths":["src/A.java","webview/PLAN-webview-suite.md"]}
 - The stream ends when the client disconnects, which the host notices on the next frame — at most one
   keep-alive (15 s) later.
 
-## 6. What is not implemented yet
+## 6. What is implemented, and what is not
 
-- **The editor-buffer path.** When a host declares `edit`, the plan is that the change goes into the editor's
-  buffer and its own undo stack instead of to disk (JetBrains: `WriteCommandAction`; VS Code:
-  `WorkspaceEdit`). Nothing in `webviewd` does that today, and the capability list it publishes therefore does
-  not claim it.
-- **Zed's `workspace/applyEdit`.** Phase 0 measured that Zed applies such an edit to its buffer and not to
-  disk; the LSP side of the sidecar does not send it yet. The write contract's transports are HTTP-only for now.
+- **The LSP buffer path: implemented and observed.** When the attached host declares `edit`, `webviewd` asks it
+  to apply the change; for Zed that means the sidecar sends `workspace/applyEdit` with a `documentChanges` entry
+  whose ranges are zero-based and whose `textDocument.version` is `null` (the buffer may legitimately differ
+  from the file, and refusing on a version we cannot see would make the feature unusable).**Observed on Zed
+  1.21.0, Windows, by the maintainer (2026-09-25):** the requested line appeared in the buffer as an unsaved
+  change, and **a single `Ctrl+Z` removed it and left the tab clean** — the change is in the editor's own undo
+  stack, and the file on disk was never touched. The two-process hop (page → `webviewd` → the sidecar's
+  loopback `/applyEdit` → LSP) needs the sidecar's token, like the navigation hop.
+- **The JetBrains and VS Code buffer paths are not wired.** Both are specified (JetBrains: `WriteCommandAction`;
+  VS Code: `WorkspaceEdit`) and neither host declares `edit` today, so a request with `target: "buffer"` from a
+  page talking to them is refused rather than silently written to disk.
 - **The page-side client.** `webview-client.js` (the full ladder, including the diff-and-accept step) and an
-  example page that edits are Phase 3's remaining half.
+  example page that edits are still to come.
 - **Checkpoint persistence.** The undo history lives in the running host; a restart forgets it, which is
   documented rather than hidden.
 - **`/jump` is still a separate route.** Plan § 6.3 folds it into `POST /api/v1/open`; that has not happened,
-  and `webviewd`'s LSP adapter still calls it.
+  and `webviewd`'s LSP adapter still calls it. The sidecar's `/applyEdit` route is the same kind of temporary
+  bridge between the two processes, and would disappear with them (plan question 4).
