@@ -3,14 +3,28 @@ import * as http from 'http';
 import * as url from 'url';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import {
     BridgeConfig,
+    EditRequest,
     RateLimiter,
     PRODUCTION_RATE_LIMIT,
+    bufferEditBody,
     countAllowedOrigins,
+    decideEdit,
     decideRoute,
-    healthDocument
+    decideWriteRoute,
+    healthDocument,
+    mapEdits,
+    parseEditRequest,
+    writeRefusalBody
 } from './BridgePolicy';
+
+/**
+ * The largest write body this host will read. An edit request is a range and some text; anything larger is not
+ * one, and reading it unbounded would let a caller spend this process's memory.
+ */
+const MAX_WRITE_BODY = 1024 * 1024;
 
 /**
  * The VS Code HTTP bridge: the fallback for a page opened in an ordinary browser, and the file server the
@@ -83,6 +97,13 @@ export class HttpBridge {
         const bridgeConfig = this.config();
         const origin = req.headers.origin;
 
+        // The write routes are decided first and separately: they require the token (an allowed Origin is not
+        // enough for a state-changing route, plan D8) and they carry a JSON body, which the read routes do not.
+        if (parsedUrl.pathname && parsedUrl.pathname.startsWith('/api/v1/')) {
+            this.handleWrite(req, res, parsedUrl.pathname, bridgeConfig, origin);
+            return;
+        }
+
         // The rate limit is acquired here rather than inside the route, so the decision function can be
         // tested with "would this be refused" as an input instead of by exhausting a limiter.
         const rateLimited = !this.rateLimiter.tryAcquire();
@@ -109,7 +130,10 @@ export class HttpBridge {
                 this.boundPort(),
                 countAllowedOrigins(bridgeConfig.allowedOrigins),
                 false,
-                ['open', 'serveFile']
+                // `edit` is advertised because the buffer path exists (BridgePolicy.decideEdit + applyEdit here);
+                // the rule this codebase holds to is that a capability is advertised when it is implemented, and
+                // not before.
+                ['edit', 'open', 'serveFile']
             );
             res.setHeader('Content-Type', 'application/json');
             res.writeHead(200);
@@ -169,6 +193,133 @@ export class HttpBridge {
     private boundPort(): number {
         const address = this.server?.address();
         return typeof address === 'object' && address ? address.port : 0;
+    }
+
+    /**
+     * The write verbs: `applyEdit` into the editor's buffer, and a refusal for the three that only make sense
+     * for a host that owns the file.
+     *
+     * This is the thin half — read the body, hash the file, call the decision, and make the one VS Code call.
+     * The reading, the digest comparison and the statuses are `BridgePolicy`, which the unit test asserts without
+     * a VS Code runtime; the single platform call is `vscode.workspace.applyEdit`.
+     */
+    private handleWrite(req: http.IncomingMessage, res: http.ServerResponse, pathname: string,
+                        bridgeConfig: BridgeConfig, origin: string | null | undefined) {
+        const suppliedToken = (req.headers['x-webview-token'] as string | undefined) ?? undefined;
+        const route = decideWriteRoute(req.method, pathname, bridgeConfig, origin, suppliedToken);
+        const json = (status: number, body: string) => {
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(status);
+            res.end(body);
+        };
+
+        if (route.action === 'notFound') {
+            res.writeHead(404);
+            res.end('Not Found');
+            return;
+        }
+        if (route.action === 'methodNotAllowed') {
+            res.writeHead(405);
+            res.end('Method Not Allowed');
+            return;
+        }
+        if (route.action === 'forbidden') {
+            res.writeHead(403);
+            res.end('Forbidden: the token is required for state-changing routes');
+            return;
+        }
+        if (route.corsGrant) {
+            this.sendCorsHeaders(res, route.corsGrant);
+        }
+
+        if (route.verb !== 'applyEdit') {
+            // diff, undo and redo are the file owner's verbs: a diff needs the bytes, and undo needs the
+            // checkpoints a disk write records. This host has an editor whose own undo is the reader's review,
+            // so it names the host that can do the rest instead of pretending.
+            json(409, writeRefusalBody('no-disk-write',
+                `'${route.verb}' needs a host that owns the file (its diff and its undo history): this host `
+                + 'edits the editor\'s buffer, so ask a host that serves the project, such as webviewd'));
+            return;
+        }
+
+        let body = '';
+        req.on('data', (chunk) => {
+            body += chunk;
+            if (body.length > MAX_WRITE_BODY) {
+                req.destroy();
+            }
+        });
+        req.on('end', async () => {
+            const parsed = parseEditRequest(body, true);
+            if (!parsed.ok) {
+                json(parsed.status, writeRefusalBody(parsed.reason, parsed.detail));
+                return;
+            }
+            const digest = this.digestOf(parsed.request.filePath);
+            const hasEditor = this.hasOpenDocument(parsed.request.filePath);
+            const decision = decideEdit(parsed.request, digest, hasEditor);
+            if (!decision.ok) {
+                json(decision.status, writeRefusalBody(decision.reason, decision.detail, decision.digest));
+                return;
+            }
+            if (!decision.apply) {
+                // A proposal: the digest and the fact that nothing was written. This host does not produce a
+                // unified diff (that is the file owner's job) — the editor's own undo is the review step here.
+                json(200, JSON.stringify({
+                    applied: false,
+                    target: 'buffer',
+                    digest,
+                    detail: 'dryRun: nothing was written; this host applies into the editor buffer where the '
+                        + 'editor\'s own undo is the review step'
+                }));
+                return;
+            }
+            const applied = await this.applyToBuffer(parsed.request);
+            if (!applied) {
+                json(409, writeRefusalBody('no-buffer-edit', 'VS Code refused the workspace edit'));
+                return;
+            }
+            json(200, bufferEditBody(digest ?? '', true,
+                "applied in the editor's buffer; the file on disk is unchanged until the editor saves, and the "
+                + "reader can undo it with the editor's own undo"));
+        });
+    }
+
+    /** `sha256:<hex>` over the file's bytes, or null when it cannot be read. */
+    private digestOf(filePath: string): string | null {
+        try {
+            const bytes = fs.readFileSync(filePath);
+            return `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Whether this file has an open text document, which is what a buffer edit needs. */
+    private hasOpenDocument(filePath: string): boolean {
+        return vscode.workspace.textDocuments.some((document) => {
+            const candidate = document.uri.fsPath.replace(/\\/g, '/');
+            return candidate.toLowerCase() === filePath.replace(/\\/g, '/').toLowerCase();
+        });
+    }
+
+    /** The one platform call: a `WorkspaceEdit` full of ranges, which VS Code applies to its buffers. */
+    private async applyToBuffer(request: EditRequest): Promise<boolean> {
+        const document = vscode.workspace.textDocuments.find((candidate) => {
+            const path = candidate.uri.fsPath.replace(/\\/g, '/');
+            return path.toLowerCase() === request.filePath.replace(/\\/g, '/').toLowerCase();
+        });
+        if (!document) {
+            return false;
+        }
+        const workspaceEdit = new vscode.WorkspaceEdit();
+        for (const mapped of mapEdits(request.edits)) {
+            const range = new vscode.Range(
+                mapped.range.start.line, mapped.range.start.character,
+                mapped.range.end.line, mapped.range.end.character);
+            workspaceEdit.replace(document.uri, range, mapped.newText);
+        }
+        return vscode.workspace.applyEdit(workspaceEdit);
     }
 
     /** Serves one file that {@link decideRoute} has already authorized and decoded. */

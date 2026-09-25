@@ -440,6 +440,15 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > asking it for a buffer edit is refused rather than written to — and checkpoint persistence across restarts, which
 > is documented rather than hidden.
 >
+> **VS Code's buffer path followed the same day**, so that note is history rather than a gap:
+> `decideWriteRoute` / `decideEdit` / `parseEditRequest` / `mapEdits` in `BridgePolicy.ts` decide, the bridge makes
+> the one `vscode.workspace.applyEdit` call, and `/health` advertises `edit`. Its surface is narrower by design —
+> a disk write is the file owner's job (its atomic replace, its checkpoints in core's `EditService`), while this
+> host has the editor's own undo — so `target: "disk"`, `/diff`, `/undo` and `/redo` are refused with
+> `409 no-disk-write`, naming `webviewd`. `npm run test:unit` is **161 assertions**, all green, with no VS Code
+> download. As with JetBrains, the change appearing in a running editor's undo stack is the maintainer's
+> observation and is not claimed here.
+>
 > **Gate (e) was delivered and OBSERVED the same day**, once the LSP write transport existed: the sidecar now
 > sends `workspace/applyEdit` (`documentChanges`, zero-based ranges, `version: null`), `webviewd` routes an
 > `applyEdit` to the buffer whenever the attached host declares `edit` (with `target: auto|buffer|disk` to make

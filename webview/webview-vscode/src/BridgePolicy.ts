@@ -21,7 +21,7 @@
 /** The authorization and CORS configuration a bridge runs with. */
 export interface BridgeConfig {
     /** Comma-separated origins, or '' for none. An empty list denies every caller. */
-    allowedOrigins: string;
+    allowedOrigins?: string;
     /** Optional shared secret; when set, presenting it authorizes a caller with no usable Origin. */
     token?: string;
 }
@@ -299,3 +299,233 @@ export function decideRoute(
  * `BridgePolicy.test.js` covers the decode-and-jail half here.
  */
 export const PageRoute = { PREFIX: '/file/' };
+
+/**
+ * The write contract's routes and their decision, as values.
+ *
+ * This host's write surface is deliberately narrower than `webviewd`'s, and the reason is architectural rather
+ * than a gap: a disk write is the *host that owns the file*'s job (its atomic replace, its checkpoints, its
+ * line-ending rules — all of them core's `EditService`), while a VS Code host has something better for the
+ * reader, an editor whose own undo stack holds the change. So this host applies edits to the **buffer** and
+ * refuses the routes that only make sense for an owner of the file, naming the host that can do them.
+ *
+ * Everything here is a value: no VS Code API, no socket. `HttpBridge.ts` does the reading, hashing and the one
+ * `vscode.workspace.applyEdit` call.
+ */
+export type WriteVerb = 'applyEdit' | 'diff' | 'undo' | 'redo';
+
+export const WriteRoutes: Record<string, WriteVerb> = {
+    '/api/v1/applyEdit': 'applyEdit',
+    '/api/v1/diff': 'diff',
+    '/api/v1/undo': 'undo',
+    '/api/v1/redo': 'redo'
+};
+
+export type WriteRoute =
+    | { action: 'write'; verb: WriteVerb; corsGrant: string | null }
+    | { action: 'forbidden'; reason: 'origin' | 'token' }
+    | { action: 'notFound' }
+    | { action: 'methodNotAllowed' };
+
+/**
+ * Whether this request may reach the write verbs.
+ *
+ * The token is required, and an allowed `Origin` is not enough: a state-changing route must not be reachable by
+ * any page the reader happens to have open (plan D8). This is stricter than `/open`, which accepts either, and
+ * the difference is the point.
+ */
+export function decideWriteRoute(
+    method: string | null | undefined,
+    requestPath: string | null | undefined,
+    config: BridgeConfig,
+    origin: string | null | undefined,
+    suppliedToken: string | null | undefined
+): WriteRoute {
+    const grant = corsGrant(config.allowedOrigins, origin);
+    const verb = requestPath ? WriteRoutes[requestPath] : undefined;
+    if (!verb) {
+        return { action: 'notFound' };
+    }
+    if (method !== 'POST') {
+        return { action: 'methodNotAllowed' };
+    }
+    const token = config.token ?? '';
+    if (token === '' || suppliedToken !== token) {
+        return { action: 'forbidden', reason: 'token' };
+    }
+    return { action: 'write', verb, corsGrant: grant };
+}
+
+/** One edit as a page spells it: one-based line and column, inclusive start, exclusive end. */
+export interface EditDto {
+    startLine: number;
+    startColumn: number;
+    endLine: number;
+    endColumn: number;
+    newText: string;
+}
+
+export interface EditRequest {
+    filePath: string;
+    expectedDigest: string;
+    edits: EditDto[];
+    dryRun: boolean;
+    target: 'auto' | 'buffer' | 'disk';
+}
+
+export type EditParse =
+    | { ok: true; request: EditRequest }
+    | { ok: false; status: number; reason: string; detail: string };
+
+/**
+ * Reads a request body into an edit request, or says why it cannot.
+ *
+ * The messages match the Java host's where a page might read them, because a page should not have to learn two
+ * vocabularies for one contract.
+ */
+export function parseEditRequest(body: string | null | undefined, defaultDryRun: boolean): EditParse {
+    let parsed: any;
+    try {
+        parsed = JSON.parse(body ?? '');
+    } catch (error) {
+        return invalid(`the request body is not valid JSON: ${(error as Error).message}`);
+    }
+    if (parsed === null || typeof parsed !== 'object') {
+        return invalid('the request body is empty');
+    }
+    if (typeof parsed.filePath !== 'string' || parsed.filePath.trim() === '') {
+        return invalid('the request must name a filePath');
+    }
+    if (typeof parsed.expectedDigest !== 'string' || parsed.expectedDigest.trim() === '') {
+        return invalid('the request must carry expectedDigest: the digest of the content the page read');
+    }
+    const target = typeof parsed.target === 'string' ? parsed.target.toLowerCase() : 'auto';
+    if (target !== 'auto' && target !== 'buffer' && target !== 'disk') {
+        return invalid(`target must be auto, buffer or disk, was '${parsed.target}'`);
+    }
+    const edits: EditDto[] = [];
+    for (const edit of Array.isArray(parsed.edits) ? parsed.edits : []) {
+        if (!edit || typeof edit !== 'object'
+            || !Number.isInteger(edit.startLine) || !Number.isInteger(edit.startColumn)
+            || !Number.isInteger(edit.endLine) || !Number.isInteger(edit.endColumn)) {
+            return invalid('every edit needs startLine, startColumn, endLine, endColumn');
+        }
+        if (edit.startLine < 1 || edit.startColumn < 1 || edit.endLine < 1 || edit.endColumn < 1) {
+            return invalid('line and column are one-based');
+        }
+        if (edit.endLine < edit.startLine
+            || (edit.endLine === edit.startLine && edit.endColumn < edit.startColumn)) {
+            return invalid('an edit cannot end before it starts');
+        }
+        edits.push({
+            startLine: edit.startLine,
+            startColumn: edit.startColumn,
+            endLine: edit.endLine,
+            endColumn: edit.endColumn,
+            newText: typeof edit.newText === 'string' ? edit.newText : ''
+        });
+    }
+    return {
+        ok: true,
+        request: {
+            filePath: parsed.filePath,
+            expectedDigest: parsed.expectedDigest,
+            edits,
+            dryRun: typeof parsed.dryRun === 'boolean' ? parsed.dryRun : defaultDryRun,
+            target
+        }
+    };
+}
+
+export type EditDecision =
+    | { ok: true; apply: boolean }
+    | { ok: false; status: number; reason: string; detail: string; digest?: string };
+
+/**
+ * The decision that matters: may this edit be applied to the editor's buffer?
+ *
+ * @param fileDigest the digest of the file on disk, or null when it could not be read
+ */
+export function decideEdit(
+    request: EditRequest,
+    fileDigest: string | null,
+    hasEditor: boolean
+): EditDecision {
+    if (request.target === 'disk') {
+        return {
+            ok: false,
+            status: 409,
+            reason: 'no-disk-write',
+            detail: "target 'disk' needs a host that owns the file: this host edits the editor's buffer and "
+                + 'leaves the write to a host that serves the project, such as webviewd'
+        };
+    }
+    if (fileDigest === null) {
+        return {
+            ok: false,
+            status: 404,
+            reason: 'not-found',
+            detail: `the host could not read '${request.filePath}'`
+        };
+    }
+    if (fileDigest.toLowerCase() !== request.expectedDigest.toLowerCase()) {
+        // The same refusal the Java host gives, for the same reason: never apply edits computed against content
+        // the page has not seen. The current digest comes back so the page can re-read and propose again.
+        return {
+            ok: false,
+            status: 409,
+            reason: 'stale',
+            detail: 'the file changed since it was read; re-read it and propose again',
+            digest: fileDigest
+        };
+    }
+    if (!hasEditor) {
+        return {
+            ok: false,
+            status: 409,
+            reason: 'no-buffer-edit',
+            detail: "target 'buffer' needs an open editor for this file, and this host has none"
+        };
+    }
+    return { ok: true, apply: !request.dryRun };
+}
+
+/** One range for `vscode.Range`: zero-based line and character, which is what the API wants. */
+export interface EditRange {
+    range: { start: { line: number; character: number }; end: { line: number; character: number } };
+    newText: string;
+}
+
+/** The edits a `WorkspaceEdit` will carry. Line and column are one-based here and zero-based there. */
+export function mapEdits(edits: EditDto[]): EditRange[] {
+    return edits.map((edit) => ({
+        range: {
+            start: { line: edit.startLine - 1, character: edit.startColumn - 1 },
+            end: { line: edit.endLine - 1, character: edit.endColumn - 1 }
+        },
+        newText: edit.newText
+    }));
+}
+
+/**
+ * The body a page reads for a refusal, spelled the way the Java hosts spell it.
+ *
+ * `status` is not in the body — it goes in the response line — but it is part of the decision, so the pattern
+ * below keeps the two together rather than letting a caller pick one and forget the other.
+ */
+export function writeRefusalBody(reason: string, detail: string, digest?: string): string {
+    const body: Record<string, unknown> = { applied: false, reason, detail };
+    if (digest) {
+        body.digest = digest;
+    }
+    return JSON.stringify(body);
+}
+
+/** The body for a buffer edit this host applied. */
+export function bufferEditBody(digest: string, applied: boolean, detail: string): string {
+    return JSON.stringify({ applied, target: 'buffer', digest, detail });
+}
+
+function invalid(detail: string): EditParse {
+    return { ok: false, status: 400, reason: 'invalid-edit', detail };
+}

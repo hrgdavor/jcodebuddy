@@ -144,8 +144,13 @@ data: {"paths":["src/A.java","webview/PLAN-webview-suite.md"]}
   `/api/v1/applyEdit|diff|undo|redo`, token-only like every state-changing route. The text transformation has 5
   unit tests; **gate (d) — the change appearing in the IDE's own undo stack — still needs the maintainer's eyes in
   a running IDE**, and is not claimed until then.
-- **VS Code's `WorkspaceEdit` path is not wired**: that host does not declare `edit`, so a `target: "buffer"`
-  request from a page talking to it is refused rather than silently written to disk.
+- **The VS Code buffer path is implemented and unit-tested** (2026-09-25, after the JetBrains one). That host
+  has no `EditService` and cannot import the Java core, so its surface is deliberately narrower and says so: it
+  applies an edit to the **editor's buffer** through `vscode.workspace.applyEdit` (the editor's own undo is the
+  reader's review step) and **refuses** `target: "disk"`, `/diff`, `/undo` and `/redo` with
+  `409 no-disk-write`, naming `webviewd` as the host that owns the file. The digest guard, the parse and the
+  statuses live in `BridgePolicy.ts` and are asserted by `npm run test:unit` (161 assertions), which needs no VS
+  Code download. Its `/health` now advertises `edit` alongside `open` and `serveFile`.
 - **Checkpoint persistence.** The undo history lives in `webviewd`'s process; a restart forgets it, which is
   documented rather than hidden. (The plugin builds its own `EditService` per project, so its history is
   separate.)

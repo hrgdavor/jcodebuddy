@@ -28,6 +28,9 @@ function loadVectors() {
 
 let checks = 0;
 
+/** The write surface runs with a token, since a state-changing route requires one. */
+const writeConfig = { allowedOrigins: '', token: 's3cret' };
+
 function check(condition, message) {
     checks++;
     assert.ok(condition, message);
@@ -184,6 +187,63 @@ function run() {
         'the token is an alternative to an allowed origin, not an addition to it');
     check(policy.PRODUCTION_RATE_LIMIT.count === 20 && policy.PRODUCTION_RATE_LIMIT.windowMillis === 20000,
         'the production limit matches webview-core: 20 per 20s');
+
+    // --- the write surface: the buffer path, and the verbs this host deliberately does not own ------------
+    console.log('  write routes:');
+    check(policy.decideWriteRoute('GET', '/api/v1/applyEdit', writeConfig, null, 's3cret').action
+        === 'methodNotAllowed', 'a write route is POST only');
+    check(policy.decideWriteRoute('POST', '/api/v1/applyEdit', writeConfig, null, null).action === 'forbidden',
+        'a write route is refused with no token');
+    check(policy.decideWriteRoute('POST', '/api/v1/applyEdit',
+        { allowedOrigins: 'http://localhost:3000' }, 'http://localhost:3000', null).action === 'forbidden',
+        'an allowed Origin is NOT enough for a write: the token is required (D8)');
+    check(policy.decideWriteRoute('POST', '/api/v1/applyEdit', writeConfig, null, 's3cret').verb === 'applyEdit',
+        'the right token reaches the verb');
+    check(policy.decideWriteRoute('POST', '/api/v1/nowhere', writeConfig, null, 's3cret').action === 'notFound',
+        'an unknown write route is notFound');
+
+    const digest = 'sha256:' + 'a'.repeat(64);
+    const request = {
+        filePath: 'C:/p/A.java', expectedDigest: digest, dryRun: false, target: 'auto',
+        edits: [{ startLine: 2, startColumn: 1, endLine: 2, endColumn: 4, newText: 'TWO' }]
+    };
+    check(policy.decideEdit(request, digest, true).apply === true, 'a matching digest with an editor applies');
+    check(policy.decideEdit({ ...request, dryRun: true }, digest, true).apply === false,
+        'dryRun applies nothing');
+    check(policy.decideEdit(request, 'sha256:' + 'b'.repeat(64), true).reason === 'stale',
+        'a stale digest is refused, exactly as the Java host refuses it');
+    check(policy.decideEdit(request, 'sha256:' + 'b'.repeat(64), true).digest === 'sha256:' + 'b'.repeat(64),
+        'the refusal carries the current digest so the page can re-read');
+    check(policy.decideEdit(request, null, true).reason === 'not-found',
+        'a file this host cannot read is a notFound, not a write');
+    check(policy.decideEdit(request, digest, false).reason === 'no-buffer-edit',
+        'no open editor means no buffer edit');
+    check(policy.decideEdit({ ...request, target: 'disk' }, digest, true).reason === 'no-disk-write',
+        'this host refuses target disk rather than pretending to own the file');
+    check(policy.decideEdit({ ...request, target: 'disk' }, digest, true).detail.includes('webviewd'),
+        'and it names the host that can do it');
+
+    const mapped = policy.mapEdits(request.edits);
+    check(mapped[0].range.start.line === 1 && mapped[0].range.start.character === 0,
+        "one-based line 2 column 1 becomes the API's zero-based 1:0");
+    check(mapped[0].range.end.character === 3 && mapped[0].newText === 'TWO',
+        'the exclusive end and the replacement text are passed through');
+
+    const parsed = policy.parseEditRequest(JSON.stringify(request), true);
+    check(parsed.ok === true && parsed.request.filePath === 'C:/p/A.java',
+        'a well-formed body parses');
+    check(policy.parseEditRequest('{ nope', true).status === 400, 'malformed JSON is a 400');
+    check(policy.parseEditRequest('{"filePath":"A.java"}', true).detail.includes('expectedDigest'),
+        'a request without a digest is refused with the same words the Java host uses');
+    check(policy.parseEditRequest(JSON.stringify({ ...request, edits: [{ startLine: 0, startColumn: 1,
+        endLine: 0, endColumn: 1, newText: 'x' }] }), true).detail.includes('one-based'),
+        'line and column are one-based');
+    check(policy.parseEditRequest(JSON.stringify({ ...request, target: 'elsewhere' }), true)
+        .detail.includes('auto, buffer or disk'), 'an unknown target is refused by name');
+    check(JSON.parse(policy.writeRefusalBody('stale', 'detail', digest)).digest === digest,
+        'a refusal body carries the digest when there is one');
+    check(JSON.parse(policy.bufferEditBody(digest, true, 'done')).target === 'buffer',
+        'a buffer answer says where the change went');
 
     console.log(`BridgePolicy: ${checks} assertions against conformance/bridge-decisions.json`
         + ' and the rules this host used to get wrong. All green.');
