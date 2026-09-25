@@ -98,6 +98,11 @@
                     "type": "string",
                     "default": "",
                     "description": "Comma-separated list of allowed origins for the HTTP bridge."
+                },
+                "webviewExplorer.token": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Shared secret the state-changing routes require (/api/v1/applyEdit and friends). Without it those routes refuse every caller, including pages this bridge served."
                 }
             }
         }

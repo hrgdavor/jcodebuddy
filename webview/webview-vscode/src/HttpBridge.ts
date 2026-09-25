@@ -48,7 +48,8 @@ export class HttpBridge {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (
                 e.affectsConfiguration('webviewExplorer.port') ||
-                e.affectsConfiguration('webviewExplorer.allowedOrigins')
+                e.affectsConfiguration('webviewExplorer.allowedOrigins') ||
+                e.affectsConfiguration('webviewExplorer.token')
             ) {
                 this.restartServer();
             }
@@ -59,7 +60,11 @@ export class HttpBridge {
     private config(): BridgeConfig {
         const configuration = vscode.workspace.getConfiguration('webviewExplorer');
         return {
-            allowedOrigins: configuration.get<string>('allowedOrigins') || ''
+            allowedOrigins: configuration.get<string>('allowedOrigins') || '',
+            // The write routes require this (plan D8), so a host whose token cannot be configured cannot serve
+            // them at all: without it every /api/v1/* request would answer 403 and the `edit` capability would
+            // be advertised but unusable.
+            token: configuration.get<string>('token') || ''
         };
     }
 
@@ -129,7 +134,9 @@ export class HttpBridge {
             const document = healthDocument(
                 this.boundPort(),
                 countAllowedOrigins(bridgeConfig.allowedOrigins),
-                false,
+                // Honest, and it was not: a token that is set must be reported as required, or a page cannot
+                // tell whether presenting one is the way in.
+                (bridgeConfig.token ?? '') !== '',
                 // `edit` is advertised because the buffer path exists (BridgePolicy.decideEdit + applyEdit here);
                 // the rule this codebase holds to is that a capability is advertised when it is implemented, and
                 // not before.
