@@ -5,8 +5,10 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import hr.hrg.jetbrains.webview.bridge.AllowedOrigins;
 import hr.hrg.jetbrains.webview.bridge.NavigatorService;
+import hr.hrg.webview.core.AllowedOrigins;
+import hr.hrg.webview.core.HostHealth;
+import hr.hrg.webview.core.NavigationOutcome;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -196,9 +198,11 @@ public final class HttpBridgeService {
         }
 
         if (PATH_HEALTH.equals(path)) {
-            String body = "{\"plugin\":\"hr.hrg.jetbrains.webview\",\"port\":" + boundPort
-                    + ",\"allowedOrigins\":" + allowedOrigins.values().size()
-                    + ",\"tokenRequired\":" + !token.isEmpty() + "}";
+            // Built by the shared HostHealth rather than assembled here: the three hosts used to answer with
+            // three different documents, and a page could not tell which keys it would get.
+            String body = HostHealth.of(HostHealth.PLUGIN_JETBRAINS, boundPort,
+                    allowedOrigins.values().size(), !token.isEmpty(),
+                    NavigatorService.getInstance(project).capabilities()).toJson();
             send(exchange, 200, body, "application/json");
             return;
         }
@@ -231,12 +235,24 @@ public final class HttpBridgeService {
         int line = parseInt(params.get("line"), 1);
         int column = parseInt(params.get("column"), 1);
 
-        boolean opened = NavigatorService.getInstance(project).open(filePath, line, column);
-        if (opened) {
+        // Both transports go through the NavigatorService's shared funnel, so the rate limit is acquired
+        // exactly once per request whichever way it arrived, and the reason a request failed is available
+        // instead of being flattened into one 404.
+        NavigationOutcome outcome = NavigatorService.getInstance(project).navigator()
+                .open(filePath, line, column);
+        if (outcome.succeeded()) {
             send(exchange, 200, "Opening " + filePath + ":" + line + ":" + column, "text/plain");
-        } else {
-            // Either the path is not in the project or the rate limit refused it; both are "not this".
-            send(exchange, 404, "Could not open " + filePath, "text/plain");
+            return;
+        }
+        LOG.warn("WebView HTTP bridge: " + outcome.reason() + " for '" + filePath + "'"
+                + (outcome.detail().isEmpty() ? "" : " (" + outcome.detail() + ")"));
+        switch (outcome.reason()) {
+            case RATE_LIMITED -> send(exchange, 429,
+                    "Too Many Requests: " + outcome.detail(), "text/plain");
+            case OUTSIDE_PROJECT -> send(exchange, 403,
+                    "Forbidden: '" + filePath + "' is outside the project", "text/plain");
+            case INVALID_PATH -> send(exchange, 400, "Missing filePath parameter", "text/plain");
+            default -> send(exchange, 404, "Could not open " + filePath, "text/plain");
         }
     }
 

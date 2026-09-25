@@ -29,6 +29,37 @@ the two hosts is the bridge port (18882 here, 18881 in JetBrains).
 - `webviewExplorer.port`: Port for the HTTP server (default: 18882).
 - `webviewExplorer.allowedOrigins`: Comma-separated list of origins allowed to call the bridge (e.g., `http://localhost:3000`).
 
+## The authorization rule, and where it lives
+
+The decisions this host makes about *who may drive the editor* — the origin allow-list, CORS, and the rate
+limit — are in [`src/BridgePolicy.ts`](src/BridgePolicy.ts), as pure functions with no VS Code dependency, and
+they are asserted against the vectors every host shares in
+[`../conformance/bridge-decisions.json`](../conformance/bridge-decisions.json).
+
+```bash
+npm run test:unit      # 113 assertions, no VS Code download, about a second
+npm test               # the VS Code integration suite (downloads VS Code; see "Known failures" below)
+```
+
+Three behaviours changed when this host adopted the shared rule. The first two were bugs:
+
+* **`/open` used to test the allow-list only when the request carried an `Origin` header.** A request with no
+  `Origin` — a `file://` page, a hidden iframe, any non-browser client — skipped the check and was served. An
+  absent `Origin` is now a denial, exactly as in `webview-core`'s `AllowedOrigins`.
+* **`/file/` used to answer `Access-Control-Allow-Origin: *`**, which let any page in the browser read any file
+  the extension could read. It now sends a grant only to an origin the allow-list names.
+* The bridge now binds `127.0.0.1` explicitly (it previously listened on every interface), gained a
+  `GET /health` that answers without credentials so a page can discover whether a bridge is there, and shares
+  the 20-per-20-seconds rate limit that `webview-core` applies in every other host.
+
+## Known failures
+
+`npm test` has one **pre-existing** failing assertion, `URL conversion logic - file://` in
+`src/test/suite/extension.test.ts`: it expects `loadUrl` to hand back a `vscode-webview://` URL for the
+hard-coded path `C:/test.html`, but the `file://` branch of `WebViewProvider.loadUrl` only produces that scheme
+for a path that exists, so on a machine without `C:\test.html` it falls through to the `https://` guess. It is
+unrelated to the policy work above — `WebViewProvider.ts`, which the test exercises, is unchanged by it.
+
 ## Project Setup (For Tool Authors)
 
 To ensure your users have the correct settings for your tool, you can include a `.vscode/settings.json` file in your repository:

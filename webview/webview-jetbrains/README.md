@@ -40,6 +40,9 @@ says so instead of staying empty.
 
 ## Development
 
+> **`webview-core` must be installed first**: the injected script, its parser, the allow-list and the rate
+> limiter live in `webview/core/webview-core`; run its `mvn install` before `./gradlew test`.
+
 ```bash
 ./gradlew runIde        # start a sandbox IDE with the plugin installed
 ./gradlew test          # the unit test suite
@@ -63,6 +66,16 @@ Disk…** and pick the zip `buildPlugin` produced, then restart.
 ## The `window.openFile` contract
 
 The plugin injects, after every main-frame load:
+
+```js
+window.openFile = function (path, line, column) { … };   // line and column default to 1
+window.__jcbWebViewBridge = 1;                            // lets a page detect the bridge
+```
+
+`path` may be an absolute file path or a `file:` URL. The message is JSON (`{kind, filePath, line, column}`)
+and is parsed as JSON, so a path containing quotes or the text `"line":` cannot confuse it.
+`scripts/entity-html/render.js` feature-detects the function, falls back to the HTTP bridge, and finally
+copies the location to the clipboard.
 
 ```js
 window.openFile = function (path, line, column) { … };   // line and column default to 1
@@ -108,11 +121,16 @@ Notes on the fallback:
   silently swallowed.
 - Navigations are rate limited (20 per 20 seconds) across both entry points.
 
-`/health` reports what the bridge is doing:
+`/health` reports what the bridge is doing, in the document every host answers with (`HostHealth` in
+`webview-core`, so the shape cannot drift between the hosts):
 
 ```json
-{"plugin":"hr.hrg.jetbrains.webview","port":18881,"allowedOrigins":1,"tokenRequired":false}
+{"plugin":"hr.hrg.jetbrains.webview","port":18881,"allowedOrigins":1,"tokenRequired":false,
+ "bridgeVersion":1,"capabilities":["open","select"]}
 ```
+
+`capabilities` is empty while no project editor is available, and `allowedOrigins: 0` means every caller is
+refused. `bridgeVersion` is the same number a page sees as `window.__jcbWebViewBridge`.
 
 ## JCEF debugging
 

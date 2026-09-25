@@ -138,8 +138,16 @@ Responses:
 | `200`  | `Opening <filePath>:<line>:<column>`                                             | accepted and opened                               |
 | `400`  | `Missing filePath parameter`                                                     | no usable path                                    |
 | `403`  | `Forbidden: configure webview.explorer.allowedOrigins or webview.explorer.token` | the caller proved nothing                         |
-| `404`  | `Could not open <filePath>`                                                      | path not resolvable, or the rate limit refused it |
+| `403`  | `Forbidden: '<path>' is outside the project`                                     | the path resolved outside the project             |
+| `404`  | `Could not open <filePath>`                                                      | path not resolvable                               |
 | `405`  | `Method Not Allowed`                                                             | not a `GET`                                       |
+| `429`  | `Too Many Requests: <the limit>`                                                 | the rate limit refused the request                |
+
+`403` for an escaping path and `429` for the rate limit were added on 2026-09-25, when the path jail and the
+rate limiter became one shared implementation for all three hosts. Both were previously answered `404`, so the
+**only** change is that a failure a page could not distinguish now has its own status; every status a page
+acted on before still means what it always did. This is an addition of detail, not a change of contract — see
+§ 6: the return value is still nothing, and a page still must not depend on which failure it was.
 
 ### `GET /health`
 
@@ -147,8 +155,21 @@ Useful before wiring a page to a bridge the user may not have started — and th
 answers without credentials.
 
 ```json
-{ "plugin": "hr.hrg.jetbrains.webview", "port": 18881, "allowedOrigins": 1, "tokenRequired": false }
+{ "plugin": "hr.hrg.jetbrains.webview", "port": 18881, "allowedOrigins": 1, "tokenRequired": false,
+  "bridgeVersion": 1, "capabilities": ["open", "select"] }
 ```
+
+The first four keys are the ones this contract has always defined. On 2026-09-25 two keys were **added**,
+and both are additive — no page that read the first four can be affected:
+
+| Key | Meaning |
+| --- | --- |
+| `bridgeVersion` | which injected contract the host implements; the same number a page sees as `window.__jcbWebViewBridge`. Lets a page tell an old host from a new one instead of depending on `window.openFile`'s presence alone |
+| `capabilities` | what the host can do **now**, sorted — `open`, `reveal`, `select`, `serveFile`. An empty array is the honest answer for a host with no editor attached, and it is how a page picks its fallback rung rather than calling a verb and watching it fail |
+
+`allowedOrigins: 0` means every caller is refused, which is the default rather than an error. A host with a
+page-visible file route also serves it under `/file/<percent-encoded absolute path>`; that route is
+authorized by the same rules as `/open` and refused the same way.
 
 ### Security, and what it means for a page author
 
@@ -247,6 +268,10 @@ absolute path** (`scripts/entity-html/entity-html.test.js` asserts exactly that 
 * **`window.openFile` and the `/open` parameters are frozen.** `(filePath, line, column)` — 1-based line and
   column, paths in either slash style, relative or absolute — is the contract; a host that accepted
   anything else would break every existing page.
+* **The `/open` status codes are not frozen, and a page must not depend on them.** `200` and `403` (the
+  caller proved nothing) are the two a page could ever act on. The set grew on 2026-09-25 — see § 3 — by
+  splitting failures that were previously all `404`; a caller that treats "not 200" as "it did not open"
+  is unaffected, which is the only reading the contract ever promised.
 * **`kind: 'openFile'` in the JSON payload is the only actionable kind today**, but the parser ignores
   unknown kinds instead of failing, so the protocol can grow (`revealInProjectView`, `openUrl`) without
   breaking an older host.

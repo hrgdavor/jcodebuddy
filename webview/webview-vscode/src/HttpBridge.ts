@@ -3,22 +3,50 @@ import * as http from 'http';
 import * as url from 'url';
 import * as path from 'path';
 import * as fs from 'fs';
+import {
+    BridgeConfig,
+    RateLimiter,
+    PRODUCTION_RATE_LIMIT,
+    countAllowedOrigins,
+    decideRoute,
+    healthDocument
+} from './BridgePolicy';
 
+/**
+ * The VS Code HTTP bridge: the fallback for a page opened in an ordinary browser, and the file server the
+ * webview's iframe loads pages from.
+ *
+ * The authorization, CORS and rate-limit decisions live in `BridgePolicy`, which is tested without VS Code
+ * against the shared vectors in `webview/conformance/bridge-decisions.json`. This class is the HTTP half:
+ * routing, headers, and serving bytes.
+ */
 export class HttpBridge {
     private server: http.Server | undefined;
-    private requestTimestamps: number[] = [];
-    private readonly RATE_LIMIT_COUNT = 20;
-    private readonly RATE_LIMIT_WINDOW_MS = 20000;
+    private readonly rateLimiter = new RateLimiter(
+        PRODUCTION_RATE_LIMIT.count,
+        PRODUCTION_RATE_LIMIT.windowMillis
+    );
 
     constructor() {
         this.startServer();
 
         // Listen for configuration changes
         vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('webviewExplorer.port')) {
+            if (
+                e.affectsConfiguration('webviewExplorer.port') ||
+                e.affectsConfiguration('webviewExplorer.allowedOrigins')
+            ) {
                 this.restartServer();
             }
         });
+    }
+
+    /** The configuration the policy functions read. */
+    private config(): BridgeConfig {
+        const configuration = vscode.workspace.getConfiguration('webviewExplorer');
+        return {
+            allowedOrigins: configuration.get<string>('allowedOrigins') || ''
+        };
     }
 
     private startServer() {
@@ -29,8 +57,8 @@ export class HttpBridge {
             this.handleRequest(req, res);
         });
 
-        this.server.listen(port, () => {
-            console.log(`HTTP Bridge server listening on port ${port}`);
+        this.server.listen(port, '127.0.0.1', () => {
+            console.log(`HTTP Bridge server listening on 127.0.0.1:${port}`);
         });
 
         this.server.on('error', (err) => {
@@ -52,133 +80,147 @@ export class HttpBridge {
 
     private handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
         const parsedUrl = url.parse(req.url || '', true);
-        const reqPath = parsedUrl.pathname;
-
-        // CORS headers
+        const bridgeConfig = this.config();
         const origin = req.headers.origin;
-        if (origin && this.isOriginAllowed(origin)) {
-            res.setHeader('Access-Control-Allow-Origin', origin);
-            res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-            res.setHeader('Access-Control-Allow-Headers', '*');
-        }
 
-        if (req.method === 'OPTIONS') {
-            res.writeHead(204);
+        // The rate limit is acquired here rather than inside the route, so the decision function can be
+        // tested with "would this be refused" as an input instead of by exhausting a limiter.
+        const rateLimited = !this.rateLimiter.tryAcquire();
+        const route = decideRoute(req.method, parsedUrl.pathname, {
+            filePath: parsedUrl.query.filePath,
+            line: parsedUrl.query.line,
+            column: parsedUrl.query.column
+        }, bridgeConfig, origin, null, rateLimited);
+
+        if (route.action === 'options') {
+            if (route.corsGrant) {
+                this.sendCorsHeaders(res, route.corsGrant);
+                res.writeHead(204);
+            } else {
+                res.writeHead(403);
+            }
             res.end();
             return;
         }
 
-        if (reqPath === '/open' && req.method === 'GET') {
-            if (origin && !this.isOriginAllowed(origin)) {
-                res.writeHead(403);
-                res.end('CORS Forbidden: Origin not allowed');
-                return;
-            }
+        if (route.action === 'health') {
+            // The shared document shape, so a page reads the same keys from this host as from the Java ones.
+            const document = healthDocument(
+                this.boundPort(),
+                countAllowedOrigins(bridgeConfig.allowedOrigins),
+                false,
+                ['open', 'serveFile']
+            );
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(200);
+            res.end(JSON.stringify(document));
+            return;
+        }
 
-            if (!this.checkRateLimit()) {
+        if (route.action === 'forbidden') {
+            if (route.reason === 'rate') {
                 res.writeHead(429);
-                res.end('Too Many Requests: Rate limit exceeded');
-                return;
-            }
-
-            const filePath = parsedUrl.query.filePath as string;
-            const line = parseInt(parsedUrl.query.line as string) || 1;
-            const column = parseInt(parsedUrl.query.column as string) || 1;
-
-            if (filePath) {
-                this.navigateToFile(filePath, line, column);
-                res.writeHead(200);
-                res.end(`Opening ${filePath}:${line}:${column}`);
+                res.end(`Too Many Requests: ${PRODUCTION_RATE_LIMIT.count} per `
+                    + `${PRODUCTION_RATE_LIMIT.windowMillis / 1000}s`);
             } else {
-                res.writeHead(400);
-                res.end('Missing filePath parameter');
+                // No CORS headers: an uninvited caller must not even be able to read the status.
+                res.writeHead(403);
+                res.end('Forbidden: configure webviewExplorer.allowedOrigins');
             }
-        } else if (reqPath?.startsWith('/file/') && req.method === 'GET') {
-            // Allow all origins for the file server to support webview iframes
-            res.setHeader('Access-Control-Allow-Origin', '*');
+            return;
+        }
 
-            // Extract file path from URL: /file/<encoded_path>
-            // We use the raw URL to avoid issues with specialized characters passed in the path
-            const match = req.url?.match(/^\/file\/(.+)$/);
-            if (!match) {
-                res.writeHead(400);
-                res.end('Invalid file path');
-                return;
+        if (route.action === 'methodNotAllowed') {
+            res.writeHead(405);
+            res.end('Method Not Allowed');
+            return;
+        }
+
+        if (route.action === 'open') {
+            if (route.corsGrant) {
+                this.sendCorsHeaders(res, route.corsGrant);
             }
+            // Authorization and the rate limit were settled by decideRoute; from here the request is
+            // accepted, which is why the answer no longer claims success before trying.
+            this.navigateToFile(route.filePath, route.line, route.column);
+            res.writeHead(200);
+            res.end(`Opening ${route.filePath}:${route.line}:${route.column}`);
+            return;
+        }
 
-            let filePath = decodeURIComponent(match[1]);
-            // Remove query parameters if any (though usually passed in path)
-            if (filePath.includes('?')) {
-                filePath = filePath.split('?')[0];
+        if (route.action === 'serve') {
+            if (route.corsGrant) {
+                this.sendCorsHeaders(res, route.corsGrant);
             }
+            this.serveFile(res, route.filePath);
+            return;
+        }
 
-            console.log(`[HttpBridge] Serving file: ${filePath}`);
+        res.writeHead(404);
+        res.end('Not Found');
+    }
 
-            if (!fs.existsSync(filePath)) {
-                res.writeHead(404);
-                res.end(`File not found: ${filePath}`);
-                return;
-            }
+    private sendCorsHeaders(res: http.ServerResponse, grant: string) {
+        res.setHeader('Access-Control-Allow-Origin', grant);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+    }
 
-            try {
-                const stat = fs.statSync(filePath);
-                if (stat.isDirectory()) {
-                    res.writeHead(403);
-                    res.end('Directories not supported');
-                    return;
-                }
+    private boundPort(): number {
+        const address = this.server?.address();
+        return typeof address === 'object' && address ? address.port : 0;
+    }
 
-                const mimeType = this.getMimeType(filePath);
-                res.setHeader('Content-Type', mimeType);
-                res.setHeader('Content-Length', stat.size);
+    /** Serves one file that {@link decideRoute} has already authorized and decoded. */
+    private serveFile(res: http.ServerResponse, filePath: string) {
+        if (filePath.length === 0) {
+            res.writeHead(400);
+            res.end('Invalid file path');
+            return;
+        }
 
-                if (mimeType === 'text/html') {
-                    // Inject bridge script for HTML files
-                    let content = fs.readFileSync(filePath, 'utf8');
-                    const bridgeScript = `
-                        <script>
-                            window.openFile = function(path, line, col) {
-                                window.parent.postMessage({ type: 'openFile', filePath: path, line: line, column: col }, '*');
-                            };
-                        </script>
-                     `;
-                    content += bridgeScript;
-
-                    res.setHeader('Content-Length', Buffer.byteLength(content));
-                    res.end(content);
-                } else {
-                    const stream = fs.createReadStream(filePath);
-                    stream.pipe(res);
-                }
-            } catch (err) {
-                res.writeHead(500);
-                res.end(`Error serving file: ${err}`);
-            }
-        } else {
+        if (!fs.existsSync(filePath)) {
             res.writeHead(404);
-            res.end('Not Found');
-        }
-    }
-
-    private isOriginAllowed(origin: string): boolean {
-        const config = vscode.workspace.getConfiguration('webviewExplorer');
-        const allowed = config.get<string>('allowedOrigins') || '';
-        if (!allowed) return false;
-
-        const origins = allowed.split(',').map(o => o.trim().toLowerCase());
-        return origins.includes(origin.toLowerCase());
-    }
-
-    private checkRateLimit(): boolean {
-        const now = Date.now();
-        this.requestTimestamps = this.requestTimestamps.filter(t => now - t <= this.RATE_LIMIT_WINDOW_MS);
-
-        if (this.requestTimestamps.length >= this.RATE_LIMIT_COUNT) {
-            return false;
+            res.end(`File not found: ${filePath}`);
+            return;
         }
 
-        this.requestTimestamps.push(now);
-        return true;
+        try {
+            const stat = fs.statSync(filePath);
+            if (stat.isDirectory()) {
+                res.writeHead(403);
+                res.end('Directories not supported');
+                return;
+            }
+
+            const mimeType = this.getMimeType(filePath);
+            res.setHeader('Content-Type', mimeType);
+
+            if (mimeType === 'text/html') {
+                let content = fs.readFileSync(filePath, 'utf8');
+                // The injected bridge, for pages served from this route into the webview's iframe. The
+                // contract is the same one webview-core's InjectedBridge produces; this host cannot import
+                // the Java module, and its copy is asserted against the same vectors as the Java one.
+                const bridgeScript = `
+                    <script>
+                        window.__jcbWebViewBridge = 1;
+                        window.openFile = function(path, line, col) {
+                            window.parent.postMessage(
+                                { type: 'openFile', filePath: path, line: line, column: col }, '*');
+                        };
+                    </script>
+                `;
+                content += bridgeScript;
+                res.setHeader('Content-Length', Buffer.byteLength(content));
+                res.end(content);
+            } else {
+                res.setHeader('Content-Length', stat.size);
+                fs.createReadStream(filePath).pipe(res);
+            }
+        } catch (err) {
+            res.writeHead(500);
+            res.end(`Error serving file: ${err}`);
+        }
     }
 
     public async navigateToFile(filePath: string, line: number, column: number) {

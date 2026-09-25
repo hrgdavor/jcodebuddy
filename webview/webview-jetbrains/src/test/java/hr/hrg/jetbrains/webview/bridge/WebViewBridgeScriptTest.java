@@ -1,5 +1,7 @@
 package hr.hrg.jetbrains.webview.bridge;
 
+import hr.hrg.webview.core.BridgeMessage;
+import hr.hrg.webview.core.InjectedBridge;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -8,9 +10,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The injected contract is what the generated HTML reports depend on
- * ({@code scripts/entity-html/render.js} calls {@code window.openFile}), so it is asserted as text
- * rather than only exercised through a browser.
+ * The host half of the injected contract: what this plugin contributes is the <em>transport</em>.
+ *
+ * <p>The contract itself — the function, the message kind, the defaults, the version stamp — lives in
+ * {@code webview-core}'s {@code InjectedBridge} and is asserted there, by tests that every host shares.
+ * What is left to check here is that this host injects that exact script with its own
+ * {@code JBCefJSQuery} invocation as the transport, because a host that quietly kept a private copy of
+ * the script is precisely the drift the move to core was meant to make impossible.
  */
 public class WebViewBridgeScriptTest {
 
@@ -19,8 +25,14 @@ public class WebViewBridgeScriptTest {
     private final String script = WebViewBridge.injectsInto(PLACEHOLDER);
 
     @Test
+    public void injectsTheSharedContractVerbatim() {
+        assertEquals("the plugin must inject webview-core's script, byte for byte",
+                InjectedBridge.script(PLACEHOLDER), script);
+    }
+
+    @Test
     public void definesTheFunctionTheReportsCall() {
-        assertTrue("render.js feature-detects window.openFile",
+        assertTrue("the generated pages feature-detect window.openFile",
                 script.contains("window.openFile = function (path, line, column)"));
     }
 
@@ -49,6 +61,8 @@ public class WebViewBridgeScriptTest {
     @Test
     public void stampsABridgeVersionSoAPageCanDetectIt() {
         assertTrue(script.contains("window.__jcbWebViewBridge = " + WebViewBridge.BRIDGE_VERSION));
+        assertEquals("the plugin's constant is the core's, so a page cannot see two versions",
+                InjectedBridge.VERSION, WebViewBridge.BRIDGE_VERSION);
     }
 
     @Test

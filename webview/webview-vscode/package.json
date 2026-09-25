@@ -108,7 +108,9 @@
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile && npm run lint",
         "lint": "eslint src --ext ts",
-        "test": "node ./out/test/runTest.js"
+        "test": "node ./out/test/runTest.js",
+        "pretest:unit": "npm run compile",
+        "test:unit": "node ./src/test/BridgePolicy.test.js"
     },
     "devDependencies": {
         "@types/glob": "^8.1.0",

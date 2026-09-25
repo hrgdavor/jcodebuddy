@@ -427,8 +427,17 @@ for (const page of existing) {
     const line = Number(attrs.line || 1);
     if (attrs.member) {
       const text = readFileSync(absolute, "utf8").split(/\r?\n/);
-      if (!text[line - 1] || !text[line - 1].includes(attrs.member)) {
+      const target = text[line - 1];
+      if (!target || !target.includes(attrs.member)) {
         fail(`${page.label}: data-member="${attrs.member}" is not on ${target}:${line}`);
+        continue;
+      }
+      // A link that resolves to a Markdown heading is not a location: the caret lands on a title, and the
+      // claim "this is where window.openFile is defined" becomes false the moment anything is inserted above
+      // it. This happened — four links pointed at a `## ` heading — so it is checked rather than trusted.
+      if (/^\s*#{1,6}\s/.test(target)) {
+        fail(`${page.label}: data-member="${attrs.member}" resolves to the heading ${target.trim()}`
+          + ` on ${attrs.open}:${line}; point at the line that holds the member, not at the section title`);
         continue;
       }
     }

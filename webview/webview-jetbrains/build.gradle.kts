@@ -22,6 +22,14 @@ java {
 repositories {
     mavenCentral()
 
+    // `webview-core` is the host-neutral half of this product (the injected bridge script, its payload
+    // parser, the origin allow-list, the rate limiter, the path jail, the address-bar normaliser and the
+    // Navigator). It is a Maven module in this repository rather than a Gradle subproject, because it is
+    // also consumed by `webview/jwa-sidecar` outside any IDE, so it is resolved from the local Maven
+    // repository: run `mvn -pl webview/core/webview-core install` before building this plugin, or use
+    // the `-PskipWebviewCoreCheck` property only when you know the installed jar is current.
+    mavenLocal()
+
     // IntelliJ Platform Gradle Plugin Repositories Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-repositories-extension.html
     intellijPlatform {
         defaultRepositories()
@@ -31,6 +39,16 @@ repositories {
 // Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/version_catalogs.html
 dependencies {
     testImplementation(libs.junit)
+
+    // The shared core. `implementation`, not `compileOnly`: the plugin must ship it, and the
+    // IntelliJ Platform Gradle Plugin bundles `implementation` dependencies into the distributable so
+    // the plugin loads without the local Maven repository being present on the user's machine.
+    implementation("hr.hrg.jcodebuddy:webview-core:1.0-SNAPSHOT") {
+        // Gson arrives with `transitive = false` deliberately: the IntelliJ Platform already provides
+        // `com.google.gson`, so the plugin uses the platform's copy at runtime and does not need to
+        // shadow it. The core's own tests still exercise parsing against the pinned gson version.
+        isTransitive = false
+    }
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {

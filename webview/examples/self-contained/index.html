@@ -200,7 +200,7 @@ footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; 
     <a class="generated" href="#contract">Link contract</a>
     <a class="generated" href="#files">Source files</a>
     <div class="nav-title">Real hosts</div>
-    <a href="../../../webview/webview-jetbrains/README.md" data-open="webview/webview-jetbrains/README.md" data-line="63">JetBrains plugin</a>
+    <a href="../../../webview/webview-jetbrains/README.md" data-open="webview/webview-jetbrains/README.md" data-line="71">JetBrains plugin</a>
     <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="18">Frozen API</a>
     <div class="nav-note">
       The two links above are real: click them in the IDE webview and the editor
@@ -291,7 +291,7 @@ navigator.clipboard?.writeText('src/main/java/com/example/Person.java:14');</cod
       <div class="demo">
         <div class="demo-label">Try it — each of these is a real file in this repository</div>
         <ul>
-          <li><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="63" data-member="window.openFile" data-role="doc-section">webview/webview-jetbrains/README.md:63</span> — the plugin's contract section</li>
+          <li><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="71" data-member="window.openFile" data-role="doc-section">webview/webview-jetbrains/README.md:71</span> — the line that defines <code>window.openFile</code></li>
           <li><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/bridge/WebViewBridge.java" data-line="1" data-role="type">WebViewBridge.java</span> — the class that injects the function</li>
           <li><span class="file-link" data-open="webview/doc/webview-link-api.md" data-line="18" data-role="doc-section">webview/doc/webview-link-api.md:18</span> — the contract in one screen</li>
           <li><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="93" data-member="open" data-role="function">open-file.js:93</span> — the reference implementation of the ladder</li>
@@ -507,9 +507,9 @@ See [the contract](../webview/doc/webview-link-api.md#L18) for the frozen detail
         </thead>
         <tbody>
           <tr>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="63" data-member="window.openFile" data-role="type">WebViewContract</span></td>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="71" data-member="window.openFile" data-role="type">WebViewContract</span></td>
             <td>interface</td>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="63">webview/webview-jetbrains/README.md</span></td>
+            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="71">webview/webview-jetbrains/README.md</span></td>
             <td>3</td>
           </tr>
           <tr>
@@ -569,7 +569,7 @@ window.openFile = function (path, line, column) {
         <thead><tr><th>File</th><th>Role</th><th>Clicks to</th></tr></thead>
         <tbody>
           <tr><td><span class="file-link" data-open="webview/doc/webview-link-api.md" data-line="1">webview/doc/webview-link-api.md</span></td><td>the frozen contract</td><td>line 1</td></tr>
-          <tr><td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="77">webview/webview-jetbrains/README.md</span></td><td>HTTP bridge</td><td>line 77</td></tr>
+          <tr><td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="90">webview/webview-jetbrains/README.md</span></td><td>HTTP bridge</td><td>line 90</td></tr>
           <tr><td><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="46">scripts/markdown-view/open-file.js</span></td><td>client ladder, copyable</td><td>line 46</td></tr>
           <tr><td><span class="file-link" data-open="scripts/markdown-view/index.js" data-line="1">scripts/markdown-view/index.js</span></td><td>a generator's CLI half</td><td>line 1</td></tr>
           <tr><td><span class="file-link" data-open="scripts/entity-html/README.md" data-line="1">scripts/entity-html/README.md</span></td><td>the generated page in this repo</td><td>line 1</td></tr>
