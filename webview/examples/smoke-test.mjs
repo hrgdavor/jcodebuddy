@@ -30,6 +30,10 @@ const PAGES = [
   { label: "with-assets/index", file: join(HERE, "with-assets", "index.html"), languages: 2 },
   { label: "with-assets/pages/guide", file: join(HERE, "with-assets", "pages", "guide.html"), languages: 5 },
   { label: "with-assets/pages/entity-reference", file: join(HERE, "with-assets", "pages", "entity-reference.html"), languages: 2 },
+  // The editing page has no highlighted code of its own (its diff pane is filled at runtime), so the language
+  // count is 0; it is in the list for the property that matters here - it must render and stay self-sufficient
+  // with no host, because the page a user opens from the filesystem is the one that has no host.
+  { label: "with-assets/pages/edit-demo", file: join(HERE, "with-assets", "pages", "edit-demo.html"), languages: 0 },
 ];
 
 const CHROME_CANDIDATES = [
@@ -287,7 +291,11 @@ if (!chrome) {
 
       const [blocks, categories] = String(probe.ready || "0/0").split("/").map(Number);
 
-      if (blocks >= page.languages && categories >= 6) {
+      if (page.languages === 0) {
+        // A page with no code of its own (the editing example) has nothing to highlight; asserting six syntax
+        // categories on it would assert that it loaded a highlighter it does not need.
+        pass(`${page.label}: no highlighted code expected`);
+      } else if (blocks >= page.languages && categories >= 6) {
         pass(`${page.label}: ${probe.blocks} block(s) -> ${probe.categories} categories`);
       } else {
         fail(`${page.label}: expected >= ${page.languages} blocks and >= 6 categories, got ${probe.ready} (${probe.syntax})`);

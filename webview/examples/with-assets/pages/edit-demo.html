@@ -1,0 +1,188 @@
+<!doctype html>
+<!--
+  An editing page: rename a row, see the diff, accept it, undo it.
+
+  Open it *through a host* — the page needs one to read the file and to apply the change:
+
+      webviewd --project webview/examples --port 18899 --token demo-token
+      http://127.0.0.1:18899/page/<abs path>/webview/examples/with-assets/pages/edit-demo.html?token=demo-token
+
+  Opened straight from the filesystem it still renders, and says plainly that no host is there, because a page
+  that silently does nothing is the failure the authoring contract exists to prevent.
+
+  What it demonstrates, in the order the write contract wants it:
+    1. read the file through the host, taking the digest the host announces (never a local guess),
+    2. propose the edit and show the returned unified diff,
+    3. write only when the reader accepts — into the editor's buffer when the host can, otherwise to disk,
+    4. undo it, and re-read so the table shows what is actually on disk again.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>webview editing example</title>
+<link rel="stylesheet" href="../assets/site.css">
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+  table { border-collapse: collapse; margin: 1rem 0; }
+  th, td { border: 1px solid #ccc; padding: .35rem .6rem; text-align: left; }
+  input { font: inherit; width: 14rem; }
+  button { font: inherit; margin-right: .5rem; }
+  pre { background: #f6f6f6; border: 1px solid #ddd; padding: .75rem; overflow-x: auto; }
+  .pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .85em; }
+  .ready { background: #d8f5d8; }
+  .absent { background: #f5e0d8; }
+  .row-note { color: #666; }
+</style>
+</head>
+<body>
+<h1>Editing example</h1>
+<p>Host: <span class="pill" data-bridge-status>checking…</span></p>
+<p class="row-note" id="hint"></p>
+
+<table id="people">
+  <thead><tr><th>#</th><th>name</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<p>
+  <label>Rename row <select id="row"></select> to <input id="name" value=""></label>
+  <button id="propose">Propose</button>
+  <button id="apply" disabled>Apply</button>
+  <button id="undo" disabled>Undo</button>
+  <button id="reload">Re-read</button>
+</p>
+
+<p>Digest read from the host: <code id="digest">—</code></p>
+<p id="result" class="row-note"></p>
+<pre id="diff" hidden></pre>
+
+<script id="webview-client" src="../assets/webview-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var FILE = 'data/people.txt';           // relative to this page, resolved against the host's project root
+  var params = new URLSearchParams(location.search);
+  var tag = document.getElementById('webview-client');
+
+  // The port and the token come from the page's own URL when a host is serving it — the same origin that served
+  // this page is the host — and from the script tag otherwise. Never hard-coded: see nav-client.js's header.
+  var port = params.get('port')
+    || (location.protocol === 'http:' && /^(127\.0\.0\.1|localhost)$/.test(location.hostname) ? location.port : '0')
+    || tag.getAttribute('data-bridge-port')
+    || '0';
+  var token = params.get('token') || tag.getAttribute('data-bridge-token') || '';
+
+  var client = null;                     // built by auto(), which also publishes the jcbNav probe
+  var file = null;
+  var proposal = null;
+
+  function paint(status) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-bridge-status]'), function (element) {
+      element.textContent = client.describe();
+      element.className = 'pill ' + (client.state.reachable || client.state.mode === 'injected' ? 'ready' : 'absent');
+    });
+    document.getElementById('hint').textContent = status || (client.state.reachable
+      ? 'Reading ' + FILE + ' through the host on port ' + port + '.'
+      : 'No host on port ' + port + ': open this page through webviewd to edit anything.');
+  }
+
+  function table(lines) {
+    var body = document.querySelector('#people tbody');
+    var select = document.getElementById('row');
+    body.innerHTML = '';
+    select.innerHTML = '';
+    lines.forEach(function (line, index) {
+      var parts = line.split('=');
+      var row = document.createElement('tr');
+      row.innerHTML = '<td>' + (index + 1) + '</td><td>' + (parts[1] || '') + '</td>';
+      body.appendChild(row);
+      var option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = String(index + 1) + ' — ' + (parts[1] || '');
+      select.appendChild(option);
+    });
+  }
+
+  function editFor(index, newName) {
+    var line = file.text.split('\n')[index];
+    var prefix = line.indexOf('=') + 1;
+    return [{
+      startLine: index + 1, startColumn: prefix + 1,
+      endLine: index + 1, endColumn: line.length + 1,
+      newText: newName
+    }];
+  }
+
+  async function refresh() {
+    if (!client) {
+      client = await window.jcbClient.auto({ port: port, token: token });
+    } else {
+      await client.ready();
+    }
+    if (!client.state.reachable && client.state.mode !== 'injected') {
+      paint();
+      return;
+    }
+    file = await client.read(FILE, { absolute: client.absolute('../' + FILE, tag.src) });
+    document.getElementById('digest').textContent = file.digest;
+    table(file.text.replace(/\n$/, '').split('\n'));
+    paint();
+  }
+
+  document.getElementById('propose').addEventListener('click', async function () {
+    var index = parseInt(document.getElementById('row').value, 10) || 0;
+    var newName = document.getElementById('name').value.trim();
+    if (!newName || !file) { return; }
+    proposal = await client.proposeEdit(file.path, file.digest, editFor(index, newName));
+    var diff = document.getElementById('diff');
+    diff.hidden = false;
+    diff.textContent = proposal.unifiedDiff || JSON.stringify(proposal, null, 2);
+    document.getElementById('apply').disabled = proposal.status !== 200;
+    document.getElementById('result').textContent = proposal.status === 200
+      ? 'Proposal ready: nothing has been written yet. The digest would become ' + proposal.digest + '.'
+      : 'The host refused the proposal: ' + (proposal.reason || proposal.status);
+  });
+
+  document.getElementById('apply').addEventListener('click', async function () {
+    var index = parseInt(document.getElementById('row').value, 10) || 0;
+    var newName = document.getElementById('name').value.trim();
+    var applied = await client.applyEdit(file.path, file.digest, editFor(index, newName));
+    if (applied.status === 200 && applied.applied) {
+      var where = applied.target === 'buffer'
+        ? 'the editor\u2019s buffer (unsaved — the editor\u2019s own undo takes it back)'
+        : 'the file on disk';
+      document.getElementById('result').textContent = 'Applied to ' + where
+        + '. Digest now ' + applied.digest + '.';
+      document.getElementById('undo').disabled = applied.target === 'buffer';
+      document.getElementById('apply').disabled = true;
+      if (applied.target !== 'buffer') { await refresh(); }
+    } else {
+      document.getElementById('result').textContent = 'Refused: ' + (applied.reason || applied.status)
+        + (applied.detail ? ' — ' + applied.detail : '');
+    }
+  });
+
+  document.getElementById('undo').addEventListener('click', async function () {
+    var undone = await client.undo(file.path);
+    document.getElementById('result').textContent = undone.status === 200
+      ? 'Undone. Digest is ' + undone.digest + ' again.'
+      : 'Undo refused: ' + (undone.reason || undone.status) + (undone.detail ? ' — ' + undone.detail : '');
+    await refresh();
+  });
+
+  document.getElementById('reload').addEventListener('click', refresh);
+
+  document.getElementById('row').addEventListener('change', function () {
+    var index = parseInt(this.value, 10) || 0;
+    var line = file ? file.text.split('\n')[index] : '';
+    document.getElementById('name').value = line.split('=')[1] || '';
+  });
+
+  refresh().catch(function (error) {
+    paint('Could not reach a host: ' + error.message);
+  });
+})();
+</script>
+</body>
+</html>

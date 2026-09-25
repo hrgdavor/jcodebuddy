@@ -355,6 +355,7 @@ public final class WebviewServer implements AutoCloseable {
             return;
         }
         PageServer.Response response = pageServer.serve(exchange.getRequestURI().getPath(), null);
+        announceDigest(exchange, response);
         send(exchange, response.httpStatus(), response.contentType(), response.body());
     }
 
@@ -371,7 +372,24 @@ public final class WebviewServer implements AutoCloseable {
         // gets the bridge appended, so the page can call window.openFile without shipping the script itself.
         String translated = PageServer.ROUTE_PREFIX + path.substring(PAGE_ROUTE_PREFIX.length());
         PageServer.Response response = pageServer.serve(translated, injectedBridge);
+        announceDigest(exchange, response);
         send(exchange, response.httpStatus(), response.contentType(), response.body());
+    }
+
+    /**
+     * Tells the page which bytes it just read, so it never has to recompute a digest — and, more importantly,
+     * so the digest it proposes an edit with is the host's own idea of the file rather than a second
+     * implementation of the same hash.
+     *
+     * <p>Both spellings are sent: {@code ETag} (quoted, per HTTP) for anything that speaks HTTP, and
+     * {@code X-WebView-Digest} (exactly the string the edit API wants) for the page's client.
+     */
+    private void announceDigest(HttpExchange exchange, PageServer.Response response) {
+        if (response.fileDigest() == null || response.fileDigest().isEmpty()) {
+            return;
+        }
+        exchange.getResponseHeaders().set("ETag", "\"" + response.fileDigest() + "\"");
+        exchange.getResponseHeaders().set("X-WebView-Digest", response.fileDigest());
     }
 
     /**

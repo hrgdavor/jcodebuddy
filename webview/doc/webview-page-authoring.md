@@ -159,13 +159,19 @@ that patches a hand-written page is a generator that will eventually delete some
 
 ---
 
-## 4. The client: the ladder, and why it has three rungs
+## 4. The client: the ladder, and why it has these rungs
 
 ```
-1. window.openFile(...) present   -> call it                          (inside the IDE webview)
-2. a bridge port is configured    -> hidden iframe to /open?...        (a browser, with the bridge on)
-3. neither                        -> copy "path:line", say so in a toast
+0. a port is known                -> ask what the host can do: GET /health, /.well-known/webview.json
+1. window.openFile(...) present   -> call it                            (inside an IDE webview)
+2. a host answers /health         -> GET /open over HTTP                (webviewd, or a plugin on its port)
+3. nothing answers                -> copy "path:line" and say so in a toast
 ```
+
+Rung 0 is what makes rung 2 honest: `/health` reports a **capability list** and, in the manifest, how precisely
+the attached editor can reach a line (`exact`, `file-only`, `none`). A page that reads it decides its rung from
+data instead of from a hard-coded port, which is the difference between "the host has no editor attached" and
+"the host is not there".
 
 Rung 2 is HTTP, because a browser has no injected function:
 
@@ -176,6 +182,7 @@ GET http://127.0.0.1:<port>/health
 
 | Host | Default port | Setting |
 | --- | --- | --- |
+| `webview/core/webviewd` | ephemeral, published in `.jcodebuddy/webview/host.json` | `--port` |
 | `webview/webview-jetbrains` | 18881 | `webview.explorer.port` |
 | `webview/webview-vscode` | 18882 | `webviewExplorer.port` |
 
@@ -199,6 +206,63 @@ A few facts that decide how you wire it:
   link is diagnosable, never silent. `403` means the caller proved nothing.
 
 Full parameter, response-code and security detail: [`webview/doc/webview-link-api.md`](webview-link-api.md) § 3.
+
+### 4.3 The edit rung: propose, show the diff, then write
+
+A page that only navigates needs none of this. A page that *changes* a file uses the write contract
+([`webview-edit-api.md`](webview-edit-api.md)), and the order is not a suggestion — the plan's question 1 was
+answered as **diff first, write when the reader accepts**:
+
+```js
+const client = window.jcbClient.create({ port: port, token: token });
+await client.ready();                                  // rung 0: what can this host do?
+
+const file = await client.read('src/main/java/A.java');// the host's own digest comes back with the text
+const proposal = await client.proposeEdit(file.path, file.digest, [
+  { startLine: 12, startColumn: 5, endLine: 12, endColumn: 9, newText: 'renamed' }
+]);
+show(proposal.unifiedDiff);                            // nothing has been written yet
+
+const applied = await client.applyEdit(file.path, file.digest, edits);   // target: 'auto' by default
+// applied.target === 'buffer' means the editor holds it, unsaved, in its own undo stack
+// applied.target === undefined means this host wrote the file on disk
+await client.undo(file.path);                          // restores the exact previous bytes
+```
+
+Rules that decide whether the page works in more than one host:
+
+* **Never compute the digest yourself.** `/file/` answers with `X-WebView-Digest` (and an `ETag`); that is the
+  digest the host will compare against, and a second implementation of the same hash is a second chance to
+  disagree. The client falls back to hashing the text only when a host does not send the header.
+* **`expectedDigest` is the digest of what the page read**, in both the proposal and the accepted write. The
+  proposal's own `digest` describes the file it *would* produce, which is what to render next — not what to send
+  back.
+* **A stale digest is a refusal (`409`), never a merge.** Re-read, re-render, propose again. That is the whole
+  safety argument: the browser cannot clobber a file the reader has not seen.
+* **`target` says who writes.** `auto` (the default) uses the editor's buffer when the host declares `edit` and
+  otherwise writes to disk; `buffer` insists on the editor and is refused with `409 no-buffer-edit` when no host
+  can do it — never silently written to disk; `disk` insists on this host's own atomic write.
+* **Writes need the token**, not merely an allowed `Origin` (`/open` accepts either). A page served by
+  `webviewd` can carry it in its URL: `…/page/<path>?token=<the token>`.
+* **`GET /api/v1/events`** streams file changes so a page can re-render instead of polling. `webview-client.js`
+  uses `EventSource` where it exists and reports `watching: false` where it does not, rather than pretending.
+
+Two clients ship here, on purpose:
+
+| File | For |
+| --- | --- |
+| [`examples/with-assets/assets/nav-client.js`](../examples/with-assets/assets/nav-client.js) | navigation only, the three-rung ladder, configured from the script tag — what the existing pages use |
+| [`examples/with-assets/assets/webview-client.js`](../examples/with-assets/assets/webview-client.js) | the full ladder **plus** read/propose/apply/undo/events, capability-driven, and usable with no DOM above the clipboard rung (which is why a node test can drive it) |
+
+A page that edits, end to end: [`examples/with-assets/pages/edit-demo.html`](../examples/with-assets/pages/edit-demo.html)
+(rename a row, see the unified diff, accept it, undo it). Run it through a host:
+
+```bash
+webviewd --project webview/examples --port 18899 --token demo-token
+# http://127.0.0.1:18899/page/<abs path>/webview/examples/with-assets/pages/edit-demo.html?token=demo-token
+# and the client itself is exercised without a browser:
+node webview/examples/webview-client.test.mjs      # 29 checks against a live headless host
+```
 
 ### 4.1 The link base: never an absolute path in an artifact
 

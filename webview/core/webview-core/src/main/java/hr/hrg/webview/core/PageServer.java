@@ -66,8 +66,21 @@ public final class PageServer {
         UNREADABLE
     }
 
-    /** One answer: what to send, and what to say about it. */
-    public record Response(Status status, String contentType, byte[] body) {
+    /**
+     * One answer: what to send, and what to say about it.
+     *
+     * @param fileDigest the {@link SourceDigest} of the <b>file's</b> bytes, which for {@link #OK} is what a page
+     *                   must send back as {@code expectedDigest} when it proposes an edit. It is the file's
+     *                   digest even on the page route, where the served body has a bridge appended — the page
+     *                   read the file's content, and the script tag is not part of what it is editing. Empty on
+     *                   every status that has no file behind it.
+     */
+    public record Response(Status status, String contentType, byte[] body, String fileDigest) {
+
+        /** An answer with no file behind it: an error, or a refusal. */
+        public Response(Status status, String contentType, byte[] body) {
+            this(status, contentType, body, "");
+        }
 
         public boolean ok() {
             return status == Status.OK;
@@ -139,10 +152,12 @@ public final class PageServer {
         String contentType = contentTypeOf(file.getFileName().toString());
         try {
             byte[] bytes = Files.readAllBytes(file);
+            // Computed from the file, before any bridge is appended: the page edits the file, not the page.
+            String digest = SourceDigest.of(bytes);
             if (injectBridge != null && !injectBridge.isEmpty() && contentType.startsWith("text/html")) {
                 bytes = bytes(new String(bytes, StandardCharsets.UTF_8) + injectBridge);
             }
-            return new Response(Status.OK, contentType, bytes);
+            return new Response(Status.OK, contentType, bytes, digest);
         } catch (IOException e) {
             return new Response(Status.UNREADABLE, "text/plain",
                     bytes("Error serving file: " + e.getMessage()));

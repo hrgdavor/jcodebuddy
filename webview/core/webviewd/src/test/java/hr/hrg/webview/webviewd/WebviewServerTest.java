@@ -323,6 +323,33 @@ class WebviewServerTest {
     }
 
     @Test
+    void theServedDigestDescribesTheFileEvenOnThePageRoute() throws Exception {
+        start(new RecordingHost());
+        Path file = write("pages/report.html", "<!doctype html><html><body>report</body></html>");
+        String fileDigest = hr.hrg.webview.core.SourceDigest.of(Files.readAllBytes(file));
+
+        HttpResponse<String> served = get("/file/" + file.toString().replace('\\', '/') + "?token=" + TOKEN);
+        assertEquals(200, served.statusCode());
+        assertEquals(fileDigest, served.headers().firstValue("X-WebView-Digest").orElse(""),
+                "a page must be able to propose an edit with the host's own idea of the file");
+        assertEquals("\"" + fileDigest + "\"", served.headers().firstValue("ETag").orElse(""));
+
+        // On the page route the body has a bridge appended, and the header must still describe the *file*: the
+        // page edits the file, not the page.
+        HttpResponse<String> page = get("/page/" + file.toString().replace('\\', '/') + "?token=" + TOKEN);
+        assertEquals(200, page.statusCode());
+        assertTrue(page.body().contains("window.openFile"), "the page route injects the bridge");
+        assertEquals(fileDigest, page.headers().firstValue("X-WebView-Digest").orElse(""),
+                "the injected script must not become part of what a page edits");
+
+        // An answer with no file behind it carries no digest at all.
+        HttpResponse<String> missing = get("/file/" + project.toString().replace('\\', '/')
+                + "/pages/missing.html?token=" + TOKEN);
+        assertEquals(404, missing.statusCode());
+        assertTrue(missing.headers().firstValue("X-WebView-Digest").isEmpty());
+    }
+
+    @Test
     void aPreflightForTheTokenHeaderIsAnswered() throws Exception {
         start(new RecordingHost());
 
