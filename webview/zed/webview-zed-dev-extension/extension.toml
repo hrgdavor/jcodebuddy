@@ -1,0 +1,18 @@
+id = "webview-sidecar"
+name = "Webview Sidecar"
+version = "0.0.1"
+schema_version = 1
+authors = ["JCodeBuddy"]
+description = "Registers the webview sidecar as a language server so a page served on localhost can move Zed's caret and apply edits over LSP."
+
+# Why this extension exists at all: on Zed 1.21.0 the `lsp` key in settings accepts only names that an
+# extension or a built-in adapter has registered, so `"lsp": {"webview-sidecar": {"binary": ...}}` on its
+# own does nothing (zed#52653, closed not planned - measured in webview/PHASE0-ZED-FINDINGS.md section A').
+# This manifest is what makes the name legal; from then on the settings key works, which is how a user
+# points it at a specific build.
+#
+# `language` (singular) matches the `name` field of a language the user already has. "Java" is provided
+# by the Java extension, so that extension must be installed for this server to be started at all.
+[language_servers.webview-sidecar]
+name = "Webview Sidecar"
+language = "Java"
