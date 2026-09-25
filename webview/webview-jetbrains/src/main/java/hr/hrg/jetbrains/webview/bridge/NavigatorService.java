@@ -18,8 +18,11 @@ import hr.hrg.webview.core.Navigator;
 import hr.hrg.webview.core.PathResolution;
 import hr.hrg.webview.core.PathResolver;
 import hr.hrg.webview.core.RateLimiter;
+import hr.hrg.webview.core.TextEdit;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 import java.util.Set;
 
@@ -44,6 +47,8 @@ public final class NavigatorService implements EditorHost {
     private final Project project;
     private final PathResolver pathResolver;
     private final Navigator navigator;
+    private final RateLimiter rateLimiter;
+    private final IdeDocumentEditor documentEditor;
 
     public NavigatorService(@NotNull Project project) {
         this(project, defaultRateLimiter());
@@ -53,7 +58,19 @@ public final class NavigatorService implements EditorHost {
      * @param rateLimiter the policy this host applies, shared by both of its transports
      */
     public NavigatorService(@NotNull Project project, @NotNull RateLimiter rateLimiter) {
+        this(project, rateLimiter, new WriteCommandEditor(project));
+    }
+
+    /**
+     * @param documentEditor how this host applies a buffer edit; the production one is
+     *                       {@link WriteCommandEditor}, and a test substitutes its own because a
+     *                       {@code WriteCommandAction} needs a real IDE
+     */
+    public NavigatorService(@NotNull Project project, @NotNull RateLimiter rateLimiter,
+                            @NotNull IdeDocumentEditor documentEditor) {
         this.project = project;
+        this.rateLimiter = rateLimiter;
+        this.documentEditor = documentEditor;
         this.pathResolver = PathResolver.forProject(projectBasePath(project));
         // false: a tool window drives its own IDE, and a report may legitimately link to a file the user
         // opened from outside the project. The sidecar's HTTP surface sets this true, because there the
@@ -129,7 +146,21 @@ public final class NavigatorService implements EditorHost {
         // plugin has not verified against the pinned 2026.2.3 build, and advertising a capability that
         // throws at runtime would turn a page's fallback ladder into a broken link. It is added when it
         // is implemented and verified, not before.
-        return Set.of(CAP_OPEN, CAP_SELECT);
+        //
+        // CAP_EDIT is present since 2026-09-25: a page may ask for an edit and have it land in this editor's
+        // buffer, where the reader's own Ctrl+Z takes it back (WriteCommandEditor). It is advertised because it
+        // has been implemented, which is the rule the note above is about.
+        return Set.of(CAP_OPEN, CAP_SELECT, CAP_EDIT);
+    }
+
+    @Override
+    public boolean applyEdit(@NotNull String absolutePath, @NotNull List<TextEdit> edits) {
+        return documentEditor.apply(absolutePath, edits);
+    }
+
+    /** The rate limiter this service shares with everything else in the project's bridge. */
+    public @NotNull RateLimiter rateLimiter() {
+        return rateLimiter;
     }
 
     @Override

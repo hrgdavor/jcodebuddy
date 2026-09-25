@@ -7,8 +7,11 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import hr.hrg.jetbrains.webview.bridge.NavigatorService;
 import hr.hrg.webview.core.AllowedOrigins;
+import hr.hrg.webview.core.CheckpointStore;
+import hr.hrg.webview.core.EditService;
 import hr.hrg.webview.core.HostHealth;
 import hr.hrg.webview.core.NavigationOutcome;
+import hr.hrg.webview.core.WriteSurface;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -56,6 +59,9 @@ public final class HttpBridgeService {
     private static final String PATH_OPEN = "/open";
     private static final String PATH_HEALTH = "/health";
 
+    /** The write contract's routes; see {@code doc/webview-edit-api.md}. */
+    private static final String WRITE_PREFIX = "/api/v1/";
+
     private final Project project;
     private final AtomicInteger threadSequence = new AtomicInteger();
 
@@ -64,6 +70,7 @@ public final class HttpBridgeService {
     private volatile int boundPort = -1;
     private volatile AllowedOrigins allowedOrigins = AllowedOrigins.of(null);
     private volatile String token = "";
+    private volatile WriteSurface writeSurface;
 
     public HttpBridgeService(@NotNull Project project) {
         this.project = project;
@@ -207,6 +214,11 @@ public final class HttpBridgeService {
             return;
         }
 
+        if (path != null && path.startsWith(WRITE_PREFIX)) {
+            handleWrite(exchange, path);
+            return;
+        }
+
         if (!PATH_OPEN.equals(path)) {
             send(exchange, 404, "Not Found", "text/plain");
             return;
@@ -254,6 +266,80 @@ public final class HttpBridgeService {
             case INVALID_PATH -> send(exchange, 400, "Missing filePath parameter", "text/plain");
             default -> send(exchange, 404, "Could not open " + filePath, "text/plain");
         }
+    }
+
+    /**
+     * The write routes ({@code /api/v1/applyEdit|diff|undo|redo}).
+     *
+     * <p>Two rules differ from {@code /open} on purpose. The method is {@code POST}, because these routes change
+     * something. And the caller must present the **token** — an allowed {@code Origin} is not enough — for the
+     * reason plan D8 gives: any page in the reader's browser shares the origin rule, while a page served by this
+     * bridge can hold the secret.
+     *
+     * <p>The routing itself (buffer or disk, the digest guard, the statuses) is core's {@link WriteSurface},
+     * shared with the standalone host, so the two hosts cannot drift into answering differently.
+     */
+    private void handleWrite(@NotNull HttpExchange exchange, @NotNull String path) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+        if (!isAuthorizedWrite(exchange)) {
+            LOG.warn("WebView HTTP bridge: refused a write to " + path
+                    + (token.isEmpty() ? " (no token configured)" : " (token missing or wrong)"));
+            send(exchange, 403, "Forbidden: the token is required for state-changing routes", "text/plain");
+            return;
+        }
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        WriteSurface surface = writeSurface();
+        WriteSurface.Answer answer = switch (path) {
+            case "/api/v1/applyEdit" -> surface.applyEdit(body);
+            case "/api/v1/diff" -> surface.diff(body);
+            case "/api/v1/undo" -> surface.undo(body);
+            case "/api/v1/redo" -> surface.redo(body);
+            default -> null;
+        };
+        if (answer == null) {
+            send(exchange, 404, "Not Found", "text/plain");
+            return;
+        }
+        if (!answer.ok()) {
+            LOG.warn("WebView HTTP bridge: " + path + " refused with " + answer.status());
+        }
+        send(exchange, answer.status(), answer.body(), "application/json");
+    }
+
+    /**
+     * The write surface for this project, built once: core's {@link EditService} over the project root, sharing
+     * the bridge's own rate limiter with navigation, and driving {@link NavigatorService} as the editor host so a
+     * page's edit lands in the IDE's buffer when it can.
+     */
+    private @NotNull WriteSurface writeSurface() {
+        WriteSurface current = writeSurface;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (writeSurface == null) {
+                NavigatorService hosts = NavigatorService.getInstance(project);
+                EditService edits = new EditService(project.getBasePath(),
+                        new CheckpointStore(), hosts.rateLimiter());
+                writeSurface = new WriteSurface(edits, hosts);
+            }
+            return writeSurface;
+        }
+    }
+
+    /** The token-only rule for a state-changing route. */
+    private boolean isAuthorizedWrite(@NotNull HttpExchange exchange) {
+        if (token.isEmpty()) {
+            return false;
+        }
+        String supplied = exchange.getRequestHeaders().getFirst("X-WebView-Token");
+        if (supplied == null) {
+            supplied = parseQuery(exchange.getRequestURI().getQuery()).get("token");
+        }
+        return token.equals(supplied);
     }
 
     /**

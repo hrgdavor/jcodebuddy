@@ -18,6 +18,7 @@ import hr.hrg.webview.core.Navigator;
 import hr.hrg.webview.core.NullHost;
 import hr.hrg.webview.core.PageServer;
 import hr.hrg.webview.core.RateLimiter;
+import hr.hrg.webview.core.WriteSurface;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -82,6 +83,7 @@ public final class WebviewServer implements AutoCloseable {
     private final Navigator navigator;
     private final PageServer pageServer;
     private final EditService editService;
+    private final WriteSurface writeSurface;
     private final AllowedOrigins origins;
     private final String token;
     private final Path project;
@@ -101,6 +103,7 @@ public final class WebviewServer implements AutoCloseable {
         this.navigator = new Navigator(config.project().toString(), host, true, limiter);
         this.pageServer = new PageServer(config.project().toString(), true);
         this.editService = new EditService(config.project().toString(), new CheckpointStore(), limiter);
+        this.writeSurface = new WriteSurface(editService, host);
         this.origins = origins;
         this.token = token;
         this.tokenFile = tokenFile;
@@ -397,45 +400,17 @@ public final class WebviewServer implements AutoCloseable {
      *
      * <p>Two things distinguish it from {@code /open}. It requires the **token**, not merely an allowed origin:
      * a state-changing route must not be reachable by any page the reader happens to have open (plan D8), and a
-     * page that was served by this host can present it. And it re-reads the request's {@code dryRun} flag
-     * rather than trusting a page to remember the two-step flow — absent means "propose", because a page that
-     * forgets the flag must not be the reason a file changed.
+     * page that was served by this host can present it. And the routing itself — buffer or disk, the digest
+     * guard, the statuses — belongs to {@link WriteSurface}, so the JetBrains host answers the same way instead
+     * of growing a second set of rules.
      */
     private void handleApplyEdit(HttpExchange exchange) throws IOException {
         if (!requirePost(exchange) || !authorizeWrite(exchange)) {
             return;
         }
-        String body = readBody(exchange);
-        try {
-            EditApi.Routed routed = EditApi.parseRouted(body, true);
-            EditRequest request = routed.request();
-            boolean hostCanEdit = host.capabilities().contains(EditorHost.CAP_EDIT);
-
-            if (routed.bufferRequested() && !hostCanEdit) {
-                sendJson(exchange, 409, EditApi.noBufferBody(host.name()));
-                return;
-            }
-            if (!request.dryRun() && !routed.diskRequested() && hostCanEdit) {
-                // Propose first: the same jail and the same digest guard as a disk write, without writing.
-                // Only then is it safe to hand the edits to an editor, because we have verified that the page
-                // is editing content it actually read.
-                EditService.Outcome proposal = editService.propose(request);
-                if (proposal.reason() != EditService.Reason.OK
-                        && proposal.reason() != EditService.Reason.NO_CHANGE) {
-                    answerEdits(exchange, proposal);
-                    return;
-                }
-                if (host.applyEdit(proposal.filePath(), request.edits())) {
-                    sendJson(exchange, 200, EditApi.bufferBodyOf(proposal));
-                    return;
-                }
-                note("host '" + host.name() + "' refused the buffer edit; writing the file instead");
-            }
-            answerEdits(exchange, editService.apply(request));
-        } catch (IllegalArgumentException e) {
-            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
-                    + quote(e.getMessage()) + "}");
-        }
+        WriteSurface.Answer answer = writeSurface.applyEdit(readBody(exchange));
+        noteIfRefused("applyEdit", answer);
+        sendJson(exchange, answer.status(), answer.body());
     }
 
     /** {@code POST /api/v1/diff}: the proposal step, which by definition writes nothing. */
@@ -443,36 +418,33 @@ public final class WebviewServer implements AutoCloseable {
         if (!requirePost(exchange) || !authorizeWrite(exchange)) {
             return;
         }
-        try {
-            EditRequest request = EditApi.parseRouted(readBody(exchange), true).request();
-            answerEdits(exchange, editService.propose(request));
-        } catch (IllegalArgumentException e) {
-            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
-                    + quote(e.getMessage()) + "}");
-        }
+        WriteSurface.Answer answer = writeSurface.diff(readBody(exchange));
+        noteIfRefused("diff", answer);
+        sendJson(exchange, answer.status(), answer.body());
     }
 
     private void handleUndo(HttpExchange exchange) throws IOException {
         if (!requirePost(exchange) || !authorizeWrite(exchange)) {
             return;
         }
-        try {
-            answerEdits(exchange, editService.undo(pathFromBody(exchange)));
-        } catch (IllegalArgumentException e) {
-            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
-                    + quote(e.getMessage()) + "}");
-        }
+        WriteSurface.Answer answer = writeSurface.undo(readBody(exchange));
+        noteIfRefused("undo", answer);
+        sendJson(exchange, answer.status(), answer.body());
     }
 
     private void handleRedo(HttpExchange exchange) throws IOException {
         if (!requirePost(exchange) || !authorizeWrite(exchange)) {
             return;
         }
-        try {
-            answerEdits(exchange, editService.redo(pathFromBody(exchange)));
-        } catch (IllegalArgumentException e) {
-            sendJson(exchange, 400, "{\"applied\":false,\"reason\":\"invalid-edit\",\"detail\":"
-                    + quote(e.getMessage()) + "}");
+        WriteSurface.Answer answer = writeSurface.redo(readBody(exchange));
+        noteIfRefused("redo", answer);
+        sendJson(exchange, answer.status(), answer.body());
+    }
+
+    /** One line to stderr for anything a page was refused, so the host's log explains the page's error. */
+    private void noteIfRefused(String route, WriteSurface.Answer answer) {
+        if (!answer.ok()) {
+            note(route + " refused with " + answer.status() + ": " + answer.body().replaceAll("\\s+", " "));
         }
     }
 
@@ -513,26 +485,12 @@ public final class WebviewServer implements AutoCloseable {
     }
 
     private void answerEdits(HttpExchange exchange, EditService.Outcome outcome) throws IOException {
-        int status = EditApi.statusOf(outcome.reason());
+        int status = WriteSurface.statusOf(outcome.reason());
         if (status != 200) {
-            note("edit refused " + outcome.filePath() + ": " + EditApi.reasonName(outcome.reason())
+            note("edit refused " + outcome.filePath() + ": " + WriteSurface.reasonName(outcome.reason())
                     + (outcome.detail().isEmpty() ? "" : " (" + outcome.detail() + ")"));
         }
-        sendJson(exchange, status, EditApi.bodyOf(outcome));
-    }
-
-    /** The path a body-only request names; undo and redo do not need a digest or edits. */
-    private String pathFromBody(HttpExchange exchange) throws IOException {
-        String body = readBody(exchange);
-        try {
-            EditApi.Payload payload = new com.google.gson.Gson().fromJson(body, EditApi.Payload.class);
-            if (payload == null || payload.filePath() == null || payload.filePath().isBlank()) {
-                throw new IllegalArgumentException("the request must name a filePath");
-            }
-            return payload.filePath();
-        } catch (com.google.gson.JsonSyntaxException e) {
-            throw new IllegalArgumentException("the request body is not valid JSON");
-        }
+        sendJson(exchange, status, WriteSurface.bodyOf(outcome));
     }
 
     private static String readBody(HttpExchange exchange) throws IOException {
@@ -541,29 +499,6 @@ public final class WebviewServer implements AutoCloseable {
 
     private void sendJson(HttpExchange exchange, int status, String json) throws IOException {
         send(exchange, status, "application/json", json.getBytes(StandardCharsets.UTF_8));
-    }
-
-    /** The smallest correct JSON string escaper for a detail message. */
-    private static String quote(String text) {
-        StringBuilder out = new StringBuilder("\"");
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            switch (c) {
-                case '"' -> out.append("\\\"");
-                case '\\' -> out.append("\\\\");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        out.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        out.append(c);
-                    }
-                }
-            }
-        }
-        return out.append('"').toString();
     }
 
     private void handleIndex(HttpExchange exchange) throws IOException {

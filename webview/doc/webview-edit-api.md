@@ -126,21 +126,29 @@ data: {"paths":["src/A.java","webview/PLAN-webview-suite.md"]}
 
 ## 6. What is implemented, and what is not
 
-- **The LSP buffer path: implemented and observed.** When the attached host declares `edit`, `webviewd` asks it
-  to apply the change; for Zed that means the sidecar sends `workspace/applyEdit` with a `documentChanges` entry
-  whose ranges are zero-based and whose `textDocument.version` is `null` (the buffer may legitimately differ
-  from the file, and refusing on a version we cannot see would make the feature unusable).**Observed on Zed
-  1.21.0, Windows, by the maintainer (2026-09-25):** the requested line appeared in the buffer as an unsaved
-  change, and **a single `Ctrl+Z` removed it and left the tab clean** — the change is in the editor's own undo
-  stack, and the file on disk was never touched. The two-process hop (page → `webviewd` → the sidecar's
-  loopback `/applyEdit` → LSP) needs the sidecar's token, like the navigation hop.
-- **The JetBrains and VS Code buffer paths are not wired.** Both are specified (JetBrains: `WriteCommandAction`;
-  VS Code: `WorkspaceEdit`) and neither host declares `edit` today, so a request with `target: "buffer"` from a
-  page talking to them is refused rather than silently written to disk.
-- **The page-side client.** `webview-client.js` (the full ladder, including the diff-and-accept step) and an
-  example page that edits are still to come.
-- **Checkpoint persistence.** The undo history lives in the running host; a restart forgets it, which is
-  documented rather than hidden.
+- **Both hosts now implement the surface through one class.** The routing — buffer or disk, `target`, the digest
+  guard before an editor is asked, the statuses and bodies — lives in `webview-core`'s `WriteSurface`, and both
+  `webviewd` and the JetBrains bridge call it. A second host should never grow a second set of rules, and the
+  plugin previously had no write route at all.
+- **The LSP buffer path: implemented and observed.** When the attached host declares `edit`, the change is asked
+  for over LSP; for Zed that means the sidecar sends `workspace/applyEdit` with a `documentChanges` entry whose
+  ranges are zero-based and whose `textDocument.version` is `null` (the buffer may legitimately differ from the
+  file, and refusing on a version we cannot see would make the feature unusable). **Observed on Zed 1.21.0,
+  Windows, by the maintainer (2026-09-25):** the requested line appeared in the buffer as an unsaved change, a
+  single `Ctrl+Z` removed it and left the tab clean, and the file on disk was never touched.
+- **The JetBrains buffer path: implemented, unit-tested, and not yet observed in the IDE.** The plugin's
+  `NavigatorService` declares `edit` and applies through `WriteCommandEditor`, which sets the document's text
+  inside `WriteCommandAction.runWriteCommandAction` on the EDT, with the resulting text computed by
+  `DocumentEdits` — a pure function routed through the same `EditorText` the disk path uses, so "line 2 column 1"
+  cannot mean two different things in the two halves of one contract. Its bridge serves
+  `/api/v1/applyEdit|diff|undo|redo`, token-only like every state-changing route. The text transformation has 5
+  unit tests; **gate (d) — the change appearing in the IDE's own undo stack — still needs the maintainer's eyes in
+  a running IDE**, and is not claimed until then.
+- **VS Code's `WorkspaceEdit` path is not wired**: that host does not declare `edit`, so a `target: "buffer"`
+  request from a page talking to it is refused rather than silently written to disk.
+- **Checkpoint persistence.** The undo history lives in `webviewd`'s process; a restart forgets it, which is
+  documented rather than hidden. (The plugin builds its own `EditService` per project, so its history is
+  separate.)
 - **`/jump` is still a separate route.** Plan § 6.3 folds it into `POST /api/v1/open`; that has not happened,
   and `webviewd`'s LSP adapter still calls it. The sidecar's `/applyEdit` route is the same kind of temporary
   bridge between the two processes, and would disappear with them (plan question 4).

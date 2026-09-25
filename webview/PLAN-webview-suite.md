@@ -422,10 +422,23 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > 3. **Windows reports a child's change against the parent directory's entry too**, so the first frame named
 >    `src` rather than `src/A.java`. Directories are now registered internally but never reported to a page.
 >
-> **Still open in this phase:** gate (d) — the JetBrains host applying an edit into the IDE's own undo stack
-> (VS Code's `WorkspaceEdit` path is the same shape) — and the page-side `webview-client.js` with an example
-> page that edits. Checkpoints are in-memory, so a restart forgets the undo history; that is documented rather
-> than hidden.
+> **Gate (d) delivered as code the same day, with its observation outstanding.** The work it needed turned out to
+> be more than the plugin: the write *conversation* — `target`, the digest guard before an editor is asked, the
+> statuses and bodies — was living in `webviewd`'s `EditApi`, and a second host would have meant a second set of
+> rules. It is now `webview-core`'s **`WriteSurface`**, used by `webviewd` and by the JetBrains bridge, with 8
+> core tests for the routing itself. The plugin gains `IdeDocumentEditor` + `WriteCommandEditor` (document text
+> set inside `WriteCommandAction.runWriteCommandAction` on the EDT, never saved), `DocumentEdits` (the resulting
+> text, a pure function over core's `EditableText`, so the buffer and disk halves cannot disagree about where an
+> edit goes — **5 unit tests**), `NavigatorService` declaring `edit` and delegating, and the token-only
+> `/api/v1/applyEdit|diff|undo|redo` routes on its bridge, sharing the project's rate limiter. The plugin's suite
+> is 30 tests, all green under Gradle (`gradlew test`), and `webview-core` must be `install`ed to `mavenLocal`
+> before that build, which its `build.gradle.kts` says in as many words. **What is not claimed:** that the change
+> appears in a running IDE's undo stack. That is the maintainer's observation, exactly as (e) was for Zed, and
+> until it is made the plugin's `edit` capability is implemented-and-unit-tested rather than observed.
+>
+> **Also still open in this phase:** VS Code's `WorkspaceEdit` path — that host declares no `edit`, so a page
+> asking it for a buffer edit is refused rather than written to — and checkpoint persistence across restarts, which
+> is documented rather than hidden.
 >
 > **Gate (e) was delivered and OBSERVED the same day**, once the LSP write transport existed: the sidecar now
 > sends `workspace/applyEdit` (`documentChanges`, zero-based ranges, `version: null`), `webviewd` routes an
