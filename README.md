@@ -18,6 +18,33 @@ The project is currently in **early development**. What was originally intended 
 
 Once the core framework stabilizes, these modules will be extracted back into dedicated repositories.
 
+### JCodeBuddy is expected to change until a major release
+
+**Until JCodeBuddy reaches a major release, it is expected and intended that JCodeBuddy itself is
+updated — to fix issues and to add functionality that turns out to be missing — so that the projects
+under [`proto/`](proto/README.md) can be implemented properly.**
+
+This is stated as an intention rather than as advice, because it settles which side of a problem moves.
+When a driver project cannot be built the way it should be, the default answer is **not** "work around
+it in the project": it is to change JCodeBuddy. A workaround in a driver project hides the gap, and the
+gap is the entire reason the project is being driven here. Concretely:
+
+- A driver project is a **consumer**, so it must be buildable the way any outside consumer would build
+  it. If it needs a local hack to compile, a missing API or a wrong default has just been found — and
+  the finding is the deliverable.
+- The driver projects are therefore **ahead of the library on purpose**. They use JCodeBuddy the way a
+  real project would, which means they run into what is absent long before a release would.
+- **No compatibility promise is made before the major release.** APIs, generated output shape, metadata
+  format, and the `project-automation` conventions may all change without a deprecation cycle, and a
+  driver project is expected to be updated alongside the change rather than to be held stable.
+- The cost of that is borne by the person making the change: updating the driver project, or explaining
+  in the change why it is not affected, belongs to the same commit. See
+  [`proto/README.md`](proto/README.md) and [`proto/AGENTS.md`](proto/AGENTS.md).
+
+What the promise is *not*: it is not a licence to leave JCodeBuddy broken. The recorded gate
+(`bun scripts/mvn-jdk25.js`) still has to pass, and a failure in a module unrelated to a change is still
+a failure.
+
 ## `project-automation` Architectural Convention
 
 The project recommends a **multi-module Maven structure** to incentivize modularity and maintain a clear separation of concerns:
@@ -74,7 +101,11 @@ of JCodeBuddy rather than parts of it. Consequences for anyone working on the bu
 - **The gate does not wait for it.** No command in the table above builds, tests or generates anything under `proto/`,
   so a broken driver project never blocks a JCodeBuddy change — which is the point: a consumer that participated in the
   producer's build could not tell you what an outside consumer experiences.
-- **`proto/README.md` is the one tracked file there**, and it explains the rules for adding a project. Its content is
+- **Two files under `proto/` are tracked**, and both explain the area rather than belong to a project:
+  [`proto/README.md`](proto/README.md), which covers what belongs there and how to add a project, and
+  [`proto/AGENTS.md`](proto/AGENTS.md), which scopes the agent rules to a driver project — the root
+  [`AGENTS.md`](AGENTS.md) is the rules for *this* repository, and a driver project's own `AGENTS.md` lives
+  in that project's git. A project's content is
   written by that project's own tooling, and its generated `.java` still goes under its `src/main/java` — never under a
   `.jcodebuddy/` directory, which `GeneratorGuardTest` asserts for this repository *including* anything you put in here.
 

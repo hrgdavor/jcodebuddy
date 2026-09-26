@@ -1,9 +1,31 @@
 # AGENTS.md — Rules for AI Coding Agents Working in This Repository
 
 > This file is read by AI coding agents (Kilo, codebuddy, and similar
-> tools) at the start of every session. The rules below are
-> **project-wide** and apply to anything you generate — code,
-> documentation, tests, examples, or commit messages.
+> tools) at the start of every session. § 1 and § 2 are the rules that
+> bind **everything** in this checkout — code, documentation, tests,
+> examples, commit messages, and the driver projects under `proto/`.
+> § 0 says which of the three `AGENTS.md` files applies to what you are
+> about to work on; § 3 says how they relate and which rules bind only
+> JCodeBuddy itself.
+>
+> **Until JCodeBuddy reaches a major release, it is expected that
+> JCodeBuddy itself is changed — issues fixed, missing functionality
+> added — so that the projects under `proto/` can be implemented
+> properly.** § 3 and [`doc/AGENTS.md`](doc/AGENTS.md) say what that
+> obliges a change to do.
+
+## 0. Read this far, then read your scope's file
+
+Three `AGENTS.md` files apply here, and the **nearest one wins** for what it states. This file is the entry
+point; read § 1 and § 2 (they bind everything), then the file that matches your scope. **§ 3** states how
+they relate and what no file may suspend.
+
+| File | Applies to | Read it when |
+| ---- | ---------- | ------------ |
+| **this file** (repository root) | everything in this checkout, including `proto/` | always — § 1 and § 2 bind unconditionally |
+| [`doc/AGENTS.md`](doc/AGENTS.md) | the JCodeBuddy libraries, tooling and generators — working on the **producer** | you are changing JCodeBuddy itself: a generator, a library module, the gate, the entity tooling |
+| [`proto/AGENTS.md`](proto/AGENTS.md) | the `proto/` area — working on a **consumer** | you are working in, or adding, a driver project |
+| `proto/<project>/AGENTS.md` | **one** driver project | that project's own repository, not this one — that file is not tracked here |
 
 ## 1. Source-Visible, IDE-Navigable Wiring (mandatory)
 
@@ -209,12 +231,14 @@ explanation in [`proto/README.md`](proto/README.md).
   **consumer** of JCodeBuddy:
   - **`proto/` is gitignored here, and each project under it is its
     own git repository** — its own history, remote and `.gitignore`.
-    The only file under `proto/` that is tracked here is
-    [`proto/README.md`](proto/README.md), which explains the area and
-    the rules for adding a project. **Never `git add -f` anything
+    Only two files under `proto/` are tracked here: [`proto/README.md`](proto/README.md), which
+    explains the area and the rules for adding a project, and
+    [`proto/AGENTS.md`](proto/AGENTS.md), which scopes § 1–§ 3 to a driver project.
+    **Never `git add -f` anything
     else under `proto/`**: a forced add copies another repository's
     sources into this one's history, where they stay. Do not make
-    `proto/` a submodule either.
+    `proto/` a submodule either. A driver project's **own** `AGENTS.md` belongs to that project
+    and is committed to its git, not to this one.
   - **A driver project is never part of this reactor.** It declares
     its own coordinates, parent and version (never
     `jcodebuddy-parent`), and it is never added to the root POM's
@@ -379,11 +403,48 @@ explanation in [`proto/README.md`](proto/README.md).
   [`doc-hipster-entity/architecture/decisions/DEC-033.md`](doc-hipster-entity/architecture/decisions/DEC-033.md)
   and [`webview/doc/webview-host-api.md`](webview/doc/webview-host-api.md) § 4a.
 
-## 3. How to use this file
+## 3. How the three files relate, and what no file may suspend
 
-- Read it before starting any non-trivial work in this repo.
+**Gating: what binds only JCodeBuddy.** Some of § 2 is written for *this* repository's tree and does not
+bind a driver project — its Maven reactor layout, its internal tool chain, its module inventory. Each such
+rule is marked **JCodeBuddy-only** in [`doc/AGENTS.md`](doc/AGENTS.md), and [`proto/AGENTS.md`](proto/AGENTS.md)
+lists them from the other side, so a reader in either scope can see what does *not* apply to them. A driver
+project that copied this repository's reactor layout, or that was told to mirror its module graph, would be
+wrong rather than extra-careful.
+
+**What no file may suspend.** Three rules are absolute; a nearer `AGENTS.md` that appears to conflict with
+one is a documentation bug to report, not a local override:
+
+1. **§ 1 — source-visible, IDE-navigable wiring.** A developer with only the committed sources and a stock
+   IDE must be able to follow the program flow from entry point to leaf. This is the rule the whole project
+   exists for, and it is tested in a driver project rather than relaxed there.
+2. **§ 2's Bun-JavaScript rule.** A check that only runs in one shell on one operating system is invisible
+   wiring for the workflow, in any project.
+3. **A driver project stays a consumer.** It is never part of this reactor, and never depends on
+   `project-automation` as a published artifact.
+
+**Where a conflict is resolved.** The nearer file wins for anything it states; where it is silent, the next
+one out applies. Where two files genuinely conflict, the conflict is a documentation bug and must be
+reported rather than resolved silently — including by an agent, which should say so in its final message.
+
+**A driver project's own `AGENTS.md` is authoritative for that project**, because a driver project is its
+own repository and JCodeBuddy's checkout is not part of it. It may not, however, suspend the three rules
+above. When one exists, the precedence is: `proto/<project>/AGENTS.md` → [`proto/AGENTS.md`](proto/AGENTS.md)
+→ this file.
+
+**Until JCodeBuddy reaches a major release, the expected response to a driver project that cannot be
+implemented properly is to change JCodeBuddy**, not to work around it in the project. What that obliges a
+producer-side change to do is stated in [`README.md`](README.md), [`doc/AGENTS.md`](doc/AGENTS.md) and
+[`proto/AGENTS.md`](proto/AGENTS.md).
+
+## 4. How to use this file
+
+- Read § 1 and § 2 before starting any non-trivial work in this repo, then read your scope's file — § 0
+  and § 3 say which one applies.
 - If a task description conflicts with rule §1, follow rule §1 and
   flag the conflict to the user in your final message.
+- If a task conflicts with a rule in [`doc/AGENTS.md`](doc/AGENTS.md) or
+  [`proto/AGENTS.md`](proto/AGENTS.md), say so in your final message rather than resolving it silently.
 - If you are unsure whether a specific piece of generated code
   satisfies rule §1, ask: "Could a developer with a stock IDE
   follow the program flow from entry point to leaf using only the

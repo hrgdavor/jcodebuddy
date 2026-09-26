@@ -12,8 +12,9 @@ The one sentence that explains why this directory exists:
 
 Consequences, in order of how often they matter:
 
-- **`proto/` is gitignored by this repository.** The only file here that is committed to
-  JCodeBuddy's own git is this `README.md`. See [Tracking policy](#tracking-policy).
+- **`proto/` is gitignored by this repository.** Exactly two files here are committed to
+  JCodeBuddy's own git: this `README.md` and [`AGENTS.md`](AGENTS.md), which scopes the agent rules
+  to this area. See [Tracking policy](#tracking-policy).
 - **Every project under `proto/` is its own git repository.** It has its own history, its own
   remote, its own `.gitignore`, and its own release cadence. JCodeBuddy's history deliberately
   does not contain it — neither as a submodule, nor as a vendored copy, nor as a gitlink.
@@ -37,23 +38,32 @@ put it in the owning module's `src/test` or in `target/` scratch space instead.
 ## Tracking policy
 
 `proto/` follows the same shape as the rest of the repository's ignored subtrees: **the
-directory is excluded, its explanation is committed.** The root [`.gitignore`](../.gitignore)
-carries the two lines that do it:
+directory is excluded, its explanations are committed.** The root [`.gitignore`](../.gitignore)
+carries the lines that do it:
 
 ```gitignore
 proto/*
 !proto/README.md
+!proto/AGENTS.md
 ```
 
 The rule is `proto/*` rather than `proto/` on purpose. Git never re-includes a file whose parent
-directory is excluded, so excluding the directory itself would silently drop this README as well.
-With `proto/*` the directory stays visible to git and the single exception applies.
+directory is excluded, so excluding the directory itself would silently drop these files as well.
+With `proto/*` the directory stays visible to git and the exceptions apply.
+
+**Two files are re-included, and only two.** Both are explanations of the area rather than members of any
+project: this README says what the area is and how to add a project, and [`AGENTS.md`](AGENTS.md) scopes the
+agent rules to a driver project (the root [`AGENTS.md`](../AGENTS.md) is the rules for *this* repository).
+A third exception is not a small change — it is a decision to put something under `proto/` into
+JCodeBuddy's history, which is what the rest of this file exists to prevent.
 
 The practical result:
 
     proto/
-    ├── README.md   TRACKED    this file — the only thing JCodeBuddy's git knows about here
+    ├── README.md   TRACKED    this file — what the area is, how to add a project
+    ├── AGENTS.md   TRACKED    the agent rules scoped to this area
     ├── <project>/  UNTRACKED  a project with its own git repository and its own remote
+    │   └── AGENTS.md   that project's OWN rules, in its OWN git — never in this one
     └── <project>/  UNTRACKED  …
 
 Two rules follow from that, and both are easy to get wrong:
@@ -109,6 +119,13 @@ Two rules follow from that, and both are easy to get wrong:
 
 4. Add a row to the Projects table above so the next reader knows what is being driven and in what
    state.
+
+5. **Give the project its own `AGENTS.md`, in its own repository.** The agent rules are scoped in three
+   files and the nearest one wins: the root [`AGENTS.md`](../AGENTS.md) binds everything, this area's
+   [`AGENTS.md`](AGENTS.md) says what a driver project must never do and which root rules do *not* bind
+   it, and the project's own file carries its conventions, build commands and layout. That third file is
+   **that project's**, so it is committed to that project's git and never to this one — which is why it
+   is not one of the two files re-included above.
 
 ## Moving a project in from elsewhere
 
