@@ -34,6 +34,16 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>hipster-entity-tooling</artifactId>
         </dependency>
+        <!--
+            The generator SPI, which is a shared library and not this module's own. It lives in
+            `jcodebuddy-codegen-api` so that a tool which generates code (java-watch-agent is the one
+            that forced the split) can implement a generator without depending on a project's private
+            dev-time assistant. See that module's POM.
+        -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-codegen-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -67,4 +77,44 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                NEVER INSTALLED, NEVER DEPLOYED — enforced here rather than asked for in a document.
+
+                A project-automation module is one project's dev-time assistant. It is never a
+                deliverable, never shared, and never a dependency of anything that ships (see the
+                project-automation README and the root README's dev-time-only guarantee). Publishing it
+                to any repository — the local one included — is the one thing it must never do, because
+                an outside consumer can then resolve it by accident and take a dependency on a project's
+                private tooling. That is a hard rule for JCodeBuddy in general, not a preference of this
+                module: see AGENTS.md § 1.
+
+                A bare `mvn install` is the command a newcomer runs for the released libraries, and in
+                a reactor it installs every module it builds. This module pulls `java-watch-agent` and
+                `hipster-ioc-tooling` from the reactor, and in return they depend on this one
+                *within* the reactor — so the module must still compile, and its tests must still run.
+                Only the two goals that publish are off.
+
+                `skip` rather than removing the goals: a `maven-install-plugin:install` executed with
+                no configuration fails the build with "No goals have been specified", which would break
+                the documented command instead of protecting it.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

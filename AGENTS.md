@@ -30,16 +30,18 @@ Each of those two files marks what is **JCodeBuddy-only** — written for this r
 binding a driver project. A driver project that copied this repository's Maven reactor layout, for
 instance, would be wrong rather than extra-careful.
 
-**Three rules no file may suspend**, and a nearer file that appears to conflict with one is a
+**Four rules no file may suspend**, and a nearer file that appears to conflict with one is a
 documentation bug to report rather than a local override:
 
 1. **§ 1 — source-visible, IDE-navigable wiring.** A developer with only the committed sources and a stock
    IDE must be able to follow the program flow from entry point to leaf. This is the rule the project
    exists for, and a driver project is where it is tested against a real IDE rather than relaxed.
-2. **§ 2's Bun-JavaScript rule.** A check that only runs in one shell on one operating system is invisible
+2. **§ 1.1 — a `project-automation` module is strictly private.** It is never installed, never deployed,
+   never published anywhere, and no other project may depend on it. See § 1.1, which is a hard rule.
+3. **§ 2's Bun-JavaScript rule.** A check that only runs in one shell on one operating system is invisible
    wiring for the workflow, in any project.
-3. **A driver project stays a consumer.** It is never part of this reactor, and never depends on
-   `project-automation` as a published artifact.
+4. **A driver project stays a consumer.** It is never part of this reactor, and never depends on a
+   `project-automation` module.
 
 When two files genuinely conflict, say so in your final message rather than resolving it silently.
 
@@ -228,6 +230,91 @@ code or documentation for this repository:
   metadata is the model, Bun JavaScript renders the page, and every
   source link is verified.
 
+## 1.1 A `project-automation` Module Is Strictly Private (mandatory, hard rule)
+
+> **Applies to:** every `project-automation` module, in this repository and in every project that
+> consumes JCodeBuddy, including the driver projects under `proto/`.
+
+A `project-automation` module is **one project's own dev-time assistant**. It is not a library, not a
+shared tool, and not a framework. It is the thing that knows *this* project's generators, *this* project's
+conventions and *this* project's file layout, and that knowledge is exactly why it can never be shared.
+
+**The rule, in full — all four clauses are absolute:**
+
+1. **It is never installed.** Not to `~/.m2`, not to a redirected local repository, not to any local
+   repository. `mvn install` must leave it out.
+2. **It is never deployed or published.** Not to a release repository, a snapshot repository, a package
+   registry, a CI artifact store, or a tarball attached to a release. There is no configuration of this
+   repository in which it is a deliverable.
+3. **No other project may depend on it.** Not in this reactor, not in a sibling project, not from
+   `proto/`, not by a transitive path. A dependency on another project's `project-automation` is never a
+   shortcut worth taking; it is a boundary violation, and it is the failure this rule exists for.
+4. **Reusable parts are promoted to JCodeBuddy instead.** If a second place needs something that lives in
+   a `project-automation`, that is not a reason to share the module — it is the signal that the thing was
+   never project-specific. Move it into a JCodeBuddy library and let both depend on that. See
+   § "When you are tempted to depend on one" below.
+
+**Why this is strict rather than tidy.** A `project-automation` module carries a project's private
+decisions: its generators, its naming conventions, its directory layout, its dev-time flags. Publishing it
+makes those decisions a public interface that other projects can resolve and compile against, and a
+dependency on it makes one project's private automation load-bearing for another. Neither is recoverable
+cheaply: a published artifact cannot be unpublished from somebody's local repository, and a dependency is
+a compile-time contract that has to be unwound across every consumer. The cost of getting this wrong is
+therefore paid long after the mistake, by someone who did not make it.
+
+**It is also not enough to say "it does not ship".** The claim that a `project-automation` module is not
+part of a packaged artifact is true and was already written down — and it did not prevent this repository
+from installing one. "Not in the artifact" and "not in a repository" are different guarantees, and only
+the second one keeps the module private. Both are required; neither implies the other.
+
+### How it is enforced
+
+The rule is enforced by the build, not by this paragraph:
+
+- **Every `project-automation` POM skips both publishing goals.** `maven-install-plugin` and
+  `maven-deploy-plugin` are configured with `<skip>true</skip>`, so a bare `mvn install` or `mvn deploy`
+  builds, tests and leaves the module out. `skip` is used rather than removing the goals because a
+  goal-run with no configuration fails the build with "No goals have been specified", which would break
+  the documented command instead of protecting it.
+- **The plugin versions are pinned in the root POM's `<pluginManagement>`**, so a module can switch the
+  goals off without tripping the `'build.plugins.plugin.version' is missing` warning.
+- **`ProjectAutomationIsolationTest` asserts all of it**, so deleting a `<skip>` fails the gate rather
+  than silently reopening the leak. That test is the reason this rule cannot rot: an unenforced promise in
+  a document is how the last violation survived, and the fix for a rule that was only written down is a
+  check that reads the POMs.
+- **`mvn -o -pl <module> install -am`** is how you install a library you are iterating on; naming the
+  modules is an optimisation, not a requirement, because a full install is already safe.
+
+### When you are tempted to depend on one
+
+The impulse is usually right about the *code* and wrong about the *boundary*. Two things are genuinely
+being asked for, and they have different answers:
+
+- **"I need this reusable type."** Then it was never project-specific. Promote it: move it into a
+  JCodeBuddy library module with its own POM, and have both the `project-automation` and the new consumer
+  depend on that. The precedent is [`jcodebuddy-codegen-api`](jcodebuddy-codegen-api/pom.xml), created for
+  exactly this reason when `java-watch-agent` turned out to need the generator SPI that lived in
+  `project-automation`: five leaf types became a library, and the dependency became legal.
+- **"I need this project's specific behaviour."** Then it is not reusable and must not be depended on. If
+  a JCodeBuddy tool genuinely needs to know how *a* project generates code, the right shape is for the
+  project to hand the tool an implementation of a published interface — an SPI boundary — rather than for
+  the tool to reach into the project's assistant.
+
+**Never resolve this by adding a dependency and moving on**, and never by installing the module so the
+dependency can be satisfied. Those two moves conceal each other, which is precisely how the rule was
+broken here: `java-watch-agent` depended on `project-automation`, and the dependency was only
+satisfiable because the artifact was being installed. Either one alone would have been caught.
+
+### Where this comes from
+
+- [`project-automation/README.md`](project-automation/README.md) — the module's own statement of what it
+  is and is not.
+- [`jcodebuddy-codegen-api/pom.xml`](jcodebuddy-codegen-api/pom.xml) — the promotion that made the rule
+  hold, and the reasoning written at the point it applies.
+- [`doc/architecture/decisions-watch/DEC-W003.md`](doc/architecture/decisions-watch/DEC-W003.md) —
+  the decision record. It covers the *runtime dependency* half of the rule; this section adds the
+  *publishing* half, which no decision record stated and which was therefore the half that failed.
+
 ## 2. Other rules you are expected to follow
 
 Most of these come from existing project files and are recorded here as a
@@ -329,7 +416,7 @@ canonical statement of a boundary that has no other home.
     and compare with `node:assert`, not with shell string
     matching. A test that only "looks right" in a terminal is not a
     test; print explicit `ok`/`FAIL` lines and a final count, the
-    way `webview/examples/webview-client.test.mjs` and
+    way `webview/kit/examples/webview-client.test.mjs` and
     `webview/webview-vscode/src/test/BridgePolicy.test.js` do.
   - **Java build steps are still Maven and Gradle** (`mvnd`,
     `gradlew`); the rule is about the scripts *around* them. Where

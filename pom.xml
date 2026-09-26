@@ -47,6 +47,8 @@
         <exec.maven.plugin.version>3.3.0</exec.maven.plugin.version>
         <maven.dependency.plugin.version>3.6.1</maven.dependency.plugin.version>
         <native.maven.plugin.version>0.10.1</native.maven.plugin.version>
+        <maven.install.plugin.version>3.1.4</maven.install.plugin.version>
+        <maven.deploy.plugin.version>3.1.2</maven.deploy.plugin.version>
     </properties>
 
     <modules>
@@ -75,6 +77,11 @@
         <module>hipster-entity-jackson</module>
         <module>hipster-entity-test</module>
         <module>hipster-entity-tooling</module>
+        <!-- The generator SPI: what a code generator is, the context it is handed, and how it resolves
+             a type. A leaf library, and the reason it exists is a rule rather than a feature — a tool
+             that generates code must not have to depend on anybody's `project-automation` to do it.
+             See the module's POM and AGENTS.md § 1. -->
+        <module>jcodebuddy-codegen-api</module>
         <module>project-automation</module>
         <module>hipster-ioc-api</module>
         <module>hipster-ioc-tooling</module>
@@ -355,9 +362,16 @@
             </dependency>
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
-                <artifactId>project-automation</artifactId>
+                <artifactId>jcodebuddy-codegen-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!--
+                `project-automation` is deliberately NOT managed here, for the same reason nothing may
+                depend on it (AGENTS.md § 1.1): it is a project's private dev-time assistant, and a
+                managed entry is an invitation to add exactly the dependency the rule forbids. Maven 3.9
+                only requires a version for a *dependency* on a reactor module, and no module declares
+                one, so its absence costs nothing.
+            -->
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>hipster-ioc-api</artifactId>
@@ -439,6 +453,22 @@
                     <groupId>org.graalvm.buildtools</groupId>
                     <artifactId>native-maven-plugin</artifactId>
                     <version>${native.maven.plugin.version}</version>
+                </plugin>
+                <!--
+                    Pinned so `project-automation` can switch both goals off without tripping the
+                    "'build.plugins.plugin.version' is missing" warning. See that module's POM and
+                    AGENTS.md § 1: a project-automation module must never reach a repository,
+                    local or remote.
+                -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${maven.install.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${maven.deploy.plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>

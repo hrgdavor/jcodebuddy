@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.agent.tools;
 
-import hr.hrg.jcodebuddy.automation.CodeContextImpl;
+import hr.hrg.jcodebuddy.codegen.CodeContextImpl;
 import hr.hrg.watch2.agent.core.ContextualAnalyzer;
 import hr.hrg.watch2.agent.tools.ActionTool.FileChange;
 import hr.hrg.watch2.agent.tools.ActionTool.ToolContext;

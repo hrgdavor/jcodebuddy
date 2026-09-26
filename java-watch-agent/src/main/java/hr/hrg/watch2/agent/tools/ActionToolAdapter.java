@@ -2,8 +2,13 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.agent.tools;
 
-import hr.hrg.jcodebuddy.automation.CodeContext;
-import hr.hrg.jcodebuddy.automation.CodeGenerator;
+// The generator SPI is a JCodeBuddy *library* (jcodebuddy-codegen-api), not a project's private
+// `project-automation`. This file used to import it from the latter, which meant a JCodeBuddy library
+// depended on a driver project's dev-time assistant — the one thing a project-automation module must
+// never be part of (AGENTS.md § 1). Promoted so that the rule holds and this class is what it claims to
+// be: a generator a tool can hold, with no opinion about whose project it is running in.
+import hr.hrg.jcodebuddy.codegen.CodeContext;
+import hr.hrg.jcodebuddy.codegen.CodeGenerator;
 
 import java.nio.file.Path;
 import java.util.List;

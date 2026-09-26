@@ -1,0 +1,53 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jcodebuddy-codegen-api</artifactId>
+    <packaging>jar</packaging>
+
+    <name>JCodeBuddy Codegen API</name>
+    <description>
+        The generator SPI: what a code generator is, the context it is handed, and how it resolves a
+        type. A leaf library, so that a tool which generates code can be built without depending on
+        anybody's project-automation.
+    </description>
+
+    <!--
+        WHY THIS MODULE EXISTS, AND WHY IT IS ONLY THESE FIVE TYPES.
+
+        A `project-automation` module is strictly private to the project that owns it: another project
+        must never depend on it, and it must never be installed or deployed (AGENTS.md § 1). That rule
+        was being broken in this very repository. `java-watch-agent` implemented `CodeGenerator` and
+        used `CodeContext`/`CodeContextImpl`, and those types lived in `project-automation` — so the
+        watch agent, which is a JCodeBuddy *library*, had a compile dependency on a project's private
+        dev-time assistant. The dependency was only possible because the artifact was being installed,
+        which is the leak the rule forbids; the two faults concealed each other.
+
+        The fix is the one the rule prescribes: **reusable bits are promoted to JCodeBuddy**, and what
+        remains in `project-automation` is genuinely that project's own. These five types are the
+        reusable part — a generator, the context it is given, and a type resolver — and they are all
+        leaf declarations that depend on nothing but `SourceMetadata` and the JDK. Nothing here knows
+        about JCodeBuddy's own generators, so this module cannot become a back door to them.
+
+        The module is deliberately thin. If a type here starts needing a generator implementation, that
+        is the signal it belongs in `hipster-entity-tooling` instead, and this module should keep
+        holding only the seam.
+    -->
+
+    <dependencies>
+        <!-- `SourceMetadata` is the one outside type the context carries, and it already lives here
+             because it describes *source*, which is the tooling's subject rather than a generator's. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>hipster-entity-tooling</artifactId>
+        </dependency>
+    </dependencies>
+</project>

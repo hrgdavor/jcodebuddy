@@ -56,18 +56,27 @@ These modules depend on Layer 1 and/or Layer 2:
 | `java-watch-run` | `java-watch-core`, `ecj`, `polyglot` |
 | `java-watch-run-sample` | `java-watch-run` (provided) |
 | `jwa-sidecar` | `java-watch-core`, `jwa-builder-api`, `jwa-builder` |
-| `java-watch-agent` | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `project-automation` |
+| `java-watch-agent` | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `jcodebuddy-codegen-api` |
 | `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core` |
 | `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api` |
 | `hipster-entity-test` | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson` |
 
 ## Critical Boundaries
 
-### `project-automation` — Dev-Time Only
+### `project-automation` — Dev-Time Only, and Strictly Private
 - **This module is the ORCHESTRATOR.** It wires together generators from `java-watch-agent` and `hipster-entity-tooling`.
-- It has compile-scope dependencies on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
+- It has compile-scope dependencies on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jcodebuddy-codegen-api`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
 - **It must NOT be a transitive dependency of any production/runtime module.**
-- `java-watch-agent` depends on `project-automation` to wrap `ActionTool` generators into the unified `CodeGenerator<T>` interface.
+- **No module may depend on it at all** — not in this reactor, not from a driver project. It is one
+  project's own assistant, not a library; see [AGENTS.md § 1.1](../../AGENTS.md) and
+  [DEC-W003](decisions-watch/DEC-W003.md).
+- **It is never installed and never deployed.** `maven-install-plugin` and `maven-deploy-plugin` are
+  skipped in its POM. `java-watch-agent` used to depend on it, which both broke the clause above and
+  required the module to be published for the dependency to resolve — the two faults concealed each other.
+  The reusable generator SPI (`CodeGenerator<T>`, `CodeContext`, `CodeContextImpl`, `TypeResolver`,
+  `TypeDefinition`) was promoted to `jcodebuddy-codegen-api` so that neither is needed.
+- `ProjectAutomationIsolationTest` asserts all of the above, so a removed skip or a new dependency fails
+  the gate rather than silently reopening the hole.
 
 ### `hipster-entity-api` / `hipster-entity-core` — No Watch2 Dependency
 - These modules **must not** depend on any `hr.hrg.watch2` (now `hr.hrg.jcodebuddy`) artifacts.

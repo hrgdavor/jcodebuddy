@@ -20,11 +20,15 @@
             <artifactId>hipster-ioc-api</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>project-automation</artifactId>
-            <version>${project.version}</version>
-        </dependency>
+        <!--
+            `project-automation` was declared here and is deliberately absent.
+
+            It is a project's strictly private dev-time assistant: another module must never depend on
+            it, and it must never be installed or deployed (AGENTS.md § 1). No source in this module —
+            main or test — referenced any type from it, so the dependency was never anything but an
+            invitation to break that rule, and it was pulling a private module into this one's compile
+            classpath. The compile is unchanged without it.
+        -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>hipster-entity-tooling</artifactId>
