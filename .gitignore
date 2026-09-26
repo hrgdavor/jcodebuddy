@@ -86,3 +86,14 @@ webview/zed/*/extension.wasm
 # config (package.json, node_modules) is covered above.
 .kilo/plans
 .mvn-local-repo
+
+# proto/ is the driver-project area: real projects that exercise JCodeBuddy while it is under
+# development. They are *not* part of this repository - each one is a repository of its own - so
+# nothing under proto/ is committed here. The rule is `proto/*` rather than `proto/` on purpose:
+# the directory itself stays visible to git, which is what lets the one exception below work (git
+# never re-includes a file whose parent directory is excluded). proto/README.md is the exception
+# because it is the only explanation of the area, and a next reader who clones this repository
+# needs it. Everything else - a proto project's sources, its .jcodebuddy/, its .git/, its build
+# output - stays out of this repository and lives in that project's own git.
+proto/*
+!proto/README.md

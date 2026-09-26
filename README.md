@@ -62,6 +62,22 @@ shell files until 2026-09-26; `AGENTS.md` § 2 requires Bun JavaScript for anyth
 something, because a check that only runs in one shell on one OS is invisible wiring for the workflow. One
 implementation also cannot drift from itself, which is the other reason: see the note on `GateContractTest` below.
 
+### `proto/` — the driver projects are not part of this build
+
+JCodeBuddy is under heavy development, so it is driven through **real projects**; those live under
+[`proto/`](proto/README.md). They are gitignored here and **each one is its own repository**, because they are consumers
+of JCodeBuddy rather than parts of it. Consequences for anyone working on the build:
+
+- **Nothing in `proto/` is in the reactor.** A driver project declares its own coordinates, its own parent and its own
+  version; it does **not** list `jcodebuddy-parent` as a parent and is **not** added to the root POM's `<modules>`. It
+  depends on JCodeBuddy the way any outside consumer would — a released artifact, or a local install.
+- **The gate does not wait for it.** No command in the table above builds, tests or generates anything under `proto/`,
+  so a broken driver project never blocks a JCodeBuddy change — which is the point: a consumer that participated in the
+  producer's build could not tell you what an outside consumer experiences.
+- **`proto/README.md` is the one tracked file there**, and it explains the rules for adding a project. Its content is
+  written by that project's own tooling, and its generated `.java` still goes under its `src/main/java` — never under a
+  `.jcodebuddy/` directory, which `GeneratorGuardTest` asserts for this repository *including* anything you put in here.
+
 **JCodeBuddy is a side tool, not a build step.** This project uses no annotation processing and
 no compile hooks: `mvn compile`, `package` and `test` only compile the committed generated source
 that already sits under `src/main/java`, because no execution in

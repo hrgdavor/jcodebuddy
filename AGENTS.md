@@ -185,10 +185,6 @@ code or documentation for this repository:
   reflection.
 - [`doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md`](doc-hipster-entity/brainstorm/dec-009-source-visible-generation-strategy.md) —
   the source-visible generation strategy.
-- [`doc/brainstorm/business_logic/`](doc/brainstorm/business_logic/) —
-  the business-logic concept, which depends on this rule (its
-  dispatcher and loop-guard scaffolding are real Java methods, not
-  runtime-discovered beans).
 - [`doc-hipster-entity/architecture/decisions/DEC-027.md`](doc-hipster-entity/architecture/decisions/DEC-027.md) —
   where the rule's HTML-report half comes from: the generator's JSON
   metadata is the model, Bun JavaScript renders the page, and every
@@ -196,13 +192,54 @@ code or documentation for this repository:
 
 ## 2. Other rules you are expected to follow
 
-These come from existing project files; this section is a reminder
-with pointers, not a new policy.
+Most of these come from existing project files and are recorded here as a
+reminder with pointers rather than as new policy; the `proto/` rule is the
+canonical statement of a boundary that has no other home, with its full
+explanation in [`proto/README.md`](proto/README.md).
 
 - **Modular multi-module Maven layout.** A `project-automation`
   module orchestrates dev-time codegen; the runtime app modules
   depend on released JCodeBuddy libraries, never on
   `project-automation`. See [`README.md`](README.md).
+- **`proto/` holds driver projects, and it is not part of this
+  repository.** It exists because JCodeBuddy is under heavy
+  development and is driven through **real projects**. A driver
+  project is a working codebase whose build, codegen and IDE
+  experience are exercised while JCodeBuddy changes, and it is a
+  **consumer** of JCodeBuddy:
+  - **`proto/` is gitignored here, and each project under it is its
+    own git repository** — its own history, remote and `.gitignore`.
+    The only file under `proto/` that is tracked here is
+    [`proto/README.md`](proto/README.md), which explains the area and
+    the rules for adding a project. **Never `git add -f` anything
+    else under `proto/`**: a forced add copies another repository's
+    sources into this one's history, where they stay. Do not make
+    `proto/` a submodule either.
+  - **A driver project is never part of this reactor.** It declares
+    its own coordinates, parent and version (never
+    `jcodebuddy-parent`), and it is never added to the root POM's
+    `<modules>`. It depends on JCodeBuddy the way any outside
+    consumer would — a released artifact, or a local install — and
+    no command in [`README.md`](README.md)'s table builds, tests or
+    generates anything under `proto/`. A broken driver project must
+    never block a JCodeBuddy change.
+  - **Everything else in this file still binds the projects there.**
+    A driver project's own sources are committed Java the IDE can
+    navigate (§ 1), its derived output goes in **its own**
+    `.jcodebuddy/`, and its generated `.java` stays under its
+    `src/main/java` (DEC-026). Note the limits of the guard:
+    `GeneratorGuardTest` walks this repository three levels deep, so
+    it covers `proto/<project>/.jcodebuddy/` but **not** a project
+    nested deeper, which must keep the rule on its own.
+  - When you write documentation for a driver project, refer to this
+    repository's decisions and modules **by name** (DEC-019,
+    `project-automation`, `hipster-entity`, …) rather than by
+    relative link, because this checkout is not part of that project.
+  - A project that is **not** meant to become its own repository does
+    not belong under `proto/`: put it in the owning module's
+    `src/test`, or in `target/` scratch space. The full rules —
+    tracking policy, adding a project, verified checks — are in
+    [`proto/README.md`](proto/README.md).
 - **Cooperative codegen, not annotation processing.** Prefer
   generating committed source that coexists with hand-written
   code, rather than a processor that only runs at compile time.
