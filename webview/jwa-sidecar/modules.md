@@ -45,11 +45,19 @@ about where the *worker* logic lives; the shell itself is protocol plumbing.
 ## Next Steps
 1. Split `jwa-builder` into `jwa-builder-api` (annotations) and `jwa-builder` (implementation). — **done**, and the split is what the two poms above resolve.
 2. Update the parent POM to manage both modules. — **done**.
-3. Refactor Sidecar to load implementation JARs based on `jwa-sidecar.txt`. — **NOT DONE, and never was.** This
-   line used to read "done", which was wrong: no code in any language ever referenced that file, in this
+3. Refactor Sidecar to load implementation JARs based on `jwa-sidecar.txt`. — **withdrawn, not done, and not to be
+   done** ([DEC-031](../../doc-hipster-entity/architecture/decisions/DEC-031-project-automations-are-living-code.md)).
+   This line used to read "done", which was wrong: no code in any language ever referenced that file, in this
    repository's whole history — only the documents that describe it. What exists is the *split* from step 1 plus
    a hard compile-time dependency from the sidecar's `pom.xml` on `jwa-builder`, so the builder is baked into the
-   shaded jar and its code action is offered to every client. The dynamic loading described in
-   [`README.md`](README.md#configuration-jwa-sidecartxt) needs a classloader over the listed paths and GAVs, and
-   an SPI for what an addon contributes — neither exists, because `JwaTextDocumentService` calls the builder
-   directly. Recorded here as open so the next reader does not plan around a feature that is not there.
+   shaded jar and its code action is offered to every client.
+   The replacement model is **living code**: an automation is a module in the project it automates, compiled by
+   that project's own build and visible in code review, with no classloader, no service registry and no scanning.
+   A host that needs those automations gets them on its **classpath at launch**, the way
+   [`scripts/gen.js`](../../scripts/gen.js) already runs this repository's own generator. A new project starts
+   from a **generated stub** (initial requirements in, a compiling automation module out) or by **copying an
+   example** from another project — its own or one published online — and then editing it.
+   DEC-031 records the reasoning, the accepted costs (no drop-in prebuilt jar; a copied example can drift,
+   mitigated by DEC-022's divergence report) and the follow-up work this creates: the stub generator, a
+   documented example to copy, and the sidecar's launch path that puts a project's automation module on its
+   classpath. None of those three is done.

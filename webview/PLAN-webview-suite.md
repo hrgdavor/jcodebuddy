@@ -267,7 +267,14 @@ JWA builder code actions are preserved as they are — this plan changes the sid
 **Corrected 2026-09-25:** the addon-file mechanism has **no implementation to preserve** — nothing in the
 repository's history ever read that file, and `modules.md` had recorded it as done. The builder code actions do
 exist; see [the Phase 1 record](#phase-1--extract-the-shared-core-and-put-the-sidecar-with-the-product) and
-[`jwa-sidecar/modules.md`](jwa-sidecar/modules.md).
+[`jwa-sidecar/modules.md`](jwa-sidecar/modules.md). **Resolved 2026-09-26:** the mechanism is **withdrawn**
+rather than implemented, and the requirement moves to the `project-automation` concept — an automation is a
+module in the project it automates, on the host's classpath at launch, bootstrapped by a generated stub or by
+copying an example. That removes the classloader this plan would have needed and keeps the wiring navigable
+(DEC-019). See
+[DEC-031](../doc-hipster-entity/architecture/decisions/DEC-031-project-automations-are-living-code.md), which
+also lists the follow-up work it creates: the stub generator, a documented example, and the sidecar's launch
+path — none of them done.
 
 ## 7. Phases
 

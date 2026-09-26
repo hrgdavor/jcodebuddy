@@ -78,34 +78,23 @@ Maven's dependency management handles sub-modules as distinct units. By separati
 
 ---
 
-## Configuration: `jwa-sidecar.txt`
+## Extending the sidecar: automations are code in *your* project
 
-> **Status: documented format, not implemented.** No code in this repository reads this file, and none ever has
-> — a search of the whole history for its name finds only the documents that describe it. It stays written down
-> because it is the intended design; it is labelled because a reader who followed it today would find that
-> adding a line to `jwa-sidecar.txt` changes nothing.
+> **Status: the `jwa-sidecar.txt` mechanism is withdrawn (DEC-031), not implemented.** It used to be documented
+> here as a project-level file naming Maven GAVs and jar paths for the sidecar to load — and `modules.md`
+> recorded it as done. No code in any language ever read that file: the builder is a compile-time dependency of
+> this module and `JwaTextDocumentService` calls it directly.
 >
-> **What actually happens today:** `jwa-builder` and `jwa-builder-api` are *compile-time dependencies* of the
-> sidecar (see [its `pom.xml`](pom.xml)), so the builder is inside the shaded jar and its code action is offered
-> to every client. Adding another worker means adding it to that POM and rebuilding the sidecar — not editing a
-> file in the project being edited.
+> **What replaces it:** an automation is a **module in the project it automates** — hand-written code, generated
+> code committed beside it, no classloader, no `META-INF/services`, no scanning. A host that needs a project's
+> automations gets them **on its classpath at launch**, which is exactly how this repository already runs its own
+> generator (`dependency:build-classpath` + `java -cp`, in [`scripts/gen.js`](../../scripts/gen.js)). A new
+> project starts with a **generated stub** (a few initial requirements in, a compiling automation module out) or
+> by **copying an example** — from another of your projects, or one published online — and then editing it, which
+> is the point: the starting point is source you own and can read.
 >
-> **What implementing this would take:** a classloader over the listed paths and GAVs, and an SPI describing what
-> an addon contributes. No such SPI exists: the builder is called directly by `JwaTextDocumentService`, which is
-> exactly why the file has no consumer. [`modules.md`](modules.md) records it as an open item rather than a
-> finished one.
-
-### Format (intended)
-One artifact per line (standard Maven GAV format) or a local path.
-
-```text
-# Remote Maven artifacts (fetched from .m2)
-hr.hrg.watch2:jwa-builder:1.0-SNAPSHOT
-
-# Local development paths
-./libs/my-custom-addon-impl.jar
-./my-addon/target/classes
-```
+> The full reasoning, the accepted costs, and the follow-up work are in
+> [DEC-031](../../doc-hipster-entity/architecture/decisions/DEC-031-project-automations-are-living-code.md).
 
 ---
 

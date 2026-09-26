@@ -229,9 +229,17 @@ Three things are worth reading out of that table rather than inferring:
   works: Phase 0 § B) starts the sidecar for the worktree, and it stays until Zed quits. Until then a page
   degrades honestly: the client's status line says "No host: clipboard only" and `webviewd`'s manifest reports
   `lineNavigation: none`.
-- **The `jwa-sidecar.txt` addon-file mechanism**: documented in the sidecar's README, **never implemented** — no
-  code in any language has ever read that file. The builder is a compile-time dependency instead; see
-  [`../jwa-sidecar/modules.md`](../jwa-sidecar/modules.md).
+- **The `jwa-sidecar.txt` addon-file mechanism is withdrawn, and the model that replaces it changes what a host
+  is.** It was documented here and in the sidecar's README, recorded as done in `modules.md`, and never
+  implemented — no code in any language has ever read that file. Implementing it would have meant a classloader
+  over the listed GAVs and paths plus an SPI describing what an addon contributes, and neither exists. The
+  automations are instead **living code in the project they automate**, on the host's classpath at launch, exactly
+  as this repository already runs its own generator. That means the sidecar stops being an "addon host" and
+  becomes an LSP transport over the project's own module, and it means the bootstrap for a new project is a
+  **generated stub** or a **copied example**, not an installation. Full reasoning and accepted costs:
+  [DEC-031](../../doc-hipster-entity/architecture/decisions/DEC-031-project-automations-are-living-code.md); the
+  follow-up work it creates (stub generator, a documented example, the launch path) is listed there and is not
+  done.
 - **The JWA "Sync Builder" code action is tested** as of 2026-09-26 (5 tests in `SidecarCodeActionTest`): it is
   offered on a record's own **name line** and nowhere else, the command it carries is one the server advertises in
   `executeCommandProvider` and handles, and picking it reaches the editor as `workspace/applyEdit` with the

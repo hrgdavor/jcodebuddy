@@ -11,7 +11,7 @@ This folder contains individual decision records for the JCodeBuddy project arch
 
 ## Decisions
 
-### hipster-entity subsystem (DEC-001 — DEC-030)
+### hipster-entity subsystem (DEC-001 — DEC-031)
 
 | ID                    | Title                                                                   | Status   | Date       |
 | --------------------- | ----------------------------------------------------------------------- | -------- | ---------- |
@@ -76,6 +76,9 @@ This folder contains individual decision records for the JCodeBuddy project arch
 
 | [DEC-030](DEC-030-openrewrite-source-representation.md) | **OpenRewrite as the source representation** | Accepted | 2026-09-22 |
 |                       | Notes: The source representation is OpenRewrite's **Lossless Semantic Tree** (`org.openrewrite.java.tree.J`), replacing JavaParser end to end - no module declares `com.github.javaparser`. Three properties of the LST shape the rules: it has **no positions** on any node, it is **immutable** (no `addMethod` / `remove()`), and it **recovers from syntax errors**, returning a well-formed `J.CompilationUnit` with the broken part silently absent (F-34: a syntax error in an enum's constant list produced a unit with no constants, and the R1 ledger planner renumbered a persisted positional array). So `SourceReader.read(Path)` / `readText(String)` is the only way a file is opened and its `Read` carries **two channels** - `readable()` is the verdict, `problemsIn(...)` is detail and can be empty for a file that is *not* readable - with validity asked of **javac** (`JavaSyntaxCheck`); positions come from javac's line map and never from the tree; queries go through `TreeQueries`, which **builds nothing**; and generators **splice text** (`SourceSplicer`) rather than reprinting a tree, because reprinting reformats hand-written code (`LexicalPreservingPrinter` refuses an added `default` modifier and its fallback reformats the whole file). The language level is the `rewrite-java-25` artifact, not a setting. `AGENTS.md` Section 2 and the guide `doc_knowledge/code.graph.md` are its readers' entry points; DEC-009's *strategy* (source analysis over annotation processing) stands and only its implementing library changed. |
+
+| [DEC-031](DEC-031-project-automations-are-living-code.md) | **Project automations are living code, never dynamically loaded artifacts** | Accepted | 2026-09-26 |
+|                       | Notes: The sidecar's `jwa-sidecar.txt` (a project-level list of Maven GAVs and jar paths for the sidecar to load) is **withdrawn**: it was documented, recorded as done in `modules.md`, and never implemented — no code in any language ever read that file. Implementing it would have meant a classloader over the listed artifacts plus an SPI describing what an addon contributes, and neither exists. An automation is instead a **module in the project it automates**: compiled by that project's build, visible in code review, with no classloader, no `META-INF/services` and no scanning; a host that needs those automations gets them **on its classpath at launch**, which is how `scripts/gen.js` already runs this repository's own generator (`dependency:build-classpath` + `java -cp`). If a host must know which automations exist, an explicit registration class is **generated into the automation module and committed**, so the wiring stays navigable (DEC-019) and follows the cooperative rules (DEC-020/021/022). A new project bootstraps by **generating a stub** from a few initial requirements or by **copying an example** from another project, then editing it. Accepted costs: no drop-in prebuilt jar, and a copied example can drift (mitigated by DEC-022's divergence report). |
 
 ### Watch & project-automation subsystem (DEC-W001 — DEC-W005)
 
