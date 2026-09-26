@@ -88,16 +88,10 @@ webview/zed/*/extension.wasm
 .mvn-local-repo
 
 # proto/ is the driver-project area: real projects that exercise JCodeBuddy while it is under
-# development. They are *not* part of this repository - each one is a repository of its own - so
-# nothing under proto/ is committed here. The rule is `proto/*` rather than `proto/` on purpose:
-# the directory itself stays visible to git, which is what lets the exceptions below work (git
-# never re-includes a file whose parent directory is excluded).
+# development. They are *not* part of this repository - each one is a repository of its own.
 #
-# Exactly two files are re-included, and both are explanations of the area rather than members of any
-# proto project: proto/README.md says what the area is and how to add a project, and proto/AGENTS.md
-# scopes the agent rules to a driver project (the root AGENTS.md is the rules for *this* repository).
-# Everything else - a proto project's sources, its .jcodebuddy/, its .git/, its build output, and that
-# project's own AGENTS.md - stays out of this repository and lives in that project's own git.
-proto/*
-!proto/README.md
-!proto/AGENTS.md
+# The whole directory is ignored, with no exceptions. That is deliberate for this phase: driver
+# projects are a local workspace, not something another developer checks out from here, so nothing
+# under proto/ - a project's sources, its .jcodebuddy/, its .git/, its build output, or the README
+# and AGENTS.md that sit in the area itself - needs to survive a clone of this repository.
+proto/
