@@ -335,6 +335,15 @@ public final class ViewTrackingBuilderGenerator {
         sb.append('\n');
 
         // Positional access, matching the ordinal contract.
+        //
+        // `public`, and that modifier is load-bearing rather than cosmetic: `ViewChangeTracking
+        // .currentValue(field)` — which the interface's own `changedValues()` default calls — is
+        // implemented as `get(field.ordinal())`. With this method package-private, any caller of
+        // `changedValues()` from outside the generated type's package fails at *run* time with an
+        // IllegalAccessError, and the compiler cannot see it because the call is inside a default method
+        // in a third package. hipster-entity-example's PersonDemo is exactly such a caller, and no test
+        // ran it. The positional accessor is part of the read contract, so it is public like the fluent
+        // accessors above it.
         sb.append("    public Object get(int fieldOrdinal) {\n");
         sb.append("        return switch (fieldOrdinal) {\n");
         for (int i = 0; i < allProperties.size(); i++) {
