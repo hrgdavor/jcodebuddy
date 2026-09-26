@@ -14,6 +14,22 @@ const rawArgs = Bun.argv.slice(2).flatMap((arg) => {
   return [arg];
 });
 
+// A line-continuation character from the wrong shell arrives as a positional argument, and "Unexpected argument
+// '^'" does not tell the reader that the fix is to join the lines or use their own shell's character. This is the
+// one mistake every PowerShell user makes with a command copied out of a `cmd`-flavoured note, so it gets a
+// sentence instead of a stack trace.
+const continuation = rawArgs.find((arg) => arg === '^' || arg === '`' || arg === '\\');
+if (continuation) {
+  console.error(`the argument '${continuation}' is a line-continuation character, not an option.`);
+  console.error('  cmd.exe uses ^, PowerShell uses ` (backtick), POSIX shells use \\ — and Bun receives whichever');
+  console.error('  one your shell did not consume. Easiest fix: put the whole command on one line.');
+  console.error('  A single line that works in PowerShell:');
+  console.error("    bun run webview/tools/observe-edit-host.js --port 18882 --token obs-token "
+    + '--file D:\\tmp\\obs\\Sample.java --find "int x = 1;" --replace "int x = 42;" '
+    + '--checkRefusals --watchSeconds 20');
+  process.exit(2);
+}
+
 // --- CLI Parsing ---------------------------------------------------------------------------------
 const { values } = parseArgs({
   args: rawArgs,

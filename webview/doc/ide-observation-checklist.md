@@ -79,9 +79,13 @@ alongside.
 
    ```console
    cd D:\wrk\java\jcodebuddy
-   bun run webview/tools/observe-edit-host.js --port 18881 --token obs-token `
-       --file D:\tmp\obs\Sample.java --find "int x = 1;" --replace "int x = 42;" --checkRefusals --watchSeconds 20
+   bun run webview/tools/observe-edit-host.js --port 18881 --token obs-token --file D:\tmp\obs\Sample.java --find "int x = 1;" --replace "int x = 42;" --checkRefusals --watchSeconds 20
    ```
+
+   > Kept on **one line** deliberately. A continuation character belongs to a shell — `^` to cmd.exe, a backtick
+   > to PowerShell, `\` to POSIX shells — and a command copied between notes often arrives with the wrong one,
+   > which Bun then receives as a positional argument. The script now detects exactly that and says so instead of
+   > printing a parser error.
 
 5. **Look at the IDE, and do not save:** the editor should show `int x = 42;` with the tab marked modified, and
    one `Ctrl+Z` should restore `int x = 1;` and leave the tab clean.
@@ -142,8 +146,7 @@ So:
 5. **Drive the observation:**
 
    ```console
-   bun run webview/tools/observe-edit-host.js --port 18882 --token obs-token `
-       --file D:\tmp\obs\Sample.java --find "int x = 1;" --replace "int x = 42;" --checkRefusals --watchSeconds 20
+   bun run webview/tools/observe-edit-host.js --port 18882 --token obs-token --file D:\tmp\obs\Sample.java --find "int x = 1;" --replace "int x = 42;" --checkRefusals --watchSeconds 20
    ```
 
 6. **Look at the editor, and do not save:** the replacement visible, tab dirty, one `Ctrl+Z` back to `int x = 1;`.
