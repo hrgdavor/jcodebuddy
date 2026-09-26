@@ -129,6 +129,8 @@ bun scripts/mvn-jdk25.js -o -pl webview/jwa-sidecar -am test
 cd webview/webview-jetbrains && ./gradlew.bat test
 # the VS Code host's decisions, against the shared vectors, with no VS Code download: 161 assertions
 cd webview/webview-vscode && npm run test:unit
+# and the same host in a real VS Code: the buffer edit, unsaved, with the editor's own undo (9 tests)
+cd webview/webview-vscode && npm test
 
 # the page side
 bun webview/examples/webview-client.test.mjs   # the client against a live headless webviewd (29 checks)
