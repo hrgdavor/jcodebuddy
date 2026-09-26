@@ -59,6 +59,36 @@ Fields can represent different kinds of data:
 
 For users, this means you can express whether a field is stored, computed, or sourced from another object.
 
+## Relations between entities
+
+**An entity does not hold another entity. It holds the other entity's key.**
+
+```java
+public interface OrderLine extends EntityBase<Long>, Identifiable<Long> {
+    Long id();
+    Long orderId();      // the relation, as a key — never `Order order()`
+    String sku();
+}
+```
+
+This is a deliberate departure from JPA and Hibernate, and the reason is worth understanding before you
+work around it. In an ORM, `order.getCustomer()` looks like a field read and is a database query; whether
+it costs one query or two is decided by a `LAZY`/`EAGER` annotation far from the code that pays for it;
+`CascadeType.ALL` means saving one object writes others; and dirty checking flushes an `UPDATE` that appears
+nowhere in the source. Every one of those is behaviour the code does not show — and in a library whose
+central claim is that the wiring is visible and IDE-navigable, that is not a trade worth making.
+
+So the rule is: **if the read is not in the source, the read must not happen.** A caller who needs the
+customer writes the read (or asks for a projection that includes the column). The cost is real — that is
+one more line of code — and it buys a method whose queries and writes are deducible from its body.
+
+Full reasoning, the key-marking design, and what is still open: [DEC-034](../architecture/decisions/DEC-034.md).
+
+**Composition is not a relation.** A nested view with no identity of its own — an embedded address, a
+line-item value — is a *part of* its parent: it is materialized with the parent and lives and dies with it.
+The test is whether the type has an identity to point at. If it does, the parent holds its key; if it does
+not, the parent may hold it directly.
+
 ## Materialization levels
 
 `hipster-entity` supports an ordered adoption ladder.

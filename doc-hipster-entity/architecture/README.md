@@ -119,6 +119,21 @@ Use `@FieldSource` on view interface methods to declare the data origin of each 
 
 When `@FieldSource` is absent, the field defaults to `COLUMN`.
 
+### Relations are keys, never object references
+
+A field on an entity view **MUST NOT** have an entity type. There is no `Customer customer()` and no
+`List<OrderLine> lines()`: an entity holds the other entity's **key**, and the relation is described by
+marking which key is the primary key and which is the foreign key. Read
+[DEC-034](decisions/DEC-034.md) before designing a relation — it is the decision, and the reason is worth
+reading rather than skimming, because the pattern it forbids is the one most Java developers arrive
+expecting. The short version: a relation that turns a getter into a query (lazy loading), that cascades
+writes, or that dirty-checks an `UPDATE` nobody wrote is *hidden behaviour*, and hidden behaviour is what
+this project's source-visibility rule exists to prevent.
+
+Composition is a different thing and stays legal: a nested view with **no identity of its own** — an
+embedded address, a line-item value — is a part of its parent, not a pointer to another row. The test is
+whether the type has an identity to point at.
+
 ```java
 public interface PersonSummary extends PersonEntity {
     String firstName();                                          // COLUMN

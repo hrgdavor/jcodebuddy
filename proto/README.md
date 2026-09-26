@@ -69,7 +69,7 @@ Two rules follow from that, and both are easy to get wrong:
 
 | Project | What it drives | State |
 | ------- | -------------- | ----- |
-| [`business-logic/`](business-logic/README.md) | The business-logic concept: pure-function steps, the `ProcessingUnit`, the three operation types and the generated dispatchers/loop guards. Its design documents moved out of this repository's `doc/` tree to live with the code. | Docs only so far — no `pom.xml` yet; own git repository initialized |
+| [`business-logic/`](business-logic/README.md) | The business-logic concept: the preparation phase, pure-function steps, the `ProcessingUnit`, the operation types and the generated step index. Its design documents moved out of this repository's `doc/` tree to live with the code. | Working sample — `core`/`runtime`/`demo` plus a dev-time `project-automation` module; `mvn test` green, `bun scripts/run-demo.js` writes JSON Lines, `bun scripts/gen.js` runs the JCodeBuddy generator |
 
 ## Adding a project
 
