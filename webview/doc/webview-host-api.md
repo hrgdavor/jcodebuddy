@@ -185,17 +185,52 @@ deployment needs a shared secret and a one-process deployment (plan question 4) 
 `--print-manifest` prints what would be published without binding a socket, which is how the Phase 2 work
 checked the adapter's honesty about lines on a machine with no editor running.
 
-## 8. What is deliberately missing
+## 8. The support matrix, and what is missing
 
-- **The write verbs** (`applyEdit`, `diff`, `undo`, `redo`, `events`) are Phase 3; the digest-guarded semantics
-  are specified in [the plan](../PLAN-webview-suite.md) § 6.2 and are not implemented here.
-- **`POST /api/v1/...`** does not exist yet: the frozen `GET /open` is the navigation route and Phase 3 adds the
-  write surface. The sidecar's `/jump` becomes a deprecated alias of the new open route when that surface lands
-  (plan § 6.3) — until then `webviewd` calls `/jump`, and that hop is the only HTTP call between two of our own
-  processes.
-- **Registering the sidecar with Zed still needs the extension**, not a settings snippet: Phase 0 § A′ proved a
-  config-only custom language server is impossible on 1.21.0. `webview/zed/webview-zed-dev-extension` supplies
-  the registration; `lsp.webview-sidecar.binary` then points at the build.
-- **Starting the host when no buffer of the registered language is open** is not covered: the language-server
-  route starts the sidecar only once Zed opens a matching file, and the CLI/URL tier cannot place a caret on
-  Windows. This is the gap `process:exec` in the extension (Phase 4's other half) is meant to close.
+Two words are used precisely, and nothing here uses a third: **implemented** means code exists and its tests
+pass; **observed** means someone ran it against that host on the build named and reported the result. A cell that
+says "implemented" is not claimed to work in front of a human, and the dates are the ones in
+[`webview-edit-api.md`](webview-edit-api.md) § 6 and
+[`ide-observation-checklist.md`](ide-observation-checklist.md) § 2a.
+
+| | `webviewd` (standalone) | `webview-jetbrains` | `webview-vscode` | `jwa-sidecar` (LSP) |
+| --- | --- | --- | --- | --- |
+| `open` (caret) | implemented; with `--host lsp` observed on Zed 1.21.0 | observed | observed | observed (Zed 1.21.0) |
+| `open` precision | `exact` with LSP, `file-only` with the Zed CLI, `none` with no editor | `exact` | `exact` | `exact` |
+| `select` (range) | implemented | implemented | implemented | implemented |
+| `reveal` (project view) | n/a | **not implemented**, and deliberately not advertised | n/a | n/a |
+| `serveFile` / `/page/` | implemented | not implemented | implemented | not implemented |
+| served digest (`X-WebView-Digest`, `ETag`) | implemented | not implemented | not implemented | n/a |
+| `edit` → the editor's buffer | implemented (delegates to whatever adapter says it can) | **observed** 2026-09-26 | **observed** 2026-09-26 | **observed** 2026-09-25 |
+| `edit` → disk (digest-guarded, atomic, journalled undo) | implemented; driven end to end by `examples/webview-client.test.mjs` | offered, not observed | **refused by design** with `409 no-disk-write` | not implemented |
+| `diff` (a proposal to show before writing) | implemented | implemented | **refused by design** (it owns no bytes) | not implemented |
+| `undo` / `redo` (`/api/v1/...`) | implemented, journalled to disk | implemented | **refused by design** (the editor's own undo is the review step) | not implemented |
+| `events` (SSE file changes) | implemented | not implemented | not implemented | n/a |
+| Neovim | — | — | — | registered in principle; **never run** |
+
+Three things are worth reading out of that table rather than inferring:
+
+* **A host that owns no bytes refuses the verbs that need bytes.** VS Code's `diff`, `undo` and `redo` answer
+  `409 no-disk-write` instead of pretending, which is why its `edit` still works: the change goes to the buffer,
+  where the editor's own undo already exists.
+* **`reveal` is absent from the JetBrains capability list on purpose** — advertising a verb that throws at
+  runtime turns a page's fallback ladder into a broken link, which is the rule every capability list here obeys.
+* **Zed is a client, not a host.** Its navigation and buffer-edit results are the sidecar's, and they depend on
+  the extension registering it: a settings-only entry is ignored by 1.21.0 ([`PHASE0-ZED-FINDINGS.md`](../PHASE0-ZED-FINDINGS.md) § A′).
+
+### What is missing, and what that costs
+
+- **`process:exec` in the Zed extension** (Phase 4's other half): starting the host when no file of the
+  registered language is open. Today the LSP route starts the sidecar only once Zed opens a matching file, and
+  the CLI/URL tier cannot place a caret on Windows. This is the one gap that makes a Zed user act first.
+- **The `jwa-sidecar.txt` addon-file mechanism**: documented in the sidecar's README, **never implemented** — no
+  code in any language has ever read that file. The builder is a compile-time dependency instead; see
+  [`../jwa-sidecar/modules.md`](../jwa-sidecar/modules.md).
+- **A test for the JWA "Sync Builder" code action**: it exists in the sidecar and is offered to clients, and
+  nothing in a test run asserts it. Recorded as a gap rather than presented as a feature.
+- **Checkpoints are per host.** `webviewd` journals them under `.jcodebuddy/webview/checkpoints/`; the JetBrains
+  plugin builds its own `EditService` per project. A page that switches host starts a new undo history, which is
+  correct but surprising if unwritten — so it is written here.
+- **`/jump` is still a separate route.** Plan § 6.3 folds it into `POST /api/v1/open`; until then `webviewd`'s LSP
+  adapter calls `/jump`, and that hop is the only HTTP call between two of our own processes. Its `/applyEdit` is
+  the same kind of temporary bridge.
