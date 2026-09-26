@@ -502,10 +502,18 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > `Failed to start language server "webview-sidecar"`, which is the loud, documented failure the README predicts,
 > not a silent one. Also checked while it ran: no Zed-side deserialization errors were attributed to our server
 > and jdtls kept running, so registering for Java adds a server rather than displacing one.
-> **Still open from this gate:** `process:exec` for launching the standalone host when no file of the
-> registered language is opened at all — the language-server route only starts the host once such a buffer
-> exists, which is exactly the gap the CLI/URL tier was supposed to cover and Phase 0 showed it cannot cover
-> positions. **Closed later the same day:** quitting Zed stopped the sidecar (its `java -jar …` process was gone
+> **Dropped 2026-09-26 — `process:exec` cannot close this gap, and the item was wrong about what it is for.**
+> The extension can spawn a process, but the process it spawns is **not Zed's language server**, so it has no
+> editor attached: `SidecarApp` answers `/health` with an *empty* capability list in exactly that state
+> (`isEditorAttached() ? Set.of("open","select","edit") : Set.of()`), i.e. a listening port that can move nothing.
+> For the sidecar to reach Zed's editor, **Zed** must be its client, which means Zed spawns it through the
+> language-server registration — the thing `PHASE0-ZED-FINDINGS.md` § D already recorded ("the extension needs no
+> `process:exec` capability; it returns a command, Zed spawns it"). So the cold start stays a one-step user
+> action, and the honest framing is not "a missing feature" but "an LSP-based tool starts when you open a file of
+> that language": opening any `.java` file once (or `zed path/to/Some.java`, a plain path, which Phase 0 § B
+> showed parses correctly) starts the sidecar for the worktree, and it stays until Zed quits. The page degrades
+> honestly until then — the client's status line says "No host: clipboard only" and `webviewd`'s manifest reports
+> `lineNavigation: none` — which is why this costs a step rather than breaking the contract. **Closed later the same day:** quitting Zed stopped the sidecar (its `java -jar …` process was gone
 > and port 7979 refused connections), so "closing the window stops it" is measured rather than assumed — Zed owns
 > the child process.
 
@@ -558,8 +566,9 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 >    between them is a plain loopback HTTP call to `/jump`.
 >
 > **Still open from this gate:** the `applyEdit` half (Phase 3 owns the write contract; the LSP transport for it
-> is Phase 5), the undo observation, and `process:exec` for starting a host when no buffer of the registered
-> language is open. The spike also had to pass Zed's **worktree-trust gate** in a fresh data directory — a
+> is Phase 5) and the undo observation. `process:exec` was listed here too and has since been **dropped** — see
+> the Phase 4 note above: a sidecar the extension spawns has no editor attached, so it cannot do what the item
+> was for. The spike also had to pass Zed's **worktree-trust gate** in a fresh data directory — a
 > language server does not start until the worktree is trusted, which the isolated run had to allow explicitly
 > (`session.trust_all_worktrees` in the instance's own config), and which no host may assume away.
 - ACP: a timed spike (≤1 day) that registers `webviewd --acp` as a **custom agent** (`agent_servers:

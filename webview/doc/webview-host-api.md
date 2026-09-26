@@ -220,9 +220,15 @@ Three things are worth reading out of that table rather than inferring:
 
 ### What is missing, and what that costs
 
-- **`process:exec` in the Zed extension** (Phase 4's other half): starting the host when no file of the
-  registered language is open. Today the LSP route starts the sidecar only once Zed opens a matching file, and
-  the CLI/URL tier cannot place a caret on Windows. This is the one gap that makes a Zed user act first.
+- **The Zed cold start is a one-step user action, not a missing feature.** The sidecar is Zed's language server
+  for Java, so Zed spawns it when a Java buffer is opened — and until then there is no editor to attach to. The
+  extension's `process:exec` capability was the plan's answer to that and has been **dropped (2026-09-26)**: a
+  process the extension spawns is *not* Zed's language server, so the sidecar would answer `/health` with
+  capabilities `[]` (`isEditorAttached()` is false) — a listening port that can move nothing, which is exactly
+  what this document's honesty rules exist to prevent. Opening any `.java` file once (`zed path/to/Some.java`
+  works: Phase 0 § B) starts the sidecar for the worktree, and it stays until Zed quits. Until then a page
+  degrades honestly: the client's status line says "No host: clipboard only" and `webviewd`'s manifest reports
+  `lineNavigation: none`.
 - **The `jwa-sidecar.txt` addon-file mechanism**: documented in the sidecar's README, **never implemented** — no
   code in any language has ever read that file. The builder is a compile-time dependency instead; see
   [`../jwa-sidecar/modules.md`](../jwa-sidecar/modules.md).

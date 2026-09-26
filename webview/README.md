@@ -111,7 +111,7 @@ or *observed on a named build and date*, never "works" without one of the two.
 | Disk edit (digest-guarded, atomic, journalled undo) | `webviewd`, unit-tested; the page-side flow is exercised against it by `examples/webview-client.test.mjs` |
 | File serving and page serving | `webviewd` (`/file/`, `/page/` with the bridge injected, `X-WebView-Digest`) |
 | Code actions (JWA "Sync Builder") | implemented in the sidecar; **no test yet** |
-| Zed `process:exec` (launching the host from the extension) | **not implemented** |
+| Zed `process:exec` (launching the host from the extension) | **dropped, not missing**: a sidecar the extension spawns is not Zed's language server, so it has no editor attached (the sidecar answers `/health` with an empty capability list in exactly that state). Zed spawns the sidecar when it opens a Java file, which is the one-step cold start |
 | The `jwa-sidecar.txt` addon-file mechanism | **not implemented, and never was** — see [`jwa-sidecar/modules.md`](jwa-sidecar/modules.md) |
 
 ## Verifying
