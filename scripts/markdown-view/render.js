@@ -8,7 +8,7 @@
  *      DEC-029) turns a bare type name into its declaring file and declaration line; plain paths are
  *      resolved relative to the project root or to the Markdown file itself; `#L14` / `:14` set the line.
  *   2. **Put the location on the element** as `data-open` / `data-line` / `data-member`, which is the only
- *      contract the IDE host reads (`webview/doc/webview-link-api.md` § 1.1).
+ *      contract the IDE host reads (`webview/kit/doc/contract.md` § 1.1).
  *   3. **Emit one HTML file** with the click handler inlined, so it needs no server, no bundler and no
  *      network at view time.
  *
@@ -266,7 +266,7 @@ function markdownLink(token, context) {
     return context.makeLink(target, text, 'markdown', title);
   }
   // An unresolved internal link: keep the text, show where it pointed. A link that goes nowhere is worse
-  // than a visible path (webview/doc/webview-link-api.md § 4).
+  // than a visible path (webview/kit/doc/contract.md § 4).
   return `${renderInline(text, context)} <code>${escapeHtml(href)}</code>`;
 }
 

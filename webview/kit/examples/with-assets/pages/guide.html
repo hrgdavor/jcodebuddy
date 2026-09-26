@@ -10,13 +10,20 @@
   EXAMPLE B — pages/guide.html, A MANUAL DEEP-DIVE PAGE
   ============================================================================
 
-  The point of this page in the example is that it is ONE folder deeper than
-  index.html and needs no different wiring: the same `data-link-base="../../../.."` on
-  the script tag works here because nav-client.js resolves that value against its
-  own `src` (../assets/nav-client.js), not against this page — so the value says
-  how far `assets/` is from the repository root, which is the same number for
-  every page in the project. That is the whole reason the configuration belongs
-  on the script tag.
+  This page is a manual page (a human owns its prose), and it plays two roles:
+
+  1. It is ONE folder deeper than index.html and needs no different wiring: the
+     same `data-link-base="../../../../.."` on the script tag works here because
+     nav-client.js resolves that value against its own `src`
+     (../assets/nav-client.js), not against this page — so the value says how far
+     `assets/` is from the project root, which is the same number for every page.
+     That is the whole reason the configuration belongs on the script tag.
+
+  2. Every location link on it points at a REAL file in this kit, at a line that
+     really contains the named member — so `scripts/check-pages.mjs` verifies the
+     page itself, and a reader clicking a rule lands in the document that states
+     it. That is the "resolve or leave alone" rule, applied to the page that
+     explains it.
 
   It also carries all five required language samples as separate code blocks, to
   show that highlighting is per-block and driven only by the `language-*` class.
@@ -51,6 +58,17 @@
     <a href="#samples">Language samples</a>
     <a href="#generated">Embedding generated blocks</a>
     <a href="#verify">Verifying before you ship</a>
+    <div class="nav-title">The kit's documents</div>
+    <a href="../../README.md" data-open="webview/kit/README.md" data-line="3"
+       data-member="**copy-pasteable** part" data-role="doc-section">The kit</a>
+    <a href="../../../doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="21"
+       data-member="window.openFile(filePath, line, column)" data-role="doc-section">The frozen contract</a>
+    <a href="../../../doc/page-authoring.md" data-open="webview/kit/doc/page-authoring.md" data-line="24"
+       data-member="content is a map of the code" data-role="doc-section">Building a page</a>
+    <a href="../../../doc/edit-api.md" data-open="webview/kit/doc/edit-api.md" data-line="3"
+       data-member="wants to change a file" data-role="doc-section">The edit API</a>
+    <a href="../../../doc/host-in-this-project.md" data-open="webview/kit/doc/host-in-this-project.md" data-line="20"
+       data-member="knows your project directory" data-role="doc-section">Making webview available</a>
     <div class="nav-title">Other pages</div>
     <a href="../index.html">Landing page</a>
     <a class="generated" href="entity-reference.html">Entity reference</a>
@@ -60,21 +78,27 @@
     <section id="rules">
       <h1>Five rules that make a page work in every host</h1>
       <p>
-        A page is read in three places: the IDE's own webview, an ordinary browser, and possibly a CI
+        A page is read in three places: the host's own webview, an ordinary browser, and possibly a CI
         artifact viewer or a PDF export. Only the first has <code>window.openFile</code>. These five rules
-        are what make one page work in all of them.
+        are what make one page work in all of them; the first of them is normative in
+        <a href="../../../doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="21"
+           data-member="window.openFile(filePath, line, column)" data-role="doc-section">the frozen contract &sect; 1</a>.
       </p>
       <ol>
         <li>
           <strong>Feature-detect, never assume.</strong>
           <code>typeof window.openFile === 'function'</code> before every call. An unguarded call throws a
           <code>TypeError</code> inside a click handler and silently kills navigation for every later click
-          in the page — the failure looks like "links stopped working", not like an error.
+          in the page — the failure looks like "links stopped working", not like an error. See
+          <a href="../../../doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="86"
+             data-member="acceptance list a page assumes" data-role="doc-section">contract &sect; 2</a>.
         </li>
         <li>
-          <strong>Never render a dead-looking link.</strong> When there is no bridge, copy
+          <strong>Never render a dead-looking link.</strong> When nothing answers, copy
           <code>path:line</code> to the clipboard and say so. A visible path string the user can paste beats
-          an anchor that does nothing.
+          an anchor that does nothing — that is rung three of
+          <a href="../../../doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="230"
+             data-member="three rungs, in this order" data-role="doc-section">the fallback ladder</a>.
         </li>
         <li>
           <strong>Use the link base, not an absolute path.</strong> <code>data-link-base</code> plus the
@@ -88,15 +112,17 @@
         </li>
         <li>
           <strong>No network at view time.</strong> No CDN, no bundler, no <code>node_modules</code>. The
-          JCEF webview opens a local file with no server behind it. Local <code>&lt;script src="assets/…"&gt;</code>
-          is fine; an <code>https://</code> asset is not.
+          embedded webview opens a local file with no server behind it. A local
+          <code>&lt;script src="assets/&hellip;"&gt;</code> is fine; an <code>https://</code> asset is not.
         </li>
       </ol>
       <blockquote>
         Rule 4 is the one a generator gets wrong, because a generator has a name and not a location. The
-        answer this repository uses is the class index (<code>.jcodebuddy/index/classes.json</code>): a
-        document names a <em>type</em> and the tool finds the declaring file and its declaration line, then
-        drops the link if it cannot. See <code>scripts/markdown-view/render.js</code>.
+        answer is a <em>lookup</em>: resolve the name to a file and a declaration line before emitting
+        anything, and return nothing when the lookup fails. What that costs, and why dropping the link is
+        the right failure, is in
+        <a href="../../../doc/page-authoring.md" data-open="webview/kit/doc/page-authoring.md" data-line="90"
+           data-member="Three ways, in increasing order" data-role="doc-section">How to build a page &sect; 3</a>.
       </blockquote>
     </section>
 
@@ -107,7 +133,9 @@
         <code>pre &gt; code</code>, loads the grammar for the language it finds, and registers ranges on
         <code>CSS.highlights</code>. All five required languages, plus the two grammars they pull in as
         dependencies (HTML needs CSS/JSON/JS, Markdown needs YAML), are bundled in
-        <code>assets/microlighter.js</code>.
+        <code>assets/microlighter.js</code>. The mechanism is documented in
+        <a href="../../../doc/page-authoring.md" data-open="webview/kit/doc/page-authoring.md" data-line="425"
+           data-member="is the highlighter" data-role="doc-section">How to build a page &sect; 7</a>.
       </p>
 
       <h3>JavaScript <span class="badge">source.js</span></h3>
@@ -117,11 +145,11 @@ const BRIDGE_PORT = 18881;
 function openInIde(relativePath, line = 1) {
   const target = new URL(relativePath, PROJECT_ROOT).pathname;
 
-  if (typeof window.openFile === 'function') {          // 1. injected by the IDE webview
+  if (typeof window.openFile === 'function') {          // 1. injected by the host's webview
     window.openFile(target, line, 1);
     return 'injected';
   }
-  if (BRIDGE_PORT &gt; 0) {                               // 2. loopback HTTP bridge
+  if (BRIDGE_PORT &gt; 0) {                               // 2. loopback HTTP transport
     const frame = document.createElement('iframe');
     frame.style.display = 'none';
     frame.src = `http://127.0.0.1:${BRIDGE_PORT}/open?filePath=${encodeURIComponent(target)}&amp;line=${line}`;
@@ -133,9 +161,9 @@ function openInIde(relativePath, line = 1) {
 }</code></pre>
 
       <h3>Java <span class="badge">source.java</span></h3>
-<pre><code class="language-java">// A generated dispatcher: a direct method call per case, never Method.invoke.
+<pre><code class="language-java">// A generated dispatcher: one direct method call per case, never Method.invoke.
 // The routing a reader can follow with a stock IDE is the routing that counts.
-package hr.hrg.example.dispatch;
+package com.example.dispatch;
 
 public final class ReportDispatcher {
 
@@ -159,7 +187,7 @@ public final class ReportDispatcher {
 
       <h3>JSON <span class="badge">source.json</span></h3>
 <pre><code class="language-json">{
-  "linkBase": "webview/examples/with-assets",
+  "linkBase": "webview/kit/examples/with-assets",
   "bridgePort": 18881,
   "languages": ["javascript", "java", "json", "html", "markdown"],
   "grammars": {
@@ -177,12 +205,12 @@ public final class ReportDispatcher {
 
 &lt;body data-syntax-theme="default"&gt;
   &lt;span class="file-link"
-        data-open="webview/webview-jetbrains/README.md"
-        data-line="71"
-        data-member="window.openFile"&gt;webview/webview-jetbrains/README.md:71&lt;/span&gt;
+        data-open="webview/kit/doc/contract.md"
+        data-line="16"
+        data-member="window.openFile"&gt;contract.md:16&lt;/span&gt;
 
   &lt;script id="nav-client" src="../assets/nav-client.js"
-          data-link-base="../../../.." data-bridge-port="18881"&gt;&lt;/script&gt;
+          data-link-base="../../../../.." data-bridge-port="18881"&gt;&lt;/script&gt;
   &lt;script id="microlighter" src="../assets/microlighter.js"&gt;&lt;/script&gt;
   &lt;script id="highlight-runner" src="../assets/highlight-runner.js"&gt;&lt;/script&gt;
 &lt;/body&gt;</code></pre>
@@ -190,7 +218,7 @@ public final class ReportDispatcher {
       <h3>Markdown <span class="badge">text.html.markdown</span></h3>
 <pre><code class="language-markdown">---
 title: Page authoring rules
-hosts: [webview/webview-jetbrains, webview/webview-vscode, browser]
+hosts: [ide-plugin, standalone-host, browser]
 ---
 
 # Five rules
@@ -203,10 +231,10 @@ hosts: [webview/webview-jetbrains, webview/webview-vscode, browser]
 
 &gt; A page of plausible links that go nowhere is worse than plain text.
 
-| Host | Port | Setting |
+| Host | Conventional port | Where the running port is published |
 | --- | --- | --- |
-| `webview/webview-jetbrains` | 18881 | `webview.explorer.port` |
-| `webview/webview-vscode` | 18882 | `webviewExplorer.port` |
+| IDE plugin | 18881 | `<project>/.jcodebuddy/webview/host.json` |
+| Standalone host | ephemeral | `<project>/.jcodebuddy/webview/host.json` |
 
 ```js
 window.openFile('src/main/java/Person.java', 14, 1);
@@ -223,13 +251,13 @@ window.openFile('src/main/java/Person.java', 14, 1);
         arrive after load.
       </p>
 <pre><code class="language-javascript">// A generator's contract, in one function. Note what it does when it cannot
-// resolve: it returns null, and the caller then prints the name as text.
-export function linkFor(typeName, classIndex) {
-  const entry = classIndex[typeName];          // .jcodebuddy/index/classes.json
-  if (!entry) return null;                     // resolve or leave alone
+// resolve: it returns null, and the caller then prints the name as plain text.
+export function linkFor(typeName, lookup) {
+  const hit = lookup[typeName];                // a file and a declaration line, or nothing
+  if (!hit) return null;                       // resolve or leave alone
 
-  return `&lt;span class="file-link" data-open="${escapeAttr(entry.path)}"`
-    + ` data-line="${entry.declarationLine}" data-member="${escapeAttr(typeName)}"`
+  return `&lt;span class="file-link" data-open="${escapeAttr(hit.path)}"`
+    + ` data-line="${hit.declarationLine}" data-member="${escapeAttr(typeName)}"`
     + ` data-role="type"&gt;${escapeHtml(typeName)}&lt;/span&gt;`;
 }</code></pre>
       <div class="demo">
@@ -244,30 +272,33 @@ export function linkFor(typeName, classIndex) {
     <section id="verify">
       <h2>Verifying before you ship</h2>
       <p>
-        A page is a build output like any other, so test it like one. Two checks catch almost everything:
+        A page is a build output like any other, so test it like one. Two checks catch almost everything,
+        and the kit ships both: <code>scripts/check-pages.mjs</code> needs no browser and is the one to keep
+        in your build; <code>examples/smoke-test.mjs</code> adds the browser half.
       </p>
       <ul>
         <li>
           <strong>Every link resolves.</strong> Walk the emitted <code>data-open</code> values, resolve each
           against the link base, and assert the file exists — and where you claimed a
-          <code>data-member</code>, assert that the member is on the claimed line. This repository's
-          <code>webview/examples/smoke-test.mjs</code> does exactly that for both example pages, over
-          all four pages and 40-odd links, and fails the run on the first unresolved target.
+          <code>data-member</code>, assert that the member is at or after the claimed line. The checker
+          fails the run on the first unresolved target, and this page is one of the pages it walks.
         </li>
         <li>
-          <strong>The page opens with no network.</strong> Grep the output for an <code>https://</code>
-          asset, a <code>&lt;script src&gt;</code> pointing off-box, or a CDN host, and fail. The renderer in
-          <code>scripts/entity-html/</code> asserts the same thing for the generated entity page.
+          <strong>The page opens with no network.</strong> Look for an <code>https://</code> asset, a
+          <code>&lt;script src&gt;</code> pointing off-box, or a CDN host, and fail.
         </li>
       </ul>
-<pre><code class="language-html">&lt;!-- run from the repository root --&gt;
-node webview/examples/smoke-test.mjs</code></pre>
+<pre><code class="language-html">&lt;!-- from the kit root --&gt;
+node scripts/check-pages.mjs --site examples/with-assets --root ../../..
+node examples/smoke-test.mjs</code></pre>
       <p>
-        It renders each page in a real Chromium over <code>file://</code>, over the DevTools Protocol, and
-        reads back <code>document.body.dataset.syntaxReady</code> — the
+        The smoke test renders each page in a real Chromium over <code>file://</code>, over the DevTools
+        Protocol, and reads back <code>document.body.dataset.syntaxReady</code> — the
         <code>&lt;blocks&gt;/&lt;categories&gt;</code> marker
         <code>assets/highlight-runner.js</code> publishes. So the test does not merely assert that the HTML
-        parsed: it asserts that microlighter ran and registered token ranges.
+        parsed: it asserts that microlighter ran and registered token ranges. Both checks are described in
+        <a href="../../../doc/page-authoring.md" data-open="webview/kit/doc/page-authoring.md" data-line="549"
+           data-member="A page is a build output" data-role="doc-section">How to build a page &sect; 8</a>.
       </p>
     </section>
   </main>
@@ -275,13 +306,14 @@ node webview/examples/smoke-test.mjs</code></pre>
 
 <footer class="bottom">
   Manual page, one folder deeper than the landing page — and the same
-  <code>data-link-base="../../../.."</code>, because that value is resolved against the
-  script's own <code>src</code>.
+  <code>data-link-base="../../../../.."</code>, because that value is resolved against the
+  script's own <code>src</code>. Every location link on this page points at a real file in the kit,
+  at a line that really contains the named member.
 </footer>
 
 <script id="nav-client"
         src="../assets/nav-client.js"
-        data-link-base="../../../.."
+        data-link-base="../../../../.."
         data-bridge-port="18881"></script>
 <script id="microlighter" src="../assets/microlighter.js"></script>
 <script id="highlight-runner" src="../assets/highlight-runner.js"></script>

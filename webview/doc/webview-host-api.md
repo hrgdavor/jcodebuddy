@@ -2,15 +2,15 @@
 
 Status: **written 2026-09-25 with Phase 2** (`webviewd`), **extended the same day by the LSP navigation
 spike**, which made `--host lsp` real and found the position bug that had been silently dropping `line` and
-`column`. The read/navigate half is implemented and tested; the write half is specified here and implemented in
-Phase 3. This document is the *full* contract the hosts converge on;
-[`webview-link-api.md`](webview-link-api.md) remains the **frozen** subset every existing page relies on and
-nothing here changes it.
+`column`. The edit half is implemented in both hosts and observed. This document is the *full* contract the
+hosts converge on; [`../kit/doc/contract.md`](../kit/doc/contract.md) is the **frozen** page-side subset every
+existing page relies on, and nothing here changes it.
 
-- The frozen subset: `window.openFile(path, line, column)`, `data-open`/`data-line`, `GET /open`,
-  `GET /health`, the auth rules, and the `/file/` route.
-- What this document adds: the capability document, the manifest, the descriptor, the page route, and the
-  verbs Phase 3 fills in.
+- The frozen page contract: `window.openFile(path, line, column)`, `data-open`/`data-line`, `GET /open`,
+  `GET /health`, the auth rules, and the `/file/` route — normative in
+  [`../kit/doc/contract.md`](../kit/doc/contract.md).
+- What this document adds, for whoever implements or changes a host: the capability document, the manifest,
+  the descriptor, the port claim, the page route, and how each adapter behaves.
 
 ## 1. Verbs
 
@@ -269,7 +269,7 @@ names what to check.
 
 | Adapter | `lineNavigation` | Reaches the editor by |
 | --- | --- | --- |
-| `lsp` | `exact` | asking the JWA sidecar (which holds Zed's LSP connection) to send `window/showDocument` with a selection — the sidecar's `/jump` route, over loopback. It also carries `edit`: the sidecar sends `workspace/applyEdit`, so a change lands in the editor's buffer and its undo stack ([edit API](webview-edit-api.md) § 6) |
+| `lsp` | `exact` | asking the JWA sidecar (which holds Zed's LSP connection) to send `window/showDocument` with a selection — the sidecar's `/jump` route, over loopback. It also carries `edit`: the sidecar sends `workspace/applyEdit`, so a change lands in the editor's buffer and its undo stack ([edit API](../kit/doc/edit-api.md) § 2) |
 | `zed-cli` | `file-only` | `Zed.exe <absolute path>`; the documented `path:line:column` form is refused by Zed 1.21.0 on Windows ([PHASE0-ZED-FINDINGS.md](../PHASE0-ZED-FINDINGS.md) § B) |
 | `null` | `none` | nothing: every editor verb is refused and a page should fall back to the clipboard |
 
@@ -293,7 +293,6 @@ checked the adapter's honesty about lines on a machine with no editor running.
 Two words are used precisely, and nothing here uses a third: **implemented** means code exists and its tests
 pass; **observed** means someone ran it against that host on the build named and reported the result. A cell that
 says "implemented" is not claimed to work in front of a human, and the dates are the ones in
-[`webview-edit-api.md`](webview-edit-api.md) § 6 and
 [`ide-observation-checklist.md`](ide-observation-checklist.md) § 2a.
 
 | | `webviewd` (standalone) | `webview-jetbrains` | `webview-vscode` | `jwa-sidecar` (LSP) |

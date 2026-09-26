@@ -1,6 +1,6 @@
 // Smoke test for the WebView page examples.
 //
-//   node webview/examples/smoke-test.mjs
+//   node webview/kit/examples/smoke-test.mjs
 //
 // Four checks, in order:
 //   1. every inline <script> and every local .js asset parses (`node --check`)
@@ -13,7 +13,7 @@
 //
 // Check 3 is the one that matters most: "resolve or leave alone" is the rule
 // that keeps a generated page from shipping links that look right and go
-// nowhere (webview/doc/webview-link-api.md § 4, DEC-022).
+// nowhere (webview/kit/doc/contract.md § 4, DEC-022).
 //
 // The browser is driven over the DevTools Protocol with Node's own fetch and
 // WebSocket, so the test has no dependencies and no node_modules.
@@ -135,7 +135,10 @@ function attributesOfTags(html, attribute) {
 }
 
 function srcOf(tag) {
-  const match = /\bsrc\s*=\s*"([^"]*)"/.exec(tag);
+  // A `<script>` states its own location with `src`, a `<link>` with `href`, and
+  // either may carry `data-link-base`. Both spellings are read, because the
+  // script tag is the recommended one and the link tag is what a stylesheet uses.
+  const match = /\b(?:src|href)\s*=\s*"([^"]*)"/.exec(tag);
   return match && match[1];
 }
 

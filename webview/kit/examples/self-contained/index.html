@@ -12,14 +12,14 @@
 
   What this file is
     A complete "navigate my project" page for the JCodeBuddy / WebView Explorer
-    webview plugin (webview/webview-jetbrains, and webview/webview-vscode which speaks the same
+    webview host (an IDE plugin, a standalone host, or any process that speaks the same
     API). It is ONE file: no <script src>, no <link rel=stylesheet>, no CDN, no
     node_modules, no network at view time. Copy it anywhere, double-click it,
     and it still works — in the IDE webview, in a plain browser, even offline
     on a plane.
 
   What it demonstrates
-    1. The navigation contract of webview/doc/webview-link-api.md:
+    1. The navigation contract of webview/kit/doc/contract.md:
          window.openFile(path, line, column)   <- injected by the IDE webview
          GET http://127.0.0.1:<port>/open      <- HTTP fallback in a browser
          clipboard "path:line"                 <- last resort, always works
@@ -33,15 +33,15 @@
        inlined verbatim at the bottom of this file.
 
   Where the rest of the story is
-    - webview/doc/webview-page-authoring.md ...... how to build your own page
-    - webview/examples/with-assets/ . the same page as separate files
+    - webview/kit/doc/page-authoring.md ...... how to build your own page
+    - webview/kit/examples/with-assets/ . the same page as separate files
                                           (index.html + assets/), for when you
                                           would rather edit CSS/JS on their own
-    - webview/doc/webview-link-api.md ............ the frozen host contract
-    - webview/webview-jetbrains/README.md ........ the plugin (Ctrl+Alt+Shift+W)
-    - scripts/markdown-view/README.md .... a real generator built on all of this
+    - webview/kit/doc/contract.md ............ the frozen host contract
+    - webview/kit/doc/host-in-this-project.md ..... making a host available in a project
+    - webview/kit/examples/with-assets/ ... the same page as a folder, with a generated page
 
-  Nothing here hard-codes an absolute path. `data-link-base="../../.."` tells the page
+  Nothing here hard-codes an absolute path. `data-link-base="../../../.."` tells the page
   where the project root is relative to itself, so a clone, a branch switch or
   a moved tree does not break a single link.
 -->
@@ -170,14 +170,14 @@ footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; 
 <!--
   data-link-base — the relative path from THIS page to the project root. Every
   data-open path resolves against it, so no absolute path is ever committed.
-  This file sits at webview/examples/self-contained/, so the repository
+  This file sits at webview/kit/examples/self-contained/, so the repository
   root is three levels up.
   data-bridge-port — the loopback port the IDE's HTTP bridge listens on.
-  webview/webview-jetbrains defaults to 18881, webview/webview-vscode to 18882. It is NOT a
+  conventional ports differ per host (18881 and 18882 for the two IDE plugins). It is NOT a
   constant of the API; discover it with GET /health, or set 0 to disable the
   fallback and go straight to the clipboard.
 -->
-<body data-link-base="../../.." data-bridge-port="18881" data-syntax-theme="github">
+<body data-link-base="../../../.." data-bridge-port="18881" data-syntax-theme="github">
 
 <header class="top">
   <h1>Project navigator <span>&middot; self-contained page</span></h1>
@@ -199,12 +199,12 @@ footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; 
     <a class="generated" href="#generated">Entity reference</a>
     <a class="generated" href="#contract">Link contract</a>
     <a class="generated" href="#files">Source files</a>
-    <div class="nav-title">Real hosts</div>
-    <a href="../../../webview/webview-jetbrains/README.md" data-open="webview/webview-jetbrains/README.md" data-line="71">JetBrains plugin</a>
-    <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="18">Frozen API</a>
+    <div class="nav-title">The kit's documents</div>
+    <a href="../../../kit/doc/host-in-this-project.md" data-open="webview/kit/doc/host-in-this-project.md" data-line="20" data-member="knows your project directory">Making webview available</a>
+    <a href="../../../kit/doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="21" data-member="window.openFile(filePath, line, column)">Frozen API</a>
     <div class="nav-note">
-      The two links above are real: click them in the IDE webview and the editor
-      jumps to that line. In a browser they fall back to the HTTP bridge.
+      Both links above are real files: click one inside the host's webview and the editor
+      jumps to that line. In a browser they fall back to the HTTP transport.
     </div>
   </nav>
 
@@ -213,9 +213,9 @@ footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; 
       <h1>One file that can navigate your project</h1>
       <p>
         This page is a <strong>self-contained</strong> project navigator: markup, styling, script and
-        syntax highlighting all live in this single <code>.html</code> file. Open it inside
-        <span class="badge">WebView Explorer</span> (right-click the file &rarr; <em>Open in WebView
-        Explorer</em>, or <code>Ctrl+Alt+Shift+W</code>) and every link below opens the real file at the
+        syntax highlighting all live in this single <code>.html</code> file. Open it through your host
+        (in the JetBrains plugin: right-click the file &rarr; <em>Open in WebView Explorer</em>, or
+        <code>Ctrl+Alt+Shift+W</code>) and every link below opens the real file at the
         real line. Open it in a browser and the same clicks fall back to the IDE's loopback HTTP bridge,
         or copy <code>path:line</code> to the clipboard.
       </p>
@@ -228,7 +228,7 @@ footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; 
         fallback rule can be wrong.
       </p>
       <blockquote>
-        Nothing here is hard-coded to a machine. <code>data-link-base="../../.."</code> on
+        Nothing here is hard-coded to a machine. <code>data-link-base="../../../.."</code> on
         <code>&lt;body&gt;</code> is the only thing that knows where the project root is, and it is
         relative. Clone the repository elsewhere, switch branches, or move the page, and the links still
         land.
@@ -291,11 +291,11 @@ navigator.clipboard?.writeText('src/main/java/com/example/Person.java:14');</cod
       <div class="demo">
         <div class="demo-label">Try it — each of these is a real file in this repository</div>
         <ul>
-          <li><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="71" data-member="window.openFile" data-role="doc-section">webview/webview-jetbrains/README.md:71</span> — the line that defines <code>window.openFile</code></li>
-          <li><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/bridge/WebViewBridge.java" data-line="1" data-role="type">WebViewBridge.java</span> — the class that injects the function</li>
-          <li><span class="file-link" data-open="webview/doc/webview-link-api.md" data-line="18" data-role="doc-section">webview/doc/webview-link-api.md:18</span> — the contract in one screen</li>
-          <li><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="93" data-member="open" data-role="function">open-file.js:93</span> — the reference implementation of the ladder</li>
-          <li><span class="file-link" data-open="webview/examples/with-assets/index.html" data-line="1" data-role="example">the with-assets example</span> — the same page, split into files</li>
+          <li><span class="file-link" data-open="webview/kit/doc/contract.md" data-line="21" data-member="window.openFile(filePath, line, column)" data-role="doc-section">contract.md:21</span> — the line that states <code>window.openFile</code></li>
+          <li><span class="file-link" data-open="webview/kit/doc/contract.md" data-line="77" data-member="injected contract version" data-role="doc-section">contract.md:77</span> — the version probe a host installs</li>
+          <li><span class="file-link" data-open="webview/kit/doc/contract.md" data-line="21" data-member="window.openFile(filePath, line, column)" data-role="doc-section">webview/kit/doc/contract.md:18</span> — the contract in one screen</li>
+          <li><span class="file-link" data-open="webview/kit/examples/with-assets/assets/nav-client.js" data-line="1" data-role="module">nav-client.js</span> — the reference implementation of the ladder</li>
+          <li><span class="file-link" data-open="webview/kit/examples/with-assets/index.html" data-line="1" data-role="example">the with-assets example</span> — the same page, split into files</li>
         </ul>
       </div>
 
@@ -372,7 +372,7 @@ document.addEventListener('click', (event) =&gt; {
 
       <h3>Java <span class="badge">source.java</span></h3>
 <pre><code class="language-java">// grammars/java.js — scope source.java, no external grammar dependencies
-package hr.hrg.jetbrains.webview.bridge;
+package com.example.host.bridge;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -398,8 +398,8 @@ public final class NavigatorService {
 
       <h3>JSON <span class="badge">source.json</span></h3>
 <pre><code class="language-json">{
-  "module": "webview/webview-jetbrains",
-  "plugin": "hr.hrg.jetbrains.webview",
+  "module": "webview/kit",
+  "plugin": "com.example.host",
   "bridge": {
     "port": 18881,
     "defaultPort": null,
@@ -425,10 +425,10 @@ public final class NavigatorService {
     .file-link:hover { border-bottom: 1px solid currentColor; }
   &lt;/style&gt;
   &lt;script type="application/json" id="nav-index"&gt;
-    { "openFile": "webview/webview-jetbrains/README.md", "line": 63 }
+    { "openFile": "webview/kit/doc/contract.md", "line": 21 }
   &lt;/script&gt;
 &lt;/head&gt;
-&lt;body data-link-base="../../.." data-bridge-port="18881"&gt;
+&lt;body data-link-base="../../../.." data-bridge-port="18881"&gt;
   &lt;p&gt;A click asks the host to open &amp;amp; reveal a line.&lt;/p&gt;
   &lt;script&gt;
     // and the JavaScript grammar takes over inside &lt;script&gt;
@@ -459,14 +459,13 @@ The contract is **one function** and *two attributes*.
 
 | Host | Port | Setting |
 | --- | --- | --- |
-| `webview/webview-jetbrains` | 18881 | `webview.explorer.port` |
-| `webview/webview-vscode` | 18882 | `webviewExplorer.port` |
+| an IDE plugin | 18881 | its own setting |
 
 ```js
 window.openFile('src/main/java/Person.java', 14, 1);
 ```
 
-See [the contract](../webview/doc/webview-link-api.md#L18) for the frozen details.</code></pre>
+See [the contract](../../../kit/doc/contract.md#L18) for the frozen details.</code></pre>
 
       <h3>Theme contract</h3>
       <p>
@@ -496,7 +495,7 @@ See [the contract](../webview/doc/webview-link-api.md#L18) for the frozen detail
         This is the shape a <em>generated</em> half takes: a table of types, one row per type, each row
         carrying <code>data-open</code> and <code>data-line</code> so a click lands on the declaration.
         In a real project the rows come from a generator's JSON metadata — see
-        <a href="../../../scripts/entity-html/README.md" data-open="scripts/entity-html/README.md" data-line="1">scripts/entity-html/README.md</a>
+        <a href="../with-assets/index.html" data-open="webview/kit/examples/with-assets/index.html" data-line="1">the with-assets example</a>
         and DEC-027. The rendering rule is the same either way: <strong>resolve or leave alone</strong> —
         a name that cannot be resolved to a file and a line is printed as text, never as a link that
         looks right and goes nowhere.
@@ -507,27 +506,27 @@ See [the contract](../webview/doc/webview-link-api.md#L18) for the frozen detail
         </thead>
         <tbody>
           <tr>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="71" data-member="window.openFile" data-role="type">WebViewContract</span></td>
+            <td><span class="file-link" data-open="webview/kit/doc/contract.md" data-line="21" data-member="window.openFile(filePath, line, column)" data-role="type">window.openFile</span></td>
             <td>interface</td>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="71">webview/webview-jetbrains/README.md</span></td>
+            <td><span class="file-link" data-open="webview/kit/doc/contract.md" data-line="21" data-member="window.openFile(filePath, line, column)">contract.md</span></td>
             <td>3</td>
           </tr>
           <tr>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/bridge/NavigatorService.java" data-line="1" data-role="type">NavigatorService</span></td>
+            <td><span class="file-link" data-open="webview/kit/doc/page-authoring.md" data-line="247" data-member="window.jcbNav.open(path, line)" data-role="doc-section">window.jcbNav</span></td>
             <td>class</td>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/bridge/NavigatorService.java" data-line="1">bridge/NavigatorService.java</span></td>
+            <td><span class="file-link" data-open="webview/kit/doc/page-authoring.md" data-line="247" data-member="window.jcbNav.open(path, line)">page-authoring.md</span></td>
             <td>1</td>
           </tr>
           <tr>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/services/HttpBridgeService.java" data-line="1" data-role="type">HttpBridgeService</span></td>
+            <td><span class="file-link" data-open="webview/kit/examples/with-assets/assets/nav-client.js" data-line="1" data-role="module">nav-client.js</span></td>
             <td>class</td>
-            <td><span class="file-link" data-open="webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/services/HttpBridgeService.java" data-line="1">services/HttpBridgeService.java</span></td>
+            <td><span class="file-link" data-open="webview/kit/examples/with-assets/assets/nav-client.js" data-line="1">assets/nav-client.js</span></td>
             <td>4</td>
           </tr>
           <tr>
-            <td><span class="file-link" data-open="scripts/markdown-view/render.js" data-line="1" data-role="module">markdown-view/render.js</span></td>
+            <td><span class="file-link" data-open="webview/kit/examples/with-assets/pages/entity-reference.html" data-line="1" data-role="example">entity-reference.html</span></td>
             <td>module</td>
-            <td><span class="file-link" data-open="scripts/markdown-view/render.js" data-line="1">render.js</span></td>
+            <td><span class="file-link" data-open="webview/kit/examples/with-assets/pages/entity-reference.html" data-line="1">pages/entity-reference.html</span></td>
             <td>—</td>
           </tr>
         </tbody>
@@ -545,7 +544,7 @@ See [the contract](../webview/doc/webview-link-api.md#L18) for the frozen detail
         A second generated section, this time showing the injected transport as the host implements it —
         useful in a page that explains the mechanism to a reader who will never open the plugin's Java:
       </p>
-<pre><code class="language-javascript">// webview/webview-jetbrains: bridge/WebViewBridge.java injects exactly this into every
+<pre><code class="language-javascript">// A host injects exactly this into every
 // main-frame load — after each navigation, not only the first.
 window.__jcbWebViewBridge = 1;                 // protocol version, the capability probe
 window.openFile = function (path, line, column) {
@@ -568,12 +567,12 @@ window.openFile = function (path, line, column) {
       <table>
         <thead><tr><th>File</th><th>Role</th><th>Clicks to</th></tr></thead>
         <tbody>
-          <tr><td><span class="file-link" data-open="webview/doc/webview-link-api.md" data-line="1">webview/doc/webview-link-api.md</span></td><td>the frozen contract</td><td>line 1</td></tr>
-          <tr><td><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="90">webview/webview-jetbrains/README.md</span></td><td>HTTP bridge</td><td>line 90</td></tr>
-          <tr><td><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="46">scripts/markdown-view/open-file.js</span></td><td>client ladder, copyable</td><td>line 46</td></tr>
-          <tr><td><span class="file-link" data-open="scripts/markdown-view/index.js" data-line="1">scripts/markdown-view/index.js</span></td><td>a generator's CLI half</td><td>line 1</td></tr>
-          <tr><td><span class="file-link" data-open="scripts/entity-html/README.md" data-line="1">scripts/entity-html/README.md</span></td><td>the generated page in this repo</td><td>line 1</td></tr>
-          <tr><td><span class="file-link" data-open="webview/examples/README.md" data-line="1">webview/examples/README.md</span></td><td>these two examples</td><td>line 1</td></tr>
+          <tr><td><span class="file-link" data-open="webview/kit/doc/contract.md" data-line="21" data-member="window.openFile(filePath, line, column)">webview/kit/doc/contract.md</span></td><td>the frozen contract</td><td>line 21</td></tr>
+          <tr><td><span class="file-link" data-open="webview/kit/doc/host-in-this-project.md" data-line="20" data-member="knows your project directory">webview/kit/doc/host-in-this-project.md</span></td><td>making a host available</td><td>line 20</td></tr>
+          <tr><td><span class="file-link" data-open="webview/kit/doc/contract.md" data-line="230" data-member="three rungs, in this order">webview/kit/doc/contract.md</span></td><td>the fallback ladder</td><td>line 230</td></tr>
+          <tr><td><span class="file-link" data-open="webview/kit/examples/with-assets/pages/guide.html" data-line="1">webview/kit/examples/with-assets/pages/guide.html</span></td><td>a manual page, one folder deeper</td><td>line 1</td></tr>
+          <tr><td><span class="file-link" data-open="webview/kit/README.md" data-line="3" data-member="copy-pasteable">webview/kit/README.md</span></td><td>what to copy, and why</td><td>line 3</td></tr>
+          <tr><td><span class="file-link" data-open="webview/kit/examples/README.md" data-line="3" data-member="Two complete, working">webview/kit/examples/README.md</span></td><td>these two examples</td><td>line 1</td></tr>
         </tbody>
       </table>
     </section>
@@ -584,12 +583,12 @@ window.openFile = function (path, line, column) {
   Self-contained example for the JCodeBuddy webview plugin. Highlighting by
   <a href="https://github.com/davatron5000/microlighter">microlighter</a> 2.2.0 (MIT), inlined unchanged
   apart from the grammar registry and two capability guards. Navigation contract:
-  <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="1">webview/doc/webview-link-api.md</a>.
+  <a href="../../../kit/doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="21" data-member="window.openFile(filePath, line, column)">webview/kit/doc/contract.md</a>.
 </footer>
 
 <!-- ==========================================================================
      THE NAVIGATION CLIENT
-     Same ladder as scripts/markdown-view/open-file.js, inlined. Plain ES5-style
+     The same ladder the kit's <code>nav-client.js</code> implements, inlined. Plain ES5-style
      JavaScript on purpose: the JCEF webview parses it with no build step.
      ========================================================================== -->
 <script id="nav-client">

@@ -1,11 +1,11 @@
 /**
- * The navigation client — the host half of webview/doc/webview-link-api.md.
+ * The navigation client — the page half of doc/contract.md.
  *
  * Drop this file anywhere and reference it from any page:
  *
  *     <script id="nav-client"
  *             src="../assets/nav-client.js"
- *             data-link-base="../../../.."          <!-- repo root, relative to THIS script -->
+ *             data-link-base="../../../../.."      <!-- the project root, relative to THIS script -->
  *             data-bridge-port="18881"></script>
  *
  * Three things to know about it:
@@ -14,23 +14,24 @@
  *    is resolved against the script's own `src`, so one copy of this file serves
  *    a page at `index.html` and a page at `pages/deep/report.html` with no edits
  *    and no per-page bookkeeping: the value describes the distance from
- *    `assets/` to the repository root, which is the same for every page. A page
+ *    `assets/` to the project root, which is the same for every page. A page
  *    that would rather configure itself can put `data-link-base` /
  *    `data-bridge-port` on `<body>` instead, in which case they are relative to
  *    the page; the script tag wins when both are present.
  *
- * 2. **It never hard-codes the bridge port.** 18881 is webview/webview-jetbrains,
- *    18882 is webview/webview-vscode; the port is a deployment detail, so it belongs in
- *    configuration. Use `GET /health` when you need to know whether a bridge is
- *    really listening before you wire a page to it.
+ * 2. **It never hard-codes the bridge port.** A conventional port differs per
+ *    host, so it is a deployment detail and belongs in configuration: the port a
+ *    host is really on is published in the project's
+ *    `.jcodebuddy/webview/host.json`, and `GET /health` says whether anything is
+ *    listening on it. See doc/host-in-this-project.md.
  *
  * 3. **The ladder never dead-ends.** Injected function, then the loopback HTTP
- *    bridge, then the clipboard. A click always does something the user can see,
- *    which is the rule that makes a page usable in a browser and in a CI artifact
- *    as well as inside the IDE.
+ *    transport, then the clipboard. A click always does something the user can
+ *    see, which is the rule that makes a page usable in a browser and in a CI
+ *    artifact as well as inside the host's own webview.
  *
- * Plain ES5-style JavaScript on purpose: the JetBrains JCEF webview parses it
- * with no build step, and there is no dependency to install.
+ * Plain ES5-style JavaScript on purpose: an embedded webview parses it with no
+ * build step, and there is no dependency to install.
  */
 (function () {
   var script = document.currentScript;

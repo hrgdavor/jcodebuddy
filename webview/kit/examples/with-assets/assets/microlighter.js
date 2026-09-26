@@ -2,7 +2,7 @@
  * microlighter 2.2.0 (MIT) — https://github.com/davatron5000/microlighter
  * https://raw.githubusercontent.com/davatron5000/microlighter/main/src/highlight.js
  *
- * Copied verbatim from webview/examples/self-contained/index.html, which
+ * Copied verbatim from webview/kit/examples/self-contained/index.html, which
  * carries the same code inline together with the full inlining notes. This file
  * is the ASSET form: a plain <script> exposing `window.microlighter`, so a page
  * needs no module loader and no bundler.

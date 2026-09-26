@@ -10,7 +10,7 @@
   EXAMPLE B — index.html, THE HAND-WRITTEN LANDING PAGE
   ============================================================================
 
-  Same job as webview/examples/self-contained/index.html, opposite
+  Same job as webview/kit/examples/self-contained/index.html, opposite
   trade-off: nothing is inlined. The page loads four assets from ./assets/, and
   the three pages it links to are separate files:
 
@@ -20,7 +20,7 @@
         pages/entity-reference.html <- GENERATED: a type reference
         assets/site.css             <- shell styling
         assets/syntax-theme.css     <- microlighter's ::highlight() mechanism + themes
-        assets/nav-client.js        <- the navigation ladder (webview/doc/webview-link-api.md)
+        assets/nav-client.js        <- the navigation ladder (webview/kit/doc/contract.md)
         assets/highlight-runner.js  <- calls microlighter, reports status
         assets/microlighter.js      <- vendor: microlighter 2.2.0 + 7 grammars
 
@@ -32,7 +32,7 @@
 
   Both forms obey the same three rules:
     * no network at view time (no CDN, no node_modules, no <script src> off-box)
-    * no absolute path in the artifact — data-link-base="../../../.." points at the
+    * no absolute path in the artifact — data-link-base="../../../../.." points at the
       project root relative to assets/nav-client.js, so a clone or a moved tree
       still resolves
     * no dead-looking link — the clipboard is always the last rung
@@ -68,9 +68,9 @@
     <a class="generated" href="pages/entity-reference.html">Entity reference</a>
     <a href="pages/edit-demo.html">Editing demo <span class="badge">write API</span></a>
     <div class="nav-title">Real files</div>
-    <a href="../self-contained/index.html" data-open="webview/examples/self-contained/index.html" data-line="1">the self-contained twin</a>
-    <a href="../../../webview/doc/webview-page-authoring.md" data-open="webview/doc/webview-page-authoring.md" data-line="1">page authoring guide</a>
-    <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="18">frozen link API</a>
+    <a href="../self-contained/index.html" data-open="webview/kit/examples/self-contained/index.html" data-line="1">the self-contained twin</a>
+    <a href="../../../kit/doc/page-authoring.md" data-open="webview/kit/doc/page-authoring.md" data-line="1">page authoring guide</a>
+    <a href="../../../kit/doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="18">frozen link API</a>
     <div class="nav-note">
       Every link marked with an arrow is a real location link: it asks the IDE
       to open that file at that line. The others are ordinary page-to-page
@@ -92,7 +92,7 @@
       </p>
       <p>
         That shared shell is the actual reason to pick this form. The
-        <a href="../self-contained/index.html" data-open="webview/examples/self-contained/index.html" data-line="1">self-contained
+        <a href="../self-contained/index.html" data-open="webview/kit/examples/self-contained/index.html" data-line="1">self-contained
         twin</a> is better when one file must travel alone; this form is better when a project has more
         than one page, which a project navigator always does.
       </p>
@@ -141,7 +141,7 @@
      same string on a page at the root and on a page three folders deep. --&gt;
 &lt;script id="nav-client"
         src="assets/nav-client.js"
-        data-link-base="../../../.."     &lt;!-- from assets/ up to the repository root --&gt;
+        data-link-base="../../../../.."     &lt;!-- from assets/ up to the repository root --&gt;
         data-bridge-port="18881"&gt;&lt;/script&gt;
 
 &lt;script id="highlight-runner" src="assets/highlight-runner.js"&gt;&lt;/script&gt;
@@ -171,7 +171,7 @@
         <ul>
           <li><span class="file-link" data-open="webview/webview-jetbrains/README.md" data-line="71" data-member="window.openFile">webview/webview-jetbrains/README.md:71</span></li>
           <li><span class="file-link" data-open="scripts/markdown-view/open-file.js" data-line="93" data-member="open">scripts/markdown-view/open-file.js:93</span></li>
-          <li><span class="file-link" data-open="webview/examples/with-assets/pages/entity-reference.html" data-line="1">the generated page in this folder</span></li>
+          <li><span class="file-link" data-open="webview/kit/examples/with-assets/pages/entity-reference.html" data-line="1">the generated page in this folder</span></li>
         </ul>
         <p class="demo-label" id="resolved-sample">resolved: …</p>
       </div>
@@ -193,15 +193,15 @@
   with-assets example. Assets: <code>site.css</code>, <code>syntax-theme.css</code>,
   <code>nav-client.js</code>, <code>highlight-runner.js</code>, <code>microlighter.js</code>.
   Highlighting by <a href="https://github.com/davatron5000/microlighter">microlighter</a> 2.2.0 (MIT).
-  Navigation contract: <a href="../../../webview/doc/webview-link-api.md" data-open="webview/doc/webview-link-api.md" data-line="1">webview/doc/webview-link-api.md</a>.
+  Navigation contract: <a href="../../../kit/doc/contract.md" data-open="webview/kit/doc/contract.md" data-line="1">webview/kit/doc/contract.md</a>.
 </footer>
 
-<!-- data-link-base="../../../.." is resolved against THIS script's src (assets/nav-client.js),
+<!-- data-link-base="../../../../.." is resolved against THIS script's src (assets/nav-client.js),
      so it means "one level above assets/", i.e. the project root. Every page in
      this folder writes the same value regardless of its own depth. -->
 <script id="nav-client"
         src="assets/nav-client.js"
-        data-link-base="../../../.."
+        data-link-base="../../../../.."
         data-bridge-port="18881"></script>
 <script id="microlighter" src="assets/microlighter.js"></script>
 <script id="highlight-runner" src="assets/highlight-runner.js"></script>

@@ -79,7 +79,7 @@ public final class HttpBridgeService {
     private static final String PATH_OPEN = "/open";
     private static final String PATH_HEALTH = "/health";
 
-    /** The write contract's routes; see {@code doc/webview-edit-api.md}. */
+    /** The write contract's routes; see {@code doc/edit-api.md}. */
     private static final String WRITE_PREFIX = "/api/v1/";
 
     private final Project project;

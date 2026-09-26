@@ -42,11 +42,19 @@ webview/
   README.md                      <- this file: the product, and which file to read
   PLAN-webview-suite.md          the plan and its implementation record, phase by phase
   check-links.mjs                verifies every relative link in this folder
-  doc/
-    webview-link-api.md          the FROZEN navigation contract: openFile, data-*, /open, /health, security
-    webview-edit-api.md          the write contract: propose, apply, undo, redo, events, and what is observed
+  kit/                           THE CONSUMER HALF — what another project copies (see kit/README.md)
+    README.md                    what the kit is, what to copy, and the premise that a host is available
+    doc/
+      contract.md                the FROZEN navigation contract: openFile, data-*, /open, /health, security
+      page-authoring.md          how to build a page: shapes, the client ladder, highlighting, verification
+      edit-api.md                the write contract: propose, apply, undo, redo, events
+      host-in-this-project.md    the host is available: discovery, authorisation, the security model
+    scripts/
+      check-pages.mjs            the verifier a project keeps: every link resolves before it is committed
+      check-docs.mjs             every relative link in the kit's own documents resolves
+    examples/                    the two runnable page shapes, the clients, the smoke tests (see its README)
+  doc/                           THE PRODUCER HALF — host authors and this repository's own records
     webview-host-api.md          what a host must implement, and how a page discovers what it can do
-    webview-page-authoring.md    how to build a page: shapes, the client ladder, highlighting, tests
     ide-observation-checklist.md the two claims a test cannot make here, and how to check them by hand
   core/
     README.md                    what the shared core is and why it exists
@@ -64,43 +72,38 @@ webview/
   zed/                           Phase 0 findings and the Zed dev extension
   tools/
     observe-edit-host.js         drives one buffer-edit observation against any host, and prints the evidence
-  examples/
-    README.md                    the examples and what the smoke tests check
-    webview-client.test.mjs      the page client driven against a live headless webviewd (the write verbs)
-    smoke-test.mjs               every page in a real Chromium: scripts parse, highlight runs, links resolve
-    self-contained/index.html    EXAMPLE A — one file, microlighter + grammars inlined
-    with-assets/                 EXAMPLE B — index.html + pages/ + assets/ + data/
-      index.html                   manual landing page
-      pages/guide.html             manual deep-dive
-      pages/entity-reference.html  a page written as if a generator owned it
-      pages/edit-demo.html         an EDITING page: rename a row, see the diff, apply it, undo it
-      assets/webview-client.js     the full client: capability discovery, navigation, edits, events
-      assets/nav-client.js         the older navigation-only client (still what the other pages use)
 ```
 
 ---
 
 ## Which file to read
 
+**Building a page, or generating one?** Read the [`kit/`](kit/README.md) — it is the half of this folder
+that is written for a project that only *consumes* webview, and every document in it can be copied into
+that project as it stands. **Building or changing a host, or working on this repository's own webview
+modules?** Read the rest of this table.
+
 | You want to… | Read |
 | --- | --- |
+| write a page that navigates code | [`kit/doc/page-authoring.md`](kit/doc/page-authoring.md) |
+| get the exact navigation contract | [`kit/doc/contract.md`](kit/doc/contract.md) — frozen, page-side normative |
+| **edit a file from a page** | [`kit/doc/edit-api.md`](kit/doc/edit-api.md) — diff first, then apply; `target: buffer|disk` |
+| make webview available in a project | [`kit/doc/host-in-this-project.md`](kit/doc/host-in-this-project.md) |
+| copy the whole consumer half | [`kit/README.md`](kit/README.md) |
+| copy a working page | [`kit/examples/`](kit/examples/README.md) — start with [`self-contained/index.html`](kit/examples/self-contained/index.html) |
+| see a page that edits | [`kit/examples/with-assets/pages/edit-demo.html`](kit/examples/with-assets/pages/edit-demo.html) |
 | use the JetBrains plugin | [`webview-jetbrains/README.md`](webview-jetbrains/README.md) — `Ctrl+Alt+Shift+W`, right-click an `.html` file → **Open in WebView Explorer** |
 | use the VS Code extension | [`webview-vscode/README.md`](webview-vscode/README.md) |
 | serve a page from a host that needs no editor | [`core/README.md`](core/README.md) — `webviewd --project . --port 0` |
-| write a page that navigates code | [`doc/webview-page-authoring.md`](doc/webview-page-authoring.md) |
-| get the exact navigation contract | [`doc/webview-link-api.md`](doc/webview-link-api.md) |
-| **edit a file from a page** | [`doc/webview-edit-api.md`](doc/webview-edit-api.md) — diff first, then apply; `target: buffer|disk` |
-| implement a new host | [`doc/webview-host-api.md`](doc/webview-host-api.md), plus [`core/README.md`](core/README.md) and the [`conformance/`](conformance/README.md) vectors |
+| **implement a new host** | [`doc/webview-host-api.md`](doc/webview-host-api.md), plus [`core/README.md`](core/README.md) and the [`conformance/`](conformance/README.md) vectors |
 | drive an editor that has no plugin | [`jwa-sidecar/README.md`](jwa-sidecar/README.md) — LSP, `window/showDocument` |
 | verify the IDE claims yourself | [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) — one command, two visual facts |
 | see what is planned and what was measured | [`PLAN-webview-suite.md`](PLAN-webview-suite.md) |
-| copy a working page | [`examples/`](examples/README.md) — start with [`self-contained/index.html`](examples/self-contained/index.html) |
-| see a page that edits | [`examples/with-assets/pages/edit-demo.html`](examples/with-assets/pages/edit-demo.html) |
 
 ## One contract, one implementation of the security model
 
-The navigation contract is frozen in [`doc/webview-link-api.md`](doc/webview-link-api.md); the write contract is
-in [`doc/webview-edit-api.md`](doc/webview-edit-api.md). What is *not* the contract — which origins may call, how
+The navigation contract is frozen in [`kit/doc/contract.md`](kit/doc/contract.md); the write contract is
+in [`kit/doc/edit-api.md`](kit/doc/edit-api.md). What is *not* the contract — which origins may call, how
 often, which paths may be opened or written, and who checks a digest — was implemented several times and
 disagreed, twice in a way that let any page in the user's browser drive the editor. It now lives once, in
 [`core/webview-core`](core/webview-core), with the disagreements recorded as vectors in
@@ -113,7 +116,7 @@ there and what it can do. Each host answers with the same document shape (`plugi
 `tokenRequired`, `bridgeVersion`, `capabilities`), and `.well-known/webview.json` adds the descriptor: which
 verbs exist and how precisely the attached editor can reach a line (`exact`, `file-only`, `none`).
 
-Authorisation is in [`doc/webview-link-api.md`](doc/webview-link-api.md) § 3: an allowed `Origin` **or** a token
+Authorisation is in [`kit/doc/contract.md`](kit/doc/contract.md) § 3.4: an allowed `Origin` **or** a token
 for navigation; **the token alone** for every state-changing route, because any page in the reader's browser can
 share an origin rule while only a page this host served can hold the secret.
 
@@ -153,11 +156,14 @@ cd webview/webview-vscode && npm run test:unit
 cd webview/webview-vscode && npm test
 
 # the page side
-bun webview/examples/webview-client.test.mjs   # the client against a live headless webviewd (29 checks)
-node webview/examples/smoke-test.mjs           # 5 pages in a real Chromium: parse, highlight, links resolve
-bun webview/tools/check-capabilities.js        # capability honesty: declared ⇒ served, undeclared ⇒ refused
-bun webview/tools/check-port-claim.js          # two live hosts: one bridge per project, and where a port goes
-node webview/check-links.mjs                   # every relative link in this folder resolves
+bun webview/kit/examples/webview-client.test.mjs  # the client against a live headless webviewd (the write verbs)
+node webview/kit/examples/smoke-test.mjs          # every page in a real Chromium: parse, highlight, links resolve
+node webview/kit/scripts/check-pages.mjs          # every link resolves, offline, with no browser needed
+node webview/kit/scripts/check-docs.mjs           # every relative link in the kit's documents resolves
+node webview/tools/check-pages.test.mjs           # and the checker itself fails when it should (21 assertions)
+bun webview/tools/check-capabilities.js           # capability honesty: declared ⇒ served, undeclared ⇒ refused
+bun webview/tools/check-port-claim.js             # two live hosts: one bridge per project, and where a port goes
+node webview/check-links.mjs                      # every relative link in this folder resolves
 ```
 
 `webview-client.test.mjs` starts `webviewd` itself and drives the same functions a browser page calls — nothing
@@ -166,12 +172,18 @@ is mocked — so a verb that stops working fails the run rather than being disco
 half if no Chromium is installed; it reports the highlighted block and token-category counts per page, so a
 grammar that silently stops loading fails the run rather than looking fine.
 
+`kit/scripts/check-pages.mjs` is the browser-less half of the same five checks, and it is the one a consuming
+project keeps in its build: it resolves every `data-open` through the page's own link base, asserts that a
+claimed `data-member` really is on the claimed line, and refuses an absolute path or a remote asset in the
+artifact. `tools/check-pages.test.mjs` is its own test — fixture sites that are wrong in each of those ways,
+because a verifier that silently passes is worse than none.
+
 `node scripts/check-repo-links.mjs` from the repository root additionally checks every relative link in every
 Markdown file of the repository, which covers the links *out* of this folder.
 
 ## Two page shapes, one contract
 
-| | `examples/self-contained/` | `examples/with-assets/` |
+| | [`kit/examples/self-contained/`](kit/examples/self-contained/index.html) | [`kit/examples/with-assets/`](kit/examples/with-assets/index.html) |
 | --- | --- | --- |
 | Files | 1 | 4 assets + one file per page |
 | Travels alone (attachment, CI artifact) | yes | needs the folder |
@@ -185,7 +197,7 @@ asset in the other.
 
 ## Licence and provenance
 
-`examples/*/assets/microlighter.js` and its inlined copy are
+`kit/examples/*/assets/microlighter.js` and its inlined copy are
 [microlighter](https://github.com/davatron5000/microlighter) 2.2.0, MIT, © Dave Rupert, with TextMate grammars
 adapted from Microsoft VS Code (MIT). Four documented changes adapt it to a page with no module loader; the list
-is in the file header and in [`doc/webview-page-authoring.md`](doc/webview-page-authoring.md) § 6.1.
+is in the file header and in [`kit/doc/page-authoring.md`](kit/doc/page-authoring.md) § 7.1.

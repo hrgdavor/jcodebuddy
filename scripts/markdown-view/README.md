@@ -41,7 +41,7 @@ Two things, and the second is the point:
    `resolveTarget`, and you have a viewer for your own source of truth — a coverage report, a review
    dashboard, a trace viewer, a spec that references code.
 
-The contract it speaks is documented in **[`webview/doc/webview-link-api.md`](../../webview/doc/webview-link-api.md)**.
+The contract it speaks is documented in **[`webview/kit/doc/contract.md`](../../webview/kit/doc/contract.md)**.
 Read that first if you are writing your own; this file is about *this* implementation.
 
 ---
@@ -67,7 +67,7 @@ window.openFile(target, line, column)   /* the IDE webview injected this -> use 
 
 It also writes the bridge status into `#bridge-status`, so a reader can see *why* a click did or did not
 do something. The full rules, including `data-link-base`, are in
-[`webview/doc/webview-link-api.md`](../../webview/doc/webview-link-api.md) § 4–5.
+[`webview/kit/doc/contract.md`](../../webview/kit/doc/contract.md) § 4–5.
 
 ### `render.js` — the document
 

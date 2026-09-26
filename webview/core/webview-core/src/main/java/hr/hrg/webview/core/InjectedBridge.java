@@ -3,7 +3,7 @@ package hr.hrg.webview.core;
 /**
  * The exact script a host installs into a page so it can navigate the host.
  *
- * <p>This is the frozen half of the contract in {@code webview/doc/webview-link-api.md} § 1: the page
+ * <p>This is the frozen half of the contract in {@code webview/kit/doc/contract.md} § 1: the page
  * sees one function and one version probe, and the transport underneath is the host's business. A
  * JetBrains tool window passes a {@code JBCefJSQuery.inject(...)} invocation as {@code transport}; a
  * plain browser served by the sidecar passes a call to {@code POST /api/v1/open}; a host that only

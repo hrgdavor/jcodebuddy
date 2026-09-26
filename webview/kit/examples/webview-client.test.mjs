@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Drives examples/with-assets/assets/webview-client.js against a live, headless webviewd.
+// Drives with-assets/assets/webview-client.js against a live, headless webviewd.
 //
 // This is the page's code under test, not a mock of it: the client has no DOM dependency above the clipboard
 // rung, so the same functions a browser page calls are called here, over HTTP, against the real host. It is
 // also the beginning of Phase 6's gate — "headless lacks nothing" as a test result rather than a claim.
 //
-//   node webview/examples/webview-client.test.mjs [path-to-webviewd.jar]
+//   node webview/kit/examples/webview-client.test.mjs [path-to-webviewd.jar]
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(here, '..', '..');
+const repo = path.resolve(here, '..', '..', '..');
 const jar = process.argv[2] ?? path.join(repo, 'webview', 'core', 'webviewd', 'target', 'webviewd.jar');
 // The jar is built for JDK 25, and this machine's JAVA_HOME is not: an explicit WEBVIEWD_JAVA wins, then
 // JAVA_HOME, then whatever `java` is on the PATH. Getting this wrong produces a class-version error, so the
@@ -74,7 +74,7 @@ if (port === 0) {
 console.log(`host on port ${port} (java: ${java})`);
 
 // --- the client, exactly as a page would load it -------------------------------------------------------
-await import('../examples/with-assets/assets/webview-client.js');
+await import('./with-assets/assets/webview-client.js');
 const { create } = globalThis.jcbClient;
 check('webview-client.js exports a factory on globalThis', typeof create === 'function');
 

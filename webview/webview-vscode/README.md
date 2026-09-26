@@ -3,8 +3,8 @@
 This extension is a port of the JetBrains `WebView Explorer` plugin. It provides a WebView in the sidebar with an address bar and an HTTP bridge to open files in the editor.
 
 To build a page that uses it — a navigable project report, an entity reference, a rendered Markdown
-document — see [`../doc/webview-page-authoring.md`](../doc/webview-page-authoring.md) and the runnable pages
-in [`../examples/`](../examples/README.md). They speak this same API, so the only value that changes between
+document — see [`../kit/doc/page-authoring.md`](../kit/doc/page-authoring.md) and the runnable pages
+in [`../kit/examples/`](../kit/examples/README.md). They speak this same API, so the only value that changes between
 the two hosts is the bridge port (18882 here, 18881 in JetBrains).
 
 ## Features

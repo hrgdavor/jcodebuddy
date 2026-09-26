@@ -4,8 +4,8 @@
 
   Open it *through a host* — the page needs one to read the file and to apply the change:
 
-      webviewd --project webview/examples --port 18899 --token demo-token
-      http://127.0.0.1:18899/page/<abs path>/webview/examples/with-assets/pages/edit-demo.html?token=demo-token
+      webviewd --project webview/kit/examples --port 18899 --token demo-token
+      http://127.0.0.1:18899/page/<abs path>/webview/kit/examples/with-assets/pages/edit-demo.html?token=demo-token
 
   Opened straight from the filesystem it still renders, and says plainly that no host is there, because a page
   that silently does nothing is the failure the authoring contract exists to prevent.

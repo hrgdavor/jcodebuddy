@@ -180,7 +180,7 @@ not carry and asserts the warning.
   `webview.explorer.allowedOrigins`), then clipboard plus a toast. The header pill says which one is
   live. **The contract itself — the exact signature, the payload, the HTTP parameters, the security
   model and the fallback ladder — is documented in
-  [`webview/doc/webview-link-api.md`](../../webview/doc/webview-link-api.md)**, which is the document to read if you are
+  [`webview/kit/doc/contract.md`](../../webview/kit/doc/contract.md)**, which is the document to read if you are
   writing another page or another plugin. For a smaller worked example of the same contract, see
   [`scripts/markdown-view/`](../markdown-view/README.md), which renders Markdown this way.
 - A cell is empty when the field genuinely has no such slot there — a `DERIVED` field has no setter,

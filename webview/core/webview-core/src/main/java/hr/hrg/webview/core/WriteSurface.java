@@ -16,7 +16,7 @@ import java.util.Map;
  * <p>This is the {@link EditService} counterpart of {@link Navigator}. {@code EditService} owns the rules —
  * jail, digest, atomic write, checkpoints, rate limit — and this class owns the *conversation*: parse the body,
  * honour {@code dryRun}, decide whether the change belongs in an editor's buffer or in the file, and map the
- * outcome to the status codes in {@code doc/webview-edit-api.md}. Two hosts need exactly that (the standalone
+ * outcome to the status codes in {@code doc/edit-api.md}. Two hosts need exactly that (the standalone
  * one and the JetBrains plugin), which is why it lives here rather than in either of them.
  *
  * <p>It performs no I/O of its own and knows nothing about HTTP: a host reads the body, calls one method, and

@@ -12,7 +12,8 @@ assertions). What remains is the one thing a test in this repository cannot obse
 recorded as *implemented and unit-tested*, never as *observed*, until someone does this and reports it.
 
 For comparison, gate (e) — the same claim over LSP for Zed — was observed on 2026-09-25 and is recorded as such
-in [`webview-edit-api.md`](webview-edit-api.md) § 6. This checklist exists to make the other two equally cheap.
+in the observation table of [`README.md`](../README.md) § "What is implemented, and what has actually been
+observed". This checklist exists to make the other two equally cheap.
 
 **Nothing here writes to your IDE's real settings.** The JetBrains path runs a *sandbox* IDE under the plugin's
 `build/idea-sandbox/`, and the VS Code path runs an Extension Development Host window. Neither touches the Zed
@@ -175,7 +176,8 @@ The autosave caveat from § 1 applies here too: a VS Code window can save on foc
 | **JetBrains** 2026.2.3, `runIde` sandbox, commit `bc24ee6` | 2026-09-26 | **Observed.** `"target": "buffer"`; disk unchanged when the host answered; the replacement appeared in the editor; the IDE's own undo restored the original text. The one disk write was IntelliJ's autosave on frame deactivation — the editor saving, which the contract allows. Reported by the maintainer, who checked the save behaviour himself. |
 | **VS Code** (Extension Development Host, commit `51950eb`) | 2026-09-26 | **Observed.** The buffer edit landed: the editor showed the new text, the buffer was **not saved**, and the editor's own undo/redo moved it back and forth. Two host-side fixes made the run possible at all: `webviewExplorer.token` had to exist before any write route could be exercised (they refused everything with 403), and the extension needed `activationEvents: ["onStartupFinished"]` — without it the extension never activated, so port 18882 was closed with nothing to explain it. |
 
-Recorded in [`webview-edit-api.md`](webview-edit-api.md) § 6 and the plan's Phase 3 record.
+Recorded in this file's own § 2a, and summarised in [`README.md`](../README.md) § "What is implemented, and what
+has actually been observed". The plan's Phase 3 record keeps the sequence.
 
 ---
 
@@ -207,5 +209,5 @@ saved anything?  no (if yes, say what happened to the file on disk)
 anything else:   <e.g. an unexpected status, a dialog, a log line, a delay>
 ```
 
-With that in hand the note goes into [`webview-edit-api.md`](webview-edit-api.md) § 6 and the plan's Phase 3
+With that in hand the note goes into § 2a of this file and the plan's Phase 3
 record, dated and version-named, and the claim stops being "implemented and unit-tested" and becomes "observed".

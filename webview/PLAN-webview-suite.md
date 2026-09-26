@@ -5,7 +5,7 @@ both its headless half and the LSP buffer path (gate (e) observed on Zed); the J
 the page-side client, the extension's `process:exec` half and Phase 6 are not started.** Phase 0's results and
 two corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); the hosts and their
 contracts are in [`doc/webview-host-api.md`](doc/webview-host-api.md) and
-[`doc/webview-edit-api.md`](doc/webview-edit-api.md).
+[`kit/doc/edit-api.md`](kit/doc/edit-api.md).
 Scope: the whole `webview/` product (today: `webview-jetbrains`, `webview-vscode`, `doc/`, `examples/`) plus the
 sidecar material that is being folded into it (`jwa-sidecar`, and the JWA/JSWA IDE clients).
 Written against: JDK 25 (`C:\Program Files\Java\jdk-25`; the shell's default `java` is 1.8, `JAVA_HOME` is 21 —
@@ -34,7 +34,7 @@ every Maven/Gradle command below must pin 25), Maven via **mvnd 1.0.0-m4**, Inte
 > the reconnect; and the JetBrains host does **not** yet answer the `/file/` route (`PageServer` is written and
 > tested in core, and Phase 2's `webviewd` is its first real caller, so adding a route to a shipped plugin is
 > left to a phase that also changes what that plugin is). So the plugin's behaviour is unchanged apart from the
-> two new status codes documented in `doc/webview-link-api.md` § 3.
+> two new status codes documented in `kit/doc/contract.md` § 3.
 >
 > **Correction made in the relocation commit, 2026-09-25.** The risk table's claim that "the POM `relativePath`
 > is the only path that changes" when `jwa-sidecar` moves was **wrong** — four more references pointed at the old
@@ -65,11 +65,11 @@ embeddable webview, is the first editor that is *only* reachable this way.
 
 | Piece | Location | What it does | Reusable for this plan |
 | --- | --- | --- | --- |
-| Frozen page contract | `webview/doc/webview-link-api.md` | `window.openFile(path, line, column)`, `data-open`/`data-line`, `GET /open`, `GET /health`, auth rules, §7 host checklist | **Yes — the base to extend, not replace** |
+| Frozen page contract | `webview/kit/doc/contract.md` | `window.openFile(path, line, column)`, `data-open`/`data-line`, `GET /open`, `GET /health`, auth rules, §7 host checklist | **Yes — the base to extend, not replace** |
 | JetBrains host | `webview/webview-jetbrains` (Java, JCEF) | Injects `window.openFile` after each main-frame load; HTTP fallback on port 18881; `NavigatorService` resolves the path, rate-limits, opens the editor | Path resolution + rate-limit logic ports directly |
 | VS Code host | `webview/webview-vscode` (TS) | Same contract, port 18882, **plus** `/file/<path>` (a local static file server) and `postMessage` bridging inside an iframe | `/file/` server is the seed of the sidecar's page server |
 | JWA sidecar | `jwa-sidecar` (Java, LSP4J, shaded jar) | LSP server on stdio **and** an HTTP jump service on **port 7979**, `GET /jump?uri=&line=&column=` → custom `mytool/jump` notification **and** standard `window/showDocument` | **Yes — this is the LSP sidecar, already half-built** |
-| Page examples + harness | `webview/examples/` | Two page shapes, a CDP smoke test (49 assertions, 4 pages), offline microlighter highlighting | The parity gate for "headless is not lacking" |
+| Page examples + harness | `webview/kit/examples/` | Two page shapes, a CDP smoke test (49 assertions, 4 pages), offline microlighter highlighting | The parity gate for "headless is not lacking" |
 | JWA/JSWA IDE clients | `vscode-jwa`, `vscode-jswa`, `intellij-jwa`, `intellij-jswa` | Thin clients that launch a sidecar for the Java/JS agent products | Host adapters of the same sidecar |
 
 **The duplication that motivates the rewrite.** The auth model, CORS emission, allow-list semantics, and the
@@ -100,10 +100,16 @@ webview/
   README.md                       (rewritten: one product, four hosts)
   PLAN-webview-suite.md           (this file)
   doc/
-    webview-link-api.md           FROZEN read/navigate contract — unchanged
     webview-host-api.md           DELIVERED: the full verb set + /health capability document
-    webview-edit-api.md           DELIVERED: the write contract (digest, dryRun, undo, events)
-    webview-page-authoring.md     extended: the ladder gains "editor host" and "edit" rungs
+    ide-observation-checklist.md  how to observe the two claims a test cannot make here
+  kit/                            (the consumer half, added later: what another project copies)
+    doc/contract.md               FROZEN read/navigate contract — the page-side normative subset
+    doc/edit-api.md               DELIVERED: the write contract (digest, dryRun, undo, events)
+    doc/page-authoring.md         extended: the ladder gains "editor host" and "edit" rungs
+    doc/host-in-this-project.md   making a host available: discovery, authorisation, security
+    scripts/check-pages.mjs       the verifier a consuming project keeps in its build
+    scripts/check-docs.mjs        every relative link in the kit's documents
+    examples/                     the two page shapes, the clients, the smoke tests (moved here)
   core/
     webview-core/                 DELIVERED Maven module (JDK 25)
       page server                 serves a project subtree + the generated pages (/file/, /page/) — delivered
@@ -323,7 +329,7 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 - Retarget `webview-jetbrains`' `NavigatorService`/`HttpBridgeService` and `webview-vscode`'s `HttpBridge` onto it;
   keep their ports (18881 / 18882) and every existing response body.
 - Move `jwa-sidecar` under `webview/`; give it the same auth on `/jump` or delete `/jump` in favour of the API.
-- **Gate:** the 52 JetBrains unit tests, the VS Code suite, and `webview/examples/smoke-test.mjs` all still pass;
+- **Gate:** the 52 JetBrains unit tests, the VS Code suite, and `webview/kit/kit/examples/smoke-test.mjs` all still pass;
   a new test asserts that the three hosts answer `/health` identically and that an unauthorized `/open` is `403`
   in all of them.
 
@@ -405,7 +411,7 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   edit sent through the LSP channel appears in Zed's buffer and is undone with Zed's own undo.
 
 > **Headless half delivered 2026-09-25** — the write contract in `webview-core` and its HTTP surface in
-> `webviewd`, with [`doc/webview-edit-api.md`](doc/webview-edit-api.md) as the reference. **Gate items (a), (b),
+> `webviewd`, with [`kit/doc/edit-api.md`](kit/doc/edit-api.md) as the reference. **Gate items (a), (b),
 > (c) and — later the same day — (e) are measured**; **(d)** is not, and the phase is not finished without it.
 >
 > What exists: `EditService` (the one place a path becomes a write) enforces the same path jail as navigation,
@@ -586,7 +592,7 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   The spike ends in a written go/no-go.
 
 ### Phase 6 — Headless parity as a build gate (1–2 days)
-- Extend `examples/smoke-test.mjs` (CDP, no dependencies) to drive **every** verb against a headless `webviewd`
+- Extend `kit/examples/smoke-test.mjs` (CDP, no dependencies) to drive **every** verb against a headless `webviewd`
   and assert the result; add the JetBrains/VS Code capability declarations to the same test so a host that
   declares a verb it does not implement fails the build.
 - **Gate:** "headless lacks nothing" is a test result. The README's claim of parity links to the test that proves
@@ -664,7 +670,7 @@ JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -pl webview/core/webviewd -am v
 # then: GET /health, GET /.well-known/webview.json, GET /page/<percent-encoded absolute path>?token=<from the token file>
 # pages, all four hosts' contracts, headless parity
 node webview/check-links.mjs
-node webview/examples/smoke-test.mjs
+node webview/kit/kit/examples/smoke-test.mjs
 # JetBrains host (Gradle needs write access to C:\Users\hrg\.gradle)
 cd webview/webview-jetbrains && ./gradlew test buildPlugin
 # VS Code host

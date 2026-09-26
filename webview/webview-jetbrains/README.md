@@ -220,10 +220,12 @@ Swing component tree to find the browser.
 
 ## Further reading
 
-- [`webview/doc/webview-page-authoring.md`](../doc/webview-page-authoring.md) — how to build a page that
+- [`webview/kit/doc/page-authoring.md`](../kit/doc/page-authoring.md) — how to build a page that
   navigates a project: the client ladder, the two link-base spellings, offline syntax highlighting,
   verification and troubleshooting.
-- [`webview/examples/`](../examples/README.md) — the same navigator as one self-contained file and as a
+- [`webview/kit/`](../kit/README.md) — the consumer half: the frozen contract, the authoring guide, the
+  write contract, and the runnable examples. This is what a project that only builds pages copies.
+- [`webview/kit/examples/`](../kit/examples/README.md) — the same navigator as one self-contained file and as a
   page + `assets/` folder, with a smoke test that verifies every link.
 - [`plan.reimplement.md`](plan.reimplement.md) — the rewrite plan and the findings behind the current
   design, including the JCEF dependency bug (F8).
