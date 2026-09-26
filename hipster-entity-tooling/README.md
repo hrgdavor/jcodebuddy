@@ -575,7 +575,7 @@ The generator emits a DEC-021 header on every field enum, and that header
 carries a second key:
 
 ```java
-// {@link hr.hrg.hipster.entityexample.person.entity.PersonSummary} Field metadata for the PersonSummary view.
+// @generated file hr.hrg.hipster.entity.tooling.EntityMetadataGenerator — Field metadata for the PersonSummary view.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 public enum PersonSummary_ implements FieldDef {
 ```

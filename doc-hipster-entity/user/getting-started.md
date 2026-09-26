@@ -178,7 +178,7 @@ The enum's header names the view it was generated from, which is what
 makes an IDE rename of the view reach the generated code:
 
 ```java
-// {@link hr.hrg.hipster.entityexample.person.entity.PersonSummary} Field metadata for the PersonSummary view.
+// @generated file hr.hrg.hipster.entity.tooling.EntityMetadataGenerator — Field metadata for the PersonSummary view.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 public enum PersonSummary_ implements FieldDef { ... }
 ```

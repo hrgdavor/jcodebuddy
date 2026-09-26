@@ -1,4 +1,4 @@
-// {@link hr.hrg.hipster.entityexample.person.entity.PersonCreateForm} Immutable record materialization of the PersonCreateForm view.
+// @generated file hr.hrg.hipster.entity.tooling.ViewRecordGenerator — Immutable record materialization of the PersonCreateForm view.
 // {enabled:true, blockMarker: "implicit"}
 package hr.hrg.hipster.entityexample.person.entity;
 

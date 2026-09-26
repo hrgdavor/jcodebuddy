@@ -1,4 +1,4 @@
-// {@link hr.hrg.hipster.entityexample.person.entity.PersonUpdatableView} Field metadata for the PersonUpdatableView view.
+// @generated file hr.hrg.hipster.entity.tooling.EntityMetadataGenerator — Field metadata for the PersonUpdatableView view.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 package hr.hrg.hipster.entityexample.person.entity;
 

@@ -260,11 +260,16 @@ public final class ViewAdapterGenerator {
         return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
-    /** The DEC-021 two-line header, with the `{@link}` reference DEC-019 requires. */
+    /**
+     * The two-line file header, via the one place its spelling is written down (DEC-035).
+     *
+     * <p>The {@code view} parameter is unused now and kept deliberately: it is what a caller passes to say
+     * which view the file is for, and dropping it would make the two call sites read as if the header had
+     * nothing to do with the view. The header carries the <b>generator's</b> FQN, because that is what a
+     * reader jumps to; the view is named in the description.
+     */
     private static String header(ViewMeta view, String description) {
-        String fqn = view.name();
-        return "// {@link " + fqn + "} " + description + "\n"
-                + "// {enabled:true, blockMarker: \"implicit\"}\n";
+        return GeneratedCodeMarkers.fileHeader(ViewAdapterGenerator.class.getName(), description);
     }
 
     /** Reserved for a future non-JDBC dialect; keeps the unused-import warning away. */

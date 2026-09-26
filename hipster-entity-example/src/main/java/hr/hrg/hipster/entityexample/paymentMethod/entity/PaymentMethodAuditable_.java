@@ -1,4 +1,4 @@
-// {@link hr.hrg.hipster.entityexample.paymentMethod.entity.PaymentMethodAuditable} Field metadata for the PaymentMethodAuditable view.
+// @generated file hr.hrg.hipster.entity.tooling.EntityMetadataGenerator — Field metadata for the PaymentMethodAuditable view.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 package hr.hrg.hipster.entityexample.paymentMethod.entity;
 

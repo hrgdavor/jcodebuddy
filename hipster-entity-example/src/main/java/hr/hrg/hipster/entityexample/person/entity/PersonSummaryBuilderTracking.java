@@ -1,4 +1,4 @@
-// {@link hr.hrg.hipster.entityexample.person.entity.PersonSummary} Tracking builder for the PersonSummary view.
+// @generated file hr.hrg.hipster.entity.tooling.ViewTrackingBuilderGenerator — Tracking builder for the PersonSummary view.
 // {enabled:true, blockMarker: "implicit"}
 package hr.hrg.hipster.entityexample.person.entity;
 

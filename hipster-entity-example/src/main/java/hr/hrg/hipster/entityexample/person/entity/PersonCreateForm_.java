@@ -1,4 +1,4 @@
-// {@link hr.hrg.hipster.entityexample.person.entity.PersonCreateForm} Field metadata for the PersonCreateForm view.
+// @generated file hr.hrg.hipster.entity.tooling.EntityMetadataGenerator — Field metadata for the PersonCreateForm view.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 package hr.hrg.hipster.entityexample.person.entity;
 

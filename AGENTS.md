@@ -119,13 +119,16 @@ code or documentation for this repository:
   [`doc-hipster-entity/brainstorm/cooperative-codegen-preserve-user-tweaks.md`](doc-hipster-entity/brainstorm/cooperative-codegen-preserve-user-tweaks.md).
   This complements DEC-018 (whole-file freeze markers) and DEC-019
   (source-visible wiring) without contradicting them.
-- **Generator class-file header — short id, JSON5 config,
+- **Generator class-file header — a file marker, JSON5 config,
   per-file options.** When you generate a whole class, emit a
   **two-line `//` comment pair above the `package` declaration**,
   not a class-body block:
-  `// {@link <fqn>} <one-line description>.`
+  `// @generated file <generator-fqn> — <one-line description>.`
   on the first line, and a single-line JSON5 config blob
   (`// {enabled:true, blockMarker: "implicit"}`) on the second.
+  The first line is DEC-035's **file marker**: it tells an external
+  parser, an AI agent or a reviewer that everything in the file is
+  generated, without their knowing anything about the generator.
   The JSON5 subset is **pinned** to the specific Jackson
   `JsonReadFeature`s listed in DEC-021 § 4 (single-quoted
   strings, unquoted field names, trailing commas, leading decimal
@@ -139,9 +142,16 @@ code or documentation for this repository:
   control. The full decision, exact format, and patterns are in
   [`doc-hipster-entity/architecture/decisions/DEC-021.md`](doc-hipster-entity/architecture/decisions/DEC-021.md)
   with a practical reference in
-  [`doc-hipster-entity/brainstorm/generator-class-body-header.md`](doc-hipster-entity/brainstorm/generator-class-body-header.md).
+  [`doc-hipster-entity/brainstorm/generator-class-body-header.md`](doc-hipster-entity/brainstorm/generator-class-body-header.md),
+  and the marker vocabulary it belongs to is
+  [`DEC-035`](doc-hipster-entity/architecture/decisions/DEC-035.md) — four scopes
+  (`file`, `member`, `region`, `block`), each claiming a boundary a parser can find
+  without knowing the generator, and the rule that a marker a parser does not
+  implement is **reported, never treated as hand-written**. Read DEC-035 before
+  emitting a marker of any kind: marking per `case` arm or per line is explicitly
+  wrong, because the language already delimits what the generator wrote.
   This complements DEC-020 (cooperative blocks) and DEC-019
-  (source-visible wiring): the `{@link …}` reference in the
+  (source-visible wiring): the generator reference on the
   first line is the generator-side fulfilment of the same
   navigability rule.
 - **Refactor-sensitivity rules for generated code and divergence

@@ -283,7 +283,7 @@ lifecycle phase. So a new project does three separate things:
 ### The field enum — `PersonSummary_`
 
 ```java
-// {@link com.example.person.entity.PersonSummary} Field metadata for the PersonSummary view.
+// @generated file hr.hrg.hipster.entity.tooling.EntityMetadataGenerator — Field metadata for the PersonSummary view.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 public enum PersonSummary_ implements FieldDef {
 

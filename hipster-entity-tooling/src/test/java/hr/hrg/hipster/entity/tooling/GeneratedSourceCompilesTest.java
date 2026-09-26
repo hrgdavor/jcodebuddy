@@ -91,9 +91,13 @@ class GeneratedSourceCompilesTest {
         Assertions.assertTrue(emitted.contains("public static PersonSummary_ forName(String name)"),
                 "the enum publishes a switch-based forName");
 
-        // The DEC-021 two-line header with the R1 marker (§ 8.3/3.8).
-        Assertions.assertTrue(emitted.startsWith("// {@link example.hr.PersonSummary}"),
-                "the file starts with the DEC-021 {@link} header line: " + emitted.substring(0, Math.min(200, emitted.length())));
+        // The two-line header: DEC-035's file marker on line 1, DEC-021's config on line 2 (§ 8.3/3.8).
+        Assertions.assertTrue(emitted.startsWith("// @generated file "),
+                "the file starts with the DEC-035 file marker, which is what makes it recognisable: "
+                        + emitted.substring(0, Math.min(200, emitted.length())));
+        Assertions.assertTrue(emitted.contains("EntityMetadataGenerator"),
+                "and names the generator, so a reader can jump to it: "
+                        + emitted.substring(0, Math.min(200, emitted.length())));
         Assertions.assertTrue(emitted.contains("// {enabled:true, entityFieldEnum:true, blockMarker: \"implicit\"}"),
                 "the header carries the entityFieldEnum:true marker: " + emitted.substring(0, Math.min(300, emitted.length())));
 

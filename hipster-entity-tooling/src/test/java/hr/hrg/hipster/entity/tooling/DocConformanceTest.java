@@ -113,21 +113,39 @@ class DocConformanceTest {
                         + "no such override and FieldDef's default (null) is the correct answer");
     }
 
-    /** DEC-021's header, as the guide prints it and as the generator emits it. */
+    /**
+     * The documented header is the emitted header, and the emitted header is a DEC-035 marker.
+     *
+     * <p>DEC-021 fixed the two-line shape; DEC-035 put the file marker on line 1 so a parser or an agent
+     * can recognise a wholly-generated file by its first line. Both halves are asserted here because the
+     * guide prints this header verbatim, and a guide that shows a shape the generator no longer emits is
+     * worse than no guide.
+     */
     @Test
     void theDocumentedHeaderMatchesTheEmittedHeader() throws Exception {
         String emitted = read("hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/"
                 + "person/entity/PersonSummary_.java");
         String[] lines = emitted.split("\n");
         Assertions.assertTrue(lines.length > 2, "the emitted enum has a header");
-        Assertions.assertTrue(lines[0].startsWith("// {@link "),
-                "DEC-021 line 1 is the navigable {@link} reference: " + lines[0]);
+        Assertions.assertTrue(lines[0].startsWith("// @generated file "),
+                "DEC-035 line 1 is the file marker, which is what makes the file recognisable: " + lines[0]);
         Assertions.assertTrue(lines[1].contains("entityFieldEnum:true"),
                 "line 2 is the JSON5 config and carries the R1 marker: " + lines[1]);
 
+        // The marker must be one this project's own vocabulary recognises, and it must resolve to the
+        // generator — otherwise the documentation and the recogniser have drifted apart.
+        GeneratedCodeMarkers.Found found = GeneratedCodeMarkers.recognise(1, lines[0]).orElseThrow();
+        Assertions.assertEquals(GeneratedCodeMarkers.SCOPE_FILE, found.scope());
+        Assertions.assertTrue(found.supported());
+        Assertions.assertEquals("hr.hrg.hipster.entity.tooling.EntityMetadataGenerator",
+                GeneratedCodeMarkers.generatorOfFileMarker(java.util.List.of(lines)).orElseThrow(),
+                "the marker names the generator a reader jumps to, and a parser may ignore");
+
         String guide = read("doc-hipster-entity/user/getting-started-new-project.md");
         Assertions.assertTrue(guide.contains("// {enabled:true, entityFieldEnum:true, blockMarker: \"implicit\"}"),
-                "the guide must show the header it will actually get");
+                "the guide must show the config line it will actually get");
+        Assertions.assertTrue(guide.contains("// @generated file "),
+                "and the file marker, because that is the line a parser reads");
     }
 
     /**

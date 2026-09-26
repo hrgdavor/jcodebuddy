@@ -1,4 +1,4 @@
-// {@link hr.hrg.hipster.entityexample.paymentMethod.entity.PayPalPaymentMethod} Field metadata for the PayPalPaymentMethod view.
+// @generated file hr.hrg.hipster.entity.tooling.EntityMetadataGenerator — Field metadata for the PayPalPaymentMethod view.
 // {enabled:true, entityFieldEnum:true, blockMarker: "implicit"}
 package hr.hrg.hipster.entityexample.paymentMethod.entity;
 

@@ -44,6 +44,7 @@ Architecture decisions are organized individually in the [decisions](decisions/)
 | [DEC-032](decisions/DEC-032.md) | `.jcodebuddy/` in two scopes — project and user home | Accepted |
 | [DEC-033](decisions/DEC-033.md) | One serving host per project — port, health identity, claim | Accepted |
 | [DEC-034](decisions/DEC-034.md) | Entity relations are key references, never object references | Proposed |
+| [DEC-035](decisions/DEC-035.md) | Generated-code markers — recognisable boundaries, unknown ones reported | Proposed |
 
 > This table is a quick-reference list and stops short of the detail on purpose. The authoritative index,
 > with the notes that explain each decision, is [`decisions/README.md`](decisions/README.md).

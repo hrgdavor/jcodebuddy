@@ -379,9 +379,7 @@ public final class ValidationGenerator {
         String viewFqn = packageName == null || packageName.isBlank()
                 ? view.name()
                 : packageName + "." + view.name();
-        sb.append("// {@link ").append(viewFqn).append("} Imperative constraint checks for the ")
-                .append(view.name()).append(" view.\n");
-        sb.append("// {enabled:true, blockMarker: \"implicit\"}\n");
+        sb.append(GeneratedCodeMarkers.fileHeader(ValidationGenerator.class.getName(),                 "Imperative constraint checks for the " + view.name() + " view."));
         if (packageName != null && !packageName.isBlank()) {
             sb.append("package ").append(packageName).append(";\n\n");
         }

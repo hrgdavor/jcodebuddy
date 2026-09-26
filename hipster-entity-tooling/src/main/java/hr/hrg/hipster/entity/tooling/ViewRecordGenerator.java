@@ -118,9 +118,7 @@ public final class ViewRecordGenerator {
     private static String source(String packageName, ViewMeta view, List<Property> allProperties, String recordClass) {
         StringBuilder sb = new StringBuilder();
         String fqn = packageName == null || packageName.isBlank() ? view.name() : packageName + "." + view.name();
-        sb.append("// {@link ").append(fqn).append("} Immutable record materialization of the ")
-                .append(view.name()).append(" view.\n");
-        sb.append("// {enabled:true, blockMarker: \"implicit\"}\n");
+        sb.append(GeneratedCodeMarkers.fileHeader(ViewRecordGenerator.class.getName(),                 "Immutable record materialization of the " + view.name() + " view."));
         sb.append("package ").append(packageName).append(";\n\n");
 
         for (String importName : jdkImports(allProperties)) {

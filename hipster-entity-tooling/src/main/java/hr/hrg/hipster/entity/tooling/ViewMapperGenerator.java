@@ -285,9 +285,7 @@ public final class ViewMapperGenerator {
         String targetFqn = target.packageName() == null || target.packageName().isBlank()
                 ? target.simpleName()
                 : target.packageName() + "." + target.simpleName();
-        sb.append("// {@link ").append(targetFqn).append("} Mapper from the declared source view to ")
-                .append(target.simpleName()).append(".\n");
-        sb.append("// {enabled:true, blockMarker: \"implicit\"}\n");
+        sb.append(GeneratedCodeMarkers.fileHeader(ViewMapperGenerator.class.getName(),                 "Mapper from the declared source view to " + target.simpleName() + "."));
         if (target.packageName() != null && !target.packageName().isBlank()) {
             sb.append("package ").append(target.packageName()).append(";\n\n");
         }

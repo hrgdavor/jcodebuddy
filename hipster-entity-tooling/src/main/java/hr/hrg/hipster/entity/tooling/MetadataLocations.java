@@ -20,8 +20,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * The artifact-side half of a view's detail: which files belong to it, what each one declares, and
@@ -85,9 +83,6 @@ public final class MetadataLocations {
     /** The generator's artifact naming conventions, in the order the pass emits them (DEC-028 § 2.4). */
     private static final List<String> GENERATED_SUFFIXES = List.of(
             "_", "Record", "Builder", "BuilderTracking", "Validator", "RowAdapter", "Binder");
-
-    /** The DEC-021 header's first line: {@code // {@link <fqn>} <description>}. */
-    private static final Pattern DEC_021_HEADER = Pattern.compile("\\{@link\\s+([\\w.$]+)}\\s*(.*)");
 
     /** One type declaration found in a candidate file, with everything the inventory records. */
     private record ArtifactShape(String displayName, String kind, String file, int line, boolean generated,
@@ -610,6 +605,22 @@ public final class MetadataLocations {
      * deliberately, and the {@code //} itself is stripped before matching so the pattern stays the one
      * that describes the header's content.</p>
      */
+    /**
+     * The description on a generated file's header line, or {@code null} when the file has no header.
+     *
+     * <p>Phase 6: this is the one place where reading the source <em>text</em> is the right answer rather
+     * than a fallback. JavaParser exposed a compilation unit's comments with their positions, so the
+     * original code could sort them and stop at the first block comment; the LST exposes comments as
+     * whitespace trivia with no position at all. The leading {@code //} run is exactly where the header
+     * lives, and it is trivially addressable in the text — so the text is read here deliberately.</p>
+     *
+     * <p>The line is recognised through {@link GeneratedCodeMarkers} rather than by a pattern of this
+     * class's own, and that changed after the header did: DEC-035's file marker replaced DEC-021's
+     * {@code {@link <fqn>}} first line, and a private pattern here matched the old shape and silently
+     * returned {@code null} for every generated file — the description would have gone missing from the
+     * metadata with nothing failing. One reader, in the class that owns the vocabulary, is what stops that
+     * from recurring.</p>
+     */
     private static String dec021Description(String source) {
         for (String rawLine : source.split("\\R", -1)) {
             String line = rawLine.trim();
@@ -621,9 +632,18 @@ public final class MetadataLocations {
                 // declaration itself. Only comments above `package` can be the header.
                 return null;
             }
-            Matcher matcher = DEC_021_HEADER.matcher(line.substring(2).trim());
-            if (matcher.find()) {
-                return matcher.group(2).trim();
+            java.util.Optional<GeneratedCodeMarkers.Found> found = GeneratedCodeMarkers.recognise(1, line);
+            if (found.isPresent() && GeneratedCodeMarkers.SCOPE_FILE.equals(found.get().scope())) {
+                // The marker line is `@generated file <generator-fqn> — <description>`. The description is
+                // what this method returns, so the separator that GeneratedCodeMarkers.fileHeader writes is
+                // what is split on; the generator's FQN is not this caller's business.
+                String payload = found.get().payload();
+                int separator = payload.indexOf('—');
+                if (separator < 0) {
+                    return payload.isBlank() ? null : payload;
+                }
+                String description = payload.substring(separator + 1).trim();
+                return description.isEmpty() ? null : description;
             }
         }
         return null;

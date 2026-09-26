@@ -259,9 +259,7 @@ public final class ViewTrackingBuilderGenerator {
 
         StringBuilder sb = new StringBuilder();
         String fqn = packageName == null || packageName.isBlank() ? viewName : packageName + "." + viewName;
-        sb.append("// {@link ").append(fqn).append("} Tracking builder for the ")
-                .append(viewName).append(" view.\n");
-        sb.append("// {enabled:true, blockMarker: \"implicit\"}\n");
+        sb.append(GeneratedCodeMarkers.fileHeader(ViewTrackingBuilderGenerator.class.getName(),                 "Tracking builder for the " + viewName + " view."));
         sb.append("package ").append(packageName).append(";\n\n");
 
         sb.append("import hr.hrg.hipster.entity.core.EEnumSet;\n");

@@ -554,16 +554,15 @@ public final class FieldBoilerplateGenerator {
      * control.</p>
      */
     private String generatorHeader() {
-        StringBuilder sb = new StringBuilder();
-        String viewFqn = packageName == null || packageName.isBlank() ? viewName : packageName + "." + viewName;
-        sb.append("// {@link ").append(viewFqn).append("} Field metadata for the ")
-                .append(viewName).append(" view.\n");
-        sb.append("// {enabled:true");
-        if (fieldEnumMode) {
-            sb.append(", entityFieldEnum:true");
-        }
-        sb.append(", blockMarker: \"implicit\"}\n");
-        return sb.toString();
+        String description = "Field metadata for the " + viewName + " view.";
+        String generator = EntityMetadataGenerator.class.getName();
+        // DEC-035: the file marker carries the GENERATOR's FQN, which is what a reader jumps to. An earlier
+        // revision put the VIEW's FQN on this line, which read like a link to the view the metadata
+        // describes — useful-looking, and not what the header is for. The view's name is already in the
+        // description and in the enum, so nothing is lost.
+        return fieldEnumMode
+                ? GeneratedCodeMarkers.fieldEnumFileHeader(generator, description)
+                : GeneratedCodeMarkers.fileHeader(generator, description);
     }
 
     /**
