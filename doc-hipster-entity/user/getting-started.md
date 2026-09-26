@@ -65,16 +65,16 @@ public interface PersonSummary extends PersonEntity {
 }
 ```
 
-## 3. Build and test with `scripts/mvn-jdk25.cmd`
+## 3. Build and test with `scripts/mvn-jdk25.js`
 
 The **recorded, verified** way to build and test this repository is the
-wrapper script. Called with no arguments it runs the Hipster-Entity
-test set with Maven 3.9 and JDK 25 (the root POM requires
+Bun launcher. Called with no arguments it runs the Hipster-Entity
+test set with Maven and JDK 25 (the root POM requires
 `maven.compiler.release=25`, so both the Maven JVM and the forked
 surefire JVM must be JDK 25):
 
-```bat
-scripts\mvn-jdk25.cmd
+```console
+bun scripts/mvn-jdk25.js
 ```
 
 The build **regenerates nothing.** The generator is a side tool — no annotation
@@ -93,8 +93,8 @@ The script accepts an explicit goal or flag set as well, and fills in
 the module list for you:
 
 ```bat
-scripts\mvn-jdk25.cmd hipster-entity install
-scripts\mvn-jdk25.cmd -o -pl hipster-entity-example -am test
+bun scripts/mvn-jdk25.js hipster-entity install
+bun scripts/mvn-jdk25.js -o -pl hipster-entity-example -am test
 ```
 
 `JCODEBUDDY_JDK25` (default `C:\Program Files\Java\jdk-25`) and
@@ -106,12 +106,12 @@ and the Maven launcher.
 This is the **primary path, and it is always explicit**: nothing in the
 build runs the generator, so a pass is a manual run or a watch loop. In
 this repository the one-command way is
-[`scripts\gen.cmd`](../../scripts/gen.cmd):
+[`bun scripts/gen.js`](../../bun scripts/gen.js):
 
 ```bat
-scripts\gen.cmd              rem regenerate (compile-only: no jars, no install)
-scripts\gen.cmd with-tests   rem regenerate, then run the entity test set
-scripts\gen.cmd watch        rem regenerate on every save (Ctrl+C stops it)
+bun scripts/gen.js              rem regenerate (compile-only: no jars, no install)
+bun scripts/gen.js with-tests   rem regenerate, then run the entity test set
+bun scripts/gen.js watch        rem regenerate on every save (Ctrl+C stops it)
 ```
 
 The script compiles the tooling in the reactor, exports the classpath with

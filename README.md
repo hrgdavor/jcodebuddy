@@ -47,24 +47,30 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 
 | Command | What it does |
 |---|---|
-| `scripts/mvn-jdk25.cmd` (Windows) / `scripts/mvn-jdk25.sh` (POSIX) | `mvn -o -pl <six hipster-entity modules> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.cmd` below) |
-| `scripts/mvn-jdk25.cmd hipster-entity test` | the same module set with an explicit goal (no implicit `clean`) |
-| `scripts/mvn-jdk25.cmd hipster-entity install` | install the six modules into the local repository |
-| `scripts/mvn-jdk25.cmd -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned |
-| `scripts/gen.cmd` | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
-| `scripts/gen.cmd with-tests` | the same pass, then the entity test set |
-| `scripts/gen.cmd watch` | the same pass, then regenerate on every save (long-running, Ctrl+C to stop) |
-| `scripts/run-demo.cmd` | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
+| `scripts/mvn-jdk25.js` | `mvn -o -pl <six hipster-entity modules> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.js` below) |
+| `scripts/mvn-jdk25.js hipster-entity test` | the same module set with an explicit goal (no implicit `clean`) |
+| `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository |
+| `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned |
+| `scripts/gen.js` | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
+| `scripts/gen.js with-tests` | the same pass, then the entity test set |
+| `scripts/gen.js watch` | the same pass, then regenerate on every save (long-running, Ctrl+C to stop) |
+| `scripts/run-demo.js` | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
+| `scripts/entity-html/index.js` | render the HTML entity index from the JSON a pass wrote (DEC-027); `--module <dir>` for another module |
+
+Every one of them is a **Bun** script — run them as `bun scripts/mvn-jdk25.js`, and so on. They were batch and
+shell files until 2026-09-26; `AGENTS.md` § 2 requires Bun JavaScript for anything an agent writes to run or check
+something, because a check that only runs in one shell on one OS is invisible wiring for the workflow. One
+implementation also cannot drift from itself, which is the other reason: see the note on `GateContractTest` below.
 
 **JCodeBuddy is a side tool, not a build step.** This project uses no annotation processing and
 no compile hooks: `mvn compile`, `package` and `test` only compile the committed generated source
 that already sits under `src/main/java`, because no execution in
 `hipster-entity-example/pom.xml` carries a `<phase>`. The pass that actually rewrites that source is
-`scripts\gen.cmd` — run by hand, or in `watch` mode — which compiles the tooling in the reactor,
+`bun scripts/gen.js` — run by hand, or in `watch` mode — which compiles the tooling in the reactor,
 exports the reactor classpath with `dependency:build-classpath` (the "no `mvn install` needed"
-mechanism) and runs the generator with `java -cp`. `scripts\gen.cmd` reuses the JDK that
-`mvn-jdk25.cmd` resolved (exported as `JCODEBUDDY_RESOLVED_JDK`) rather than whatever `java` is on
-`PATH`.
+mechanism) and runs the generator with `java -cp`. It selects the same JDK 25 the Maven launcher uses,
+by reading `JCODEBUDDY_JDK25`/`JAVA_HOME` and **running** the candidate to check its version, rather
+than trusting whatever `java` is on `PATH`.
 
 ### How a pass gets triggered: three layers, only the first of which is required
 
@@ -73,8 +79,8 @@ and neither is a prerequisite for the generator:
 
 | Layer | What it is | Needed? |
 |---|---|---|
-| **The pass** | `java -cp … EntityMetadataGenerator …`, or the `scripts\gen.cmd` wrapper around it. Run it whenever you want the generated source refreshed. | **Required.** This is the whole tool. |
-| **Watch mode** | The same pass, run continuously: `scripts\gen.cmd watch` (`EntityRegenerationWatcher`) regenerates after each save, so generated output keeps up with your edits without you asking. | Optional, and worth it — this is the normal development loop. Still just the generator, triggered by a file watcher. |
+| **The pass** | `java -cp … EntityMetadataGenerator …`, or the `bun scripts/gen.js` wrapper around it. Run it whenever you want the generated source refreshed. | **Required.** This is the whole tool. |
+| **Watch mode** | The same pass, run continuously: `bun scripts/gen.js watch` (`EntityRegenerationWatcher`) regenerates after each save, so generated output keeps up with your edits without you asking. | Optional, and worth it — this is the normal development loop. Still just the generator, triggered by a file watcher. |
 | **Sidecar / LSP** | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings. The `project-automation` module is the conventional home for it. | **Purely a user-friendliness expansion.** Not implemented for the entity generator in this repository; the pipeline above works fully without it. |
 
 The important part of that table is the boundary between the last two rows: **watch mode is
@@ -84,15 +90,18 @@ produces; it never replaces it, and removing the sidecar would leave the tool co
 `clean` in the recorded gate is not optional: without it the build can be satisfied by a previous
 revision's class files, which is how a source that did not compile once reported `BUILD SUCCESS`
 (notes F-47). The `-Dmaven.compiler.useIncrementalCompilation=false` is the other half of the same
-fix — it stops the compiler plugin from deciding within a run that a module is up to date. Both
-launchers are kept behaviourally identical by `GateParityTest`, which asserts the shared module list,
-the `clean test` default, the refusal below, and both flags.
+fix — it stops the compiler plugin from deciding within a run that a module is up to date. Both flags,
+the six-module list and the `clean test` default are declared once, in `scripts/lib/gate.js`, which the
+launcher, `scripts/gen.js` and `scripts/run-demo.js` all import; `GateContractTest` asserts that
+definition, and asserts that no shell twin exists to diverge from it. (It used to be `GateParityTest`,
+and the name was the problem: it existed because `mvn-jdk25.cmd` and `mvn-jdk25.sh` had already
+diverged once, and a parity test only catches that after the fact.)
 
 Override `JCODEBUDDY_JDK25`, `JCODEBUDDY_MVN` or `JCODEBUDDY_HE_MODULES` to point at another JDK,
-another Maven launcher, or another module set. Two cmd.exe details are worth knowing before editing
-the `.cmd`: a Maven property argument must be **quoted** (`"...\mvn-jdk25.cmd hipster-entity test "-Dtest=SomeTest""`)
-because cmd splits an unquoted argument at `=` and `.`, and the file must stay **ASCII + CRLF** or
-cmd mis-parses it.
+another Maven launcher, or another module set. A Maven property argument must still arrive as **one
+token** — `bun scripts/mvn-jdk25.js hipster-entity test "-Dtest=SomeTest"` — and a `-D` token with no
+`=` is refused with exit 2, because that is the signature of a property some shell split before the
+script saw it.
 
 The `hipster-entity` shortcut **refuses to run** when any property argument lacks an `=` (exit 2,
 with the quoted forms in the message), because that is what a property split by cmd.exe looks like.
@@ -127,7 +136,7 @@ java -cp hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.Ent
      enum-order --repo . --baseline origin/main --strict
 ```
 
-The example runs the first set on every **generation** pass — `scripts\gen.cmd`, manual or watched —
+The example runs the first set on every **generation** pass — `bun scripts/gen.js`, manual or watched —
 not on every build, because no build runs the generator at all. That pass is report-and-continue
 (`--validate`), so its output is in the pass log; a clean example prints `Validation: no issues in ...`
 plus three informational divergence lines (`addon_field_collision` ×2, `nested_record_reused`).

@@ -312,6 +312,17 @@
                 <artifactId>jwa-sidecar</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- The webview product's shared core: `webviewd` and `jwa-sidecar` depend on it without a version,
+                 like every other internal dependency in this reactor. This entry was missing while the modules
+                 were added (the module list got them, the management list did not), and the omission was
+                 invisible under Maven 4, which infers a same-reactor version: the recorded gate, which runs
+                 Apache Maven 3.9, could not read the reactor at all ('dependencies.dependency.version' for
+                 hr.hrg.jcodebuddy:webview-core:jar is missing). Found by converting the gate launcher to Bun. -->
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>webview-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>java-watch-agent</artifactId>

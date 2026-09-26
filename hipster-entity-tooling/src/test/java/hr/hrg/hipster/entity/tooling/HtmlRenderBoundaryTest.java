@@ -154,23 +154,27 @@ class HtmlRenderBoundaryTest {
                 "and the package scripts must expose the renderer");
     }
 
-    /** A generation pass renders the page, and the launcher keeps its documented byte discipline. */
+    /**
+     * A generation pass renders the page. The launcher is {@code scripts/gen.js} and not a batch file — the byte
+     * discipline that used to be asserted here (pure ASCII, CRLF-only, "cmd.exe mis-parses otherwise") existed
+     * because the pass was driven by a {@code .cmd}; AGENTS.md § 2 replaced those with Bun JavaScript, so the
+     * assertions are now about the script that exists: that it renders the page, and that no shell wrapper has
+     * crept back beside it.
+     */
     @Test
-    void thePassRendersThePageAndTheLauncherStaysAsciiCrlf() throws Exception {
-        String gen = read("scripts/gen.cmd");
-        Assertions.assertTrue(gen.contains("scripts\\entity-html\\index.js"),
-                "scripts\\gen.cmd renders the page as the last step of a pass (DEC-027 section 6)");
-        Assertions.assertTrue(gen.contains("where bun"),
-                "and checks for Bun rather than failing the pass on a machine without it");
+    void thePassRendersThePage() throws Exception {
+        String gen = read("scripts/gen.js");
+        Assertions.assertTrue(gen.contains("'entity-html', 'index.js'"),
+                "scripts/gen.js renders the page as the last step of a pass (DEC-027 section 6)");
+        Assertions.assertTrue(gen.contains("IS fatal"),
+                "and it treats a page that cannot verify its links as fatal, which is the rule it inherited");
 
-        byte[] bytes = Files.readAllBytes(repoRoot().resolve("scripts/gen.cmd"));
-        for (byte value : bytes) {
-            Assertions.assertTrue(value >= 0 && value < 128,
-                    "scripts/gen.cmd must stay pure ASCII: cmd.exe mis-parses non-ASCII bytes");
+        Assertions.assertFalse(Files.exists(repoRoot().resolve("scripts/gen.cmd")),
+                "scripts/gen.cmd was replaced by scripts/gen.js");
+        for (String wrapper : List.of("scripts/gen.sh", "scripts/gen.ps1", "scripts/gen.bat")) {
+            Assertions.assertFalse(Files.exists(repoRoot().resolve(wrapper)),
+                    "and no shell twin may be added beside it (AGENTS.md section 2)");
         }
-        String text = new String(bytes, StandardCharsets.US_ASCII);
-        Assertions.assertFalse(text.replace("\r\n", "").contains("\n"),
-                "scripts/gen.cmd must stay CRLF-only, or cmd.exe mis-parses it");
     }
 
     /** The rule is stated where both a human and an agent will read it, and indexed. */

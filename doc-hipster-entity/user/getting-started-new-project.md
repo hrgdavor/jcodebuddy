@@ -207,7 +207,7 @@ java -cp hipster-entity-tooling.jar hr.hrg.hipster.entity.tooling.EntityMetadata
 |---|---|
 | positional 1 | the source root, or a single `.java` file — for a file, the tool searches upward for `src/main/java` or `src/test/java` to derive the root |
 | positional 2 | the output directory for the metadata JSON. The convention is the module's own `.jcodebuddy/metadata/entity` — the `.jcodebuddy/` directory is the marker that says "this module uses JCodeBuddy", and only modules that apply `project-automation` have one |
-| `--java-out <dir>` | **where the generated `.java` goes.** Without it, generated source is written into positional 2 — the *metadata* directory — which is almost never what you want. Passing your source root here is what makes the generated files land next to the view; it is the flag every pass passes, including this repository's `scripts\gen.cmd` |
+| `--java-out <dir>` | **where the generated `.java` goes.** Without it, generated source is written into positional 2 — the *metadata* directory — which is almost never what you want. Passing your source root here is what makes the generated files land next to the view; it is the flag every pass passes, including this repository's `bun scripts/gen.js` |
 | `--packages a.b,c.d` | restrict **generation** to these packages. Indexing is *not* restricted: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omit it to generate everything |
 | `--validate[=OFF\|REPORT\|STRICT]` | run the entity rules before writing anything. Bare `--validate` = `REPORT` (print the issues, keep going); `STRICT` refuses to write until they are fixed; `OFF` is the default for a library caller |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two views. Repeatable; defaults to class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
@@ -238,7 +238,7 @@ lifecycle phase. So a new project does three separate things:
    enough on its own: a hand-run pass, or (the normal development loop) a
    watcher that regenerates when a watched source's *content* changes.
    That is the `java -cp … EntityMetadataGenerator …` command above; in
-   this repository it is `scripts\gen.cmd` and `scripts\gen.cmd watch`.
+   this repository it is `bun scripts/gen.js` and `bun scripts/gen.js watch`.
    Watch mode is part of JCodeBuddy, not an add-on: it is the same pass,
    triggered by a file watcher.
 3. **If you want Maven to supply the classpath**, you have two options,
@@ -255,7 +255,7 @@ lifecycle phase. So a new project does three separate things:
      local repository instead of from the reactor.
    - **`dependency:build-classpath` plus `java -cp`** — Maven's official
      answer for "use the reactor's classes without install", and what this
-     repository's `scripts\gen.cmd` does:
+     repository's `bun scripts/gen.js` does:
 
      ```bash
      mvn -o -pl <your-module> -am compile dependency:build-classpath \
@@ -269,7 +269,7 @@ lifecycle phase. So a new project does three separate things:
      `dependency:build-classpath` maps a dependency to that module's
      `target/classes` when the module is in the same reactor invocation —
      so add the tooling module to `-pl` (with `-am`) if it is a sibling,
-     as `scripts\gen.cmd` does. **No jar is packaged and nothing is
+     as `bun scripts/gen.js` does. **No jar is packaged and nothing is
      installed into `~/.m2`.**
 4. **Optionally, add an IDE sidecar later.** An LSP sidecar — in-editor
    diagnostics, code actions, hover for the class-file header, divergence
