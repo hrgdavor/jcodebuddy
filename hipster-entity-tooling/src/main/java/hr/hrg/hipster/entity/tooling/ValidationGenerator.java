@@ -1,5 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
+import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
+
 import org.openrewrite.java.tree.J;
 
 import hr.hrg.hipster.entity.tooling.meta.FieldConstraint;

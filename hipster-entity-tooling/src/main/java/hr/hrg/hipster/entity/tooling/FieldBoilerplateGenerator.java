@@ -1,5 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
+import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
+
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker;
 

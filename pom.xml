@@ -81,6 +81,7 @@
              a type. A leaf library, and the reason it exists is a rule rather than a feature — a tool
              that generates code must not have to depend on anybody's `project-automation` to do it.
              See the module's POM and AGENTS.md § 1. -->
+        <module>jcodebuddy-core</module>
         <module>jcodebuddy-codegen-api</module>
         <module>project-automation</module>
         <module>hipster-ioc-api</module>
@@ -358,6 +359,11 @@
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>hipster-entity-tooling</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

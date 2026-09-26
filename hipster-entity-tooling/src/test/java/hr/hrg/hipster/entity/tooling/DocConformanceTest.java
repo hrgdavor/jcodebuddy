@@ -1,5 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
+import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -138,7 +140,7 @@ class DocConformanceTest {
         Assertions.assertEquals(GeneratedCodeMarkers.SCOPE_FILE, found.scope());
         Assertions.assertTrue(found.supported());
         Assertions.assertEquals("hr.hrg.hipster.entity.tooling.EntityMetadataGenerator",
-                GeneratedCodeMarkers.generatorOfFileMarker(java.util.List.of(lines)).orElseThrow(),
+                found.generator().orElseThrow(),
                 "the marker names the generator a reader jumps to, and a parser may ignore");
 
         String guide = read("doc-hipster-entity/user/getting-started-new-project.md");

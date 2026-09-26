@@ -32,8 +32,8 @@ import java.util.stream.Stream;
  */
 class GateContractTest {
 
-    private static final List<String> SIX_MODULES = List.of(
-            "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling",
+    private static final List<String> GATE_MODULES = List.of(
+            "jcodebuddy-core", "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling",
             "hipster-entity-jackson", "hipster-entity-test", "hipster-entity-example");
 
     /**
@@ -62,7 +62,7 @@ class GateContractTest {
 
     /** The module list the shared gate definition declares, in declaration order. */
     private static List<String> declaredModules(String gate) {
-        Matcher matcher = Pattern.compile("export const SIX_MODULES = \\[(.*?)\\]\\.join", Pattern.DOTALL)
+        Matcher matcher = Pattern.compile("export const GATE_MODULES = \\[(.*?)\\]\\.join", Pattern.DOTALL)
                 .matcher(gate);
         Assertions.assertTrue(matcher.find(), "the gate must declare the module list once");
         List<String> modules = new ArrayList<>();
@@ -75,7 +75,7 @@ class GateContractTest {
 
     @Test
     void theGateDeclaresTheRecordedModuleSet() throws Exception {
-        Assertions.assertEquals(SIX_MODULES, declaredModules(gateModule()),
+        Assertions.assertEquals(GATE_MODULES, declaredModules(gateModule()),
                 "the -pl set is the recorded six modules in order (plan.dsflash 0.3)");
     }
 
@@ -92,7 +92,7 @@ class GateContractTest {
         Assertions.assertTrue(gate.contains("const goals = rest.length === 0 ? defaultGoals : rest"),
                 "and it is the DEFAULT that cleans: an explicit goal list is the caller's request, which is how "
                         + "run-demo.js reuses built classes without a rebuild");
-        Assertions.assertFalse(gate.contains("'-pl', SIX_MODULES, '-am'"),
+        Assertions.assertFalse(gate.contains("'-pl', GATE_MODULES, '-am'"),
                 "offline and -am are part of the scoped invocation; a launcher that drops them is not the gate");
     }
 

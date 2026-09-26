@@ -1,6 +1,5 @@
-package hr.hrg.hipster.entity.tooling;
+package hr.hrg.jcodebuddy.generated;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -8,35 +7,37 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The generated-code marker vocabulary: the shapes a generator emits, and the shapes a parser recognises
- * without knowing anything about this generator.
+ * The generated-code marker vocabulary: the shapes a generator writes, and the shapes a parser recognises
+ * without knowing anything about the generator that wrote them.
  *
  * <p>DEC-035 defines four markers and one rule that makes the set extensible. This class is the single
  * place those shapes are written down, for two callers with opposite needs:
  *
  * <ul>
  *   <li><strong>a generator</strong> builds a marker with {@link #fileHeader} or one of the {@code member}
- *       / {@code region} / {@code block} helpers, so every emitter produces the same spelling and a
- *       parser has one shape to match rather than eleven;</li>
- *   <li><strong>a parser or an agent</strong> asks {@link #recognise} what a line is, and gets a
- *       {@link Found} that says whether the marker is one this vocabulary {@linkplain Found#supported()
- *       supports} or one it can only name. An unknown marker is <em>reported</em>, never treated as
- *       hand-written: DEC-035's rule, and the reason the vocabulary can grow without making an
- *       out-of-date parser silently wrong.</li>
+ *       / {@code region} / {@code block} helpers, so every emitter produces the same spelling and a parser
+ *       has one shape to match rather than eleven;</li>
+ *   <li><strong>a parser</strong> asks {@link #recognise} what a line is, and gets a {@link Found} that
+ *       says whether the marker is one this vocabulary {@linkplain Found#supported() supports} or one it
+ *       can only name. An unknown marker is <em>reported</em>, never treated as hand-written: that is
+ *       DEC-035's rule, and the reason the vocabulary can grow without making an out-of-date parser
+ *       silently wrong.</li>
  * </ul>
+ *
+ * <p>Finding the <em>extent</em> of a marker's region is {@link GeneratedCodeParser}'s job. This class
+ * answers "is this line a marker, and which one"; that one answers "where does it end".
  *
  * <h3>What a marker is, and what it is not</h3>
  *
  * <p>A marker is a Java line comment whose text begins with {@code @generated}. Nothing else about the
  * comment makes it a marker, and no marker tells a parser which generator wrote it in any way the parser
  * needs: the generator's fully qualified name is present, but only so a human can jump to it. A parser
- * that implements all four markers implements them for every generator in this repository and for any
- * future one that follows the rules.
+ * that implements all four markers implements them for every generator that follows the rules, including
+ * generators written later.
  *
- * <p>The {@code @generated} keyword was chosen over this project's earlier {@code {@link <fqn>}} spelling
- * because {@code @generated} is the token tooling, IDEs and reviewers already look for, and because it
- * reads as a marker rather than as a javadoc tag in a place javadoc does not process. The {@code {@link}}
- * form is retained only where javadoc actually renders it.
+ * <p>{@code @generated} was chosen over an earlier {@code {@link <fqn>}} spelling because it is the token
+ * tooling, IDEs and reviewers already look for, and because it reads as a marker rather than as a javadoc
+ * tag in a place javadoc does not process. {@code {@link}} is retained only where javadoc renders it.
  *
  * <h3>Why the grammar is deliberately loose after the keyword</h3>
  *
@@ -86,6 +87,17 @@ public final class GeneratedCodeMarkers {
     /** The word that begins the closing half of a region pair. */
     public static final String REGION_END = "end";
 
+    /** The word that begins the opening half of a region pair. */
+    public static final String REGION_BEGIN = "begin";
+
+    /**
+     * The separator between the generator's name and its description on a file marker.
+     *
+     * <p>An em dash, and the parser is the thing that has to agree with the emitter about it, so it lives
+     * here rather than being typed twice.
+     */
+    public static final char DESCRIPTION_SEPARATOR = '\u2014';
+
     private GeneratedCodeMarkers() {
     }
 
@@ -94,26 +106,28 @@ public final class GeneratedCodeMarkers {
     /**
      * The two-line class-file header, with the file marker on the first line.
      *
-     * <p>The second line is DEC-021's JSON5 config and is deliberately unchanged: a parser must never have
-     * to parse JSON5 to find a boundary, so the boundary lives on the first line and the config stays the
-     * generator's private business.
+     * <p>The second line is the JSON5 config and is deliberately opaque to a parser: a parser must never
+     * have to parse JSON5 to find a boundary, so the boundary lives on the first line and the options stay
+     * the generator's own business.
      *
      * @param generatorFqn the generator's fully qualified name, so a human can jump to it
-     * @param description one line describing the file, for a human
+     * @param description  one line describing the file, for a human
      */
     public static String fileHeader(String generatorFqn, String description) {
-        return "// " + KEYWORD + " " + SCOPE_FILE + " " + generatorFqn + " — " + description + "\n"
+        return "// " + KEYWORD + " " + SCOPE_FILE + " " + generatorFqn
+                + " " + DESCRIPTION_SEPARATOR + " " + description + "\n"
                 + "// {enabled:true, blockMarker: \"implicit\"}\n";
     }
 
     /**
-     * The two-line header for a field enum, which carries one extra DEC-021 option.
+     * The two-line header for a field enum, which carries one extra config option.
      *
      * @param generatorFqn the generator's fully qualified name
-     * @param description one line describing the file
+     * @param description  one line describing the file
      */
     public static String fieldEnumFileHeader(String generatorFqn, String description) {
-        return "// " + KEYWORD + " " + SCOPE_FILE + " " + generatorFqn + " — " + description + "\n"
+        return "// " + KEYWORD + " " + SCOPE_FILE + " " + generatorFqn
+                + " " + DESCRIPTION_SEPARATOR + " " + description + "\n"
                 + "// {enabled:true, entityFieldEnum:true, blockMarker: \"implicit\"}\n";
     }
 
@@ -129,7 +143,7 @@ public final class GeneratedCodeMarkers {
 
     /** The opening half of a region pair. */
     public static String regionBegin(String id, String generatorFqn) {
-        return "// " + KEYWORD + " " + SCOPE_REGION + " begin " + id + " " + generatorFqn;
+        return "// " + KEYWORD + " " + SCOPE_REGION + " " + REGION_BEGIN + " " + id + " " + generatorFqn;
     }
 
     /** The closing half of a region pair, with the same id. */
@@ -142,17 +156,22 @@ public final class GeneratedCodeMarkers {
     /**
      * What a line turned out to be.
      *
-     * @param scope     the scope word, or {@code null} for a bare {@code @generated} with no scope
-     * @param payload   everything after the scope word, trimmed; the generator FQN and its description,
-     *                  or a region id, depending on the scope
-     * @param line      the 1-based line number the marker was found on
-     * @param text      the line as written, so a report can quote it
+     * @param scope   the scope word, or {@code null} for a bare {@code @generated} with no scope
+     * @param payload everything after the scope word, trimmed; the generator FQN and its description, or a
+     *                region id, depending on the scope
+     * @param line    the 1-based line number the marker was found on
+     * @param text    the line as written, so a report can quote it
      */
     public record Found(String scope, String payload, int line, String text) {
 
         /** True when this vocabulary defines the marker's scope and placement. */
         public boolean supported() {
             return scope != null && KNOWN_SCOPES.contains(scope);
+        }
+
+        /** Whether this marker is the file marker, which covers everything below it. */
+        public boolean isFile() {
+            return SCOPE_FILE.equals(scope);
         }
 
         /**
@@ -172,6 +191,61 @@ public final class GeneratedCodeMarkers {
         public String label() {
             return scope == null ? KEYWORD : KEYWORD + " " + scope;
         }
+
+        /**
+         * The generator's name, when the payload starts with something that looks like a class name.
+         *
+         * <p>Advisory, and the only thing a parser is allowed to read out of the payload. A caller that
+         * needs to know which generator wrote a file can ask; a caller that only needs the boundary never
+         * touches this, which is why the vocabulary works for generators the parser has never seen.
+         */
+        public Optional<String> generator() {
+            if (payload == null || payload.isBlank()) {
+                return Optional.empty();
+            }
+            String head = payload;
+            int dash = head.indexOf(DESCRIPTION_SEPARATOR);
+            if (dash >= 0) {
+                head = head.substring(0, dash);
+            }
+            // A region payload is `begin <id> <generator>`: skip the direction word and the id.
+            String[] parts = head.trim().split("\\s+");
+            int index = 0;
+            if (parts.length > 0 && (REGION_BEGIN.equals(parts[0]) || REGION_END.equals(parts[0]))) {
+                index = 2;
+            }
+            if (index >= parts.length) {
+                return Optional.empty();
+            }
+            String candidate = parts[index];
+            if (candidate.isEmpty() || !Character.isJavaIdentifierStart(candidate.charAt(0))) {
+                return Optional.empty();
+            }
+            return Optional.of(candidate);
+        }
+
+        /**
+         * The region pair id on a region marker, or empty for any other marker.
+         *
+         * <p>{@code begin routes</p> yields {@code routes}. This is what pairs a region's two halves.
+         */
+        public Optional<String> regionId() {
+            if (!SCOPE_REGION.equals(scope) || payload == null) {
+                return Optional.empty();
+            }
+            String[] parts = payload.trim().split("\\s+");
+            if (parts.length < 2 || !(REGION_BEGIN.equals(parts[0]) || REGION_END.equals(parts[0]))) {
+                return Optional.empty();
+            }
+            return Optional.of(parts[1]);
+        }
+
+        /** Whether this is the closing half of a region pair. */
+        public boolean isRegionEnd() {
+            return SCOPE_REGION.equals(scope)
+                    && payload != null
+                    && payload.trim().startsWith(REGION_END + " ");
+        }
     }
 
     /**
@@ -181,8 +255,8 @@ public final class GeneratedCodeMarkers {
      * {@link Found#supported()} is false rather than as "not a marker". That distinction is the whole
      * contract: a parser must be able to refuse.
      *
-     * @param line     the 1-based line number, for the report
-     * @param text     the line
+     * @param line the 1-based line number, for the report
+     * @param text the line
      */
     public static Optional<Found> recognise(int line, String text) {
         if (text == null) {
@@ -216,9 +290,7 @@ public final class GeneratedCodeMarkers {
             if (line.isBlank()) {
                 continue;
             }
-            return recognise(1, line)
-                    .map(found -> SCOPE_FILE.equals(found.scope()))
-                    .orElse(false);
+            return recognise(1, line).map(Found::isFile).orElse(false);
         }
         return false;
     }
@@ -230,7 +302,7 @@ public final class GeneratedCodeMarkers {
      * that "list what is here" and "refuse what I cannot read" stay separate decisions.
      */
     public static List<Found> scan(List<String> lines) {
-        List<Found> found = new ArrayList<>();
+        List<Found> found = new java.util.ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             recognise(i + 1, lines.get(i)).ifPresent(found::add);
         }
@@ -238,35 +310,11 @@ public final class GeneratedCodeMarkers {
     }
 
     /**
-     * Every unsupported marker in a file, in order — the list a parser must report before it edits anything.
+     * Every unsupported marker in a file, in order — the list a parser must report before it edits
+     * anything.
      */
     public static List<Found> unsupported(List<String> lines) {
         return scan(lines).stream().filter(found -> !found.supported()).toList();
-    }
-
-    /**
-     * The generator FQN on a file marker, when there is one.
-     *
-     * <p>For a tool that wants to say which generator produced a file. A parser that only needs the
-     * boundary never calls this.
-     */
-    public static Optional<String> generatorOfFileMarker(List<String> lines) {
-        for (String line : lines) {
-            if (line.isBlank()) {
-                continue;
-            }
-            return recognise(1, line)
-                    .filter(found -> SCOPE_FILE.equals(found.scope()))
-                    .map(found -> {
-                        int space = found.payload().indexOf(' ');
-                        String first = space < 0 ? found.payload() : found.payload().substring(0, space);
-                        // The description is separated by an em dash; take the token before it.
-                        int dash = first.indexOf('—');
-                        return dash < 0 ? first : first.substring(0, dash).trim();
-                    })
-                    .filter(fqn -> !fqn.isEmpty());
-        }
-        return Optional.empty();
     }
 
     /** Whether the given word is a scope this vocabulary defines, case-insensitively. */

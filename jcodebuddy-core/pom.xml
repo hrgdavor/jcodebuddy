@@ -1,0 +1,53 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jcodebuddy-core</artifactId>
+    <packaging>jar</packaging>
+
+    <name>JCodeBuddy Core</name>
+    <description>
+        Generated-code markers and the parser that finds generated regions in a file, for any tool that
+        needs to know which parts of a source file a generator owns. No dependencies, so a linter, a
+        migration tool, an IDE inspection or an agent can use it without pulling in a generator.
+    </description>
+
+    <!--
+        WHY THIS MODULE EXISTS, AND WHY IT HAS NO DEPENDENCIES.
+
+        Generated code is committed source and it is cooperative: a member from an earlier revision
+        survives regeneration, so a file can be partly generated and partly hand-written, and the boundary
+        used to be knowable only to the generator — because the recogniser WAS the generator. Every other
+        consumer (an external static parser, an AI agent reading the source, a reviewer reading a diff)
+        needs that boundary and has no access to a generator's internals. DEC-035 fixes the marker
+        vocabulary; this module is the parser that reads it.
+
+        It is a separate module from `hipster-entity-tooling`, where the emitters live, for one reason:
+        what a consumer gets. `hipster-entity-tooling` carries the OpenRewrite LST, Jackson and the entity
+        generator's whole model, and a tool that only wants to know where generated code stops should not
+        have to resolve any of that. This module is a leaf: no dependencies, no generator types, nothing to
+        configure. A consumer reads source text and gets line spans back.
+
+        That also makes the direction of the dependency the honest one. The generator depends on the
+        vocabulary (it emits markers this parser understands); the parser must never depend on the
+        generator, or it could not be used by a project that does not use this one.
+    -->
+
+    <dependencies>
+        <!-- The one dependency, and only for tests: the parser itself is pure JDK, which is what lets a
+             consumer add this module without resolving a generator, a JSON library or a parser library. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

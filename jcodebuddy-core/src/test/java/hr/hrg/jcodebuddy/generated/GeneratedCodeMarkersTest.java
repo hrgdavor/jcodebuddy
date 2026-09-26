@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling;
+package hr.hrg.jcodebuddy.generated;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
@@ -14,10 +14,13 @@ import java.util.Optional;
  * knowing anything about the generator</b>. These tests are the claim made checkable, and they are written
  * from the parser's side — no generator instance, no config, no recognition logic of the generator's own.
  *
- * <p>The rule that carries the design is the last group: a marker this vocabulary does not implement must
- * be <em>recognised and reported</b>, never treated as hand-written. Everything else can be fixed by
- * updating a parser; treating generated code as the developer's is the one mistake that destroys work
- * silently.
+ * <p>This class covers the vocabulary itself: what a line is, whether it is supported, and what can be
+ * read out of it. Finding the extent of a marker's region is {@link GeneratedCodeParserTest}'s subject.
+ *
+ * <p>The rule that carries the design is the group near the end: a marker this vocabulary does not
+ * implement must be <em>recognised and reported</em>, never treated as hand-written. Everything else can
+ * be fixed by updating a parser; treating generated code as the developer's is the one mistake that
+ * destroys work silently.
  */
 class GeneratedCodeMarkersTest {
 
@@ -35,9 +38,8 @@ class GeneratedCodeMarkersTest {
         GeneratedCodeMarkers.Found found = GeneratedCodeMarkers.recognise(1, lines.get(0)).orElseThrow();
         Assertions.assertEquals(GeneratedCodeMarkers.SCOPE_FILE, found.scope());
         Assertions.assertTrue(found.supported());
-        Assertions.assertEquals("hr.hrg.example.Gen",
-                GeneratedCodeMarkers.generatorOfFileMarker(lines).orElseThrow(),
-                "the generator's FQN is recoverable, for a reader that wants to jump to it");
+        Assertions.assertEquals("hr.hrg.example.Gen", found.generator().orElseThrow(),
+                "the generator's name is recoverable, for a reader that wants to jump to it");
     }
 
     @Test
@@ -46,7 +48,7 @@ class GeneratedCodeMarkersTest {
         String header = GeneratedCodeMarkers.fileHeader("gen", "desc");
 
         Assertions.assertTrue(header.contains("// {enabled:true"),
-                "the config line is still emitted, unchanged from DEC-021");
+                "the config line is still emitted");
         Assertions.assertFalse(GeneratedCodeMarkers.isMarker("// {enabled:true, blockMarker: \"implicit\"}"),
                 "it must not be mistaken for a marker: the boundary is the marker, the options are the "
                         + "generator's business");
@@ -84,9 +86,10 @@ class GeneratedCodeMarkersTest {
                 GeneratedCodeMarkers.recognise(7, begin).orElseThrow();
 
         Assertions.assertEquals(GeneratedCodeMarkers.SCOPE_REGION, found.scope());
-        Assertions.assertTrue(found.payload().startsWith("begin routes"),
-                "the payload carries the pair id and the generator: " + found.payload());
-        Assertions.assertTrue(end.contains("end routes"), "and the closing half names the same id");
+        Assertions.assertEquals("routes", found.regionId().orElseThrow());
+        Assertions.assertFalse(found.isRegionEnd());
+        Assertions.assertTrue(GeneratedCodeMarkers.recognise(7, end).orElseThrow().isRegionEnd(),
+                "the closing half names the same id and reports itself as an end");
     }
 
     @Test
@@ -214,7 +217,7 @@ class GeneratedCodeMarkersTest {
     }
 
     @Test
-    @DisplayName("the field-enum header keeps the extra DEC-021 option the enum needs")
+    @DisplayName("the field-enum header keeps the extra config option the enum needs")
     void theFieldEnumHeaderKeepsItsOption() {
         String header = GeneratedCodeMarkers.fieldEnumFileHeader("a.b.Gen", "d");
 
@@ -232,5 +235,16 @@ class GeneratedCodeMarkersTest {
         }
         Assertions.assertFalse(GeneratedCodeMarkers.isKnownScope("patchwork"));
         Assertions.assertFalse(GeneratedCodeMarkers.isKnownScope(null));
+    }
+
+    @Test
+    @DisplayName("a marker kind maps to its scope word and back, for the four this vocabulary defines")
+    void kindsAndScopesAgree() {
+        for (GeneratedBlock.Kind kind : GeneratedBlock.Kind.values()) {
+            Assertions.assertEquals(kind, GeneratedBlock.Kind.of(kind.scope()).orElseThrow(),
+                    "the scope word round-trips: " + kind);
+            Assertions.assertTrue(GeneratedCodeMarkers.isKnownScope(kind.scope()));
+        }
+        Assertions.assertTrue(GeneratedBlock.Kind.of("patchwork").isEmpty());
     }
 }

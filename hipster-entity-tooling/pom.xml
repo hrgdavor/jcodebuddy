@@ -18,6 +18,15 @@
         (metadata, field enums, builders, records, validators) plus the module's class index.</description>
 
     <dependencies>
+        <!-- The generated-code marker vocabulary and its parser, in a leaf module with no dependencies of
+             its own, so that a consumer which only needs to know where generated code stops does not have
+             to resolve OpenRewrite, Jackson and this module's whole model. The direction matters: the
+             generator depends on the vocabulary it emits, and the parser never depends on the generator,
+             which is what lets a project that does not use this generator's parser still use its files. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-core</artifactId>
+        </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>hipster-entity-api</artifactId>

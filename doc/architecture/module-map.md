@@ -21,6 +21,7 @@ jcodebuddy-parent (POM)
 ├── hipster-entity-jackson
 ├── hipster-entity-test
 ├── hipster-entity-tooling
+├── jcodebuddy-core          (leaf: markers + the generated-code parser)
 ├── jcodebuddy-codegen-api
 │
 └── project-automation          (strictly private: never installed, never deployed)
@@ -51,6 +52,7 @@ These modules depend on Layer 1:
 | `jwa-builder` | `jwa-builder-api` + `java-watch-core` |
 | `hipster-entity-tooling` | `hipster-entity-api` + `hipster-entity-core` (test) |
 | `jcodebuddy-codegen-api` | `hipster-entity-tooling` (for `SourceMetadata` only) |
+| `jcodebuddy-core` | none — a leaf, and deliberately so |
 
 ### Layer 3: Applications & Runtimes
 These modules depend on Layer 1 and/or Layer 2:
@@ -96,6 +98,20 @@ These modules depend on Layer 1 and/or Layer 2:
 - It has **zero dependency** on `project-automation` or any `watch` modules.
 - `project-automation` consumes it as a library, and so does `jcodebuddy-codegen-api` — the latter for
   `SourceMetadata` alone, which is the one type its `CodeContext` carries.
+
+### `jcodebuddy-core` — Generated-Code Markers and Their Parser, and a Leaf
+- Holds `GeneratedCodeMarkers` (the marker vocabulary: how a generator spells one, and how a parser
+  recognises one), `GeneratedCodeParser` (the parser that turns markers into line spans) and
+  `GeneratedBlock` (a span).
+- It exists so that a tool which is **not** the generator can find the generated regions of a file —
+  DEC-035's vocabulary, DEC-020's cooperative preservation. The consumer is an external linter, a
+  migration tool, an IDE inspection or an AI agent, and the point is that none of them can depend on a
+  generator's internals.
+- **It has no dependencies at all**, and that is the reason it is separate from
+  `hipster-entity-tooling`, where the emitters live. The tooling carries the OpenRewrite LST, Jackson and
+  the entity model; a tool that only wants to know where generated code stops should not resolve any of
+  that. The dependency direction is the honest one: the generator depends on the vocabulary it emits, and
+  the parser never depends on the generator.
 
 ### `jcodebuddy-codegen-api` — The Generator SPI, and a Leaf
 - Holds exactly five types: `CodeGenerator`, `CodeContext`, `CodeContextImpl`, `TypeResolver`,

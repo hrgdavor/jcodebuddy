@@ -9,8 +9,17 @@
  * notes recorded.
  */
 
-/** The module set the `hipster-entity` shortcut expands to. A Maven profile cannot narrow a reactor, so `-pl` is the mechanism. */
-export const SIX_MODULES = [
+/**
+ * The module set the `hipster-entity` shortcut expands to. A Maven profile cannot narrow a reactor, so
+ * `-pl` is the mechanism.
+ *
+ * `jcodebuddy-core` is named rather than left to arrive transitively through `hipster-entity-tooling`'s
+ * dependency on it. It would be built either way, but a module reached only as a dependency is one whose
+ * tests nobody chose to run — and this module holds the generated-code parser, which is the vocabulary
+ * every other consumer of generated code reads. Being in the gate is a decision, so it is written down.
+ */
+export const GATE_MODULES = [
+  'jcodebuddy-core',
   'hipster-entity-api',
   'hipster-entity-core',
   'hipster-entity-tooling',
@@ -53,7 +62,7 @@ export function splitPropertyAdvice(script, fragment) {
  * @returns {{args: string[], shortcut: boolean, error: string|null}}
  */
 export function buildGateArgs(argv, options = {}) {
-  const modules = options.modules ?? SIX_MODULES;
+  const modules = options.modules ?? GATE_MODULES;
   const defaultGoals = options.defaultGoals ?? DEFAULT_GOALS;
 
   const shortcut = argv.length === 0 || argv[0] === 'hipster-entity';
