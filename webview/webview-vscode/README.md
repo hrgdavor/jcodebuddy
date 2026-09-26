@@ -13,8 +13,12 @@ the two hosts is the bridge port (18882 here, 18881 in JetBrains).
 - **Address Bar**: Enter URLs to browse the web or local files.
 - **HTTP Bridge**: A local HTTP server (default port 18882) that allows opening files via GET requests.
   - Endpoint: `http://localhost:18882/open?filePath=path/to/file&line=10&column=5`
+  - It starts when the **window loads** (`activationEvents: ["onStartupFinished"]`), not when you happen to
+    open the sidebar. Before that, the extension is not activated at all and the port is closed — which is how
+    a bridge request could fail with nothing to explain it. If the port is already taken, the extension says so
+    in a message rather than failing silently.
 - **JS Bridge**: Injects `window.openFile(path, line, col)` into pages loaded in the WebView (if origins match).
-- **Settings**: Configure the HTTP port and allowed origins for CORS protection.
+- **Settings**: Configure the HTTP port, the allowed origins and the token for the write routes.
 
 ## Usage
 
