@@ -21,8 +21,9 @@ jcodebuddy-parent (POM)
 ├── hipster-entity-jackson
 ├── hipster-entity-test
 ├── hipster-entity-tooling
+├── jcodebuddy-codegen-api
 │
-└── project-automation
+└── project-automation          (strictly private: never installed, never deployed)
 ```
 
 ## Dependency Direction
@@ -35,7 +36,11 @@ The following modules have **no dependency** on any other JCodeBuddy module:
 | `hipster-entity-api` | Shared entity interfaces and annotations |
 | `java-watch-core` | File monitoring, hashing, change detection |
 | `jwa-builder-api` | Lightweight annotations for JWA Builder |
-| `project-automation` | **Dev-time orchestrator** (depends on Layer 2 modules) |
+
+`project-automation` used to be listed here and does not belong: it depends on Layer 2 modules, so it was
+never a Layer 1 library, and it is now not a library at all. It is one project's private dev-time
+assistant — never installed, never deployed, and not depended on by anything (see
+[AGENTS.md § 1.1](../../AGENTS.md) and [DEC-W003](decisions-watch/DEC-W003.md)).
 
 ### Layer 2: Add-on Libraries
 These modules depend on Layer 1:
@@ -45,6 +50,7 @@ These modules depend on Layer 1:
 | `hipster-entity-core` | `hipster-entity-api` |
 | `jwa-builder` | `jwa-builder-api` + `java-watch-core` |
 | `hipster-entity-tooling` | `hipster-entity-api` + `hipster-entity-core` (test) |
+| `jcodebuddy-codegen-api` | `hipster-entity-tooling` (for `SourceMetadata` only) |
 
 ### Layer 3: Applications & Runtimes
 These modules depend on Layer 1 and/or Layer 2:
@@ -88,7 +94,18 @@ These modules depend on Layer 1 and/or Layer 2:
 ### `hipster-entity-tooling` — Standalone Library
 - This module depends only on `hipster-entity-api` (and `hipster-entity-core` for tests), plus the OpenRewrite parser artifacts (`rewrite-core`, `rewrite-java`, `rewrite-java-25`).
 - It has **zero dependency** on `project-automation` or any `watch` modules.
-- `project-automation` consumes it as a library.
+- `project-automation` consumes it as a library, and so does `jcodebuddy-codegen-api` — the latter for
+  `SourceMetadata` alone, which is the one type its `CodeContext` carries.
+
+### `jcodebuddy-codegen-api` — The Generator SPI, and a Leaf
+- Holds exactly five types: `CodeGenerator`, `CodeContext`, `CodeContextImpl`, `TypeResolver`,
+  `TypeDefinition`. All are leaf declarations depending on nothing but `SourceMetadata` and the JDK.
+- It exists so that a tool which generates code can implement a generator **without depending on a
+  project's `project-automation`** (AGENTS.md § 1.1). `java-watch-agent` is the consumer that forced the
+  split: it implements `CodeGenerator`, and those types previously lived in `project-automation`, which
+  made a JCodeBuddy library depend on a private dev-time assistant.
+- It must stay thin. A type here that needs a generator *implementation* belongs in
+  `hipster-entity-tooling` instead — this module holds the seam, not the machinery.
 
 ## Excluded from Maven Reactor
 
