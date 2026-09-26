@@ -141,15 +141,22 @@ data: {"paths":["src/A.java","webview/PLAN-webview-suite.md"]}
   file, and refusing on a version we cannot see would make the feature unusable). **Observed on Zed 1.21.0,
   Windows, by the maintainer (2026-09-25):** the requested line appeared in the buffer as an unsaved change, a
   single `Ctrl+Z` removed it and left the tab clean, and the file on disk was never touched.
-- **The JetBrains buffer path: implemented, unit-tested, and not yet observed in the IDE.** The plugin's
+- **The JetBrains buffer path: implemented, unit-tested, and now observed.** The plugin's
   `NavigatorService` declares `edit` and applies through `WriteCommandEditor`, which sets the document's text
   inside `WriteCommandAction.runWriteCommandAction` on the EDT, with the resulting text computed by
-  `DocumentEdits` — a pure function routed through the same `EditorText` the disk path uses, so "line 2 column 1"
+  `DocumentEdits` — a pure function routed through the same `EditableText` the disk path uses, so "line 2 column 1"
   cannot mean two different things in the two halves of one contract. Its bridge serves
   `/api/v1/applyEdit|diff|undo|redo`, token-only like every state-changing route. The text transformation has 5
-  unit tests; **gate (d) — the change appearing in the IDE's own undo stack — still needs the maintainer's eyes in
-  a running IDE**, and is not claimed until then.
-- **The VS Code buffer path is implemented and unit-tested** (2026-09-25, after the JetBrains one). That host
+  unit tests. **Gate (d) observed on 2026-09-26** (JetBrains 2026.2.3 via `gradlew runIde`, commit `bc24ee6`,
+  reported by the maintainer): `/api/v1/applyEdit` answered `"target": "buffer"`, the bytes on disk were unchanged
+  when it answered, the replacement appeared in the editor, and the IDE's own undo restored the original text. The
+  file did reach disk minutes later — **IntelliJ saved it itself** on frame deactivation, which its default
+  settings do and which the contract's own `detail` describes ("unchanged until the editor saves"). The
+  observation tool now re-samples the file (`--watchSeconds`) so that distinction is evidence rather than
+  inference: [`ide-observation-checklist.md`](ide-observation-checklist.md) § 1.
+- **The VS Code buffer path is implemented and unit-tested** (2026-09-25, after the JetBrains one), **and not yet
+  observed in the IDE** — the same claim as gate (d) above, waiting for the same kind of run
+  ([checklist](ide-observation-checklist.md) § 2). That host
   has no `EditService` and cannot import the Java core, so its surface is deliberately narrower and says so: it
   applies an edit to the **editor's buffer** through `vscode.workspace.applyEdit` (the editor's own undo is the
   reader's review step) and **refuses** `target: "disk"`, `/diff`, `/undo` and `/redo` with

@@ -436,9 +436,14 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > edit goes — **5 unit tests**), `NavigatorService` declaring `edit` and delegating, and the token-only
 > `/api/v1/applyEdit|diff|undo|redo` routes on its bridge, sharing the project's rate limiter. The plugin's suite
 > is 30 tests, all green under Gradle (`gradlew test`), and `webview-core` must be `install`ed to `mavenLocal`
-> before that build, which its `build.gradle.kts` says in as many words. **What is not claimed:** that the change
-> appears in a running IDE's undo stack. That is the maintainer's observation, exactly as (e) was for Zed, and
-> until it is made the plugin's `edit` capability is implemented-and-unit-tested rather than observed.
+> before that build, which its `build.gradle.kts` says in as many words. **Gate (d) was then observed on
+> 2026-09-26** — JetBrains 2026.2.3 through `gradlew runIde`, reported by the maintainer: the host answered
+> `"target": "buffer"`, the bytes on disk were unchanged when it answered, the replacement appeared in the editor,
+> and the IDE's own undo restored the original text. The file reached disk minutes later because **IntelliJ saved
+> it itself** on frame deactivation — the editor saving, which the contract allows and describes — and the
+> observation tool now samples the file twice (`--watchSeconds`) so that distinction is evidence rather than
+> inference. Steps and expected output for a repeat:
+> [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md).
 >
 > **Also still open in this phase:** VS Code's `WorkspaceEdit` path — that host declares no `edit`, so a page
 > asking it for a buffer edit is refused rather than written to — and checkpoint persistence across restarts, which

@@ -24,7 +24,7 @@ settings or the settings of your installed IDEs.
 
 Keep it out of the repository, so nothing observed can end up in a commit:
 
-```powershell
+```console
 New-Item -ItemType Directory -Force D:\tmp\obs | Out-Null
 Set-Content -Path D:\tmp\obs\Sample.java -Value @'
 class Sample {
@@ -35,16 +35,13 @@ class Sample {
 
 The needle `int x = 1;` must be on one line; the script refuses one that spans lines.
 
-**Windows blocks unsigned scripts**, so run the observation with a per-process bypass rather than changing the
-machine's policy:
+**The tool is Bun JavaScript**, per `AGENTS.md` § 2: scripts and tests in this repository are `.js` files run with
+Bun — never PowerShell or shell — so they work on every OS and nobody has to think about execution policy. The
+only prerequisite is Bun itself (`bun --version`). There is deliberately no `.ps1` twin: two ways to run a check
+is one way to run it wrong, and the earlier PowerShell version of this script was replaced rather than kept
+alongside.
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-```
-
-or invoke it in a child shell: `powershell -ExecutionPolicy Bypass -File .\webview\tools\observe-edit-host.ps1 …`.
-
-> **The script is self-tested.** Running it against `webviewd --host none` on 2026-09-25 produced the expected
+> **The script is self-tested.** Running it against `webviewd --host none` on 2026-09-26 produced the expected
 > `/health`, a 200 proposal with a `unifiedDiff`, a 200 `applyEdit` that wrote the file itself (that host has no
 > editor, so it says `DISK CHANGED` and tells you there is nothing unsaved to look at), a 403 with the token
 > message, and a 409 `stale` carrying the current digest. So a surprising result below is about the IDE, not
@@ -57,7 +54,7 @@ or invoke it in a child shell: `powershell -ExecutionPolicy Bypass -File .\webvi
 1. **Launch a sandbox IDE with the plugin.** JDK 25 comes from `org.gradle.java.home` in
    `gradle.properties`; the first run downloads the 2026.2.3 platform.
 
-   ```powershell
+   ```console
    cd D:\wrk\java\jcodebuddy\webview\webview-jetbrains
    .\gradlew.bat runIde
    ```
@@ -80,14 +77,32 @@ or invoke it in a child shell: `powershell -ExecutionPolicy Bypass -File .\webvi
 
 4. **Drive the observation:**
 
-   ```powershell
+   ```console
    cd D:\wrk\java\jcodebuddy
-   .\webview\tools\observe-edit-host.ps1 -Port 18881 -Token obs-token `
-       -File D:\tmp\obs\Sample.java -Find 'int x = 1;' -Replace 'int x = 42;' -CheckRefusals
+   bun run webview/tools/observe-edit-host.js --port 18881 --token obs-token `
+       --file D:\tmp\obs\Sample.java --find "int x = 1;" --replace "int x = 42;" --checkRefusals --watchSeconds 20
    ```
 
 5. **Look at the IDE, and do not save:** the editor should show `int x = 42;` with the tab marked modified, and
    one `Ctrl+Z` should restore `int x = 1;` and leave the tab clean.
+
+### The autosave caveat — read this before concluding anything
+
+The first JetBrains observation (2026-09-26) looked at first like a failure: the file on disk ended up containing
+`42`. It was not. The host's answer was `"target": "buffer"` and the disk was **unchanged** at that moment — the
+bytes moved later, because **IntelliJ saves modified documents itself**: *"Save files on frame deactivation"* and
+*"Save files automatically if application is idle for 15 sec"* are both on by default, and running this script
+from a terminal *is* a frame deactivation. That is the editor saving, which is exactly what the contract's own
+`detail` describes: *the file on disk is unchanged until the editor saves*.
+
+So:
+
+- `--watchSeconds 20` re-samples the file and says whether the bytes moved after the host answered. A change
+  **only** in that second sample is the IDE's save, not the host's write.
+- To watch the genuinely unsaved state, turn autosave off first: `Settings → Appearance & Behavior → System
+  Settings` → uncheck *Save files on frame deactivation* and *Save files automatically if application is idle*.
+- Either way, what identifies the buffer path is the **response** (`"target": "buffer"`) plus the disk being
+  unchanged when the host answered — not the final state of the file minutes later.
 
 ### What the output should say
 
@@ -106,7 +121,7 @@ or invoke it in a child shell: `powershell -ExecutionPolicy Bypass -File .\webvi
 
 1. **Compile the extension:**
 
-   ```powershell
+   ```console
    cd D:\wrk\java\jcodebuddy\webview\webview-vscode
    npm install          # only if node_modules is missing
    npm run compile
@@ -114,7 +129,7 @@ or invoke it in a child shell: `powershell -ExecutionPolicy Bypass -File .\webvi
 
 2. **Launch an Extension Development Host** with that folder loaded:
 
-   ```powershell
+   ```console
    code --extensionDevelopmentPath="D:\wrk\java\jcodebuddy\webview\webview-vscode" D:\tmp\obs
    ```
 
@@ -126,9 +141,9 @@ or invoke it in a child shell: `powershell -ExecutionPolicy Bypass -File .\webvi
 
 5. **Drive the observation:**
 
-   ```powershell
-   .\webview\tools\observe-edit-host.ps1 -Port 18882 -Token obs-token `
-       -File D:\tmp\obs\Sample.java -Find 'int x = 1;' -Replace 'int x = 42;' -CheckRefusals
+   ```console
+   bun run webview/tools/observe-edit-host.js --port 18882 --token obs-token `
+       --file D:\tmp\obs\Sample.java --find "int x = 1;" --replace "int x = 42;" --checkRefusals --watchSeconds 20
    ```
 
 6. **Look at the editor, and do not save:** the replacement visible, tab dirty, one `Ctrl+Z` back to `int x = 1;`.
@@ -141,9 +156,23 @@ or invoke it in a child shell: `powershell -ExecutionPolicy Bypass -File .\webvi
 | `/api/v1/diff` | **409 `no-disk-write`** — by design: this host has no bytes of its own to diff, and its README says so |
 | `/api/v1/applyEdit` | 200, `"applied": true`, `"target": "buffer"` |
 | `/undo`, `/redo` | **409 `no-disk-write`** — that history belongs to a host that owns the file |
-| disk digest after | identical to before |
+| disk digest when the host answered | identical to before |
 | wrong token | 403 |
 | stale digest | 409 `"reason": "stale"` |
+
+The autosave caveat from § 1 applies here too: a VS Code window can save on focus change, so give
+`--watchSeconds 20` and attribute a *later* change to the editor, not the host.
+
+---
+
+## 2a. Recorded observations
+
+| Host | Date | Result |
+| --- | --- | --- |
+| **JetBrains** 2026.2.3, `runIde` sandbox, commit `bc24ee6` | 2026-09-26 | **Observed.** `"target": "buffer"`; disk unchanged when the host answered; the replacement appeared in the editor; the IDE's own undo restored the original text. The one disk write was IntelliJ's autosave on frame deactivation — the editor saving, which the contract allows. Reported by the maintainer, who checked the save behaviour himself. |
+| **VS Code** | — | **Not observed yet.** The host is implemented and unit-tested (161 assertions); it declares `edit`, has a `webviewExplorer.token` setting, and refuses the verbs it does not own. |
+
+Recorded in [`webview-edit-api.md`](webview-edit-api.md) § 6 and the plan's Phase 3 record.
 
 ---
 

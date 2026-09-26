@@ -241,6 +241,37 @@ with pointers, not a new policy.
   `Arena` / `LongToLongsIndex` / mmap formats from that module
   rather than inventing your own. See
   [`metadata-arena/README.md`](metadata-arena/README.md).
+- **Scripts and tests are Bun JavaScript — never PowerShell, never
+  shell.** Anything an agent writes to *run* or *check* something is
+  a `.js` file with a `#!/usr/bin/env bun` header, run as
+  `bun run <path>` (or `bun <path>`), and it must work on Windows,
+  macOS and Linux without a shell-specific wrapper. Concretely:
+  - **Do not create `.ps1`, `.bat`, `.cmd`, `.sh` or `.fish`
+    files** for tooling, fixtures, test harnesses, spikes,
+    verification scripts or "just this once" helpers — a
+    PowerShell script is not acceptable as the only way to run a
+    check, because it pins the work to Windows and to an execution
+    policy that blocks unsigned scripts by default.
+  - **Tests use the runtime's own runner and APIs** — `bun test`,
+    `node:test`, or a plain script that exits non-zero on failure —
+    and compare with `node:assert`, not with shell string
+    matching. A test that only "looks right" in a terminal is not a
+    test; print explicit `ok`/`FAIL` lines and a final count, the
+    way `webview/examples/webview-client.test.mjs` and
+    `webview/webview-vscode/src/test/BridgePolicy.test.js` do.
+  - **Java build steps are still Maven and Gradle** (`mvnd`,
+    `gradlew`); the rule is about the scripts *around* them. Where
+    a JDK must be pinned, read `JAVA_HOME` in the script and fail
+    with an actionable message rather than assuming a shell.
+  - **Existing wrappers are grandfathered, not a licence for new
+    ones.** `scripts/*.cmd`, `scripts/mvn-jdk25.sh` and
+    `webview/webview-jetbrains/gradlew.bat` predate this rule;
+    convert one to Bun JavaScript when you next touch it, and do
+    not add a sibling to it.
+  - The reason is the same as rule §1's: what an agent commits must
+    be runnable and reviewable by whoever reads the repository next,
+    on whatever machine they have. A script that only runs in one
+    shell on one OS is invisible wiring for the *workflow*.
 - **JCodeBuddy output goes in the module's `.jcodebuddy/`.** A
   `.jcodebuddy/` directory means "this module applies
   `project-automation`" — it is per-module, never a repository-wide
