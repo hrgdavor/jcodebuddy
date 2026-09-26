@@ -133,6 +133,7 @@ cd webview/webview-vscode && npm run test:unit
 # the page side
 bun webview/examples/webview-client.test.mjs   # the client against a live headless webviewd (29 checks)
 node webview/examples/smoke-test.mjs           # 5 pages in a real Chromium: parse, highlight, links resolve
+bun webview/tools/check-capabilities.js        # capability honesty: declared ⇒ served, undeclared ⇒ refused
 node webview/check-links.mjs                   # every relative link in this folder resolves
 ```
 
