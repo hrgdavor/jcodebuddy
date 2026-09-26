@@ -62,6 +62,22 @@ class WriteApiTest {
         return Files.readString(file, StandardCharsets.UTF_8);
     }
 
+    /**
+     * A POST to a route that does not exist is a 404: only a route that <em>does</em> exist can be a 405. The
+     * other order made every unknown {@code /api/v1/*} answer 405, which reads as "you used the wrong method" and
+     * sends the reader after a mistake that is not there. Found by the capability gate, which asserts that 403
+     * and 404 stay distinguishable from each other and from a method mistake.
+     */
+    @Test
+    void anUnknownWriteRouteIsNotFoundRatherThanMethodNotAllowed() throws Exception {
+        start();
+
+        HttpResponse<String> response = post("/api/v1/notAVerb", "{}", TOKEN);
+
+        assertEquals(404, response.statusCode(),
+                "an unknown write route must be distinguishable from a method mistake: " + response.body());
+    }
+
     private HttpResponse<String> post(String path, String body, String token) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(server.baseUrl() + path))
                 .header("Content-Type", "application/json")

@@ -508,12 +508,17 @@ public final class WebviewServer implements AutoCloseable {
     }
 
     private void handleIndex(HttpExchange exchange) throws IOException {
-        if (!requireGet(exchange)) {
-            return;
-        }
         String path = exchange.getRequestURI().getPath();
+        // The path is checked before the method, and the order is the whole point: a POST to a route that does
+        // not exist is a 404 ("there is no such thing"), while only a route that *does* exist can be the subject
+        // of a 405 ("not with that method"). The other order made every unknown /api/v1/* answer 405, which sends
+        // a reader looking for a method mistake that is not there. Found by the capability gate, which asserts
+        // that 403 and 404 stay distinguishable.
         if (!"/".equals(path) && !"/index.html".equals(path)) {
             send(exchange, 404, "text/plain", bytes("Not found: " + path));
+            return;
+        }
+        if (!requireGet(exchange)) {
             return;
         }
         String html = """
