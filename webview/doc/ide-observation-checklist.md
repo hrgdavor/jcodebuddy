@@ -173,7 +173,7 @@ The autosave caveat from § 1 applies here too: a VS Code window can save on foc
 | Host | Date | Result |
 | --- | --- | --- |
 | **JetBrains** 2026.2.3, `runIde` sandbox, commit `bc24ee6` | 2026-09-26 | **Observed.** `"target": "buffer"`; disk unchanged when the host answered; the replacement appeared in the editor; the IDE's own undo restored the original text. The one disk write was IntelliJ's autosave on frame deactivation — the editor saving, which the contract allows. Reported by the maintainer, who checked the save behaviour himself. |
-| **VS Code** | — | **Not observed yet.** The host is implemented and unit-tested (161 assertions); it declares `edit`, has a `webviewExplorer.token` setting, and refuses the verbs it does not own. |
+| **VS Code** (Extension Development Host, commit `51950eb`) | 2026-09-26 | **Observed.** The buffer edit landed: the editor showed the new text, the buffer was **not saved**, and the editor's own undo/redo moved it back and forth. Two host-side fixes made the run possible at all: `webviewExplorer.token` had to exist before any write route could be exercised (they refused everything with 403), and the extension needed `activationEvents: ["onStartupFinished"]` — without it the extension never activated, so port 18882 was closed with nothing to explain it. |
 
 Recorded in [`webview-edit-api.md`](webview-edit-api.md) § 6 and the plan's Phase 3 record.
 

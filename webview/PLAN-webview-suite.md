@@ -455,7 +455,12 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > a disk write is the file owner's job (its atomic replace, its checkpoints in core's `EditService`), while this
 > host has the editor's own undo — so `target: "disk"`, `/diff`, `/undo` and `/redo` are refused with
 > `409 no-disk-write`, naming `webviewd`. `npm run test:unit` is **161 assertions**, all green, with no VS Code
-> download. As with JetBrains, the change appearing in a running editor's undo stack is the maintainer's
+> download. **And it is observed, 2026-09-26**, in an Extension Development Host: the edit landed in the editor's
+> buffer, the file was not saved, and the editor's own undo/redo moved it back and forth. Two host-side fixes had
+> to happen first, both of which are the kind of thing only a real run finds: `webviewExplorer.token` did not
+> exist, so every write route refused everything with 403 while `/health` advertised `edit`; and the extension had
+> no `activationEvents`, so it was never activated and port 18882 was closed with nothing to explain why. Both
+> IDE hosts are therefore observed now; the JetBrains note above records its own run.
 > observation and is not claimed here.
 >
 > **Gate (e) was delivered and OBSERVED the same day**, once the LSP write transport existed: the sidecar now

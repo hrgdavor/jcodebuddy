@@ -154,9 +154,10 @@ data: {"paths":["src/A.java","webview/PLAN-webview-suite.md"]}
   settings do and which the contract's own `detail` describes ("unchanged until the editor saves"). The
   observation tool now re-samples the file (`--watchSeconds`) so that distinction is evidence rather than
   inference: [`ide-observation-checklist.md`](ide-observation-checklist.md) § 1.
-- **The VS Code buffer path is implemented and unit-tested** (2026-09-25, after the JetBrains one), **and not yet
-  observed in the IDE** — the same claim as gate (d) above, waiting for the same kind of run
-  ([checklist](ide-observation-checklist.md) § 2). That host
+- **The VS Code buffer path is implemented, unit-tested and now observed** (2026-09-26, Extension Development
+  Host, reported by the maintainer): an `/api/v1/applyEdit` with `target: auto` put the replacement in the
+  editor's **buffer** — the file was edited to the new text, the buffer was **not saved**, and the editor's own
+  undo and redo moved it back and forth. That host
   has no `EditService` and cannot import the Java core, so its surface is deliberately narrower and says so: it
   applies an edit to the **editor's buffer** through `vscode.workspace.applyEdit` (the editor's own undo is the
   reader's review step) and **refuses** `target: "disk"`, `/diff`, `/undo` and `/redo` with
