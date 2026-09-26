@@ -38,9 +38,10 @@ its HTTP surface:
 | `JwaLanguageServer` | LSP server wiring; delegates navigation to `webview-core`'s `Navigator` |
 | `JwaLanguageClient` | client callbacks |
 | `JwaTextDocumentService` | text-document lifecycle and the builder code actions |
-| `JwaWorkspaceService` | workspace-level requests |
+| `JwaWorkspaceService` | workspace-level requests; handles the `jwa.syncBuilder` command the code action carries |
 | `JumpParams` | the `mytool/jump` Remote Jump parameters |
 | `SidecarAppJumpServiceTest` | the jump endpoint's authorization, over a real socket |
+| `SidecarCodeActionTest` | when "Sync Builder" is offered, and that picking it reaches the editor |
 
 The behaviour it drives still lives in the worker modules (`jwa-builder`'s `RecordBuilderProcessorTest`,
 `RecordBuilderFormattingTest` and `ClassMemberProcessorTest`); what the sidecar's own test covers is the part

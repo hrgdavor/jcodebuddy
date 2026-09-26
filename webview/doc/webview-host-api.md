@@ -232,8 +232,12 @@ Three things are worth reading out of that table rather than inferring:
 - **The `jwa-sidecar.txt` addon-file mechanism**: documented in the sidecar's README, **never implemented** — no
   code in any language has ever read that file. The builder is a compile-time dependency instead; see
   [`../jwa-sidecar/modules.md`](../jwa-sidecar/modules.md).
-- **A test for the JWA "Sync Builder" code action**: it exists in the sidecar and is offered to clients, and
-  nothing in a test run asserts it. Recorded as a gap rather than presented as a feature.
+- **The JWA "Sync Builder" code action is tested** as of 2026-09-26 (5 tests in `SidecarCodeActionTest`): it is
+  offered on a record's own **name line** and nowhere else, the command it carries is one the server advertises in
+  `executeCommandProvider` and handles, and picking it reaches the editor as `workspace/applyEdit` with the
+  generated edits. One asymmetry that test pins, because it surprises readers: the **manual** action is offered on
+  **any** record's name (an explicit user request needs no annotation — `recordOnLine`'s own javadoc says so),
+  while the **automatic** sync runs only for records carrying `@GenerateBuilder` (`annotatedRecords`).
 - **Checkpoints are per host.** `webviewd` journals them under `.jcodebuddy/webview/checkpoints/`; the JetBrains
   plugin builds its own `EditService` per project. A page that switches host starts a new undo history, which is
   correct but surprising if unwritten — so it is written here.
