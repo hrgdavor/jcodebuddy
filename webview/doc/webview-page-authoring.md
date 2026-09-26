@@ -186,13 +186,21 @@ GET http://127.0.0.1:<port>/health
 | `webview/webview-jetbrains` | 18881 | `webview.explorer.port` |
 | `webview/webview-vscode` | 18882 | `webviewExplorer.port` |
 
+The default is what the host **asks for**, not what it necessarily gets: it takes the next free port when
+something unrelated holds that one, and it opens no endpoint at all when the port is held by a host that
+already serves the same project. The port that is really in use is in the project's
+`.jcodebuddy/webview/host.json` (`port`, plus `ide` and `project`), and every host's `GET /health` says the
+same three things.
+
 A few facts that decide how you wire it:
 
 * **The port is a deployment detail, never a constant.** Put it in `data-bridge-port` (or a CLI flag, the
   way `scripts/markdown-view` does); a page that assumes 18881 works in JetBrains and silently does nothing
-  in VS Code. `GET /health` answers without credentials and tells you whether a bridge is really there:
+  in VS Code. `GET /health` answers without credentials and tells you whether a bridge is really there,
+  which editor it is, and which project it serves:
   ```json
-  {"plugin":"hr.hrg.jetbrains.webview","port":18881,"allowedOrigins":1,"tokenRequired":false}
+  {"plugin":"hr.hrg.jetbrains.webview","port":18881,"allowedOrigins":1,"tokenRequired":false,
+   "ide":"IntelliJ IDEA","project":"D:/wrk/java/jcodebuddy"}
   ```
 * **The server is off until it is configured**, binds to loopback only, and **denies every caller until one
   is authorized** — by an allowed `Origin`, or by a token (`?token=…` or the `X-WebView-Token` header).

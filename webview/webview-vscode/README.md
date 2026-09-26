@@ -15,8 +15,13 @@ the two hosts is the bridge port (18882 here, 18881 in JetBrains).
   - Endpoint: `http://localhost:18882/open?filePath=path/to/file&line=10&column=5`
   - It starts when the **window loads** (`activationEvents: ["onStartupFinished"]`), not when you happen to
     open the sidebar. Before that, the extension is not activated at all and the port is closed — which is how
-    a bridge request could fail with nothing to explain it. If the port is already taken, the extension says so
-    in a message rather than failing silently.
+    a bridge request could fail with nothing to explain it.
+  - **18882 is a request, not the address.** The port actually bound is published in the workspace's
+    `.jcodebuddy/webview/host.json` (`port`, plus `ide` and `project`), and `GET /health` answers the same
+    three things. When the requested port is held by an unrelated application the bridge takes the next free
+    port; when it is held by a host that already serves **this** project — another IDE on the same folder —
+    the bridge opens nothing at all and says who is serving, rather than starting a second bridge for one
+    project. See [`../doc/webview-host-api.md`](../doc/webview-host-api.md) § 4a.
 - **JS Bridge**: Injects `window.openFile(path, line, col)` into pages loaded in the WebView (if origins match).
 - **Settings**: Configure the HTTP port, the allowed origins and the token for the write routes.
 
@@ -30,22 +35,39 @@ the two hosts is the bridge port (18882 here, 18881 in JetBrains).
 
 ## Configuration
 
-- `webviewExplorer.port`: Port for the HTTP server (default: 18882).
+- `webviewExplorer.port`: The port to **ask for** (default: 18882). With no explicit setting for this window,
+  the port this workspace is currently on (`.jcodebuddy/webview/host.json` — local, never in git) is used
+  first, and failing that the project's committed default `.jcodebuddy/conf/webview.json`
+  (`{ "port": 18882 }`, optional), so a fresh clone needs no IDE configuration. The bridge takes the next free
+  port when something unrelated holds the one it asked for, and opens nothing when the port is held by a host
+  already serving this workspace. The port in use is in `.jcodebuddy/webview/host.json`, and in `GET /health`.
+- **The record outlives the bridge.** Stopping the bridge does not delete it, so the next start asks for the
+  same port instead of taking a fresh one — which is what makes an ephemeral port usable in a bookmark.
+  Delete that file to go back to the project's default.
+- **A pinned port is never moved.** If that `host.json` says `"sticky": true`, the port it records is the only
+  one acceptable: if something else holds it the bridge opens nothing and shows an error, rather than serving
+  where you did not ask. Set it by editing the file, or once with `webviewd --sticky` from the project (the
+  pin belongs to the project and the port, not to the process that set it).
 - `webviewExplorer.allowedOrigins`: Comma-separated list of origins allowed to call the bridge (e.g., `http://localhost:3000`).
+- `webviewExplorer.token`: Required by the state-changing routes (`/api/v1/applyEdit` and friends) — an allowed
+  `Origin` is deliberately not enough for a route that changes something.
 
-## The authorization rule, and where it lives
+## The rules, and where they live
 
-The decisions this host makes about *who may drive the editor* — the origin allow-list, CORS, and the rate
-limit — are in [`src/BridgePolicy.ts`](src/BridgePolicy.ts), as pure functions with no VS Code dependency, and
-they are asserted against the vectors every host shares in
-[`../conformance/bridge-decisions.json`](../conformance/bridge-decisions.json).
+Two sets of decisions, both as pure functions with no VS Code dependency and both asserted against the tables
+every host shares:
+
+| What | Where | Asserted by |
+| --- | --- | --- |
+| who may drive the editor: the origin allow-list, CORS, the rate limit, the write-token rule | [`src/BridgePolicy.ts`](src/BridgePolicy.ts) | [`../conformance/bridge-decisions.json`](../conformance/bridge-decisions.json) |
+| which port this host serves on: the claim table, the `/health` identity, the descriptor | [`src/BridgePolicy.ts`](src/BridgePolicy.ts) + [`src/HostRegistration.ts`](src/HostRegistration.ts) | `HostRegistration.test.js` (real sockets) and `BridgePolicy.test.js` |
 
 ```bash
-npm run test:unit      # 113 assertions, no VS Code download, about a second
+npm run test:unit      # BridgePolicy + HostRegistration: no VS Code download, about a second
 npm test               # the VS Code integration suite (downloads VS Code; see "Known failures" below)
 ```
 
-Three behaviours changed when this host adopted the shared rule. The first two were bugs:
+Three behaviours changed when this host adopted the shared authorization rule. The first two were bugs:
 
 * **`/open` used to test the allow-list only when the request carried an `Origin` header.** A request with no
   `Origin` — a `file://` page, a hidden iframe, any non-browser client — skipped the check and was served. An

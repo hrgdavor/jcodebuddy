@@ -1,26 +1,46 @@
-# Derived: regenerable machine output. Opt a subtree back in with a '!' rule when a
-# project wants its metadata committed as a contract (see README.md, "Track policy").
-metadata/**
-!metadata/**/
-!metadata/**/README.md
+# The default track policy for a .jcodebuddy/ tree: everything in here is derived, machine-written
+# and machine-local, so nothing is committed unless a project says otherwise. The one reserved
+# exception is conf/, which holds what MUST survive a clone and a commit.
+#
+# The palette of subfolders is deliberately open — projects are still inventing them (metadata/,
+# index/, cache/, reports/, agent-state/, webview/, …) — so a tool does not have to be listed here
+# to be ignored. It has to be listed to be *tracked*.
+*
+!.gitignore
+!README.md
 
-# Belt and braces for DEC-026 section 4, and for the rule that a report records a PATH to a
-# source file rather than a copy of it: a .java under .jcodebuddy/ is always a mistake, so it
-# stays ignored even after a project opts metadata/entity in as a contract with the '!' rule
-# above. An older tooling did drop generated source here (codebuddy.md section 6.1); this line
-# is what stops that residue from ever being committed, and GeneratorGuardTest asserts the tree
-# itself stays clear of it.
-metadata/**/*.java
+# ---------------------------------------------------------------------------------------------
+# This module's opt-ins. It keeps the *explanation* of every subtree in git — the README.md that
+# says what the subtree is — and none of its content, plus one hand-written spec in context/.
+#
+# The directory must be re-included before anything inside it: git never re-includes a file whose
+# parent directory is excluded. That is why each of these is two lines (or, for a subtree whose
+# READMEs are nested, a line per level).
+!context/
+!context/**
+!reports/
+!reports/README.md
 
-# The module index (DEC-029) is coupled to the metadata above: a document names source files by the
-# fully qualified type names that resolve only in index/classes.json, so a project that opts metadata/
-# in MUST opt index/ in too, or its committed documents reference an uncommitted table. Same shape as
-# the metadata rules: the subtree is derived and ignored, and only its README.md is re-included;
-# README.md shows the two opt-in snippets side by side. mtimes.json is derived from the working tree
-# rather than from the source, so it is deliberately never committed.
-index/**
-!index/**/
-!index/**/README.md
+!metadata/
+!metadata/README.md
+!metadata/*/
+!metadata/*/README.md
 
-# Disposable: run logs, probes, temp copies. Never a deliverable.
-agent-state/**
+!index/
+!index/README.md
+
+# A subtree that is opted in for its *content* rather than its explanation needs the same two-line
+# shape, and must stay narrow enough not to carry generated .java: a .java under .jcodebuddy/ is
+# always a mistake (DEC-026 section 5, and GeneratorGuardTest asserts it).
+#
+#     !metadata/entity/
+#     !metadata/entity/**
+#     metadata/entity/**/*.java
+
+# ---------------------------------------------------------------------------------------------
+# Reserved. conf/ is the one subtree that is tracked by default: it holds what must be preserved
+# across a clone and a commit — the settings a project wants its contributors and its tools to
+# share. Everything else is opt-in, and a project that adds a subfolder does not have to come back
+# here to have it ignored.
+!conf/
+!conf/**

@@ -11,7 +11,9 @@ import hr.hrg.webview.core.Clock;
 import hr.hrg.webview.core.EditRequest;
 import hr.hrg.webview.core.EditService;
 import hr.hrg.webview.core.EditorHost;
+import hr.hrg.webview.core.HostDescriptor;
 import hr.hrg.webview.core.HostHealth;
+import hr.hrg.webview.core.HostPortClaim;
 import hr.hrg.webview.core.InjectedBridge;
 import hr.hrg.webview.core.NavigationOutcome;
 import hr.hrg.webview.core.Navigator;
@@ -65,6 +67,9 @@ public final class WebviewServer implements AutoCloseable {
 
     /** The plugin name a page sees, and the one that goes in the descriptor. */
     public static final String PLUGIN = "hr.hrg.webview.webviewd";
+
+    /** The human name this host answers {@code /health} with, and writes into the descriptor. */
+    public static final String IDE = HostHealth.IDE_WEBVIEWD;
 
     /** Where the capabilities, the port and the token path are published for a caller that cannot guess. */
     public static final String MANIFEST_ROUTE = "/.well-known/webview.json";
@@ -131,11 +136,23 @@ public final class WebviewServer implements AutoCloseable {
      * @param host   the adapter every verb funnels into
      */
     public static WebviewServer start(WebviewdConfig config, EditorHost host) throws IOException {
+        return start(config, host, config.port());
+    }
+
+    /**
+     * The same, on a port the caller has already claimed.
+     *
+     * <p>{@link HostPortClaim} decides which port this is; the caller passes the answer rather than
+     * {@code config.port()}, because the port that was free when the claim was made is the port that must be
+     * bound, and re-reading the config would silently bind the one that was taken.
+     */
+    public static WebviewServer start(WebviewdConfig config, EditorHost host, int claimedPort)
+            throws IOException {
         if (!Files.isDirectory(config.project())) {
             throw new IOException("--project is not a directory: " + config.project());
         }
         // Loopback only, and never 0.0.0.0: the frozen contract's first security rule.
-        InetSocketAddress address = new InetSocketAddress(InetAddress.getLoopbackAddress(), config.port());
+        InetSocketAddress address = new InetSocketAddress(InetAddress.getLoopbackAddress(), claimedPort);
         HttpServer server = HttpServer.create(address, 0);
         int port = server.getAddress().getPort();
 
@@ -247,8 +264,12 @@ public final class WebviewServer implements AutoCloseable {
 
     /** The document a page reads from {@code /health}; also what the descriptor and manifest carry. */
     public String healthJson() {
-        return HostHealth.of(PLUGIN, port, origins.values().size(), token != null, navigator.capabilities())
-                .toJson();
+        // The project path is in the document because the port-claim protocol needs it: a second host that
+        // finds this port taken asks this question and must be able to tell "another host for my project"
+        // from "a host for somebody else's", which is the difference between not starting and taking the
+        // next port.
+        return HostHealth.of(PLUGIN, IDE, project.toString(), port, origins.values().size(), token != null,
+                navigator.capabilities()).toJson();
     }
 
     /** The manifest {@code /.well-known/webview.json} answers with (and {@code --print-manifest} prints). */
@@ -262,9 +283,15 @@ public final class WebviewServer implements AutoCloseable {
      * no editor attached.
      */
     public static String manifestJson(Path project, EditorHost host, int port, Path tokenFile) {
+        return manifestJson(project, IDE, host, port, tokenFile);
+    }
+
+    /** The same, for a host that names itself: {@code ide} is the human name {@code /health} also answers. */
+    public static String manifestJson(Path project, String ide, EditorHost host, int port, Path tokenFile) {
         Set<String> capabilities = capabilitiesOf(host);
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("plugin", PLUGIN);
+        manifest.put("ide", ide);
         manifest.put("port", port);
         manifest.put("project", project.toString().replace('\\', '/'));
         manifest.put("tokenPath", tokenFile.toString().replace('\\', '/'));
@@ -308,10 +335,21 @@ public final class WebviewServer implements AutoCloseable {
 
     /** The descriptor that lets a page find this host without being told the port. */
     public HostDescriptor descriptor() {
+        return descriptor(false);
+    }
+
+    /**
+     * The same, recording whether this port is pinned for the project.
+     *
+     * <p>{@code sticky} is passed in rather than derived here because it is the caller's decision: the
+     * standalone host reads it from the project's own record and from its command line, and the file is the
+     * only place a later start can learn it.
+     */
+    public HostDescriptor descriptor(boolean sticky) {
         List<String> capabilities = new ArrayList<>(navigator.capabilities());
         HostDescriptor.HostDetail detail = new HostDescriptor.HostDetail(host.name(), host.isAvailable(),
                 lineNavigation(), lineNavigationNote());
-        return HostDescriptor.of(project, port, tokenFile.toString(), capabilities, detail);
+        return HostDescriptor.of(project, PLUGIN, IDE, port, sticky, tokenFile.toString(), capabilities, detail);
     }
 
     // --- request handling ---------------------------------------------------------------------------

@@ -81,6 +81,22 @@ if (port === 0) {
 }
 
 const base = `http://127.0.0.1:${port}`;
+
+// The descriptor is what a page, a script or a second host reads to find the port (DEC-032, DEC-033). Its
+// shape is asserted here rather than assumed, because every other check in this file depends on it.
+const published = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
+check('the descriptor names the editor that published the port',
+  typeof published.ide === 'string' && published.ide.length > 0, JSON.stringify(published.ide));
+check('and the project the port belongs to', published.project === project.replace(/\\/g, '/'),
+  JSON.stringify(published.project));
+check('and the port it actually bound, which is the ephemeral one it asked for',
+  published.port === port, `${published.port} vs ${port}`);
+check('the descriptor carries the token PATH only, never the token',
+  !Object.prototype.hasOwnProperty.call(published, 'token') && typeof published.tokenPath === 'string',
+  JSON.stringify(Object.keys(published)));
+check('and the state directory ignores itself, so a served project gains no untracked files',
+  fs.readFileSync(path.join(project, '.jcodebuddy', 'webview', '.gitignore'), 'utf8').includes('*'),
+  'no .gitignore, or one without a * in it');
 const withToken = { 'X-WebView-Token': token, 'Content-Type': 'application/json' };
 const json = async (route, init) => {
   const response = await fetch(`${base}${route}`, init);
@@ -107,6 +123,13 @@ check('every declared capability is a known verb', declared.every((c) => KNOWN.i
 // This host has no editor attached, so the honest list is empty: anything else would be a claim it cannot serve.
 check('a host with no editor declares no editor verbs', declared.length === 0, JSON.stringify(declared));
 check('a host with a token reports that it needs one', health.body.tokenRequired === true);
+
+// The identity the port claim turns on (DEC-033): a second host asks /health who holds the port, and only a
+// document that names the SAME project may make it decline to open an endpoint.
+check('the host names the editor serving this endpoint', health.body.ide === 'webviewd',
+  JSON.stringify(health.body.ide));
+check('and the project the endpoint serves', health.body.project === project.replace(/\\/g, '/'),
+  JSON.stringify(health.body.project));
 
 const manifest = await json('/.well-known/webview.json');
 check('the manifest answers', manifest.status === 200, `HTTP ${manifest.status}`);

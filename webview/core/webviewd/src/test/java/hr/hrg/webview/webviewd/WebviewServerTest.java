@@ -1,6 +1,7 @@
 package hr.hrg.webview.webviewd;
 
 import hr.hrg.webview.core.EditorHost;
+import hr.hrg.webview.core.HostDescriptor;
 import hr.hrg.webview.core.NullHost;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -70,7 +71,7 @@ class WebviewServerTest {
     private WebviewServer server;
 
     private WebviewServer start(EditorHost host) throws IOException {
-        WebviewdConfig config = new WebviewdConfig(project, 0, false, ALLOWED_ORIGIN, TOKEN,
+        WebviewdConfig config = new WebviewdConfig(project, 0, true, null, false, ALLOWED_ORIGIN, TOKEN,
                 WebviewdConfig.HostChoice.NONE, WebviewdConfig.DEFAULT_SIDECAR_PORT, "", false);
         server = WebviewServer.start(config, host);
         return server;

@@ -1,5 +1,6 @@
 package hr.hrg.jcodebuddy.automation.entity;
 
+import hr.hrg.hipster.entity.tooling.JcodebuddyDirectory;
 import hr.hrg.watch2.core.ChangeSet;
 
 import org.junit.jupiter.api.Assertions;
@@ -302,6 +303,40 @@ class EntityRegenerationWatcherTest {
     }
 
     @Test
+    void aPageHostsPublishedStateDoesNotCaptureAModulesReports() throws Exception {
+        // The layout a webview host creates when it is pointed at a directory that is not a converted
+        // module: `<served>/.jcodebuddy/webview/host.json` and nothing else. Without the marker rule this
+        // would be the nearest `.jcodebuddy`, and the module's report would move one level up into the
+        // served directory — a tree the module's own .gitignore does not cover.
+        Path served = Files.createTempDirectory("served-project");
+        Path moduleRoot = Files.createDirectories(served.resolve("module"));
+        Path sourceRoot = moduleRoot.resolve("src/main/java");
+        Files.createDirectories(sourceRoot);
+        Files.writeString(moduleRoot.resolve("pom.xml"), "<project/>");
+        Path hostState = Files.createDirectories(
+                served.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR).resolve("webview"));
+        Files.writeString(hostState.resolve("host.json"), "{\"port\": 18882}");
+
+        // Same guard as the test above: a real marker somewhere above the temporary directory would decide
+        // the answer instead, so only assert when there is none.
+        Path current = served.getParent();
+        while (current != null
+                && !JcodebuddyDirectory.isMarker(current.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR))) {
+            current = current.getParent();
+        }
+        org.junit.jupiter.api.Assumptions.assumeTrue(current == null,
+                "a .jcodebuddy marker exists above the temporary directory: " + current);
+
+        Path reportDir = EntityRegenerationWatcher.Config.defaultReportDir(sourceRoot);
+
+        Assertions.assertEquals(
+                moduleRoot.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR)
+                        .resolve(EntityRegenerationWatcher.METADATA_ENTITY_DIR).toAbsolutePath().normalize(),
+                reportDir,
+                "the published port belongs to the directory a host served, not to the module below it");
+    }
+
+    @Test
     void aModuleWithoutAJcodebuddyMarkerStillGetsAPredictableReportDirectory() throws Exception {
         Path moduleRoot = Files.createTempDirectory("plain-module");
         Path sourceRoot = moduleRoot.resolve("src/main/java");
@@ -310,9 +345,11 @@ class EntityRegenerationWatcherTest {
 
         // The search eventually leaves the tree and inspects the real parent directories; only
         // proceed when none of them carries a marker, so the assertion below cannot pass for the
-        // wrong reason (a stray `.jcodebuddy` above the temporary directory would be found first).
+        // wrong reason. A directory that holds only a page host's published state is not a marker
+        // (JcodebuddyDirectory), so a host having served the repository root is not a reason to skip.
         Path current = moduleRoot.getParent();
-        while (current != null && !Files.isDirectory(current.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR))) {
+        while (current != null
+                && !JcodebuddyDirectory.isMarker(current.resolve(EntityRegenerationWatcher.JCODEBUDDY_DIR))) {
             current = current.getParent();
         }
         org.junit.jupiter.api.Assumptions.assumeTrue(current == null,

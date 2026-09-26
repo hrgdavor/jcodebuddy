@@ -932,9 +932,12 @@ public class EntityMetadataGenerator {
      * project-relative path would need the project root at read time, which no metadata file knows.</p>
      */
     private static Path resolveModuleRoot(Path sourceRoot, Path outputDir) {
-        Path marker = nearestDirectoryNamed(outputDir, JCODEBUDDY_DIR);
+        // A marker, not merely a directory of that name: a page host publishes its port in
+        // `<project>/.jcodebuddy/webview/` (DEC-032), and a project that is not a converted module must not
+        // become one because a browser was pointed at it. See JcodebuddyDirectory.
+        Path marker = JcodebuddyDirectory.nearestMarker(outputDir);
         if (marker == null) {
-            marker = nearestDirectoryNamed(sourceRoot, JCODEBUDDY_DIR);
+            marker = JcodebuddyDirectory.nearestMarker(sourceRoot);
         }
         if (marker != null && marker.getParent() != null) {
             return marker.getParent();

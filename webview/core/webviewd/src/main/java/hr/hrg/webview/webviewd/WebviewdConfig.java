@@ -8,12 +8,19 @@ import java.nio.file.Path;
  * The command line of {@code webviewd}, parsed once and validated once.
  *
  * <p>A record rather than a field bag because every one of these values is fixed for the process's life: the
- * project it serves, the port it binds (0 meaning "pick one and tell me"), whether to open a browser, the
- * origins it trusts beyond itself, the token to require, and which editor adapter to use.
+ * project it serves, the port it binds (0 meaning "pick one and tell me"), whether the port is pinned, whether
+ * to open a browser, the origins it trusts beyond itself, the token to require, and which editor adapter to
+ * use.
+ *
+ * <p>{@code portSpecified} exists because "no {@code --port}" and "{@code --port 0}" are different requests:
+ * the first should defer to the project's committed preference
+ * ({@link hr.hrg.webview.core.HostConfig}, which is what makes a fresh clone start somewhere sensible), while
+ * the second is an explicit "any free port please". {@code sticky} is nullable for the same reason: absent
+ * means "leave the project's own pin as it is", which is not the same as {@code --no-sticky}.
  */
-public record WebviewdConfig(Path project, int port, boolean open, String allowedOrigins, String token,
-                             HostChoice host, int sidecarPort, String sidecarToken,
-                             boolean printManifestOnly) {
+public record WebviewdConfig(Path project, int port, boolean portSpecified, Boolean sticky, boolean open,
+                             String allowedOrigins, String token, HostChoice host, int sidecarPort,
+                             String sidecarToken, boolean printManifestOnly) {
 
     /** Which {@link hr.hrg.webview.core.EditorHost} to attach, or how to pick one. */
     public enum HostChoice {
@@ -60,12 +67,19 @@ public record WebviewdConfig(Path project, int port, boolean open, String allowe
     public static final String USAGE = """
             webviewd - the standalone page host
 
-              webviewd --project <dir> [--port 0|N] [--open] [--host auto|none|lsp|zed-cli]
+              webviewd --project <dir> [--port 0|N] [--sticky|--no-sticky] [--open]
+                       [--host auto|none|lsp|zed-cli]
                        [--allowed-origins <origin,origin>] [--token <secret>]
                        [--sidecar-port <7979>] [--sidecar-token <secret>] [--print-manifest]
 
               --project <dir>        the directory pages may read and write; defaults to the current directory
-              --port 0|N             TCP port on loopback; 0 (the default) picks a free one and publishes it
+              --port 0|N             TCP port on loopback; 0 (the default) picks a free one and publishes it.
+                                     With no --port at all, the project's own .jcodebuddy/conf/webview.json is
+                                     consulted first, so a fresh clone starts where the project says
+              --sticky               pin the port this project is served on: a later start must use it, and a
+                                     taken port is an error instead of a reason to move. Recorded in
+                                     .jcodebuddy/webview/host.json, which is local to this checkout
+              --no-sticky            clear that pin, and serve on the next free port again
               --open                 open the host's index page in the default browser after starting
               --host auto|none|lsp|zed-cli
                                      which editor adapter to attach. auto prefers the LSP route (the only one
@@ -100,6 +114,8 @@ public record WebviewdConfig(Path project, int port, boolean open, String allowe
     public static WebviewdConfig parse(String[] args) {
         Path project = Path.of("").toAbsolutePath().normalize();
         int port = 0;
+        boolean portSpecified = false;
+        Boolean sticky = null;
         boolean open = false;
         boolean printManifest = false;
         String origins = "";
@@ -112,7 +128,12 @@ public record WebviewdConfig(Path project, int port, boolean open, String allowe
             String arg = args[i];
             switch (arg) {
                 case "--project", "-p" -> project = Path.of(value(args, ++i, arg)).toAbsolutePath().normalize();
-                case "--port" -> port = parseInt(value(args, ++i, arg), arg);
+                case "--port" -> {
+                    port = parseInt(value(args, ++i, arg), arg);
+                    portSpecified = true;
+                }
+                case "--sticky" -> sticky = Boolean.TRUE;
+                case "--no-sticky" -> sticky = Boolean.FALSE;
                 case "--open" -> open = true;
                 case "--print-manifest" -> printManifest = true;
                 case "--allowed-origins" -> origins = value(args, ++i, arg);
@@ -124,8 +145,8 @@ public record WebviewdConfig(Path project, int port, boolean open, String allowe
                 default -> throw new IllegalArgumentException("unknown option '" + arg + "'");
             }
         }
-        return new WebviewdConfig(project, port, open, origins, token, host, sidecarPort, sidecarToken,
-                printManifest);
+        return new WebviewdConfig(project, port, portSpecified, sticky, open, origins, token, host, sidecarPort,
+                sidecarToken, printManifest);
     }
 
     private static String value(String[] args, int index, String option) {

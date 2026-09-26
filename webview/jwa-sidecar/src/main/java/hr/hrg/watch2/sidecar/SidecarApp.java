@@ -7,7 +7,9 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import hr.hrg.webview.core.AllowedOrigins;
 import hr.hrg.webview.core.Clock;
+import hr.hrg.webview.core.HostDescriptor;
 import hr.hrg.webview.core.HostHealth;
+import hr.hrg.webview.core.HostPortClaim;
 import hr.hrg.webview.core.NavigationOutcome;
 import hr.hrg.webview.core.Navigator;
 import hr.hrg.webview.core.RateLimiter;
@@ -41,6 +43,12 @@ import java.util.concurrent.ExecutionException;
  * {@link RateLimiter} and {@link Navigator} from {@code webview-core}, binds the loopback address
  * explicitly, and applies the same closed default as the JetBrains plugin: with no token and no allowed
  * origin, every request is refused.
+ *
+ * <p><b>Which port.</b> {@code jwa.sidecar.jumpPort} is a request, not an instruction: when something else
+ * holds it, the next free port is taken ({@link HostPortClaim}), and the port actually served on is
+ * published in the project's {@code .jcodebuddy/webview/host.json} as soon as the client's {@code initialize}
+ * has said where the project is — a port belongs to a project, and this process does not know its project
+ * until then.
  */
 public class SidecarApp {
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -96,13 +104,24 @@ public class SidecarApp {
             throws InterruptedException, ExecutionException, IOException {
         JwaLanguageServer server = new JwaLanguageServer();
 
+        // The port this process actually serves the jump service on: the requested one when it is free, the
+        // next free one when something else holds it. Published in the project's .jcodebuddy/ once the client
+        // has said where the project is — a port belongs to a project, and before initialize there is none.
+        java.util.concurrent.atomic.AtomicInteger jumpPort = new java.util.concurrent.atomic.AtomicInteger(-1);
+        server.setProjectRootListener(root -> publishJumpPort(root, jumpPort.get(), server.capabilities()));
+
         // Start the Jump HTTP Service (non-fatal)
         try {
             int port = Integer.getInteger("jwa.sidecar.jumpPort", 7979);
-            startJumpService(server, port, new RateLimiter(
+            int bound = startJumpService(server, port, new RateLimiter(
                             Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS, Clock.SYSTEM),
                     System.getProperty("jwa.sidecar.allowedOrigins"),
                     System.getProperty("jwa.sidecar.token", "").trim());
+            jumpPort.set(bound);
+            if (bound > 0 && bound != port) {
+                System.err.println("Jump service: port " + port + " was taken, serving on " + bound
+                        + " instead (published in the project's .jcodebuddy/webview/host.json)");
+            }
         } catch (Exception e) {
             System.err.println("Failed to start Jump service: " + e.getMessage());
         }
@@ -131,17 +150,48 @@ public class SidecarApp {
      * with an {@code Origin} the allow-list names. With neither configured nothing is authorized, which is
      * the deliberate default rather than an oversight.
      *
+     * <p>The port is a request: when something else holds it the next free one is taken, and when a host that
+     * already serves the same project holds it this process opens nothing — the same rule the two IDE hosts
+     * follow, from the same {@link HostPortClaim}.
+     *
      * @param allowedOriginsText comma-separated origins, or null/blank for none
      * @param token              the shared secret, or blank for none
+     * @return the port actually served on, or -1 when no endpoint was opened
      */
-    static void startJumpService(final JwaLanguageServer server, int port, final RateLimiter rateLimiter,
-                                 String allowedOriginsText, String token) throws IOException {
+    static int startJumpService(final JwaLanguageServer server, int requestedPort, final RateLimiter rateLimiter,
+                                String allowedOriginsText, String token) throws IOException {
         final AllowedOrigins allowedOrigins = AllowedOrigins.of(allowedOriginsText);
         final String configuredToken = token == null ? "" : token.trim();
 
-        // Loopback explicitly: passing no address binds 0.0.0.0, which exposes the endpoint to the LAN.
-        HttpServer httpServer = HttpServer.create(
-                new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+        // The binding happens inside the claim's attempt, so the port the claim reports as free is a port this
+        // process already holds. The project root is not known yet — it arrives with the LSP initialize — so
+        // this is a claim about the *machine*, not about a project: a host that is already serving this
+        // project cannot be recognised here, and the port loop decides.
+        java.util.concurrent.atomic.AtomicReference<HttpServer> claimed = new java.util.concurrent.atomic.AtomicReference<>();
+        HostPortClaim.Attempt attempt = candidate -> {
+            try {
+                claimed.set(HttpServer.create(
+                        new InetSocketAddress(InetAddress.getLoopbackAddress(), candidate), 0));
+                return new HostPortClaim.Try.Free();
+            } catch (IOException e) {
+                return new HostPortClaim.Try.Taken(HostPortClaim.occupantOf(candidate));
+            }
+        };
+        HostPortClaim.Decision decision = HostPortClaim.decide(null, requestedPort,
+                HostPortClaim.DEFAULT_ATTEMPTS, attempt);
+        if (decision.skipped()) {
+            System.err.println("Jump service: " + decision.reason());
+            return -1;
+        }
+        HttpServer created = claimed.get();
+        if (created == null) {
+            System.err.println("Jump service: no server was created for the claimed port " + decision.port());
+            return -1;
+        }
+        // Effectively final from here: the route handlers below capture it, and the port that was claimed is
+        // not a value any of them may see change.
+        final HttpServer httpServer = created;
+        final int port = decision.port();
 
         httpServer.createContext(PATH_APPLY_EDIT, exchange -> {
             try {
@@ -274,8 +324,14 @@ public class SidecarApp {
                 // can only answer NO_HOST is exactly the dead-link failure the link contract's section 4
                 // forbids. This was corrected on 2026-09-25, when webviewd started deciding from this
                 // document whether to route navigation here at all.
-                Set<String> capabilities = server.isEditorAttached() ? Set.of("open", "select", "edit") : Set.of();
-                byte[] body = HostHealth.of(HostHealth.PLUGIN_SIDECAR, port,
+                //
+                // The project root arrives with the same initialize, so before it does the project key is the
+                // empty string — which is how every host says "not known yet" — rather than a guess. The editor
+                // name is the client's, when it told us: this process serves whichever editor attached to it,
+                // and the LSP initialize carries that in clientInfo.
+                Set<String> capabilities = server.capabilities();
+                byte[] body = HostHealth.of(HostHealth.PLUGIN_SIDECAR, server.editorName(),
+                        server.getProjectRoot(), port,
                         allowedOrigins.values().size(), !configuredToken.isEmpty(),
                         capabilities).toJson().getBytes(StandardCharsets.UTF_8);
                 respond(exchange, 200, body);
@@ -290,6 +346,39 @@ public class SidecarApp {
                 + (allowedOrigins.isEmpty() && configuredToken.isEmpty()
                         ? " (denying every caller until jwa.sidecar.allowedOrigins or jwa.sidecar.token is set)"
                         : ""));
+        return port;
+    }
+
+    /**
+     * Publishes the jump port in the project's {@code .jcodebuddy/webview/host.json}, so a page or a script
+     * finds it without being told — the same file, in the same place, as every other host writes.
+     *
+     * <p>Called when the client's project root becomes known, which is later than the port is claimed: a port
+     * is published in the <em>project's</em> directory, and before {@code initialize} there is no project.
+     *
+     * <p>The {@code ide} in the descriptor is this process's own name, and the capabilities are what it can
+     * honour at that moment: before {@code initialize} completes the list is empty, which is the honest answer
+     * and the same one {@code /health} gives.
+     */
+    static void publishJumpPort(String projectRoot, int port, Set<String> capabilities) {
+        if (projectRoot == null || projectRoot.isBlank() || port <= 0) {
+            return;
+        }
+        try {
+            java.nio.file.Path project = java.nio.file.Path.of(projectRoot);
+            HostDescriptor.of(project, HostHealth.PLUGIN_SIDECAR, HostHealth.IDE_SIDECAR, port, "",
+                    java.util.List.copyOf(capabilities),
+                    new HostDescriptor.HostDetail("lsp", true, "exact",
+                            "the editor's own LSP client opens the document and places the caret"))
+                    .write(project);
+            System.err.println("Jump service: published port " + port + " in "
+                    + HostDescriptor.fileOf(project));
+        } catch (IOException | RuntimeException e) {
+            // A read-only checkout still serves jumps: the descriptor is how other tools find this process,
+            // not a precondition for it working.
+            System.err.println("Jump service: could not publish the port for " + projectRoot + ": "
+                    + e.getMessage());
+        }
     }
 
     /** Token or allowed origin; with neither configured, nothing is authorized. */

@@ -276,14 +276,71 @@ with pointers, not a new policy.
 - **JCodeBuddy output goes in the module's `.jcodebuddy/`.** A
   `.jcodebuddy/` directory means "this module applies
   `project-automation`" — it is per-module, never a repository-wide
-  default, and a module without one must not be given one. Reports
-  and caches go in `metadata/` (ignored by default, opt-in with a
-  `!` rule when a project wants metadata as a contract), specs in
-  `context/`, run records in `reports/`, scratch in `agent-state/`.
-  **Generated `.java` does not go there** — it stays under
-  `src/main/java` per rule §1. See
+  default, and a module without one must not be given one. **`conf/` is the
+  reserved, tracked subtree: what must be preserved across a commit belongs
+  there.** Every other subfolder — `metadata/`, `index/`, `cache/`,
+  `reports/`, `context/`, `agent-state/`, `webview/`, and whatever a tool adds
+  next — is derived, machine-written and **ignored by default**; a project
+  opts a subtree in with a `!` rule in `.jcodebuddy/.gitignore`, re-including
+  the directory before its contents. The palette is deliberately open:
+  projects are still inventing subfolders, so a tool has to be listed to be
+  *tracked*, not to be ignored. **Generated `.java` does not go there** — it
+  stays under `src/main/java` per rule §1. See
   [`doc-hipster-entity/architecture/decisions/DEC-026.md`](doc-hipster-entity/architecture/decisions/DEC-026.md)
   and [`hipster-entity-example/.jcodebuddy/README.md`](hipster-entity-example/.jcodebuddy/README.md).
+- **Host state is not configuration — never file a port, a pid or a token as config.**
+  A webview host's local state (the port this checkout is on, the pin, the
+  token a caller must present, a page's undo journal) goes in the served
+  project's `.jcodebuddy/webview/`, which is ignored and per checkout, and
+  **never** in `.jcodebuddy/conf/` nor in a `config` file in either scope. The
+  difference is not stylistic: configuration is a *choice* that means the same
+  thing to every contributor and survives a clone, while this is a *fact about
+  one checkout on one machine*. A port **default** ("a fresh checkout asks for
+  18882") is configuration and belongs to the project's `conf/`; the **current
+  port** does not. That record **outlives the host** that wrote it — nothing
+  deletes it on shutdown, because it is what the next start asks for and where
+  the `sticky` pin lives — so a stopped host's record is normal, and "is a host
+  there?" is always answered by probing the port, never by the file.
+  See
+  [`doc-hipster-entity/architecture/decisions/DEC-032.md`](doc-hipster-entity/architecture/decisions/DEC-032.md)
+  and [`DEC-033.md`](doc-hipster-entity/architecture/decisions/DEC-033.md).
+- **`~/.jcodebuddy/` is the other scope, and it holds configuration only — and never a port.**
+  The name means "JCodeBuddy's directory", so there are exactly two scopes: the
+  project's (above) and the user's, at the JDK's `user.home`. The user-home one
+  is the machine-wide scope for a person's **global defaults** — never project
+  output, caches, reports, host state, generated or committed artifacts, or a
+  project's secrets; a **build must neither read nor create** it, and a missing
+  `~/.jcodebuddy/` is the normal state. **A port is not a user default**: it
+  names a socket for one served directory, so the user-home scope must carry no
+  port setting at all — neither a default nor a current port. A port's
+  resolution is explicit flag/IDE setting → the port this checkout is currently
+  on (`.jcodebuddy/webview/host.json`) → the project's committed default
+  (`.jcodebuddy/conf/webview.json`, optional) → the host's fallback, and it
+  never reaches the user home. Precedence for everything else is explicit
+  CLI/IDE setting → the project's `.jcodebuddy/` → `~/.jcodebuddy/config.json` →
+  the built-in default, so a user-scope read is always `user.home`-anchored and
+  **never** a directory walk (which would find a project's directory and call it
+  the user's).
+  See
+  [`doc-hipster-entity/architecture/decisions/DEC-032.md`](doc-hipster-entity/architecture/decisions/DEC-032.md).
+- **One serving host per project, and it publishes the port it actually took.**
+  A webview host writes the port it bound into the served project's
+  `.jcodebuddy/webview/host.json` and answers `/health` with `ide` and `project`
+  as well as the older keys. When the port it asked for is taken it **probes**
+  that port's `/health`: a host already serving **this** project means it opens
+  no endpoint at all, anything else means it takes the next free port. The one
+  exception is a **pinned** port — `"sticky": true` in that same `host.json`,
+  set by a person or by `webviewd --sticky` — which must never be moved: if
+  something else holds it the host opens nothing and reports an error. Never
+  invent a second copy of that rule — it is `HostPortClaim` (Java) and
+  `BridgePolicy.decidePort` / `decidePinnedPort` + `HostRegistration.claimPort`
+  (TypeScript), with the shared vectors in
+  `webview/conformance/bridge-decisions.json`. A project's port **default** is
+  configuration and goes in the tracked `.jcodebuddy/conf/webview.json`
+  (optional); the port the checkout is **currently on**, and its pin, are local
+  state in `webview/host.json`. See
+  [`doc-hipster-entity/architecture/decisions/DEC-033.md`](doc-hipster-entity/architecture/decisions/DEC-033.md)
+  and [`webview/doc/webview-host-api.md`](webview/doc/webview-host-api.md) § 4a.
 
 ## 3. How to use this file
 

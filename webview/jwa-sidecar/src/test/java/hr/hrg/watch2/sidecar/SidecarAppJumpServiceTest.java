@@ -44,13 +44,14 @@ public class SidecarAppJumpServiceTest {
         }
     }
 
-    /** Starts the service and returns the port it bound. */
+    /** Starts the service and returns the port it bound — which is the claimed one, not the requested one. */
     private static int start(String allowedOrigins, String token) throws IOException {
         int port = freePort();
-        SidecarApp.startJumpService(new JwaLanguageServer(), port,
+        int bound = SidecarApp.startJumpService(new JwaLanguageServer(), port,
                 new RateLimiter(Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS, Clock.SYSTEM),
                 allowedOrigins, token);
-        return port;
+        assertTrue("the service must report the port it serves on, or -1 when it serves none", bound > 0);
+        return bound;
     }
 
     private static HttpURLConnection get(int port, String path, String origin, String token)
@@ -204,5 +205,90 @@ public class SidecarAppJumpServiceTest {
         }
         assertTrue("the service answers on loopback", get(port, "/health", null, null)
                 .getResponseCode() == 200);
+    }
+
+    /**
+     * The health document names the editor and the project, which is what lets a host for one project tell a
+     * host for another apart — and what the port claim reads before it decides whether to move.
+     */
+    @Test
+    public void theHealthDocumentNamesTheEditorAndTheProject() throws Exception {
+        JwaLanguageServer server = new JwaLanguageServer();
+        int port = SidecarApp.startJumpService(server, freePort(),
+                new RateLimiter(Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS, Clock.SYSTEM),
+                null, "");
+
+        // Before initialize there is no editor and no project, and the document says exactly that rather than
+        // guessing: an empty project is how every host spells "not known yet".
+        String before = drain(get(port, "/health", null, null));
+        assertTrue(before, before.contains("\"ide\":\"jwa-sidecar\""));
+        assertTrue(before, before.contains("\"project\":\"\""));
+
+        server.connect((JwaLanguageClient) java.lang.reflect.Proxy.newProxyInstance(
+                JwaLanguageClient.class.getClassLoader(), new Class<?>[] {JwaLanguageClient.class},
+                (proxy, method, arguments) -> null));
+        org.eclipse.lsp4j.InitializeParams params = new org.eclipse.lsp4j.InitializeParams();
+        params.setRootUri("file:///D:/wrk/project");
+        org.eclipse.lsp4j.ClientInfo clientInfo = new org.eclipse.lsp4j.ClientInfo();
+        clientInfo.setName("Zed");
+        params.setClientInfo(clientInfo);
+        server.initialize(params).get();
+
+        String after = drain(get(port, "/health", null, null));
+        assertTrue("the editor that attached is named, not the constant this process started with: " + after,
+                after.contains("\"ide\":\"Zed\""));
+        assertTrue("and the project is the client's, forward-slashed as every other document spells it: " + after,
+                after.contains("\"project\":\"D:/wrk/project\""));
+    }
+
+    /**
+     * The requested port is a request: when something else holds it, the next free one is taken and reported,
+     * rather than the service dying or silently binding nothing.
+     */
+    @Test
+    public void aTakenPortMovesTheServiceToTheNextFreeOne() throws Exception {
+        int taken = freePort();
+        com.sun.net.httpserver.HttpServer occupant = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), taken), 0);
+        occupant.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(404, -1);
+            exchange.close();
+        });
+        occupant.start();
+        try {
+            int bound = SidecarApp.startJumpService(new JwaLanguageServer(), taken,
+                    new RateLimiter(Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS, Clock.SYSTEM),
+                    null, "");
+
+            assertEquals("an unrelated application on the port is stepped over, not fought with",
+                    taken + 1, bound);
+            assertEquals(200, get(bound, "/health", null, null).getResponseCode());
+        } finally {
+            occupant.stop(0);
+        }
+    }
+
+    /**
+     * The port is published in the project's own {@code .jcodebuddy/} once the project is known — the same
+     * file, in the same place, as the other hosts write (DEC-032, DEC-033).
+     */
+    @Test
+    public void thePortIsPublishedInTheProjectsJcodebuddy() throws IOException {
+        java.nio.file.Path project = java.nio.file.Files.createTempDirectory("sidecar-publish");
+        SidecarApp.publishJumpPort(project.toString(), 7979, java.util.Set.of("open", "select", "edit"));
+
+        java.nio.file.Path descriptor = project.resolve(".jcodebuddy/webview/host.json");
+        assertTrue("the port is published where every other host publishes it: " + descriptor,
+                java.nio.file.Files.isRegularFile(descriptor));
+        String json = java.nio.file.Files.readString(descriptor);
+        assertTrue(json, json.contains("\"port\": 7979"));
+        assertTrue(json, json.contains("\"ide\": \"jwa-sidecar\""));
+        assertTrue(json, json.contains("\"plugin\": \"hr.hrg.watch2.sidecar\""));
+        assertTrue(json, json.contains("\"pid\": " + ProcessHandle.current().pid()));
+
+        // Nothing to publish into, or nothing to publish: both are silent no-ops rather than a crash at
+        // startup, which is what an editor with no folder open would otherwise get.
+        SidecarApp.publishJumpPort(null, 7979, java.util.Set.of());
+        SidecarApp.publishJumpPort(project.toString(), -1, java.util.Set.of());
     }
 }

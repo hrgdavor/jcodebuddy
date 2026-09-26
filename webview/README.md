@@ -8,12 +8,30 @@ function, two attributes, and a small write API. No framework, no build step, no
 The same contract is implemented by **four hosts**, which is why this folder holds one shared core rather than
 four copies of one security model:
 
-| Host | What it is | Reaches the editor by | Listens on |
-| --- | --- | --- | --- |
-| [`webview-jetbrains`](webview-jetbrains/README.md) | JetBrains plugin: a JCEF tool window, plus an HTTP fallback for a browser | its own IDE APIs | 18881 (`webview.explorer.port`) |
-| [`webview-vscode`](webview-vscode/README.md) | VS Code extension: a webview view, plus an HTTP fallback and a file server for the view | `vscode.window`/`workspace` | 18882 (`webviewExplorer.port`) |
-| [`core/webviewd`](core/README.md) | **the standalone host**: a page server with no editor of its own, for any browser | a CLI adapter, an LSP sidecar, or nothing | ephemeral, published in `.jcodebuddy/webview/host.json` |
-| [`jwa-sidecar`](jwa-sidecar/README.md) | an LSP server (also the JWA addon host) | `window/showDocument`, `workspace/applyEdit` | 7979 (`jwa.sidecar.jumpPort`) |
+| Host | What it is | Reaches the editor by | Asks for | Publishes |
+| --- | --- | --- | --- | --- |
+| [`webview-jetbrains`](webview-jetbrains/README.md) | JetBrains plugin: a JCEF tool window, plus an HTTP fallback for a browser | its own IDE APIs | 18881 (`webview.explorer.port`) | the port it bound, in `.jcodebuddy/webview/host.json` |
+| [`webview-vscode`](webview-vscode/README.md) | VS Code extension: a webview view, plus an HTTP fallback and a file server for the view | `vscode.window`/`workspace` | 18882 (`webviewExplorer.port`) | the port it bound, in `.jcodebuddy/webview/host.json` |
+| [`core/webviewd`](core/README.md) | **the standalone host**: a page server with no editor of its own, for any browser | a CLI adapter, an LSP sidecar, or nothing | ephemeral (`--port 0`) | the port it bound, in `.jcodebuddy/webview/host.json` |
+| [`jwa-sidecar`](jwa-sidecar/README.md) | an LSP server (also the JWA addon host) | `window/showDocument`, `workspace/applyEdit` | 7979 (`jwa.sidecar.jumpPort`) | the port it bound, once the client says where the project is |
+
+**The listed port is a request, not an address.** Every host publishes the port it actually bound in the
+served project's `.jcodebuddy/webview/host.json`, and moves to the next free port when something unrelated
+holds the requested one. When the port is held by a host that already serves **the same project**, the second
+host opens no endpoint at all rather than starting a second bridge for one project — two IDEs on one project
+is normal, and a page that finds two bridges has no rule for choosing.
+
+Two things a project can add, and they are different files on purpose:
+
+- a **default** for the port, committed as `.jcodebuddy/conf/webview.json` (`{ "port": 18882 }`) and
+  **optional**, so a fresh clone starts somewhere sensible with no IDE configuration;
+- the port this **checkout is currently on**, in `.jcodebuddy/webview/host.json` — local, never in git, and
+  what the next start asks for, so a checkout that had to take the next free port keeps it. The same file
+  carries the **pin**: set `"sticky": true` there, or once with `webviewd --sticky`, and the port is never
+  moved — if something else holds it, the host opens nothing and reports an error. That is what a bookmark, a
+  firewall rule or a second screen needs. A pin is per worktree, and it is cleared with `--no-sticky`.
+
+See [`doc/webview-host-api.md`](doc/webview-host-api.md) § 4a; the decision is DEC-033.
 
 Zed is a fifth *client* rather than a host: [`zed/webview-zed-dev-extension`](zed/webview-zed-dev-extension/README.md)
 registers the sidecar as a language server, because Zed accepts only language servers an extension declares
@@ -119,15 +137,17 @@ or *observed on a named build and date*, never "works" without one of the two.
 Scripts are Bun JavaScript (`AGENTS.md` § 2): run them with `bun`. Java steps pin JDK 25 themselves.
 
 ```console
-# the shared core: 128 tests — the write surface, checkpoints, the jail, the allow-list, navigation
+# the shared core: 161 tests — the write surface, checkpoints, the jail, the allow-list, navigation, and
+# the shared contracts: the /health identity (HostHealth), the port claim (HostPortClaim) and the
+# project's committed port preference (HostConfig)
 bun scripts/mvn-jdk25.js -o -pl webview/core/webview-core -am test
-# the standalone host: 60 tests — routes, the descriptor, adapters, the write API end to end
+# the standalone host: 58 tests — routes, the descriptor, adapters, the write API, the --sticky flags
 bun scripts/mvn-jdk25.js -o -pl webview/core/webviewd -am test
-# the LSP sidecar: 16 tests — jump positions, applyEdit over LSP, the HTTP surface
+# the LSP sidecar: 24 tests — jump positions, applyEdit over LSP, the HTTP surface, the published port
 bun scripts/mvn-jdk25.js -o -pl webview/jwa-sidecar -am test
 # the JetBrains plugin: 30 tests (Gradle, IntelliJ Platform 2026.2.3)
 cd webview/webview-jetbrains && ./gradlew.bat test
-# the VS Code host's decisions, against the shared vectors, with no VS Code download: 161 assertions
+# the VS Code host's decisions, against the shared vectors, with no VS Code download: 275 assertions
 cd webview/webview-vscode && npm run test:unit
 # and the same host in a real VS Code: the buffer edit, unsaved, with the editor's own undo (9 tests)
 cd webview/webview-vscode && npm test
@@ -136,6 +156,7 @@ cd webview/webview-vscode && npm test
 bun webview/examples/webview-client.test.mjs   # the client against a live headless webviewd (29 checks)
 node webview/examples/smoke-test.mjs           # 5 pages in a real Chromium: parse, highlight, links resolve
 bun webview/tools/check-capabilities.js        # capability honesty: declared ⇒ served, undeclared ⇒ refused
+bun webview/tools/check-port-claim.js          # two live hosts: one bridge per project, and where a port goes
 node webview/check-links.mjs                   # every relative link in this folder resolves
 ```
 

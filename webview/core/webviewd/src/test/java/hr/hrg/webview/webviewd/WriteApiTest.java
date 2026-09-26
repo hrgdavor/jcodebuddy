@@ -1,5 +1,6 @@
 package hr.hrg.webview.webviewd;
 
+import hr.hrg.webview.core.HostDescriptor;
 import hr.hrg.webview.core.NullHost;
 import hr.hrg.webview.core.SourceDigest;
 import org.junit.jupiter.api.AfterEach;
@@ -38,7 +39,7 @@ class WriteApiTest {
     private WebviewServer server;
 
     private WebviewServer start() throws IOException {
-        WebviewdConfig config = new WebviewdConfig(project, 0, false, "", TOKEN,
+        WebviewdConfig config = new WebviewdConfig(project, 0, true, null, false, "", TOKEN,
                 WebviewdConfig.HostChoice.NONE, WebviewdConfig.DEFAULT_SIDECAR_PORT, "", false);
         server = WebviewServer.start(config, NullHost.INSTANCE);
         return server;
@@ -223,7 +224,7 @@ class WriteApiTest {
         byte[] onDisk = Files.readAllBytes(file);
         FakeSidecar sidecar = FakeSidecar.withEditorAttached();
         LspHost host = LspHost.discover(sidecar);
-        WebviewdConfig config = new WebviewdConfig(project, 0, false, "", TOKEN,
+        WebviewdConfig config = new WebviewdConfig(project, 0, true, null, false, "", TOKEN,
                 WebviewdConfig.HostChoice.LSP, WebviewdConfig.DEFAULT_SIDECAR_PORT, "sidecar-token", false);
         server = WebviewServer.start(config, host);
 
@@ -246,7 +247,7 @@ class WriteApiTest {
         byte[] onDisk = Files.readAllBytes(file);
         FakeSidecar sidecar = FakeSidecar.withEditorAttached();
         sidecar.acceptEdit = false;
-        server = WebviewServer.start(new WebviewdConfig(project, 0, false, "", TOKEN,
+        server = WebviewServer.start(new WebviewdConfig(project, 0, true, null, false, "", TOKEN,
                 WebviewdConfig.HostChoice.LSP, WebviewdConfig.DEFAULT_SIDECAR_PORT, "sidecar-token", false),
                 LspHost.discover(sidecar));
 
@@ -279,7 +280,7 @@ class WriteApiTest {
         Path file = write("src/A.java", "one\ntwo\n");
         byte[] onDisk = Files.readAllBytes(file);
         FakeSidecar sidecar = FakeSidecar.withEditorAttached();
-        server = WebviewServer.start(new WebviewdConfig(project, 0, false, "", TOKEN,
+        server = WebviewServer.start(new WebviewdConfig(project, 0, true, null, false, "", TOKEN,
                 WebviewdConfig.HostChoice.LSP, WebviewdConfig.DEFAULT_SIDECAR_PORT, "sidecar-token", false),
                 LspHost.discover(sidecar));
         Files.writeString(file, "one\nchanged-behind-your-back\n", StandardCharsets.UTF_8);

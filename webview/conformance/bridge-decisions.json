@@ -1,8 +1,8 @@
 {
     "note": "The authorization decision tables every webview host must agree on. Consumed by webview-core's Java test (ConformanceVectorsTest) and by webview-vscode's Node test (src/test/BridgePolicy.test.js). A host that disagrees with a vector is wrong, not different.",
     "healthKeys": {
-        "note": "The keys of the GET /health document, in order. Java builds that document with webview-core's HostHealth and TypeScript with webview-vscode's healthDocument(); this list is the one definition both sides assert against, so a host cannot add a key the others do not answer with. The first four are the original keys; bridgeVersion and capabilities were added on 2026-09-25 and are additive.",
-        "keys": ["plugin", "port", "allowedOrigins", "tokenRequired", "bridgeVersion", "capabilities"]
+        "note": "The keys of the GET /health document, in order. Java builds that document with webview-core's HostHealth and TypeScript with webview-vscode's healthDocument(); this list is the one definition both sides assert against, so a host cannot add a key the others do not answer with. The first four are the original keys; bridgeVersion and capabilities were added on 2026-09-25 and are additive. ide and project were added later and are appended for the same reason: they name the editor serving this endpoint and the project directory it serves, which is what lets a host whose port is already taken tell a second host for its own project (skip) from an unrelated application (take the next port). Both are always emitted — an unknown project is the empty string, never a missing key.",
+        "keys": ["plugin", "port", "allowedOrigins", "tokenRequired", "bridgeVersion", "capabilities", "ide", "project"]
     },
     "allowedOrigins": [
         { "allowed": "", "origin": "http://localhost:3000", "expected": false },

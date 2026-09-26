@@ -94,6 +94,14 @@ function run() {
     assert.strictEqual(document.tokenRequired, true);
     assert.strictEqual(document.bridgeVersion, 1);
     checks += 5;
+    assert.strictEqual(document.ide, 'Visual Studio Code',
+        'the document names the editor, so a second host can recognise who holds the port');
+    assert.strictEqual(document.project, '', 'a host that does not know its project says so with an empty string');
+    assert.strictEqual(policy.healthDocument(1, 0, false, [], '', 'D:\\wrk\\proj\\').project, 'D:/wrk/proj',
+        'the project is written forward-slashed and without a trailing separator');
+    assert.strictEqual(policy.healthDocument(1, 0, false, [], '   ', '').ide, 'unknown',
+        'a blank IDE name becomes "unknown" rather than an empty string');
+    checks += 4;
     assert.deepStrictEqual(document.capabilities, ['open', 'serveFile'],
         'capabilities are sorted so two hosts with the same abilities agree byte for byte');
     assert.deepStrictEqual(policy.healthDocument(1, 0, false, ['serveFile', 'open']).capabilities,
@@ -249,4 +257,147 @@ function run() {
         + ' and the rules this host used to get wrong. All green.');
 }
 
-run();
+/**
+ * The port claim, as the pure decision the host layer drives. The socket half of it (actually binding, and
+ * reading a real `/health` off a port) is `HostRegistration.test.js`; what is asserted here is the rule —
+ * who may keep a port, and the one case in which a host must not open an endpoint at all.
+ */
+async function runPortClaim() {
+    const project = 'D:/wrk/one';
+    const other = 'D:/wrk/two';
+
+    // Reading an occupant out of a /health body.
+    const health = JSON.stringify(policy.healthDocument(18882, 0, false, ['open'], 'Visual Studio Code', project));
+    const occupant = policy.parseHealthDocument(18882, health);
+    check(occupant.answered === true, 'a health document is recognised');
+    check(occupant.ide === 'Visual Studio Code' && occupant.project === project,
+        'the occupant carries the editor and the project, which is what the decision turns on');
+    check(policy.parseHealthDocument(18882, 'not json').answered === false, 'a non-JSON answer is not an occupant');
+    check(policy.parseHealthDocument(18882, '{"hello":"world"}').answered === false,
+        'JSON without plugin and port is an unrelated application, not an occupant');
+    check(policy.parseHealthDocument(18882, '').answered === false, 'an empty answer is not an occupant');
+
+    // "The same project" as a path comparison, not a string comparison.
+    check(policy.sameProject(project, 'D:/wrk/one/') === true, 'a trailing separator is the same directory');
+    check(policy.sameProject(project, 'D:\\wrk\\one') === true, 'a backslash is the same directory');
+    check(policy.sameProject(project, 'D:/wrk/one/sub/..') === true, 'a folded .. is the same directory');
+    check(policy.sameProject(project, other) === false, 'a different directory is a different project');
+    check(policy.sameProject(project, '') === false, 'an unknown project is never "the same project"');
+    check(policy.servesSameProject(occupant, project) === true, 'the occupant serves this project');
+    check(policy.servesSameProject(occupant, other) === false, 'and not the other one');
+    checks += 12;
+
+    // The port loop. Each case is one row of the table in HostPortClaim's javadoc.
+    const free = async () => ({ free: true });
+    const takenBy = (who) => async () => ({ free: false, occupant: who });
+
+    const firstFree = await policy.decidePort(project, 18882, 20, free);
+    check(firstFree.action === 'start' && firstFree.port === 18882,
+        'a free port is used as asked, with no probing');
+
+    const mine = policy.parseHealthDocument(18882, JSON.stringify(
+        policy.healthDocument(18882, 0, false, [], 'IntelliJ Platform', project)));
+    const sameProject = await policy.decidePort(project, 18882, 20, takenBy(mine));
+    check(sameProject.action === 'skip',
+        'another host serving THIS project means this host opens nothing at all');
+    check(sameProject.reason.includes('will not open a second endpoint'),
+        'and the reason says why, rather than leaving a silent bridge');
+    check(sameProject.port === 18882, 'the port it declined to take is reported, so a log can name it');
+
+    const theirs = policy.parseHealthDocument(18883, JSON.stringify(
+        policy.healthDocument(18883, 0, false, [], 'IntelliJ Platform', other)));
+    const foreignProject = await policy.decidePort(project, 18882, 20,
+        async (port) => (port === 18882 ? { free: false, occupant: theirs } : { free: true }));
+    check(foreignProject.action === 'start' && foreignProject.port === 18883,
+        "a host for ANOTHER project does not stop this one: the next free port is taken");
+
+    const stranger = policy.parseHealthDocument(18882, '{"hello":"world"}');
+    const strangerCase = await policy.decidePort(project, 18882, 20,
+        async (port) => (port === 18882 ? { free: false, occupant: stranger } : { free: true }));
+    check(strangerCase.action === 'start' && strangerCase.port === 18883,
+        'an unrelated application on the port is treated the same way: take the next free one');
+
+    const exhaustion = await policy.decidePort(project, 18882, 3, takenBy(stranger));
+    check(exhaustion.action === 'skip' && exhaustion.tried === 3,
+        'when the whole range is taken the host serves nothing rather than binding a port at random');
+    check(exhaustion.reason.includes('none of the 3 ports'),
+        'and it says how far it looked');
+
+    const ephemeral = await policy.decidePort(project, 0, 20, async () => {
+        throw new Error('an ephemeral port must not be probed: there is nothing to conflict with');
+    });
+    check(ephemeral.action === 'start' && ephemeral.port === 0,
+        'port 0 asks the operating system for a free port, so no probe happens');
+    checks += 9;
+
+    // The pinned port. Same table as the Java host's HostPortClaim: a pin is tried alone, and the last two
+    // rows of the table become a failure rather than a move.
+    const neverBindable = async () => {
+        throw new Error('a pinned port that already serves this project must not be bound again');
+    };
+    const pinnedFree = await policy.decidePinnedPort(project, 19000, null, async () => ({ free: true }),
+        async () => policy.parseHealthDocument(19000, '{}'));
+    check(pinnedFree.action === 'start' && pinnedFree.port === 19000 && pinnedFree.sticky === true,
+        'a free pinned port is taken, and the decision says it was pinned');
+    check(pinnedFree.tried === 1, 'a pinned port is tried alone: no other port is a candidate');
+
+    const pinnedServed = await policy.decidePinnedPort(project, 19000, null, neverBindable,
+        async () => policy.parseHealthDocument(19000, JSON.stringify(
+            policy.healthDocument(19000, 0, false, [], 'IntelliJ Platform', project))));
+    check(pinnedServed.action === 'skip' && pinnedServed.sticky === true,
+        'a pinned port already serving THIS project is the state the pin asked for, not an error');
+
+    const pinnedTaken = await policy.decidePinnedPort(project, 19000, null,
+        async () => ({ free: false, occupant: policy.notAHost('nothing answered') }),
+        async () => policy.notAHost('nothing answered'));
+    check(pinnedTaken.action === 'fail',
+        'a pinned port held by anything else is an error: moving would be a silent lie about a choice');
+    check(pinnedTaken.reason.includes('pinned') && pinnedTaken.reason.includes('sticky')
+        && pinnedTaken.reason.includes('host.json'),
+        `the message says which port, that it is pinned, and how to unpin it: ${pinnedTaken.reason}`);
+
+    const pinnedByAnotherProject = await policy.decidePinnedPort(project, 19000, null,
+        async () => ({ free: false, occupant: theirs }),
+        async () => theirs);
+    check(pinnedByAnotherProject.action === 'fail',
+        'a pinned port held by a host for another project is a collision, not "already served"');
+    check(pinnedByAnotherProject.reason.includes('IntelliJ Platform'),
+        'and the message names the host that holds it');
+
+    const pinnedButServedElsewhere = await policy.decidePinnedPort(project, 19000,
+        { port: 19001, live: true, ours: false }, neverBindable,
+        async (port) => policy.parseHealthDocument(port, JSON.stringify(
+            policy.healthDocument(port, 0, false, [], 'IntelliJ Platform', project))));
+    check(pinnedButServedElsewhere.action === 'skip' && pinnedButServedElsewhere.port === 19001,
+        'one bridge per project outranks the pin: a live host elsewhere is not an invitation to start a second');
+    checks += 10;
+
+    // The descriptor fast path: a live host that moved to a port nobody asked about.
+    const moved = await policy.publishedElsewhere(project, 18882, { port: 19000, live: true, ours: false },
+        async (port) => policy.parseHealthDocument(port, JSON.stringify(
+            policy.healthDocument(port, 0, false, [], 'IntelliJ Platform', project))));
+    check(moved !== null && moved.action === 'skip' && moved.port === 19000,
+        'a live descriptor for this project stops a second bridge even on a port nobody asked for');
+
+    check(await policy.publishedElsewhere(project, 18882, { port: 19000, live: false, ours: false },
+        async () => mine) === null, 'a dead descriptor is not an occupant');
+    check(await policy.publishedElsewhere(project, 18882, { port: 19000, live: true, ours: true },
+        async () => mine) === null,
+        'a descriptor written by this process is ignored, or a host could never restart itself');
+    check(await policy.publishedElsewhere(project, 18882, { port: 19000, live: true, ours: false },
+        async () => theirs) === null, 'a descriptor for another project is not this project’s host');
+    check(await policy.publishedElsewhere(project, 18882, null, async () => mine) === null,
+        'no descriptor means the port loop decides');
+    checks += 4;
+
+    console.log(`PortClaim: ${checks} assertions so far — the port table, the occupant identity, and the`
+        + ' descriptor fast path. All green.');
+}
+
+Promise.resolve()
+    .then(run)
+    .then(runPortClaim)
+    .catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+    });

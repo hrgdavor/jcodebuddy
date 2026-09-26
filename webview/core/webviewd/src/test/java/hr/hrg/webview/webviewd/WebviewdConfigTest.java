@@ -6,6 +6,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -74,6 +75,40 @@ class WebviewdConfigTest {
             assertEquals(WebviewdConfig.HostChoice.NONE,
                     WebviewdConfig.parse(new String[] {"--host", spelling}).host(), spelling);
         }
+    }
+
+    /**
+     * "No {@code --port}" and "{@code --port 0}" are different requests: the first defers to the project's
+     * committed preference, the second means "any free port". Collapsing them would either ignore a project's
+     * configuration or hand a project that asked for a specific port an ephemeral one.
+     */
+    @Test
+    void anAbsentPortAndAnEphemeralPortAreDistinguishable() {
+        WebviewdConfig absent = WebviewdConfig.parse(new String[] {});
+        assertFalse(absent.portSpecified(), "no --port means 'ask the project first'");
+        assertEquals(0, absent.port());
+
+        WebviewdConfig ephemeral = WebviewdConfig.parse(new String[] {"--port", "0"});
+        assertTrue(ephemeral.portSpecified(), "--port 0 is a decision, not an absence");
+        assertEquals(0, ephemeral.port());
+
+        assertTrue(WebviewdConfig.parse(new String[] {"--port", "18899"}).portSpecified());
+    }
+
+    /**
+     * The pin is tri-state on the command line, and the third state is the important one: saying nothing must
+     * leave a project's pin exactly as it was, not silently clear it.
+     */
+    @Test
+    void thePinIsSetClearedOrLeftAlone() {
+        assertEquals(Boolean.TRUE, WebviewdConfig.parse(new String[] {"--sticky"}).sticky());
+        assertEquals(Boolean.FALSE, WebviewdConfig.parse(new String[] {"--no-sticky"}).sticky());
+        assertNull(WebviewdConfig.parse(new String[] {}).sticky(),
+                "no flag means 'leave the project's own pin as it is'");
+
+        // Last one wins, so a script can append an override to a shared argument list.
+        assertEquals(Boolean.FALSE,
+                WebviewdConfig.parse(new String[] {"--sticky", "--no-sticky"}).sticky());
     }
 
     @Test

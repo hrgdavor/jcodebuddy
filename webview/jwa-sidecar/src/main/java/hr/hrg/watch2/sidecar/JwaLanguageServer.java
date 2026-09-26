@@ -39,6 +39,16 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
     /** Where the client's project is, from {@code initialize}; the path jail is built from it. */
     private String projectRoot;
 
+    /** The client's own name, from {@code initialize}'s {@code clientInfo}, when it sent one. */
+    private String clientName;
+
+    /**
+     * Told the project root once the client has sent one, so the HTTP face can publish its port in the
+     * project's own {@code .jcodebuddy/}. Explicit wiring rather than a lookup: the sidecar's LSP half and its
+     * HTTP half know nothing else about each other.
+     */
+    private java.util.function.Consumer<String> projectRootListener;
+
     private Navigator navigator;
 
     public JwaLanguageServer() {
@@ -201,6 +211,14 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
     @Override
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
         projectRoot = rootPathOf(params);
+        clientName = clientNameOf(params);
+
+        // The HTTP face could not publish its port before this: a port is published in the *project's*
+        // .jcodebuddy/, and until the client says where the project is there is nothing to publish into.
+        java.util.function.Consumer<String> listener = projectRootListener;
+        if (listener != null && projectRoot != null) {
+            listener.accept(projectRoot);
+        }
 
         ServerCapabilities capabilities = new ServerCapabilities();
 
@@ -210,6 +228,35 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
         capabilities.setExecuteCommandProvider(new ExecuteCommandOptions(java.util.List.of("jwa.syncBuilder")));
 
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
+    }
+
+    /**
+     * The name of the editor at the other end of this LSP connection, or this host's own name before the
+     * client has identified itself.
+     *
+     * <p>{@code /health} answers this as {@code ide}. The sidecar serves whichever editor attached to it, and
+     * a page that shows "which editor is serving this page" must not print a constant when the client has
+     * already told us the truth — {@code clientInfo.name} is that name, and it is what a reader recognises
+     * ("Zed", "Visual Studio Code") rather than the process's own name.
+     */
+    public String editorName() {
+        return clientName == null || clientName.isBlank()
+                ? hr.hrg.webview.core.HostHealth.IDE_SIDECAR
+                : clientName;
+    }
+
+    /** The client's own name from {@code initialize}, or null when it sent none. */
+    private static String clientNameOf(InitializeParams params) {
+        ClientInfo info = params.getClientInfo();
+        return info == null ? null : info.getName();
+    }
+
+    /**
+     * Sets what is told the project root once the client sends one. Used by the HTTP face to publish the port
+     * it claimed in the project's {@code .jcodebuddy/webview/host.json}.
+     */
+    public void setProjectRootListener(java.util.function.Consumer<String> listener) {
+        this.projectRootListener = listener;
     }
 
     /**
@@ -289,6 +336,17 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
      */
     public boolean isEditorAttached() {
         return client != null && projectRoot != null;
+    }
+
+    /**
+     * The contract capability keys this process can honour <b>right now</b>, which is none until a client has
+     * completed {@code initialize}.
+     *
+     * <p>One definition, read by the {@code /health} answer and by the descriptor this process publishes: two
+     * lists that claim to say the same thing are two lists that can disagree.
+     */
+    public Set<String> capabilities() {
+        return isEditorAttached() ? Set.of("open", "select", "edit") : Set.of();
     }
 
     /** The project root the path jail was built from, or null when the client sent none. */

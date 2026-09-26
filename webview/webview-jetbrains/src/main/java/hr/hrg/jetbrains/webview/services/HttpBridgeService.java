@@ -1,15 +1,21 @@
 package hr.hrg.jetbrains.webview.services;
 
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import hr.hrg.jetbrains.webview.bridge.NavigatorService;
 import hr.hrg.webview.core.AllowedOrigins;
 import hr.hrg.webview.core.CheckpointStore;
 import hr.hrg.webview.core.EditService;
+import hr.hrg.webview.core.HostConfig;
+import hr.hrg.webview.core.HostDescriptor;
 import hr.hrg.webview.core.HostHealth;
+import hr.hrg.webview.core.HostPortClaim;
 import hr.hrg.webview.core.NavigationOutcome;
 import hr.hrg.webview.core.WriteSurface;
 import org.jetbrains.annotations.NotNull;
@@ -21,11 +27,14 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The browser fallback: an HTTP endpoint that opens a file in the IDE when the page is <b>not</b>
@@ -40,6 +49,17 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>The server is off until {@code webview.explorer.port} is configured, because a plugin should not
  * open a listening socket that nobody asked for.
+ *
+ * <p><b>Which port, and whether to open one at all.</b> The configured port is a request, not an
+ * instruction. Three things can be true of it, and {@link HostPortClaim} decides between them: it is free,
+ * so it is used; it is held by something unrelated — another application, or a bridge for a <em>different</em>
+ * project — so the next free port is taken; or it is held by a bridge that already serves <b>this</b>
+ * project, in which case this IDE opens nothing. The last case is ordinary rather than exotic: two IDEs can
+ * be open on one project, and a page that finds two bridges for one project has no rule for choosing, while
+ * an edit that lands in the other IDE's buffer is worse than no bridge at all.
+ *
+ * <p>Whichever port is taken is published in {@code <project>/.jcodebuddy/webview/host.json}, beside the
+ * port the other hosts publish, so a script — or a second editor — finds it without being told.
  *
  * <p><b>Security.</b> The endpoint can open an arbitrary file in the IDE, so it is denied unless the
  * caller proves it may. Three changes from the first implementation, each closing a real hole:
@@ -72,6 +92,9 @@ public final class HttpBridgeService {
     private volatile String token = "";
     private volatile WriteSurface writeSurface;
 
+    /** Why the bridge is in the state it is in, for the settings UI: the claim's own sentence. */
+    private volatile String stateNote = "Bridge: not started yet";
+
     public HttpBridgeService(@NotNull Project project) {
         this.project = project;
         applySettingsAndStart();
@@ -101,12 +124,12 @@ public final class HttpBridgeService {
     public @NotNull String describeState() {
         HttpServer current = server;
         if (current == null) {
-            return "Bridge: stopped";
+            return "Bridge: stopped — " + stateNote;
         }
         String auth = token.isEmpty()
                 ? (allowedOrigins.isEmpty() ? "no caller allowed yet" : allowedOrigins.values().size() + " allowed origin(s)")
                 : "token required";
-        return "Bridge: running on 127.0.0.1:" + boundPort + " (" + auth + ")";
+        return "Bridge: running on 127.0.0.1:" + boundPort + " (" + auth + ") — " + stateNote;
     }
 
     public synchronized void stopServer() {
@@ -128,6 +151,9 @@ public final class HttpBridgeService {
             currentExecutor.shutdownNow();
             executor = null;
         }
+        // The published record is left in place on purpose: it is the project's port, not this process's —
+        // what the next start asks for, and where a `sticky` pin lives (HostDescriptor). "Is a bridge there?"
+        // is answered by probing the port, so a record left by a stopped host misleads nobody.
     }
 
     private void applySettingsAndStart() {
@@ -145,23 +171,141 @@ public final class HttpBridgeService {
         allowedOrigins = AllowedOrigins.of(originsText);
         token = tokenText == null ? "" : tokenText.trim();
 
-        if (portText == null || portText.isBlank()) {
+        int port;
+        String basePath = project.getBasePath();
+        Integer explicitPort = null;
+        if (portText != null && !portText.isBlank()) {
+            try {
+                explicitPort = Integer.parseInt(portText.trim());
+            } catch (NumberFormatException e) {
+                stateNote = "'" + portText + "' is not a port number; the bridge stays off";
+                LOG.warn("WebView HTTP bridge: '" + portText + "' is not a port number; bridge stays off");
+                return;
+            }
+        }
+        // One resolution for every host: the setting the user made, else the port this checkout is currently
+        // on (`.jcodebuddy/webview/host.json`, local and never in git), else the project's committed default
+        // (`conf/webview.json` — optional, and there so a fresh clone needs no IDE configuration). The
+        // fallback is -1: this host stays off until something names a port, which is its documented behaviour
+        // and not an oversight.
+        HostConfig.RequestedPort resolved = basePath == null
+                ? new HostConfig.RequestedPort(-1, "fallback", "")
+                : HostConfig.requestedPort(Path.of(basePath), explicitPort, -1);
+        if (!resolved.problem().isEmpty()) {
+            LOG.info("WebView HTTP bridge: " + resolved.problem());
+        }
+        if (!resolved.configured()) {
+            stateNote = "the bridge is off (neither webview.explorer.port, nor this checkout's "
+                    + HostDescriptor.FILE_NAME + ", nor " + HostConfig.DIR + "/" + HostConfig.FILE_NAME
+                    + " names a port)";
             LOG.info("WebView HTTP bridge is off (webview.explorer.port is not configured)");
             return;
         }
-        int port;
-        try {
-            port = Integer.parseInt(portText.trim());
-        } catch (NumberFormatException e) {
-            LOG.warn("WebView HTTP bridge: '" + portText + "' is not a port number; bridge stays off");
-            return;
+        port = resolved.port();
+        stateNote = resolved.describe(Path.of(basePath));
+        if (!stateNote.isEmpty()) {
+            LOG.info("WebView HTTP bridge: " + stateNote);
         }
         startServer(port);
     }
 
-    private void startServer(int port) {
+    /**
+     * Takes a port for this project, or declines to open an endpoint at all.
+     *
+     * <p>The binding happens inside the claim's attempt, and the server it created is handed back out of it:
+     * a "check whether the port is free, then bind it" design leaves a window in which another process takes
+     * the port between the two, and the port this method reports as free is then not the port it serves on.
+     *
+     * <p>Three outcomes that are not "serving on the port you configured" are all handled here: the next free
+     * port when something unrelated holds it; nothing at all when another IDE already serves this project;
+     * and an <b>error</b> when the project's port is pinned ({@code sticky} in its {@code host.json}) and could
+     * not be taken — a pinned port is a choice, and quietly moving would be a lie about it.
+     */
+    private void startServer(int requestedPort) {
+        String basePath = project.getBasePath();
+        if (basePath == null) {
+            stateNote = "the project has no base path, so there is nowhere to publish a port";
+            LOG.info("WebView HTTP bridge is off: the project has no base path");
+            return;
+        }
+        Path projectRoot = Path.of(basePath);
+
+        // The pin is a local property of the port this checkout uses, so it is read from the published state
+        // and never from configuration. `null` means "this project has not pinned anything".
+        HostDescriptor published = HostDescriptor.read(projectRoot);
+        boolean sticky = published != null && published.sticky();
+        Integer stickyPort = sticky && published.port() > 0 ? published.port() : null;
+
+        // The server created by the attempt that succeeded. A bind failure on a taken port is classified by
+        // asking the occupant what it is: "the port is busy" is not "a bridge is there".
+        AtomicReference<HttpServer> claimed = new AtomicReference<>();
+        HostPortClaim.Attempt attempt = port -> {
+            try {
+                claimed.set(HttpServer.create(
+                        new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0));
+                return new HostPortClaim.Try.Free();
+            } catch (IOException e) {
+                return new HostPortClaim.Try.Taken(HostPortClaim.occupantOf(port));
+            }
+        };
+
+        HostPortClaim.Decision decision;
         try {
-            HttpServer created = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+            decision = HostPortClaim.claim(projectRoot, requestedPort, stickyPort,
+                    HostPortClaim.DEFAULT_ATTEMPTS, attempt, HostPortClaim::occupantOf);
+        } catch (RuntimeException e) {
+            stateNote = "could not decide which port to use: " + e.getMessage();
+            LOG.warn("WebView HTTP bridge: could not decide which port to use", e);
+            return;
+        }
+
+        if (decision.failed()) {
+            stateNote = decision.reason();
+            LOG.warn("WebView HTTP bridge is not started: " + decision.reason());
+            notifyError(decision.reason());
+            return;
+        }
+        if (decision.skipped()) {
+            stateNote = decision.reason();
+            LOG.info("WebView HTTP bridge is not started: " + decision.reason());
+            return;
+        }
+
+        HttpServer created = claimed.get();
+        if (created == null) {
+            stateNote = "no server was created for the claimed port " + decision.port();
+            LOG.warn("WebView HTTP bridge: " + stateNote);
+            return;
+        }
+        stateNote = decision.reason();
+        if (decision.moved() || decision.sticky()) {
+            LOG.info("WebView HTTP bridge: " + decision.reason());
+        }
+        start(created, decision.port(), projectRoot, sticky);
+    }
+
+    /**
+     * Tells the reader that a pinned port could not be taken.
+     *
+     * <p>A dialog is the right weight for this and only this failure: the user pinned a port on purpose, the
+     * bridge they expected is therefore <em>absent</em>, and a log line in an IDE's idea.log is not something
+     * anyone reads while wondering why a page's links do nothing. It is guarded so a headless or already
+     * disposed project simply records the sentence instead of throwing inside a service constructor.
+     */
+    private void notifyError(@NotNull String message) {
+        try {
+            if (ApplicationManager.getApplication().isHeadlessEnvironment() || project.isDisposed()) {
+                return;
+            }
+            Messages.showErrorDialog(project, message, "WebView Explorer");
+        } catch (RuntimeException | LinkageError e) {
+            LOG.warn("WebView HTTP bridge: could not show the error dialog", e);
+        }
+    }
+
+    /** Registers the routes, starts the claimed server and publishes the port. */
+    private void start(@NotNull HttpServer created, int port, @NotNull Path projectRoot, boolean sticky) {
+        try {
             created.createContext("/", this::handle);
             ExecutorService createdExecutor = Executors.newSingleThreadExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "webview-bridge-" + threadSequence.incrementAndGet());
@@ -174,12 +318,62 @@ public final class HttpBridgeService {
             server = created;
             executor = createdExecutor;
             boundPort = port;
+            publish(projectRoot, port, sticky);
             LOG.info("WebView HTTP bridge listening on 127.0.0.1:" + port
+                    + (sticky ? " (pinned for this project)" : "")
                     + (allowedOrigins.isEmpty() && token.isEmpty()
                             ? " (denying every caller until an allowed origin or token is configured)"
                             : ""));
-        } catch (IOException e) {
-            LOG.warn("WebView HTTP bridge could not bind 127.0.0.1:" + port, e);
+        } catch (RuntimeException e) {
+            stateNote = "could not start on port " + port + ": " + e.getMessage();
+            LOG.warn("WebView HTTP bridge could not start on port " + port, e);
+        }
+    }
+
+    /**
+     * Publishes the port in the project's {@code .jcodebuddy/webview/host.json}, beside the port the other
+     * hosts publish, so a page, a script or a second editor finds it without being told.
+     *
+     * <p>{@code sticky} is carried through unchanged: this IDE did not decide whether the port is pinned, and
+     * it must not silently unpin one that was.
+     */
+    private void publish(@NotNull Path projectRoot, int port, boolean sticky) {
+        NavigatorService host = NavigatorService.getInstance(project);
+        HostDescriptor.HostDetail detail = new HostDescriptor.HostDetail(host.name(), host.isAvailable(),
+                host.lineNavigation(), host.lineNavigationNote());
+        try {
+            HostDescriptor.of(projectRoot, HostHealth.PLUGIN_JETBRAINS, ideName(), port, sticky, "",
+                    new ArrayList<>(host.capabilities()), detail).write(projectRoot);
+        } catch (IOException | RuntimeException e) {
+            // A read-only checkout still serves pages: the descriptor is how other tools find this one, not a
+            // precondition for it working.
+            LOG.info("WebView HTTP bridge: could not publish the port in " + projectRoot + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * The project's own directory, as every document in this product spells it, or blank when the project has
+     * none (the default project of a window with no folder open).
+     */
+    private @NotNull String projectPath() {
+        String basePath = project.getBasePath();
+        return basePath == null ? "" : basePath;
+    }
+
+    /**
+     * The human name of the IDE this plugin is running in — "IntelliJ IDEA", "PyCharm", "RustRover".
+     *
+     * <p>Read from the platform rather than hard-coded, because the same plugin runs in all of them and a page
+     * that says "which editor is serving this bridge" has to name the one the reader is actually in. The
+     * fallback covers an environment that cannot answer the question, where an honest generic name beats a
+     * crash in a service constructor.
+     */
+    private static @NotNull String ideName() {
+        try {
+            String name = ApplicationNamesInfo.getInstance().getFullProductName();
+            return name == null || name.isBlank() ? HostHealth.IDE_JETBRAINS : name;
+        } catch (RuntimeException | LinkageError e) {
+            return HostHealth.IDE_JETBRAINS;
         }
     }
 
@@ -206,8 +400,10 @@ public final class HttpBridgeService {
 
         if (PATH_HEALTH.equals(path)) {
             // Built by the shared HostHealth rather than assembled here: the three hosts used to answer with
-            // three different documents, and a page could not tell which keys it would get.
-            String body = HostHealth.of(HostHealth.PLUGIN_JETBRAINS, boundPort,
+            // three different documents, and a page could not tell which keys it would get. `ide` and
+            // `project` are what let a second host for this project recognise this one and decline to open a
+            // bridge of its own.
+            String body = HostHealth.of(HostHealth.PLUGIN_JETBRAINS, ideName(), projectPath(), boundPort,
                     allowedOrigins.values().size(), !token.isEmpty(),
                     NavigatorService.getInstance(project).capabilities()).toJson();
             send(exchange, 200, body, "application/json");

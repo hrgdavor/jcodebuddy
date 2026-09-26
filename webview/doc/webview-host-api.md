@@ -36,11 +36,13 @@ rest.
 
 ## 2. `GET /health` — the capability document
 
-Answers without credentials, which is the whole point: a page asks before it wires itself up.
+Answers without credentials, which is the whole point: a page asks before it wires itself up. A second host
+asks the same question before it opens an endpoint of its own (§ 4a).
 
 ```json
 { "plugin": "hr.hrg.webview.webviewd", "port": 51234, "allowedOrigins": 2, "tokenRequired": true,
-  "bridgeVersion": 1, "capabilities": ["open", "serveFile"] }
+  "bridgeVersion": 1, "capabilities": ["open", "serveFile"], "ide": "webviewd",
+  "project": "D:/wrk/java/jcodebuddy" }
 ```
 
 | Key | Meaning |
@@ -51,6 +53,13 @@ Answers without credentials, which is the whole point: a page asks before it wir
 | `tokenRequired` | whether a token is configured for the state-changing routes |
 | `bridgeVersion` | which injected contract the host implements; the same number a page sees as `window.__jcbWebViewBridge` |
 | `capabilities` | what the host can do **now**, sorted. Empty is the honest answer for a host with no editor attached |
+| `ide` | a **human** name for the editor — `"IntelliJ IDEA"`, `"Visual Studio Code"`, `"webviewd"`, and for the sidecar the LSP client's own name (`"Zed"`) once it has identified itself; `"unknown"` when the host has no name to give, never blank |
+| `project` | the directory **this endpoint serves**, forward-slashed and absolute, or the empty string when the host does not know it yet (the sidecar before LSP `initialize`). It is what makes "a host for **this** project" a decidable question (§ 4a) |
+
+`ide` and `project` were appended last, so a reader that walks the keys in order keeps seeing the six it
+always saw. Both are **required** keys: `HostHealth.REQUIRED_KEYS`, the TypeScript `HealthDocument` and
+`webview/conformance/bridge-decisions.json` → `healthKeys` are one list, and the Java and Node tests both
+assert against it. Neither is a secret — both already appear in the project's `host.json` (§ 4).
 
 One implementation produces this document (`webview-core`'s `HostHealth`), so two hosts with the same
 abilities produce identical bytes — that is Phase 1's `HostHealthParityTest`.
@@ -94,22 +103,116 @@ process, where is its token, and how precisely can it move a caret".
 ([`PHASE0-ZED-FINDINGS.md`](../PHASE0-ZED-FINDINGS.md) § B). The caret path on Zed is the LSP channel, not the
 CLI — which is why the capability says `open` and this field says `file-only` rather than both pretending.
 
-## 4. `.jcodebuddy/webview/` — the descriptor
+## 4. `.jcodebuddy/webview/` — the port record
 
 ```
-.jcodebuddy/webview/host.json    { plugin, pid, port, project, tokenPath, capabilities, startedAt, host }
-.jcodebuddy/webview/token        the secret itself, 0600 where the filesystem has POSIX permissions
+<project>/.jcodebuddy/webview/host.json   { plugin, ide, pid, port, sticky, project, tokenPath, capabilities, startedAt, host }
+<project>/.jcodebuddy/webview/token       the secret itself, 0600 where the filesystem has POSIX permissions
 ```
 
-- The port is ephemeral by default (`--port 0`); the descriptor is how a page or a script finds it, which is
-  decision D7 in [the plan](../PLAN-webview-suite.md).
-- **The descriptor never contains the token**, only the path to it, so it can be logged or printed.
-- A second `webviewd` for the same project **refuses to start** (exit code `2`) while the recorded pid is
-  alive. Liveness is asked of the operating system, not inferred from the file, because a killed process leaves
-  the file behind; a stale descriptor is simply overwritten.
+- **Every host publishes it**, not only `webviewd`: the port a host actually bound goes in the project it
+  serves, so a page, a script or a second editor finds it without being told. The port in the file is the
+  one that was **taken**, and it is also the port this **checkout** is now on — the next start asks for it
+  rather than for a fresh one (§ 4b), which is what keeps a checkout that had to move from colliding again
+  on every restart.
+- `ide` is the same human name `/health` answers with; `project` is the directory the port belongs to.
+- `sticky` **pins** that port for this checkout: a later start must use it or fail, never move (§ 4a). It is
+  `false` unless a person or `webviewd --sticky` set it, and it lives here rather than in configuration
+  because it is a property of the port one worktree is using, not a project-wide preference. The *default* —
+  which port a fresh clone should ask for — is committed configuration:
+  `<project>/.jcodebuddy/conf/webview.json` (`{ "port": 18882 }`, optional).
+- **The record outlives the host that wrote it.** A host that stops leaves it in place, because it is the
+  checkout's port rather than the process's: deleting it on shutdown would change an ephemeral port on every
+  restart and would silently throw away a `sticky` pin. So a stopped host's record is normal, and **"is a
+  host there?" is never answered by this file** — it is answered by probing the port (§ 4a), which is why a
+  stale record misleads nobody. Delete the file to forget the port; the pin is cleared with
+  `webviewd --no-sticky`.
+- **This is host state, not configuration**, and it is filed accordingly: it is a fact about one checkout on
+  one machine, so it is ignored by git, per project, and never written into `.jcodebuddy/conf/` — the tracked
+  subtree for what a project wants committed — nor into a `config` file in either scope. A port *default*
+  ("a fresh clone asks for 18882") may be configuration; the *current port* may not (DEC-032, DEC-033).
+  The state directory carries its own `.gitignore` (`*`) so publishing never leaves an untracked file in a
+  project that has no JCodeBuddy ignore policy of its own.
+- `ide` is the same human name `/health` answers with; `project` is the directory the port belongs to.
+- **The descriptor never contains the token**, only the path to it, so it can be logged or printed. The
+  VS Code host keeps its token in the editor's settings rather than in a file, and writes an empty
+  `tokenPath` for that reason.
+- A second host for the same project **does not start a second bridge**: it either declines to open an
+  endpoint (when the port it asked for is held by a host serving this project) or takes the next free port
+  and republishes it (§ 4a). `webviewd` — a CLI, whose whole purpose is the endpoint — additionally exits
+  `2` in the decline case, with a message naming the host that is already there; the IDE hosts keep running,
+  because closing the editor is not an option.
+- **A stopping host removes only its own descriptor** (its `pid` is the check). Two hosts take turns on one
+  port, and the one that shuts down last is not necessarily the one that wrote the file that is there now.
 - On Windows there is no POSIX mode to set, so the token file inherits the user profile's ACLs. That is stated
   rather than worked around; the file is inside the user's own profile either way.
-- `.jcodebuddy/webview/` is derived state and is ignored by git (see the repository's `.gitignore`).
+- `.jcodebuddy/webview/` is derived state and is ignored by git — it is DEC-026's per-project
+  `.jcodebuddy/` (see also DEC-032), machine-written, and nothing may depend on it existing.
+
+## 4a. Which port a host takes, and when it takes none
+
+`webview-host-api.md` § 4 says where the port is published; this section says how it is chosen. The rule is
+one table, implemented once per language — `HostPortClaim` in `webview-core`, and
+`BridgePolicy.decidePort` + `HostRegistration.claimPort` in the VS Code host — with DEC-033 as the decision
+record.
+
+| the requested port is… | and the process there is… | what the host does |
+| --- | --- | --- |
+| free | — | **start** on it |
+| taken | a webview host serving **this** project | **skip**: open no endpoint at all, log who is serving |
+| taken | a webview host serving **another** project | **start** on the next free port |
+| taken | anything else | **start** on the next free port |
+
+**Unless the port is pinned.** When `<project>/.jcodebuddy/webview/host.json` says `sticky: true`, that port
+is the only acceptable one and the last two rows become an **error**: the host reports it (a dialog in an
+IDE, exit `2` for `webviewd`) instead of serving somewhere the user did not ask for. A pinned port already
+served by this project is still `skip` — that is the state the pin asks for — and a live host for this
+project on another port still wins, because one bridge per project outranks the pin. The case it exists for:
+several git worktrees of one project, one of which must keep its port (a bookmark, a firewall rule, a second
+screen) while the others are free to move. `webviewd --sticky` sets it and `webviewd --no-sticky` clears it,
+both taking effect even when the run cannot serve.
+
+Where the requested port comes from, first match wins: an explicit flag or IDE setting, then the port this
+**checkout** is currently on (`webview/host.json` — local, never in git), then the project's committed
+**default** (`<project>/.jcodebuddy/conf/webview.json`, `{ "port": 18882 }` — optional, tracked, and there so
+a fresh clone needs no editor configuration), then the host's own fallback (`0`, i.e. ephemeral, for
+`webviewd`; the IDE hosts' conventional port). A malformed default is reported and ignored rather than fatal.
+
+The current port beats the default on purpose: a checkout that had to take the next free port — a second
+worktree, an unrelated application on the conventional one — keeps it instead of drifting back and colliding
+there again on every start. Deleting `webview/host.json` returns the checkout to the default.
+
+**The user-home `~/.jcodebuddy/` is never consulted for a port** — not for a default and not for a current
+port. A port names a socket for one served directory, so a machine-wide default would have every project on
+the machine ask for the same port at once. See DEC-032 § 2.
+
+- The occupant is **asked**, not guessed: a plain `GET http://127.0.0.1:<port>/health`, no token. Only a
+  document carrying both `plugin` and `port` is a webview host; a non-200, a refusal, a timeout and a JSON
+  body without those keys all mean "not a host", which means "take the next port".
+- **Twenty** consecutive ports are tried (`HostPortClaim.DEFAULT_ATTEMPTS`, the same number in both
+  languages). When all of them are taken the host serves nothing and says which range it tried — binding an
+  arbitrary port would be worse than not serving. Port `0` is never probed: the operating system picks one
+  and cannot hand out a taken one, which is why `webviewd --port 0` stays the default.
+- The project's **descriptor is checked first**, before the port loop: a live host for this project may be
+  on a port nobody asked about, and probing only the requested port would find it free and start a second
+  bridge for one project. A descriptor written by the host's **own** process is ignored, so a host can
+  restart on its own port; a descriptor whose port does not answer is not an occupant, because the file can
+  outlive the process that wrote it. Liveness is asked of the port, never of the file.
+- **A host that can bind passes its own attempt**: the port is bound inside the claim and the bound server
+  is handed back, so the port reported free is a port already held. `HostPortClaim.systemAttempt()` is the
+  fallback for a host that cannot — it probes with a `ServerSocket` and releases it, which leaves a small
+  window — and is documented as the weaker of the two.
+
+**Skip is not refuse.** The IDE keeps running when it declines to open a bridge, and the decline is logged
+(and shown in the JetBrains settings pane) with the occupant's name and port, so the state is discoverable
+rather than mysterious. The `jwa-sidecar` is the one host that cannot run the whole rule: it does not know
+its project until the client's `initialize` arrives, so at startup it applies the **port loop only** and
+publishes the port it took once the project root is known.
+
+Two runnable gates cover this section, both against live processes rather than mocks:
+`bun webview/tools/check-capabilities.js` (the `/health` identity and the descriptor's shape) and
+`bun webview/tools/check-port-claim.js` (two hosts on one project, then a host for another project on the
+same port).
 
 ## 5. Routes
 

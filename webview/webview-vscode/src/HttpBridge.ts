@@ -7,6 +7,8 @@ import * as crypto from 'crypto';
 import {
     BridgeConfig,
     EditRequest,
+    IDE_VSCODE,
+    PLUGIN_VSCODE,
     RateLimiter,
     PRODUCTION_RATE_LIMIT,
     bufferEditBody,
@@ -16,9 +18,19 @@ import {
     decideWriteRoute,
     healthDocument,
     mapEdits,
+    normalizeProject,
     parseEditRequest,
     writeRefusalBody
 } from './BridgePolicy';
+import {
+    boundPortOf,
+    claimPort,
+    closeQuietly,
+    describeRequestedPort,
+    descriptorFor,
+    requestedPort,
+    writePublished
+} from './HostRegistration';
 
 /**
  * The largest write body this host will read. An edit request is a range and some text; anything larger is not
@@ -27,12 +39,21 @@ import {
 const MAX_WRITE_BODY = 1024 * 1024;
 
 /**
+ * The capabilities this host advertises, and the same list it publishes in its descriptor. `edit` is
+ * advertised because the buffer path exists (`BridgePolicy.decideEdit` + `applyEdit` here); the rule this
+ * codebase holds to is that a capability is advertised when it is implemented, and not before.
+ */
+const VSCODE_CAPABILITIES = ['edit', 'open', 'serveFile'];
+
+/**
  * The VS Code HTTP bridge: the fallback for a page opened in an ordinary browser, and the file server the
  * webview's iframe loads pages from.
  *
  * The authorization, CORS and rate-limit decisions live in `BridgePolicy`, which is tested without VS Code
  * against the shared vectors in `webview/conformance/bridge-decisions.json`. This class is the HTTP half:
- * routing, headers, and serving bytes.
+ * routing, headers, and serving bytes — plus the two things a host owes the project it serves, which are
+ * decided in `HostRegistration`: the port it took, published in `.jcodebuddy/webview/host.json`, and the
+ * refusal to take a second one when another editor is already serving this project.
  */
 export class HttpBridge {
     private server: http.Server | undefined;
@@ -68,21 +89,132 @@ export class HttpBridge {
         };
     }
 
-    private startServer() {
-        const config = vscode.workspace.getConfiguration('webviewExplorer');
-        const port = config.get<number>('port') || 18882;
+    /**
+     * The project this bridge serves: the first workspace folder. Empty when no folder is open, in which case
+     * there is no `.jcodebuddy/` to publish into and nothing to compare a second host against, so the
+     * requested port is bound as it always was.
+     */
+    private projectRoot(): string {
+        const folders = vscode.workspace.workspaceFolders;
+        return folders && folders.length > 0 ? folders[0].uri.fsPath : '';
+    }
 
-        this.server = http.createServer((req, res) => {
+    /**
+     * The port to ask for, resolved by the shared rule (the same four sources as webview-core's
+     * `HostConfig.requestedPort`): the setting the user made for this window, then the port this checkout is
+     * currently on (`.jcodebuddy/webview/host.json` — local, never in git), then the project's committed
+     * default (`.jcodebuddy/conf/webview.json` — optional, so a fresh clone needs no configuration), then the
+     * conventional default.
+     *
+     * The setting is read through `inspect` rather than `get` because it declares a default: `get` cannot tell
+     * "the user chose 18882" from "nobody chose anything and 18882 is the default", and only the first should
+     * outrank what the project and the checkout say.
+     */
+    private requestedPort(): number {
+        const configuration = vscode.workspace.getConfiguration('webviewExplorer');
+        const inspected = configuration.inspect<number>('port');
+        const explicit = inspected?.workspaceFolderValue ?? inspected?.workspaceValue ?? inspected?.globalValue;
+        const project = this.projectRoot();
+        if (project === '') {
+            return typeof explicit === 'number' ? explicit : configuration.get<number>('port') || 18882;
+        }
+        const resolved = requestedPort(project, typeof explicit === 'number' ? explicit : null,
+            configuration.get<number>('port') || 18882);
+        if (resolved.problem !== '') {
+            console.log(`HTTP Bridge: ${resolved.problem}`);
+        }
+        const note = describeRequestedPort(project, resolved);
+        if (note !== '') {
+            console.log(`HTTP Bridge: ${note}`);
+        }
+        return resolved.port;
+    }
+
+    private startServer() {
+        const requestedPort = this.requestedPort();
+        const project = this.projectRoot();
+
+        const server = http.createServer((req, res) => {
             this.handleRequest(req, res);
         });
+        this.server = server;
 
-        this.server.listen(port, '127.0.0.1', () => {
+        if (project === '') {
+            server.on('error', (err) => {
+                vscode.window.showErrorMessage(`Failed to start HTTP Bridge server: ${err.message}`);
+            });
+            server.listen(requestedPort, '127.0.0.1', () => {
+                console.log(`HTTP Bridge server listening on 127.0.0.1:${requestedPort}`);
+            });
+            return;
+        }
+
+        void this.claimAndListen(server, project, requestedPort);
+    }
+
+    /**
+     * Takes a port for this project, or declines to serve at all.
+     *
+     * Three outcomes other than "listening on the port you configured" are normal, and only the third is an
+     * error: the requested port was held by an unrelated application, so the next free one was taken (and
+     * published); another editor is already serving **this** project, so this host opens nothing — a page that
+     * finds two bridges for one project has no rule for choosing; or the project **pinned** its port
+     * (`sticky` in its `host.json`) and it could not be had, which is reported rather than quietly worked
+     * around.
+     */
+    private async claimAndListen(server: http.Server, project: string, requestedPort: number) {
+        try {
+            const decision = await claimPort(server, project, requestedPort);
+            if (decision.action === 'fail') {
+                await closeQuietly(server);
+                this.server = undefined;
+                console.log(`HTTP Bridge not started: ${decision.reason}`);
+                vscode.window.showErrorMessage(`WebView Explorer: ${decision.reason}`);
+                return;
+            }
+            if (decision.action === 'skip') {
+                await closeQuietly(server);
+                this.server = undefined;
+                console.log(`HTTP Bridge not started: ${decision.reason}`);
+                vscode.window.showWarningMessage(`WebView Explorer: ${decision.reason}`);
+                return;
+            }
+            const port = boundPortOf(server) || decision.port;
+            if (decision.tried > 1 || decision.sticky) {
+                console.log(`HTTP Bridge: ${decision.reason}`);
+            }
+            // Registered only once the claim has settled: a bind failure during the claim is the claim's own
+            // business (it steps over the port), and reporting it here would tell the user about a port the
+            // bridge deliberately did not take.
+            server.on('error', (err) => {
+                vscode.window.showErrorMessage(`HTTP Bridge server error: ${err.message}`);
+            });
+            this.publish(project, port, decision.sticky);
             console.log(`HTTP Bridge server listening on 127.0.0.1:${port}`);
-        });
+        } catch (error) {
+            await closeQuietly(server);
+            this.server = undefined;
+            vscode.window.showErrorMessage(
+                `Failed to start HTTP Bridge server: ${(error as Error).message}`);
+        }
+    }
 
-        this.server.on('error', (err) => {
-            vscode.window.showErrorMessage(`Failed to start HTTP Bridge server: ${err.message}`);
-        });
+    /** Publishes the port, so a page or a second host finds it without being told. */
+    private publish(project: string, port: number, sticky: boolean) {
+        try {
+            writePublished(project, descriptorFor(project, PLUGIN_VSCODE, IDE_VSCODE, port,
+                VSCODE_CAPABILITIES, {
+                    name: 'vscode',
+                    available: true,
+                    lineNavigation: 'exact',
+                    note: 'the editor opens the document and places the caret'
+                }, '', sticky));
+        } catch (error) {
+            // A project that cannot be written to (read-only checkout, no permission) still serves pages: the
+            // descriptor is a convenience for other tools, not a precondition for this one.
+            console.log(`HTTP Bridge: could not publish the port in ${normalizeProject(project)}:`
+                + ` ${(error as Error).message}`);
+        }
     }
 
     public stopServer() {
@@ -90,6 +222,9 @@ export class HttpBridge {
             this.server.close();
             this.server = undefined;
         }
+        // The published record is left in place on purpose: it is the workspace's port, not this process's —
+        // what the next start asks for, and where a `sticky` pin lives. "Is a bridge there?" is answered by
+        // probing the port, so a record left by a stopped host misleads nobody.
     }
 
     public restartServer() {
@@ -130,17 +265,18 @@ export class HttpBridge {
         }
 
         if (route.action === 'health') {
-            // The shared document shape, so a page reads the same keys from this host as from the Java ones.
+            // The shared document shape, so a page reads the same keys from this host as from the Java ones —
+            // including `ide` and `project`, which is how a second host for this project recognises this one
+            // and declines to open a bridge of its own.
             const document = healthDocument(
                 this.boundPort(),
                 countAllowedOrigins(bridgeConfig.allowedOrigins),
                 // Honest, and it was not: a token that is set must be reported as required, or a page cannot
                 // tell whether presenting one is the way in.
                 (bridgeConfig.token ?? '') !== '',
-                // `edit` is advertised because the buffer path exists (BridgePolicy.decideEdit + applyEdit here);
-                // the rule this codebase holds to is that a capability is advertised when it is implemented, and
-                // not before.
-                ['edit', 'open', 'serveFile']
+                VSCODE_CAPABILITIES,
+                IDE_VSCODE,
+                this.projectRoot()
             );
             res.setHeader('Content-Type', 'application/json');
             res.writeHead(200);
@@ -197,9 +333,15 @@ export class HttpBridge {
         res.setHeader('Access-Control-Allow-Headers', '*');
     }
 
-    private boundPort(): number {
-        const address = this.server?.address();
-        return typeof address === 'object' && address ? address.port : 0;
+    /**
+     * The port this bridge actually serves on, or 0 when it is not listening.
+     *
+     * Public because the webview's own URL rewriting needs it: the configured port is a *request*, and the
+     * port that was free may be a different one, so a `/file/…` URL built from the setting would point at
+     * whatever else holds that port.
+     */
+    public boundPort(): number {
+        return this.server ? boundPortOf(this.server) : 0;
     }
 
     /**

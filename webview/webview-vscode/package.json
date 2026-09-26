@@ -117,7 +117,7 @@
         "lint": "eslint src --ext ts",
         "test": "node ./out/test/runTest.js",
         "pretest:unit": "npm run compile",
-        "test:unit": "node ./src/test/BridgePolicy.test.js"
+        "test:unit": "node ./src/test/BridgePolicy.test.js && node ./src/test/HostRegistration.test.js"
     },
     "devDependencies": {
         "@types/glob": "^8.1.0",

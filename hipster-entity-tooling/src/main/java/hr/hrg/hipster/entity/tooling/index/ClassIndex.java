@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling.index;
 import tools.jackson.databind.JsonNode;
 
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
+import hr.hrg.hipster.entity.tooling.JcodebuddyDirectory;
 import hr.hrg.hipster.entity.tooling.SourceReader;
 import hr.hrg.hipster.entity.tooling.TreeQueries;
 import org.openrewrite.java.tree.J;
@@ -282,19 +283,15 @@ public final class ClassIndex {
         return new ClassIndex(dir, reportDir, moduleRoot, module, relativeSourceRoot, inside, clock);
     }
 
-    /** The nearest ancestor (inclusive) named {@code .jcodebuddy}, or {@code null}. */
+    /**
+     * The nearest ancestor (inclusive) that is a {@code .jcodebuddy} <b>marker</b>, or {@code null}.
+     *
+     * <p>{@link JcodebuddyDirectory#nearestMarker} owns the rule, because a directory of that name is not
+     * always a module marker: a page host publishes its port in {@code <project>/.jcodebuddy/webview/}
+     * (DEC-032, DEC-033), and the index must not follow a host into a project that was never converted.
+     */
     private static Path nearestJcodebuddy(Path start) {
-        if (start == null) {
-            return null;
-        }
-        for (Path cursor = start.toAbsolutePath().normalize(); cursor != null; cursor = cursor.getParent()) {
-            Path name = cursor.getFileName();
-            if (name != null && EntityMetadataGenerator.JCODEBUDDY_DIR.equals(name.toString())
-                    && Files.isDirectory(cursor)) {
-                return cursor;
-            }
-        }
-        return null;
+        return JcodebuddyDirectory.nearestMarker(start);
     }
 
     /** {@code file} relative to {@code base}, with forward slashes; never absolute. */

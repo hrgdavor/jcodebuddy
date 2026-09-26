@@ -22,6 +22,7 @@ sides assert against it.
 
 | Key | Fields | Meaning |
 | --- | --- | --- |
+| `healthKeys` | `keys` | the keys of the `GET /health` document, **in order**: `plugin`, `port`, `allowedOrigins`, `tokenRequired`, `bridgeVersion`, `capabilities`, `ide`, `project`. Java's `HostHealth`, TypeScript's `healthDocument()` and both test suites assert against this one list, so a host cannot add a key the others do not answer with. The last two are what the port claim reads (DEC-033): `ide` names the editor and `project` names the directory that endpoint serves, which is how a host whose port is taken tells "another host for my project" (skip) from "a stranger" (take the next port). |
 | `allowedOrigins` | `allowed`, `origin`, `expected` | `AllowedOrigins.of(allowed).allows(origin)` must equal `expected`. A JSON `null` origin is an absent header. |
 | `cors` | `allowed`, `origin`, `sends`, `echoes` | whether a host may emit `Access-Control-Allow-Origin` at all, and that it echoes the caller's own origin (never `*`, never a constant) |
 | `rateLimit` | `limit`, `windowMillis`, `tryAt`, `expected` | `tryAt[i]` is the millisecond offset the injected clock is set to before call `i`; `expected[i]` is what `RateLimiter.tryAcquire()` must return. Offsets are absolute from the start of the run, and a refused call is not recorded. |
@@ -30,7 +31,7 @@ sides assert against it.
 
 | Reader | How |
 | --- | --- |
-| `webview/core/webview-core` | `ConformanceVectorsTest` loads the JSON with Gson and asserts `AllowedOrigins`, the CORS decision and `RateLimiter` produce the expected answers |
+| `webview/core/webview-core` | `ConformanceVectorsTest` loads the JSON with Gson and asserts `AllowedOrigins`, the CORS decision, `RateLimiter` and the `/health` key list produce the expected answers |
 | `webview/webview-vscode` | `src/test/BridgePolicy.test.js` loads the same file and asserts `BridgePolicy` produces the same answers, with no VS Code and no dependencies: `npm run test:unit` |
 
 Neither side *generates* the file. A vector is a claim about behaviour, and generating it from one

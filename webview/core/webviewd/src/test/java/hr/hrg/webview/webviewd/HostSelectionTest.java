@@ -24,7 +24,7 @@ class HostSelectionTest {
     Path project;
 
     private WebviewdConfig config(WebviewdConfig.HostChoice choice) {
-        return new WebviewdConfig(project, 0, false, "", "t", choice, 7979, "sidecar-secret", false);
+        return new WebviewdConfig(project, 0, true, null, false, "", "t", choice, 7979, "sidecar-secret", false);
     }
 
     @Test

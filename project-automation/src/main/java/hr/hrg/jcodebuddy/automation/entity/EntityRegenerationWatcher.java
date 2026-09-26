@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.automation.entity;
 
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
+import hr.hrg.hipster.entity.tooling.JcodebuddyDirectory;
 import hr.hrg.watch2.core.BatchedFileWatcher;
 import hr.hrg.watch2.core.ChangeSet;
 import hr.hrg.watch2.core.FileFilter;
@@ -109,6 +110,11 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
          * further up must not be shadowed by a plain {@code pom.xml} closer to the sources, which is
          * the layout a freshly converted submodule of an aggregator has.</p>
          *
+         * <p>A directory whose whole content is <b>tool state</b> is not a marker: a page host publishes
+         * its port in {@code <project>/.jcodebuddy/webview/} (DEC-032, DEC-033), and a project that
+         * gained one because a browser was pointed at it must not capture the reports of a module below
+         * it. {@link JcodebuddyDirectory#nearestMarker} owns that rule.</p>
+         *
          * <p>Either way the report lands beside {@code src/main/java}, not inside it, so a watched run
          * never drops untracked {@code *.metadata.json} files next to the entities.</p>
          *
@@ -120,15 +126,16 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
          * unconditionally.</p>
          */
         static Path defaultReportDir(Path sourceRoot) {
-            Path current = sourceRoot;
-            while (current != null && !Files.isDirectory(current.resolve(JCODEBUDDY_DIR))) {
-                current = current.getParent();
+            // A *marker*, not merely a directory of that name: a page host publishes its port in
+            // `<project>/.jcodebuddy/webview/` (DEC-032, DEC-033), and a project that gained one because a
+            // browser was pointed at it must not capture a module's reports. See JcodebuddyDirectory.
+            Path marker = JcodebuddyDirectory.nearestMarker(sourceRoot);
+            if (marker != null) {
+                return marker.resolve(METADATA_ENTITY_DIR).toAbsolutePath().normalize();
             }
-            if (current == null) {
-                current = sourceRoot;
-                while (current != null && !Files.exists(current.resolve("pom.xml"))) {
-                    current = current.getParent();
-                }
+            Path current = sourceRoot;
+            while (current != null && !Files.exists(current.resolve("pom.xml"))) {
+                current = current.getParent();
             }
             if (current == null) {
                 return Path.of(System.getProperty("java.io.tmpdir"), "jcodebuddy-entity-metadata")

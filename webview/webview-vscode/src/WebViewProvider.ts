@@ -54,6 +54,20 @@ export class WebViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    /**
+     * The port `/file/…` URLs are built from: the one the bridge actually bound.
+     *
+     * Not the `webviewExplorer.port` setting, which is only what the bridge *asked* for — the port that was
+     * free may be a different one, and a URL built from the setting would then point at whatever else holds
+     * that port. The setting is the fallback for the window between activation and the bridge listening.
+     */
+    private bridgePort(): number {
+        const bound = this._httpBridge.boundPort();
+        return bound > 0
+            ? bound
+            : vscode.workspace.getConfiguration('webviewExplorer').get<number>('port') || 18882;
+    }
+
     public loadUrl(url: string) {
         if (!this._view) {
             return;
@@ -71,7 +85,7 @@ export class WebViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
 
-            const port = vscode.workspace.getConfiguration('webviewExplorer').get<number>('port') || 18882;
+            const port = this.bridgePort();
             // Normalize path separators to forward slashes and encode each segment to allow directory traversal in browser
             const normalizedPath = filePath.replace(/\\/g, '/');
             const encodedPath = normalizedPath.split('/').map(s => encodeURIComponent(s)).join('/');
@@ -88,7 +102,7 @@ export class WebViewProvider implements vscode.WebviewViewProvider {
                 if (path.isAbsolute(cleanPath) || cleanPath.includes('\\') || cleanPath.includes('/')) {
                     const uri = vscode.Uri.file(path.normalize(cleanPath));
                     if (fs.existsSync(uri.fsPath)) {
-                        const port = vscode.workspace.getConfiguration('webviewExplorer').get<number>('port') || 18882;
+                        const port = this.bridgePort();
                         // Normalize and encode segments
                         const normalizedPath = uri.fsPath.replace(/\\/g, '/');
                         const encodedPath = normalizedPath.split('/').map(s => encodeURIComponent(s)).join('/');

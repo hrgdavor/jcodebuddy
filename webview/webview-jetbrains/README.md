@@ -110,6 +110,33 @@ authorize one.** A caller is authorized by presenting the token (as an `X-WebVie
 `token` query parameter) or an allowed `Origin`. With no token and no origins configured, `/open` answers
 `403` — that is deliberate: the endpoint can open any file in your IDE, so it does not work by accident.
 
+**The port you configure is a request.** With no `webview.explorer.port` setting and no `-D`, the port this
+checkout is currently on (`.jcodebuddy/webview/host.json` — local, never in git) is asked for first, and
+failing that the project's committed default `.jcodebuddy/conf/webview.json` (`{ "port": 18882 }`, optional)
+is used, so a cloned project starts a bridge without anyone configuring their IDE; that file is tracked,
+which is the point. The bridge publishes the port it actually bound in the same `host.json` (`port`, `ide`,
+`project`, `plugin`, `pid`, `sticky`, `capabilities` — never the token itself), and `GET /health` says the
+same things:
+
+- the requested port is free → the bridge serves on it;
+- it is held by an unrelated application, or by a bridge serving a **different** project → the bridge takes
+  the next free port, up to twenty, and says so in the log and in the settings pane;
+- it is held by a bridge that already serves **this** project — a second IDE window on the same folder → the
+  bridge opens **nothing**. One bridge per project is the rule: a page that finds two has no way to choose,
+  and an edit landing in the other IDE's buffer is worse than a page that cannot edit. The settings pane says
+  which IDE is serving, and where its port is published;
+- **the port is pinned** (`"sticky": true` in that `host.json`) and something else holds it → the bridge opens
+  **nothing** and shows an error. A pinned port is never moved: it was chosen on purpose (a bookmark, a
+  firewall rule, a second screen), so moving would break the reason it was pinned. Set the pin by editing the
+  file or once with `webviewd --sticky` in the project.
+
+**The record outlives the bridge.** Stopping the bridge — or closing the IDE — leaves `host.json` in place,
+because it is the checkout's port rather than the process's: that is what the next start asks for, and where
+the pin lives. Delete the file to go back to the project's default.
+
+Both behaviours come from `webview-core`'s `HostPortClaim`, shared with the other three hosts
+([`../doc/webview-host-api.md`](../doc/webview-host-api.md) § 4a).
+
 Notes on the fallback:
 
 - The bridge is **not needed** for pages inside the WebView Explorer tool window; they get the injected
@@ -126,11 +153,15 @@ Notes on the fallback:
 
 ```json
 {"plugin":"hr.hrg.jetbrains.webview","port":18881,"allowedOrigins":1,"tokenRequired":false,
- "bridgeVersion":1,"capabilities":["open","select"]}
+ "bridgeVersion":1,"capabilities":["open","select"],"ide":"IntelliJ IDEA",
+ "project":"D:/wrk/java/jcodebuddy"}
 ```
 
 `capabilities` is empty while no project editor is available, and `allowedOrigins: 0` means every caller is
-refused. `bridgeVersion` is the same number a page sees as `window.__jcbWebViewBridge`.
+refused. `bridgeVersion` is the same number a page sees as `window.__jcbWebViewBridge`. `ide` is the product
+name of the IDE you are actually in — "IntelliJ IDEA", "PyCharm", "RustRover" — read from the platform, and
+`project` is the directory this endpoint serves; a second host reads both to tell "another bridge for my
+project" from a stranger.
 
 ## JCEF debugging
 
