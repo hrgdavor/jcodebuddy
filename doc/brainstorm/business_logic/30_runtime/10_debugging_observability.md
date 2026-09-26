@@ -11,7 +11,7 @@ re-running in a debugger.
 
 The primary debugging tool is the **per-entity, per-step diff** built
 from the snapshots recorded at call-graph boundaries (see
-[`20_writes/15_aggregation_and_snapshots.md`](20_writes/15_aggregation_and_snapshots.md)).
+[`20_writes/15_aggregation_and_snapshots.md`](../20_writes/15_aggregation_and_snapshots.md)).
 The diff itself carries the **operation type** (`@CoreChange` /
 `@CoreChangeOnChange` / `@NotificationOnly`) of each step, so a
 debugger can filter to one category.

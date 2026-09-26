@@ -24,7 +24,7 @@ A pure function in a business process:
 - does **not** call I/O, does **not** call injected services, does
   **not** read wall time or random ids directly,
 - is annotated as exactly **one** of the three operation types —
-  see [`10_concept/05_operation_types.md`](10_concept/05_operation_types.md).
+  see [`10_concept/05_operation_types.md`](../10_concept/15_operation_types.md).
 
 ## The role of the Processing Unit
 

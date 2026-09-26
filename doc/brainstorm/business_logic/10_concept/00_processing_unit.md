@@ -79,7 +79,7 @@ The single object is what makes the process **reviewable and replayable**:
 - A debugger can inspect the unit at any point in the graph.
 - A test can assert on the unit's contents at any point, with no mocks.
 - A WAL can serialize the unit's effect descriptions and replay them
-  later (see [`40_engineering/05_memory_performance_wal.md`](40_engineering/05_memory_performance_wal.md)).
+  later (see [`40_engineering/05_memory_performance_wal.md`](../40_engineering/05_memory_performance_wal.md)).
 
 ## Type safety
 

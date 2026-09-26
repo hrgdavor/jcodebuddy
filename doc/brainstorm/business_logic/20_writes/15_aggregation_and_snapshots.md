@@ -32,7 +32,7 @@ Between well-defined points in the call graph — typically **between
 named sub-steps** of a `@BusinessProcess` method, or around each call
 to a `@CoreChange` / `@CoreChangeOnChange` / `@NotificationOnly`
 method (see
-[`10_concept/15_operation_types.md`](10_concept/15_operation_types.md))
+[`10_concept/15_operation_types.md`](../10_concept/15_operation_types.md))
 — the unit records a **snapshot** of every entity it has been told
 about.
 

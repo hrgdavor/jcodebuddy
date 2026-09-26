@@ -7,7 +7,7 @@ This page is the guide `AGENTS.md` § 2 points at. It is written against the cod
 as it is, so every class named here is the one to open; the migration that put it
 in this shape is recorded in
 [`plans/rewrite-migration/`](../plans/rewrite-migration/README.md) and
-[`doc/brainstorm/rewrite-migration/`](../../doc/brainstorm/rewrite-migration/)
+[`doc/brainstorm/rewrite-migration/`](../doc/brainstorm/rewrite-migration/)
 and is **not** repeated here.
 
 The decision behind the shape is

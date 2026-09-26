@@ -42,7 +42,7 @@ This concept organizes business logic so that:
   entries, generated identifiers, debug snapshots, and the **traceId** for
   end-to-end tracking of user actions through the entire operation.
 - **Every step is exactly one of three operation types** — see
-  [`10_concept/05_operation_types.md`](10_concept/05_operation_types.md):
+  [`10_concept/05_operation_types.md`](10_concept/15_operation_types.md):
   - `@CoreChange` — only changes core data, no dependency on current changes.
   - `@CoreChangeOnChange` — changes core data based on current changes;
     protected by a **loop guard** that detects and stops infinite oscillation.
@@ -120,7 +120,7 @@ edits.
   changes, **guarded by a fixed-point loop**), or `@NotificationOnly`
   (emits notifications/external effects only, runs once after the core
   loop has converged). See
-  [`10_concept/05_operation_types.md`](10_concept/05_operation_types.md).
+  [`10_concept/05_operation_types.md`](10_concept/15_operation_types.md).
 - **`EntityWrite<E>`** — sealed `Insert / Update / Delete` marker, so
   identifiers stay in code rather than being assigned by the database.
 - **Loop guard** — the unit detects infinite oscillation between

@@ -39,7 +39,7 @@ JCodeBuddy's `project-automation` module produces:
 
 Just the call graph. The developer writes pure functions tagged with
 one of the three operation-type annotations (see
-[`10_concept/15_operation_types.md`](10_concept/15_operation_types.md)):
+[`10_concept/15_operation_types.md`](../10_concept/15_operation_types.md)):
 - `@CoreChange` for steps that only write core data,
 - `@CoreChangeOnChange` for steps that react to current core writes
   (the loop guard is wired in automatically),

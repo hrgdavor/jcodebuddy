@@ -221,4 +221,4 @@ Before submitting or generating deserializer or field-mapping code, verify:
 - [`ViewMeta.forName` Javadoc](../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/ViewMeta.java)
 - [`FieldNameMapper` interface](../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldNameMapper.java)
 - [`EntityJacksonViewDeserializer`](../../hipster-entity-jackson/src/main/java/hr/hrg/hipster/entity/jackson/EntityJacksonViewDeserializer.java) — canonical generic implementation
-- [`PersonSummaryBoilerplateDeserializer`](../../hipster-entity-jackson/src/test/java/hr/hrg/hipster/entity/jackson/PersonSummaryBoilerplateDeserializer.java) — canonical boilerplate implementation
+- [`PersonSummaryBoilerplateDeserializer`](../../hipster-entity-test/src/test/java/hr/hrg/hipster/entity/jackson/PersonSummaryBoilerplateDeserializer.java) — canonical boilerplate implementation

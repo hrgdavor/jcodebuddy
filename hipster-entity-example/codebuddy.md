@@ -86,7 +86,7 @@ The hand-written consumers worth looking at, which exercise the generated API:
 | JDK 25 | `C:\Program Files\Java\jdk-25` | `JCODEBUDDY_JDK25` |
 | Maven  | `D:\programs\mvn\bin\mvn.cmd`  | `JCODEBUDDY_MVN`   |
 
-Both are consumed by [`../scripts/mvn-jdk25.cmd`](../scripts/mvn-jdk25.cmd), which
+Both are consumed by [`../scripts/mvn-jdk25.cmd`](../scripts/mvn-jdk25.js), which
 sets `JAVA_HOME` for the Maven JVM. **JDK 25 is required on both JVMs** — the root
 POM pins `maven.compiler.release=25`, and `.mvn/jvm.config` cannot select a JDK.
 

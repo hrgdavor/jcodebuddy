@@ -32,7 +32,7 @@ feature       o       what our branch did since we last synced
 
 - **`base`** holds the fixture's `base/` — the upstream *as this branch last saw
   it*, which is not the same thing as Git's merge base. See
-  [`../docs/WHAT_IS_BASE.md`](../docs/WHAT_IS_BASE.md).
+  [`../docs/WHAT_IS_BASE.md`](../../docs/WHAT_IS_BASE.md).
 - **`upstream`** holds `theirs/`, **`feature`** holds `ours/`, and both are one
   commit above `base`, so the base commit really is their common ancestor.
 - **`feature` is checked out** and tracks `origin/upstream`, so a plain

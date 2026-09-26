@@ -7,7 +7,7 @@ mutations inside the unit, and the rules that make those mutations
 **controllable from code** rather than left to the database. Only
 **type-1 (`@CoreChange`) and type-2 (`@CoreChangeOnChange`) steps**
 populate these — see
-[`10_concept/15_operation_types.md`](10_concept/15_operation_types.md).
+[`10_concept/15_operation_types.md`](../10_concept/15_operation_types.md).
 
 ## `EntityWrite<E>` — the marker for entity effects
 

@@ -97,7 +97,7 @@ Because our engine is an **LSP sidecar**, we solve this perfectly. The sidecar t
 - I hate Lombok for the fact it changes code directly as it compiles, and obscures what happens
 - I use jackson for JSON stuff
 - I wanted to try generated serializers and deserializers for jackson versus runtime ones.
-- [micronaut-serde-jackson](../README.json.serialization.md) looks very promising for jackson serializers generation
+- [micronaut-serde-jackson](../explore/README.json.serialization.md) looks very promising for jackson serializers generation
 
 For server with web, websocket, servlets:
   - jetty:12 has 33 jars, and 4.5MB
