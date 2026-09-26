@@ -61,7 +61,7 @@ public class EntityMetadataGenerator {
     /** Every CLI flag this build understands; {@code --version} prints it. */
     public static final List<String> SUPPORTED_FLAGS = List.of(
             "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper",
-            "--adapters", "--run-record", "--version");
+            "--adapters", "--run-record", "--force", "--version");
 
     /**
      * The flags every documented invocation of this generator passes.
@@ -710,6 +710,10 @@ public class EntityMetadataGenerator {
         // test, a watcher run) must not inherit the first pass's mode.
         validationPolicy = Policy.OFF;
         strictWarnings = false;
+        // Force mode lives on CooperativeCodegen, which the reconciliation reads directly, so it is reset
+        // here with the rest: a `--force` pass followed by a normal one in the same JVM must not leave the
+        // second one overwriting members the first was allowed to.
+        CooperativeCodegen.setForce(false);
         List<String> positional = new ArrayList<>();
         List<String> packages = new ArrayList<>();
         List<String> mappers = new ArrayList<>();
@@ -770,6 +774,14 @@ public class EntityMetadataGenerator {
                 javaOutputOverride = Path.of(args[++i]);
             } else if (arg.startsWith("--java-out=")) {
                 javaOutputOverride = Path.of(arg.substring("--java-out=".length()));
+            } else if ("--force".equals(arg)) {
+                // Stop preserving previous members: the generator becomes the authority on every file it
+                // writes. The documented remedy for wanting a generator fix to reach an existing file is to
+                // delete the member and regenerate, which still works; this flag exists for when that is
+                // large or touches many files, and for testing an emitter change in the output first. It is
+                // never implied — losing a developer's edit to a generated block is silent. See
+                // CooperativeCodegen.setForce.
+                CooperativeCodegen.setForce(true);
             } else {
                 positional.add(arg);
             }
@@ -891,6 +903,16 @@ public class EntityMetadataGenerator {
         System.err.println("  --run-record <file>   also write what this pass ran with (revision, flags, counts)");
         System.err.println("                        as JSON. A generation pass writes");
         System.err.println("                        .jcodebuddy/metadata/entity/generation.json.");
+        System.err.println("  --force               stop preserving members from a previous revision: this pass is the");
+        System.err.println("                        authority on every file it writes, and the canonical text replaces");
+        System.err.println("                        what is there. Normally a member the generator no longer recognises");
+        System.err.println("                        (a changed arity, or a name an earlier revision spelled differently)");
+        System.err.println("                        is carried through as the developer's own, so a generator fix cannot");
+        System.err.println("                        reach it — deleting that member and regenerating is the usual remedy.");
+        System.err.println("                        This flag is for when that is large or touches many files, and for");
+        System.err.println("                        trying an emitter change in the output before changing the generator.");
+        System.err.println("                        It discards edits to generated members, silently, so it is never");
+        System.err.println("                        implied by another flag.");
         System.err.println("  --version             print the generator identity and its flag surface, then stop.");
         System.err.println();
         System.err.println("Generated .java is never written under a .jcodebuddy/ directory: that is the");

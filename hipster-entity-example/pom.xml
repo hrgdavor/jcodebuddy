@@ -143,6 +143,17 @@
                                      pass that produced it. -->
                                 <argument>--run-record</argument>
                                 <argument>${project.basedir}/.jcodebuddy/metadata/entity/generation.json</argument>
+                                <!-- Force mode, as an appended flag and OFF unless asked for: pass the
+                                     property `entity.force` with the flag as its value, for example
+                                     `-Dentity.force=` followed by the flag name. Cooperative codegen
+                                     preserves a member from an earlier revision, so a generator fix cannot
+                                     reach a member the reconciliation no longer recognises — the usual
+                                     remedy is to delete that member and regenerate, and this is for when
+                                     that is large, or touches many files, or when an emitter change is
+                                     being tried in the output before the generator is changed. It discards
+                                     edits to generated members silently, which is why the property is
+                                     empty by default and the flag is never part of the normal pass. -->
+                                <argument>${entity.force}</argument>
                                 <!-- NO SQL-generation flag here, deliberately. SQL generation (the
                                      generated `<View>RowAdapter` / `<View>Binder` pair) is a
                                      draft/exploration in the tooling and is strictly OPT-IN: it runs

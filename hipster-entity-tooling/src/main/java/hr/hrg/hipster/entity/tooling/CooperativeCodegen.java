@@ -181,6 +181,45 @@ public final class CooperativeCodegen {
         return reconcileMembers(previousFile, topLevelName, canonical, Reconciliation.ALL, Set.of());
     }
 
+    /**
+     * Whether reconciliation is skipped and the canonical text is emitted as-is.
+     *
+     * <p><strong>Force mode: the escape hatch from cooperation, and the reason it is needed.</strong> The
+     * default contract is that a generated member belonging to an <em>earlier revision</em> is carried
+     * through verbatim, which is what lets a developer edit generated code and keep the edit. The cost is
+     * that a fix to the generator cannot reach a file that already contains the member it fixes: the old
+     * text is compared, found to differ from the canonical one, reported as
+     * {@code generated_member_diverged}, and the canonical body emitted — but a member whose <em>identity</em>
+     * changed (a different arity, or a name an earlier revision spelled differently) does not match at all,
+     * so it is read as the developer's own and preserved. Deleting it by hand then regenerating is the
+     * documented remedy, and it works; this flag is for when the change is large, or touches many files, and
+     * deleting by hand is the risky part.
+     *
+     * <p>It is also how a fix gets <em>tested before the generator is changed</em>, which is the better
+     * order: edit the generated output, see the result compile and its tests pass, and only then teach the
+     * emitter to produce it. Force mode is what makes that loop possible without hand-deleting between
+     * iterations — the generator writes what it would write today, whatever is in the file now.
+     *
+     * <p>Process-global rather than per-file, matching {@code generationPackages} and the rest of this
+     * generator's flag surface: one pass has one answer to "am I the authority on this file". It is
+     * deliberately not the default, because losing a developer's edit to a generated block is silent.
+     */
+    private static boolean force = false;
+
+    /**
+     * Set force mode: skip reconciliation and emit the canonical text.
+     *
+     * @param value true to stop preserving previous members
+     */
+    public static void setForce(boolean value) {
+        force = value;
+    }
+
+    /** Whether force mode is on. */
+    public static boolean isForce() {
+        return force;
+    }
+
     /** As the five-argument form, with nothing the generator has stopped emitting. */
     public static Reconciled reconcileMembers(Path previousFile, String topLevelName, String canonical,
                                               Reconciliation policy) throws IOException {
@@ -204,6 +243,9 @@ public final class CooperativeCodegen {
             throws IOException {
         if (previousFile == null || !Files.exists(previousFile)) {
             return new Reconciled(canonical, List.of());
+        }
+        if (force) {
+            return forceReplace(previousFile, topLevelName, canonical, policy);
         }
         String previousText = Files.readString(previousFile);
         J.CompilationUnit previousCu = SourceReader.readSourceText(previousText);
@@ -254,6 +296,48 @@ public final class CooperativeCodegen {
         String withoutKind = key.length() > 2 && key.charAt(1) == ':' ? key.substring(2) : key;
         int slash = withoutKind.indexOf('/');
         return slash < 0 ? withoutKind : withoutKind.substring(0, slash);
+    }
+
+    /**
+     * Force mode: emit the canonical text, and <b>report every member that goes with it</b>.
+     *
+     * <p>The first version of this returned the canonical text and no divergences, on the reasoning that
+     * nothing had been compared so nothing had diverged. That reasoning was wrong in the way that matters,
+     * and it cost a real edit: a force pass over the example deleted the hand-written
+     * {@code PersonSummaryBuilderTracking.TrackingStrict} — the nested type whose whole documented purpose
+     * is to survive regeneration — and the pass reported success with nothing about it. "Nothing diverged"
+     * described the code path, not what happened to the file, and the file is what the developer has.
+     *
+     * <p>So the previous file is still read, and every member present in it that the canonical text does
+     * not contain is reported as {@code force_discarded_member}. That is the cost of the flag stated at the
+     * moment it is paid, in the same diagnostic format as every other divergence, so a force pass over a
+     * file with hand-written members is loud rather than silent. The caller has already chosen to force;
+     * this does not second-guess the choice, it just refuses to make it quietly.
+     */
+    private static Reconciled forceReplace(Path previousFile, String topLevelName, String canonical,
+                                           Reconciliation policy) throws IOException {
+        List<String> discarded = new ArrayList<>();
+        String previousText = Files.readString(previousFile);
+        J.CompilationUnit previousCu = SourceReader.readSourceText(previousText);
+        J.CompilationUnit canonicalCu = SourceReader.readSourceText(canonical);
+        if (previousCu != null && canonicalCu != null) {
+            Map<String, String> canonicalMembers = membersByName(canonicalCu, topLevelName, canonical, policy);
+            for (Map.Entry<String, String> member : membersByName(previousCu, topLevelName, previousText, policy)
+                    .entrySet()) {
+                if (canonicalMembers.containsKey(member.getKey())) {
+                    continue;
+                }
+                discarded.add("kind=force_discarded_member, location=" + topLevelName + "."
+                        + groupName(member.getKey())
+                        + ", cause=force mode replaced the file, and this member is not in the canonical text"
+                        + ", current=the member that was in the file"
+                        + ", canonical=absent"
+                        + ", action=if this member was yours, copy it out before forcing again: a normal "
+                        + "pass would have preserved it. Pass --force only when every member this file "
+                        + "holds belongs to the generator");
+            }
+        }
+        return new Reconciled(canonical, discarded);
     }
 
     /**
