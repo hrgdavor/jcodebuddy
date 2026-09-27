@@ -13,10 +13,12 @@ import hr.hrg.webview.core.TextEdit;
 import hr.hrg.webview.core.TextRange;
 
 /**
- * The editor host as the HTTP transport sees it: every call is handed to the SWT display thread
- * before it touches the workbench, and the caller waits for the real answer (plan R19: an
+ * The editor host as the HTTP transport sees it: every editor <em>action</em> is handed to the SWT
+ * display thread before it touches a widget, and the caller waits for the real answer (plan R19: an
  * implementation that must run on a UI thread is responsible for marshalling — the core's
- * {@link EditorHost} contract is explicit that it does not marshal for anyone).
+ * {@link EditorHost} contract is explicit that it does not marshal for anyone). The availability
+ * reads ({@code isAvailable}, {@code capabilities}, {@code lineNavigation}) answer from the
+ * workbench's own window/page state without touching a widget, so they run on the calling thread.
  *
  * <p>The wrapping is a separate class rather than code inside {@link EclipseEditorHost} because the
  * two callers differ: the injected bridge already arrives on the display thread — the browser

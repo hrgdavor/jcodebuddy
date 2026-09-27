@@ -1,8 +1,10 @@
 package hr.hrg.eclipse.webview.bridge;
 
+import java.util.List;
 import java.util.Set;
 
 import hr.hrg.webview.core.EditorHost;
+import hr.hrg.webview.core.TextEdit;
 import hr.hrg.webview.core.TextRange;
 
 import org.eclipse.core.resources.IFile;
@@ -20,36 +22,58 @@ import org.eclipse.ui.texteditor.ITextEditor;
 
 /**
  * The core's {@link EditorHost} for the Eclipse platform: it opens a workspace file in the
- * platform's text editor and reveals the requested line, or selects a span in an already-open
- * editor. The editor it works through is the platform's own, so the platform's undo model owns
- * the buffer this host touches — the host never saves and never writes to disk.
+ * platform's text editor and reveals the requested line, selects a span in an already-open
+ * editor, and carries a buffer edit through the {@link EclipseDocumentEditor} seam. The editor it
+ * works through is the platform's own, so the platform's undo model owns the buffer this host
+ * touches — the host never saves and never writes to disk (E8: the disk half of the write contract
+ * belongs to core's {@code EditService}, routed by {@code WriteSurface}, not to this class).
  *
- * <p>Every method here runs on whatever thread the transport uses; the platform's widgets are
- * only touched from that thread, which is the UI thread in practice.
+ * <p>Availability is asked of the workbench rather than assumed: a plugin loaded into a headless
+ * product has no page to act on, and then the honest capability set is the empty one — the same
+ * answer {@code webviewd}'s {@code NullHost} gives (plan § 6). Every method here runs on whatever
+ * thread the transport uses; the calls that touch widgets are marshalled to the display thread by
+ * {@link hr.hrg.eclipse.webview.http.UiThreadHost} before they arrive.
  */
 public class EclipseEditorHost implements EditorHost {
 
     /** The short name /health and the logs use. */
     public static final String NAME = "eclipse";
 
+    private final EclipseDocumentEditor documentEditor;
+
+    /** The production wiring: the platform's own buffer editor behind the seam. */
+    public EclipseEditorHost() {
+        this(new DocumentBufferEditor());
+    }
+
+    /**
+     * A test seam: the document editor is injectable, so {@code applyEdit}'s delegation is
+     * assertable in a plain JUnit run without a workbench (E10).
+     */
+    public EclipseEditorHost(EclipseDocumentEditor documentEditor) {
+        this.documentEditor = documentEditor;
+    }
+
     @Override
     public String name() {
         return NAME;
     }
 
+    /** True when a workbench page exists to act on; false in a headless product or a plain JVM. */
     @Override
     public boolean isAvailable() {
-        return true;
+        return activePage() != null;
     }
 
+    /**
+     * {@code edit} is declared because it is implemented — the rule that keeps {@code reveal} off
+     * this list until Phase 4 observes it. It is declared only while the workbench can act at all;
+     * a per-path refusal (no document held) is the seam's {@code false}, which core's
+     * {@code WriteSurface} turns into its own documented answer.
+     */
     @Override
     public Set<String> capabilities() {
-        return Set.of(CAP_OPEN, CAP_SELECT);
-    }
-
-    @Override
-    public String lineNavigation() {
-        return "exact";
+        return isAvailable() ? Set.of(CAP_OPEN, CAP_SELECT, CAP_EDIT) : Set.of();
     }
 
     /**
@@ -132,12 +156,24 @@ public class EclipseEditorHost implements EditorHost {
     }
 
     /**
+     * The buffer half of the write contract (E8), delegated to the seam: one compound change on
+     * the UI thread, never a save. This host only forwards — the decision about what a declined
+     * edit means belongs to core's {@code WriteSurface}, the same surface every other host answers
+     * through.
+     */
+    @Override
+    public boolean applyEdit(String absolutePath, List<TextEdit> edits) {
+        return documentEditor.apply(absolutePath, edits);
+    }
+
+    /**
      * The editor's document, through the document provider with the editor's own input as the
      * element. The provider is the platform's, so its element is the {@code IEditorInput} the
      * editor was created with; a provider without that element answers null, and the caller
-     * degrades gracefully.
+     * degrades gracefully. Package-visible because {@link DocumentBufferEditor} asks the same
+     * question the navigation methods do.
      */
-    private static IDocument documentOf(ITextEditor textEditor) {
+    static IDocument documentOf(ITextEditor textEditor) {
         IDocumentProvider provider = textEditor.getDocumentProvider();
         return provider == null ? null : provider.getDocument(textEditor.getEditorInput());
     }
@@ -154,8 +190,18 @@ public class EclipseEditorHost implements EditorHost {
         return (int) Math.min(offset, document.getLength());
     }
 
-    private static IWorkbenchPage activePage() {
-        IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
-        return window == null ? null : window.getActivePage();
+    /**
+     * The active workbench page, or null when there is none — which includes "there is no
+     * workbench at all" (a headless product, a plain JUnit JVM): the platform throws rather than
+     * answer, and the honest translation of that throw is "nothing is available". Package-visible
+     * because {@link DocumentBufferEditor} refuses on exactly this answer.
+     */
+    static IWorkbenchPage activePage() {
+        try {
+            IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+            return window == null ? null : window.getActivePage();
+        } catch (IllegalStateException | LinkageError e) {
+            return null;
+        }
     }
 }

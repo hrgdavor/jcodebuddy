@@ -232,13 +232,47 @@ class EclipseHttpBridgeTest {
         assertTrue(index.body().contains("Eclipse webview bridge"), index.body());
     }
 
+    /**
+     * The routing shape of the write routes: the path decides before the method, so an unknown verb
+     * is a 404 ("there is no such thing") and only a route that exists can answer 405 ("not with
+     * that method"); and a write without the token is a 403 whatever else is true about it (D8).
+     * The statuses behind those doors are the shared core's business and are tested against a live
+     * socket in {@code EclipseWriteApiTest}.
+     */
     @Test
-    void theWriteRoutesExistAndRefuseUntilPhaseThree() throws Exception {
+    void theWriteRoutesAnswerWithMethodTokenAndExistenceInThatOrder() throws Exception {
         EclipseHttpBridge bridge = start(project(), freePort()).bridge();
-        HttpResponse<String> apply = get(bridge, "/api/v1/applyEdit");
-        assertEquals(404, apply.statusCode());
-        assertTrue(apply.body().contains("Phase 3"), apply.body());
+
+        HttpResponse<String> wrongMethod = get(bridge, "/api/v1/applyEdit");
+        assertEquals(405, wrongMethod.statusCode());
+        assertEquals("POST", wrongMethod.headers().firstValue("Allow").orElse(""));
+
         assertEquals(404, get(bridge, "/api/v1/nonsense").statusCode());
+
+        HttpResponse<String> noToken = post(bridge, "/api/v1/applyEdit", "{}", null);
+        assertEquals(403, noToken.statusCode());
+        assertTrue(noToken.body().contains("token is required"), noToken.body());
+
+        // Even the caller's own origin is not enough for a state-changing route.
+        HttpResponse<String> ownOrigin = client.send(HttpRequest.newBuilder(URI.create(bridge.baseUrl()
+                        + "/api/v1/applyEdit"))
+                .header("Content-Type", "application/json")
+                .header("Origin", bridge.baseUrl())
+                .POST(HttpRequest.BodyPublishers.ofString("{}", StandardCharsets.UTF_8)).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, ownOrigin.statusCode());
+        assertTrue(ownOrigin.body().contains("token is required"), ownOrigin.body());
+    }
+
+    private HttpResponse<String> post(EclipseHttpBridge bridge, String path, String body, String token)
+            throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(bridge.baseUrl() + path))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
+        if (token != null) {
+            request.header("X-WebView-Token", token);
+        }
+        return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Test

@@ -31,6 +31,8 @@ import org.eclipse.core.runtime.Platform;
 
 import hr.hrg.eclipse.webview.bridge.EclipseBridge;
 import hr.hrg.webview.core.AllowedOrigins;
+import hr.hrg.webview.core.CheckpointStore;
+import hr.hrg.webview.core.EditService;
 import hr.hrg.webview.core.EditorHost;
 import hr.hrg.webview.core.HostConfig;
 import hr.hrg.webview.core.HostDescriptor;
@@ -41,6 +43,7 @@ import hr.hrg.webview.core.NavigationOutcome;
 import hr.hrg.webview.core.Navigator;
 import hr.hrg.webview.core.PageServer;
 import hr.hrg.webview.core.RateLimiter;
+import hr.hrg.webview.core.WriteSurface;
 
 /**
  * The HTTP surface of the Eclipse host: loopback, the frozen contract's routes, the two page routes,
@@ -73,7 +76,7 @@ public final class EclipseHttpBridge implements AutoCloseable {
     /** Where the port, the token path and the capabilities are published for a caller that cannot guess. */
     public static final String MANIFEST_ROUTE = "/.well-known/webview.json";
 
-    /** The write routes' prefix. The verbs themselves are Phase 3; see {@link #handleApi}. */
+    /** The write routes' prefix; {@link #handleApi} names what each verb answers. */
     public static final String API_ROUTE_PREFIX = "/api/v1/";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -97,6 +100,8 @@ public final class EclipseHttpBridge implements AutoCloseable {
     private final ExecutorService executor;
     private final Navigator navigator;
     private final PageServer pageServer;
+    private final EditService editService;
+    private final WriteSurface writeSurface;
     private final AllowedOrigins origins;
     private final String token;
     private final Path tokenFile;
@@ -124,6 +129,19 @@ public final class EclipseHttpBridge implements AutoCloseable {
         // bridge and this transport draw on one budget rather than charging a page twice.
         this.navigator = new Navigator(projectRoot.toString(), editorHost, true, limiter);
         this.pageServer = new PageServer(projectRoot.toString(), true);
+        // The disk half of the write contract (E8), sharing the ONE budget with navigation — a page
+        // that spins on writes cannot spend a different allowance from a page that spins on clicks.
+        // The checkpoints are persistent and live with the descriptor, so an undo survives a restart
+        // of the workbench: the part the JetBrains host's in-memory store does not claim.
+        this.editService = new EditService(projectRoot.toString(),
+                CheckpointStore.persistent(
+                        HostDescriptor.directoryOf(projectRoot).resolve("checkpoints"),
+                        CheckpointStore.DEFAULT_LIMIT),
+                limiter);
+        // The conversation half: parse, digest-guard, route buffer-versus-disk, map to the frozen
+        // statuses. Shared with webviewd and the JetBrains host, so this host cannot drift into
+        // answering a write differently (E8: "WriteSurface decides, not the plugin").
+        this.writeSurface = new WriteSurface(editService, editorHost);
         // The transport a served page uses is the BrowserFunction the view registered: the page is
         // rendered inside the same SWT Browser (E12), so the injected script calls straight into the
         // editor host with no HTTP hop, no CORS grant and no visible navigation.
@@ -488,25 +506,120 @@ public final class EclipseHttpBridge implements AutoCloseable {
 
     /**
      * The write routes, dispatched by a {@code switch} with one direct call per case so an IDE can
-     * navigate a route to its handler (DEC-019) — never a scanned registry. Phase 2 gives every case
-     * the answer Phase 2 honestly has: the route exists, the verb does not yet. Phase 3 replaces each
-     * 404 with {@code authorizeWrite} plus the core's {@code WriteSurface}, as {@code webviewd} answers.
+     * navigate a route to its handler (DEC-019, E9) — never a scanned registry. The path decides
+     * first: an unknown verb is a 404 ("there is no such thing") and only a route that exists can
+     * answer 405 ("not with that method") — the ordering webviewd learned the hard way. The routing,
+     * the digest guard and every status belong to core's {@link WriteSurface}; this class only moves
+     * bytes between the socket and it (E8: "WriteSurface decides, not the plugin").
+     *
+     * <p>{@code /api/v1/events} answers 404 with the reason instead of streaming: this host declares
+     * no {@code watch} capability, and a page asking for one must be refused rather than left
+     * waiting (plan § 6).
      */
     private void handleApi(HttpExchange exchange) throws IOException {
         String path = exchange.getRequestURI().getPath();
         switch (path) {
-            case "/api/v1/applyEdit" -> notYetImplemented(exchange, path);
-            case "/api/v1/diff" -> notYetImplemented(exchange, path);
-            case "/api/v1/undo" -> notYetImplemented(exchange, path);
-            case "/api/v1/redo" -> notYetImplemented(exchange, path);
-            case "/api/v1/events" -> notYetImplemented(exchange, path);
+            case "/api/v1/applyEdit" -> handleApplyEdit(exchange);
+            case "/api/v1/diff" -> handleDiff(exchange);
+            case "/api/v1/undo" -> handleUndo(exchange);
+            case "/api/v1/redo" -> handleRedo(exchange);
+            case "/api/v1/events" -> send(exchange, 404, "text/plain", bytes(
+                    "Not Found: " + path + " — this host declares no watch capability"
+                            + " and serves no event stream"));
             default -> send(exchange, 404, "text/plain", bytes("Not Found: " + path));
         }
     }
 
-    private void notYetImplemented(HttpExchange exchange, String path) throws IOException {
-        send(exchange, 404, "text/plain",
-                bytes("Not Found: " + path + " — the write verbs arrive with Phase 3 of the Eclipse host"));
+    /**
+     * {@code POST /api/v1/applyEdit}: the write contract's one entry point. Two rules distinguish it
+     * from {@code /open}: the method is POST, and the caller must present the <b>token</b> — an
+     * allowed Origin is not enough (D8).
+     */
+    private void handleApplyEdit(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        WriteSurface.Answer answer = writeSurface.applyEdit(readBody(exchange));
+        noteIfRefused("applyEdit", answer);
+        sendJson(exchange, answer.status(), answer.body());
+    }
+
+    /** {@code POST /api/v1/diff}: the proposal step, which by definition writes nothing. */
+    private void handleDiff(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        WriteSurface.Answer answer = writeSurface.diff(readBody(exchange));
+        noteIfRefused("diff", answer);
+        sendJson(exchange, answer.status(), answer.body());
+    }
+
+    private void handleUndo(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        WriteSurface.Answer answer = writeSurface.undo(readBody(exchange));
+        noteIfRefused("undo", answer);
+        sendJson(exchange, answer.status(), answer.body());
+    }
+
+    private void handleRedo(HttpExchange exchange) throws IOException {
+        if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+            return;
+        }
+        WriteSurface.Answer answer = writeSurface.redo(readBody(exchange));
+        noteIfRefused("redo", answer);
+        sendJson(exchange, answer.status(), answer.body());
+    }
+
+    /** One stderr line for anything a page was refused, so the host's log explains the page's error. */
+    private void noteIfRefused(String route, WriteSurface.Answer answer) {
+        if (!answer.ok()) {
+            note(route + " refused with " + answer.status() + ": " + answer.body().replaceAll("\\s+", " "));
+        }
+    }
+
+    /**
+     * The authorization for a <b>state-changing</b> route: the token, and nothing else. Deliberately
+     * stricter than {@link #authorize} — any page in the reader's browser can share an origin rule,
+     * and plan D8 says no state-changing route may be reachable without proving possession of the
+     * secret. This host always has a token (E16 generates one when nothing named one), so the null
+     * guard is the belt to that brace.
+     */
+    private boolean authorizeWrite(HttpExchange exchange) throws IOException {
+        if (token == null) {
+            send(exchange, 403, "text/plain", bytes(
+                    "Forbidden: this host has no token configured, so it refuses every state-changing route"));
+            return false;
+        }
+        String presented = exchange.getRequestHeaders().getFirst("X-WebView-Token");
+        if (presented == null) {
+            presented = query(exchange.getRequestURI()).get("token");
+        }
+        if (token.equals(presented)) {
+            return true;
+        }
+        note("refused a write to " + exchange.getRequestURI().getPath() + ": token missing or wrong");
+        send(exchange, 403, "text/plain",
+                bytes("Forbidden: the token is required for state-changing routes"));
+        return false;
+    }
+
+    private boolean requirePost(HttpExchange exchange) throws IOException {
+        if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            return true;
+        }
+        exchange.getResponseHeaders().set("Allow", "POST");
+        send(exchange, 405, "text/plain", bytes("Method Not Allowed: use POST"));
+        return false;
+    }
+
+    private static String readBody(HttpExchange exchange) throws IOException {
+        return new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    private void sendJson(HttpExchange exchange, int status, String json) throws IOException {
+        send(exchange, status, "application/json", bytes(json));
     }
 
     /**
