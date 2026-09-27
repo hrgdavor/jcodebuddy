@@ -24,6 +24,10 @@ jcodebuddy-parent (POM)
 ├── jcodebuddy-core          (leaf: markers + the generated-code parser)
 ├── jcodebuddy-codegen-api
 │
+├── webview/core/webview-core
+├── webview/core/webviewd
+├── webview/eclipse/webview-eclipse
+│
 └── project-automation          (strictly private: never installed, never deployed)
 ```
 
@@ -68,6 +72,7 @@ These modules depend on Layer 1 and/or Layer 2:
 | `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core` |
 | `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api` |
 | `hipster-entity-test` | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson` |
+| `webview-eclipse` | `webview-core` (core + Gson unpacked into the bundle jar; Eclipse platform bundles are provided) |
 
 ## Critical Boundaries
 
@@ -149,7 +154,7 @@ Do **not** rename `jswa` to `watch`. The `jwa`/`jswa` branding is intentional: J
 | Layer | Test Framework |
 |-------|---------------|
 | `watch`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jwa-builder-api`, `jwa-builder`, `jwa-sidecar`, `java-watch-agent` | JUnit 4 |
-| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling` | JUnit 5 (the default; no profile needed) |
+| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling`, `webview-eclipse` | JUnit 5 (the default; no profile needed) |
 
 JUnit 5 is not gated behind profile activation. Each module with tests declares
 `junit-jupiter-engine` as an ordinary test dependency, and surefire 3.2.5 selects its

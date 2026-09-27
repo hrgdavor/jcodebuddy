@@ -326,8 +326,10 @@ count, `MigrationCompletenessTest.MODULES`, and the already-stale module map (§
   `Require-Bundle` for the platform bundles the code touches. bnd is the alternative and would compute
   `Import-Package` for us; it is not used because nothing here needs computed imports and a generated manifest is
   one more thing that cannot be reviewed.
-- **Gate (unit):** the module's suite is green under
-  `bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse -am test`, and it includes: the injected
+- **Gate (unit):** `webview-core` is installed into the local repository first (`bun scripts/mvn-jdk25.js -o
+  -pl webview/core/webview-core -am install` — a changed library module is reinstalled locally), and the
+  module's suite is green under `bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse clean test`,
+  and it includes: the injected
   script carries the core marker and sends exactly one string argument (so R8's narrow argument rule cannot be
   broken by accident); a path containing quotes and the text `"line":` parses through core's `BridgeMessage`; the
   capability set equals the declared constants; **`Require-Bundle` is complete** — a test scans the module's
@@ -335,7 +337,14 @@ count, `MigrationCompletenessTest.MODULES`, and the already-stale module map (§
   which turns the JCEF-class runtime failure into a build failure; **the built jar carries the committed manifest
   headers, contains `hr/hrg/webview/core/HostHealth.class` and Gson's `Gson.class`, and contains no
   `module-info.class`** (E15's two failure modes); and `plugin.xml` names exactly the classes that exist on the
-  classpath — the Eclipse analogue of the JetBrains `PluginDescriptorTest`.
+  classpath — the Eclipse analogue of the JetBrains `PluginDescriptorTest`. **Corrected 2026-09-27
+   (observed):** the original gate's `-am` cannot be green — `unpack-dependencies` refuses to unpack a reactor
+   artifact that has not been packaged yet (MDEP-98): under `-am`, `webview-core` resolves to the reactor's
+   `target/classes` directory, and the `process-classes` unpack fails. The gate therefore resolves
+   `webview-core` from the local repository (installed first, as the repository rule for a changed library
+   module requires), and it carries `clean`, because without it the incremental compile silently compiles only
+   the stale subset. A full-reactor `install` still works: there, core is packaged before eclipse's
+   `process-classes`, so the same POM passes.
 - **Gate (repository):** the recorded gate still passes — `bun scripts/mvn-jdk25.js`. What that does and does
   not prove: the gate's module list is `scripts/lib/gate.js`'s `GATE_MODULES` (the hipster-entity set plus
   `jcodebuddy-core`), so it does **not** build the Eclipse module. What it does is run the repo-wide sweeps that

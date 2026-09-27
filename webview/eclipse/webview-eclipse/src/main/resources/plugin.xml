@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns:osgi="http://www.w3.org/2001/XMLSchema"
+        id="hr.hrg.eclipse.webview"
+        name="JCodeBuddy WebView (Eclipse)">
+
+    <extension point="org.eclipse.ui.views">
+        <category
+            id="hr.hrg.eclipse.webview.views"
+            name="JCodeBuddy">
+        </category>
+        <view
+            category="hr.hrg.eclipse.webview.views"
+            id="hr.hrg.eclipse.webview.views.WebView"
+            name="WebView"
+            class="hr.hrg.eclipse.webview.view.WebViewPart"
+            allowMultiple="true">
+        </view>
+    </extension>
+
+    <extension point="org.eclipse.ui.preferencePages">
+        <page
+            id="hr.hrg.eclipse.webview.prefs"
+            name="WebView"
+            class="hr.hrg.eclipse.webview.prefs.WebViewPreferencePage">
+        </page>
+    </extension>
+
+    <extension point="org.eclipse.ui.commands">
+        <command
+            id="hr.hrg.eclipse.webview.commands.openInWebView"
+            name="Open in WebView"
+            description="Open the selected HTML file in the JCodeBuddy WebView">
+            <parameter id="element" name="The selected element"
+                typeId="org.eclipse.ui.commands.parameters.IElementReference"/>
+        </command>
+    </extension>
+
+    <extension point="org.eclipse.ui.handlers">
+        <handler
+            class="hr.hrg.eclipse.webview.actions.OpenInWebViewAction"
+            commandId="hr.hrg.eclipse.webview.commands.openInWebView">
+        </handler>
+    </extension>
+
+    <extension point="org.eclipse.ui.keys">
+        <key
+            commandId="hr.hrg.eclipse.webview.commands.openInWebView"
+            sequence="M1+ALT+SHIFT+W">
+        </key>
+    </extension>
+
+    <extension point="org.eclipse.ui.menus">
+        <menuContribution
+            locationID="menu:org.eclipse.ui.navigator.resourceMenu">
+            <command
+                commandId="hr.hrg.eclipse.webview.commands.openInWebView"
+                style="push">
+                <visibleWhen>
+                    <or>
+                        <test
+                            osgi:property="org.eclipse.core.resources.extension"
+                            osgi:value="html">
+                        </test>
+                        <test
+                            osgi:property="org.eclipse.core.resources.extension"
+                            osgi:value="htm">
+                        </test>
+                    </or>
+                </visibleWhen>
+            </command>
+        </menuContribution>
+    </extension>
+</plugin>

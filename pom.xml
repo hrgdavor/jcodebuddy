@@ -57,9 +57,10 @@
         <module>java-watch-scp</module>
         <module>java-watch-run</module>
         <module>java-watch-run-sample</module>
-        <!-- The webview product: the host-neutral core, the standalone host, and the LSP sidecar. Its two
+        <!-- The webview product: the host-neutral core, the standalone host, the LSP sidecar, and the
+              Eclipse IDE host. The other two
              editor hosts are not Maven modules (webview-jetbrains is a Gradle IntelliJ Platform build,
-             webview-vscode is a Node package), which is why only the Java half appears here. -->
+             webview-vscode is a Node package). -->
         <module>webview/core/webview-core</module>
         <!-- webviewd is the reference host of that contract and the only one that needs no editor
              (webview/PLAN-webview-suite.md, Phase 2). -->
@@ -70,6 +71,9 @@
              product (pages, navigation, edits), reached over LSP instead of over a webview. See
              webview/PLAN-webview-suite.md, decision D9. -->
         <module>webview/jwa-sidecar</module>
+        <!-- The Eclipse IDE host (Phase 1 of webview/PLAN-eclipse-host.md): an SWT Browser view with
+              the injected bridge, packaged as a dropins bundle. -->
+        <module>webview/eclipse/webview-eclipse</module>
         <module>java-watch-agent</module>
         <module>hipster-entity-api</module>
         <module>hipster-entity-core</module>

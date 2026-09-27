@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>webview-eclipse</artifactId>
+    <name>Eclipse WebView Host</name>
+    <description>The Eclipse IDE host of the webview product: an SWT Browser view, the injected
+        window.openFile bridge, and the platform's text editor as the core's EditorHost.</description>
+
+    <properties>
+        <!-- Java 21 is the floor: Eclipse 4.41 requires it, and a bundle that demanded more would not
+             load in a stock Eclipse. The reactor still compiles on JDK 25. -->
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+
+    <dependencies>
+        <!-- The host-neutral core, whose rules this host reuses instead of re-deriving. The version
+             comes from the root's dependency management, as in webviewd. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>webview-core</artifactId>
+        </dependency>
+        <!-- Gson parses the bridge payload; the version is pinned and managed at the root. -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
+
+        <!--
+            The platform bundles, all provided: the IDE supplies them at runtime, so none is copied
+            into the bundle's runtime resolution. Every coordinate is verified against the Eclipse
+            4.41 train's Maven Central artifacts (groupId org.eclipse.platform).
+        -->
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.swt.win32.win32.x86_64</artifactId>
+            <version>3.135.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.ui.workbench</artifactId>
+            <version>3.140.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.ui.workbench.texteditor</artifactId>
+            <version>3.20.200</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.ui.ide</artifactId>
+            <version>3.23.200</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.jface</artifactId>
+            <version>3.40.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.jface.text</artifactId>
+            <version>3.31.100</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.text</artifactId>
+            <version>3.14.800</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.core.commands</artifactId>
+            <version>3.13.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.core.resources</artifactId>
+            <version>3.24.100</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.core.runtime</artifactId>
+            <version>3.35.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.equinox.common</artifactId>
+            <version>3.21.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.osgi</artifactId>
+            <version>3.24.300</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- The platform jars are automatic modules; compiling plain classes against them
+                         raises a module lint, which is expected for a dropins bundle and suppressed
+                         here, as the reactor compiles on JDK 25. -->
+                    <compilerArgs>
+                        <arg>-Xlint:-module</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <!--
+                Plan E15 places the unpack at prepare-package; this module runs it at process-classes
+                instead, and the jar goal at process-test-classes instead of package. The reason: the
+                Phase 1 gate is "-am test", which never reaches prepare-package, and the jar-content
+                test reads the built jar, so the jar must exist when the tests run. Only the moment
+                the jar is built moved; the installed dropins jar is the same artifact.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-core-and-gson</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>unpack-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <includeArtifactIds>webview-core,gson</includeArtifactIds>
+                            <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+                            <excludes>META-INF/**</excludes>
+                            <excludes>module-info.class</excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+                maven-jar-plugin is not pinned in the root POM, so this module pins 3.4.1 itself:
+                the build must put the committed MANIFEST.MF into the jar at a moment the tests can
+                see it.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.1</version>
+                <executions>
+                    <execution>
+                        <id>bundle-jar-at-test-time</id>
+                        <phase>process-test-classes</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <archive>
+                                <manifestFile>${project.basedir}/src/main/resources/META-INF/MANIFEST.MF</manifestFile>
+                            </archive>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

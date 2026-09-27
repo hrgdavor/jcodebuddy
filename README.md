@@ -141,7 +141,8 @@ script saw it.
 The `hipster-entity` shortcut **refuses to run** when any property argument lacks an `=` (exit 2,
 with the quoted forms in the message), because that is what a property split by cmd.exe looks like.
 That is deliberate: the fragments used to be forwarded as malformed arguments, Maven then dropped the
-`-pl` list, and the "gate" silently became a build of the whole 23-module reactor — so a failure in an
+`-pl` list, and the "gate" silently became a build of the whole 28-module reactor — it was 23 modules when that
+incident was recorded — so a failure in an
 unrelated module (`java-watch-scp`, `metadata-server`) looked like a failure of the recorded gate.
 Quote **every** property you pass through the shortcut, including boolean ones
 (`"-DskipTests=true"`), or invoke Maven directly with the same `-pl` list.

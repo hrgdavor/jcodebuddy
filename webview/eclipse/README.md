@@ -1,8 +1,10 @@
 # `webview/eclipse` — the Eclipse IDE host
 
-**Status: planned, 2026-09-27. Nothing here is implemented and nothing in the build reads this folder yet.**
-No Eclipse IDE is installed on this machine, and Phase 0 has not been run — see
-[`PHASE0-ECLIPSE-FINDINGS.md`](PHASE0-ECLIPSE-FINDINGS.md), which is deliberately still a stub.
+**Status: Phase 1 implemented, 2026-09-27.** The plugin module, `webview-eclipse/`, is in the reactor and is
+built and unit-tested by the repository's gate; the dropins install and the observed gates against a 2026-09
+train of Eclipse have not been observed yet — they need a real IDE and a human, per
+[`../doc/ide-observation-checklist.md`](../doc/ide-observation-checklist.md). Phase 0 was measured on
+2026-09-27 — see [`PHASE0-ECLIPSE-FINDINGS.md`](PHASE0-ECLIPSE-FINDINGS.md).
 
 The plan is [`../PLAN-eclipse-host.md`](../PLAN-eclipse-host.md). It is the file to read before touching anything
 here; this README exists so the folder has an entry point, so every link in the plan resolves, and so the four
@@ -12,9 +14,9 @@ facts below are stated where someone about to build the plugin will meet them.
 eclipse/
   README.md                     this file
   PLATFORM-REFERENCE.md         what the Eclipse sources say, cited — the plan's reference half (R1…R22)
-  PHASE0-ECLIPSE-FINDINGS.md    Phase 0's measured answers — EMPTY until someone runs the probe
+  PHASE0-ECLIPSE-FINDINGS.md    Phase 0's measured answers (run 2026-09-27)
   phase0/                       the Phase 0 apparatus (see its README), no production code
-  webview-eclipse/              the plugin module, to be created in Phase 1
+  webview-eclipse/              the plugin module (Phase 1)
 ```
 
 ## What this host will be, in one paragraph
@@ -36,7 +38,10 @@ only what is Eclipse-specific.
    (WebView2/Chromium)** — the Windows default since SWT 4.35. Sources:
    [`PLATFORM-REFERENCE.md`](PLATFORM-REFERENCE.md) R2, R3, R5; the decision is the plan's E2.
 2. **OSGi cannot see a plain jar.** `webview-core` is a Maven artifact, not a bundle, so the plugin **unpacks it
-   and Gson into its own jar** at `prepare-package` and keeps `Bundle-ClassPath: .` — one file to install, the
+   and Gson into its own jar** at `process-classes`, with the jar goal at `process-test-classes` because the
+   Phase 1 gate is `clean test`, which never reaches `package`, and the jar-content test needs the jar to exist by
+    test time; it keeps `Bundle-ClassPath: .` — one file
+   to install, the
    same shape `jwa-sidecar` takes. Not `maven-shade-plugin`: it rebuilds the jar, which would take the
    committed manifest with it unless every header were duplicated into a transformer — two sources of truth for
    the bundle's identity. The module's README records what is bundled and its licence (Gson, Apache-2.0).
@@ -47,18 +52,22 @@ only what is Eclipse-specific.
    `release 21` and declares `Bundle-RequiredExecutionEnvironment: JavaSE-21` even though the repository builds
    with JDK 25. A bundle demanding JavaSE-25 would not load in a stock Eclipse (R21).
 
-## Building and installing it (when Phase 1 exists)
+## Building and installing it
 
-The module is a Maven reactor module (the root POM's `<modules>`), so it builds with the repository's launcher
-and needs no `mavenLocal` install step:
+The module is a Maven reactor module (the root POM's `<modules>`), so it builds with the repository's launcher.
+The only local install step is `webview-core` itself, when it has changed — `unpack-dependencies` cannot unpack
+a reactor artifact that has not been packaged yet (MDEP-98, observed 2026-09-27), so the module gate resolves
+core from the local repository:
 
 ```console
-bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse -am test
-bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse -am package
+bun scripts/mvn-jdk25.js -o -pl webview/core/webview-core -am install
+bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse clean test
+bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse package
 ```
 
 Install it by copying the built bundle into `<eclipse>/dropins/`. Which layout p2 accepts in 4.41 is not
-documented to the letter (R21), so Phase 1 records the one that worked — either the bare jar or
+documented to the letter (R21); no install has been observed yet (2026-09-27), so Phase 1 records the one
+that worked — either the bare jar or
 `dropins/webview/plugins/hr.hrg.eclipse.webview_<version>.jar` — in the plan's Phase 1 record and here. The
 bundle version is the manifest's `Bundle-Version` (`1.0.0`), independent of the Maven version; if a replaced jar
 is not picked up after a restart, start Eclipse with `-clean` once, which is the platform's own remedy for a
