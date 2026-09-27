@@ -146,7 +146,9 @@ class EclipseHttpBridgeTest {
         assertEquals("Eclipse-Test", published.ide());
         assertEquals(port, published.port());
         assertFalse(published.sticky());
-        assertEquals(List.of(EditorHost.CAP_OPEN), published.capabilities());
+        // The editor half is the recording host's; serveFile is the process's own — the /file/ and
+        // /page/ routes exist while this server runs, editor or not (plan E12).
+        assertEquals(List.of(EditorHost.CAP_OPEN, "serveFile"), published.capabilities());
         assertTrue(published.tokenPath().endsWith("token"), published.tokenPath());
         assertNotNull(published.host());
         assertEquals("fake", published.host().name());
@@ -158,6 +160,10 @@ class EclipseHttpBridgeTest {
         assertEquals(HostHealth.PLUGIN_ECLIPSE, json.get("plugin").getAsString());
         assertEquals(port, json.get("port").getAsInt());
         assertTrue(json.get("tokenRequired").getAsBoolean());
+        assertEquals(List.of(EditorHost.CAP_OPEN, "serveFile"),
+                json.get("capabilities").getAsJsonArray().asList().stream()
+                        .map(com.google.gson.JsonElement::getAsString).toList(),
+                "health, the manifest and the descriptor publish one sorted capability list");
         assertEquals(HostHealth.normalizeProject(project.toString()),
                 json.get("project").getAsString());
     }

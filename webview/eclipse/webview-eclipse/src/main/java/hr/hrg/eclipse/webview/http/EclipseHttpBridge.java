@@ -16,6 +16,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -356,9 +358,22 @@ public final class EclipseHttpBridge implements AutoCloseable {
         return URLEncoder.encode(text, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
+    /**
+     * The capabilities this bridge publishes: the editor half, which the navigator reports, plus
+     * the half the process itself serves — {@code serveFile}, because the file and page routes
+     * exist whenever this server runs, editor or not (plan E12: "serveFile joins the capability
+     * list"). Sorted once, here, so {@code /health}, the manifest and the descriptor cannot
+     * disagree about what this host claims.
+     */
+    private Set<String> publishedCapabilities() {
+        Set<String> merged = new TreeSet<>(navigator.capabilities());
+        merged.addAll(PageServer.CAPABILITIES);
+        return merged;
+    }
+
     /** The descriptor that lets a page find this bridge without being told the port. */
     public HostDescriptor descriptor(boolean sticky) {
-        List<String> capabilities = new ArrayList<>(navigator.capabilities());
+        List<String> capabilities = new ArrayList<>(publishedCapabilities());
         HostDescriptor.HostDetail detail = new HostDescriptor.HostDetail(editorHost.name(),
                 editorHost.isAvailable(), editorHost.lineNavigation(), editorHost.lineNavigationNote());
         return HostDescriptor.of(projectRoot, HostHealth.PLUGIN_ECLIPSE, ideName, port, sticky,
@@ -368,7 +383,7 @@ public final class EclipseHttpBridge implements AutoCloseable {
     /** The document a page reads from {@code /health}. */
     public String healthJson() {
         return HostHealth.of(HostHealth.PLUGIN_ECLIPSE, ideName, projectRoot.toString(), port,
-                origins.values().size(), true, navigator.capabilities()).toJson();
+                origins.values().size(), true, publishedCapabilities()).toJson();
     }
 
     /** The manifest {@code /.well-known/webview.json} answers with. */
@@ -381,7 +396,7 @@ public final class EclipseHttpBridge implements AutoCloseable {
         manifest.put("tokenPath", tokenFile == null ? "" : HostHealth.normalizeProject(tokenFile.toString()));
         manifest.put("tokenRequired", true);
         manifest.put("bridgeVersion", InjectedBridge.VERSION);
-        manifest.put("capabilities", new ArrayList<>(navigator.capabilities()));
+        manifest.put("capabilities", new ArrayList<>(publishedCapabilities()));
         Map<String, Object> hostDetail = new LinkedHashMap<>();
         hostDetail.put("name", editorHost.name());
         hostDetail.put("available", editorHost.isAvailable());
