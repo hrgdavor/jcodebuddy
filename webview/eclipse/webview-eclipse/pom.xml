@@ -100,6 +100,19 @@
             <version>3.35.0</version>
             <scope>provided</scope>
         </dependency>
+        <!--
+            Compile-time only, and deliberately not a Require-Bundle line: the jobs bundle's manifest
+            exports org.eclipse.core.runtime.jobs, and org.eclipse.core.runtime 3.35.0 requires it with
+            visibility:=reexport — so the Require-Bundle on the host below already gives the package at
+            runtime. Maven needs the jar on the compile classpath because provided scope is not
+            transitive. RequireBundleCompletenessTest maps the import to the host, as the platform does.
+        -->
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.core.jobs</artifactId>
+            <version>3.15.900</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.platform</groupId>
             <artifactId>org.eclipse.equinox.common</artifactId>

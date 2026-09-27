@@ -39,6 +39,8 @@ public final class HostHealth {
     public static final String PLUGIN_SIDECAR = "hr.hrg.watch2.sidecar";
     /** The name a page sees for the standalone host. */
     public static final String PLUGIN_WEBVIEWD = "hr.hrg.webview.webviewd";
+    /** The name a page sees for the Eclipse host — the bundle's symbolic name. */
+    public static final String PLUGIN_ECLIPSE = "hr.hrg.eclipse.webview";
 
     /**
      * The human name a reader recognises for each plugin id, which is what {@code ide} carries.
@@ -56,6 +58,12 @@ public final class HostHealth {
     public static final String IDE_SIDECAR = "jwa-sidecar";
     /** See {@link #IDE_JETBRAINS}. */
     public static final String IDE_WEBVIEWD = "webviewd";
+    /**
+     * See {@link #IDE_JETBRAINS}. The Eclipse host reports the running product's own name
+     * ({@code Platform.getProduct().getName()}: "Eclipse IDE for Java Developers", and so on) and falls
+     * back to this constant when the platform has no product to name itself with.
+     */
+    public static final String IDE_ECLIPSE = "Eclipse";
 
     /** The name a host uses when it has no human name to give: never blank, always non-null. */
     public static final String IDE_UNKNOWN = "unknown";
@@ -142,6 +150,7 @@ public final class HostHealth {
             case PLUGIN_VSCODE -> IDE_VSCODE;
             case PLUGIN_SIDECAR -> IDE_SIDECAR;
             case PLUGIN_WEBVIEWD -> IDE_WEBVIEWD;
+            case PLUGIN_ECLIPSE -> IDE_ECLIPSE;
             default -> plugin;
         };
     }

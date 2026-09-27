@@ -62,9 +62,11 @@ public final class WorkspaceFiles {
 
     /**
      * The project's location as a forward-slash path. A location that is not absolute — a project
-     * located relative to the workspace — is resolved against the workspace root instead.
+     * located relative to the workspace — is resolved against the workspace root instead. Public
+     * because the view asks it which project a file belongs to before deciding bridge-versus-file
+     * URL; the plugin identifies its running bridges by exactly this spelling.
      */
-    private static String projectLocation(IProject project) {
+    public static String projectLocation(IProject project) {
         IPath location = project.getLocation();
         if (location != null && location.isAbsolute()) {
             return toForwardSlashes(location);

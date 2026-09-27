@@ -368,6 +368,47 @@ public final class WebviewServer implements AutoCloseable {
         send(exchange, 200, "application/json", manifestJson().getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * The contract's authorization rule, in one place: an allowed {@code Origin} <b>or</b> the configured
+     * token, and an empty allow-list with no token denies everyone.
+     *
+     * <p>It is defined <em>above</em> the routes that call it deliberately: the cross-host parity test
+     * ({@code HostHealthParityTest}) reads this file and requires the first {@code 403} to precede the first
+     * act-on-the-request, so that "authorizes first" is true of the program text and not just of the
+     * thread's order of execution.
+     */
+    private boolean authorize(HttpExchange exchange) throws IOException {
+        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+            if (origins.allows(exchange.getRequestHeaders().getFirst("Origin"))) {
+                applyCors(exchange);
+                exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, OPTIONS");
+                exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "X-WebView-Token");
+                exchange.sendResponseHeaders(204, -1);
+            } else {
+                exchange.sendResponseHeaders(403, -1);
+            }
+            exchange.close();
+            return false;
+        }
+        if (!requireGet(exchange)) {
+            return false;
+        }
+        String presented = exchange.getRequestHeaders().getFirst("X-WebView-Token");
+        if (presented == null) {
+            presented = query(exchange.getRequestURI()).get("token");
+        }
+        if (token != null && token.equals(presented)) {
+            return true;
+        }
+        if (origins.allows(exchange.getRequestHeaders().getFirst("Origin"))) {
+            return true;
+        }
+        note("refused " + exchange.getRequestURI().getPath() + ": no allowed Origin and no valid token");
+        send(exchange, 403, "text/plain",
+                bytes("Forbidden: configure webview.explorer.allowedOrigins or webview.explorer.token"));
+        return false;
+    }
+
     private void handleOpen(HttpExchange exchange) throws IOException {
         if (!authorize(exchange)) {
             return;
@@ -606,42 +647,6 @@ public final class WebviewServer implements AutoCloseable {
             return false;
         }
         return true;
-    }
-
-    /**
-     * The contract's authorization rule, in one place: an allowed {@code Origin} <b>or</b> the configured
-     * token, and an empty allow-list with no token denies everyone.
-     */
-    private boolean authorize(HttpExchange exchange) throws IOException {
-        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-            if (origins.allows(exchange.getRequestHeaders().getFirst("Origin"))) {
-                applyCors(exchange);
-                exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, OPTIONS");
-                exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "X-WebView-Token");
-                exchange.sendResponseHeaders(204, -1);
-            } else {
-                exchange.sendResponseHeaders(403, -1);
-            }
-            exchange.close();
-            return false;
-        }
-        if (!requireGet(exchange)) {
-            return false;
-        }
-        String presented = exchange.getRequestHeaders().getFirst("X-WebView-Token");
-        if (presented == null) {
-            presented = query(exchange.getRequestURI()).get("token");
-        }
-        if (token != null && token.equals(presented)) {
-            return true;
-        }
-        if (origins.allows(exchange.getRequestHeaders().getFirst("Origin"))) {
-            return true;
-        }
-        note("refused " + exchange.getRequestURI().getPath() + ": no allowed Origin and no valid token");
-        send(exchange, 403, "text/plain",
-                bytes("Forbidden: configure webview.explorer.allowedOrigins or webview.explorer.token"));
-        return false;
     }
 
     /** CORS headers go to an allowed origin only, and are echoed rather than wildcarded. */

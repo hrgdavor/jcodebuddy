@@ -19,9 +19,10 @@ import static org.junit.Assert.fail;
  * The cross-host gate: every host must answer {@code /health} with the same document, and must refuse an
  * unauthorized {@code /open} with {@code 403}.
  *
- * <p>Two of the three hosts cannot be started from this module — one needs an IntelliJ Platform project, the
- * other needs VS Code and a Node process — so this test reads their sources and asserts the two properties
- * that make the runtime behaviour true rather than hoping:
+ * <p>Most of the hosts cannot be started from this module — one needs an IntelliJ Platform project, one
+ * needs VS Code and a Node process, one needs an Eclipse workbench, and the standalone host and its
+ * port-claiming sibling would each have to be launched as a subprocess — so this test reads their sources
+ * and asserts the two properties that make the runtime behaviour true rather than hoping:
  *
  * <ol>
  *   <li>each host builds its health body through {@link HostHealth}, so the <b>shape is identical by
@@ -31,7 +32,7 @@ import static org.junit.Assert.fail;
  * </ol>
  *
  * <p>A source-reading test is a weaker instrument than calling the endpoint, and it is the honest one here:
- * the alternative is to not check two thirds of the hosts at all. What it cannot catch — a host that calls
+ * the alternative is to not check most of the hosts at all. What it cannot catch — a host that calls
  * the builder and then overwrites the body — is caught by the host's own test suite, which each host keeps.
  */
 public class HostHealthParityTest {
@@ -60,6 +61,12 @@ public class HostHealthParityTest {
                 root.resolve("webview/webview-vscode/src/HttpBridge.ts")));
         hosts.add(new Host("jwa-sidecar",
                 root.resolve("webview/jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/SidecarApp.java")));
+        hosts.add(new Host("webviewd",
+                root.resolve("webview/core/webviewd/src/main/java/hr/hrg/webview/webviewd/"
+                        + "WebviewServer.java")));
+        hosts.add(new Host("webview-eclipse",
+                root.resolve("webview/eclipse/webview-eclipse/src/main/java/hr/hrg/eclipse/webview/"
+                        + "http/EclipseHttpBridge.java")));
         return hosts;
     }
 
@@ -198,9 +205,9 @@ public class HostHealthParityTest {
 
     @Test
     public void reportsWhatItChecked() {
-        // Not a tautology: the test above is only meaningful while there are three hosts to compare, and a
-        // fourth host added to the product without being added here would silently go unchecked.
-        assertTrue("the parity check covers three hosts, found " + hosts().size(), hosts().size() >= 3);
+        // Not a tautology: the test above is only meaningful while there are five hosts to compare, and a
+        // sixth host added to the product without being added here would silently go unchecked.
+        assertTrue("the parity check covers five hosts, found " + hosts().size(), hosts().size() >= 5);
         assertTrue("and each must have a readable decision layer",
                 hosts().stream().allMatch(host -> {
                     try {

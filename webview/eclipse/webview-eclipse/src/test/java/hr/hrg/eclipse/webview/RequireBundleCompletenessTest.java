@@ -72,7 +72,18 @@ class RequireBundleCompletenessTest {
      * Most specific first, because the relocation made package names and bundle names diverge.
      */
     private static String bundleFor(String importName) {
-        if (importName.equals("org.eclipse.core.runtime.Plugin")) {
+        if (importName.equals("org.eclipse.core.runtime.Plugin")
+                || importName.equals("org.eclipse.core.runtime.Platform")
+                || importName.equals("org.eclipse.core.runtime.IProduct")) {
+            // Plugin, Platform and IProduct are core.runtime's own; the package is split, and most
+            // of its classes (IPath, IAdaptable, IStatus) live in the equinox.common export.
+            return "org.eclipse.core.runtime";
+        }
+        if (importName.startsWith("org.eclipse.core.runtime.jobs.")) {
+            // The package's bundle is org.eclipse.core.jobs, and core.runtime re-exports it: the
+            // host's 3.35.0 manifest requires the jobs bundle with visibility:=reexport, so
+            // Require-Bundle on the host already sees it. The pom carries the jobs jar for
+            // compilation for the same reason, with the comment that says so.
             return "org.eclipse.core.runtime";
         }
         if (importName.startsWith("org.eclipse.core.runtime.")) {
