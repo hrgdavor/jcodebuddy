@@ -4,8 +4,9 @@ This extension is a port of the JetBrains `WebView Explorer` plugin. It provides
 
 To build a page that uses it — a navigable project report, an entity reference, a rendered Markdown
 document — see [`../kit/doc/page-authoring.md`](../kit/doc/page-authoring.md) and the runnable pages
-in [`../kit/examples/`](../kit/examples/README.md). They speak this same API, so the only value that changes between
-the two hosts is the bridge port (18882 here, 18881 in JetBrains).
+in [`../kit/examples/`](../kit/examples/README.md). They speak this same API, so the only value that changes
+between hosts is the bridge port (18882 here, 18881 in JetBrains, 18883 in Eclipse) — which is why a page
+carries a *configured* port and never a constant.
 
 ## Features
 

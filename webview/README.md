@@ -1,17 +1,18 @@
-# webview — one product, four hosts
+# webview — one product, five hosts
 
 A page of HTML can navigate and edit a project: put `data-open="src/main/java/A.java"` and `data-line="14"` on
 an element and a click opens that file in the editor with the caret on line 14; ask the host over HTTP and the
 change lands in the editor's buffer, unsaved, in the editor's own undo stack. That is the whole feature — one
 function, two attributes, and a small write API. No framework, no build step, no network at runtime.
 
-The same contract is implemented by **four hosts**, which is why this folder holds one shared core rather than
-four copies of one security model:
+The same contract is implemented by **five hosts**, which is why this folder holds one shared core rather than
+five copies of one security model:
 
 | Host | What it is | Reaches the editor by | Asks for | Publishes |
 | --- | --- | --- | --- | --- |
 | [`webview-jetbrains`](webview-jetbrains/README.md) | JetBrains plugin: a JCEF tool window, plus an HTTP fallback for a browser | its own IDE APIs | 18881 (`webview.explorer.port`) | the port it bound, in `.jcodebuddy/webview/host.json` |
 | [`webview-vscode`](webview-vscode/README.md) | VS Code extension: a webview view, plus an HTTP fallback and a file server for the view | `vscode.window`/`workspace` | 18882 (`webviewExplorer.port`) | the port it bound, in `.jcodebuddy/webview/host.json` |
+| [`eclipse/webview-eclipse`](eclipse/README.md) | Eclipse plugin: an SWT `Browser` (Edge/WebView2) view, plus an HTTP fallback for a browser | its own workbench APIs | 18883 (`hr.hrg.eclipse.webview.port`), and **off** until that port is named | the port it bound, in `.jcodebuddy/webview/host.json` |
 | [`core/webviewd`](core/README.md) | **the standalone host**: a page server with no editor of its own, for any browser | a CLI adapter, an LSP sidecar, or nothing | ephemeral (`--port 0`) | the port it bound, in `.jcodebuddy/webview/host.json` |
 | [`jwa-sidecar`](jwa-sidecar/README.md) | an LSP server (also the JWA addon host) | `window/showDocument`, `workspace/applyEdit` | 7979 (`jwa.sidecar.jumpPort`) | the port it bound, once the client says where the project is |
 
@@ -33,7 +34,7 @@ Two things a project can add, and they are different files on purpose:
 
 See [`doc/webview-host-api.md`](doc/webview-host-api.md) § 4a; the decision is DEC-033.
 
-Zed is a fifth *client* rather than a host: [`zed/webview-zed-dev-extension`](zed/webview-zed-dev-extension/README.md)
+Zed is a *client* rather than a host: [`zed/webview-zed-dev-extension`](zed/webview-zed-dev-extension/README.md)
 registers the sidecar as a language server, because Zed accepts only language servers an extension declares
 (Phase 0 measured that a settings-only entry is ignored).
 
@@ -41,6 +42,7 @@ registers the sidecar as a language server, because Zed accepts only language se
 webview/
   README.md                      <- this file: the product, and which file to read
   PLAN-webview-suite.md          the plan and its implementation record, phase by phase
+  PLAN-eclipse-host.md           the Eclipse host's plan and its implementation record
   check-links.mjs                verifies every relative link in this folder
   kit/                           THE CONSUMER HALF — what another project copies (see kit/README.md)
     README.md                    what the kit is, what to copy, and the premise that a host is available
@@ -66,6 +68,9 @@ webview/
   conformance/
     bridge-decisions.json        the authorization / CORS / rate-limit vectors every host asserts against
     README.md                    who reads it, and why neither side generates it
+  eclipse/                       the Eclipse IDE host: its README, the Phase 0 findings, the platform reference
+    webview-eclipse/             Maven `hr.hrg.eclipse.webview`: the dropins bundle — SWT Browser view,
+                                 injected bridge, HTTP bridge, preferences, editor host (see eclipse/README.md)
   jwa-sidecar/                   the LSP transport, and the JWA side (annotations, Sync Builder code action)
   webview-jetbrains/             IntelliJ Platform plugin (Gradle, IntelliJ Platform 2026.2.3)
   webview-vscode/                the VS Code extension (TypeScript, no bundler)
@@ -94,6 +99,7 @@ modules?** Read the rest of this table.
 | see a page that edits | [`kit/examples/with-assets/pages/edit-demo.html`](kit/examples/with-assets/pages/edit-demo.html) |
 | use the JetBrains plugin | [`webview-jetbrains/README.md`](webview-jetbrains/README.md) — `Ctrl+Alt+Shift+W`, right-click an `.html` file → **Open in WebView Explorer** |
 | use the VS Code extension | [`webview-vscode/README.md`](webview-vscode/README.md) |
+| use the Eclipse plugin | [`eclipse/README.md`](eclipse/README.md) — dropins install, the port preference, what is declared and what backs each claim |
 | serve a page from a host that needs no editor | [`core/README.md`](core/README.md) — `webviewd --project . --port 0` |
 | **implement a new host** | [`doc/webview-host-api.md`](doc/webview-host-api.md), plus [`core/README.md`](core/README.md) and the [`conformance/`](conformance/README.md) vectors |
 | drive an editor that has no plugin | [`jwa-sidecar/README.md`](jwa-sidecar/README.md) — LSP, `window/showDocument` |
@@ -108,8 +114,8 @@ often, which paths may be opened or written, and who checks a digest — was imp
 disagreed, twice in a way that let any page in the user's browser drive the editor. It now lives once, in
 [`core/webview-core`](core/webview-core), with the disagreements recorded as vectors in
 [`conformance/`](conformance/README.md) that the Java hosts and the TypeScript host all assert against, and the
-write *conversation* (routing, statuses, bodies) lives once in `WriteSurface`, which `webviewd` and the
-JetBrains bridge both call.
+write *conversation* (routing, statuses, bodies) lives once in `WriteSurface`, which `webviewd`, the
+JetBrains bridge and the Eclipse bridge all call.
 
 Never assume a port: put it in `data-bridge-port`, and use `GET /health` to find out whether a bridge is really
 there and what it can do. Each host answers with the same document shape (`plugin`, `port`, `allowedOrigins`,
@@ -129,8 +135,9 @@ or *observed on a named build and date*, never "works" without one of the two.
 | --- | --- |
 | Navigation (page → editor caret) | observed in JetBrains, VS Code and Zed |
 | Buffer edit (page → unsaved change in the editor's undo stack) | observed in **JetBrains** (2026-09-26) and **VS Code** (2026-09-26); **Zed** observed 2026-09-25 over LSP |
-| Disk edit (digest-guarded, atomic, journalled undo) | `webviewd`, unit-tested; the page-side flow is exercised against it by `examples/webview-client.test.mjs` |
-| File serving and page serving | `webviewd` (`/file/`, `/page/` with the bridge injected, `X-WebView-Digest`) |
+| Disk edit (digest-guarded, atomic, journalled undo) | `webviewd` and the Eclipse host, unit-tested; the Eclipse checkpoint is **persistent** — `/undo` restores byte-for-byte after a restart of the host (headless test, 2026-09-27); the page-side flow is exercised against `webviewd` by `examples/webview-client.test.mjs` |
+| File serving and page serving | `webviewd` (`/file/`, `/page/` with the bridge injected, `X-WebView-Digest`); the same two routes are implemented and headless-tested in the Eclipse host |
+| Eclipse host (view, injected bridge, HTTP bridge, write verbs) | implemented and unit-tested headlessly (58 tests, 2026-09-27); the in-IDE observations — caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install — are **outstanding**: they need a real Eclipse 4.41 and a human, and [`eclipse/README.md`](eclipse/README.md) records every claim with its backing |
 | Code actions (JWA "Sync Builder") | implemented **and tested** (5 tests, 2026-09-26): offered on a record's name, the command is advertised in `executeCommandProvider` and handled, and the generated edits reach the editor as `workspace/applyEdit` |
 | Zed `process:exec` (launching the host from the extension) | **dropped, not missing**: a sidecar the extension spawns is not Zed's language server, so it has no editor attached (the sidecar answers `/health` with an empty capability list in exactly that state). Zed spawns the sidecar when it opens a Java file, which is the one-step cold start |
 | The `jwa-sidecar.txt` addon-file mechanism | **withdrawn** by [DEC-031](../doc-hipster-entity/architecture/decisions/DEC-031-project-automations-are-living-code.md): never implemented, and replaced by the model where an automation is a module in *your* project — generated as a stub or copied from an example — with no classloader |
@@ -140,15 +147,20 @@ or *observed on a named build and date*, never "works" without one of the two.
 Scripts are Bun JavaScript (`AGENTS.md` § 2): run them with `bun`. Java steps pin JDK 25 themselves.
 
 ```console
-# the shared core: 161 tests — the write surface, checkpoints, the jail, the allow-list, navigation, and
-# the shared contracts: the /health identity (HostHealth), the port claim (HostPortClaim) and the
+# the shared core: 173 tests — the write surface, checkpoints, the jail, the allow-list, navigation, and
+# the shared contracts: the /health identity (HostHealth, five hosts), the port claim (HostPortClaim) and the
 # project's committed port preference (HostConfig)
 bun scripts/mvn-jdk25.js -o -pl webview/core/webview-core -am test
 # the standalone host: 58 tests — routes, the descriptor, adapters, the write API, the --sticky flags
 bun scripts/mvn-jdk25.js -o -pl webview/core/webviewd -am test
+# the Eclipse host: 58 tests, headless — bundle content and manifest, the injected bridge, the navigator,
+# the HTTP bridge (claim, served pages, preferences, write verbs with the persistent checkpoint). The
+# workbench half is the observation gate (doc/ide-observation-checklist.md). No -am here (MDEP-98):
+# install the core into the local repository first when it changed.
+bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse test
 # the LSP sidecar: 24 tests — jump positions, applyEdit over LSP, the HTTP surface, the published port
 bun scripts/mvn-jdk25.js -o -pl webview/jwa-sidecar -am test
-# the JetBrains plugin: 30 tests (Gradle, IntelliJ Platform 2026.2.3)
+# the JetBrains plugin: 25 tests (Gradle, IntelliJ Platform 2026.2.3)
 cd webview/webview-jetbrains && ./gradlew.bat test
 # the VS Code host's decisions, against the shared vectors, with no VS Code download: 275 assertions
 cd webview/webview-vscode && npm run test:unit

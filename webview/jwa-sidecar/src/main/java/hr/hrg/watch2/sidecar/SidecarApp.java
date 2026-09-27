@@ -151,8 +151,8 @@ public class SidecarApp {
      * the deliberate default rather than an oversight.
      *
      * <p>The port is a request: when something else holds it the next free one is taken, and when a host that
-     * already serves the same project holds it this process opens nothing — the same rule the two IDE hosts
-     * follow, from the same {@link HostPortClaim}.
+     * already serves the same project holds it this process opens nothing — the same rule every other host
+     * follows, from the same {@link HostPortClaim}.
      *
      * @param allowedOriginsText comma-separated origins, or null/blank for none
      * @param token              the shared secret, or blank for none
@@ -314,7 +314,7 @@ public class SidecarApp {
 
         httpServer.createContext(PATH_HEALTH, exchange -> {
             try {
-                // The shared document, so this host answers /health with the same keys as the two IDE hosts
+                // The shared document, so this host answers /health with the same keys as every other host
                 // (it used to answer three of the four, and neither of the two newer ones). Sent as its own
                 // bytes rather than through the mapper: writeValueAsBytes(String) would quote and escape the
                 // document into a JSON string.

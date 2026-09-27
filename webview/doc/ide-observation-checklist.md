@@ -1,15 +1,19 @@
 # IDE observation checklist — the buffer-edit claim
 
-The two claims in this product that **no test in this repository can make for you**:
+The three claims in this product that **no test in this repository can make for you**:
 
 - **gate (d), JetBrains**: an edit applied through the plugin's write API appears in the IDE's own editor as an
   **unsaved** change, the file on disk is untouched, and one `Ctrl+Z` takes it back;
-- **the same claim for VS Code**, through `vscode.workspace.applyEdit`.
+- **the same claim for VS Code**, through `vscode.workspace.applyEdit`;
+- **the same claim for Eclipse** (§ 1a), through one `IRewriteTarget` compound change — plus the caret claim
+  the Eclipse Phase 1 gate needs: a click on `data-open`/`data-line` lands the caret on the named line.
 
 Everything up to the platform call is implemented and unit-tested (core's `WriteSurface`; the plugin's
-`DocumentEdits` + `WriteCommandEditor`; VS Code's `BridgePolicy` decisions; 30 Gradle tests and 161 unit
-assertions). What remains is the one thing a test in this repository cannot observe: **the IDE**. Both are
-recorded as *implemented and unit-tested*, never as *observed*, until someone does this and reports it.
+`DocumentEdits` + `WriteCommandEditor`; VS Code's `BridgePolicy` decisions; the Eclipse module's
+`DocumentBufferEditor` seam and HTTP write routes; 25 Gradle tests, 173 core tests and 58 Eclipse-module
+tests). What remains is the one thing a test in this repository cannot observe: **the IDE**. All three are
+recorded as *implemented and unit-tested*, never as *observed*, until someone does this and reports it —
+JetBrains and VS Code have been observed (§ 2a); Eclipse has not.
 
 For comparison, gate (e) — the same claim over LSP for Zed — was observed on 2026-09-25 and is recorded as such
 in the observation table of [`README.md`](../README.md) § "What is implemented, and what has actually been
@@ -122,6 +126,55 @@ So:
 
 ---
 
+## 1a. Eclipse (the same claim, plus the caret)
+
+The Eclipse host is **implemented and headless-tested** (58 tests, 2026-09-27) and **not yet observed**:
+there is no supported headless SWT, so everything below needs a real workbench and a human. Two claims are
+observed in one run: the Phase 1 caret landing and the Phase 3 buffer edit.
+
+1. **Install the bundle.** Build it (`bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse package`,
+   with `webview-core` installed into the local repository first) and copy it into `<eclipse>/dropins/` as
+   `hr.hrg.eclipse.webview_1.0.0.jar` — [`../eclipse/README.md`](../eclipse/README.md) records the two layouts
+   p2 may accept and the `-clean` remedy. **Record which layout your Eclipse 4.41 took.**
+2. **Open the observed project.** Launch Eclipse (4.41, the 2026-09 train), import or open `D:\tmp\obs` as a
+   project, and open `Sample.java` in an editor — the buffer edit only lands in a document the platform
+   already holds. Open the **WebView** view (Window → Show View) once, so the injected-bridge path exists too.
+3. **Turn the bridge on.** Window → Preferences → JCodeBuddy → WebView: port `18883`, token `obs-token`.
+   Apply — the running bridges restart without a workbench restart. **The bridge is off until a port is
+   named** (E17): before this step, verify nothing listens (`Get-NetTCPConnection -LocalPort 18883` finds
+   nothing), and verify the same after quitting Eclipse at the end of the run.
+4. **The caret claim (Phase 1's gate):** with `Sample.java` closed or on another line, ask for a position —
+   a `data-open`/`data-line` click in a page the view serves, or directly:
+   `Invoke-WebRequest "http://127.0.0.1:18883/open?filePath=<abs path>&line=2&column=9&token=obs-token"`.
+   The editor opens with the caret on line 2, column 9. Record the Eclipse, SWT and Edge/WebView2 versions
+   (`Browser.getBrowserType()` was measured as `EDGE` in Phase 0; confirm it in the running product).
+5. **Drive the buffer-edit observation:**
+
+   ```console
+   bun run webview/tools/observe-edit-host.js --port 18883 --token obs-token --file D:\tmp\obs\Sample.java --find "int x = 1;" --replace "int x = 42;" --checkRefusals --watchSeconds 20
+   ```
+
+6. **Look at the editor, and do not save:** `int x = 42;` visible, tab marked modified, and **one** `Ctrl+Z`
+   restores `int x = 1;` and leaves the tab clean. Eclipse does not autosave editor buffers by default the
+   way IntelliJ does; the exact 4.41 preference set is unconfirmed, so let `--watchSeconds 20` attribute a
+   *later* disk change to the platform rather than to the host.
+7. **Quit Eclipse** and confirm port 18883 has no listener left (E17), and that
+   `D:\tmp\obs\.jcodebuddy\webview\host.json` is still there — the record outlives the host (DEC-033).
+
+### What the output should say
+
+| Step | Expected |
+| --- | --- |
+| `/health` | `"plugin": "hr.hrg.eclipse.webview"`, `"ide": "Eclipse"`, `"tokenRequired": true`, `"capabilities": ["edit","open","select","serveFile"]` |
+| `/api/v1/diff` | 200, `"applied": false`, a `unifiedDiff` — a proposal writes nothing |
+| `/api/v1/applyEdit`, file **open** in an editor | 200, `"applied": true`, `"target": "buffer"`, a `digest`, and the `detail` saying the disk is unchanged until the editor saves |
+| `/api/v1/applyEdit`, file **not open** | 200, `"applied": true` **on disk** — the shared surface's documented fallback when the platform holds no buffer for the path; `/api/v1/undo` takes it back, even after an Eclipse restart (the checkpoint is persistent) |
+| disk digest after a buffer apply | **identical** to before (DISK UNCHANGED) |
+| wrong token | 403 `the token is required for state-changing routes` |
+| stale digest | 409 `"reason": "stale"` |
+
+---
+
 ## 2. VS Code (the same claim)
 
 1. **Compile the extension:**
@@ -175,6 +228,7 @@ The autosave caveat from § 1 applies here too: a VS Code window can save on foc
 | --- | --- | --- |
 | **JetBrains** 2026.2.3, `runIde` sandbox, commit `bc24ee6` | 2026-09-26 | **Observed.** `"target": "buffer"`; disk unchanged when the host answered; the replacement appeared in the editor; the IDE's own undo restored the original text. The one disk write was IntelliJ's autosave on frame deactivation — the editor saving, which the contract allows. Reported by the maintainer, who checked the save behaviour himself. |
 | **VS Code** (Extension Development Host, commit `51950eb`) | 2026-09-26 | **Observed.** The buffer edit landed: the editor showed the new text, the buffer was **not saved**, and the editor's own undo/redo moved it back and forth. Two host-side fixes made the run possible at all: `webviewExplorer.token` had to exist before any write route could be exercised (they refused everything with 403), and the extension needed `activationEvents: ["onStartupFinished"]` — without it the extension never activated, so port 18882 was closed with nothing to explain it. |
+| **Eclipse** 4.41 (2026-09 train), dropins install, module as of commit `d7c5fb7` | 2026-09-27 | **Not observed — outstanding.** The headless half passed on 2026-09-27 (58 module tests: routes, statuses, the persistent-checkpoint undo across a host restart). The caret landing, the unsaved buffer edit and the single `Ctrl+Z` need a real workbench and a human — § 1a is the run sheet, and this row becomes the dated observation when someone does it. |
 
 Recorded in this file's own § 2a, and summarised in [`README.md`](../README.md) § "What is implemented, and what
 has actually been observed". The plan's Phase 3 record keeps the sequence.
@@ -187,9 +241,10 @@ Diagnose before reporting; the interesting outcomes are the ones *not* in the ta
 
 | Symptom | Likely cause |
 | --- | --- |
-| `no host answered on …/health` | JetBrains: no port set in Settings, or no project open (the bridge is a *project* service). VS Code: the extension is not activated in that window, or the port is taken by something else. |
+| `no host answered on …/health` | JetBrains: no port set in Settings, or no project open (the bridge is a *project* service). VS Code: the extension is not activated in that window, or the port is taken by something else. Eclipse: no port preference and no committed project default — the bridge is off until a port is named (E17) — or the workspace's project location is not the directory you pointed `--file` at. |
 | `403 Forbidden: the token is required…` | The token is empty in the IDE, or the `-Token` differs from it. |
-| `409 no-buffer-edit` | VS Code: the file is not open in that window. JetBrains: the platform has no document for the path (a binary file, or a path the IDE does not know). |
+| `409 no-buffer-edit` | VS Code: the file is not open in that window. JetBrains: the platform has no document for the path (a binary file, or a path the IDE does not know). Eclipse: the workbench has no page at all, so no edit capability is declared — a *per-path* "no open document" is **not** a 409 there; see the next row. |
+| 200 with `"applied": true` **on disk** when you expected the buffer (Eclipse) | The file was not open in an editor, so no platform document existed to carry the change and the shared `WriteSurface` took its documented disk fallback. Open the file in an editor and rerun for the buffer path; the disk write is undoable with `/api/v1/undo` — even after a restart of the workbench, because the Eclipse checkpoint is persistent. |
 | `409 stale` | The bytes changed between the script's read and its request — most likely a save in the IDE. Re-run. |
 | `404 not-found` (VS Code) | Path mismatch: pass the absolute path, and prefer a path without a symlink. |
 | 200 with `target: "buffer"` but **nothing visible** in the editor | The most valuable report: the document changed without a visible editor. Say so, and include the response body. |
@@ -201,8 +256,9 @@ Diagnose before reporting; the interesting outcomes are the ones *not* in the ta
 Paste this, filled in — it is what becomes the dated verification note (plan § 8, criterion 8):
 
 ```
-host:            JetBrains 2026.2.3 (runIde sandbox)   |   VS Code <version>
+host:            JetBrains 2026.2.3 (runIde sandbox)   |   VS Code <version>   |   Eclipse <version, train> (dropins, layout p2 took)
 script output:   <the whole paste, including the health document and the disk digests>
+visual 0:        (Eclipse only) the caret landed on the requested line and column — yes / no / partial
 visual 1:        the replacement is visible in the editor and the tab is marked modified — yes / no / partial
 visual 2:        one Ctrl+Z restores the original text and the tab goes clean — yes / no / partial
 saved anything?  no (if yes, say what happened to the file on disk)

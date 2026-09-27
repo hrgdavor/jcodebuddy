@@ -24,8 +24,9 @@ page's links mean anything. Three ways a host comes to exist:
 | Host | How it starts | When it is the right answer |
 | --- | --- | --- |
 | **The IDE plugin**, `WebView Explorer` | installed in the IDE; its tool window serves pages itself (`Ctrl+Alt+Shift+W` in JetBrains). Its HTTP transport is **off until configured** | you read pages inside your IDE — the common case, and the one the injection path exists for |
+| **The Eclipse view**, `WebView` | installed from `dropins/` (`webview/eclipse/README.md`); Window → Show View, and its HTTP transport is **off until a port is named** in Window → Preferences → JCodeBuddy → WebView | you read pages inside Eclipse |
 | **A standalone host** | started by hand or by a script: it serves pages itself and drives an editor through an adapter | you want a page in an ordinary browser, or in a host that owns no webview of its own |
-| **Another editor's extension** | same contract, different port | the editor is not JetBrains and not VS Code |
+| **Another editor's extension** | same contract, different port | the editor is not JetBrains, not VS Code and not Eclipse |
 
 **The minimum a person must do** — this is the whole prerequisite list:
 

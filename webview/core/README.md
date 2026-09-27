@@ -38,7 +38,8 @@ Before this module the same security model existed three times and disagreed wit
 Two of the three would therefore let any page in the user's browser drive the editor. The module makes
 the safe behaviour the only one a host can get by accident: `AllowedOrigins` cannot be forgotten, the
 jail is inside `PathResolver`, and the rate limit is inside `Navigator`, so a host that uses them cannot
-implement a weaker variant of either.
+implement a weaker variant of either. The two hosts written after the module — `webviewd` and the Eclipse
+host — had no drift to unlearn: they can only get the security model from here.
 
 **And the shape of `/health` differed too** — four keys in the two IDE hosts, three in the sidecar, none of
 them saying what the host could actually do. `HostHealth` fixes that, and
@@ -48,6 +49,8 @@ them saying what the host could actually do. `HostHealth` fixes that, and
 
 | Consumer | How |
 | --- | --- |
+| `webview/core/webviewd` | the reference host, in the same reactor: its routes, page serving (`PageServer`), port claim (`HostPortClaim`), descriptor (`HostDescriptor`), write surface (`WriteSurface`, `EditService`, `CheckpointStore`) and `/health` all come from this module |
+| `webview/eclipse/webview-eclipse` | same-reactor Maven dependency; the build **unpacks** `webview-core` (and Gson) into the bundle's own classes so the OSGi runtime never has to resolve them — the Eclipse host's navigator, page serving, port claim, descriptor, write surface and `/health` come from here |
 | `webview/webview-jetbrains` | Gradle dependency on `hr.hrg.jcodebuddy:webview-core`; its `NavigatorService` is the `EditorHost`, its HTTP bridge builds `/health` with `HostHealth`, and the bridge types come from here |
 | `webview/jwa-sidecar` | Maven dependency; the LSP sidecar's `/jump` uses `AllowedOrigins` + `RateLimiter` + `PathResolver`, and its `/health` uses `HostHealth` |
 | `webview/webview-vscode` | cannot consume a jar: it is checked against the same decision tables in `webview/conformance/bridge-decisions.json` (origins, CORS, rate limit, and the `/health` key list), which the Java tests and the TypeScript tests both read |
@@ -60,10 +63,13 @@ half of the TypeScript one, against the same rules.
 
 ```json
 {"plugin":"hr.hrg.jetbrains.webview","port":18881,"allowedOrigins":1,"tokenRequired":false,
- "bridgeVersion":1,"capabilities":["open","select"]}
+ "bridgeVersion":1,"capabilities":["open","select"],"ide":"IntelliJ IDEA",
+ "project":"D:/wrk/java/jcodebuddy"}
 ```
 
 * The first four keys are the originals and keep their names and types: a page may already read them.
+* `ide` and `project` were appended last (`HostHealth.REQUIRED_KEYS` is the one list), and they are what the
+  port claim reads (DEC-033): `ide` names the editor, `project` names the directory this endpoint serves.
 * `bridgeVersion` lets a page tell an old bridge from a new one — it is `InjectedBridge.VERSION`, the same
   number the page sees as `window.__jcbWebViewBridge`.
 * `capabilities` is what the host can do **right now**, sorted. An empty array is the honest answer for a

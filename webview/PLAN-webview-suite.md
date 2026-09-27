@@ -71,6 +71,7 @@ embeddable webview, is the first editor that is *only* reachable this way.
 | JWA sidecar | `jwa-sidecar` (Java, LSP4J, shaded jar) | LSP server on stdio **and** an HTTP jump service on **port 7979**, `GET /jump?uri=&line=&column=` → custom `mytool/jump` notification **and** standard `window/showDocument` | **Yes — this is the LSP sidecar, already half-built** |
 | Page examples + harness | `webview/kit/examples/` | Two page shapes, a CDP smoke test (49 assertions, 4 pages), offline microlighter highlighting | The parity gate for "headless is not lacking" |
 | JWA/JSWA IDE clients | `vscode-jwa`, `vscode-jswa`, `intellij-jwa`, `intellij-jswa` | Thin clients that launch a sidecar for the Java/JS agent products | Host adapters of the same sidecar |
+| Eclipse host *(added after this plan was written)* | `webview/eclipse/webview-eclipse` (Java, SWT Browser) | The fifth host, built under [`PLAN-eclipse-host.md`](PLAN-eclipse-host.md): a workbench view with the injected bridge, the same `/health`, port claim and write verbs — Phases 1–3 implemented 2026-09-27 | Consumes `webview-core` from birth, so the "three times" duplication below never included it |
 
 **The duplication that motivates the rewrite.** The auth model, CORS emission, allow-list semantics, and the
 "20 navigations / 20 s" rate limit exist **three times** — `HttpBridgeService.java`, `HttpBridge.ts`, and
@@ -97,11 +98,12 @@ no host that works without an editor.
 
 ```
 webview/
-  README.md                       (rewritten: one product, four hosts)
+  README.md                       (rewritten: one product, five hosts since Eclipse joined 2026-09)
   PLAN-webview-suite.md           (this file)
+  PLAN-eclipse-host.md            the fifth host's own plan: phases, gates and decisions (Phase 7 below)
   doc/
     webview-host-api.md           DELIVERED: the full verb set + /health capability document
-    ide-observation-checklist.md  how to observe the two claims a test cannot make here
+    ide-observation-checklist.md  how to observe the three claims a test cannot make here (JetBrains, VS Code, Eclipse)
   kit/                            (the consumer half, added later: what another project copies)
     doc/contract.md               FROZEN read/navigate contract — the page-side normative subset
     doc/edit-api.md               DELIVERED: the write contract (digest, dryRun, undo, events)
@@ -133,12 +135,14 @@ webview/
     settings-snippet.json         Tier 1 configuration a user pastes into Zed — **only useful with the
                                   extension above**, which Phase 0 proved is required (A′)
   eclipse/
-    PLAN-eclipse-host.md          the fifth host: an Eclipse IDE plugin on webview-core — a separate plan with its
-                                  own phases and gates (cross-linked here by its Phase 0 gate)
+    README.md                     the host's own README: the dropins install, the port preference, what it
+                                  declares and what backs each claim
     PLATFORM-REFERENCE.md         what the Eclipse sources say (22 items with sources)
     PHASE0-ECLIPSE-FINDINGS.md    the measured Phase 0 results (run 2026-09-27)
     phase0/                       the Phase 0 apparatus (the SWT probe)
-    webview-eclipse/              the Maven module (release 21, the committed MANIFEST.MF and plugin.xml)
+    webview-eclipse/              DELIVERED Maven module (release 21, the committed MANIFEST.MF and
+                                  plugin.xml): the view, the injected bridge, the HTTP bridge with the
+                                  port claim and the write verbs — 58 headless tests
   examples/                       unchanged; smoke test extended to the whole verb set (§7)
 ```
 
@@ -606,17 +610,29 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   it.
 
 ### Phase 7 — The Eclipse host (a separate plan)
-The Eclipse IDE host is planned and gated under its own plan, [`PLAN-eclipse-host.md`](PLAN-eclipse-host.md):
-its Phase 0 (the SWT probe) ran 2026-09-27 and its findings are committed in `eclipse/PHASE0-ECLIPSE-FINDINGS.md`;
-its phases 1–5 — the Maven module, the HTTP bridge, the buffer edits, the documents, and the host-table rows —
-follow the same gate discipline, and its *observed* gates need a human with the 2026-09 / 4.41 build. This entry
-and the `eclipse/` subtree in § 4 are the cross-links that plan's Phase 0 gate required; nothing here changes
-this suite's own phases.
+The Eclipse IDE host is planned and gated under its own plan, [`PLAN-eclipse-host.md`](PLAN-eclipse-host.md).
+
+> **Implementation record — Phases 0–4, 2026-09-27.** Phase 0 (the SWT probe) ran and its findings are
+> committed in `eclipse/PHASE0-ECLIPSE-FINDINGS.md` (engine measured: `EDGE`/WebView2 on this machine).
+> Phase 1 (the Maven module, the view, the injected bridge, `WorkspaceFiles`, the navigator —
+> commit `ee50637`), Phase 2 (the HTTP bridge: claim, descriptor, served pages, preferences, parity —
+> commit `835f7a5`) and Phase 3 (the write verbs: the `EclipseDocumentEditor` seam, the buffer editor,
+> the shared `WriteSurface` with persistent checkpoints — commit `d7c5fb7`) are implemented; Phase 4 is the
+> documents sweep this entry lives in. Gates run headlessly from the agent session on the implementing
+> machine: the eclipse module 58/58, `webview-core` 173/173 (the parity test reads the Eclipse sources),
+> `webviewd` 58/58, the repository gate `bun scripts/mvn-jdk25.js` green, and
+> `webview/tools/check-port-claim.js` 24/24. The plan's *observed* gates — the caret landing, the unsaved
+> buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim against a real
+> workbench — need a human with the 2026-09 / 4.41 build and are recorded as outstanding in
+> [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) § 1a and § 2a. Nothing here changed
+> this suite's own phases.
 
 ## 8. Acceptance criteria (whole plan)
 
 1. `webview/webview-core` exists, is the only implementation of auth/CORS/rate-limit/path-jail, and every host
-   answers `/health` with a capability list.
+   answers `/health` with a capability list. **Extended 2026-09-27:** "every host" is five —
+   `HostHealthParityTest.hosts()` lists `webviewd`, the two IDE hosts, the sidecar and the Eclipse bridge,
+   and it reads each host's source for the two runtime properties.
 2. A page served by `webviewd` from a plain browser performs: open at line, reveal, select, applyEdit, diff,
    undo, and receives file-change events — with no editor installed.
 3. In JetBrains and VS Code the *existing* behaviour is unchanged (same ports, same responses, existing tests
@@ -645,6 +661,7 @@ this suite's own phases.
 | The write API is the wrong interpretation of "trigger file changes" | Rework of Phase 3 | Phase 3 is deliberately after Phases 1–2, and §10 Q1 asks before it starts |
 | Moving `jwa-sidecar` breaks the JWA/JSWA clients and CI | Broken builds | The move is its own commit with a reactor build + the JWA client smoke path; the POM `relativePath` is the only path that changes |
 | Gradle needs `C:\Users\hrg\.gradle`, JDK 25 is not the default `java` | Host plugin builds fail confusingly | Every command in the phase notes pins `org.gradle.java.home` / `JAVA_HOME=…jdk-25`; already pinned in `gradle.properties` |
+| There is no supported headless SWT, so the Eclipse host's workbench half cannot run in a build (its plan's R22) | The fifth host's editor behaviour is not provable by tests | Narrow seams (`WorkspaceFiles`, `EclipseDocumentEditor`) with hand-written fakes; every workbench behaviour is an outstanding *observation* recorded in `doc/ide-observation-checklist.md` § 1a/§ 2a — claimed nowhere as observed |
 
 ## 10. Open questions (answer before the phase that needs them)
 
@@ -677,13 +694,17 @@ this suite's own phases.
 ```bash
 # core + sidecar (JDK 25; the shell default java is 8 and JAVA_HOME is 21)
 JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -pl webview/core/webview-core,webview/jwa-sidecar -am verify
-# the standalone host: its own 27 tests plus core's 97
+# the standalone host: its own 58 tests plus core's 173
 JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -pl webview/core/webviewd -am verify
+# the Eclipse host: 58 headless tests. NO -am — under a reactor build, unpack-dependencies refuses the
+# not-yet-packaged core (MDEP-98); install webview-core into the local repository first when it changed:
+JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -o -pl webview/core/webview-core -am install
+JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -o -pl webview/eclipse/webview-eclipse clean test
 # run it: port 0 publishes an ephemeral port in .jcodebuddy/webview/host.json, and the token file sits beside it
 "C:/Program Files/Java/jdk-25/bin/java.exe" -jar webview/core/webviewd/target/webviewd.jar \
     --project <dir> --port 0 --host auto
 # then: GET /health, GET /.well-known/webview.json, GET /page/<percent-encoded absolute path>?token=<from the token file>
-# pages, all four hosts' contracts, headless parity
+# pages, all five hosts' contracts, headless parity
 node webview/check-links.mjs
 node webview/kit/kit/examples/smoke-test.mjs
 # JetBrains host (Gradle needs write access to C:\Users\hrg\.gradle)

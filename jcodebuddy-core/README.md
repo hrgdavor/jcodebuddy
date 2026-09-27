@@ -154,13 +154,13 @@ boundary is on the first line, and the options stay the generator's own business
 
 ## Where the rules come from
 
-- [`DEC-035`](../../doc-hipster-entity/architecture/decisions/DEC-035.md) — the vocabulary, the placement
+- [`DEC-035`](../doc-hipster-entity/architecture/decisions/DEC-035.md) — the vocabulary, the placement
   rules, and the unknown-marker rule this module implements.
-- [`DEC-020`](../../doc-hipster-entity/architecture/decisions/DEC-020.md) — cooperative codegen, which is
+- [`DEC-020`](../doc-hipster-entity/architecture/decisions/DEC-020.md) — cooperative codegen, which is
   why a file can be partly generated in the first place.
-- [`DEC-021`](../../doc-hipster-entity/architecture/decisions/DEC-021.md) — the class-file header's second
+- [`DEC-021`](../doc-hipster-entity/architecture/decisions/DEC-021.md) — the class-file header's second
   line and its JSON5 config.
-- [`DEC-019`](../../doc-hipster-entity/architecture/decisions/DEC-019.md) — generated code is committed,
+- [`DEC-019`](../doc-hipster-entity/architecture/decisions/DEC-019.md) — generated code is committed,
   navigable source.
 
 ## Tests

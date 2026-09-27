@@ -121,6 +121,7 @@ GET http://127.0.0.1:<port>/health
 | --- | --- | --- |
 | JetBrains plugin (`WebView Explorer`) | `18881` (setting `webview.explorer.port`) | `<project>/.jcodebuddy/webview/host.json` |
 | VS Code extension | `18882` (setting `webviewExplorer.port`) | `<project>/.jcodebuddy/webview/host.json` |
+| Eclipse view (`WebView`) | `18883` (preference `hr.hrg.eclipse.webview.port`) — and the endpoint stays **off** until a port is named | `<project>/.jcodebuddy/webview/host.json` |
 | A standalone host | ephemeral — it asks for `0` unless told otherwise | `<project>/.jcodebuddy/webview/host.json` |
 
 **The listed port is a request, not an address.** A host takes the next free port when something unrelated

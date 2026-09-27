@@ -12,7 +12,6 @@ jcodebuddy-parent (POM)
 ├── java-watch-run-sample
 ├── jwa-builder-api
 ├── jwa-builder
-├── jwa-sidecar
 ├── java-watch-agent
 │
 ├── hipster-entity-api
@@ -26,6 +25,7 @@ jcodebuddy-parent (POM)
 │
 ├── webview/core/webview-core
 ├── webview/core/webviewd
+├── webview/jwa-sidecar      (the LSP sidecar lives with the webview product — PLAN-webview-suite D9)
 ├── webview/eclipse/webview-eclipse
 │
 └── project-automation          (strictly private: never installed, never deployed)
@@ -41,6 +41,7 @@ The following modules have **no dependency** on any other JCodeBuddy module:
 | `hipster-entity-api` | Shared entity interfaces and annotations |
 | `java-watch-core` | File monitoring, hashing, change detection |
 | `jwa-builder-api` | Lightweight annotations for JWA Builder |
+| `webview-core` | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
 
 `project-automation` used to be listed here and does not belong: it depends on Layer 2 modules, so it was
 never a Layer 1 library, and it is now not a library at all. It is one project's private dev-time
@@ -69,6 +70,7 @@ These modules depend on Layer 1 and/or Layer 2:
 | `java-watch-run-sample` | `java-watch-run` (provided) |
 | `jwa-sidecar` | `java-watch-core`, `jwa-builder-api`, `jwa-builder` |
 | `java-watch-agent` | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `jcodebuddy-codegen-api` |
+| `webviewd` | `webview-core` — the reference host of the webview contract, and the only one that needs no editor |
 | `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core` |
 | `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api` |
 | `hipster-entity-test` | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson` |
@@ -154,7 +156,7 @@ Do **not** rename `jswa` to `watch`. The `jwa`/`jswa` branding is intentional: J
 | Layer | Test Framework |
 |-------|---------------|
 | `watch`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jwa-builder-api`, `jwa-builder`, `jwa-sidecar`, `java-watch-agent` | JUnit 4 |
-| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling`, `webview-eclipse` | JUnit 5 (the default; no profile needed) |
+| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling`, `webview-core`, `webviewd`, `webview-eclipse` | JUnit 5 (the default; no profile needed) |
 
 JUnit 5 is not gated behind profile activation. Each module with tests declares
 `junit-jupiter-engine` as an ordinary test dependency, and surefire 3.2.5 selects its

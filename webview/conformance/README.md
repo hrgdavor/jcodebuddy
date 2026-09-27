@@ -15,8 +15,10 @@ security bugs, not style:
 | `jwa-sidecar` | no allow-list at all | **allowed through** | **sent `*` to everyone** |
 
 The rule now lives in `webview-core` (`AllowedOrigins`, and the same table is what `HttpBridge.ts` implements),
-and these vectors are what keeps the hosts from drifting apart again: a decision is written down once, and both
-sides assert against it.
+and these vectors are what keeps the hosts from drifting apart again: a decision is written down once, and every
+side asserts against it. `webviewd` and the Eclipse host were written after the vectors existed and were born
+bound by them — `webviewd` through the core classes the vectors describe, the Eclipse module by asserting the
+vectors against a live bridge of its own.
 
 ## The vector shapes
 
@@ -33,11 +35,12 @@ sides assert against it.
 | --- | --- |
 | `webview/core/webview-core` | `ConformanceVectorsTest` loads the JSON with Gson and asserts `AllowedOrigins`, the CORS decision, `RateLimiter` and the `/health` key list produce the expected answers |
 | `webview/webview-vscode` | `src/test/BridgePolicy.test.js` loads the same file and asserts `BridgePolicy` produces the same answers, with no VS Code and no dependencies: `npm run test:unit` |
+| `webview/eclipse/webview-eclipse` | `EclipseConformanceVectorsTest` loads the same file and asserts a **live** Eclipse bridge against it — the origin allow-list, the CORS decision, the rate-limit windows and the `/health` key list — so the fifth host is checked end to end, not only through the shared classes |
 
-Neither side *generates* the file. A vector is a claim about behaviour, and generating it from one
+No reader *generates* the file. A vector is a claim about behaviour, and generating it from one
 implementation would only prove that implementation agrees with itself.
 
 ## Adding a case
 
-Add the vector first, then make both hosts pass it. If a host cannot — because the platform genuinely cannot
+Add the vector first, then make every host pass it. If a host cannot — because the platform genuinely cannot
 express the case — say so in that host's README rather than deleting the vector.

@@ -134,8 +134,9 @@ same things:
 because it is the checkout's port rather than the process's: that is what the next start asks for, and where
 the pin lives. Delete the file to go back to the project's default.
 
-Both behaviours come from `webview-core`'s `HostPortClaim`, shared with the other three hosts
-([`../doc/webview-host-api.md`](../doc/webview-host-api.md) § 4a).
+Both behaviours come from `webview-core`'s `HostPortClaim`, shared with the other four hosts — the Eclipse
+bridge and `webviewd` call it directly, and VS Code's `BridgePolicy.decidePort` asserts the same decisions
+from the shared conformance vectors ([`../doc/webview-host-api.md`](../doc/webview-host-api.md) § 4a).
 
 Notes on the fallback:
 

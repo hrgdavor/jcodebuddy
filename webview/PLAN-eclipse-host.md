@@ -1,18 +1,52 @@
 # Plan — an Eclipse IDE host for `webview` (a fifth host, built on `webview-core`)
 
-Status: **proposed, 2026-09-27.** Phase 0 has been **run** on this machine — the measured results are in
-[`eclipse/PHASE0-ECLIPSE-FINDINGS.md`](eclipse/PHASE0-ECLIPSE-FINDINGS.md) (SWT 3.135.0, Edge runtime
-154.0.4258.37; A2 and the `SWT.NONE` half of A recorded as not measured). Phase 1a (`DocumentEdits` promoted into
-`webview-core`) is **implemented** and verified; the Eclipse module itself is not yet built. Findings are cited as
+Status: **Phases 0–4 implemented, 2026-09-27.** Phase 0 has been **run** on this machine — the measured results
+are in [`eclipse/PHASE0-ECLIPSE-FINDINGS.md`](eclipse/PHASE0-ECLIPSE-FINDINGS.md) (SWT 3.135.0, Edge runtime
+154.0.4258.37; A2 and the `SWT.NONE` half of A recorded as not measured). Phase 1a (`DocumentEdits` promoted
+into `webview-core`), Phase 1 (commit `ee50637`), Phase 2 (`835f7a5`), Phase 3 (`d7c5fb7`) and Phase 4 (the
+documents sweep, same day) are **implemented**; their headless gates ran green from the agent session on this
+machine — the record below lists each. Findings are cited as
 `R<n>` into [`eclipse/PLATFORM-REFERENCE.md`](eclipse/PLATFORM-REFERENCE.md) (what the Eclipse sources say,
 22 items with sources); § 5.2 is the measured half, and its results sit in the findings file. Nothing here is
 marked *observed* for the IDE gates, because the 2026-09 / 4.41 build those gates name is not on this machine —
 an older install exists (`D:\programs\eclipse`, core runtime 3.34.200, a 2025-12 generation), and it is not the
-build the gate claims (§ 9, "the machine").
+build the gate claims (§ 9, "the machine"). The outstanding observations are enumerated in
+[`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) § 1a and § 2a.
 
 Measurement words, used precisely, as everywhere in this folder: **documented** = a named source says so;
 **implemented** = code exists and its tests pass; **observed** = someone ran it against that host on the build
 named and reported the result.
+
+> **Implementation record — Phases 1–4, 2026-09-27.**
+>
+> | Phase | Shipped | Commit |
+> | --- | --- | --- |
+> | 1 | the Maven module (`release 21`, committed `MANIFEST.MF` + `plugin.xml`, the Require-Bundle completeness test, the assembled-bundle test), `WebViewPart` + `InjectedBridge` (`BrowserFunction`), `WorkspaceFiles`, `EclipseEditorHost`, `EclipseNavigator` | `ee50637` |
+> | 2 | `EclipseHttpBridge` (loopback-only, the claim through `HostPortClaim`, the descriptor left in place, `/open`, `/file/`+`/page/` through core's `PageServer`, CORS/OPTIONS, rate limit), `UiThreadHost`, the preferences (enabled, splash, port, token override — off until a port is named, E17), `HostHealth.PLUGIN_ECLIPSE`/`IDE_ECLIPSE`, five entries in `HostHealthParityTest.hosts()`, `EclipseConformanceVectorsTest` | `835f7a5` |
+> | 3 | the `EclipseDocumentEditor` seam, `DocumentBufferEditor` (one `IRewriteTarget` compound change, never saves — R16/R17), `CAP_EDIT` with dynamic availability, the write verbs through core's `WriteSurface` + `EditService` with a **persistent** `CheckpointStore` under `.jcodebuddy/webview/checkpoints/` (undo survives a host restart; one rate budget for navigation and writes), token-only state-changing routes (D8), `/api/v1/events` → 404 (no `watch` declared) | `d7c5fb7` |
+> | 4 | this record, the DEC-033 amendment + index row, and the documents sweep of § 7 Phase 4's table | this commit |
+>
+> **Gates observed headlessly** (this machine, from the agent session, 2026-09-27): the eclipse module
+> **58/58**; `webview-core` **173/173** (`HostHealthParityTest` re-reads the new Eclipse sources);
+> `webviewd` **58/58**; the repository gate `bun scripts/mvn-jdk25.js` **BUILD SUCCESS**;
+> `webview/tools/check-port-claim.js` **24/24** (with `WEBVIEWD_JAVA` pinned to JDK 25). The module gate runs
+> **without `-am`** and with `clean` (MDEP-98, as the Phase 1 gate's correction says), installing
+> `webview-core` into the local repository first.
+>
+> **Gates still outstanding — they need Eclipse 4.41 and a human**, and are claimed nowhere as observed:
+> the caret landing (Phase 1), the live two-hosts-on-one-project claim and the browser-beside-Eclipse page
+> (Phase 2 gates (a)/(d)/(e)), the unsaved buffer edit and the single `Ctrl+Z` (Phase 3), and which dropins
+> layout p2 accepts (Q2). Run sheet: [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) § 1a.
+>
+> **Deviations, recorded honestly.** (1) § 11.6's literal "no document for the path → 409 `no-buffer-edit`"
+> cannot arise from the shared `WriteSurface` for a Java host: a per-path refusal is the seam's `false`, and
+> the surface's documented disk fallback follows for target `auto`/`buffer`; the 409 is produced only where
+> the host declares no `edit` capability at all (headless). E8's "the plugin decides the routing" is honoured
+> as "the seam decides what the host can carry; `WriteSurface` decides the routing and the statuses".
+> (2) E16's preference list is larger than what Phase 2 shipped: there is no `EdgeDataDir` and no
+> allowed-origins preference (the allow-list is the served page's own origin), so Q8 stays open and R11's
+> contention is documented rather than configurable. (3) The reveal capability is absent, not missing —
+> the JetBrains precedent (§ 8's rule).
 
 ---
 
@@ -503,14 +537,18 @@ A Tycho build (R22) of a feature + p2 update site (`category.xml`) so the host i
 | **SWT cannot be created in a test process — there is no supported headless SWT** (R22) | a suite that passes locally and hangs or fails in CI | E10: IDE types behind interfaces with fakes, no SWT in unit tests, and Phase 0 E measures even `new Display()` |
 | **Tycho becomes necessary for Phase 5** (R22) | the "one build system" claim in E4 quietly fails | Phase 5 is optional and last, a separate profile; E4 records the flip condition (if Central's bundles cannot compile the code, Tycho moves first) |
 | **A helper script appears in the wrong language** (E14) | the check runs on one OS only, and no gate catches it, because `GateContractTest` scans `scripts/` only | E14 states the rule for this folder; the probe and any later verifier are Bun `.js` |
-| **This session cannot run the builds at all** | gates cannot be run where the work is written | § 11's commands are for a normal shell, and every observation is recorded as **outstanding** until the maintainer reports it |
+| **This session cannot run the builds at all** | gates cannot be run where the work is written | **resolved 2026-09-27:** after the file policy was lifted, every headless gate ran from the agent session on this machine (the implementation record lists them); what still cannot run here are the *observed* gates — no Eclipse 4.41 and no human — and those stay **outstanding** until the maintainer reports them |
 | **The machine has no Eclipse IDE and no p2 cache** | the *observed* gates are blocked, not failed | Phase 0's probe needs only Central bundles plus a desktop session; the IDE-side observations are explicitly the maintainer's, like the JetBrains/VS Code/Zed ones |
 
 **The machine, recorded so the next reader does not re-discover it.** As of 2026-09-27: JDK 25 and Maven/mvnd are
 present; `~/.m2/repository/org/eclipse/platform` holds only `org.eclipse.osgi`, so the SWT/UI bundles are a new
 download; **no Eclipse IDE is installed** (only Zed; the JDKs present are 8, 17, 21, 24, 25 and GraalVM 25); and
 the agent sandbox refuses to launch `mvn`, `bun`, `node` and `git status` (`Access is denied` — they write
-outside the workspace), so no command in § 11 was executed while this plan was written.
+outside the workspace), so no command in § 11 was executed while this plan was written. **Correction, later the
+same day:** the file policy was lifted to full access while Phase 0 ran, and from Phase 1a onward every headless
+command in § 11 was executed from the agent session on this machine — the two Eclipse-platform downloads
+included. What the machine still does not have is the 2026-09 / 4.41 IDE and a human at it, so the *observed*
+gates remain the maintainer's.
 
 ## 10. Open questions, with their current state
 
@@ -519,29 +557,32 @@ decision above does, and the row says which half still needs a measurement.
 
 | # | Question | State |
 | --- | --- | --- |
-| Q1 | **Which Eclipse is the target — the 2026-09 train or the installed IDE?** This plan pins the 2026-09 train and Java 21 (R1, R21). Supporting 2025-03 or 2024-12 changes a build detail (the engine stays Edge only because `SWT.EDGE` is explicit) but is a decision about the supported range | **open** — settle before Phase 1 |
-| Q2 | **Is a `dropins` install acceptable for the first release** (E5, R21), or is a p2 update site required from day one? If the latter, Phase 5 moves ahead of Phase 4 and the product pays for p2 (and Tycho) immediately | **open** — settle before Phase 5, and it decides whether Phase 5 is "optional" |
-| Q3 | **Does the view serve its pages, or load them from disk?** E12 says serve, same-origin, and `serveFile` is declared | **answered by E12**; the measurement is Phase 0 D and Phase 2's gate (e) |
-| Q4 | **Does the Eclipse plugin own bytes on disk** (core's `EditService`, checkpoints, `/undo`), or refuse disk writes like `webview-vscode` and point a page at `webviewd`? The hazard is specific: writing a file that is open in an editor fights the buffer (R17), so "buffer only" is defensible rather than a shortfall | **open** — settle before Phase 3; E8 assumes both |
+| Q1 | **Which Eclipse is the target — the 2026-09 train or the installed IDE?** This plan pins the 2026-09 train and Java 21 (R1, R21). Supporting 2025-03 or 2024-12 changes a build detail (the engine stays Edge only because `SWT.EDGE` is explicit) but is a decision about the supported range | **settled by construction, 2026-09-27** — Phases 1–3 built against the pinned 2026-09 train and Java 21; the supported *range* below it is untested and remains a release decision |
+| Q2 | **Is a `dropins` install acceptable for the first release** (E5, R21), or is a p2 update site required from day one? If the latter, Phase 5 moves ahead of Phase 4 and the product pays for p2 (and Tycho) immediately | **open** — settle before Phase 5, and it decides whether Phase 5 is "optional"; the dropins install itself is also an outstanding *observation* (checklist § 1a, step 1: record which layout p2 accepted) |
+| Q3 | **Does the view serve its pages, or load them from disk?** E12 says serve, same-origin, and `serveFile` is declared | **answered by E12 and built** — Phase 2 serves `/page/` with the injected bridge and declares `serveFile`; the measurement left is Phase 2's gate (e), a browser beside Eclipse |
+| Q4 | **Does the Eclipse plugin own bytes on disk** (core's `EditService`, checkpoints, `/undo`), or refuse disk writes like `webview-vscode` and point a page at `webviewd`? The hazard is specific: writing a file that is open in an editor fights the buffer (R17), so "buffer only" is defensible rather than a shortfall | **settled yes, 2026-09-27 (Phase 3)** — the host owns both halves: the buffer half through the `EclipseDocumentEditor` seam (a refusal there falls through to disk), the disk half through core's `EditService` with a **persistent** `CheckpointStore`, so `/undo` survives a restart (headless-tested). R17 is met by the seam's rules: a buffer edit never saves, and one compound change means one `Ctrl+Z` |
 | Q5 | **How is the host scoped to a project?** E7 binds per `IProject`. The alternative — one workspace-level bridge serving the workspace directory — is simpler but makes `project` a directory that is not a project (R15) | **answered by E7**; confirm in Phase 2's gate (a) |
 | Q6 | **Does anything else in the repository need an Eclipse host to exist** (a generator that emits a page for Eclipse, an `intellij-jwa`-style client)? Nothing here references Eclipse beyond ECJ, LSP4J and JGit; if a consumer is coming, its requirements belong in Phase 3's write contract rather than bolted on after | **open, no known consumer** |
 | Q7 | **Reactor module, or an out-of-reactor build like the other two editor hosts?** E4 chooses the reactor, because the root POM's reason for excluding the other two (they are not Maven builds) does not apply and the reactor already carries third-party artifacts. The alternative keeps the literal "editor hosts are not modules" reading and pays with a `mavenLocal` prerequisite | **answered by E4**; the alternative is recorded, and § 13 keeps the wiring honest either way |
-| Q8 | **Should `EdgeDataDir` be a per-workspace or a per-project preference?** WebView2 shares one user-data directory per *application* (R11), so a per-project setting is a lie unless the host also passes a distinct directory per project | **open** — settle before Phase 2; E16's preference list assumes per project and must be corrected if that reading is wrong |
+| Q8 | **Should `EdgeDataDir` be a per-workspace or a per-project preference?** WebView2 shares one user-data directory per *application* (R11), so a per-project setting is a lie unless the host also passes a distinct directory per project | **still open — it did not block Phase 2**: the preference page shipped without `EdgeDataDir` (enabled, splash, port, token override), so the WebView2 default user-data directory applies and R11's two-instance contention stands; E16's preference list overstates what was built |
 
 ## 11. Verification commands
 
-Run these in a **normal shell**, not from an agent session: the sandbox refuses `mvn`/`bun`/`node` (§ 9), and the
-IDE-side steps need a desktop. Java steps pin JDK 25 through the repository's launcher, which is Bun JavaScript
-per AGENTS § 2. The commands are shell-neutral — no PowerShell-only cmdlets — because the same block is used on
-whatever machine the maintainer has.
+The IDE-side steps need a desktop and a human. The headless steps below all ran green from the agent session on
+the implementing machine on 2026-09-27 — § 9's note about a sandbox refusing `mvn`/`bun`/`node` describes the
+*planning* session, before the file policy was lifted. Java steps pin JDK 25 through the repository's launcher,
+which is Bun JavaScript per AGENTS § 2. The commands are shell-neutral — no PowerShell-only cmdlets — because the
+same block is used on whatever machine the maintainer has.
 
 ```console
 # Phase 0 — the Eclipse facts, no IDE needed (opens and closes short-lived windows)
 bun webview/eclipse/phase0/probe.mjs
 
-# the module: its tests, then the assembled bundle
-bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse -am test
-bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse -am package
+# the module: its tests, then the assembled bundle. NO -am — under a reactor build, unpack-dependencies
+# refuses the not-yet-packaged core (MDEP-98, the Phase 1 gate's correction); install core first when it changed:
+bun scripts/mvn-jdk25.js -o -pl webview/core/webview-core -am install
+bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse clean test
+bun scripts/mvn-jdk25.js -o -pl webview/eclipse/webview-eclipse clean package
 # a human glance at what the jar claims and carries; the same assertions run as tests in the suite above
 jar tf webview/eclipse/webview-eclipse/target/webview-eclipse-1.0-SNAPSHOT.jar
 
@@ -590,10 +631,16 @@ how `jwa-sidecar`'s sources stopped being swept when it moved.
 
 | Where | What it is | If the host is not added |
 | --- | --- | --- |
-| `webview/core/webview-core/src/test/java/hr/hrg/webview/core/HostHealthParityTest.java` | `hosts()` — the literal list of host sources, currently three entries | the host's `/health` document and its authorization ordering are never checked; the test's own comment warns that a fourth host "added to the product without being added here would silently go unchecked" |
+| `webview/core/webview-core/src/test/java/hr/hrg/webview/core/HostHealthParityTest.java` | `hosts()` — the literal list of host sources (five entries since 2026-09-27) | the host's `/health` document and its authorization ordering are never checked; the test's own comment warns that a fourth host "added to the product without being added here would silently go unchecked" |
 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/MigrationCompletenessTest.java` | `MODULES` (+ the `>250 files` floor), which **skips a module whose `src/main/java` is missing** | the new module's Java is never parsed, never position-checked and never compared against the LST — silently |
 | `webview/core/webview-core/src/main/java/hr/hrg/webview/core/HostHealth.java` | `PLUGIN_*`/`IDE_*` constants and `defaultIdeFor` | the host's identity becomes a string literal in the plugin (E13), and the parity test fails a host that writes its identity or a capability key inline |
 | root `pom.xml` `<modules>`, and the comment above the webview entries | membership and the explanation of who is absent and why | the module is not built by the reactor, and the comment (which says the editor hosts are not Maven modules *because they are not Maven builds*) becomes false |
 | root `README.md` | the gate story's module count | a stale number in the sentence explaining the recorded gate |
 | `doc/architecture/module-map.md` | the module tree, the dependency table and the JUnit Strategy table — **already stale about `webview-core`, `webviewd` and the moved `jwa-sidecar`** | the repository's own map of its modules contradicts the reactor |
 | every host enumeration in the documents — `webview/README.md`, `doc/webview-host-api.md` § 8, `doc/ide-observation-checklist.md`, `kit/doc/contract.md` § 3.1, `core/README.md`, `conformance/README.md`, and DEC-033 with its index row | the product's own description of itself | the documentation under-reports what ships; the full list is § 7 **Phase 4** |
+
+**All of it joined, 2026-09-27.** `HostHealthParityTest.hosts()` lists five sources; `MigrationCompletenessTest`'s
+`MODULES` carries `webview/eclipse/webview-eclipse`; `HostHealth` owns the `PLUGIN_ECLIPSE`/`IDE_ECLIPSE` constants
+and the `defaultIdeFor` case; the root POM lists the module with the corrected comment; the root README's gate story
+says 29 modules; `module-map.md`'s tree, dependency table and JUnit table are current for the whole product; and
+the document enumerations were swept in Phase 4's commit.

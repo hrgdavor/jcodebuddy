@@ -3,7 +3,8 @@
 Renders one self-contained HTML page from a module's generator JSON metadata and its class index:
 every entity, every artifact generated from it, and every field clickable through to the exact
 source line of every artifact. The page is meant to be opened inside the IDE — in the JetBrains
-**WebView Explorer** tool window — but it is an ordinary file that any browser can open.
+**WebView Explorer** tool window or the Eclipse **WebView** view — but it is an ordinary file that any
+browser can open.
 
 This is the renderer DEC-027 decides on: **the JSON metadata is the model, Bun JavaScript renders
 the page, and the Java generators never emit HTML.** A fact that should appear on the page is added
@@ -36,7 +37,7 @@ fails makes the pass fail, because a link to the wrong line is worse than no lin
 | `--out <file>` | output file | `<metadata>/index.html` |
 | `--packages <a.b,c.d>` | only views in these packages | every view in the metadata |
 | `--title <text>` | page title | `<module> — entity reference` |
-| `--bridge-port <n>` | `webview/webview-jetbrains` HTTP bridge port for the browser fallback; `0` disables it | `18881` |
+| `--bridge-port <n>` | the host's HTTP bridge port for the browser fallback — by convention `18881` for JetBrains, `18882` for VS Code, `18883` for Eclipse; `0` disables it | `18881` |
 | `--soft` | exit 0 even when the link check rejects a candidate | off |
 | `--quiet` | print only the output path and the link-check summary | off |
 | `--version`, `--help` | identity / usage, no rendering | — |
@@ -174,10 +175,11 @@ not carry and asserts the warning.
   holding paths relative to **one** link base (`data-link-base` on `<body>`), never `href`s and never
   absolute paths. The page resolves the base against its own `location`, so the same file works
   whether the IDE project is the module or the repository above it.
-- Opening a link: `window.openFile(path, line, column)` — injected by the JetBrains **WebView
-  Explorer** plugin into every page it loads — then the plugin's HTTP bridge
-  (`http://127.0.0.1:<port>/open?filePath=…&line=…`, needs the page's origin in
-  `webview.explorer.allowedOrigins`), then clipboard plus a toast. The header pill says which one is
+- Opening a link: `window.openFile(path, line, column)` — injected by whichever host loads the page (the
+  JetBrains **WebView Explorer** plugin, the Eclipse **WebView** view, or any host's `/page/` route) — then
+  the host's HTTP bridge
+  (`http://127.0.0.1:<port>/open?filePath=…&line=…`, with the page's origin allowed by that host — in
+  JetBrains, `webview.explorer.allowedOrigins`), then clipboard plus a toast. The header pill says which one is
   live. **The contract itself — the exact signature, the payload, the HTTP parameters, the security
   model and the fallback ladder — is documented in
   [`webview/kit/doc/contract.md`](../../webview/kit/doc/contract.md)**, which is the document to read if you are

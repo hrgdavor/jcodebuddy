@@ -20,14 +20,14 @@ calling and watching something fail.
 
 | Verb | HTTP | Capability key | Implemented in |
 | --- | --- | --- | --- |
-| open a file at a line | `GET /open` (frozen) | `open` | `webviewd` (LSP and CLI adapters) + both IDE hosts |
-| serve a project file | `GET /file/<abs path>` (frozen) | `serveFile` | `webviewd`, `webview-vscode` |
-| serve a page **with the bridge injected** | `GET /page/<abs path>` | `serveFile` | `webviewd` |
-| **propose + apply an edit** | `POST /api/v1/applyEdit`, `/api/v1/diff` | `edit` | `webviewd`: the buffer when the host declares `edit`, otherwise its own atomic write |
+| open a file at a line | `GET /open` (frozen) | `open` | `webviewd` (LSP and CLI adapters) + the three IDE hosts |
+| serve a project file | `GET /file/<abs path>` (frozen) | `serveFile` | `webviewd`, `webview-vscode`, `webview-eclipse` |
+| serve a page **with the bridge injected** | `GET /page/<abs path>` | `serveFile` | `webviewd`, `webview-eclipse` |
+| **propose + apply an edit** | `POST /api/v1/applyEdit`, `/api/v1/diff` | `edit` | `webviewd`, `webview-jetbrains`, `webview-eclipse` — one shared `WriteSurface`: the buffer when the host declares `edit`, otherwise its own atomic write |
 | reveal in the project tree | `POST /reveal` | `reveal` | Phase 3 |
 | select a range | `POST /select` | `select` | the LSP host reports it; no HTTP verb yet |
-| show a diff of a proposal | included in `/api/v1/diff` and in every apply response | `diff` | `webviewd` |
-| undo / redo the last applied edit | `POST /api/v1/undo`, `/api/v1/redo` | `undo` | `webviewd` (its own checkpoints; the editor's own undo is the reader's `Ctrl+Z`) |
+| show a diff of a proposal | included in `/api/v1/diff` and in every apply response | `diff` | `webviewd`, `webview-jetbrains`, `webview-eclipse` |
+| undo / redo the last applied edit | `POST /api/v1/undo`, `/api/v1/redo` | `undo` | `webviewd`, `webview-jetbrains`, `webview-eclipse` — the checkpoints of `webviewd` and `webview-eclipse` are **persistent** (an undo survives a host restart), the JetBrains one is in-memory; the editor's own undo is the reader's `Ctrl+Z` |
 | notify the host a page changed | `POST /refresh` | `refresh` | Phase 3 |
 | stream file-change events (SSE) | `GET /api/v1/events` | `watch` | `webviewd` |
 
@@ -47,13 +47,13 @@ asks the same question before it opens an endpoint of its own (§ 4a).
 
 | Key | Meaning |
 | --- | --- |
-| `plugin` | which host is answering — `hr.hrg.webview.webviewd`, `hr.hrg.jetbrains.webview`, `vscode-webview-explorer`, `hr.hrg.watch2.sidecar` |
+| `plugin` | which host is answering — `hr.hrg.webview.webviewd`, `hr.hrg.jetbrains.webview`, `vscode-webview-explorer`, `hr.hrg.eclipse.webview`, `hr.hrg.watch2.sidecar` |
 | `port` | the port actually bound, which is how a page learns an ephemeral one |
 | `allowedOrigins` | how many origins are trusted; **`0` means every caller is refused**, and that is the default, not an error |
 | `tokenRequired` | whether a token is configured for the state-changing routes |
 | `bridgeVersion` | which injected contract the host implements; the same number a page sees as `window.__jcbWebViewBridge` |
 | `capabilities` | what the host can do **now**, sorted. Empty is the honest answer for a host with no editor attached |
-| `ide` | a **human** name for the editor — `"IntelliJ IDEA"`, `"Visual Studio Code"`, `"webviewd"`, and for the sidecar the LSP client's own name (`"Zed"`) once it has identified itself; `"unknown"` when the host has no name to give, never blank |
+| `ide` | a **human** name for the editor — `"IntelliJ IDEA"`, `"Visual Studio Code"`, `"Eclipse"`, `"webviewd"`, and for the sidecar the LSP client's own name (`"Zed"`) once it has identified itself; `"unknown"` when the host has no name to give, never blank |
 | `project` | the directory **this endpoint serves**, forward-slashed and absolute, or the empty string when the host does not know it yet (the sidecar before LSP `initialize`). It is what makes "a host for **this** project" a decidable question (§ 4a) |
 
 `ide` and `project` were appended last, so a reader that walks the keys in order keeps seeing the six it
@@ -295,28 +295,34 @@ pass; **observed** means someone ran it against that host on the build named and
 says "implemented" is not claimed to work in front of a human, and the dates are the ones in
 [`ide-observation-checklist.md`](ide-observation-checklist.md) § 2a.
 
-| | `webviewd` (standalone) | `webview-jetbrains` | `webview-vscode` | `jwa-sidecar` (LSP) |
-| --- | --- | --- | --- | --- |
-| `open` (caret) | implemented; with `--host lsp` observed on Zed 1.21.0 | observed | observed | observed (Zed 1.21.0) |
-| `open` precision | `exact` with LSP, `file-only` with the Zed CLI, `none` with no editor | `exact` | `exact` | `exact` |
-| `select` (range) | implemented | implemented | implemented | implemented |
-| `reveal` (project view) | n/a | **not implemented**, and deliberately not advertised | n/a | n/a |
-| `serveFile` / `/page/` | implemented | not implemented | implemented | not implemented |
-| served digest (`X-WebView-Digest`, `ETag`) | implemented | not implemented | not implemented | n/a |
-| `edit` → the editor's buffer | implemented (delegates to whatever adapter says it can) | **observed** 2026-09-26 | **observed** 2026-09-26 | **observed** 2026-09-25 |
-| `edit` → disk (digest-guarded, atomic, journalled undo) | implemented; driven end to end by `examples/webview-client.test.mjs` | offered, not observed | **refused by design** with `409 no-disk-write` | not implemented |
-| `diff` (a proposal to show before writing) | implemented | implemented | **refused by design** (it owns no bytes) | not implemented |
-| `undo` / `redo` (`/api/v1/...`) | implemented, journalled to disk | implemented | **refused by design** (the editor's own undo is the review step) | not implemented |
-| `events` (SSE file changes) | implemented | not implemented | not implemented | n/a |
-| Neovim | — | — | — | registered in principle; **never run** |
+| | `webviewd` (standalone) | `webview-jetbrains` | `webview-vscode` | `webview-eclipse` | `jwa-sidecar` (LSP) |
+| --- | --- | --- | --- | --- | --- |
+| `open` (caret) | implemented; with `--host lsp` observed on Zed 1.21.0 | observed | observed | implemented (headless); the caret landing is an outstanding observation | observed (Zed 1.21.0) |
+| `open` precision | `exact` with LSP, `file-only` with the Zed CLI, `none` with no editor | `exact` | `exact` | `exact` with a workbench page, `none` headless | `exact` |
+| `select` (range) | implemented | implemented | implemented | implemented | implemented |
+| `reveal` (project view) | n/a | **not implemented**, and deliberately not advertised | n/a | **not implemented**, and deliberately not advertised | n/a |
+| `serveFile` / `/page/` | implemented | not implemented | implemented | implemented (both routes) | not implemented |
+| served digest (`X-WebView-Digest`, `ETag`) | implemented | not implemented | not implemented | implemented | n/a |
+| `edit` → the editor's buffer | implemented (delegates to whatever adapter says it can) | **observed** 2026-09-26 | **observed** 2026-09-26 | implemented (headless, through the seam); the unsaved change and the single `Ctrl+Z` are an outstanding observation | **observed** 2026-09-25 |
+| `edit` → disk (digest-guarded, atomic, journalled undo) | implemented; driven end to end by `examples/webview-client.test.mjs` | offered, not observed | **refused by design** with `409 no-disk-write` | implemented, with **persistent** checkpoints — undo after a host restart is headless-tested | not implemented |
+| `diff` (a proposal to show before writing) | implemented | implemented | **refused by design** (it owns no bytes) | implemented | not implemented |
+| `undo` / `redo` (`/api/v1/...`) | implemented, journalled to disk | implemented | **refused by design** (the editor's own undo is the review step) | implemented, journalled to disk | not implemented |
+| `events` (SSE file changes) | implemented | not implemented | not implemented | not implemented — `/api/v1/events` answers 404 with that reason; no `watch` is declared | n/a |
+| Neovim | — | — | — | — | registered in principle; **never run** |
 
-Three things are worth reading out of that table rather than inferring:
+Four things are worth reading out of that table rather than inferring:
 
 * **A host that owns no bytes refuses the verbs that need bytes.** VS Code's `diff`, `undo` and `redo` answer
   `409 no-disk-write` instead of pretending, which is why its `edit` still works: the change goes to the buffer,
   where the editor's own undo already exists.
-* **`reveal` is absent from the JetBrains capability list on purpose** — advertising a verb that throws at
-  runtime turns a page's fallback ladder into a broken link, which is the rule every capability list here obeys.
+* **`reveal` is absent from the JetBrains and Eclipse capability lists on purpose** — advertising a verb that
+  throws at runtime turns a page's fallback ladder into a broken link, which is the rule every capability list
+  here obeys.
+* **The Eclipse column says *implemented* everywhere and *observed* nowhere, and that is the honest state.**
+  Its 58 tests run headless (no supported headless SWT exists, so the workbench half cannot be unit-tested);
+  the caret landing, the unsaved buffer edit and the single `Ctrl+Z` are recorded as outstanding in
+  [`ide-observation-checklist.md`](ide-observation-checklist.md) § 1a/§ 2a until someone runs them against a
+  real Eclipse and dates the result.
 * **Zed is a client, not a host.** Its navigation and buffer-edit results are the sidecar's, and they depend on
   the extension registering it: a settings-only entry is ignored by 1.21.0 ([`PHASE0-ZED-FINDINGS.md`](../PHASE0-ZED-FINDINGS.md) § A′).
 

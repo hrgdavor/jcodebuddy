@@ -18,6 +18,10 @@ const SKIP_DIRS = new Set([
   // Agent workspaces: .kilo holds plans and git worktrees, which are separate
   // checkouts with their own (often pre-existing) link state. Not this repo's content.
   ".kilo", ".jcodebuddy",
+  // Driver projects: proto/ is gitignored with no exceptions and each project under it is
+  // its own repository (root AGENTS.md § 2) — its link state is not this repo's content,
+  // and a broken driver project must never block a JCodeBuddy change.
+  "proto",
 ]);
 
 function walk(dir, out = []) {

@@ -52,7 +52,7 @@ import com.google.gson.annotations.SerializedName;
  * descriptor without the field reads as {@code false}.
  *
  * <p>This record lives in {@code webview-core} rather than in one host because every host publishes it: the
- * standalone {@code webviewd} writes it for an ephemeral port, and the two IDE hosts write it so that a
+ * standalone {@code webviewd} writes it for an ephemeral port, and the IDE hosts write it so that a
  * page — or a second IDE — can find a port the user never configured. The file is <b>per project</b>
  * (DEC-026's per-module {@code .jcodebuddy/} rule, applied to the project root the host serves); there is
  * deliberately no user-home equivalent, because a port only means something to the project that published

@@ -58,9 +58,8 @@
         <module>java-watch-run</module>
         <module>java-watch-run-sample</module>
         <!-- The webview product: the host-neutral core, the standalone host, the LSP sidecar, and the
-              Eclipse IDE host. The other two
-             editor hosts are not Maven modules (webview-jetbrains is a Gradle IntelliJ Platform build,
-             webview-vscode is a Node package). -->
+              Eclipse IDE host. The other two editor hosts are not Maven modules (webview-jetbrains is a
+              Gradle IntelliJ Platform build, webview-vscode is a Node package). -->
         <module>webview/core/webview-core</module>
         <!-- webviewd is the reference host of that contract and the only one that needs no editor
              (webview/PLAN-webview-suite.md, Phase 2). -->
