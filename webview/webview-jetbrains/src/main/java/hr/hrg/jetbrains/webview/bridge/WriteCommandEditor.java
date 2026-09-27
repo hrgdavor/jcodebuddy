@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.diagnostic.Logger;
+import hr.hrg.webview.core.DocumentEdits;
 import hr.hrg.webview.core.TextEdit;
 import org.jetbrains.annotations.NotNull;
 

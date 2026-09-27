@@ -1,6 +1,5 @@
-package hr.hrg.jetbrains.webview.bridge;
+package hr.hrg.webview.core;
 
-import hr.hrg.webview.core.TextEdit;
 import org.junit.Test;
 
 import java.util.List;
@@ -11,10 +10,11 @@ import static org.junit.Assert.assertThrows;
 /**
  * The buffer half of the write contract, as text: what a document becomes after an edit.
  *
- * <p>This is the part of gate (d) that can be checked without an IDE. {@code WriteCommandAction} itself needs a
- * running platform — that is what the maintainer's observation is for — but "which characters end up where" is
+ * <p>This is the part of gate (d) that can be checked without an IDE. The host-side command — a
+ * {@code WriteCommandAction} in JetBrains, a compound change on the UI thread in Eclipse — needs a running
+ * platform, and that is what the maintainer's observation is for; but "which characters end up where" is
  * exactly the part that used to be reimplemented per host, and it is checked here against the same
- * {@link hr.hrg.webview.core.EditableText} the disk path uses.
+ * {@link EditableText} the disk path uses.
  */
 public class DocumentEditsTest {
 
