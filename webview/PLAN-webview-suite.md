@@ -132,6 +132,13 @@ webview/
     phase0/                       the Phase 0 apparatus (stub LSP server, DB probe, scratch targets)
     settings-snippet.json         Tier 1 configuration a user pastes into Zed — **only useful with the
                                   extension above**, which Phase 0 proved is required (A′)
+  eclipse/
+    PLAN-eclipse-host.md          the fifth host: an Eclipse IDE plugin on webview-core — a separate plan with its
+                                  own phases and gates (cross-linked here by its Phase 0 gate)
+    PLATFORM-REFERENCE.md         what the Eclipse sources say (22 items with sources)
+    PHASE0-ECLIPSE-FINDINGS.md    the measured Phase 0 results (run 2026-09-27)
+    phase0/                       the Phase 0 apparatus (the SWT probe)
+    webview-eclipse/              the Maven module (release 21, the committed MANIFEST.MF and plugin.xml)
   examples/                       unchanged; smoke test extended to the whole verb set (§7)
 ```
 
@@ -597,6 +604,14 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
   declares a verb it does not implement fails the build.
 - **Gate:** "headless lacks nothing" is a test result. The README's claim of parity links to the test that proves
   it.
+
+### Phase 7 — The Eclipse host (a separate plan)
+The Eclipse IDE host is planned and gated under its own plan, [`PLAN-eclipse-host.md`](PLAN-eclipse-host.md):
+its Phase 0 (the SWT probe) ran 2026-09-27 and its findings are committed in `eclipse/PHASE0-ECLIPSE-FINDINGS.md`;
+its phases 1–5 — the Maven module, the HTTP bridge, the buffer edits, the documents, and the host-table rows —
+follow the same gate discipline, and its *observed* gates need a human with the 2026-09 / 4.41 build. This entry
+and the `eclipse/` subtree in § 4 are the cross-links that plan's Phase 0 gate required; nothing here changes
+this suite's own phases.
 
 ## 8. Acceptance criteria (whole plan)
 

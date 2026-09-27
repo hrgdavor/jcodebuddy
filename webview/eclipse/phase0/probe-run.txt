@@ -1,0 +1,38 @@
+﻿bundle org.eclipse.ui.browser-3.9.200 downloaded from Maven Central
+bundle org.eclipse.ui-3.209.100 downloaded from Maven Central
+bundle org.eclipse.swt.win32.win32.x86_64-3.135.0 downloaded from Maven Central
+compiling SwtProbe.java
+running the probe (120 s cap; it opens short-lived windows)
+PROBE host java=25.0.1 os=Windows 11 arch=amd64
+bun : WARNING: A restricted method in java.lang.System has been called
+At line:1 char:265
++ ... penjdk-25.0.1'; bun run webview/eclipse/phase0/probe.mjs 2>&1 | Out-F ...
++                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARNING: A rest...has been called:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+WARNING: java.lang.System::loadLibrary has been called by org.eclipse.swt.internal.Library in an unnamed module (file:/D:/wrk/java/jcodebuddy/webview/eclipse/phase0/target/org.eclipse.swt.win32.win32.x86_64-3.135.0.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+E ok � new Display() succeeded in a workbench-less process
+loopback server on 127.0.0.1:52777
+C splash data: -> complete events=[complete url=]
+C splash content = splash
+A1 getBrowserType() = edge
+A1 no EdgeVersion class in SWT 3.135.0 � the version is a system property SWT sets itself
+A1 org.eclipse.swt.browser.EdgeVersion = 154.0.4258.37
+A1 userAgent = Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0
+A1 edge-obtained = true
+C loopback -> complete events=[complete url=http://127.0.0.1:52777/]
+B1 sync-return via evaluate = echo:B1-echo | java saw arg=B1-echo thread=[main]
+B2 throw = threw:Error: probe throw
+D loopback-served page: server-saw-origin=(none) originsSeen=[(none)]
+B3 after dispose: page=complete typeof jcbProbe = undefined
+B4 after re-registration: page=complete sync-return = echo:B4-echo | java saw arg=B4-echo
+C file:// -> complete events=[complete url=http://127.0.0.1:52777/after-dispose, complete url=http://127.0.0.1:52777/reregistered, complete url=file:///D:/wrk/java/jcodebuddy/webview/eclipse/phase0/target/file-page.html]
+D file:// page fetch = status=200 origin=null originsSeen=[(none), null]
+D file:// page window.origin = null
+A2 not-run � there is no non-invasive way to hide the installed WebView2 runtime without modifying the system (registry/COM state), and the probe forbids system modification
+F found D:\programs\eclipse\eclipse.exe version=3.33.0.v20250206-0919,3.34.0.v20250711-1249,3.34.100.v20251111-1421,3.34.200.v20251220-0953
+PROBE done
