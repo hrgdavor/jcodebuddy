@@ -39,5 +39,46 @@
             <artifactId>java-watch-core</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <!--
+            The generator SPI, from the shared library rather than from `project-automation`.
+
+            `IocContextGenerator` is a `CodeGenerator`, so the dev-time pass can offer it to every file
+            without knowing what it is for, and a watch agent can apply its output through an editor. That
+            interface lives in a library of its own precisely so this module can implement it without
+            depending on a project's private assistant (AGENTS.md § 1/§ 1.1).
+        -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-codegen-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- `GeneratedCodeMarkers`, the one place DEC-035's file marker is spelled. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>junit5</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+    </profiles>
 </project>

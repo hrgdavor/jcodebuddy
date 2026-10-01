@@ -428,24 +428,47 @@ decision — including "either backend will do, and here is why that is the answ
 ### 3.2 — `CodeGenerator<GeneratedContext>` and dependency-graph computation
 **Who:** agent · **Size:** L
 
-[`hipster-ioc-tooling`](../hipster-ioc-tooling/pom.xml) is a reactor module whose POM says "Code generator
-and dependency graph computation for hipster-ioc" and which contains **no `src/` at all** — it compiles
-to an empty jar. A grep for `HipsterIocGenerator`, `GeneratedContext` or a dependency-graph service
-finds nothing anywhere in the tree. The API surface it must target is the five types in
-[`hipster-ioc-api`](../hipster-ioc-api/src/main/java/hr/hrg/hipster/ioc) (`HipsterContext`,
-`ChildContext`, `Circular`, `DynamicResource`, `StableValuePolyfill`), and the hand-written context it
-must eventually replace is [`hipster-ioc-test`](../hipster-ioc-test/src/test/java/hr/hrg/hipster/ioc/test)'s
-`CtxMain`/`CtxMainModule`.
+**Done 2026-10-01 — the empty module has sources, and they generate Java the JDK accepts.**
 
-**Do:** implement the generator and the dependency-graph computation per step 3.1's decision. Generated
-Java is committed under `src/main/java` of the consuming module and is IDE-navigable (§ 1). **Do not
-declare `project-automation` as a dependency** — the POM's comment records that it was deliberately
-removed, and § 1.1 forbids re-adding it; anything genuinely reusable goes into a library module.
+- **`ContextReader`** reads one `@HipsterContext` interface through the LST (`SourceReader`/`TreeQueries`,
+  DEC-030), into a small model (`IocModel`): beans (abstract no-arg accessors), factories (`default
+  build<Bean>(...)` on the module interface, with their parameters and `@Circular` marks), `dependencies()`,
+  the `ChildContext<P>` parent type, `impl()`, and both files' imports.
+- **`DependencyOrder`** derives creation order topologically from the factory parameters, preferring
+  declaration order among ready beans so the output is deterministic, and **refuses** a context whose beans
+  form a cycle — leaving the file untouched — with `circular_dependency_unmarked` or
+  `circular_dependency_marked_unsupported`. A factory parameter the context cannot provide becomes a
+  **constructor parameter** of the generated class, so no generated code ever passes a `null`.
+- **`ContextSource`** renders `<Context>Impl`: the DEC-035 file marker, creation in the computed order with
+  each line naming its factory, one accessor per bean returning its field, and `getParent`/`setParent` when
+  the context implements `ChildContext`.
+- **`IocContextGenerator`** is the shared `CodeGenerator` (`jcodebuddy-codegen-api`), with a cheap
+  `isApplicable` (a substring test, not a parse) and a `generate` that **returns text**; the text goes
+  through `CooperativeCodegen.reconcileMembers`, so step 1.1's freeze and DEC-020's preservation apply to
+  what this generator writes. It also refuses a `Supplier`/`DynamicResource` bean with no factory
+  (`lazy_bean_needs_factory`) and a context that names its own implementation
+  (`context_implementation_present`).
+- **`IocGeneration`** walks a source root, writes only when the text changed, and writes the dependency graph
+  to the **module** root's `.jcodebuddy/metadata/hipster-ioc/contexts.json`.
+- Four new divergence kinds, registered in `DivergenceReporter.KINDS` **and** in the entity tooling's
+  producer map (`ExampleDivergenceReportTest` fails on a kind nothing produces, which is the guard working).
+- `IocContextGeneratorTest` (11) asserts the model, the order, the constructor-parameter case, idempotence,
+  the freeze, all four refusals, the parent accessors — and **compiles the generated tree with the JDK's own
+  compiler**, which is the assertion a string-matching test cannot make.
+- **Three claims of DEC-036 were wrong and are amended in the record, not worked around:** the module
+  interface is a **sibling file** (`CtxMainModule.java`), not a type in the context's compilation unit —
+  which is why the first implementation found no factories at all; `impl` is a **context-level** attribute,
+  so it suppresses the whole context rather than one bean; and a cycle marked `@Circular` **cannot** be
+  generated as a settable assignment without a `Supplier` parameter, so both cycle cases are refused with
+  distinct diagnostics and the `Supplier` form is named as the follow-up.
+- One trap worth recording for whoever runs this module's tests: `-pl hipster-ioc-tooling` **without `-am`**
+  silently uses the *installed* `hipster-entity-tooling` jar, so a change made there (step 1.1's freeze, the
+  new kinds) appears absent and two tests fail for the wrong reason. With `-am` everything is green — this
+  is doc/AGENTS.md's "changing a library means reinstalling it", met from the other side.
 
-**Gate:** `MODULE` for `hipster-ioc-tooling,hipster-ioc-test` green, with a test that generates a context
-from the test module's beans and asserts the graph (dependencies, factories, exposed beans).
-
-**Done when:** the module has sources that build, generate, and are asserted by tests.
+**Gate:** ✅ `MODULE` for `hipster-ioc-tooling` green — 11 tests, with the generated tree compiled by the
+JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `DivergenceReporterTest`,
+`DivergenceKindTest`, 20 tests) green with the four new kinds.
 
 ### 3.3 — Make it runnable and documented
 **Who:** agent · **Size:** M
@@ -886,7 +909,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[ ]` |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` |
-| 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[ ]` |
+| 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[ ]` |
 | 4.1 | Replace `WIDENING_CHAINS` with supertype resolution | agent | S–M | `[ ]` |
 | 4.2 | merge-java Phase 13 step 1 — review render | agent | M | `[ ]` |

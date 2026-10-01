@@ -76,7 +76,12 @@ public final class DivergenceReporter {
             "mapper_request_malformed",
             "validation_constraint_unsupported",
             "validation_constraint_type_mismatch",
-            "deep_tracking_type_not_enabled");
+            "deep_tracking_type_not_enabled",
+            // hipster-ioc context generation (DEC-036): the generator's own refusals and skips.
+            "circular_dependency_unmarked",
+            "circular_dependency_marked_unsupported",
+            "lazy_bean_needs_factory",
+            "context_implementation_present");
 
     /** The DEC-022 field order. An entry is rendered in exactly this order. */
     private static final List<String> FIELDS =

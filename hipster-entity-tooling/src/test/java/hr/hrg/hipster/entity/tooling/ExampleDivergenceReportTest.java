@@ -177,7 +177,14 @@ class ExampleDivergenceReportTest {
             Map.entry("mapper_request_malformed", "ViewMapperGeneratorTest"),
             Map.entry("validation_constraint_unsupported", "ValidationGeneratorTest"),
             Map.entry("validation_constraint_type_mismatch", "ValidationGeneratorTest"),
-            Map.entry("deep_tracking_type_not_enabled", "DeepTrackingWiringTest"));
+            Map.entry("deep_tracking_type_not_enabled", "DeepTrackingWiringTest"),
+            // hipster-ioc context generation (DEC-036) reports these four; they are produced by that
+            // module's generator tests rather than by the entity pass, but they are part of the same
+            // project-wide vocabulary, so the producer is named here just the same.
+            Map.entry("circular_dependency_unmarked", "hipster-ioc-tooling IocContextGeneratorTest"),
+            Map.entry("circular_dependency_marked_unsupported", "hipster-ioc-tooling IocContextGeneratorTest"),
+            Map.entry("lazy_bean_needs_factory", "hipster-ioc-tooling IocContextGeneratorTest"),
+            Map.entry("context_implementation_present", "hipster-ioc-tooling IocContextGeneratorTest"));
 
     /** Kinds in the project vocabulary whose producer is a validator, not the generation pass. */
     private static final Map<String, String> KINDS_PRODUCED_ELSEWHERE = Map.of(
