@@ -169,6 +169,7 @@ class ExampleDivergenceReportTest {
             Map.entry("type_ambiguous", "AddonAndInheritanceTest"),
             Map.entry("type_unresolved", "UnresolvedTypeNameTest"),
             Map.entry("generated_member_diverged", "CooperativeCodegenTest"),
+            Map.entry("file_frozen", "CooperativeCodegenEnabledTest"),
             Map.entry("mapper_field_missing_in_source", "ViewMapperGeneratorTest"),
             Map.entry("mapper_field_missing_in_target", "ViewMapperGeneratorTest"),
             Map.entry("mapper_type_incompatible", "ViewMapperGeneratorTest"),

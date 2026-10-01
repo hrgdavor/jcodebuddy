@@ -139,35 +139,45 @@ each was wrong.
 ### 1.1 — Honour `enabled: false` (the whole-file freeze, DEC-018 / DEC-021 § 6)
 **Who:** agent · **Size:** M
 
-[DEC-021 § 6](../doc-hipster-entity/architecture/decisions/DEC-021.md) records the gap in its own text:
+[DEC-021 § 6](../doc-hipster-entity/architecture/decisions/DEC-021.md) recorded the gap in its own text:
 the header **format** is implemented and emitted by every generator, `entityFieldEnum` and
-`allowReorder` are decoded and honoured, and **`enabled` is not honoured — no code path reads it**, so
-`enabled: false` does not freeze a file and the next pass regenerates it. The same section names the
-fix rather than the symptom: the header is parsed in one place, the reconciliation is in another, and
-"only the first half exists today". `blockMarker: "strict"` and `maxMethods` are examples in the doc
-that are likewise not read — decide whether to implement or delete them in the same pass, and say which.
+`allowReorder` were decoded and honoured, and **`enabled` was not honoured — no code path read it**, so
+`enabled: false` did not freeze a file and the next pass regenerated it.
 
-**Where:** the JSON5 header parser is
-[`EnumConstantOrderChecker`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java)
-(`HeaderConfig`, and the pinned `JsonReadFeature` set that
-`DependencyBoundaryTest` guards — adding a feature means updating that test). The single reconciliation
-entry point every whole-file emitter goes through is
-[`CooperativeCodegen`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java)
-(`reconcileMembers`), which is where the note says the knob belongs.
+**Done 2026-10-01.** What changed:
 
-**Do:** parse `enabled` (default `true`) alongside the existing knobs; make `reconcileMembers` return the
-file unchanged when it is `false`, and report it in DEC-022's divergence format so a skipped file is
-visible rather than silent. Then delete the "aspirational" wording: DEC-021 § 6's implementation note,
-and the javadoc at
-[`FieldBoilerplateGenerator`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java)
-that already promises `enabled: false` takes the file fully under manual control.
+- `EnumConstantOrderChecker.HeaderConfig` gained an `enabled` component (default **true**), decoded from
+  the header's JSON5. **A malformed header does not freeze the file** — the two fail-safe directions are
+  deliberately opposite (still `marked`, so R1 keeps protecting the enum; still `enabled`, so one typo
+  cannot silently stop generation).
+- `CooperativeCodegen.isFrozen(Path)` / `isFrozen(J.CompilationUnit)` is the **single reader** of the
+  knob, and `reconcileMembers` returns the previous text unchanged (plus one DEC-022 line,
+  `kind=file_frozen`) before it consults `force`. **The freeze outranks `--force`**: force means "every
+  member in this file belongs to the generator", and a file cannot be both; the way out is the freeze's
+  own opt-out (`enabled:true`, or delete the line).
+- **Two of the writers did not go through the reconciler, which this step's own text had assumed.**
+  `ViewAdapterGenerator` writes `<View>RowAdapter.java` / `<View>Binder.java` directly and emits the
+  DEC-021 header, so it now checks `isFrozen` (and skips the write, reporting `file_frozen`), taking the
+  reporter through a new five-argument overload that the pass supplies. `ViewInterfaceGenerator` writes
+  the developer's **own** view interface — no generated header, so `enabled` has nothing to freeze there —
+  and is correctly untouched.
+- `DivergenceReporter.KINDS` gained `file_frozen`, with its producer named in
+  `ExampleDivergenceReportTest.KIND_PRODUCER` (that test fails on a kind nothing produces).
+- New `CooperativeCodegenEnabledTest`: byte-for-byte freeze, the enabled path still regenerating *and*
+  still preserving the developer's member, force not overriding the freeze while still regenerating an
+  enabled file, the malformed-header direction, `isFrozen` for the four file states a pass meets, and an
+  end-to-end pass over a tree with one frozen generated file (asserted byte-identical, reported, and
+  still compiled).
+- **DEC-021 was corrected rather than merely annotated**, because two of its claims were false:
+  § 6's "aspirational" note is replaced by an implemented-status note; § 1/§ 2 and the worked examples now
+  show DEC-035's `@generated file` first line instead of the `{@link …}` form it was written with; and the
+  `blockMarker: "strict"` / `maxMethods` examples are removed with an explicit statement of the three keys
+  this project actually reads (`enabled`, `entityFieldEnum`, `allowReorder`).
+- `doc-hipster-entity/roadmap/README.md`'s DEC-018 row no longer says the freeze is "not yet honoured".
 
-**Gate:** a new test (`CooperativeCodegenEnabledTest` or beside `CooperativeCodegenTest`) that (a) sets
-`enabled: false` in a generated file's header, (b) runs a pass, (c) asserts the file is **byte-identical**,
-and (d) sets `enabled: true` and asserts it *is* regenerated. Then `GATE`.
+**Gate:** `GATE` green (8 modules), with `CooperativeCodegenEnabledTest` (7 tests) in the run.
 
-**Done when:** `GATE` green, the DEC-021 § 6 note is gone, and DEC-018's row in the roadmap tracker can
-say the whole-file freeze is real.
+**Done when:** ✅ done — see the commit for this step.
 
 ### 1.2 — Implement `MetadataProvider.parse` (the no-cache path, DEC-W008)
 **Who:** agent · **Size:** M
@@ -716,9 +726,9 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 
 | Step | What | Who | Size | State |
 | --- | --- | --- | --- | --- |
-| 0.1 | Commit the EEnumSet overlap JMH delivery | agent | S | `[ ]` |
-| 0.2 | Commit the stale-document corrections | agent | S | `[ ]` |
-| 1.1 | Honour `enabled: false` (DEC-018 / DEC-021 § 6) | agent | M | `[ ]` |
+| 0.1 | Commit the EEnumSet overlap JMH delivery | agent | S | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer) |
+| 0.2 | Commit the stale-document corrections | agent | S | `[x]` (landed as `ff0dc49`) |
+| 1.1 | Honour `enabled: false` (DEC-018 / DEC-021 § 6) | agent | M | `[x]` |
 | 1.2 | `MetadataProvider.parse` (DEC-W008) | agent | M | `[ ]` |
 | 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[ ]` |
 | 1.4 | Test the MCP tool surface | agent | S | `[ ]` |

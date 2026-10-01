@@ -140,15 +140,33 @@ public final class EnumConstantOrderChecker {
         return ledgers;
     }
 
-    /** The DEC-021 header of one file: its JSON5 config blob, if any. */
-    public record HeaderConfig(boolean present, boolean marked, boolean allowReorder, List<String> diagnostics) {
+    /**
+     * The DEC-021 header of one file: its JSON5 config blob, if any.
+     *
+     * <p>Three knobs are read. {@code marked} is the R1 ledger marker ({@code entityFieldEnum:true});
+     * {@code allowReorder} is the escape hatch reported as the warning {@code enum_reorder_allowed};
+     * and {@code enabled} is DEC-018's whole-file freeze in its per-file form
+     * (DEC-021 § 6) — {@code false} means the file is the developer's and no pass may rewrite it.
+     * {@code CooperativeCodegen.isFrozen} is the single reader of that third knob, because the freeze
+     * has to hold in every emitter and not only in this one.</p>
+     *
+     * @param present      whether a configuration line was found at all
+     * @param marked       the {@code entityFieldEnum} marker (R1); absent header defaults to false
+     * @param allowReorder the {@code allowReorder} escape hatch; defaults to false
+     * @param enabled      the whole-file freeze knob; <strong>defaults to true</strong>, so a header that
+     *                     does not mention it, and a header that cannot be parsed, both leave the file
+     *                     under the generator's control
+     * @param diagnostics  what went wrong while decoding
+     */
+    public record HeaderConfig(boolean present, boolean marked, boolean allowReorder, boolean enabled,
+                               List<String> diagnostics) {
 
         public HeaderConfig {
             diagnostics = List.copyOf(diagnostics);
         }
 
         static HeaderConfig none() {
-            return new HeaderConfig(false, false, false, List.of());
+            return new HeaderConfig(false, false, false, true, List.of());
         }
     }
 
@@ -202,12 +220,19 @@ public final class EnumConstantOrderChecker {
             JsonNode node = JSON5.readTree(json);
             boolean marked = node.path(MARKER_KEY).asBoolean(false);
             boolean allowReorder = node.path("allowReorder").asBoolean(false);
-            return new HeaderConfig(true, marked, allowReorder, diagnostics);
+            // The freeze knob defaults to true, and only the literal `false` turns it off.
+            boolean enabled = node.path("enabled").asBoolean(true);
+            return new HeaderConfig(true, marked, allowReorder, enabled, diagnostics);
         } catch (RuntimeException e) {
-            // Malformed marker: fail safe toward "marked".
+            // Malformed marker: fail safe toward "marked", and toward "enabled". The two directions are
+            // deliberately opposite, and each is the safe one for its own question: an unreadable header
+            // must not let the R1 rule stop protecting a generated enum, and it must not silently stop
+            // generating a file for the rest of the project's life because of one typo. Regeneration is
+            // not silent — every member the developer added is still preserved by reconciliation and
+            // reported — so "keep generating, and say why" is the recoverable choice.
             diagnostics.add("malformed_generator_header: could not decode '" + json
-                    + "' (" + e.getMessage() + "); treating the enum as marked");
-            return new HeaderConfig(true, true, false, diagnostics);
+                    + "' (" + e.getMessage() + "); treating the enum as marked and the file as enabled");
+            return new HeaderConfig(true, true, false, true, diagnostics);
         }
     }
 

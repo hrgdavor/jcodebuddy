@@ -1,5 +1,6 @@
 package hr.hrg.hipster.entity.tooling;
 
+import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker;
 import org.openrewrite.java.tree.J;
 
 import java.io.IOException;
@@ -57,6 +58,16 @@ import java.util.Set;
  * would be actively harmful: the hint would sit outside every preserved member's range, so the next
  * pass would drop the hint the previous pass wrote and then re-add it — a comment that can never be
  * stable. The recognition is structural, so the aid buys nothing.</p>
+ *
+ * <h3>The other half of the contract: {@code enabled: false} freezes the whole file</h3>
+ *
+ * <p>Cooperation is about <em>what</em> the generator may replace; the freeze is about <em>whether</em> it
+ * may touch the file at all. DEC-018 fixes the whole-file freeze and DEC-021 § 6 gives it a per-file
+ * spelling — {@code enabled:false} in the DEC-021 header — which is read here, in
+ * {@link #isFrozen(J.CompilationUnit)}, because this is the path every reconciled emitter already goes
+ * through. A frozen file is returned unchanged and reported as {@code file_frozen}; the file's own
+ * header is the way back in. See {@link #reconcileMembers(Path, String, String, Reconciliation, Set)}
+ * for why the freeze outranks {@code --force}.</p>
  */
 public final class CooperativeCodegen {
 
@@ -140,6 +151,52 @@ public final class CooperativeCodegen {
             sb.append('\n').append(member.source()).append('\n');
         }
         return sb.toString();
+    }
+
+    /**
+     * Whether a file on disk is frozen by its own DEC-021 header ({@code enabled: false}).
+     *
+     * <p>Exposed because not every generated file goes through {@link #reconcileMembers}: the adapter
+     * generator writes two files of its own, and it asks this question directly rather than growing a
+     * second, divergent copy of the rule. This is the one place {@code enabled} is interpreted; the
+     * header is decoded in one other place ({@link EnumConstantOrderChecker#readHeader}), which is the
+     * split DEC-021 § 6 asked for.</p>
+     *
+     * @param file the file a pass is about to write; a missing file is not frozen
+     */
+    public static boolean isFrozen(Path file) throws IOException {
+        if (file == null || !Files.exists(file)) {
+            return false;
+        }
+        return isFrozen(SourceReader.readSourceText(Files.readString(file)));
+    }
+
+    /** As {@link #isFrozen(Path)}, on an already-parsed unit, so a caller that has the tree pays once. */
+    public static boolean isFrozen(J.CompilationUnit cu) {
+        if (cu == null) {
+            return false;
+        }
+        EnumConstantOrderChecker.HeaderConfig header = EnumConstantOrderChecker.readHeader(cu);
+        // `present` matters: a file with no header at all is an ordinary generated-or-hand-written file,
+        // not a frozen one, and a header that failed to parse reports enabled=true (its own fail-safe
+        // direction), so neither case can freeze a file by accident.
+        return header.present() && !header.enabled();
+    }
+
+    /**
+     * The DEC-022 line a frozen file produces.
+     *
+     * <p>A freeze is honoured, not a problem, and the line says so in the {@code action} field: what it
+     * buys is visibility — a pass over a directory with one hand-maintained file in it would otherwise
+     * be indistinguishable from a pass that had nothing to do there.</p>
+     */
+    public static String frozen(String topLevelName) {
+        return "kind=file_frozen, location=" + topLevelName
+                + ", cause=the DEC-021 header sets enabled:false, so the file is under manual control"
+                + ", current=the file exactly as the developer left it"
+                + ", canonical=not emitted: generation is off for this file"
+                + ", action=no action; set enabled:true in the header (or delete the line) to hand the "
+                + "file back to the generator";
     }
 
     /** The text to write, plus the divergence entries the reconciliation produced (DEC-022 lines). */
@@ -244,11 +301,26 @@ public final class CooperativeCodegen {
         if (previousFile == null || !Files.exists(previousFile)) {
             return new Reconciled(canonical, List.of());
         }
+        String previousText = Files.readString(previousFile);
+        J.CompilationUnit previousCu = SourceReader.readSourceText(previousText);
+        if (isFrozen(previousCu)) {
+            // The whole-file freeze: DEC-018 in the per-file form DEC-021 § 6 fixes, where `enabled:false`
+            // in the header means "this file is mine" and the pass writes nothing to it. The text is
+            // returned unchanged, so the caller's write is byte-identical and the file is untouched in
+            // substance — the freeze is not a round trip through the generator.
+            //
+            // The check sits BEFORE force mode, and that ordering is the decision rather than an
+            // accident. `--force` means "every member in this file belongs to the generator" (see
+            // forceReplace); `enabled:false` means the opposite, and a file cannot be both. Letting force
+            // win would rewrite exactly the files a developer marked as hand-maintained — the silent loss
+            // of a developer's file that both DEC-018 and DEC-020 exist to prevent. The escape hatch from
+            // the freeze is the freeze's own opt-out: set `enabled:true`, or delete the header line, the
+            // same way DEC-020 has a developer opt a block back in by deleting it.
+            return new Reconciled(previousText, List.of(frozen(topLevelName)));
+        }
         if (force) {
             return forceReplace(previousFile, topLevelName, canonical, policy);
         }
-        String previousText = Files.readString(previousFile);
-        J.CompilationUnit previousCu = SourceReader.readSourceText(previousText);
         J.CompilationUnit canonicalCu = SourceReader.readSourceText(canonical);
         if (previousCu == null || canonicalCu == null) {
             // Unreadable on either side: the safe answer is the canonical text plus nothing preserved,

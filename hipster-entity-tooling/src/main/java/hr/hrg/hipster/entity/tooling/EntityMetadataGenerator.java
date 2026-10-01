@@ -1756,7 +1756,11 @@ public class EntityMetadataGenerator {
                         // `--adapters`. Generated adapters are ordinary committed Java in the view's
                         // own package (G5) and use java.sql only, so no JDBC driver or connection-pool
                         // dependency enters any library POM. The example project does not enable this.
-                        ViewAdapterGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties);
+                        // The reporter is passed in because these two files are written directly rather
+                        // than through CooperativeCodegen, so a file frozen by `enabled:false` is skipped
+                        // there and has to be announced here (DEC-018/DEC-021 § 6).
+                        ViewAdapterGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
+                                divergences);
                     }
                     if (wantsTrackingBuilder) {
                         ViewTrackingBuilderGenerator.generate(javaOutputRoot, viewPackage, view,

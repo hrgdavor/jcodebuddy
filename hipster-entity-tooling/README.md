@@ -262,15 +262,15 @@ java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir>
 | *(positional 2)* | the output directory for the metadata JSON, one `<Marker>.metadata.json` per entity. It **must not be under a `.jcodebuddy/` directory** when generated Java would land there — see the layout guard below |
 | `--packages a.b,c.d` | restrict **generation** to these packages. It does **not** restrict indexing: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omitting the flag generates everything (the historical behaviour) |
 | `--adapters` | **[DRAFT/EXPLORATION, opt-in]** also emit `<View>RowAdapter` / `<View>Binder` next to each view. Off unless given; no other flag, property or profile enables it |
-| `--java-out <dir>` | write generated `.java` there instead of into the positional output directory. A pass passes it so committed source is regenerated **in place** while the metadata JSON stays in `.jcodebuddy/metadata/entity` — `scripts\gen.cmd`, the module POM's explicit `exec:java` goal, and a hand run all do |
+| `--java-out <dir>` | write generated `.java` there instead of into the positional output directory. A pass passes it so committed source is regenerated **in place** while the metadata JSON stays in `.jcodebuddy/metadata/entity` — `bun scripts/gen.js`, the module POM's explicit `exec:java` goal, and a hand run all do |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two **views**. Repeatable. Defaults: class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
 | `--validate[=OFF\|REPORT\|STRICT]` | run the entity rules over the source root **before** writing anything. Bare `--validate` means `REPORT`: print every issue and continue. `STRICT` refuses to write until they are fixed, so a violating tree is never half-regenerated. `OFF` is the default for a library caller, so introducing validation cannot change an unrelated build. Warnings (the R1 `allowReorder` escape hatch) do not fail a pass unless `STRICT` |
-| `--run-record <file>` | also write what this pass ran with — generator revision, the artifact its classes came from, resolved roots, flags, validation count, divergences, and `status` (`ok` / `failed`) — as JSON. Opt-in, so a library caller and the existing tests are unaffected. The example's pass — `scripts\gen.cmd` — writes `.jcodebuddy/metadata/entity/generation.json` |
+| `--run-record <file>` | also write what this pass ran with — generator revision, the artifact its classes came from, resolved roots, flags, validation count, divergences, and `status` (`ok` / `failed`) — as JSON. Opt-in, so a library caller and the existing tests are unaffected. The example's pass — `bun scripts/gen.js` — writes `.jcodebuddy/metadata/entity/generation.json` |
 | `--version` | print the generator identity (name, revision, and the artifact the classes came from) plus its flag surface, then stop. This is the first thing to run when a pass appears to have mis-generated a tree |
 
 Flags may appear anywhere after the two positionals, and `--packages=a.b`
 is accepted as well as `--packages a.b`. That matters because **every
-invocation shares one flag surface** (§ 8.8/3.23): `scripts\gen.cmd`, the
+invocation shares one flag surface** (§ 8.8/3.23): `bun scripts/gen.js`, the
 module POM's goal-only `exec:java` executions, the watcher and a hand run
 all pass the same CLI arguments, never `-D` system properties.
 
@@ -283,7 +283,7 @@ The guard fires before the first write, at every entry point.
 
 In practice it fires for one specific mistake: **the classpath points at an
 older tooling than the pass assumes.** The generator runs as a side tool with no
-lifecycle binding, so a pass assembles its own classpath — `scripts\gen.cmd`
+lifecycle binding, so a pass assembles its own classpath — `bun scripts/gen.js`
 does, the module POM's goal-only `exec:java` executions do (they resolve the
 `provided` tooling dependency from the local repository), and a reader typing
 `java -cp` does. An outdated artifact does not know `--java-out`, treats it and
@@ -295,7 +295,7 @@ Two guards close that, and they are complementary:
 - [`GeneratorPreflight`](src/main/java/hr/hrg/hipster/entity/tooling/GeneratorPreflight.java)
   is a class that exists **only in a current tooling build**. It is a
   stand-alone check that the tooling on the classpath is new enough to
-  understand the flags a pass passes; `scripts\gen.cmd` runs it first before
+  understand the flags a pass passes; `bun scripts/gen.js` runs it first before
   every pass, and the module POM also exposes it as the
   `hipster-entity-preflight` exec goal. An outdated artifact fails the check on
   the missing class, before anything is written. A flag could not do this job:
@@ -305,13 +305,13 @@ Two guards close that, and they are complementary:
   the generator end, which also covers a hand run and
   `EntityRegenerationWatcher`.
 
-A pass needs **no `mvn install`** and builds **no jar**. `scripts\gen.cmd`
+A pass needs **no `mvn install`** and builds **no jar**. `bun scripts/gen.js`
 compiles the tooling in the reactor, exports a classpath with
 `dependency:build-classpath` (which maps a reactor dependency to that module's
 `target/classes` directory), and runs a plain `java -cp`.
 
 `hipster-entity-example/codebuddy.md` § 6.1 is the full account, and
-`scripts/gen.cmd` is the one-command regeneration path that always works.
+`bun scripts/gen.js` is the one-command regeneration path that always works.
 
 ### Entity rules (`validate`)
 
@@ -765,7 +765,7 @@ file as the only symptom. OpenRewrite's parser needs a version-specific
 implementation on the classpath or it fails at *runtime* with "Unable to create
 a Java parser instance", which no build catches.
 
-`scripts\gen.cmd` already does exactly this — the mechanism is described
+`bun scripts/gen.js` already does exactly this — the mechanism is described
 [above](#the-layout-guard-and-the-stale-tooling-trap-it-closes). If you
 assemble the classpath yourself instead, build it from Maven rather than
 globbing the repository:
@@ -810,8 +810,34 @@ The recognised kinds include `enum_order_shuffled`,
 `polymorphic_root_enum_preserved`, `mapper_field_missing_in_source`,
 `mapper_field_missing_in_target`, `mapper_type_incompatible`,
 `mapper_view_not_found`, `mapper_request_malformed`,
-`validation_constraint_unsupported` and
-`validation_constraint_type_mismatch`.
+`validation_constraint_unsupported`,
+`validation_constraint_type_mismatch` and `file_frozen`.
+
+### The whole-file freeze, and why it is a diagnostic and not a silence
+
+A generated file can take itself out of the generator's hands: set
+`enabled:false` in the DEC-021 header and no pass rewrites it
+(DEC-018's whole-file freeze, in the per-file form DEC-021 § 6
+fixes). `CooperativeCodegen.isFrozen` is the one place that reads the
+knob; `reconcileMembers` returns the file unchanged, and the two files
+`ViewAdapterGenerator` writes directly ask the same question before
+writing. **The freeze outranks `--force`**, because `--force` asserts
+that every member in the file belongs to the generator and
+`enabled:false` asserts the opposite; the way back in is the freeze's
+own opt-out (`enabled:true`, or delete the header line).
+
+The pass reports `file_frozen` anyway, with `action=no action`, and that
+is deliberate: a pass over a directory containing one hand-maintained
+file would otherwise be indistinguishable from a pass that had nothing
+to do there. The `action` field says the reader has nothing to fix — the
+line exists so that "the generator skipped this file" is visible rather
+than inferred.
+
+An **unreadable** header does not freeze the file (the decoder's
+fail-safe direction is `enabled:true`, alongside `marked:true`): one
+typo must not silently stop generating a file for the rest of the
+project's life, and regeneration is recoverable and reported, while a
+silent freeze is not.
 
 Two of them are worth spelling out because they are the generator
 declining to guess rather than reporting a defect:

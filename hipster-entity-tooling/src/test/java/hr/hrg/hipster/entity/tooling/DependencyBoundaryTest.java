@@ -279,7 +279,7 @@ class DependencyBoundaryTest {
         // And the positive half: the ordinal-consuming emitters are actually reached with it.
         Assertions.assertTrue(passCode.contains("ViewBuilderGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties"),
                 "the builder is handed the ledger-ordered list");
-        Assertions.assertTrue(passCode.contains("ViewAdapterGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties)"),
+        Assertions.assertTrue(passCode.contains("ViewAdapterGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties"),
                 "and so is the (draft) adapter generator");
     }
 }

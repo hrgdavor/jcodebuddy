@@ -68,6 +68,7 @@ public final class DivergenceReporter {
             "polymorphic_root_enum_preserved",
             "addon_on_non_view",
             "generated_member_diverged",
+            "file_frozen",
             "mapper_field_missing_in_source",
             "mapper_field_missing_in_target",
             "mapper_type_incompatible",

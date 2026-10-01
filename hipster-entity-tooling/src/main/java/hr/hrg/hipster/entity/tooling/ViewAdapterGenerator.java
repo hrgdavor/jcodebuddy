@@ -68,6 +68,25 @@ public final class ViewAdapterGenerator {
      */
     public static AdapterResult generate(Path outputRoot, String packageName, ViewMeta view, List<Property> properties)
             throws IOException {
+        return generate(outputRoot, packageName, view, properties, null);
+    }
+
+    /**
+     * As {@link #generate(Path, String, ViewMeta, List)}, reporting a frozen file rather than rewriting it.
+     *
+     * <p>This emitter writes its two files directly instead of going through
+     * {@link CooperativeCodegen#reconcileMembers}, so the whole-file freeze (DEC-018 in the per-file form
+     * DEC-021 § 6 fixes) would otherwise not reach them — a developer who marks
+     * {@code <View>RowAdapter.java} {@code enabled:false} would still see it regenerated on the next pass.
+     * The check is delegated to {@link CooperativeCodegen#isFrozen(Path)} so the rule keeps one
+     * implementation.</p>
+     *
+     * @param divergences where a skipped file is reported; {@code null} is allowed for a caller that only
+     *                    wants the files and does not report (the four-argument form above)
+     */
+    public static AdapterResult generate(Path outputRoot, String packageName, ViewMeta view,
+                                         List<Property> properties, DivergenceReporter divergences)
+            throws IOException {
         Path packageDir = packageName == null || packageName.isBlank()
                 ? outputRoot
                 : outputRoot.resolve(packageName.replace('.', '/'));
@@ -76,9 +95,30 @@ public final class ViewAdapterGenerator {
 
         Path rowAdapter = packageDir.resolve(view.name() + "RowAdapter.java");
         Path binder = packageDir.resolve(view.name() + "Binder.java");
-        Files.writeString(rowAdapter, rowAdapterSource(packageName, view, properties));
-        Files.writeString(binder, binderSource(packageName, view, properties, writable));
+        writeUnlessFrozen(rowAdapter, rowAdapterSource(packageName, view, properties), divergences);
+        writeUnlessFrozen(binder, binderSource(packageName, view, properties, writable), divergences);
         return new AdapterResult(rowAdapter, binder, writable.stream().map(Property::name).toList());
+    }
+
+    /**
+     * Writes the canonical text, or leaves the file alone and says so when its header froze it.
+     *
+     * <p>The diagnostic's {@code location} is the file's simple type name, which is what a reader needs to
+     * find it: the two files this emitter writes differ only in that suffix.</p>
+     */
+    private static void writeUnlessFrozen(Path file, String canonical, DivergenceReporter divergences)
+            throws IOException {
+        if (!CooperativeCodegen.isFrozen(file)) {
+            Files.writeString(file, canonical);
+            return;
+        }
+        if (divergences != null) {
+            String simpleName = file.getFileName().toString();
+            if (simpleName.endsWith(".java")) {
+                simpleName = simpleName.substring(0, simpleName.length() - ".java".length());
+            }
+            divergences.add(CooperativeCodegen.frozen(simpleName));
+        }
     }
 
     /**
