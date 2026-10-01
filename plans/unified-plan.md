@@ -251,15 +251,23 @@ the snippet above is the whole wiring, and that module's test is the place to pr
 ### 1.4 — Test the MCP tool surface
 **Who:** agent · **Size:** S
 
-[`metadata-mcp-server`](../metadata-mcp-server/src/main/java/hr/hrg/watch2/server/metadata/mcp) has two
-source classes and **no test directory at all**: the tools it publishes have never been called by a test.
+**Done 2026-10-01.** `metadata-mcp-server` has its first test directory, and all **six** advertised tools
+are called rather than four: `get_entry`, `list_entries`, `get_metadata`, `has_changed`, `list_classes` and
+`parse_file` (added by step 1.2, so leaving it untested would have made the newest tool the untested one).
 
-**Do:** add `src/test/java` with a test per tool (list, get, has-changed, list-classes) that drives the
-provider through the MCP tool provider; assert the JSON shape as well as the call.
+- `MetadataMcpToolProviderTest` (8 tests) drives each handler directly and asserts the answer, including
+  the two shapes that are easy to get wrong: a missing argument is an **error result**, not a thrown
+  exception, and `parse_file` against a provider with no parser (DEC-W008's default) arrives as a tool
+  error naming the provider rather than a broken session. The cache-backed tools are asserted still to work
+  for that provider, which is what "additive" has to mean.
+- A drift guard: `tools()` and `register()` are two hand-maintained lists of the same six names, so the
+  test pins the names — a tool registered but not advertised (or the reverse) fails here.
+- One small production change to make that possible: the six handlers are **package-private** rather than
+  `private`, with a comment saying why. The wiring stays `register()` — one explicit `toolCall` per tool,
+  each naming its handler method — so there is still no name-to-handler registry to keep in step; a test
+  forced to assemble an `McpSyncServer` would have been testing the SDK instead of this class.
 
-**Gate:** `MODULE` for `metadata-mcp-server` green.
-
-**Done when:** every advertised tool has a test.
+**Gate:** ✅ `MODULE` for `metadata-mcp-server` green — 8 tests.
 
 ---
 
@@ -782,7 +790,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 1.1 | Honour `enabled: false` (DEC-018 / DEC-021 § 6) | agent | M | `[x]` |
 | 1.2 | `MetadataProvider.parse` (DEC-W008) | agent | M | `[x]` |
 | 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[x]` |
-| 1.4 | Test the MCP tool surface | agent | S | `[ ]` |
+| 1.4 | Test the MCP tool surface | agent | S | `[x]` |
 | 2.1 | metadata-arena unit tests | agent | M | `[ ]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[ ]` |
 | 3.1 | The hipster-ioc ADR | agent | S | `[ ]` |

@@ -66,7 +66,12 @@ public class MetadataMcpToolProvider {
             .build();
     }
 
-    private CallToolResult getEntry(McpSyncServerExchange exchange, CallToolRequest request) {
+    // The handlers are package-private rather than private on purpose. The wiring is register() above:
+    // one explicit toolCall per tool, each naming its handler method, so the mapping is navigable and
+    // there is no name-to-handler registry to keep in step. This module's test then calls each handler
+    // directly; a test forced to assemble an McpSyncServer to reach them would be testing the SDK.
+
+    CallToolResult getEntry(McpSyncServerExchange exchange, CallToolRequest request) {
         Map<String, Object> args = request.arguments();
         String hash = (String) args.get("hash");
         if (hash == null) return err("Missing 'hash' parameter");
@@ -74,11 +79,11 @@ public class MetadataMcpToolProvider {
         return ok(result);
     }
 
-    private CallToolResult listEntries(McpSyncServerExchange exchange, CallToolRequest request) {
+    CallToolResult listEntries(McpSyncServerExchange exchange, CallToolRequest request) {
         return ok(provider.listEntries());
     }
 
-    private CallToolResult getMetadata(McpSyncServerExchange exchange, CallToolRequest request) {
+    CallToolResult getMetadata(McpSyncServerExchange exchange, CallToolRequest request) {
         Map<String, Object> args = request.arguments();
         String hash = (String) args.get("hash");
         if (hash == null) return err("Missing 'hash' parameter");
@@ -87,7 +92,7 @@ public class MetadataMcpToolProvider {
         return ok(entry.metadata());
     }
 
-    private CallToolResult hasChanged(McpSyncServerExchange exchange, CallToolRequest request) {
+    CallToolResult hasChanged(McpSyncServerExchange exchange, CallToolRequest request) {
         Map<String, Object> args = request.arguments();
         String relPath = (String) args.get("relPath");
         String checksum = (String) args.get("checksum");
@@ -95,7 +100,7 @@ public class MetadataMcpToolProvider {
         return ok(provider.hasChanged(relPath, checksum));
     }
 
-    private CallToolResult listClasses(McpSyncServerExchange exchange, CallToolRequest request) {
+    CallToolResult listClasses(McpSyncServerExchange exchange, CallToolRequest request) {
         return ok(provider.listClasses());
     }
 
@@ -107,7 +112,7 @@ public class MetadataMcpToolProvider {
      * returned as a tool <em>error</em> rather than an exception, because an MCP tool that throws gives
      * the caller a broken session instead of an answer it can act on.</p>
      */
-    private CallToolResult parseFile(McpSyncServerExchange exchange, CallToolRequest request) {
+    CallToolResult parseFile(McpSyncServerExchange exchange, CallToolRequest request) {
         Map<String, Object> args = request.arguments();
         String relPath = (String) args.get("relPath");
         Object source = args.get("source");
