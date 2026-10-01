@@ -58,6 +58,24 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 7. **Reports are rendered by Bun from the generator's JSON metadata**, never by a Java generator
    (DEC-027/028/029): one self-contained, framework-free HTML file, every link verified before it is
    written.
+8. **Generators come in two tiers, and the tier is declared.** A **standalone** generator reads only the
+   file it is handed (`CodeContext.getFilePath()`) and its output is a function of that file: it may be
+   offered to every file, one at a time, in any order, from a saved buffer with no tree around it. A
+   **neighbour-reading** generator needs at least one *other* file — a sibling, a package, the source root
+   — or writes something that describes the tree (a graph, an index, a report). Those are a second tier:
+   declared as such, run with the root in their own pass, and **never offered per-file** by a caller that
+   believes it is asking about one file.
+
+   The line is not "how much does it read" but **"can a missing neighbour change the answer"** — and the
+   failure mode is specific: a generator that reads only its own file when it needed a neighbour does not
+   fail, it *infers an absence*. The hipster-ioc generator did exactly that in step 3.2: it looked for the
+   module interface inside the context's own compilation unit, found nothing, and reported no factories —
+   an empty-wiring implementation rather than an error, because a file it never read looked like a file
+   with nothing in it. So a neighbour that cannot be read is **reported, never inferred as absent**, and
+   the current tree shows both shapes: the entity generator takes a source root and a package list and
+   writes Java plus metadata JSON (tier 2 by construction, with no per-file entry point to misuse), while
+   `IocContextGenerator` implements the per-file SPI and reads a sibling file and writes a tree-level
+   graph (tier 2 wearing tier 1's interface). Enforcement: step 7.8.
 
 ---
 
@@ -520,18 +538,48 @@ JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `Dive
 ### 4.1 — Replace the hardcoded `WIDENING_CHAINS` table
 **Who:** agent · **Size:** S–M
 
-[`TypeChangeConflictResolver`](../merge-java/src/main/java/com/codebuddy/merge/TypeChangeConflictResolver.java)
-still carries a hardcoded JDK name table, and its own plan says replacing it with real supertype
-resolution "needs no new capability" — `ResolvedTypeReader` and `TypeContext` already exist and are
-already required by `OverloadAddConflictResolver`.
+**Done 2026-10-01 — the table is gone, and deleting it corrected a real defect.**
 
-**Do:** resolve the widening question through the type context, delete the table, and keep the
-resolver's diagnostics identical for the cases the table used to answer.
+- **The JDK name list is deleted.** `PRIMITIVE_CHAINS` replaces `WIDENING_CHAINS` and holds only the
+  JLS 5.1.2 widening primitive conversions, which are the language's rule and the one thing no class
+  hierarchy expresses (`int` is not a subtype of `long`). Everything else is resolved:
+  `ResolvedTypeReader.declaredType(...)` attributes each side's declaration against the type context,
+  and `TypeUtils.isAssignableTo(wider, narrower)` answers the question — a semantic the existing
+  expectations confirmed rather than one I assumed.
+- **The reader grew one query, not a second parse path.** `parseInto(...)` was extracted so the method
+  reading and the new declaration reading share one parser setup, one analysis context and one failure
+  rule; `declaredType` returns empty for "no answer", and the caller treats that as escalate — never as
+  "not assignable".
+- **`requiresTypeContext()` is now true for this resolver**, matching `OverloadAddConflictResolver`: the
+  orchestrator refuses to build a set without a context and names the resolver, and a direct caller gets
+  a `MANUAL` resolution carrying the reason. The primitive lattice deliberately gets no context-free
+  path — one resolver that answers differently depending on how it was built is worse than one that
+  insists on being built properly. `TypeContext`'s javadoc and `merge-java/README.md` were updated with
+  it.
+- **Two defects the table was hiding, both now pinned by tests.** (1) The boxed chain read the primitive
+  lattice across the wrapper classes, so `widens("Long", "Integer")` was **true** — but javac rejects
+  `Long x = anInteger`, and the two are siblings under `Number`; auto-adopting the `Long` declaration
+  would have broken every reader assigning the result to an `Integer`. That pair now escalates.
+  (2) `TreeSet` was listed against `AbstractSet`/`Set`/`Collection`/`Iterable`, so the interfaces it
+  actually implements — `NavigableSet`, `SortedSet` — were absent, and a pair the resolver could have
+  decided went to a human. Incompleteness was not neutral: it handed work back.
+- **Generics changed meaning, deliberately.** The canonical token still drops type arguments (it is what
+  the lattice compares), but resolution sees them, so `List<String>` → `Collection<String>` is a
+  widening and `List<String>` → `Collection<Integer>` is **not** — a distinction the old string
+  comparison could not make.
+- **Docs updated with the code**: the resolver's page (its decision list, a new "What changed when the
+  table was deleted" section, and the no-context example), the four live statements that called this
+  table the remaining approximation (`merge-java/README.md`, `IMPLEMENTATION_PLAN.md` in two places,
+  `IMPROVEMENTS_DELIVERED.md`), and an appended `CHANGELOG` entry — appended rather than edited, because
+  that file's own rule says so.
+- **The doc-injection gate caught the drift, not the Maven gate.** `ResolverDocsTest` failed with
+  "rendered block is out of sync … re-run: npm run inject:examples" the moment the test regions changed,
+  which is exactly what it exists for; `npm run inject:examples` re-rendered five blocks. Worth knowing
+  which check owns which mistake, again: a green compile says nothing about a doc that quotes the code.
 
-**Gate:** `MODULE` for `merge-java` green; the existing resolver tests are the regression net, and the
-commit message says which table entries became unreachable.
-
-**Done when:** no JDK type-name list remains in the resolver.
+**Gate:** ✅ `MODULE` for `merge-java` green — **683 tests, 0 failures**, including the 68 in
+`TypeChangeConflictResolverTest`, the resolver-docs suite and the whole three-way/verification set.
+Which table entries became unreachable is in the commit message, as this step requires.
 
 ### 4.2 — Phase 13, step 1: the read-only per-conflict review render
 **Who:** agent · **Size:** M
@@ -807,6 +855,40 @@ round-trips as the same JSON the RPC returns, and `GATE` stays green.
 **Done when:** DEC-W008's manual-mode paragraph is true and its status note drops the CLI from its
 "not implemented" list.
 
+### 7.8 — Make the two generator tiers a type, not a convention
+**Who:** agent · **Size:** M
+
+Rule § 2.8 states the distinction; nothing in the tree expresses it. One SPI — `CodeGenerator<T>` with
+`isApplicable(CodeContext)` and `generate(CodeContext)` — describes a **standalone** generator, and its
+javadoc says so ("a generator is therefore safe to offer to every file — the cost of asking is the
+predicate"), but nothing stops a neighbour-reading generator from implementing it and being offered
+exactly that way. Two facts about the current tree:
+
+- `IocContextGenerator` implements the per-file SPI and is **not** standalone: it resolves a supertype to
+  the sibling `<Supertype>.java` next to the context, and it writes
+  `<module>/.jcodebuddy/metadata/hipster-ioc/contexts.json` — an artifact describing the whole tree. A
+  caller holding a list of `CodeGenerator`s has no way to know that, and the generator's own
+  `isApplicable` (a substring test on the file's text) is deliberately cheap precisely *because* the SPI
+  promises the file is all that matters.
+- `EntityMetadataGenerator` is tier 2 by construction and therefore safe: its entry points take a source
+  root and a package list and write generated Java plus `.jcodebuddy/metadata/entity/…`, so there is no
+  per-file door to walk through. The tier distinction is what keeps that true as more generators appear.
+
+**Do:** put the distinction in `jcodebuddy-codegen-api` as a type rather than a comment — a second
+interface for the neighbour-reading tier, carrying what it needs beyond one file (the inputs it will read,
+or the requirement that it be run with a root) — declare `IocContextGenerator` as that tier, and make the
+caller side refuse to hand a tier-2 generator a single-file context (the entity pass's own dispatch is the
+caller to check, plus anything that iterates a resolver/generator list). State the tier on each
+generator's README, and amend DEC-036 § 11 with the classification, with the "a neighbour that cannot be
+read is reported, never inferred as absent" rule, and with the step 3.2 evidence for it.
+
+**Gate:** `MODULE` for `jcodebuddy-codegen-api,hipster-ioc-tooling` green, with tests that a
+neighbour-reading generator is not offered per-file and is run with a root, and that a declared neighbour
+which is missing produces a diagnostic instead of an empty answer.
+
+**Done when:** a caller holding a generator list can tell the tiers apart without reading the generator's
+source, and no generator that reads another file implements only the per-file tier.
+
 ---
 
 ## 12. Phase 8 — human-gated observations (no code; a checklist)
@@ -939,7 +1021,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` |
-| 4.1 | Replace `WIDENING_CHAINS` with supertype resolution | agent | S–M | `[ ]` |
+| 4.1 | Replace `WIDENING_CHAINS` with supertype resolution | agent | S–M | `[x]` |
 | 4.2 | merge-java Phase 13 step 1 — review render | agent | M | `[ ]` |
 | 4.3 | merge-java Phase 13 step 2 — action display + sticky decisions | agent | M | `[ ]` |
 | 4.4 | merge-java Phase 13 step 3 — LLM proposer behind the gate | agent | M | `[ ]` |
@@ -959,6 +1041,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 7.5 | Agent OpenRewrite tool prototype | agent | M | `[ ]` |
 | 7.6 | Decide the three `todo.java_watch2.md` remainders | agent + maintainer | S | `[ ]` |
 | 7.7 | Manual-mode CLI for DEC-W008 (`metadata parse`) | agent | S | `[ ]` |
+| 7.8 | Two generator tiers as a type, not a convention (rule § 2.8) | agent | M | `[ ]` |
 | 8.1 | JetBrains maintainer questions + IDE observations | human | — | `[ ]` |
 | 8.2 | Eclipse observations, then Q2 | human | — | `[ ]` |
 | 8.3 | Agent IDE hooks | human decides | — | `[ ]` |

@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -119,10 +120,67 @@ final class ResolvedTypeReader {
             return Reading.failed("no type context was supplied");
         }
 
+        List<J.MethodDeclaration> declarations = new ArrayList<>();
+        String failure = parseInto(code, filePath, context, sourceFile -> {
+            if (sourceFile instanceof J.CompilationUnit) {
+                collectMethods(sourceFile, declarations);
+            }
+        });
+        if (failure != null) {
+            return Reading.failed(failure);
+        }
+        return new Reading(indexByName(declarations), null);
+    }
+
+    /**
+     * The resolved type of a named declaration — a field, a local variable or a
+     * parameter — in a fragment.
+     *
+     * <p>What a resolver needs when the question is about a <em>declaration's</em>
+     * type rather than a method's parameters: the type that a branch wrote on the
+     * left-hand side of {@code long count = 0}. Resolution is what makes the answer
+     * a fact about the language instead of a lookup in a hand-written list —
+     * {@code TreeSet} is a {@code NavigableSet} because javac says so, not because
+     * somebody added it to a table.
+     *
+     * <p>Empty means "not resolvable" — a parse failure, a missing context, or a
+     * declaration the fragment does not contain. It is never an empty answer
+     * standing in for a negative one: the caller must treat it as "no answer" and
+     * escalate, which is the opposite of treating it as "not assignable".
+     */
+    static Optional<JavaType> declaredType(String code, String name, String filePath,
+        TypeContext context) {
+        if (code == null || code.isBlank() || context == null || name == null) {
+            return Optional.empty();
+        }
+        Map<String, JavaType> byName = new LinkedHashMap<>();
+        String failure = parseInto(code, filePath, context, sourceFile -> {
+            if (sourceFile instanceof J.CompilationUnit) {
+                collectVariableTypes(sourceFile, byName);
+            }
+        });
+        if (failure != null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(byName.get(name));
+    }
+
+    /**
+     * Parses one fragment and hands each compilation unit to {@code onUnit}.
+     *
+     * <p>One parse path for every question asked of a fragment. Two readers with
+     * their own {@link JavaParser} setup would drift — the analysis context, the
+     * source-path derivation and the failure handling below are each subtle enough
+     * that a second copy would eventually disagree with this one about what "could
+     * not be parsed" means.
+     *
+     * @return the parser's message when parsing failed, otherwise {@code null}
+     */
+    private static String parseInto(String code, String filePath, TypeContext context,
+        Consumer<SourceFile> onUnit) {
         Path sourcePath = context.sourcePathFor(filePath);
         Path sourceRoot = context.sourceRoot();
 
-        List<J.MethodDeclaration> declarations = new ArrayList<>();
         List<String> failures = new ArrayList<>();
 
         JavaParser parser = parserFor(context);
@@ -140,7 +198,7 @@ final class ResolvedTypeReader {
                     failures.add(error.getExceptionType() + ": " + error.getMessage()));
 
                 if (sourceFile instanceof J.CompilationUnit) {
-                    collectMethods(sourceFile, declarations);
+                    onUnit.accept(sourceFile);
                 } else if (failures.isEmpty()) {
                     // A ParseError tree: not a compilation unit and no marker text.
                     failures.add("the source could not be parsed");
@@ -151,10 +209,32 @@ final class ResolvedTypeReader {
                 + (e.getMessage() == null ? "" : ": " + e.getMessage()));
         }
 
-        if (!failures.isEmpty()) {
-            return Reading.failed(String.join("; ", failures));
-        }
-        return new Reading(indexByName(declarations), null);
+        return failures.isEmpty() ? null : String.join("; ", failures);
+    }
+
+    /**
+     * Index every named variable's resolved type.
+     *
+     * <p>Fields, locals and parameters all arrive here as
+     * {@link J.VariableDeclarations}; a declaration naming several variables
+     * ({@code int a, b;}) contributes each name with the same type, which is what
+     * the source means. The first binding for a name wins, so an inner redeclaration
+     * does not displace the outer one — the fragments this reads declare each name
+     * once, and a stable answer matters more than the rare shadowing case.
+     */
+    private static void collectVariableTypes(SourceFile sourceFile, Map<String, JavaType> into) {
+        new JavaIsoVisitor<ExecutionContext>() {
+            @Override
+            public J.VariableDeclarations visitVariableDeclarations(
+                J.VariableDeclarations declarations, ExecutionContext context) {
+                if (declarations.getVariables() != null) {
+                    for (J.VariableDeclarations.NamedVariable variable : declarations.getVariables()) {
+                        into.putIfAbsent(variable.getSimpleName(), declarations.getType());
+                    }
+                }
+                return super.visitVariableDeclarations(declarations, context);
+            }
+        }.visit(sourceFile, new InMemoryExecutionContext());
     }
 
     private static void collectMethods(SourceFile sourceFile, List<J.MethodDeclaration> into) {

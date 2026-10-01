@@ -357,12 +357,16 @@ keeps a branch up to date through JGit, `MergeBatch` handles many files at once,
 cannot fix as a private, anonymization-first fixture for the next resolver.
 
 Overload comparison is now **type-aware**: it compares resolved parameter types, so
-two spellings of one signature are recognised as one. Only that resolver needs type
-information — placing imports, merging comments and the rest work from the conflict
-text alone, which is why a type context is optional and declared per resolver.
+two spellings of one signature are recognised as one. Placing imports, merging
+comments and the rest work from the conflict text alone, so a type context is
+optional and declared per resolver — **two** resolvers declare it today, overload
+comparison and type-change widening.
 
-`TypeChangeConflictResolver` still classifies widening from a hardcoded table of JDK
-type names, which is the remaining known approximation.
+`TypeChangeConflictResolver` classifies widening by resolving the two declared types
+and asking javac which is the supertype, so `TreeSet` → `NavigableSet` is recognised
+and so is any type in the project under merge. Only the JLS primitive conversions
+keep a table, because they are the language's rule and no class hierarchy expresses
+them.
 
 Structural, API and overlapping-body conflicts are **never** resolved
 automatically, by design. The reasoning, with worked examples, is in

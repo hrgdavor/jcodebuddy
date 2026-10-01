@@ -25,7 +25,15 @@ import java.util.Objects;
  * {@link ConflictResolver#requiresTypeContext()}. Today that is
  * {@link OverloadAddConflictResolver}, because deciding whether {@code List<String>}
  * and {@code java.util.List<java.lang.String>} are the same parameter list is a
- * question about resolved types, not about spelling.
+ * question about resolved types, not about spelling, and
+ * {@link TypeChangeConflictResolver}, because deciding which of two declared types is
+ * the wider one is a question about the class hierarchy - {@code TreeSet} is a
+ * {@code NavigableSet} because javac says so, not because a table lists it, and
+ * {@code Integer} does <em>not</em> widen to {@code Long} however much the primitive
+ * lattice suggests otherwise. Only the JLS primitive conversions avoid the question,
+ * and that resolver asks for a context regardless: one resolver that answers
+ * differently depending on how it was built is worse than one that insists on being
+ * built properly.
  *
  * <p>When any registered resolver declares the requirement, the orchestrator
  * refuses to be built without a context rather than silently degrading to a weaker

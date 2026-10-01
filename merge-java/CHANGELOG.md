@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`TypeChangeConflictResolver` classifies widening by resolution.** The
+  hand-written `WIDENING_CHAINS` list of JDK type names is gone. A pair of
+  reference types is now decided by resolving both declarations against the type
+  context and asking javac whether the narrower type is assignable to the wider
+  one; a pair involving a primitive keeps the JLS 5.1.2 conversion lattice, which
+  is the language's own rule and the only table left. Three consequences worth
+  naming:
+  - a supertype the list never carried is now **answered instead of escalated** —
+    `TreeSet` was listed against `AbstractSet`/`Set`/`Collection`/`Iterable`, so
+    `NavigableSet` and `SortedSet`, the interfaces it actually implements, were
+    absent, and a `TreeSet`/`NavigableSet` pair went to a reviewer for no reason;
+  - the boxed-type entries were **wrong**, not merely coarse: the list read the
+    primitive lattice across the wrapper classes, so `widens("Long", "Integer")`
+    was `true` where javac rejects `Long x = anInteger`, because the two are
+    siblings under `Number`. That pair escalates now, and a commit that would have
+    auto-adopted the `Long` declaration no longer does;
+  - the resolver now declares `requiresTypeContext()`, so a run with no type
+    context is refused at construction with its name in the message rather than
+    resolved by a weaker rule. A direct caller gets a manual resolution carrying
+    the reason.
+  The stale note at the end of the WS2 step 2 entry below — that the hardcoded
+  `WIDENING_CHAINS` table and Phase 13 are what remain open — is corrected by this
+  entry as far as that table is concerned; Phase 13 is still open.
+
 ### Added
 
 - **Resolver reference documentation** (`docs/resolvers/`) — one folder per

@@ -13,16 +13,18 @@ Status legend: **[done]**, **[partial]**, **[todo]**.
 > **Done** (step 1 `DeclarationScanner`, step 2 `ResolvedTypeReader` + `TypeContext`
 > comparing resolved types — Phase 9 below), and the token comparison is gone.
 >
-> The two items genuinely open in this module are:
+> The one item genuinely open in this module is:
 >
 > 1. **Phase 13 — analysis display and UI helper** (`[todo]` below): the per-conflict
 >    review render, the action display that writes back to `BranchConflictStore`, and
 >    the LLM-as-proposer step.
-> 2. **Phase 9's residue:** `TypeChangeConflictResolver` still carries its hardcoded
->    `WIDENING_CHAINS` JDK name table (line 57); the plan's own note says replacing it
->    with real supertype resolution "needs no new capability".
 >
-> Both are tracked as steps in [`plans/unified-plan.md`](../plans/unified-plan.md).
+> Phase 9's residue is **done**: `TypeChangeConflictResolver`'s hardcoded
+> `WIDENING_CHAINS` JDK name table is gone, replaced by resolution through the type
+> context the other resolvers already use. See the status note in the Phase 9 section
+> below for what it cost and what it corrected.
+>
+> Phase 13 is tracked as a step in [`plans/unified-plan.md`](../plans/unified-plan.md).
 
 ## Goal
 
@@ -181,9 +183,17 @@ The type context is optional and required only by resolvers that declare
 `requiresTypeContext()` — currently just `OverloadAddConflictResolver`. Placing
 imports needs nothing but text.
 
-**Still todo:** `TypeChangeConflictResolver` keeps its hardcoded JDK name table
-(`WIDENING_CHAINS`). Replacing it with real supertype resolution through the same
-mechanism is the obvious next step and needs no new capability.
+**Done:** `TypeChangeConflictResolver` no longer keeps a JDK name table. A pair of
+reference types is decided by resolving both declarations through the same
+`ResolvedTypeReader` + `TypeContext` the overload resolver uses — `ResolvedTypeReader`
+gained a declaration-type query for it, so the fragment is parsed once, by one parse
+path — and a pair involving a primitive is decided by the JLS 5.1.2 lattice, which is
+the language's rule rather than a claim about the JDK. Two things the table got wrong
+came out of doing it: it called `Integer` → `Long` a widening (javac rejects
+`Long x = anInteger`; they are siblings under `Number`), and it escalated pairs it
+simply had not listed (`TreeSet`/`NavigableSet`). The resolver declares
+`requiresTypeContext()`, so a context-less run is refused at construction instead of
+being resolved by a weaker rule.
 
 ## Phase 10 — JGit integration [done → WS5]
 

@@ -129,14 +129,20 @@ rather than trusting the suite - surfaced one more defect, and it was the worst 
 `DESIGN_NEVER_AUTO_RESOLVED.md` is the authority on the three conflict kinds that
 stay manual, and that is unchanged.
 
-- **Only one resolver is type-aware, and on purpose.** Type context is optional and
-  required only where a resolver declares it. Placing imports needs nothing but
-  text — de-duplicate and keep both — and neither do comment or constant unions, or
-  the two manual resolvers. `OverloadAddConflictResolver` is the sole declarer,
+- **Two resolvers are type-aware, and only where they must be.** Type context is
+  optional and required only where a resolver declares it. Placing imports needs
+  nothing but text — de-duplicate and keep both — and neither do comment or constant
+  unions, or the two manual resolvers. `OverloadAddConflictResolver` declares it,
   because deciding whether `List<String>` and `java.util.List<java.lang.String>` are
   the same parameter list is a question about the language rather than about
-  spelling. `TypeChangeConflictResolver` still uses its hardcoded JDK name table
-  (`WIDENING_CHAINS`), which is a known approximation and the obvious next candidate.
+  spelling. `TypeChangeConflictResolver` declares it too, since replacing its
+  hardcoded JDK name table: which of two declared types is the wider one is a
+  question about the class hierarchy, and the table was both incomplete (nothing it
+  did not list, including every type in the project under merge, was escalated) and
+  wrong for boxed types (it called `Integer` → `Long` a widening, which javac
+  rejects). Only the JLS primitive conversions avoid the question, and that resolver
+  asks for a context anyway — one resolver that answers differently depending on how
+  it was built is worse than one that insists on being built properly.
 - **The verification gate is parse-level, not compile-level.** It catches unbalanced
   delimiters, unterminated literals and leftover conflict markers. It is a floor, not
   a proof: it establishes well-formedness, never intent, which is exactly why it does
