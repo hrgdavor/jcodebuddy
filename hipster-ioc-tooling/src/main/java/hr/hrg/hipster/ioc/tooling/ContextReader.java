@@ -271,9 +271,16 @@ public final class ContextReader {
             }
             for (String line : source.split("\n", -1)) {
                 String trimmed = line.strip();
-                if (trimmed.startsWith("import ") && !imports.contains(trimmed)) {
-                    imports.add(trimmed);
+                if (!trimmed.startsWith("import ") || imports.contains(trimmed)) {
+                    continue;
                 }
+                // The marker annotation's own import is dropped: the generated class implements the
+                // interface and never names the annotation, and an unused import in generated source is
+                // exactly the noise a reviewer stops reading.
+                if (trimmed.endsWith("." + CONTEXT_ANNOTATION + ";")) {
+                    continue;
+                }
+                imports.add(trimmed);
             }
         }
         return imports;

@@ -8,6 +8,20 @@
 > [`hipster-ioc-api/`](../../hipster-ioc-api) (`HipsterContext`, `ChildContext`, `Circular`,
 > `DynamicResource`, `StableValuePolyfill`).
 >
+> **Phase 2 has since started, and its first half is real (2026-10-01):**
+> [`hipster-ioc-tooling/`](../../hipster-ioc-tooling/README.md) is no longer an empty jar. It generates
+> `CtxMainImpl` from `CtxMain` — committed Java, DEC-035's header, creation order derived from the
+> `buildMapper()` factory, accessors that return fields — and the committed example in `hipster-ioc-test`
+> compiles. It also computes the dependency graph, as JSON under the module's
+> `.jcodebuddy/metadata/hipster-ioc/contexts.json`, and runs through
+> `bun scripts/ioc-gen.js`. The shape is fixed by
+> [DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md) (`Trial`).
+>
+> **What is still not built, and is not claimed:** the browsable presentation of the graph — the report page
+> rendered by Bun from that JSON (DEC-027/029), the "editor-agnostic context navigation" bullet below, and
+> the embedded light HTTP server. None of those exist. Nor does the `@Circular` two-phase form: a cycle is
+> refused with a diagnostic rather than wired (DEC-036 § 5).
+>
 > What does **not** exist: Phase 2's whole backlog — dependency metadata, the embedded light HTTP
 > server, the editor-agnostic graph navigation, and the "secondary backlog" list. A grep for
 > `HipsterIocGenerator`, `GeneratedContext` or a dependency-graph service finds nothing, and the

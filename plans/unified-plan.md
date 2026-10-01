@@ -473,17 +473,45 @@ JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `Dive
 ### 3.3 — Make it runnable and documented
 **Who:** agent · **Size:** M
 
-A generator nothing can invoke is not a delivery. The ROADMAP's second half — the dependency metadata
-and its navigation — needs a path a user can actually take.
+**Done 2026-10-01 — the generator has an entry point, a README, and a committed example.**
 
-**Do:** wire the generator into the documented entry point (the dev-time runner and/or a CLI), extend
-[`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) to say what landed and what did **not**
-(the embedded HTTP server for graphs is a separate item — leave it explicitly open or drop it in the
-same decision), and document the generated shape where a user reads it.
+- **`IocTool`** is the Java entry point: `--root <dir>`, `--indent <text>`, `--quiet`, `--help`, and an exit
+  code that is **non-zero when any context was refused** — a cycle, a lazy bean without a factory, a named
+  implementation — so a check can depend on it, while report-only divergences exit 0.
+- **`bun scripts/ioc-gen.js`** is the documented way to run it (AGENTS.md § 2: the script is Bun JavaScript,
+  the build step is Maven). It pins JDK 25 through `scripts/lib/toolchain.js`, compiles the module and its
+  reactor dependencies, exports the classpath with `dependency:build-classpath -am` — so it runs *this
+  checkout's* classes rather than whatever jar is in `~/.m2` — and forwards the generator's arguments. Its
+  header records why it is not `mvn exec:java`, the same measured reasons `scripts/gen.js` gives.
+- **The committed example**: `hipster-ioc-test/src/test/java/…/CtxMainImpl.java` — the real `CtxMain`, its
+  package-private `CtxMainModule` sibling, and `this.mapper = buildMapper();`. `hipster-ioc-test` **compiles**
+  with it, which is DEC-036's headline acceptance criterion, met on the module the decision names rather than
+  only on a fixture tree. Found while doing it: the generated file inherited the marker annotation's own
+  import, which it never uses — the reader now drops it.
+- **`hipster-ioc-tooling/README.md`** is the module's front door: what it does, the generated layout, how to
+  run it, the five refusals and why refusing is the answer, the graph's location, the **naming-contract table
+  DEC-036 § 12 asked for**, and the boundaries (§ 1.1, DEC-030, DEC-026).
+- **The ROADMAP now distinguishes what landed from what did not**: the generator and the graph are real; the
+  browsable report page (DEC-027/029), the editor-agnostic navigation bullet, the embedded light HTTP server
+  and the `@Circular` two-phase form are named as *not built*, rather than left as an implication of "Phase 2
+  started".
+- The `-am` trap from step 3.2 is worth repeating for this step too: `bun scripts/mvn-jdk25.js` needs
+  `-DskipTests=true` (the wrapper refuses a `-D` token without `=`, by design), and a module built with
+  `-pl` alone uses installed siblings.
 
-**Gate:** the new path runs from a documented command in a clean checkout, and `GATE` is green.
+**Gate:** ✅ `bun scripts/ioc-gen.js` runs from a clean checkout and reports `1 context, 1 implementation,
+0 refused`; `MODULE` for `hipster-ioc-test` compiles with the generated file; the recorded `GATE` is green
+(8 modules, `hipster-entity-tooling` 6:20), as are `GeneratorGuardTest` and `GateContractTest` (14).
 
-**Done when:** the ROADMAP's Phase 2 items are each either delivered or explicitly dropped with a reason.
+**Two details worth keeping, because each cost a wrong answer before it was found:**
+
+- The new README's relative links were written with a `../../` prefix copied from files two levels deeper,
+  and the **link check** caught it — the gate did not, because the gate is the Maven set and does not read
+  Markdown. Which check owns which mistake is worth knowing: `GATE` green did not mean the docs resolved.
+- The graph's destination needed a **module-level** ignore. The root `.gitignore`'s `.jcodebuddy/metadata/`
+  contains a slash, so it is anchored to the repository root and does **not** match
+  `hipster-ioc-test/.jcodebuddy/metadata/` — the graph showed up as untracked until the module got its own
+  `.jcodebuddy/.gitignore` in the shape `hipster-entity-example`'s states.
 
 ---
 
@@ -910,7 +938,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[ ]` |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` |
-| 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[ ]` |
+| 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` |
 | 4.1 | Replace `WIDENING_CHAINS` with supertype resolution | agent | S–M | `[ ]` |
 | 4.2 | merge-java Phase 13 step 1 — review render | agent | M | `[ ]` |
 | 4.3 | merge-java Phase 13 step 2 — action display + sticky decisions | agent | M | `[ ]` |

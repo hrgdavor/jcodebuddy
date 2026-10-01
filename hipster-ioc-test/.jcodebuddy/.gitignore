@@ -1,0 +1,18 @@
+# The default track policy for a `.jcodebuddy/` tree: everything here is derived, machine-written and
+# machine-local, so nothing is committed unless this module says otherwise. The one reserved exception
+# is `conf/`, which holds what must survive a clone and a commit (DEC-026).
+#
+# This module currently opts nothing in. `metadata/hipster-ioc/contexts.json` is the dependency graph the
+# context generator writes, and it is derived output by definition: it is a rendering of the interfaces,
+# so a stale copy in git describes a tree that no longer exists.
+*
+!.gitignore
+
+# Opt in here when a subtree earns it — and remember the directory must be re-included before anything
+# inside it, because git never re-includes a file whose parent directory is excluded:
+#
+#     !metadata/
+#     !metadata/README.md
+#
+# A `.java` file under `.jcodebuddy/` is always a mistake: generated Java belongs in `src/main/java`
+# (DEC-026 § 5), and `GeneratorGuardTest` asserts it.
