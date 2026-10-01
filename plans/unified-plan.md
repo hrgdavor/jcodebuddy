@@ -182,22 +182,34 @@ the header **format** is implemented and emitted by every generator, `entityFiel
 ### 1.2 — Implement `MetadataProvider.parse` (the no-cache path, DEC-W008)
 **Who:** agent · **Size:** M
 
-[DEC-W008](../doc/architecture/decisions-watch/DEC-W008.md) decides that parsing without a cache is a
-first-class path; [MetadataProvider](../metadata-server/src/main/java/hr/hrg/watch2/server/metadata/MetadataProvider.java)
-today has only `get`, `listEntries`, `hasChanged`, `listClasses`, so the fallback the decision fixes does
-not exist. The index row in
-[`decisions/README.md`](../doc-hipster-entity/architecture/decisions/README.md) records that too.
+**Done 2026-10-01.** DEC-W008's P0 half is implemented, and four points of the decision's text were
+corrected in place (the amendment block at the top of DEC-W008 records all four):
 
-**Do:** add `parse` to the interface and implement it so metadata comes from source bytes with no cache
-present, wire it to the RPC path (`rpc/MetadataRpcService`) so a manual-mode caller can use it, and test
-both halves: parse-with-no-cache returns the same facts as a cache hit, and the cache-backed path is
-unchanged.
+- `MetadataProvider.parse(String relativePath, byte[] sourceBytes)` is on the interface. Its **default
+  throws** `MetadataParseUnsupportedException` — DEC-W008 required a working default, which is not
+  implementable in `metadata-server`: a default that parses needs the repository's one source reader
+  (OpenRewrite's LST, DEC-030), which lives in `hipster-entity-tooling` and is not on this module's
+  classpath. The decision's own boundary section had left the location open, so this is its "module
+  dependency resolution" answer, recorded rather than assumed.
+- The **reference implementation** is `project-automation`'s new `SourceMetadataParser`, called from
+  `InMemoryMetadataCacheProvider.parse` — the override DEC-W008 names. Pure (nothing outside its two
+  arguments is read or written), file-scoped facts only: the wayhash of the LF-normalised bytes via the
+  tooling's `ContentHash` (so the CRLF/LF rule of DEC-029 § 4 is not re-implemented), the primary type
+  chosen by Java's own file-name rule, its kind via `MetadataLocations.kindOf`, and its declared method
+  names (sorted — declaration order is not part of the fact).
+- **`SourceMetadata` does not exist**, so the entry carries the same `Map<String, Object>` payload cache
+  entries already use; a parallel model would have made the interface's two halves disagree the day
+  DEC-W007 lands.
+- Additive surfaces: RPC `parseFile`, MCP `parse_file`. A provider with no parser gets a JSON-RPC error
+  naming the provider (and the MCP tool an error result) rather than a silent `null`; the cache-backed
+  methods are untouched, asserted in the same test.
+- Tests: `SourceMetadataParserTest` (6) and two new `MetadataServerTest` cases (7 in that class).
 
-**Gate:** `MODULE` for `metadata-server` green, with the new test named in the commit. Leave DEC-W008's
-status at `Proposed` unless the maintainer moves it — implementing a decision is not the same as
-accepting it, and that call is theirs.
+**Still open from the decision:** the manual-mode CLI (`jcodebuddy metadata parse <file>`) — now step 7.7.
 
-**Done when:** the interface method exists, is reachable from the RPC surface, and is tested.
+**Gate:** ✅ `MODULE` for `metadata-server,metadata-mcp-server,project-automation` green.
+
+**Done when:** ✅ done — see the commit for this step.
 
 ### 1.3 — `WatchMetadataProvider`: the metadata server over the watch cache
 **Who:** agent · **Size:** M
@@ -606,6 +618,25 @@ Each is a decision, and silence is the only wrong outcome:
 **Gate:** each item in [`todo.java_watch2.md`](../todo.java_watch2.md) is either scheduled or struck
 through with a reason; nothing stays silently unchecked.
 
+### 7.7 — The manual-mode CLI for DEC-W008 (`jcodebuddy metadata parse <file>`)
+**Who:** agent · **Size:** S
+
+DEC-W008 requires a CLI entry point that calls `parse` directly and prints the resulting metadata, working
+in a fresh checkout with no daemon, no cache folder and no prior `scan`. Step 1.2 built the method and the
+RPC/MCP routes; the CLI is the piece the decision names and nothing implements — there is no `metadata`
+command anywhere in the tree, which is why DEC-W008's amendment lists it as open.
+
+**Do:** add the command where DEC-W008 says it belongs (`project-automation`, which already hosts
+`MetadataAnalysisRunner` and the provider). It prints the entry as JSON on stdout and exits non-zero when
+the file cannot be read. If it needs a launcher, that launcher is Bun JavaScript with JDK 25 pinned
+(AGENTS.md § 2: the script is JavaScript, the build step is Maven) — never a `.cmd`/`.sh`.
+
+**Gate:** the command runs against a file in a clean checkout with no `.jcodebuddy/` present, its output
+round-trips as the same JSON the RPC returns, and `GATE` stays green.
+
+**Done when:** DEC-W008's manual-mode paragraph is true and its status note drops the CLI from its
+"not implemented" list.
+
 ---
 
 ## 12. Phase 8 — human-gated observations (no code; a checklist)
@@ -729,7 +760,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 0.1 | Commit the EEnumSet overlap JMH delivery | agent | S | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer) |
 | 0.2 | Commit the stale-document corrections | agent | S | `[x]` (landed as `ff0dc49`) |
 | 1.1 | Honour `enabled: false` (DEC-018 / DEC-021 § 6) | agent | M | `[x]` |
-| 1.2 | `MetadataProvider.parse` (DEC-W008) | agent | M | `[ ]` |
+| 1.2 | `MetadataProvider.parse` (DEC-W008) | agent | M | `[x]` |
 | 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[ ]` |
 | 1.4 | Test the MCP tool surface | agent | S | `[ ]` |
 | 2.1 | metadata-arena unit tests | agent | M | `[ ]` |
@@ -756,6 +787,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 7.4 | Documentation front door + cross-references | agent | S | `[ ]` |
 | 7.5 | Agent OpenRewrite tool prototype | agent | M | `[ ]` |
 | 7.6 | Decide the three `todo.java_watch2.md` remainders | agent + maintainer | S | `[ ]` |
+| 7.7 | Manual-mode CLI for DEC-W008 (`metadata parse`) | agent | S | `[ ]` |
 | 8.1 | JetBrains maintainer questions + IDE observations | human | — | `[ ]` |
 | 8.2 | Eclipse observations, then Q2 | human | — | `[ ]` |
 | 8.3 | Agent IDE hooks | human decides | — | `[ ]` |

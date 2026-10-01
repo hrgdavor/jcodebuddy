@@ -7,6 +7,46 @@
 - Supersedes: -
 - Superseded by: -
 
+> **IMPLEMENTATION STATUS (2026-10-01) — the P0 half is implemented; four points of the text below were
+> wrong and are corrected here.**
+>
+> **Implemented.**
+>
+> - `MetadataProvider.parse(String relativePath, byte[] sourceBytes)` exists on the interface
+>   (`metadata-server`).
+> - The **reference implementation** is `project-automation`'s `SourceMetadataParser`, called from
+>   `InMemoryMetadataCacheProvider.parse` — the override the "Implementation boundaries" section below
+>   names. It is pure (it reads and writes nothing outside its two arguments), and its facts are
+>   file-scoped only: the wayhash of the LF-normalised bytes (DEC-029 § 4), the primary type's fully
+>   qualified name, the type's kind, and its declared method names.
+> - The additive surfaces exist: RPC `parseFile` in `MetadataRpcService` and MCP `parse_file` in
+>   `MetadataMcpToolProvider`. Both leave the cache-backed methods untouched, and a provider with no
+>   parser answers with a **named** failure (`MetadataParseUnsupportedException`) rather than a silent
+>   `null` — the dispatcher turns it into a JSON-RPC error whose message names the provider.
+> - Tests: `SourceMetadataParserTest` (purity, CRLF/LF checksum equality, broken source, the
+>   file-name rule for the primary type, and "what `parse` derives is what the cache then holds") plus two
+>   `MetadataServerTest` cases for the RPC surface and for a provider with no parser.
+>
+> **Corrected in this decision's text.**
+>
+> 1. **"The default behaviour of `parse` MUST work correctly" is not implementable in `metadata-server`.**
+>    The default now throws `MetadataParseUnsupportedException`. A default that parses would need the
+>    repository's one source reader — OpenRewrite's LST in `hipster-entity-tooling` (DEC-030) — and the
+>    metadata server does not have it, by design. This decision's own boundary section left the location to
+>    "module dependency resolution"; the resolution is that the implementation lives where the reader does.
+> 2. **`SourceMetadata` does not exist as a type.** DEC-W007's model was never implemented, so `parse`
+>    returns the same `Map<String, Object>` payload the cache entries already carry. Inventing a parallel
+>    model here would have made the interface's two halves disagree on the day the model lands.
+> 3. **The parsing is OpenRewrite's, not JavaParser's.** The migration removed JavaParser from the
+>    repository entirely (DEC-030); every sentence below that names it describes the state before
+>    2026-09-22.
+> 4. **The manual-mode CLI is not implemented.** `jcodebuddy metadata parse <file>` does not exist; the RPC
+>    and MCP routes above are the manual-mode path today. The CLI stays open work, scheduled in
+>    [`plans/unified-plan.md`](../../../plans/unified-plan.md).
+>
+> The status stays **Proposed**: P1 (cache write-back), P1/P2 (`get` falling back to `parse`) and P2+ are
+> still unbuilt, and a decision whose later phases have no code is not Accepted.
+
 ## Context
 
 The current metadata-server and metadata-mcp-server expose only cache-backed RPC and MCP tools: `get_entry`, `list_entries`, `get_metadata`, `has_changed`, `list_classes`. The `MetadataProvider` interface has no method for generating metadata from source bytes when the cache is absent.
@@ -62,17 +102,17 @@ Persisting `CacheEntry` records by hash to `.cache/<hash>.fury` and maintaining 
 
 ### Implementation boundaries
 
-- `InMemoryMetadataCacheProvider` SHOULD override `parse` to avoid redundant work when the caller already has access to the in-memory map, but this is not required. The default behavior of `parse` MUST work correctly regardless of whether overriding exists.
-- The metadata-server module adds `parseFile` to its RPC surface and `parse_file` to its MCP tool surface as optional, additive methods. These MUST NOT change the behavior of existing cache-backed methods.
-- `hipster-entity-tooling` (which provides JavaParser-based parsing) is the expected implementation of `parse`. Whether `parse` lives in `metadata-server` or `project-automation` depends on module dependency resolution; the contract is defined here, and the implementation location is a follow-up decision.
+- `InMemoryMetadataCacheProvider` SHOULD override `parse` to avoid redundant work when the caller already has access to the in-memory map, but this is not required. ~~The default behavior of `parse` MUST work correctly regardless of whether overriding exists.~~ **Amended 2026-10-01:** the default throws `MetadataParseUnsupportedException` instead, because a default that parses would need the source reader, which lives in `hipster-entity-tooling` (DEC-030) and is not on this module's classpath. The reference implementation is the override, in `project-automation`.
+- The metadata-server module adds `parseFile` to its RPC surface and `parse_file` to its MCP tool surface as optional, additive methods. These MUST NOT change the behavior of existing cache-backed methods. **Implemented 2026-10-01**, with a test that a provider which has no parser still serves `listEntries` unchanged.
+- ~~`hipster-entity-tooling` (which provides JavaParser-based parsing)~~ **Amended 2026-10-01:** `hipster-entity-tooling` (which provides the OpenRewrite LST reader; JavaParser left the repository on 2026-09-22, DEC-030) is the expected implementation of `parse`. Whether `parse` lives in `metadata-server` or `project-automation` depends on module dependency resolution; the contract is defined here, and the implementation location is a follow-up decision. **Resolved 2026-10-01:** the reader is in `hipster-entity-tooling`, so the implementation lives in `project-automation` (`SourceMetadataParser`), which already depends on both it and this module.
 
 ### Source metadata as interchange
 
-`parse` returns the same rich `SourceMetadata` model defined in DEC-W007 that enriched cache entries use, but ONLY for information that can be derived from the file's own source bytes alone. `SourceMetadata` MUST NOT contain cross-file resolved references, annotation indexes, or any correlation data that requires reading other files. This ensures interchange format consistency: producers (whether cache enrichment or on-demand parse) and consumers always see the same typed, file-scoped tree.
+`parse` returns ~~the same rich `SourceMetadata` model defined in DEC-W007~~ **Amended 2026-10-01:** the same `Map<String, Object>` payload the cache entries carry — DEC-W007's typed `SourceMetadata` model does not exist yet, so a second, parallel model here would have made the interface's two halves disagree the day it lands. The payload carries the file-scoped facts only, as this paragraph requires: the wayhash, the primary type's FQN, its kind and its declared method names. It MUST NOT contain cross-file resolved references, annotation indexes, or any correlation data that requires reading other files; those belong in the relation store DEC-W009 describes.
 
 ### Implementation order
 
-1. **P0:** `parse` produces `SourceMetadata` from source bytes via `hipster-entity-tooling` JavaParser integration.
+1. **P0:** `parse` produces file-scoped metadata from source bytes via `hipster-entity-tooling`'s reader. **Implemented 2026-10-01**, except the CLI half of the manual-mode path (`jcodebuddy metadata parse <file>`), which remains open and is scheduled in [`plans/unified-plan.md`](../../../plans/unified-plan.md).
 2. **P1:** `MetadataCacheWriter` persists `CacheEntry` by hash to configurable cache folder.
 3. **P1/P2:** `get(hash)` falls back to `parse` when entry is absent or metadata is null.
 4. **P2+:** Retention cleanup, index rebuild, cross-module link tracking.

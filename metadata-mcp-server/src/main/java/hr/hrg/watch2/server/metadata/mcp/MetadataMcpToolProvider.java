@@ -32,7 +32,8 @@ public class MetadataMcpToolProvider {
             tool("list_entries", "List all entries in the metadata cache"),
             tool("get_metadata", "Return parsed metadata tree for a hash"),
             tool("has_changed", "Whether the file has changed since last cache update"),
-            tool("list_classes", "List all fully-qualified class names in cache")
+            tool("list_classes", "List all fully-qualified class names in cache"),
+            tool("parse_file", "Parse one file's source text with no cache involved (DEC-W008)")
         );
     }
 
@@ -42,6 +43,8 @@ public class MetadataMcpToolProvider {
         builder.toolCall(tool("get_metadata", "Return parsed metadata tree for a hash"), this::getMetadata);
         builder.toolCall(tool("has_changed", "Whether the file has changed since last cache update"), this::hasChanged);
         builder.toolCall(tool("list_classes", "List all fully-qualified class names in cache"), this::listClasses);
+        builder.toolCall(tool("parse_file", "Parse one file's source text with no cache involved (DEC-W008)"),
+                this::parseFile);
     }
 
     private Tool tool(String name, String desc) {
@@ -52,7 +55,12 @@ public class MetadataMcpToolProvider {
                 "properties", Map.of(
                     "hash", Map.of("type", "string", "description", "File wayhash"),
                     "relPath", Map.of("type", "string", "description", "Relative file path"),
-                    "checksum", Map.of("type", "string", "description", "File checksum")
+                    "checksum", Map.of("type", "string", "description", "File checksum"),
+                    // Only `parse_file` reads this, and it is in the shared schema for the same reason the
+                    // other three are: one schema for the surface keeps a tool's arguments discoverable,
+                    // and an argument no tool reads is inert rather than wrong.
+                    "source", Map.of("type", "string",
+                            "description", "The file's source text, for parse_file (no cache is consulted)")
                 )
             ))
             .build();
@@ -89,6 +97,28 @@ public class MetadataMcpToolProvider {
 
     private CallToolResult listClasses(McpSyncServerExchange exchange, CallToolRequest request) {
         return ok(provider.listClasses());
+    }
+
+    /**
+     * DEC-W008's no-cache path over MCP, additive like the RPC method of the same name.
+     *
+     * <p>A provider with no parser reports
+     * {@link hr.hrg.watch2.server.metadata.MetadataParseUnsupportedException}; it is caught here and
+     * returned as a tool <em>error</em> rather than an exception, because an MCP tool that throws gives
+     * the caller a broken session instead of an answer it can act on.</p>
+     */
+    private CallToolResult parseFile(McpSyncServerExchange exchange, CallToolRequest request) {
+        Map<String, Object> args = request.arguments();
+        String relPath = (String) args.get("relPath");
+        Object source = args.get("source");
+        if (relPath == null) return err("Missing 'relPath' parameter");
+        if (!(source instanceof String text)) return err("Missing 'source' parameter: the file's text");
+        try {
+            return ok(provider.parse(relPath,
+                    text.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (hr.hrg.watch2.server.metadata.MetadataParseUnsupportedException e) {
+            return err(e.getMessage());
+        }
     }
 
     private CallToolResult ok(Object content) {

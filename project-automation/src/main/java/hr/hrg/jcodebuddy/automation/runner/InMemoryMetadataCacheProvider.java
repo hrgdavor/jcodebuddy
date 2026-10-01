@@ -31,5 +31,20 @@ public class InMemoryMetadataCacheProvider implements MetadataProvider {
     @Override
     public List<String> listClasses() { return List.of("com.example.Foo", "com.example.Bar"); }
 
+    /**
+     * DEC-W008's no-cache path, and the reference implementation the provider interface's javadoc points
+     * at: this module is where the source reader (OpenRewrite's LST, DEC-030) is on the classpath, so
+     * this is the provider that can answer {@code parse} for real.
+     *
+     * <p>It consults no cache — not even its own in-memory map. An implementation that returned a
+     * previously cached entry for the same bytes would look identical to a caller while quietly breaking
+     * the property DEC-W008 cares about: that the answer is a function of the bytes handed in, so it
+     * works in a fresh checkout with no prior scan.</p>
+     */
+    @Override
+    public CacheEntry parse(String relativePath, byte[] sourceBytes) {
+        return SourceMetadataParser.parse(relativePath, sourceBytes);
+    }
+
     public void put(String key, CacheEntry entry) { entries.put(key, entry); }
 }

@@ -51,11 +51,48 @@ class MetadataServerTest {
         @Override
         public List<String> listClasses() { return List.of("com.example.Foo", "com.example.Bar"); }
 
+        /**
+         * A transport-level stub, and deliberately not a Java parser.
+         *
+         * <p>The reference implementation of DEC-W008's {@code parse} is
+         * {@code project-automation}'s {@code SourceMetadataParser}, which sits in the module that has the
+         * source reader (OpenRewrite's LST, DEC-030). Pulling that reader into this module's tests to
+         * assert a JSON-RPC round trip would test the parser twice and the transport once. So the rule
+         * here is fixed and trivial — the hash is the byte count, the metadata is the length and the text
+         * — which is exactly what lets the assertions below be exact about what crossed the wire.</p>
+         */
+        @Override
+        public CacheEntry parse(String relativePath, byte[] sourceBytes) {
+            Map<String, Object> meta = new HashMap<>();
+            meta.put("length", sourceBytes.length);
+            meta.put("text", new String(sourceBytes, StandardCharsets.UTF_8));
+            return new CacheEntry(String.format("%016x", (long) sourceBytes.length), relativePath,
+                    relativePath, meta);
+        }
+
         public void put(String hash, String relPath, String className) {
             Map<String, Object> meta = new HashMap<>();
             meta.put("checksum", hash);
             entries.put(hash, new CacheEntry(hash, className, relPath, meta));
         }
+    }
+
+    /**
+     * A provider that implements only the four cache-backed methods: what a third-party provider looks
+     * like, and the case DEC-W008's default has to answer for.
+     */
+    static class NoParserProvider implements MetadataProvider {
+        @Override
+        public CacheEntry get(String hash) { return null; }
+
+        @Override
+        public List<CacheEntry> listEntries() { return List.of(); }
+
+        @Override
+        public boolean hasChanged(String relPath, String checksum) { return true; }
+
+        @Override
+        public List<String> listClasses() { return List.of(); }
     }
 
     @BeforeEach
@@ -123,6 +160,99 @@ class MetadataServerTest {
             Map<?,?> error = (Map<?,?>) res.get("error");
             assertNotNull(error);
             assertEquals(-32601, error.get("code"));
+        }
+    }
+
+    /**
+     * DEC-W008's additive RPC method: the file's text in, the entry out, no cache consulted.
+     */
+    @Test
+    void parseFileJsonRoundTrip() throws Exception {
+        int port = 18080 + (int) (Math.random() * 1000);
+        httpTransport = new HttpTransport(port, provider);
+        httpTransport.start();
+
+        String source = "package demo;\n\npublic class Demo {\n}\n";
+        URL url = new URL("http://localhost:" + port + "/api/json");
+        URLConnection conn = url.openConnection();
+        conn.setDoOutput(true);
+        conn.setRequestProperty("Content-Type", "application/json");
+        try (OutputStream os = conn.getOutputStream()) {
+            String req = mapper.writeValueAsString(Map.of(
+                "jsonrpc", "2.0",
+                "id", "9",
+                "method", "parseFile",
+                "params", Map.of("relPath", "demo/Demo.java", "source", source)
+            ));
+            os.write(req.getBytes(StandardCharsets.UTF_8));
+        }
+        try (InputStream is = conn.getInputStream()) {
+            Map<?,?> res = mapper.readValue(is, Map.class);
+            assertNull(res.get("error"), String.valueOf(res.get("error")));
+            Map<?,?> result = (Map<?,?>) res.get("result");
+            assertNotNull(result, "parseFile answers with the entry");
+            assertEquals("demo/Demo.java", result.get("relativePath"));
+            int length = source.getBytes(StandardCharsets.UTF_8).length;
+            assertEquals(String.format("%016x", (long) length), result.get("hash"),
+                    "the hash is the one the provider's parse produced, not one the transport invented");
+            Map<?,?> metadata = (Map<?,?>) result.get("metadata");
+            assertEquals(length, metadata.get("length"));
+            assertEquals(source, metadata.get("text"));
+        }
+    }
+
+    /**
+     * The same surface against a provider with no parser: a named failure for {@code parseFile}, and the
+     * cache-backed methods untouched — which is what "additive" has to mean for a third-party provider.
+     */
+    @Test
+    void aProviderWithNoParserFailsLoudlyAndOnlyForParseFile() throws Exception {
+        int port = 18080 + (int) (Math.random() * 1000);
+        httpTransport = new HttpTransport(port, new NoParserProvider());
+        httpTransport.start();
+
+        URL url = new URL("http://localhost:" + port + "/api/json");
+        URLConnection conn = url.openConnection();
+        conn.setDoOutput(true);
+        conn.setRequestProperty("Content-Type", "application/json");
+        try (OutputStream os = conn.getOutputStream()) {
+            String req = mapper.writeValueAsString(Map.of(
+                "jsonrpc", "2.0",
+                "id", "10",
+                "method", "parseFile",
+                "params", Map.of("relPath", "demo/Demo.java", "source", "package demo;\n")
+            ));
+            os.write(req.getBytes(StandardCharsets.UTF_8));
+        }
+        try (InputStream is = conn.getInputStream()) {
+            Map<?,?> res = mapper.readValue(is, Map.class);
+            assertNull(res.get("result"), "no entry can be invented for a provider with no parser");
+            Map<?,?> error = (Map<?,?>) res.get("error");
+            assertNotNull(error, "the caller gets an error it can act on");
+            assertEquals(-32603, error.get("code"));
+            String message = String.valueOf(error.get("message"));
+            assertTrue(message.contains("no source parser"),
+                    "and the message names the thing to change: " + message);
+            assertTrue(message.contains("NoParserProvider"),
+                    "including which provider was asked: " + message);
+        }
+
+        URL listUrl = new URL("http://localhost:" + port + "/api/json");
+        URLConnection listConn = listUrl.openConnection();
+        listConn.setDoOutput(true);
+        listConn.setRequestProperty("Content-Type", "application/json");
+        try (OutputStream os = listConn.getOutputStream()) {
+            os.write(mapper.writeValueAsString(Map.of(
+                "jsonrpc", "2.0",
+                "id", "11",
+                "method", "listEntries",
+                "params", Map.of()
+            )).getBytes(StandardCharsets.UTF_8));
+        }
+        try (InputStream is = listConn.getInputStream()) {
+            Map<?,?> res = mapper.readValue(is, Map.class);
+            assertTrue(((List<?>) res.get("result")).isEmpty(),
+                    "listEntries is unchanged by the addition");
         }
     }
 
