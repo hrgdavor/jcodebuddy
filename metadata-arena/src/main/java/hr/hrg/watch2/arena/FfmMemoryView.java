@@ -13,8 +13,15 @@ final class FfmMemoryView implements MemoryView {
     FfmMemoryView(MemorySegment segment, ByteOrder byteOrder) {
         this.segment = segment;
         this.byteOrder = byteOrder;
-        this.layout = java.lang.foreign.ValueLayout.JAVA_LONG.withOrder(byteOrder);
-        this.intLayout = java.lang.foreign.ValueLayout.JAVA_INT.withOrder(byteOrder);
+        // Alignment 1, because the layouts this view serves are *packed*: `LongToLongsIndex` stores a
+        // 4-byte count immediately followed by that many `long` values, so a value routinely starts at a
+        // 4-byte-aligned offset. `ValueLayout.JAVA_LONG` carries an 8-byte alignment constraint by default,
+        // and the FFM API enforces it — the index could not be built over an FfmArena at all until this
+        // was declared, which is what `LongToLongsIndexLayoutTest.theIndexRunsOverBothBackends` exists for.
+        // The ByteBuffer backend has no such constraint, so the two backends disagreed on a format the
+        // module's README says works with both.
+        this.layout = java.lang.foreign.ValueLayout.JAVA_LONG.withOrder(byteOrder).withByteAlignment(1);
+        this.intLayout = java.lang.foreign.ValueLayout.JAVA_INT.withOrder(byteOrder).withByteAlignment(1);
     }
 
     @Override

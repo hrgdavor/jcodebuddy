@@ -4,6 +4,39 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
+/**
+ * A compact, open-addressing hash table mapping {@code long} keys to arrays of {@code long} values, stored
+ * entirely in an {@link Arena} (DEC-W009).
+ *
+ * <h3>The sizing requirement this places on the arena</h3>
+ *
+ * <p>The layout is a fixed region followed by a data area: {@code HEADER_SIZE + 16 * capacity} bytes of
+ * header, key table and value pointers, then the value lists. The fixed region is written
+ * <strong>directly</strong> into the arena's storage and only the data area goes through
+ * {@link Arena#allocate}, which is why {@link #totalSize()} is {@code fixedRegion + arena.size()} rather
+ * than just {@code arena.size()}.</p>
+ *
+ * <p>So the arena must have room for the fixed region <em>in addition to</em> the room the index will
+ * allocate for values. An arena sized to exactly the fixed region constructs fine and then fails on the
+ * first {@link #put} with an {@code IndexOutOfBoundsException} from inside the memory view.
+ * {@code LongToLongsIndexLayoutTest} asserts both sides of that requirement; if it bites, size the arena
+ * from {@link #totalSize()}'s formula (fixed region plus the values you expect to store).</p>
+ *
+ * <h3>Other contracts worth knowing</h3>
+ *
+ * <ul>
+ *   <li><strong>Key 0 is reserved</strong> as the empty-slot marker ({@link #put} throws for it, {@link #get}
+ *       answers empty), and capacity must be a power of two because probing masks with {@code capacity - 1}.</li>
+ *   <li><strong>Values keep insertion order,</strong> and a value list is rebuilt by copying: nothing
+ *       deallocates per entry, so the data area only grows (DEC-W009's rebuild protocol relies on that).</li>
+ *   <li><strong>{@link #reset()} keeps the arena's fixed region</strong> — it clears the table, resets the
+ *       arena's cursor and rewrites the header — while {@link #swap} exchanges storage with a freshly built
+ *       index of the same capacity.</li>
+ *   <li><strong>{@link #close()} closes the arena</strong> it was handed (idempotent, as {@link Arena}
+ *       promises); afterwards every operation reports that the index is closed instead of reading freed
+ *       memory.</li>
+ * </ul>
+ */
 public final class LongToLongsIndex implements AutoCloseable {
     private static final int EMPTY_SLOT = 0;
     private static final long VO_EMPTY = 0;

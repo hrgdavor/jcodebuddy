@@ -276,20 +276,53 @@ are called rather than four: `get_entry`, `list_entries`, `get_metadata`, `has_c
 ### 2.1 — The unit tests the plan asked for
 **Who:** agent · **Size:** M
 
-`metadata-arena` implements the storage decision
-([DEC-W009](../doc/architecture/decisions-watch/DEC-W009.md)) and has **one** test
-([`LongToLongsIndexTest`](../metadata-arena/src/test/java/hr/hrg/watch2/arena/LongToLongsIndexTest.java))
-against seven planned. The classes to cover: `Arena` / `ByteBufferArenaImpl` / `FfmArenaImpl`,
-`MemoryView` / `ByteBufferMemoryView` / `FfmMemoryView`, `CompactIndexFormat`, `IndexMmapWriter` /
-`IndexMmapReader`.
+**Done 2026-10-01 — and the tests found six real defects.** 37 tests in six classes (was 8 in one):
 
-**Do:** one test class per unit, asserting the contract the plan states — allocation and release, the
-compact binary layout round-trip, index put/get/rebuild, and a `mmap` write→read round-trip across a
-fresh reader (the DEC-W009 rebuild protocol).
+- `ArenaTest` (8) — both backends, through one set of assertions: sequential allocation, view round-trip,
+  byte order, `reset`, growth, read-only refusal, idempotent `close`, and the growth/view caveat.
+- `MemoryViewTest` (5) — typed and bulk access with array offsets, and the byte-level defaults.
+- `CompactIndexFormatTest` (3) — the magic's exact eight bytes, the header budget, and the layout
+  arithmetic. **The note this step inherited was wrong about the format**: the fixed region is
+  `HEADER_SIZE + 16 * capacity` (keys *and* value pointers are 8 bytes per slot), not "12 × capacity".
+- `IndexMmapRoundTripTest` (5) — values (the existing test asserted only size and capacity), the exact file
+  size with no padding, bad magic, bad version, and the byte-order contract.
+- `LongToLongsIndexLayoutTest` (8) — the sizing requirement, value-list growth, `totalSize()` accounting,
+  the reserved key, the two constructor refusals, and both backends.
+- The existing `LongToLongsIndexTest` (8) already covered six of the plan's seven intents, but two only
+  nominally: its "capacity growth" case never actually grew anything (an oversized arena), and its mmap case
+  never read a value back.
 
-**Gate:** `MODULE` for `metadata-arena` green, test count in the commit message.
+**The six defects, each fixed here and pinned by the test that found it:**
 
-**Done when:** each public type has at least one test that would fail if its contract broke.
+1. **`MemoryView.getBytes`/`putBytes` were wrong for any run longer than one word** —
+   `offset + (long) i / 8` advanced the word base by one *byte* per byte instead of eight, so bytes ≥ 8 wrote
+   into overlapping words and read back scrambled. Nothing noticed because the only caller
+   (`IndexMmapWriter`'s tail) passes fewer than eight bytes.
+2. **`FfmMemoryView` declared 8-byte alignment for a packed format**, so the FFM API rejected the index's
+   data writes outright (`Target offset 132 is incompatible with alignment constraint 8`): `LongToLongsIndex`
+   could not be built over an `FfmArena` at all, while the README claimed both backends work. The layouts
+   now declare alignment 1.
+3. **`FfmArenaImpl.view()` was sliced to `cursor`** — an empty view before the first allocation, which is the
+   exact moment `LongToLongsIndex` writes its fixed region. It now covers the whole segment, like the
+   `ByteBuffer` backend always did; the useful guard (refusing a write past the storage) is the segment's own
+   bounds.
+4. **`FfmArenaImpl.allocate` copied only the allocated prefix on growth**, losing anything written through a
+   view without allocating — which is how the index writes its fixed region. `ByteBufferArenaImpl` copied its
+   whole buffer; now both do.
+5. **`FfmArenaImpl.close()` was not idempotent** (`java.lang.foreign.Arena.close()` throws "Already closed"),
+   so `LongToLongsIndex.close()` followed by the caller's own `arena.close()` — the shape every test in the
+   module uses — threw during teardown.
+6. **`IndexMmapWriter` wrote the *arena's* byte order**, against the module's documented little-endian format,
+   so a big-endian index produced a file the little-endian reader misread. It now writes little-endian and
+   **refuses** a big-endian index rather than converting it: it transcribes 8-byte words, and the header's
+   4-byte fields would be scrambled by a word-level copy, so the honest answer is a named failure.
+
+Docs moved with the fixes: `Arena` and `MemoryView` now state their contracts (view extent, the growth
+caveat, the byte packing, alignment), `LongToLongsIndex` gained the javadoc it never had (sizing requirement,
+reserved key, rebuild-by-copy, `close` semantics), and the README's magic bytes, layout formula, test list and
+byte-order rule were corrected.
+
+**Gate:** ✅ `MODULE` for `metadata-arena` green — 37 tests, 0 failures.
 
 ### 2.2 — The JMH benchmarks
 **Who:** agent · **Size:** S–M
@@ -791,7 +824,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 1.2 | `MetadataProvider.parse` (DEC-W008) | agent | M | `[x]` |
 | 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[x]` |
 | 1.4 | Test the MCP tool surface | agent | S | `[x]` |
-| 2.1 | metadata-arena unit tests | agent | M | `[ ]` |
+| 2.1 | metadata-arena unit tests | agent | M | `[x]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[ ]` |
 | 3.1 | The hipster-ioc ADR | agent | S | `[ ]` |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[ ]` |

@@ -34,14 +34,18 @@ A compact, open-addressing hash index that maps `long` keys to arrays of `long` 
 - **Variable-length value lists** — each key can map to a dynamically growing array of longs
 - **Off-heap capable** — all data lives in the arena's memory, not on the Java heap
 - **Serializable format** — supports reading and writing to memory-mapped files via `IndexMmapReader` and `IndexMmapWriter`
-- **Binary format** defined by `CompactIndexFormat`: little-endian, 64-byte header, magic bytes `ARENA\0\001`
+- **Binary format** defined by `CompactIndexFormat`: little-endian, 64-byte header, magic bytes `ARENA01\0`
+
+**The arena must have room for the fixed region *and* the values.** The layout is `HEADER_SIZE + 16 * capacity` bytes of fixed region (header, key table, value pointers) followed by the value lists. The fixed region is written straight into the arena's storage while only the data area is allocated, so `totalSize()` is `fixedRegion + arena.size()`. An arena sized to the fixed region alone constructs fine and then fails on the first `put` with an `IndexOutOfBoundsException`; size it from that formula plus the values you expect to store. `Arena` carries one more rule worth reading before use: `view()` covers the whole storage, and a view taken before a growth still points at the *old* storage — take the view after the last allocation that may grow.
+
+Key `0` is reserved as the empty-slot marker and capacity must be a power of two (probing masks with `capacity - 1`). Values keep insertion order, and a value list is rebuilt by copying rather than grown in place.
 
 ### Mmap I/O
 
 - **`IndexMmapReader`** — memory-maps an existing index file and exposes a `LongToLongsIndex` over it
 - **`IndexMmapWriter`** — writes a `LongToLongsIndex` to a file via a direct `ByteBuffer`
 
-The mmap format is little-endian and designed for cross-backend compatibility (works with both `ByteBufferArena` and `FfmArena`).
+The mmap format is little-endian and designed for cross-backend compatibility (works with both `ByteBufferArena` and `FfmArena`). Because that order is a decision rather than an accident, the writer **refuses an index built over a big-endian arena** instead of producing a file the little-endian reader would misread; the error names the byte order. Both writer and reader are covered by round-trip tests that assert the values, the exact file size (the format has no padding), and the validation of the magic and version.
 
 ## Endianness
 
@@ -70,8 +74,18 @@ metadata-arena/
     │   ├── IndexMmapWriter.java         # Memory-mapped index writer
     │   └── LongToLongsIndex.java        # Long-to-longs hash index
     └── test/java/hr/hrg/watch2/arena/
-        └── LongToLongsIndexTest.java    # Index tests (round-trip, collisions, mmap, swap)
+        ├── ArenaTest.java                   # both backends: allocation, views, growth, reset, read-only
+        ├── CompactIndexFormatTest.java      # the wire format's constants and layout arithmetic
+        ├── IndexMmapRoundTripTest.java      # values, exact file size, magic/version, byte-order refusal
+        ├── LongToLongsIndexLayoutTest.java  # sizing requirement, value-list growth, both backends
+        ├── LongToLongsIndexTest.java        # round-trip, collisions, rebuild, swap, mmap, zero key
+        └── MemoryViewTest.java              # typed + bulk + byte access, both backends
 ```
+
+Every contract the tests assert is stated where a caller reads it: the interfaces (`Arena`, `MemoryView`),
+`LongToLongsIndex`'s javadoc, and this file. The tests exist so those statements cannot quietly stop being
+true — several of them were written against behaviour that turned out to be wrong, and are noted in the
+class javadoc of the test that caught them.
 
 ## Position in JCodeBuddy
 
