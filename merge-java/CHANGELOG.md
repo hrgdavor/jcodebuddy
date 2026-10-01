@@ -187,3 +187,20 @@ The Notes entry "`JavaParser` is deliberately **not** a dependency: OpenRewrite 
 
 The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).
 
+---
+
+## Appendix note — the WS2 status line in the Notes above (2026-10-01)
+
+**A changelog entry is appended, never edited, so the Notes line "WS2 step 2 …
+remains the main outstanding item" stays as written — and is corrected here.**
+
+That sentence described the state when the entry was written. It is no longer true:
+[`IMPROVEMENTS_DELIVERED.md`](IMPROVEMENTS_DELIVERED.md) records **WS2 as Done** —
+step 1 `DeclarationScanner` (line-based scanning removed), step 2 `ResolvedTypeReader`
++ `TypeContext`, which compare parameter types as *resolved* types, so there is one
+comparison path that cannot disagree with itself. The token-based comparison is gone.
+
+What is still open in this module is **Phase 13 — analysis display and UI helper** and
+`TypeChangeConflictResolver`'s hardcoded `WIDENING_CHAINS` table; both are listed in
+[`plans/unified-plan.md`](../plans/unified-plan.md).
+

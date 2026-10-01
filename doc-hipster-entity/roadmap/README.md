@@ -2,6 +2,11 @@
 
 This document tracks roadmap progress, current work, and changes in direction for the hipster-entity project.
 
+> **This file is the status tracker; the schedule is [`plans/unified-plan.md`](../../plans/unified-plan.md).**
+> (2026-10-01) The unchecked rows of § 1 and the `Proposed` rows of § 3 are the open work recorded here.
+> The unified plan orders that work against everything else open in the repository, one gated step at a
+> time. Keep the two in step: when a row closes here, its step closes there, and vice versa.
+
 ## 1. Roadmap Checklist
 
 The unchecked rows here are **open work**, and the two that are only partly done say so — an earlier

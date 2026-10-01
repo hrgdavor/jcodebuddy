@@ -438,6 +438,15 @@ Each step should build green on its own.
 
 ## 8. Open questions for the maintainer
 
+> **Status 2026-10-01 — still unanswered, and they are the only thing left in this plan.**
+> Steps 1–10 are implemented (F9 was closed by deleting `withJcef.xml` rather than wiring it, so the
+> stretch form is not in the tree), and `withJcef.xml` is absent. The five questions below are
+> decisions for a person, not work an agent can settle: each one changes a shipped default (the
+> allow-list default decides whether the browser fallback works out of the box), a public identity
+> (vendor), or the build's language set (Kotlin). Acceptance criteria 2, 5 and 7 additionally rest on
+> an observation in a running IDE. Scheduled as step 8.1 of
+> [`../../plans/unified-plan.md`](../../plans/unified-plan.md).
+
 1. **Vendor identity** — what should `<vendor>` be (personal name, an organisation, a URL/email)?
 2. **HTTP bridge allow-list default** — §4.5.2 makes "no allow-list" mean "/open is disabled". Confirm
    that is acceptable, or say that the browser fallback must keep working out of the box (in which case

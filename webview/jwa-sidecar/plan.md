@@ -78,6 +78,14 @@ Navigation now reports an outcome instead of assuming success, which is what let
 a file that does not exist rather than a cheerful "ok". See [`../PLAN-webview-suite.md`](../PLAN-webview-suite.md).
 
 ## Future Refinement
+
+> **Status 2026-10-01 — these two boxes are the only open work in this plan.** Phases 1–4 are
+> complete (Phase 4 on 2026-09-25), and both items below are genuinely unstarted: a grep for
+> `tabSize` / `insertSpaces` / `formatting` across `webview/jwa-sidecar` finds nothing, so the
+> indentation the client configured is not read — the generator's indent stays the constructor
+> argument `jwa-builder` takes, defaulted to 4 spaces. Scheduled as step 7.1 of
+> [`../../plans/unified-plan.md`](../../plans/unified-plan.md).
+
 - [ ] Handle indentation configuration from client properly (currently defaulted to 4 spaces).
 - [ ] Add more tools (e.g., toString/equals generator) following the same surgical pattern.
 

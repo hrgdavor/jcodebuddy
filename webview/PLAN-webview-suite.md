@@ -1,8 +1,15 @@
 # Plan — grow `webview` from two IDE plugins into one product: a localhost page host, an LSP sidecar, and a ZED host
 
 Status: **Phases 0, 1, 2 delivered (2026-09-25) plus Phase 5's navigation half as a spike, and Phase 3 with
-both its headless half and the LSP buffer path (gate (e) observed on Zed); the JetBrains/VS Code buffer paths,
-the page-side client, the extension's `process:exec` half and Phase 6 are not started.** Phase 0's results and
+both its headless half and the LSP buffer path (gate (e) observed on Zed).** **Corrected 2026-10-01:** the
+parts this line used to call "not started" have since landed — the JetBrains and VS Code buffer paths are
+**observed** (2026-09-26; capability table in [`README.md`](README.md)), the page-side client shipped as
+[`kit/examples/with-assets/assets/webview-client.js`](kit/examples/with-assets/assets/webview-client.js) with
+[`kit/examples/webview-client.test.mjs`](kit/examples/webview-client.test.mjs) driving it against a live
+`webviewd`, and the extension's `process:exec` half was **dropped, not deferred** (2026-09-26; Phase 4 below).
+What is genuinely open: **Phase 6** (headless parity as a build gate) and the **ACP go/no-go** spike's written
+verdict, plus § 10 **Q3/Q5** — Q2 is answered by delivery, since the write verbs landed in every host. All of
+it is scheduled in [`../plans/unified-plan.md`](../plans/unified-plan.md). Phase 0's results and
 two corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); the hosts and their
 contracts are in [`doc/webview-host-api.md`](doc/webview-host-api.md) and
 [`kit/doc/edit-api.md`](kit/doc/edit-api.md).
@@ -706,7 +713,7 @@ JAVA_HOME="C:/Program Files/Java/jdk-25" mvnd -q -o -pl webview/eclipse/webview-
 # then: GET /health, GET /.well-known/webview.json, GET /page/<percent-encoded absolute path>?token=<from the token file>
 # pages, all five hosts' contracts, headless parity
 node webview/check-links.mjs
-node webview/kit/kit/examples/smoke-test.mjs
+node webview/kit/examples/smoke-test.mjs
 # JetBrains host (Gradle needs write access to C:\Users\hrg\.gradle)
 cd webview/webview-jetbrains && ./gradlew test buildPlugin
 # VS Code host

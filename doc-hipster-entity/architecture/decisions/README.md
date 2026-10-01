@@ -92,7 +92,7 @@ This folder contains individual decision records for the JCodeBuddy project arch
 | [DEC-035](DEC-035.md) | **Generated-code markers — a recognisable vocabulary, and a warning for what a parser does not know** | Proposed | 2026-09-26 |
 |                       | Notes: A marker is a Java line comment whose text begins with `@generated`, and the vocabulary is **closed at four scopes**: `file` (the whole file, first line above `package`), `member` (the declaration immediately below it and its body), `region begin <id>` … `region end <id>` (the lines between a pair), and `block` (the statement or block immediately below, **bounded by the language's own braces**). The vocabulary exists so an **external parser, an AI agent or a reviewer** can find the boundary between generated and hand-written code without knowing anything about the generator — which is what DEC-020's cooperative preservation makes necessary and what a partly-generated file currently does not show at all. `block` is deliberately the answer for a generated `switch` over routes: **one marker for the statement, never one per `case` arm**, because the construct's braces already bound it and per-arm markers are noise forever. The file marker replaces DEC-021's `{@link <fqn>}` first line — `@generated` is the token tooling already looks for, and `{@link}` in a line comment is a javadoc tag javadoc does not process there — while the JSON5 config line is **unchanged**, because a parser must never have to parse JSON5 to find a boundary. The rule that makes the set extensible: **a marker a parser does not implement MUST be reported, never treated as hand-written.** Treating generated code as the developer's is the one outcome that loses work silently; refusing is correct, and `@generated <any word>` is recognisable as a marker by shape alone, so a parser can say "unsupported marker at line 412" without knowing what the word means. Acceptance: a parser decides from the file alone for all four scopes; one implementing only `file` still reports the others as unsupported; every wholly-generated file carries a file marker; no marker is emitted for a construct the generator does not fully generate; no marker per `case` arm, branch or line. Follow-up in order: the 11 existing file headers, then a marker reader in `CooperativeCodegen` so "the members it owns" and "the members a marker claims" cannot drift, then `member`/`region`/`block` at the first partial emission — deliberately not implemented ahead of its use, since a marker set invented before the code that needs it gets the granularity wrong. |
 
-### Watch & project-automation subsystem (DEC-W001 — DEC-W005)
+### Watch & project-automation subsystem (DEC-W001 — DEC-W009)
 
 | ID                    | Title                                                                   | Status   | Date       |
 | --------------------- | ----------------------------------------------------------------------- | -------- | ---------- |
@@ -106,6 +106,20 @@ This folder contains individual decision records for the JCodeBuddy project arch
 |                       | Notes: `ToolRegistry`, `ToolSetAgent`, `ProjectWatcher`, `CommandServer`, `InteractiveSession` | | |
 | [DEC-W005](../../../doc/architecture/decisions-watch/DEC-W005.md) | **Code generation interface contract (CodeGenerator/CodeContext)**   | Accepted | 2026-07-24 |
 |                       | Notes: Unified `CodeGenerator<T>` interface with optional type resolution |        |            |
+| [DEC-W006](../../../doc/architecture/decisions-watch/DEC-W006.md) | **Metadata cache with per-hash invalidation and cross-module reference tracking** | Proposed | 2026-07-24 |
+|                       | Notes: a per-checksum `CacheEntry` is the unit of reuse and expiry; a cross-module reference names its module and path | | |
+| [DEC-W007](../../../doc/architecture/decisions-watch/DEC-W007.md) | **Unified source metadata model for generators and runtime**          | Proposed | 2026-07-24 |
+|                       | Notes: the shared model (`SourceMetadata`, `AnnotationMeta`/`MemberValue`, source `Range`, `schemaVersion` + `MetadataSerializer`, per-module index) that DEC-W006 caches; the model is not yet what `metadata-server` stores — its `CacheEntry` carries a `Map<String, Object>` payload | | |
+| [DEC-W008](../../../doc/architecture/decisions-watch/DEC-W008.md) | **Metadata parsing without cache as manual-mode fallback**            | Proposed | 2026-07-28 |
+|                       | Notes: the no-cache path is a planned `parse` on `MetadataProvider`; today that interface has only `get`, `listEntries`, `hasChanged`, `listClasses`, so the fallback this decision fixes does not exist yet | | |
+| [DEC-W009](../../../doc/architecture/decisions-watch/DEC-W009.md) | **In-RAM metadata relations storage with arena allocation and annotation indexes** | Proposed | 2026-07-28 |
+|                       | Notes: no per-entry heap allocation for edges or index entries; `metadata-arena` (`Arena`, `LongToLongsIndex`, the mmap formats) is the module built for this storage | | |
+
+> **Index completeness (added 2026-10-01).** DEC-W006 — DEC-W009 were accepted into the record set between
+> 2026-07-24 and 2026-07-28 but were never listed here, so the index read as if the subsystem stopped at
+> DEC-W005. The subsystem section is now complete. What is *not* claimed above: all four are still
+> **Proposed**, and the code that would satisfy them is tracked as open work in
+> [`plans/unified-plan.md`](../../../plans/unified-plan.md).
 
 ## Template
 

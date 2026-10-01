@@ -1,5 +1,24 @@
 # Roadmap / Todo
 
+> **Status 2026-10-01 — this is a backlog, not a plan, and Phase 2 is not implemented.**
+>
+> What exists: Phase 1's catalog is [`ioc-problems-catalog.md`](ioc-problems-catalog.md), and the
+> usage simulation is hand-written today — [`hipster-ioc-test/`](../../hipster-ioc-test) holds
+> `CtxMain`/`CtxMainModule` plus the composable-entity playground, over the five API types in
+> [`hipster-ioc-api/`](../../hipster-ioc-api) (`HipsterContext`, `ChildContext`, `Circular`,
+> `DynamicResource`, `StableValuePolyfill`).
+>
+> What does **not** exist: Phase 2's whole backlog — dependency metadata, the embedded light HTTP
+> server, the editor-agnostic graph navigation, and the "secondary backlog" list. A grep for
+> `HipsterIocGenerator`, `GeneratedContext` or a dependency-graph service finds nothing, and the
+> module that would carry them, [`hipster-ioc-tooling/`](../../hipster-ioc-tooling) ("Code generator
+> and dependency graph computation for hipster-ioc"), is a reactor module with a POM, three declared
+> dependencies and **no `src/` at all** — it compiles to an empty jar.
+>
+> Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), together with the
+> missing hipster-ioc ADR. (The `.kilo` plan for this work asked for the number `DEC-W008`, which the
+> metadata no-cache decision took; the hipster-ioc record needs a free number when it is written.)
+
 ## Phase 1: Define the Problem Space & Refine Boilerplate
 To be able to define good, readable boilerplate, we first need to explicitly catalog the "problems" that existing IOC frameworks (like Dagger, Spring, Guice) attempt to solve.
 

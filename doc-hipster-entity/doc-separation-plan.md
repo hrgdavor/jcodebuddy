@@ -1,5 +1,26 @@
 # Documentation Separation Plan
 
+> **Status 2026-10-01 — delivered, with two items still open.**
+>
+> Items 1–11 of the [Suggested Execution Order](#suggested-execution-order) below are **done**, under the
+> paths this repository ended up with: the user documentation lives in [`user/`](user/README.md) (not the
+> plan's `doc/user/`) and the implementation half in [`architecture/`](architecture/README.md).
+> `field-lookup-guide.md` was relocated to `architecture/` as item 1 asked, and every pattern doc the plan
+> lists exists — plus `jdbc-row-adapter.md`, `ordinal-array-contract.md`, `deep-change-tracking.md` and
+> `field-enum-compaction.md`, which the plan did not anticipate.
+>
+> **Still open — the two items nothing has delivered:**
+>
+> - **Item 12, restructure the root [`README.md`](../README.md).** It is now a JCodeBuddy project
+>   overview (vision, `proto/`, the gate) and links **no** user guide: a reader cannot reach
+>   `getting-started.md` or `why-hipster-entity.md` from the front page.
+> - **Item 13, cross-reference links from the architecture docs back into the user docs.**
+>
+> Both are scheduled in [`plans/unified-plan.md`](../plans/unified-plan.md). The **Current State** and
+> **Proposed Structure** sections below describe the July-2026 tree (`doc/user/`, `doc/architecture/`),
+> which the `doc-hipster-entity/` split has since moved — read them as the plan's starting point, not as
+> today's layout.
+
 ## Problem
 
 ~85% of current documentation targets library developers (architecture decisions, implementation internals, naming conventions, JMH benchmarks). End-user documentation (`doc/user/`) is essentially a placeholder. A new user browsing the docs is immediately confronted with internal design rationale, ordinal dispatch strategies, and ADR lifecycle rules — none of which help them evaluate or adopt the library.

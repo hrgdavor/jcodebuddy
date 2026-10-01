@@ -5,10 +5,24 @@ Status legend: **[done]**, **[partial]**, **[todo]**.
 > **Superseded for forward work.** Phases 9–12 below were detailed, executed and
 > extended by [`IMPROVEMENT_PROPOSAL.md`](IMPROVEMENT_PROPOSAL.md); the outcome is
 > recorded in [`IMPROVEMENTS_DELIVERED.md`](IMPROVEMENTS_DELIVERED.md), which is
-> the authority on what has been built. The one substantial item still outstanding
-> is WS2 step 2: replacing the token-based scanner with OpenRewrite's AST.
-> Forward planning resumes in this file with **Phase 13 — analysis display and
-> UI helper**.
+> the authority on what has been built.
+>
+> **Status corrected 2026-10-01.** This banner used to say that "the one substantial
+> item still outstanding is WS2 step 2: replacing the token-based scanner with
+> OpenRewrite's AST". That is **stale**: `IMPROVEMENTS_DELIVERED.md` records WS2 as
+> **Done** (step 1 `DeclarationScanner`, step 2 `ResolvedTypeReader` + `TypeContext`
+> comparing resolved types — Phase 9 below), and the token comparison is gone.
+>
+> The two items genuinely open in this module are:
+>
+> 1. **Phase 13 — analysis display and UI helper** (`[todo]` below): the per-conflict
+>    review render, the action display that writes back to `BranchConflictStore`, and
+>    the LLM-as-proposer step.
+> 2. **Phase 9's residue:** `TypeChangeConflictResolver` still carries its hardcoded
+>    `WIDENING_CHAINS` JDK name table (line 57); the plan's own note says replacing it
+>    with real supertype resolution "needs no new capability".
+>
+> Both are tracked as steps in [`plans/unified-plan.md`](../plans/unified-plan.md).
 
 ## Goal
 

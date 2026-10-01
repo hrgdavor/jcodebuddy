@@ -100,7 +100,7 @@ describe('resolving a target', () => {
     expect(resolveOpenable('scripts', MODULE_ROOT)).toBeNull();
     expect(resolveOpenable('doc', MODULE_ROOT)).toBeNull();
     expect(resolveOpenable('doc/', MODULE_ROOT)).not.toBeNull();
-    expect(resolveOpenable('scripts/gen.cmd', MODULE_ROOT)).not.toBeNull();
+    expect(resolveOpenable('scripts/gen.js', MODULE_ROOT)).not.toBeNull();
     // And a path that is not there never resolves, whatever it looks like.
     expect(resolveOpenable('src/main/java/…', MODULE_ROOT)).toBeNull();
     expect(resolveOpenable('does/not/exist.java', MODULE_ROOT)).toBeNull();

@@ -12,6 +12,7 @@ Related decisions and implementation guides:
 - [DEC-015: Generated field metadata method lookup strategy](decisions/DEC-015.md) — generated sorted arrays, binary search dispatch, and optional char-bucket prefilter
 - [Generator freezing architecture](gen-freezing.md) — generator freeze marker semantics for manual preservation of generated code
 - [EnumSet implementation guide](enumset-implementation-and-jmh.md) — how-to reference with JMH profile and measured results
+- [Overlap at workload scale](enumset-overlap-workload-summary.md) — what those measurements cost for a 3000-user sweep, in time and garbage
 
 ## 1. Core principle
 

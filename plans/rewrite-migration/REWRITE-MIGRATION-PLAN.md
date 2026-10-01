@@ -1,3 +1,18 @@
+> **Status 2026-10-01 — this is the plan as written, not the current state.**
+>
+> The migration it describes is **complete**: [`README.md`](README.md) in this directory records
+> "the migration is complete, code and documentation both" (`javaparser-core` declared by no module,
+> all 34 queue files ported, `verify-migration.js` reporting `RESULT: PASS`), and
+> [`PLAN-SUMMARY.md`](PLAN-SUMMARY.md) carries the phase table verified against the tree, including
+> every place where the plan and the code disagree.
+>
+> **Everything below is historical.** The deliverable checkboxes in it are unchecked and stay that
+> way, because they track the plan as it was written, not today's tree; several files it names (for
+> example `hr/hrg/rewrite/api/AstVisitor.java`) never existed under those paths, and their sketches
+> live under [`doc/brainstorm/rewrite-migration/`](../../doc/brainstorm/rewrite-migration/).
+> **Do not read an unchecked box here as open work.** Open work in this repository is tracked in
+> [`plans/unified-plan.md`](../unified-plan.md).
+
 # OpenRewrite Migration Plan: From JavaParser to OpenRewrite
 
 ## Executive Summary

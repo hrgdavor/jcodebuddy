@@ -13,6 +13,12 @@ an older install exists (`D:\programs\eclipse`, core runtime 3.34.200, a 2025-12
 build the gate claims (§ 9, "the machine"). The outstanding observations are enumerated in
 [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) § 1a and § 2a.
 
+**Open, and scheduled (2026-10-01).** **Phase 5** (the Tycho/p2 update site) is not started and is gated on
+**Q2**, which is still open; **Q8** stays open too — no `EdgeDataDir` and no allowed-origins preference, so
+R11's contention is documented rather than configurable (the deviation recorded below). Nothing else in this
+plan is unfinished. Those two, together with the human-observation gates, are steps 5.4 and 8.2 of
+[`../plans/unified-plan.md`](../plans/unified-plan.md).
+
 Measurement words, used precisely, as everywhere in this folder: **documented** = a named source says so;
 **implemented** = code exists and its tests pass; **observed** = someone ran it against that host on the build
 named and reported the result.

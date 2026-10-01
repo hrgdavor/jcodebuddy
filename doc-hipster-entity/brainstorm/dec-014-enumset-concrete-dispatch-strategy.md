@@ -109,6 +109,27 @@ Interpretation:
 - The tradeoff is justified for hot paths with high marking frequency.
 - Snapshot cost is a separate concern from dispatch strategy.
 
+### 6.3 Service-ID overlap (decision-grade)
+
+A full-profile run (3 forks, 6 × 2 s warmup, 8 × 2 s measurement, JMH 1.37, JDK 25) measured
+`hasAny` overlap against `HashSet`, `BitSet` and raw-`long` baselines across enum widths 64 / 96 / 256
+and densities 0.05–0.9:
+
+- **~390× faster than `HashSet`** at density 0.5 and **~739×** at 0.9 (width 64), rising to **~1,246×**
+  at width 256.
+- Filtering a whole agent corpus inverts with density: the EEnumSet path **accelerates** as overlap
+  rises while `HashSet.retainAll` **slows down** — ~1,933× apart at 100 agents and density 0.9.
+- The disjoint worst case stays flat within ±3%, and the path is allocation-free in steady state
+  (≈ 10⁻⁵ B/op, ≈ 0 GC counts per iteration, against 1,376 B/op and 18 GCs for `HashSet`).
+- Width costs only what the scan walks: with no early exit, width 256 drops to ~322k ops/ms from width
+  64's ~1,098k.
+
+The full tables, the allocation probe and the reproduction command are in
+[EnumSet implementation path and JMH evidence](../architecture/enumset-implementation-and-jmh.md); the
+workload-scale reading of them (a 3000-user sweep: microseconds against milliseconds, and no garbage
+against megabytes) is in
+[Overlap at workload scale](../architecture/enumset-overlap-workload-summary.md).
+
 ## 7. Decision
 
 **Adopted**: Use custom `EEnumSet*` and `EEnumSetBuilder*` classes with concrete dispatch for tracking arrays.

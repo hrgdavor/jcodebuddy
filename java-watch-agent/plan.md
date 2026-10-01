@@ -144,6 +144,21 @@ For complex refactorings and large-scale migrations, we propose integrating [Ope
 - [ ] Create lightweight hooks for IntelliJ and VS Code.
 - [ ] Prototype an OpenRewrite-based tool module.
 
+> **Status 2026-10-01 — these two boxes are the only open items in this plan.** Phases 1–3 and the
+> first two Phase 4 items are done (the dashboard is
+> [`src/main/resources/web/`](src/main/resources/web)). On the two open ones:
+>
+> - **IDE hooks** — the `intellij-jwa`, `intellij-jswa`, `vscode-jwa` and `vscode-jswa` clients exist,
+>   but they are JWA/JSWA **sidecar** clients under the `webview` product, not the lightweight hooks
+>   this plan asked for; nothing here implements them.
+> - **OpenRewrite tool prototype** — nothing in this module references OpenRewrite (`Recipe` /
+>   `org.openrewrite` appear in no source file under `java-watch-agent/`), so the prototype was never
+>   started. The representation decision that would govern it is
+>   [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
+>
+> Both are scheduled in [`plans/unified-plan.md`](../plans/unified-plan.md), with the IDE-hook half
+> marked as needing a human with a running IDE.
+
 ---
 
 ## Appendix note — Phase 8 of the rewrite migration (2026-09-22)

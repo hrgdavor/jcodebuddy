@@ -432,6 +432,31 @@ canonical statement of a boundary that has no other home.
     `gradlew`); the rule is about the scripts *around* them. Where
     a JDK must be pinned, read `JAVA_HOME` in the script and fail
     with an actionable message rather than assuming a shell.
+    Concretely: this repository's gate compiles at **release 25**,
+    so every class file under `target/` is Java 25 bytecode (class
+    file version 69.0), while `JAVA_HOME` or `PATH` on a given
+    machine may hold an older JDK — a stock Windows box here has
+    `JAVA_HOME` on JDK 21 and a JDK 8 `java` first on `PATH`. A
+    script that compiles or runs repository Java must resolve its
+    JDK from `JAVA_HOME`, **check that major version against the
+    release the gate compiles at**, and stop with a message naming
+    the fix rather than producing a wall of errors; see
+    `checkJdkVersion` in `scripts/run-jmh.js` for the shape.
+    Recognise the mismatch by its symptom instead of debugging it:
+    `class file has wrong version 69.0, should be 65.0`, usually
+    followed by hundreds of `cannot find symbol` errors in
+    generated sources (for example JMH `_jmhTest` / `_jmhType`
+    files). That is a toolchain-version problem, not a codegen bug,
+    and the fix is never to edit the generated code.
+  - **Check the environment before debugging a tool.** When a
+    build, benchmark or script fails in a way that looks like a
+    code problem, print the facts that decide it first —
+    `JAVA_HOME`, `java`/`javac` on `PATH` and their versions, and
+    the command's own output — before reading source. An agent that
+    spends a long stretch investigating a failure whose cause was a
+    stale environment variable has spent the user's time on the
+    wrong artifact. One command that prints the versions is worth
+    more than a dozen hypotheses.
   - **The wrappers that predated this rule have been converted.** `scripts/mvn-jdk25.cmd`,
     `scripts/mvn-jdk25.sh`, `scripts/gen.cmd`, `scripts/run-demo.cmd` and `scripts/entity-html.cmd`
     are now `scripts/mvn-jdk25.js`, `scripts/gen.js`, `scripts/run-demo.js` and the existing
