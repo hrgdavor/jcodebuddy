@@ -143,10 +143,19 @@ final class ResolvedTypeReader {
      * {@code TreeSet} is a {@code NavigableSet} because javac says so, not because
      * somebody added it to a table.
      *
-     * <p>Empty means "not resolvable" — a parse failure, a missing context, or a
-     * declaration the fragment does not contain. It is never an empty answer
-     * standing in for a negative one: the caller must treat it as "no answer" and
-     * escalate, which is the opposite of treating it as "not assignable".
+     * <p>Empty means "no type information at all" — a parse failure, a missing
+     * context, or a declaration the fragment does not contain. It is never an empty
+     * answer standing in for a negative one: the caller must treat it as "no answer"
+     * and escalate, which is the opposite of treating it as "not assignable".
+     *
+     * <p><strong>A type that is absent from the classpath is a fourth case, and it is
+     * not empty.</strong> Measured: {@code com.example.Missing value = null} parsed
+     * against a JDK-only classpath resolves to {@link JavaType.Unknown} — present, and
+     * assignable to nothing. So a caller that needs to tell "not a widening
+     * relationship" apart from "could not resolve" cannot use an emptiness check; it
+     * has to look at the type ({@code instanceof JavaType.Unknown}, or an unrenderable
+     * type) as well. Both outcomes escalate, so the difference is in what the reviewer
+     * is told, not in whether the answer is safe.
      */
     static Optional<JavaType> declaredType(String code, String name, String filePath,
         TypeContext context) {

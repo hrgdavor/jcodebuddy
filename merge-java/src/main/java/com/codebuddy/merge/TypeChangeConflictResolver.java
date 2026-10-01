@@ -266,10 +266,17 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
         Optional<JavaType> narrowerType =
             ResolvedTypeReader.declaredType(narrowerCode, narrower.name(), filePath, context);
         if (widerType.isEmpty() || narrowerType.isEmpty()) {
-            // Unresolvable: the table could not have answered either, and a guess here
-            // would adopt a declaration on the strength of a name match.
+            // The declaration is absent, the fragment is unreadable, or its type could
+            // not be attributed at all. No answer: escalate rather than guess, because a
+            // guess here would adopt a declaration on the strength of a name match.
             return false;
         }
+        // A type that is merely off the classpath arrives as JavaType.Unknown rather
+        // than as an absent one, so this check does not catch it: `isAssignableTo`
+        // answers false for Unknown and the comparison escalates. Safe, but the
+        // escalation currently reads as "no widening relationship" when the truth may be
+        // "the type could not be resolved" - see the decision recorded in the plan's
+        // step 4.1 record and ResolvedTypeReaderTest.offClasspathTypeResolvesToUnknown.
         return widens(widerType.get(), narrowerType.get());
     }
 
