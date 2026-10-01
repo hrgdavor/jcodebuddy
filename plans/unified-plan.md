@@ -397,20 +397,33 @@ decision — including "either backend will do, and here is why that is the answ
 ### 3.1 — The hipster-ioc ADR
 **Who:** agent · **Size:** S
 
-The integration plan's ADR was never written, and the number it asked for (`DEC-W008`) was taken by the
-metadata no-cache decision — so this record needs a free number. The record is required *before* the code
-(the module has a `pom.xml` and no `src/`, and a generator's shape is a model decision).
+**Done 2026-10-01 — [DEC-036](../doc-hipster-entity/architecture/decisions/DEC-036.md), status `Trial`.**
 
-**Do:** write the decision (module structure, what the generator emits, the `GeneratedContext` shape,
-how the LSP sidecar consumes it, what it does **not** do), register it in
-[`decisions/README.md`](../doc-hipster-entity/architecture/decisions/README.md), and cross-link it from
-[`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) and
-[`hipster-ioc/doc/architecture-and-design.md`](../hipster-ioc/doc/architecture-and-design.md).
+- The number the `.kilo` plan asked for (`DEC-W008`) was already taken by the metadata no-cache decision, so
+  the record is **DEC-036** in the main series — the watch series covers the watch subsystem, and this is a
+  code-generation decision.
+- It fixes the twelve things step 3.2 must not re-decide: `<Context>Impl` committed under the consuming
+  module's `src/main/java` with DEC-035's file marker; the interface implemented directly (no proxy, no
+  reflection, no name→bean registry, per DEC-019); creation order derived from `dependencies()` and each
+  bean's type, with the same order driving `init*`; dependency-free beans in field initializers; `@Circular`
+  as a settable field and an **unmarked cycle as a `circular_dependency_unmarked` diagnostic**; parent
+  plumbing for `ChildContext<P>`; `impl` suppressing creation code; `Supplier`/`DynamicResource`/
+  `StableValuePolyfill` as the **opt-in** lazy seam with eager creation as the default; region markers only
+  above the design document's thresholds (fields > 5, exposed beans > 3, factory methods > 3) with DEC-020
+  preservation and the `enabled:false` freeze from step 1.1; the graph as JSON under
+  `.jcodebuddy/metadata/` and the page rendered by Bun (DEC-027/029); no `project-automation` dependency
+  (§ 1.1) and no second Java parser (DEC-030); and the `<Context>` → `<Context>Impl` naming contract for
+  DEC-022.
+- Registered in [`decisions/README.md`](../doc-hipster-entity/architecture/decisions/README.md) with its
+  Notes row, and cross-linked from
+  [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) and
+  [`architecture-and-design.md`](../hipster-ioc/doc/architecture-and-design.md) — the second says explicitly
+  that DEC-036 is the decision and the design document is the intent behind it, so a later reader does not
+  have to guess which wins.
 
-**Gate:** `LINKS` green; the record is listed in the index with a status of `Proposed` or `Accepted`
-(the maintainer's call, stated in the record).
+**Gate:** ✅ `LINKS` green (252 files, 1459 links) and the record is listed in the index.
 
-**Done when:** the decision exists, is registered, and names the exact generator API step 3.2 implements.
+**Done when:** ✅ done — step 3.2 implements against this record.
 
 ### 3.2 — `CodeGenerator<GeneratedContext>` and dependency-graph computation
 **Who:** agent · **Size:** L
@@ -872,7 +885,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 2.1 | metadata-arena unit tests | agent | M | `[x]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[ ]` |
-| 3.1 | The hipster-ioc ADR | agent | S | `[ ]` |
+| 3.1 | The hipster-ioc ADR | agent | S | `[x]` |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[ ]` |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[ ]` |
 | 4.1 | Replace `WIDENING_CHAINS` with supertype resolution | agent | S–M | `[ ]` |

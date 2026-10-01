@@ -114,6 +114,14 @@ For server with web, websocket, servlets:
     - this way no big refactor is needed, just flip the option or switch to version where stable value is default
 
 ## Generated code style
+
+> **Made concrete by [DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md)** (2026-10-01):
+> the record fixes what this section describes — the `<Context>Impl` name, the committed file and its
+> DEC-035 header, creation order derived from the declared dependencies, the region-marker thresholds this
+> section names, `@Circular` and `impl` handling, the opt-in lazy seam, and the dependency graph as JSON
+> that a Bun renderer presents. Where the two disagree, DEC-036 is the decision and this document is the
+> design intent behind it.
+
 - generate region and endregion for sections
   - instance fields ( count > 5)
   - methods exposing public Beans  (count > 3)

@@ -15,9 +15,12 @@
 > and dependency graph computation for hipster-ioc"), is a reactor module with a POM, three declared
 > dependencies and **no `src/` at all** — it compiles to an empty jar.
 >
-> Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), together with the
-> missing hipster-ioc ADR. (The `.kilo` plan for this work asked for the number `DEC-W008`, which the
-> metadata no-cache decision took; the hipster-ioc record needs a free number when it is written.)
+> Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md). The record those
+> steps needed is **[DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md)** — the `.kilo`
+> plan for this work asked for `DEC-W008`, a number the metadata no-cache decision had already taken. It
+> fixes the generated shape (`<Context>Impl`, committed Java, DEC-035's header, creation order derived from
+> the dependencies, region markers only above the design document's thresholds, the graph as JSON under
+> `.jcodebuddy/metadata/`) and carries status `Trial` until the maintainer accepts it.
 
 ## Phase 1: Define the Problem Space & Refine Boilerplate
 To be able to define good, readable boilerplate, we first need to explicitly catalog the "problems" that existing IOC frameworks (like Dagger, Spring, Guice) attempt to solve.
