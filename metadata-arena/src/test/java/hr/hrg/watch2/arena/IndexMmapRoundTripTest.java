@@ -155,6 +155,53 @@ class IndexMmapRoundTripTest {
         }
     }
 
+    /**
+     * A file larger than one writer chunk, which is where the writer used to go wrong.
+     *
+     * <p>The writer copies word by word in chunks, and its byte-wise path was taken for everything after the
+     * first 64 KB — scrambling every key past that point. A round-trip test whose file fits in one chunk
+     * cannot see it: the smallest capacity that exceeds a chunk is 8192
+     * ({@code 64 + 16 * 8192 = 131 136} bytes of fixed region), and that is what this case uses. Found by
+     * the JMH benchmark at 100 000 entries, and pinned here so it stays found.</p>
+     */
+    @Test
+    void aFileLargerThanOneWriterChunkRoundTripsToo(@TempDir Path dir) throws Exception {
+        Map<Long, long[]> entries = new LinkedHashMap<>();
+        Random random = new Random(64L);
+        for (int i = 0; i < 4000; i++) {
+            long key = random.nextLong() & 0x7FFFFFFFFFFFFFFFL;
+            if (key == 0) {
+                key = 1;
+            }
+            entries.put(key, new long[]{i, -i});
+        }
+
+        Path file = dir.resolve("multi-chunk.bin");
+        try (ByteBufferArena arena = new ByteBufferArena(1048576);
+             LongToLongsIndex index = new LongToLongsIndex(arena, 8192);
+             IndexMmapWriter writer = new IndexMmapWriter(file)) {
+            for (Map.Entry<Long, long[]> entry : entries.entrySet()) {
+                for (long value : entry.getValue()) {
+                    index.put(entry.getKey(), value);
+                }
+            }
+            Assertions.assertTrue(index.totalSize() > 65536,
+                    "the fixture has to exceed one writer chunk to test the chunked path: "
+                            + index.totalSize());
+            writer.write(index);
+            Assertions.assertEquals(index.totalSize(), Files.size(file));
+        }
+
+        try (IndexMmapReader reader = new IndexMmapReader(file)) {
+            LongToLongsIndex index = reader.index();
+            Assertions.assertEquals(entries.size(), index.size());
+            for (Map.Entry<Long, long[]> entry : entries.entrySet()) {
+                Assertions.assertArrayEquals(entry.getValue(), index.get(entry.getKey()),
+                        "key " + entry.getKey() + " lies past the first chunk and must still be found");
+            }
+        }
+    }
+
     private static long magicAsLong() {
         long v = 0;
         for (byte b : CompactIndexFormat.MAGIC) {

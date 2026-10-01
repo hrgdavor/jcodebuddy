@@ -33,25 +33,38 @@ public final class IndexMmapWriter implements AutoCloseable {
         ByteBuffer direct = ByteBuffer.allocateDirect((int) totalSize);
         direct.order(ByteOrder.LITTLE_ENDIAN);
         MemoryView view = index.arenaReflection().view();
+
+        // The file is the little-endian byte image of the arena's storage, so it is copied WORD BY WORD:
+        // `getLong` yields the value and `putLong` writes it little-endian, which is the same byte sequence
+        // the arena holds. The previous version fell into a byte-wise path for everything after the first
+        // 64 KB chunk — `remaining` was computed as the whole rest of the file, not as a partial word — and
+        // the byte-level defaults transcribe a word most-significant-byte first, i.e. the reverse of the
+        // memory order. Any index larger than one chunk therefore landed on disk scrambled from 64 KB on,
+        // and a reader over it answered "no such key" instead of reporting a corrupt file. Found by
+        // `ArenaIndexJmhBenchmark.mmapLoad` at 100 000 entries, whose index is ~5 MB; the unit tests' files
+        // all fitted in one chunk.
+        int chunkBytes = 65536;
+        long[] chunk = new long[chunkBytes / Long.BYTES];
         long offset = 0;
-        int chunk = 65536;
-        while (offset < totalSize) {
-            int bytes = (int) Math.min(totalSize - offset, chunk);
-            int longs = bytes / 8;
-            long[] tmp = new long[longs];
-            view.getLongs(offset, tmp, 0, longs);
-            for (long l : tmp) {
-                direct.putLong(l);
+        while (totalSize - offset >= Long.BYTES) {
+            int longs = (int) Math.min((totalSize - offset) / Long.BYTES, chunk.length);
+            view.getLongs(offset, chunk, 0, longs);
+            for (int i = 0; i < longs; i++) {
+                direct.putLong(chunk[i]);
             }
-            offset += longs * 8L;
-            int remaining = (int) (totalSize - offset);
-            if (remaining > 0) {
-                byte[] rem = new byte[remaining];
-                view.getBytes(offset, rem, 0, remaining);
-                direct.put(rem);
-                offset += remaining;
+            offset += (long) longs * Long.BYTES;
+        }
+
+        // At most seven bytes left, and they are the first bytes of the final word's little-endian image —
+        // so they are taken in that order rather than through the byte-level defaults, which would reverse
+        // them within the word.
+        if (offset < totalSize) {
+            long lastWord = view.getLong(offset);
+            for (int i = 0; offset + i < totalSize; i++) {
+                direct.put((byte) (lastWord >>> (8 * i)));
             }
         }
+
         direct.flip();
         while (direct.hasRemaining()) {
             channel.write(direct);

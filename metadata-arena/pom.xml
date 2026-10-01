@@ -47,6 +47,50 @@
 
     <profiles>
         <profile>
+            <id>jmh</id>
+            <properties>
+                <jmh.version>1.37</jmh.version>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.openjdk.jmh</groupId>
+                    <artifactId>jmh-core</artifactId>
+                    <version>${jmh.version}</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>org.openjdk.jmh</groupId>
+                    <artifactId>jmh-generator-annprocess</artifactId>
+                    <version>${jmh.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <!-- JDK 23 and later do not run annotation processors found on the classpath
+                                 unless processing is asked for explicitly, so `-proc:full` is what makes
+                                 `jmh-generator-annprocess` emit the `*_jmhTest` harness at all. Without it
+                                 the benchmark sources compile, the build stays green, and no benchmark can
+                                 be run — which is the trap `hipster-entity-core`'s profile documents at
+                                 length. Scoped to this profile so the default compile stays processor-free. -->
+                            <compilerArgs>
+                                <arg>-proc:full</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>${exec.maven.plugin.version}</version>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
             <id>junit5</id>
             <activation>
                 <activeByDefault>true</activeByDefault>
@@ -61,6 +105,14 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argLine>
+                    <excludes>
+                        <!-- JMH's annotation processor writes a `*_jmhTest` JUnit test per benchmark into
+                             target/generated-test-sources, and surefire would otherwise pick it up and run
+                             the whole benchmark as part of `mvn test`. The same two excludes are in
+                             `hipster-entity-core`; a `-Pjmh` build must stay a build, not a benchmark run. -->
+                        <exclude>**/jmh_generated/**</exclude>
+                        <exclude>**/*_jmhTest.class</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
         </plugins>

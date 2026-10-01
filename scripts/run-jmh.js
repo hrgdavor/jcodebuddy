@@ -12,6 +12,7 @@ const REQUIRED_JDK_MAJOR = 25;
 
 const rootDir = path.resolve(import.meta.dir, "..");
 const coreDir = path.join(rootDir, "hipster-entity-core");
+const arenaDir = path.join(rootDir, "metadata-arena");
 const resultDir = path.join(rootDir, "target", "jmh");
 const classpathFile = path.join(resultDir, "test-classpath.txt");
 
@@ -175,8 +176,12 @@ function summarize(results) {
 
     const grouped = new Map();
     for (const row of rows) {
+        // Groups are display-only: a benchmark whose name matches none of the entity families is an arena
+        // benchmark (metadata-arena), and calling those "SetCompare" would mislabel the summary a reader
+        // uses to find the numbers.
         const groupName = row.benchmark.includes("Tracking") ? "Tracking"
             : row.benchmark.includes("Overlap") ? "Overlap"
+            : row.benchmark.includes("Arena") ? "Arena"
             : "SetCompare";
         if (!grouped.has(groupName)) grouped.set(groupName, []);
         grouped.get(groupName).push(row);
@@ -304,7 +309,10 @@ async function main() {
     // Install every benchmark-bearing module so hipster-entity-test can resolve them
     // as dependencies. The jmh profile activates the JMH annotation processor with
     // -proc:full, which JDK 25 requires for classpath processors.
-    const benchmarkModuleList = "hipster-entity-api,hipster-entity-core,hipster-entity-jackson,hipster-entity-test";
+    // `metadata-arena` is here for its own benchmarks (ArenaIndexJmhBenchmark) — it is not a dependency
+    // of the entity modules, and it is independent, so it can land anywhere in reactor order.
+    const benchmarkModuleList = "hipster-entity-api,hipster-entity-core,hipster-entity-jackson,"
+        + "hipster-entity-test,metadata-arena";
     const bootstrapArgs = [
         "-pl", benchmarkModuleList,
         "-Pjmh",
@@ -313,16 +321,31 @@ async function main() {
     ];
 
     // Compile all benchmark-bearing modules (and their deps): this compiles all benchmark
-    // classes now living in the test and core modules and runs the JMH annotation processor,
-    // generating runners in each module's target/generated-test-sources/test-annotations.
-    // The classpath file is written by the last module in reactor order (hipster-entity-test),
-    // so it includes jackson-databind, JMH, and all transitive deps.
+    // classes now living in the test, core and arena modules and runs the JMH annotation
+    // processor, generating runners in each module's target/generated-test-sources/test-annotations.
     const compileArgs = [
         "-pl", benchmarkModuleList,
         "-Pjmh",
         "-DskipTests",
         "clean",
-        "test-compile",
+        "test-compile"
+    ];
+
+    // The classpath file is built from ONE named module rather than from whichever module happened to be
+    // last in reactor order. That ordering used to decide it implicitly ("the last module in reactor order
+    // is hipster-entity-test, so the file includes jackson-databind and every transitive dep"), and adding
+    // an independent module — `metadata-arena`, which depends on none of the entity modules — can put a
+    // different module last and silently produce a classpath missing the very dependencies the benchmarks
+    // need. Naming the module makes the classpath a fact instead of an ordering accident; the bootstrap
+    // install above is what lets it resolve its siblings from the local repository.
+    // No `-Pjmh` here: this invocation builds ONE module, and hipster-entity-test does not define that
+    // profile (the processor switch lives in the modules that own benchmarks). Passing it made Maven fail
+    // with "The requested profiles [jmh] could not be activated ... because they do not exist", which is a
+    // fair complaint — the profile is not this module's. It does declare the JMH artefacts itself, so the
+    // classpath it produces carries them without any profile.
+    const classpathArgs = [
+        "-pl", "hipster-entity-test",
+        "-DskipTests",
         "dependency:build-classpath",
         `-Dmdep.outputFile=${classpathFile}`,
         "-Dmdep.includeScope=test"
@@ -333,6 +356,7 @@ async function main() {
 
     console.log(`Preparing test classpath with ${path.basename(maven)}...`);
     await runCommand([maven, ...compileArgs], rootDir);
+    await runCommand([maven, ...classpathArgs], rootDir);
 
     const dependencyClasspath = (await readFile(classpathFile, "utf8")).trim();
     const classpathEntries = [
@@ -346,6 +370,9 @@ async function main() {
         // Jackson module: production classes (no benchmark classes remain here)
         path.join(jacksonDir, "target", "classes"),
         path.join(jacksonDir, "target", "test-classes"),
+        // metadata-arena: ArenaIndexJmhBenchmark and the arena/index classes it measures
+        path.join(arenaDir, "target", "test-classes"),
+        path.join(arenaDir, "target", "classes"),
     ];
     if (dependencyClasspath.length > 0) classpathEntries.push(dependencyClasspath);
     const effectiveClasspath = classpathEntries.join(path.delimiter);
@@ -364,6 +391,7 @@ async function main() {
         ...await collectJavaFiles(path.join(coreDir,    "target", "generated-test-sources", "test-annotations")),
         ...await collectJavaFiles(path.join(jacksonDir, "target", "generated-test-sources", "test-annotations")),
         ...await collectJavaFiles(path.join(testDir,    "target", "generated-test-sources", "test-annotations")),
+        ...await collectJavaFiles(path.join(arenaDir,   "target", "generated-test-sources", "test-annotations")),
     ];
     if (generatedJavaFiles.length > 0) {
         console.log(`Recompiling ${generatedJavaFiles.length} JMH generated sources with ${path.basename(javac)}...`);

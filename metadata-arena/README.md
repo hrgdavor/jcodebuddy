@@ -87,6 +87,31 @@ Every contract the tests assert is stated where a caller reads it: the interface
 true — several of them were written against behaviour that turned out to be wrong, and are noted in the
 class javadoc of the test that caught them.
 
+## Benchmarks
+
+`ArenaIndexJmhBenchmark` measures the index over **both** backends at two table sizes:
+
+- `getHot` / `getRandom` — the cache's steady-state lookup, and the same probe on a cold slot
+- `rebuild` — `reset()` plus re-inserting every entry, which is DEC-W009's rebuild protocol measured as the
+  caller performs it
+- `mmapLoad` — map the file written during setup, read every entry, unmap: the cold-start path a metadata
+  server takes when it finds an index on disk
+
+Run it through the repository's one JMH entry point:
+
+```bash
+bun run scripts/run-jmh.js --include ".*ArenaIndexJmhBenchmark.*"
+```
+
+The runner supplies the profile (3 forks, 6×2 s warmup, 8×2 s measurement) and warns when it is lowered, so
+the benchmark class declares no iterations of its own. `-Pjmh` activates the JMH annotation processor, and
+this module's `jmh` profile is what puts `-proc:full` on the compile: without it the benchmark sources
+compile, the build stays green, and no `*_jmhTest` harness exists to run.
+
+The numbers decide one thing worth deciding — which backend the metadata cache should default to, and
+whether a full rebuild is cheap enough to run on every watcher batch. They are recorded where that decision
+is made, not here: a number in a README is stale the moment the machine changes.
+
 ## Position in JCodeBuddy
 
 `metadata-arena` is a foundational library within the JCodeBuddy project. It is currently a standalone module under active development, intended to serve as the storage layer for the `metadata-server` and `metadata-mcp-server` modules. Unlike the higher-level metadata modules (which handle JSON-RPC transport and MCP tool integration), `metadata-arena` focuses purely on memory management and compact index structures.

@@ -327,23 +327,68 @@ byte-order rule were corrected.
 ### 2.2 — The JMH benchmarks
 **Who:** agent · **Size:** S–M
 
-The plan asked for `put`/`get`/`rebuild`/`mmap` benchmarks and the POM already declares the JMH
-dependencies, but **no benchmark source exists**. Decide first whether the numbers will inform a
-decision; if they will not, record that in the plan and close the step as "not needed" rather than
-leaving it open.
+**The decision this step asked for: yes, the numbers inform something** — which backend the metadata cache
+should default to (the module ships two and nothing chooses between them), and whether a full rebuild
+(DEC-W009's protocol) is cheap enough to run on every watcher batch.
 
-**Do:** add the benchmark class(es) beside the module's tests, in the module's `jmh` profile
-(`-proc:full` is required on JDK 23+ and the sibling modules already carry it — check
-`hipster-entity-core/pom.xml` for the shape), and extend [`scripts/run-jmh.js`](../scripts/run-jmh.js)'s
-module list and classpath entries if `metadata-arena` is not already collected there. **Never** add a
-shell wrapper.
+**Done 2026-10-01.**
 
-**Gate:** the benchmark compiles under `MODULE` with `-Pjmh`, and one smoke run completes:
-`bun run scripts/run-jmh.js --include "<class>"` with the smoke flags; record decision-grade numbers only
-from the default profile.
+- `ArenaIndexJmhBenchmark` in `metadata-arena`: `getHot`, `getRandom`, `rebuild` (reset + re-insert, because
+  that is how a caller performs it), `mmapLoad` (map the file written in setup, read every entry, unmap).
+  Params: backend ∈ {`bytebuffer`, `ffm`} × entries ∈ {1 000, 100 000}. It declares no forks/iterations of
+  its own, so the runner's profile governs.
+- `metadata-arena/pom.xml` gained the `jmh` profile (`-proc:full`, without which the harness is never
+  generated and the sources merely compile) and the same two surefire excludes `hipster-entity-core` has, so
+  a `-Pjmh` build stays a build rather than running the benchmark as a test.
+- `scripts/run-jmh.js`: `metadata-arena` added to the benchmark module list, to the classpath and to the
+  generated-source collection, plus an `Arena` summary group. **The classpath file is now built from a named
+  module** (`hipster-entity-test`) instead of "whichever module is last in reactor order" — adding an
+  independent module is exactly what makes that ordering assumption fail silently, and the fix removes the
+  need to reason about it. Two errors of mine on the way: `-Pjmh` was passed to a module that does not define
+  the profile (Maven refuses, correctly), and the runner's own JDK check caught `JAVA_HOME` on 21 — both are
+  the tooling working as designed.
+- **The benchmark found a seventh defect, and a gap in the tests step 2.1 had just written.**
+  `IndexMmapWriter` computed its byte-wise tail as "everything left in the file" rather than "a partial
+  word", and the byte-level defaults transcribe a word most-significant-byte first — the reverse of memory
+  order. Every file larger than one 64 KB chunk therefore landed on disk scrambled from 64 KB on, and a
+  reader over it answered *no such key* rather than reporting corruption. `mmapLoad` at 100 000 entries
+  (~5 MB file) threw; every unit-test file fitted in one chunk, which is why they passed. The writer now
+  copies word by word and writes the ≤7-byte tail little-endian, and
+  `IndexMmapRoundTripTest.aFileLargerThanOneWriterChunkRoundTripsToo` (capacity 8 192 → 131 KB fixed region)
+  pins it. 38 arena tests green.
+- **Evidence, and what is not evidence:** the smoke runs completed all 16 cases through the standard entry
+  point (`bun run scripts/run-jmh.js --include ".*ArenaIndexJmhBenchmark.*"`), which is this step's gate.
+  Their numbers are **not recorded** — 1 fork and 1×1 s, and the runner prints exactly that warning. They do
+  raise one question worth a real run: `ByteBuffer` measured ~10× faster than FFM on `get` and `rebuild`
+  (≈134 000 vs ≈13 000 ops/ms for a hot get), plausibly the alignment-1 var-handle access against an
+  intrinsified `ByteBuffer`. That is a hypothesis, not a finding, and it is what step 2.3 exists to settle.
 
-**Done when:** the benchmark runs through the standard entry point, or the step is closed with the reason
-it is not needed.
+**Gate:** ✅ the benchmark compiles under `-Pjmh` and runs through the runner; `MODULE` for `metadata-arena`
+green (38 tests).
+
+### 2.3 — The decision-grade arena run, and the backend decision it settles
+**Who:** agent, on a quiet machine · **Size:** S
+
+Step 2.2 left one thing deliberately unrecorded: the smoke run's numbers are not evidence, and the module
+still ships two backends with nothing choosing between them. This step is the run that produces the
+evidence, and the decision that consumes it.
+
+**Do:** on a machine that is not building anything else, run the default profile:
+
+```
+bun run scripts/run-jmh.js --include ".*ArenaIndexJmhBenchmark.*"
+```
+
+That is 3 forks with 6×2 s warmup and 8×2 s measurement per case — roughly half an hour, and the runner
+warns if any of it is lowered. Then record the outcome where the decision lives: which backend
+`metadata-server` should use for the index (and why), and whether a `rebuild` at the expected table size fits
+the watcher batch the DEC-W009 rebuild protocol is meant to serve. Write it into DEC-W009's implementation
+note, not into a README.
+
+**Gate:** the numbers come from a default-profile run (the runner's own warning line is absent), and the
+decision — including "either backend will do, and here is why that is the answer" — is written down.
+
+**Done when:** no reader has to run the benchmark to learn which backend to use.
 
 ---
 
@@ -825,7 +870,8 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[x]` |
 | 1.4 | Test the MCP tool surface | agent | S | `[x]` |
 | 2.1 | metadata-arena unit tests | agent | M | `[x]` |
-| 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[ ]` |
+| 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
+| 2.3 | Decision-grade arena run + the backend decision | agent | S | `[ ]` |
 | 3.1 | The hipster-ioc ADR | agent | S | `[ ]` |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[ ]` |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[ ]` |
