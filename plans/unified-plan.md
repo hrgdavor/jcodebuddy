@@ -214,19 +214,39 @@ corrected in place (the amendment block at the top of DEC-W008 records all four)
 ### 1.3 — `WatchMetadataProvider`: the metadata server over the watch cache
 **Who:** agent · **Size:** M
 
-The metadata-server plan's step 9 was never built: nothing named `WatchMetadataProvider` exists, so the
-RPC/MCP surface cannot serve the cache that [`java-watch-agent`](../java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/MetadataCache.java)
-actually maintains.
+**Done 2026-10-01, with one deliberate deviation from this step's own text.**
 
-**Do:** implement the provider over the agent's `MetadataCache` and promote that dependency from test
-scope to compile scope in the POM. Keep the module boundary honest: the server must not drag
-`project-automation` in (§ 1.1), and if it needs something from the agent that is not a shared library
-type, promote that type into a library rather than reaching into the module.
+What landed: `WatchMetadataProvider` in `metadata-server` — a snapshot view of a watch checksum cache built
+from its three real facts (`WatchedFile(path, checksum, lastModified)`). It answers `get` by checksum (the
+cache is keyed by path and the interface by hash, so identical content resolves to the first path in path
+order while `listEntries` still lists every file), `listEntries` (path-ordered, so a cache with no order of
+its own answers in a deterministic one), `hasChanged`, and `listClasses` — **empty**, deliberately, because
+a checksum cache has never known a class name and paths that look like Java files would be a guess dressed
+as a fact. `parse` is not overridden, so the interface's default answers with the named refusal. Tests:
+`WatchMetadataProviderTest` (8), one of which drives a JSON-RPC round trip through the real transport.
 
-**Gate:** `MODULE` for `metadata-server,metadata-mcp-server` green, plus a test that a cache entry written
-by the agent is visible through the server's RPC surface.
+**The deviation: the dependency this step asked for is not added, in either direction.** The step followed
+the `.kilo` metadata-server plan ("promote `java-watch-agent` from test scope to compile scope"), which is
+backwards twice over: it would make a **library** (`metadata-server`, which `metadata-mcp-server` and
+`project-automation` both depend on) depend on an **application** that shades a jar and pulls OpenRewrite's
+LST in through `jwa-builder`; and the reverse direction — `metadata-server` added to `java-watch-agent` —
+would shade Fory into the watch daemon's fat jar for the sake of a three-line helper. So the **reusable
+half is promoted here**, which is AGENTS.md § 1.1's rule doing its job, and the call site converts:
 
-**Done when:** the provider exists, is wired, and is tested end to end.
+```java
+WatchMetadataProvider.of(cache.getCache().entrySet().stream()
+        .map(e -> new WatchMetadataProvider.WatchedFile(
+                e.getValue().path(), e.getValue().checksum(), e.getValue().lastModified()))
+        .toList())
+```
+
+**Left to the consumer, and not claimed as wired:** no production call site exists today, because nothing
+yet runs a `MetadataServer` over a `MetadataCache` — the `.kilo` plan's own step 10 ("integration test
+wiring `MetadataServer` with a real `MetadataCache`") never happened either. When such a call site appears,
+the snippet above is the whole wiring, and that module's test is the place to prove it.
+
+**Gate:** ✅ `MODULE` for `metadata-server` green — 15 tests (`MetadataServerTest` 7,
+`WatchMetadataProviderTest` 8); `metadata-mcp-server` compiles unchanged.
 
 ### 1.4 — Test the MCP tool surface
 **Who:** agent · **Size:** S
@@ -761,7 +781,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 0.2 | Commit the stale-document corrections | agent | S | `[x]` (landed as `ff0dc49`) |
 | 1.1 | Honour `enabled: false` (DEC-018 / DEC-021 § 6) | agent | M | `[x]` |
 | 1.2 | `MetadataProvider.parse` (DEC-W008) | agent | M | `[x]` |
-| 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[ ]` |
+| 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[x]` |
 | 1.4 | Test the MCP tool surface | agent | S | `[ ]` |
 | 2.1 | metadata-arena unit tests | agent | M | `[ ]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[ ]` |
