@@ -70,6 +70,17 @@ generator (DEC-027/029).
 
 ## Boundaries
 
+- **This is not a standalone, per-file generator — use the script, not the interface.** It implements the
+  shared `CodeGenerator` SPI, whose contract is "offer me any file and I will answer about that file", but
+  it needs a file *beside* the one it is given: the context's own compilation unit holds the interface,
+  while the `default buildXxx(...)` factories live in the module interface in the **sibling**
+  `<Supertype>.java`. It also writes `<module>/.jcodebuddy/metadata/hipster-ioc/contexts.json`, which
+  describes the whole tree. Run it through `bun scripts/ioc-gen.js`, which walks a source root. The tier
+  distinction is being made explicit in
+  [the plan's step 7.8](../plans/unified-plan.md) and recorded in
+  [DEC-036 § 11](../doc-hipster-entity/architecture/decisions/DEC-036.md); until then, a caller holding a
+  list of generators must not hand this one an isolated file — and if a sibling module interface cannot be
+  read, that is a missing neighbour to report, never an absence to infer.
 - It does **not** depend on `project-automation`; another module must never depend on a project's private
   dev-time assistant, and this one implements the shared `CodeGenerator` SPI instead (AGENTS.md § 1.1).
 - It reads Java through **OpenRewrite's LST** via `hipster-entity-tooling` (DEC-030); there is no second
