@@ -20,13 +20,13 @@ tell whether the port is correct.
 
 This guide is the **procedural** half of Phase 6. The other four deliverables are:
 
-| Document | Answers |
-| --- | --- |
-| [`Checklist.md`](Checklist.md) | Which files, what JavaParser surface, what each needs |
-| [`tracker.md`](tracker.md) | What the status of each file is |
+| Document                                       | Answers                                                                     |
+| ---------------------------------------------- | --------------------------------------------------------------------------- |
+| [`Checklist.md`](Checklist.md)                 | Which files, what JavaParser surface, what each needs                       |
+| [`tracker.md`](tracker.md)                     | What the status of each file is                                             |
 | [`MIGRATION-CAVEATS.md`](MIGRATION-CAVEATS.md) | **What will go wrong, how it fails, what to do — read this before porting** |
-| `../../scripts/rewrite-migration/README.md` | How to run the tooling |
-| **this guide** | **How to do the port, and how to know it worked** |
+| `../../scripts/rewrite-migration/README.md`    | How to run the tooling                                                      |
+| **this guide**                                 | **How to do the port, and how to know it worked**                           |
 
 The caveats document is the one written from the mistakes made during the first two passes; this
 guide is the procedure, and the caveats file is why the procedure has the shape it does.
@@ -71,12 +71,12 @@ has never compiled — see § 6.
 JavaParser and OpenRewrite differ most in the two things this repository's
 generators do most: **constructing** trees and **finding** things in them.
 
-| Task | JavaParser | OpenRewrite |
-| --- | --- | --- |
-| Find nodes | `cu.findAll(X.class)` | `new JavaIsoVisitor<>(){...}.visit(cu, ctx)` |
-| Build a tree | `new MethodDeclaration()`, `setName(...)` | `JavaTemplate` or immutable `withXxx(...)` chains |
-| Print | `LexicalPreservingPrinter.print(cu)` | `cu.printAll()` — formatting is inherent, then verified |
-| Write to disk | `Files.writeString(...)` | `Result` / `printAll()`, then verify idempotency |
+| Task          | JavaParser                                | OpenRewrite                                             |
+| ------------- | ----------------------------------------- | ------------------------------------------------------- |
+| Find nodes    | `cu.findAll(X.class)`                     | `new JavaIsoVisitor<>(){...}.visit(cu, ctx)`            |
+| Build a tree  | `new MethodDeclaration()`, `setName(...)` | `JavaTemplate` or immutable `withXxx(...)` chains       |
+| Print         | `LexicalPreservingPrinter.print(cu)`      | `cu.printAll()` — formatting is inherent, then verified |
+| Write to disk | `Files.writeString(...)`                  | `Result` / `printAll()`, then verify idempotency        |
 
 The `findAll` → visitor change is why a ported file often ends up *longer*: a
 visitor is a class, not a lambda, unless you use `TreeVisitor` helpers.
@@ -257,10 +257,10 @@ There is no `J.FieldDeclaration`.
 The two highest-risk mappings in the table, and they land on the two
 highest-risk files.
 
-| JavaParser | OpenRewrite |
-| --- | --- |
-| `com.github.javaparser.ast.comments.Comment` — a positioned node | comment **text** attached as a prefix to the following tree; no standalone comment node |
-| `com.github.javaparser.Range` — line/column | character **offsets** on the tree; line numbers must be derived from the `SourceFile` text |
+| JavaParser                                                       | OpenRewrite                                                                                |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `com.github.javaparser.ast.comments.Comment` — a positioned node | comment **text** attached as a prefix to the following tree; no standalone comment node    |
+| `com.github.javaparser.Range` — line/column                      | character **offsets** on the tree; line numbers must be derived from the `SourceFile` text |
 
 **Why it matters here:** `CooperativeCodegen` implements DEC-020 block
 preservation. It recognises its own previously generated output **by structural
@@ -355,9 +355,9 @@ reason; resetting is the cheaper equivalent for a shared instance.
 
 Measured on `interface PersonEntity extends EntityBase<String>`:
 
-| accessor | value |
-| --- | --- |
-| `getExtends()` | `null` |
+| accessor          | value                  |
+| ----------------- | ---------------------- |
+| `getExtends()`    | `null`                 |
 | `getImplements()` | `[EntityBase<String>]` |
 
 A port that reads `getExtends()` — the obvious translation of JavaParser's
@@ -569,13 +569,13 @@ An entry whose file no longer mentions JavaParser is reported as
 Phase 6 is where the architecture decisions are cashed in, and two of them are
 directly at stake.
 
-| Decision | What the port must preserve |
-| --- | --- |
-| **DEC-019** — source-visible wiring | Routing and wiring stay navigable Java. The ported staging files carry an `Original JavaParser location:` provenance annotation for exactly this reason; it is the navigational half of the port and must not be "cleaned up". |
-| **DEC-020** — cooperative codegen | Block recognition is **structural**, not marker-based. Porting `CooperativeCodegen` without the three-state test set risks overwriting hand-edited generated blocks — the one outcome the decision exists to prevent. |
-| **DEC-021** — generator class header | The `{@link <fqn>}` first line is generated from the type's own name and is refactor-sensitive. `TypeLiterals` implements it; keep the emitted header byte-identical. |
+| Decision                                | What the port must preserve |
+| --------------------------------------- | --------------------------- |
+| **DEC-019** — source-visible wiring     | Routing and wiring stay navigable Java. The ported staging files carry an `Original JavaParser location:` provenance annotation for exactly this reason; it is the navigational half of the port and must not be "cleaned up". |
+| **DEC-020** — cooperative codegen       | Block recognition is **structural**, not marker-based. Porting `CooperativeCodegen` without the three-state test set risks overwriting hand-edited generated blocks — the one outcome the decision exists to prevent. |
+| **DEC-021** — generator class header    | The `{@link <fqn>}` first line is generated from the type's own name and is refactor-sensitive. `TypeLiterals` implements it; keep the emitted header byte-identical. |
 | **DEC-022** — refactor-sensitive naming | A name derived from a Java identifier must stay reachable by IDE rename; an explicit API label (JSON-RPC method, audit event) must not be. Node construction is where a derived name can accidentally become a string literal. |
-| **DEC-029** — class index by FQN | `ClassIndex` / `TypeFacts` write `.jcodebuddy/index/classes.json`, keyed by FQN. The **JSON shape is the contract** — keep `kind` spellings byte-identical and let only the tree access change. |
+| **DEC-029** — class index by FQN        | `ClassIndex` / `TypeFacts` write `.jcodebuddy/index/classes.json`, keyed by FQN. The **JSON shape is the contract** — keep `kind` spellings byte-identical and let only the tree access change. |
 
 Where rule §1 of `AGENTS.md` and the plan conflict, §1 wins. It does not conflict
 here: the port moves *towards* committed, navigable source.

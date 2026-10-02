@@ -155,16 +155,16 @@ pending. This table is what was actually verified, with the evidence for each ro
 deliverables are *documents* rather than compiled code, the row says so, because that distinction is what
 made the plan's status lines misleading.
 
-| Phase | Status | Evidence |
-| --- | --- | --- |
-| 1 — Foundation | **Delivered as specified** | `01-foundation/pom-fragment-rewrite.xml` exists, and its content is in the root POM: `openrewrite.version` 8.90.4 plus managed `rewrite-core` / `rewrite-java`, with `rewrite-java-25` pinned in the modules that parse. `01-foundation/api-compatibility/{AstVisitor,AstManipulator,CompilationUnitAdapter}.java` exist. OpenRewrite is a real dependency of four modules. |
-| 2 — Core AST Utilities | **Delivered as specified, and superseded in practice** | `02-utilities/util/{AstPrinter,NodeTraversal,SourceManipulation,TypeUtils}.java` and their four test sketches exist. The *working* equivalents were written during Phase 6 where they are used: `hipster-entity-tooling`'s `TreeQueries` (traversal/kind/annotation queries), `JavaSyntaxCheck` (positions, which the plan did not anticipate needing javac for) and `TypeLiterals`/`JdkImportSupport` (type text and class literals). The plan's `util/` files are sketches in the docs tree, not compiled code. |
-| 3 — Code Generation | **Delivered** | Its own Status line already said "Implementation Complete"; the generators are ported and green in the tree (`ViewBuilderGenerator`, `ViewInterfaceGenerator`, `ValidationGenerator`, `ViewRecordGenerator`, `FieldBoilerplateGenerator`, and `jwa-builder`'s `RecordBuilderProcessor`/`ClassMemberProcessor`). `03-codegen/` holds the design notes, not code. |
-| 4 — Validation | **Delivered** | Its own heading says so, and the tree agrees: `EntityRulesValidator` plus `EntityRule`, `MarkerEntityRule`, `ViewAnnotationRule`, `ViewInterfaceRule`, `AuditableRule`, `EntityFieldEnumOrderRule` and `EnumConstantOrderChecker` are all ported and green. |
-| 5 — Automation | **Delivered** (2026-09-22) | The eleven classes are in `project-automation/src/main/java/hr/hrg/jcodebuddy/automation/` (`Transformation`, `TransformationRegistry`, `AutomationEngine`, `BatchProcessor` + `BatchReport`, `ProjectAutomation`, `TransformationResult`, `ValidationResult`, `AnalysisResult`, `TransformationException`, `SourceFiles`, `SourceFacts`) with 67 tests. The ten sketches in `05-automation/` were reviewed line by line and rewritten: two registries became one, the reflective registration overload and the empty `initialize()` are gone, `apply` returns a result rather than a `String`, writes are opt-in, and the regex-based counting / whole-path glob / hard-coded thread count / stdout reporting were replaced. `ValidationException` had no caller and was deleted. Delivery record: `05-Automation.md` § *Status*. |
-| 6 — Migration of Existing Tooling | **COMPLETE** (2026-09-22) | 34/34 queue files ported; `javaparser-core` declared by no module; `verify-migration.js` `RESULT: PASS`; whole reactor `clean test` green (1164 tests at that point; 1231 after Phase 5). Delivery record: `06-Migration-Checklist.md` § *Delivery record*. |
-| 7 — Testing & Validation | **Delivered** (2026-09-22) | Re-scoped first, because its deliverables named Phase 2 sketches (`AstVisitorTests`, `TypeUtilsTests`) and two of them compared against JavaParser, which Phase 6 removed. What exists: `TreeQueriesTest` (40), `JavaSyntaxCheckTest` (22), `LargeSourceEdgeCaseTest` (4), `MigrationCompletenessTest` (3 over 283 real files), four more `SourceReader` entry-point cases, `AutomationChainIntegrationTest` (4, a chain over a generated tree), `ToolSeamTest` (18, `java-watch-agent`'s first tests), two `*JmhBenchmark` classes with 18 measured results, and Bun-rendered `TEST-REPORT.md` / `BenchmarkReport.md`. Reactor total 1231 to **1326 tests, 0 failures**, gate `RESULT: PASS`. The new tests found and fixed three production defects in the position-lookup half (reversed enclosing chain; `@Foo`/`Outer.Foo` stealing a name line; a match inside a string literal), with committed output byte-identical. Delivery record: `07-Testing-Validation.md` § *Status*. |
-| 8 — Documentation | **Delivered** (2026-09-22) | The five "decide first" questions are answered in `08-Documentation.md` § *Status*. What exists: `AGENTS.md` § 2 now states the OpenRewrite rule with its four operations; `doc_knowledge/code.graph.md` is rewritten as *Reading and writing Java source* (read contract and the two channels, javac positions and the `(simpleName, enclosingChain)` match, the `TreeQueries` trap table, the splice rule, the measured read cost); `docs/RecordBuilderGenerator.md` rewritten against `jwa-builder` and `jcodebuddy/jcodebuddy-agent/record builder.md` retired into it; 20 DEC/brainstorm/record appendix notes appended (`DEC-009`, `DEC-020`, `DEC-023`, `DEC-029`, `gen-freezing`, six brainstorms, five watch-series DECs, four `merge-java` records, the legacy continuation plan, `jcodebuddy/jcodebuddy-agent/plan.md`); `DEC-030-openrewrite-source-representation.md` written and registered in the decisions index; `docs-honest` added to `verify-migration.js` with a 28-entry `DOC_ALLOWLIST` in `curation.js`. Measured result: 284 markdown files scanned, 51 still mention the library (13 live, 17 decisions, 21 records/generated), **0 live documents teach a removed API** except one recorded warning, gate `RESULT: PASS with 1 warning(s)`, and `DocConformanceTest` 7/7 green over the rewritten links. |
+| Phase                             | Status                                                 | Evidence |
+| --------------------------------- | ------------------------------------------------------ | -------- |
+| 1 — Foundation                    | **Delivered as specified**                             | `01-foundation/pom-fragment-rewrite.xml` exists, and its content is in the root POM: `openrewrite.version` 8.90.4 plus managed `rewrite-core` / `rewrite-java`, with `rewrite-java-25` pinned in the modules that parse. `01-foundation/api-compatibility/{AstVisitor,AstManipulator,CompilationUnitAdapter}.java` exist. OpenRewrite is a real dependency of four modules. |
+| 2 — Core AST Utilities            | **Delivered as specified, and superseded in practice** | `02-utilities/util/{AstPrinter,NodeTraversal,SourceManipulation,TypeUtils}.java` and their four test sketches exist. The *working* equivalents were written during Phase 6 where they are used: `hipster-entity-tooling`'s `TreeQueries` (traversal/kind/annotation queries), `JavaSyntaxCheck` (positions, which the plan did not anticipate needing javac for) and `TypeLiterals`/`JdkImportSupport` (type text and class literals). The plan's `util/` files are sketches in the docs tree, not compiled code. |
+| 3 — Code Generation               | **Delivered**                                          | Its own Status line already said "Implementation Complete"; the generators are ported and green in the tree (`ViewBuilderGenerator`, `ViewInterfaceGenerator`, `ValidationGenerator`, `ViewRecordGenerator`, `FieldBoilerplateGenerator`, and `jwa-builder`'s `RecordBuilderProcessor`/`ClassMemberProcessor`). `03-codegen/` holds the design notes, not code. |
+| 4 — Validation                    | **Delivered**                                          | Its own heading says so, and the tree agrees: `EntityRulesValidator` plus `EntityRule`, `MarkerEntityRule`, `ViewAnnotationRule`, `ViewInterfaceRule`, `AuditableRule`, `EntityFieldEnumOrderRule` and `EnumConstantOrderChecker` are all ported and green. |
+| 5 — Automation                    | **Delivered** (2026-09-22)                             | The eleven classes are in `project-automation/src/main/java/hr/hrg/jcodebuddy/automation/` (`Transformation`, `TransformationRegistry`, `AutomationEngine`, `BatchProcessor` + `BatchReport`, `ProjectAutomation`, `TransformationResult`, `ValidationResult`, `AnalysisResult`, `TransformationException`, `SourceFiles`, `SourceFacts`) with 67 tests. The ten sketches in `05-automation/` were reviewed line by line and rewritten: two registries became one, the reflective registration overload and the empty `initialize()` are gone, `apply` returns a result rather than a `String`, writes are opt-in, and the regex-based counting / whole-path glob / hard-coded thread count / stdout reporting were replaced. `ValidationException` had no caller and was deleted. Delivery record: `05-Automation.md` § *Status*. |
+| 6 — Migration of Existing Tooling | **COMPLETE** (2026-09-22)                              | 34/34 queue files ported; `javaparser-core` declared by no module; `verify-migration.js` `RESULT: PASS`; whole reactor `clean test` green (1164 tests at that point; 1231 after Phase 5). Delivery record: `06-Migration-Checklist.md` § *Delivery record*. |
+| 7 — Testing & Validation          | **Delivered** (2026-09-22)                             | Re-scoped first, because its deliverables named Phase 2 sketches (`AstVisitorTests`, `TypeUtilsTests`) and two of them compared against JavaParser, which Phase 6 removed. What exists: `TreeQueriesTest` (40), `JavaSyntaxCheckTest` (22), `LargeSourceEdgeCaseTest` (4), `MigrationCompletenessTest` (3 over 283 real files), four more `SourceReader` entry-point cases, `AutomationChainIntegrationTest` (4, a chain over a generated tree), `ToolSeamTest` (18, `java-watch-agent`'s first tests), two `*JmhBenchmark` classes with 18 measured results, and Bun-rendered `TEST-REPORT.md` / `BenchmarkReport.md`. Reactor total 1231 to **1326 tests, 0 failures**, gate `RESULT: PASS`. The new tests found and fixed three production defects in the position-lookup half (reversed enclosing chain; `@Foo`/`Outer.Foo` stealing a name line; a match inside a string literal), with committed output byte-identical. Delivery record: `07-Testing-Validation.md` § *Status*. |
+| 8 — Documentation                 | **Delivered** (2026-09-22)                             | The five "decide first" questions are answered in `08-Documentation.md` § *Status*. What exists: `AGENTS.md` § 2 now states the OpenRewrite rule with its four operations; `doc_knowledge/code.graph.md` is rewritten as *Reading and writing Java source* (read contract and the two channels, javac positions and the `(simpleName, enclosingChain)` match, the `TreeQueries` trap table, the splice rule, the measured read cost); `docs/RecordBuilderGenerator.md` rewritten against `jwa-builder` and `jcodebuddy/jcodebuddy-agent/record builder.md` retired into it; 20 DEC/brainstorm/record appendix notes appended (`DEC-009`, `DEC-020`, `DEC-023`, `DEC-029`, `gen-freezing`, six brainstorms, five watch-series DECs, four `merge-java` records, the legacy continuation plan, `jcodebuddy/jcodebuddy-agent/plan.md`); `DEC-030-openrewrite-source-representation.md` written and registered in the decisions index; `docs-honest` added to `verify-migration.js` with a 28-entry `DOC_ALLOWLIST` in `curation.js`. Measured result: 284 markdown files scanned, 51 still mention the library (13 live, 17 decisions, 21 records/generated), **0 live documents teach a removed API** except one recorded warning, gate `RESULT: PASS with 1 warning(s)`, and `DocConformanceTest` 7/7 green over the rewritten links. |
 
 **With Phase 7 delivered, the migration itself is complete. With Phase 8 delivered, the documentation
 says so.** The "20 weeks / 5 months" timeline above was never a used estimate and should not be read as
@@ -221,16 +221,16 @@ remaining work.
 
 ## Timeline
 
-| Phase | Duration | Dependencies |
-|-------|----------|--------------|
-| Phase 1: Foundation | 2 weeks | None |
-| Phase 2: Core Utilities | 2 weeks | Phase 1 |
-| Phase 3: Code Generation | 4 weeks | Phase 2 |
-| Phase 4: Validation | 3 weeks | Phase 3 |
-| Phase 5: Automation | 2 weeks | Phase 4 |
-| Phase 6: Migration | 4 weeks | Phase 5 |
-| Phase 7: Testing | 3 weeks | Phase 6 |
-| Phase 8: Documentation | 1 week | Phase 7 |
+| Phase                    | Duration   | Dependencies   |
+| ------------------------ | ---------- | -------------- |
+| Phase 1: Foundation      | 2 weeks    | None           |
+| Phase 2: Core Utilities  | 2 weeks    | Phase 1        |
+| Phase 3: Code Generation | 4 weeks    | Phase 2        |
+| Phase 4: Validation      | 3 weeks    | Phase 3        |
+| Phase 5: Automation      | 2 weeks    | Phase 4        |
+| Phase 6: Migration       | 4 weeks    | Phase 5        |
+| Phase 7: Testing         | 3 weeks    | Phase 6        |
+| Phase 8: Documentation   | 1 week     | Phase 7        |
 
 **Total Estimated Duration**: 21 weeks (~5 months) — never a used estimate, kept as the plan's own record
 
@@ -238,12 +238,12 @@ remaining work.
 
 ## Risk Assessment
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| OpenRewrite API changes | Medium | Medium | Use stable API, monitor releases |
-| Lexical preservation issues | Low | High | Thorough testing |
-| Performance degradation | Low | Medium | Benchmark and optimize |
-| Missing JavaParser features | Medium | High | Map all features, implement equivalents |
+| Risk                        | Probability   | Impact   | Mitigation                              |
+| --------------------------- | ------------- | -------- | --------------------------------------- |
+| OpenRewrite API changes     | Medium        | Medium   | Use stable API, monitor releases        |
+| Lexical preservation issues | Low           | High     | Thorough testing                        |
+| Performance degradation     | Low           | Medium   | Benchmark and optimize                  |
+| Missing JavaParser features | Medium        | High     | Map all features, implement equivalents |
 
 ---
 

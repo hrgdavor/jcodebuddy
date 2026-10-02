@@ -27,18 +27,18 @@ branch's decisions so the same conflict is not re-litigated on the next update.
 
 ## What it does per conflict type
 
-| Conflict | Decision | Behaviour |
-|---|---|---|
-| `IMPORT_ADD` | Both branches add imports | **Automatic** - keeps the union, de-duplicated |
-| `COMMENT_ADD` | Both branches add documentation | **Automatic** - keeps the union |
-| `CONSTANT_ADD` | Both branches add constants | **Automatic**, or review if the same name has different values |
-| `OVERLOAD_ADD` | Both branches add a method of the same name | **Automatic** if the parameter lists differ, review if identical |
-| `TYPE_CHANGE` | Declared type differs | **Automatic** when one side widens the type, review otherwise |
-| `METHOD_BODY_CHANGE` | Both edited the same body | **Review** - disjoint edits are combined, overlapping ones are reported |
-| `VARIABLE_RENAME` | Renamed differently on each side | **Review + remembered** - the chosen name is replayed later |
-| `PACKAGE_CHANGE` | Class moved on both sides | **Automatic** if one side moved it, **review + remembered** if both did |
-| `STRUCTURAL_CHANGE` | Members added/removed incompatibly | **Manual**, with a description of what each side does |
-| `API_INCOMPATIBILITY` | Public contract changed | **Manual**, naming exactly which part moved |
+| Conflict              | Decision                                    | Behaviour                                                               |
+| --------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
+| `IMPORT_ADD`          | Both branches add imports                   | **Automatic** - keeps the union, de-duplicated                          |
+| `COMMENT_ADD`         | Both branches add documentation             | **Automatic** - keeps the union                                         |
+| `CONSTANT_ADD`        | Both branches add constants                 | **Automatic**, or review if the same name has different values          |
+| `OVERLOAD_ADD`        | Both branches add a method of the same name | **Automatic** if the parameter lists differ, review if identical        |
+| `TYPE_CHANGE`         | Declared type differs                       | **Automatic** when one side widens the type, review otherwise           |
+| `METHOD_BODY_CHANGE`  | Both edited the same body                   | **Review** - disjoint edits are combined, overlapping ones are reported |
+| `VARIABLE_RENAME`     | Renamed differently on each side            | **Review + remembered** - the chosen name is replayed later             |
+| `PACKAGE_CHANGE`      | Class moved on both sides                   | **Automatic** if one side moved it, **review + remembered** if both did |
+| `STRUCTURAL_CHANGE`   | Members added/removed incompatibly          | **Manual**, with a description of what each side does                   |
+| `API_INCOMPATIBILITY` | Public contract changed                     | **Manual**, naming exactly which part moved                             |
 
 Three kinds of outcome fall out of this:
 
@@ -346,11 +346,11 @@ bun run scripts/git-sample/sample-repo.test.js
 
 ## Dependencies
 
-| Dependency | Why |
-|---|---|
-| `org.openrewrite:rewrite-core`, `rewrite-java`, `rewrite-maven` | Java parsing and source-level recipes |
-| `org.eclipse.jgit:org.eclipse.jgit` | Branch and history access from the library, never shelling out to `git` |
-| JUnit 5, Mockito | Tests |
+| Dependency                                                      | Why                                                                     |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `org.openrewrite:rewrite-core`, `rewrite-java`, `rewrite-maven` | Java parsing and source-level recipes                                   |
+| `org.eclipse.jgit:org.eclipse.jgit`                             | Branch and history access from the library, never shelling out to `git` |
+| JUnit 5, Mockito                                                | Tests                                                                   |
 
 OpenRewrite bundles its own Java parser, so no separate `JavaParser` dependency
 is needed. Versions of OpenRewrite come from the parent POM.
@@ -394,19 +394,19 @@ proposing (never applying) a solution. Planned as Phase 13 in
 
 ## Documents
 
-| Document | Contents |
-|---|---|
-| [QUICKSTART.md](QUICKSTART.md) | Runnable examples for each capability |
-| [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md) | The extension pattern |
-| [docs/resolvers/](docs/resolvers/README.md) | **Resolver reference**: one folder per resolver with its decision logic in detail and examples included verbatim from test fixtures — drift fails the build |
-| [docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md) | **`MergeFileTool`**: fixing a marker-carrying file, and the private fixture loop that turns what stays broken into a new resolver |
-| [docs/THREE_WAY_FIXTURES.md](docs/THREE_WAY_FIXTURES.md) | How to add a merge case as real source files, and why |
-| [docs/WHAT_IS_BASE.md](docs/WHAT_IS_BASE.md) | **What `base` means**: the last-synced upstream state, not Git's merge base |
-| [VERSION_MAINTENANCE.md](VERSION_MAINTENANCE.md) | **The half-yearly version-update obligation**: what to bump, how to verify, and the traps |
-| [DESIGN_NEVER_AUTO_RESOLVED.md](DESIGN_NEVER_AUTO_RESOLVED.md) | Why three conflict kinds stay manual |
-| [IMPROVEMENT_PROPOSAL.md](IMPROVEMENT_PROPOSAL.md) | The analysis and evidence behind the last round of work |
-| [IMPROVEMENTS_DELIVERED.md](IMPROVEMENTS_DELIVERED.md) | What that round actually produced |
+| Document                                                           | Contents                                                                                     |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [QUICKSTART.md](QUICKSTART.md)                                     | Runnable examples for each capability                                                        |
+| [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md)                       | The extension pattern                                                                        |
+| [docs/resolvers/](docs/resolvers/README.md)                        | **Resolver reference**: one folder per resolver with its decision logic in detail and examples included verbatim from test fixtures — drift fails the build |
+| [docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md)           | **`MergeFileTool`**: fixing a marker-carrying file, and the private fixture loop that turns what stays broken into a new resolver |
+| [docs/THREE_WAY_FIXTURES.md](docs/THREE_WAY_FIXTURES.md)           | How to add a merge case as real source files, and why                                        |
+| [docs/WHAT_IS_BASE.md](docs/WHAT_IS_BASE.md)                       | **What `base` means**: the last-synced upstream state, not Git's merge base                  |
+| [VERSION_MAINTENANCE.md](VERSION_MAINTENANCE.md)                   | **The half-yearly version-update obligation**: what to bump, how to verify, and the traps    |
+| [DESIGN_NEVER_AUTO_RESOLVED.md](DESIGN_NEVER_AUTO_RESOLVED.md)     | Why three conflict kinds stay manual                                                         |
+| [IMPROVEMENT_PROPOSAL.md](IMPROVEMENT_PROPOSAL.md)                 | The analysis and evidence behind the last round of work                                      |
+| [IMPROVEMENTS_DELIVERED.md](IMPROVEMENTS_DELIVERED.md)             | What that round actually produced                                                            |
 | [IMPROVEMENT_PROPOSAL_ROUND_2.md](IMPROVEMENT_PROPOSAL_ROUND_2.md) | **Where the evidence is thin**: fixture coverage, marker validation (fixed, §7), and what to fix first |
-| [scripts/git-sample/README.md](scripts/git-sample/README.md) | Turning one fixture into a real git repository, to open in a git GUI or hand to another tool |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Delivery phases |
-| [CHANGELOG.md](CHANGELOG.md) | Change history |
+| [scripts/git-sample/README.md](scripts/git-sample/README.md)       | Turning one fixture into a real git repository, to open in a git GUI or hand to another tool |
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)                   | Delivery phases                                                                              |
+| [CHANGELOG.md](CHANGELOG.md)                                       | Change history                                                                               |

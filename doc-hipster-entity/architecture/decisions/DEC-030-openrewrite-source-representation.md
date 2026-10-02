@@ -67,10 +67,10 @@ verdict.
 
 The read contract is therefore two channels, and they are not redundant:
 
-| Channel | Meaning | How a caller uses it |
-| --- | --- | --- |
-| `SourceReader.Read.readable()` | the verdict | **branch on this** |
-| `SourceReader.problemsIn(String)` | the parser's own words | show a human |
+| Channel                           | Meaning                | How a caller uses it |
+| --------------------------------- | ---------------------- | -------------------- |
+| `SourceReader.Read.readable()`    | the verdict            | **branch on this**   |
+| `SourceReader.problemsIn(String)` | the parser's own words | show a human         |
 
 `problemsIn(...)` can be **empty for a file `readable()` refuses**, so a caller
 that gates on "there were no problems" accepts exactly the defect this rule

@@ -121,10 +121,10 @@ too short, and the failure mode is a shifted or truncated value, not an error.
 
 The three accessors the adapter leans on, and why each one exists:
 
-| Accessor | Returns | Role in the adapter |
-|---|---|---|
-| `meta.fieldCount()` | `int` — the number of field constants | The array length. Rule 2 of the contract: `values.length == FieldDef.values().length`. |
-| `meta.fieldNameAt(i)` | `String` — the field name at ordinal `i` | The column label to match, when the result set is not guaranteed to be in ordinal order. |
+| Accessor              | Returns                                                   | Role in the adapter                                                                      |
+| --------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `meta.fieldCount()`   | `int` — the number of field constants                     | The array length. Rule 2 of the contract: `values.length == FieldDef.values().length`.   |
+| `meta.fieldNameAt(i)` | `String` — the field name at ordinal `i`                  | The column label to match, when the result set is not guaranteed to be in ordinal order. |
 | `meta.fieldTypeAt(i)` | `java.lang.reflect.Type` — the field's declared Java type | Null-policy decisions and diagnostics. **Not** a conversion hint: see [Null tolerance](#null-tolerance) below. |
 
 Note that `fieldNameAt(i)` returns the **field** name (the accessor/enum name), which is not
@@ -237,13 +237,13 @@ accept that too. `retired()` gates writes only, never reads.
 Resolving a field to a database column name is one call — `field.column()` — and adapters never
 re-implement it. The contract that call satisfies:
 
-| Field state | `column()` must return |
-|---|---|
-| `@FieldSource(column = "person_first")` | `"person_first"` — the explicit label |
-| `@FieldSource` with an empty `column` | the field name, i.e. `enum.name()`, which equals the accessor name |
-| `@FieldSource(kind = DERIVED / JOINED)` | `null` for the column; the annotation carries `expression()` / `relation()` instead |
-| a retired tombstone constant | `null` — a retired field has no column to write |
-| a field with no `@FieldSource` and no declared column | no column name is available to the adapter; see the note below |
+| Field state                                           | `column()` must return                                                              |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `@FieldSource(column = "person_first")`               | `"person_first"` — the explicit label                                               |
+| `@FieldSource` with an empty `column`                 | the field name, i.e. `enum.name()`, which equals the accessor name                  |
+| `@FieldSource(kind = DERIVED / JOINED)`               | `null` for the column; the annotation carries `expression()` / `relation()` instead |
+| a retired tombstone constant                          | `null` — a retired field has no column to write                                     |
+| a field with no `@FieldSource` and no declared column | no column name is available to the adapter; see the note below                      |
 
 The annotation's own `column()` is documented as "defaults to the method name when empty", and the
 "defaults to the method name" half of that resolution is performed by `FieldDef.column()` rather

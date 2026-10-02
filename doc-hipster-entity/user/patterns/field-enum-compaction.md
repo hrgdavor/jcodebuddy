@@ -48,13 +48,13 @@ occupies an ordinal, a nullable component in the record, and a slot in `fieldCou
 Nothing in the toolchain can verify this step, which is why the command demands an explicit
 acknowledgement for it. The artifacts that carry ordinals are:
 
-| artifact | what "drained" means |
-| --- | --- |
-| Positional `Object[]` rows written to a database, file or cache | every stored row has been migrated or is no longer read |
-| Queued or archived **change-set patches** (the JSON from `EntityJacksonMapper.toJsonChanges`) | replayed or discarded — a patch names changed ordinals |
-| Serialized **snapshots** of a tracking builder | invalidated or rewritten |
+| artifact                                                                                      | what "drained" means                                    |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Positional `Object[]` rows written to a database, file or cache                               | every stored row has been migrated or is no longer read |
+| Queued or archived **change-set patches** (the JSON from `EntityJacksonMapper.toJsonChanges`) | replayed or discarded — a patch names changed ordinals  |
+| Serialized **snapshots** of a tracking builder                                                | invalidated or rewritten                                |
 | SQL `INSERT`/`UPDATE` fragments cached by a connection pool or a statement cache (the draft SQL generator's `<View>Binder`, or your own) | the statements are prepared per call, so this is normally free; a pool that caches them must be flushed |
-| Anything else that stored `field.ordinal()` or a bit position | found by grepping for the view's field enum |
+| Anything else that stored `field.ordinal()` or a bit position                                 | found by grepping for the view's field enum             |
 
 Writers to drain are any generated `<View>Binder` (only if your project opted into the draft SQL
 generator with `--adapters`), any caller that kept a prepared statement across the migration, and any

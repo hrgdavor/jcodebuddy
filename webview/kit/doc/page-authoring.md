@@ -26,12 +26,12 @@ inventory, a specification that names classes, a coverage or review report. The 
 the page is one click away from the location in the editor. A navigator ends up with two kinds of content,
 and they have different owners:
 
-| | **Manual pages** | **Generated pages** |
-| --- | --- | --- |
-| Written by | a human, in the editor | a build step |
-| Changes when | someone edits prose | the model changes |
-| Examples | an architecture overview, a how-to, a decision log | a type reference, a coverage table, a file inventory, a review dashboard |
-| Must never happen | a generated block overwritten by a hand edit | a stale link that looks right and goes nowhere |
+|                   | **Manual pages**                                   | **Generated pages**                                                      |
+| ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------ |
+| Written by        | a human, in the editor                             | a build step                                                             |
+| Changes when      | someone edits prose                                | the model changes                                                        |
+| Examples          | an architecture overview, a how-to, a decision log | a type reference, a coverage table, a file inventory, a review dashboard |
+| Must never happen | a generated block overwritten by a hand edit       | a stale link that looks right and goes nowhere                           |
 
 Both belong in **one navigator with one shell and one navigation client**, so the link contract, the fallback
 ladder, the theme and the offline rules exist in exactly one place — [§ 3](#3-combining-manual-and-generated-content) is how to combine them. The host gives you the
@@ -198,10 +198,10 @@ target = new URL(linkBase + '/' + relativePath, <the page or the script>).pathna
 
 Two spellings, and you must know which one you are using:
 
-| Where `data-link-base` lives | Resolved against | What the value means |
-| --- | --- | --- |
+| Where `data-link-base` lives                                | Resolved against         | What the value means                                                                              |
+| ----------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
 | on the **`<script src="…">`** tag (recommended for shape B) | the **script's own URL** | the distance from `assets/` to the project root — **identical on every page**, whatever its depth |
-| on **`<body>`** (shape A) | the **page's own URL** | the distance from *this page* to the project root |
+| on **`<body>`** (shape A)                                   | the **page's own URL**   | the distance from *this page* to the project root                                                 |
 
 When both are present the script tag wins, which is what lets one client file serve a landing page and a
 page three folders deep with no per-page bookkeeping. The same tag is written the same way everywhere:
@@ -242,15 +242,15 @@ in your own tree, then let the verifier in
 complete, dependency-free implementation with a small surface, so pages and tests do not re-implement the
 ladder:
 
-| Member | Returns |
-| --- | --- |
-| `window.jcbNav.open(path, line)` | navigates programmatically |
-| `window.jcbNav.mode()` | `'injected'` \| `'bridge'` \| `'clipboard'` |
-| `window.jcbNav.absoluteTarget(path)` | the absolute target the page will ask for |
-| `window.jcbNav.projectRoot()` | the absolute URL the link base resolved to |
-| `window.jcbNav.links()` | every `[data-open]` element, resolved — for tests and debugging |
-| `window.jcbNav.describe()` | the sentence the status pill shows |
-| `window.jcbNav.onStatus(fn)` | called on every mode change; returns an unsubscribe |
+| Member                               | Returns                                                         |
+| ------------------------------------ | --------------------------------------------------------------- |
+| `window.jcbNav.open(path, line)`     | navigates programmatically                                      |
+| `window.jcbNav.mode()`               | `'injected'` \| `'bridge'` \| `'clipboard'`                     |
+| `window.jcbNav.absoluteTarget(path)` | the absolute target the page will ask for                       |
+| `window.jcbNav.projectRoot()`        | the absolute URL the link base resolved to                      |
+| `window.jcbNav.links()`              | every `[data-open]` element, resolved — for tests and debugging |
+| `window.jcbNav.describe()`           | the sentence the status pill shows                              |
+| `window.jcbNav.onStatus(fn)`         | called on every mode change; returns an unsubscribe             |
 
 It also paints the current mode onto any element marked for it — `<span class="pill" data-bridge-status>`,
 or `data-bridge-status="short"` for the mode name alone — so a reader never has to guess why a click did
@@ -262,15 +262,15 @@ nothing visible.
 
 Two shapes, same contract; [`../examples/README.md`](../examples/README.md) holds both. This is the decision:
 
-| | **A. One self-contained file** | **B. Page + `assets/` folder** |
-| --- | --- | --- |
-| Files | 1 | the assets + one file per page |
-| Restyle everything | edit each file | edit `site.css` once |
-| Several pages share a client | no sharing | yes — one `<script src>` per page |
-| Travels as an attachment / CI artifact | perfect | needs the folder (or a zip) |
-| Diff when the client changes | the whole page | just `nav-client.js` |
-| A generator regenerates one page | no | yes, without touching the shell or prose |
-| Reference | [`self-contained/index.html`](../examples/self-contained/index.html) | [`with-assets/index.html`](../examples/with-assets/index.html) |
+|                                        | **A. One self-contained file**                                       | **B. Page + `assets/` folder**                                 |
+| -------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Files                                  | 1                                                                    | the assets + one file per page                                 |
+| Restyle everything                     | edit each file                                                       | edit `site.css` once                                           |
+| Several pages share a client           | no sharing                                                           | yes — one `<script src>` per page                              |
+| Travels as an attachment / CI artifact | perfect                                                              | needs the folder (or a zip)                                    |
+| Diff when the client changes           | the whole page                                                       | just `nav-client.js`                                           |
+| A generator regenerates one page       | no                                                                   | yes, without touching the shell or prose                       |
+| Reference                              | [`self-contained/index.html`](../examples/self-contained/index.html) | [`with-assets/index.html`](../examples/with-assets/index.html) |
 
 **Choose A when a page must travel alone. Choose B when there is more than one page** — which a project
 navigator always has — **or when anything is generated.**
@@ -440,11 +440,11 @@ editable.
 
 ### 7.1 Two ways to get it into a page
 
-| | **Inlined** (shape A) | **As an asset** (shape B) |
-| --- | --- | --- |
-| File | one `<script>` block in the page | `assets/microlighter.js` |
-| Works from | anywhere, alone | the folder |
-| Reference | [`../examples/self-contained/index.html`](../examples/self-contained/index.html) | [`../examples/with-assets/assets/microlighter.js`](../examples/with-assets/assets/microlighter.js) |
+|            | **Inlined** (shape A)                                                            | **As an asset** (shape B)                                                                          |
+| ---------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| File       | one `<script>` block in the page                                                 | `assets/microlighter.js`                                                                           |
+| Works from | anywhere, alone                                                                  | the folder                                                                                         |
+| Reference  | [`../examples/self-contained/index.html`](../examples/self-contained/index.html) | [`../examples/with-assets/assets/microlighter.js`](../examples/with-assets/assets/microlighter.js) |
 
 Upstream ships ES modules (`import { highlightAll } from 'microlighter'`) and loads each grammar with
 `await import('./grammars/x.js')`. **A webview page may have no module loader and no bundler** (a `jsx6`
@@ -465,13 +465,13 @@ re-run your checks, and diff the grammar files — a grammar change is a visual 
 
 ### 7.2 Five languages, seven grammars
 
-| Language | Class | Grammar | Pulls in |
-| --- | --- | --- | --- |
-| JavaScript | `language-javascript` | `source.js` | — |
-| Java | `language-java` | `source.java` | — |
-| JSON | `language-json` | `source.json` | — |
-| HTML | `language-html` | `text.html.basic` | `source.css`, `source.json`, `source.js` — for what is inside `<style>`/`<script>` |
-| Markdown | `language-markdown` | `text.html.markdown` | `source.yaml` — for front matter |
+| Language   | Class                 | Grammar              | Pulls in                                                                           |
+| ---------- | --------------------- | -------------------- | ---------------------------------------------------------------------------------- |
+| JavaScript | `language-javascript` | `source.js`          | —                                                                                  |
+| Java       | `language-java`       | `source.java`        | —                                                                                  |
+| JSON       | `language-json`       | `source.json`        | —                                                                                  |
+| HTML       | `language-html`       | `text.html.basic`    | `source.css`, `source.json`, `source.js` — for what is inside `<style>`/`<script>` |
+| Markdown   | `language-markdown`   | `text.html.markdown` | `source.yaml` — for front matter                                                   |
 
 That dependency column is why seven grammars are bundled for five languages: the HTML grammar includes
 `source.css`, `source.json` and `source.js` by scope, and the Markdown grammar includes `source.yaml` for
@@ -577,14 +577,14 @@ problem. [`../examples/smoke-test.mjs`](../examples/smoke-test.mjs) drives a rea
 Protocol with no dependencies, and it **skips the browser half** when no Chromium is installed rather than
 passing quietly.
 
-| Check | How | Why it is not optional |
-| --- | --- | --- |
-| **Every script parses** | `node --check` on each inline `<script>` and each `.js` asset; every referenced local asset exists | one typo in a fallback path is invisible until the host is missing |
-| **The page opens offline and highlights** | load it in a real Chromium over `file://`; read back the block and category counts | proves the grammar registry and the `::highlight()` rules line up |
-| **Every `data-open` resolves** | resolve each target through **the page's own link base** | this is "resolve or leave alone", enforced |
+| Check                                            | How                                                                                                | Why it is not optional                                             |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| **Every script parses**                          | `node --check` on each inline `<script>` and each `.js` asset; every referenced local asset exists | one typo in a fallback path is invisible until the host is missing |
+| **The page opens offline and highlights**        | load it in a real Chromium over `file://`; read back the block and category counts                 | proves the grammar registry and the `::highlight()` rules line up  |
+| **Every `data-open` resolves**                   | resolve each target through **the page's own link base**                                           | this is "resolve or leave alone", enforced                         |
 | **The claimed line exists and holds the member** | read the target file; the line must be inside it, `data-member` must appear **on that line**, and the line must not be a Markdown heading | a line number that is off by one looks exactly like a working link, and a link that lands on a section title is false the moment anything is inserted above the member |
-| **Every ordinary page link resolves** | resolve each local `href` against the page | the sidebar and breadcrumbs are navigation too |
-| **Nothing is loaded off-box** | no `https://` asset, no CSS `@import`, no absolute project path in the source | an embedded webview has no server and no guaranteed network |
+| **Every ordinary page link resolves**            | resolve each local `href` against the page                                                         | the sidebar and breadcrumbs are navigation too                     |
+| **Nothing is loaded off-box**                    | no `https://` asset, no CSS `@import`, no absolute project path in the source                      | an embedded webview has no server and no guaranteed network        |
 
 The third and fourth checks are one rule seen from two sides, and the fourth is the one that catches a
 generator's drift: point a link at the **member** it names, never at the section that contains it. A page
@@ -611,19 +611,19 @@ the reason a generator can fail its run on the first unverifiable candidate inst
 
 ## 9. Troubleshooting
 
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| Every click after the first does nothing | an unguarded `window.openFile` call threw a `TypeError` in the handler | feature-detect before calling ([§ 2.1](#21-feature-detect-always)) |
-| A click does nothing, ever | the element has no `data-open`, or the handler is bound to the wrong root | put `data-open` on the element; delegate from `document` |
-| The editor opens the wrong file | the link base is wrong, or the page used an absolute path that only exists on one machine | count the levels ([§ 4.2](#42-the-link-base-never-an-absolute-path-in-an-artifact)); never commit an absolute path |
-| The editor opens the file, caret on line 1 | `data-line` missing, or the value is not a number | 1-based `data-line`; the client falls back to `1` |
-| `403` from `/open` | the caller proved nothing — a `file://` page sends no usable `Origin` | configure a token and pass `?token=…`, or serve the page through the host ([`host-in-this-project.md`](host-in-this-project.md) § 4) |
-| `404` from `/open` | the path did not resolve against the project, or the rate limit refused it | check the path; read the host's log |
-| Works in one host, silently does nothing in another | the page assumed a fixed port | put the port in configuration; read it from `/health` |
+| Symptom                                                               | Cause                                                                                     | Fix                                                                        |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Every click after the first does nothing                              | an unguarded `window.openFile` call threw a `TypeError` in the handler                    | feature-detect before calling ([§ 2.1](#21-feature-detect-always))         |
+| A click does nothing, ever                                            | the element has no `data-open`, or the handler is bound to the wrong root                 | put `data-open` on the element; delegate from `document`                   |
+| The editor opens the wrong file                                       | the link base is wrong, or the page used an absolute path that only exists on one machine | count the levels ([§ 4.2](#42-the-link-base-never-an-absolute-path-in-an-artifact)); never commit an absolute path |
+| The editor opens the file, caret on line 1                            | `data-line` missing, or the value is not a number                                         | 1-based `data-line`; the client falls back to `1`                          |
+| `403` from `/open`                                                    | the caller proved nothing — a `file://` page sends no usable `Origin`                     | configure a token and pass `?token=…`, or serve the page through the host ([`host-in-this-project.md`](host-in-this-project.md) § 4) |
+| `404` from `/open`                                                    | the path did not resolve against the project, or the rate limit refused it                | check the path; read the host's log                                        |
+| Works in one host, silently does nothing in another                   | the page assumed a fixed port                                                             | put the port in configuration; read it from `/health`                      |
 | No highlighting, or it is invisible while the status pill says it ran | `CSS.highlights`/`Highlight` missing, the vendor script loaded *after* the runner, or the `::highlight()` rules are missing | load the vendor first, report the API status, and take the rule list from `syntax-theme.css` verbatim ([§ 7.3](#73-the-theme-is-only-css-variables)) |
-| One language highlights only partially | a grammar dependency is missing (HTML → css/json/js, Markdown → yaml) | bundle the dependency grammar ([§ 7.2](#72-five-languages-seven-grammars)) |
-| A code block is not highlighted while others are | it has an element child, or a whitespace sibling — microlighter needs **one text node** | escape `<`/`>`/`&`; no nested elements |
-| The page is blank in the host but fine in a browser | a remote asset, or a module `<script type="module">` the webview never fetched | no CDN, no modules at view time ([§ 5](#5-choose-a-shape)) |
+| One language highlights only partially                                | a grammar dependency is missing (HTML → css/json/js, Markdown → yaml)                     | bundle the dependency grammar ([§ 7.2](#72-five-languages-seven-grammars)) |
+| A code block is not highlighted while others are                      | it has an element child, or a whitespace sibling — microlighter needs **one text node**   | escape `<`/`>`/`&`; no nested elements                                     |
+| The page is blank in the host but fine in a browser                   | a remote asset, or a module `<script type="module">` the webview never fetched            | no CDN, no modules at view time ([§ 5](#5-choose-a-shape))                 |
 
 For a problem that looks like the environment rather than the page — a click that always reaches the
 clipboard rung, a `403`, a page never loaded *through* the host —
@@ -656,18 +656,18 @@ observable.
 
 ## 11. Where to read more
 
-| Document | What it answers |
-| --- | --- |
-| [`contract.md`](contract.md) | the frozen contract: `window.openFile`, the attributes, `/open`, `/health`, the ladder, the security model, what may change |
-| [`edit-api.md`](edit-api.md) | how a page proposes, shows and applies a change, and undoes it |
-| [`host-in-this-project.md`](host-in-this-project.md) | how the host in *your* project is found and authorised, and what to check when it is not |
-| [`../examples/README.md`](../examples/README.md) | the two runnable examples, and how to check them |
-| [`../scripts/check-pages.mjs`](../scripts/check-pages.mjs) | the five checks, as a script to keep in your build |
-| [`../examples/smoke-test.mjs`](../examples/smoke-test.mjs) | the same pages in a real Chromium: highlighting included |
-| [`../examples/webview-client.test.mjs`](../examples/webview-client.test.mjs) | the write verbs, driven against a live headless host |
-| [`../examples/with-assets/pages/edit-demo.html`](../examples/with-assets/pages/edit-demo.html) | an editing page, end to end |
-| [`../examples/with-assets/pages/entity-reference.html`](../examples/with-assets/pages/entity-reference.html) | a page written as if a generator owned it |
-| [microlighter](https://github.com/davatron5000/microlighter) | the highlighter: grammars, themes, `<micro-lighter>`, editable code |
+| Document                                                                                       | What it answers                                                                          |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [`contract.md`](contract.md)                                                                   | the frozen contract: `window.openFile`, the attributes, `/open`, `/health`, the ladder, the security model, what may change |
+| [`edit-api.md`](edit-api.md)                                                                   | how a page proposes, shows and applies a change, and undoes it                           |
+| [`host-in-this-project.md`](host-in-this-project.md)                                           | how the host in *your* project is found and authorised, and what to check when it is not |
+| [`../examples/README.md`](../examples/README.md)                                               | the two runnable examples, and how to check them                                         |
+| [`../scripts/check-pages.mjs`](../scripts/check-pages.mjs)                                     | the five checks, as a script to keep in your build                                       |
+| [`../examples/smoke-test.mjs`](../examples/smoke-test.mjs)                                     | the same pages in a real Chromium: highlighting included                                 |
+| [`../examples/webview-client.test.mjs`](../examples/webview-client.test.mjs)                   | the write verbs, driven against a live headless host                                     |
+| [`../examples/with-assets/pages/edit-demo.html`](../examples/with-assets/pages/edit-demo.html) | an editing page, end to end                                                              |
+| [`../examples/with-assets/pages/entity-reference.html`](../examples/with-assets/pages/entity-reference.html) | a page written as if a generator owned it                                  |
+| [microlighter](https://github.com/davatron5000/microlighter)                                   | the highlighter: grammars, themes, `<micro-lighter>`, editable code                      |
 
 **Provenance.** `microlighter` is MIT, © Dave Rupert, with TextMate grammars adapted from Microsoft VS Code
 (MIT). The vendored copy in this kit is version `2.2.0` with the four documented adaptations listed in

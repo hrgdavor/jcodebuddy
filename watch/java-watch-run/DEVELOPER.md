@@ -191,17 +191,17 @@ This is required because ECJ's jar is **signed**. Repackaging it into an uber-ja
 
 ## Key design decisions and rationale
 
-| Decision                                     | Rationale                                                                                                              |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Use ECJ instead of `javax.tools` (javac API) | ECJ is a self-contained batch compiler with no JDK dependency at runtime; ships as a single ~4 MB jar                  |
+| Decision                                     | Rationale                                                                                      |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Use ECJ instead of `javax.tools` (javac API) | ECJ is a self-contained batch compiler with no JDK dependency at runtime; ships as a single ~4 MB jar |
 | In-memory caching for dependencies           | Standard ECJ `FileSystem` (BatchCompiler) re-scans JARs on every call; in-memory `CachingNameEnvironment` is 4x faster |
-| Eager `jrt:/` indexing                       | Reliable way to resolve JDK classes on Java 9+ without classloader resource stream limitations                         |
-| `URLClassLoader` per reload, not per file    | Simplest isolation model; entire `bin/` is the unit of atomicity                                                       |
+| Eager `jrt:/` indexing                       | Reliable way to resolve JDK classes on Java 9+ without classloader resource stream limitations |
+| `URLClassLoader` per reload, not per file    | Simplest isolation model; entire `bin/` is the unit of atomicity                               |
 | System classloader as parent                 | Ensures daemon classes (`Stoppable`, `StopRegistry`, SLF4J, Jackson) are shared across generations without duplication |
-| `ManagedFileWatcher` from java-watch-core    | Reuses existing debounce + filter logic; avoids duplicating the `DirectoryWatcher` dependency wiring                   |
-| Single-threaded reload executor              | Prevents two concurrent compiles from racing on `bin/`                                                                 |
-| ECJ `-proc:none`                             | Skips annotation processing; saves 50–200 ms per compile cycle                                                         |
-| Daemon thread for `hot-swap-main`            | Prevents a blocking `main()` from starving the reload executor                                                         |
+| `ManagedFileWatcher` from java-watch-core    | Reuses existing debounce + filter logic; avoids duplicating the `DirectoryWatcher` dependency wiring |
+| Single-threaded reload executor              | Prevents two concurrent compiles from racing on `bin/`                                         |
+| ECJ `-proc:none`                             | Skips annotation processing; saves 50–200 ms per compile cycle                                 |
+| Daemon thread for `hot-swap-main`            | Prevents a blocking `main()` from starving the reload executor                                 |
 
 ---
 

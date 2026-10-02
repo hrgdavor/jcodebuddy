@@ -71,14 +71,14 @@ state which interpretation the numbers answer.
 
 ### 2.1 Implementations compared (per-agent check)
 
-| # | Benchmark method | Implementation | Allocation per iteration |
-|---|------------------|----------------|--------------------------|
-| 1 | `overlapHashSet*` | `new HashSet<>(agentIds)` + `retainAll(sessionIds)` + `!isEmpty()` — verbatim production shape | `HashSet` + internal map |
-| 2 | `overlapEnumSet*` | `EnumSet.noneOf(...)` + `addAll(agentEnumSet)` + `retainAll(sessionEnumSet)` + `!isEmpty()` | 1–2 collections |
-| 3 | `overlapBitSet*` | `agentBitSet.clone()` + `and(sessionBitSet)` + `!isEmpty()` | one `long[⌈u/64⌉]` |
-| 4 | `overlapRawLong` | `(sessionBits & agentBits) != 0` — theoretical floor | 0 |
-| 5 | `overlapEEnumSet*` | `session.hasAny(agentSet)` — both sides immutable `EEnumSet` snapshots | **0** |
-| 6 | `overlapEEnumSetBuilder*` | `session.hasAny(agentBuilder)` — agent side is a live `EEnumSetBuilder` (the mutable tracking-state shape from DEC-012) | **0** |
+| #   | Benchmark method          | Implementation                                                                                 | Allocation per iteration   |
+| --- | ------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------- |
+| 1   | `overlapHashSet*`         | `new HashSet<>(agentIds)` + `retainAll(sessionIds)` + `!isEmpty()` — verbatim production shape | `HashSet` + internal map   |
+| 2   | `overlapEnumSet*`         | `EnumSet.noneOf(...)` + `addAll(agentEnumSet)` + `retainAll(sessionEnumSet)` + `!isEmpty()`    | 1–2 collections            |
+| 3   | `overlapBitSet*`          | `agentBitSet.clone()` + `and(sessionBitSet)` + `!isEmpty()`                                    | one `long[⌈u/64⌉]`         |
+| 4   | `overlapRawLong`          | `(sessionBits & agentBits) != 0` — theoretical floor                                           | 0                          |
+| 5   | `overlapEEnumSet*`        | `session.hasAny(agentSet)` — both sides immutable `EEnumSet` snapshots                         | **0**                      |
+| 6   | `overlapEEnumSetBuilder*` | `session.hasAny(agentBuilder)` — agent side is a live `EEnumSetBuilder` (the mutable tracking-state shape from DEC-012) | **0** |
 
 `*` = width suffix (`64`, `96`, `256`).
 

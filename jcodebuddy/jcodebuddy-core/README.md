@@ -59,12 +59,12 @@ Two decisions worth knowing before you read the spans:
 Write this into your own tooling. It is the whole vocabulary; a parser that implements all four implements
 them for **every** generator that follows the rules, including ones written later.
 
-| Marker | Scope it claims |
-| ------ | --------------- |
-| `// @generated file <generator>` | the whole file |
-| `// @generated member <generator>` | the declaration immediately below it, and its body |
-| `// @generated region begin <id>` … `// @generated region end <id>` | the lines between the pair |
-| `// @generated block` | the statement below it, bounded by the statement's own braces |
+| Marker                                                              | Scope it claims                                               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `// @generated file <generator>`                                    | the whole file                                                |
+| `// @generated member <generator>`                                  | the declaration immediately below it, and its body            |
+| `// @generated region begin <id>` … `// @generated region end <id>` | the lines between the pair                                    |
+| `// @generated block`                                               | the statement below it, bounded by the statement's own braces |
 
 A marker is a Java line comment whose text **begins** with `@generated`. Nothing else about the comment
 makes it a marker, and the generator's name is *advisory* — present so a human can jump to the generator,
@@ -80,10 +80,10 @@ per arm would add a line per route forever while telling you nothing you did not
 
 Three behaviours are possible when you meet a marker you do not know, and they are not equivalent:
 
-| What you do | What happens |
-| ----------- | ------------ |
-| Treat the code as hand-written | **Wrong, and silently.** You will edit or migrate generated code and the edit is lost on the next pass |
-| Treat the code as generated | Safe for edits, but you silently do not do what the marker asked |
+| What you do                         | What happens                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Treat the code as hand-written      | **Wrong, and silently.** You will edit or migrate generated code and the edit is lost on the next pass |
+| Treat the code as generated         | Safe for edits, but you silently do not do what the marker asked                                  |
 | **Report it, and refuse to decide** | Correct: the code's status is unknown, and the operator is told which marker they need to support |
 
 So the grammar after the keyword is deliberately loose, and this module accepts **any** word as a scope.
@@ -121,13 +121,13 @@ Every one of these is reported as an issue, never resolved by extending a span t
 to the next blank line. Guessing a boundary is worse than reporting a missing one, because a wrong span
 looks exactly like a right one.
 
-| `kind=` | Meaning |
-| ------- | ------- |
-| `unknown_marker` | A scope this parser does not implement, or a `region` with no direction and id |
-| `marker_without_block` | A `block`/`member` whose construct has no braces — `private int value = 1;` |
-| `unclosed_region` | A `region begin` with no matching `region end` by end of file |
-| `unmatched_region_end` | A `region end` with no matching `region begin` |
-| `unclosed_block` | The opening brace below a marker is never closed: the file does not parse |
+| `kind=`                | Meaning                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `unknown_marker`       | A scope this parser does not implement, or a `region` with no direction and id |
+| `marker_without_block` | A `block`/`member` whose construct has no braces — `private int value = 1;`    |
+| `unclosed_region`      | A `region begin` with no matching `region end` by end of file                  |
+| `unmatched_region_end` | A `region end` with no matching `region begin`                                 |
+| `unclosed_block`       | The opening brace below a marker is never closed: the file does not parse      |
 
 The diagnostic shape is the one this project uses elsewhere:
 `kind=…, location=<file>:<line>, cause=…, current=…, canonical=…, action=…`. The `action` is written for a

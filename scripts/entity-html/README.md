@@ -28,19 +28,19 @@ fails makes the pass fail, because a link to the wrong line is worse than no lin
 
 ## Flags
 
-| Flag | Meaning | Default |
-| --- | --- | --- |
-| `--module <dir>` | module directory to render | `hipster-entity-example` |
-| `--metadata <dir>` | directory holding `<Marker>.metadata.json` | `<module>/.jcodebuddy/metadata/entity` |
-| `--source-root <dir>` | Java source root used to resolve link targets | `<module>/src/main/java` |
-| `--link-base <dir>` | directory link paths are relative to | the module directory |
-| `--out <file>` | output file | `<metadata>/index.html` |
-| `--packages <a.b,c.d>` | only views in these packages | every view in the metadata |
-| `--title <text>` | page title | `<module> — entity reference` |
-| `--bridge-port <n>` | the host's HTTP bridge port for the browser fallback — by convention `18881` for JetBrains, `18882` for VS Code, `18883` for Eclipse; `0` disables it | `18881` |
-| `--soft` | exit 0 even when the link check rejects a candidate | off |
-| `--quiet` | print only the output path and the link-check summary | off |
-| `--version`, `--help` | identity / usage, no rendering | — |
+| Flag                   | Meaning                                               | Default                                |
+| ---------------------- | ----------------------------------------------------- | -------------------------------------- |
+| `--module <dir>`       | module directory to render                            | `hipster-entity-example`               |
+| `--metadata <dir>`     | directory holding `<Marker>.metadata.json`            | `<module>/.jcodebuddy/metadata/entity` |
+| `--source-root <dir>`  | Java source root used to resolve link targets         | `<module>/src/main/java`               |
+| `--link-base <dir>`    | directory link paths are relative to                  | the module directory                   |
+| `--out <file>`         | output file                                           | `<metadata>/index.html`                |
+| `--packages <a.b,c.d>` | only views in these packages                          | every view in the metadata             |
+| `--title <text>`       | page title                                            | `<module> — entity reference`          |
+| `--bridge-port <n>`    | the host's HTTP bridge port for the browser fallback — by convention `18881` for JetBrains, `18882` for VS Code, `18883` for Eclipse; `0` disables it | `18881` |
+| `--soft`               | exit 0 even when the link check rejects a candidate   | off                                    |
+| `--quiet`              | print only the output path and the link-check summary | off                                    |
+| `--version`, `--help`  | identity / usage, no rendering                        | —                                      |
 
 Exit codes: `0` success, `1` usage or I/O error, or an unverified link (unless `--soft`).
 
@@ -67,18 +67,18 @@ revision.
                                 "line": 14, "generated": false, "own": true } ] } ] }
 ```
 
-| JSON | Used for |
-| --- | --- |
+| JSON                                                                                        | Used for                                                                                     |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `index/classes.json` — `format`, `hash`, `classes` (FQN → `path`, `kind`, `modifiers`, `line`, `depth`, `enclosing?`, `generated?`, `size`, `checksum`, `hashCalculatedAt`) | the path behind every FQN the page links with. Located from the module root the CLI already knows **and** cross-checked against each document's `classIndex` pointer; `format` must be one this renderer knows, and `index/files.json` is read as the one-revision legacy name |
-| `entityName`, `package`, `markerInterface`, `idType`, `markerFile`, `markerLine` | the entity section's header — marker, package, identity type, and the marker's own file (an FQN) and declaration line |
-| `classIndex` | the pointer to the class index, relative to the document — the second route to the table (the legacy `fileIndex` is read the same way) |
-| `views[].name`, `gen`, `addons`, `extends`, `discriminatorField` | one view section per view, its `GenLevel` chip and its declaration |
-| `views[].file`, `views[].lineNumber` | the view's file FQN and declaration line — the link behind its name |
+| `entityName`, `package`, `markerInterface`, `idType`, `markerFile`, `markerLine`            | the entity section's header — marker, package, identity type, and the marker's own file (an FQN) and declaration line |
+| `classIndex`                                                                                | the pointer to the class index, relative to the document — the second route to the table (the legacy `fileIndex` is read the same way) |
+| `views[].name`, `gen`, `addons`, `extends`, `discriminatorField`                            | one view section per view, its `GenLevel` chip and its declaration                           |
+| `views[].file`, `views[].lineNumber`                                                        | the view's file FQN and declaration line — the link behind its name                          |
 | `views[].properties[]` — `name`, `type`, `lineNumber`, `file`, `fieldKind`, `column`, `relation`, `expression` | a view's own accessors and its `@FieldSource` facts, and the declaring file (an FQN) of each |
 | `views[].artifacts[]` — `id`, `name`, `kind`, `file`, `line`, `generated`, `own`, `header?` | the artifacts that belong to a view: its aspects, their labels and descriptions, and the foreign declaring interfaces its fields reference (`own: false`); `file` is an FQN |
 | `views[].fields[]` — `name`, `ordinal`, `type`, `fieldKind`, `column`, `relation`, `expression`, `at` | each field's ordinal (DEC-023's ledger order), its type, its chips, and **every location it has**: `at` is artifact id → role → line |
 | `allFields[]` — `name`, `type`/`typeByView`, `lineNumber`, `file`, `fieldKind`, `column`, `relation`, `expression`, `views[]` | each field's type as one view sees it, which views expose it, and **the declaring file's FQN** (`null` when that file is outside the module — the inherited `id`) |
-| `generation.json` | the footer's run record: generator, version, status, packages |
+| `generation.json`                                                                           | the footer's run record: generator, version, status, packages                                |
 
 Every path in the class index is **relative to the module root** (`src/main/java/…`), which is
 exactly the base the page's link base is set to, so a resolved path is used as a link path verbatim.
@@ -131,15 +131,15 @@ second supported path.
 The renderer derives labels from source identifiers and recognises artifacts by name. What it reads
 never changes generated Java — the table exists so a reader knows what a rename does to the page.
 
-| Name | Derived from | If the identifier is renamed | Refactor-sensitive? |
-| --- | --- | --- | --- |
-| artifact → view association | the metadata's `views[].artifacts[]`; the DEC-021 header's `{@link <viewFqn>}` only on the pre-DEC-028 fallback | the generator re-records the inventory on the next pass, and rewrites the header; the page follows it | **no** — a recorded fact or a reference, not a convention |
+| Name                                               | Derived from                                                            | If the identifier is renamed                                                                     | Refactor-sensitive?                                                                    |
+| -------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| artifact → view association                        | the metadata's `views[].artifacts[]`; the DEC-021 header's `{@link <viewFqn>}` only on the pre-DEC-028 fallback | the generator re-records the inventory on the next pass, and rewrites the header; the page follows it | **no** — a recorded fact or a reference, not a convention |
 | `<View>_`, `<View>Record`, `<View>Builder`, `<View>BuilderTracking`, `<View>Validator`, `<View>RowAdapter`, `<View>Binder`, `<View>Mapper` | the view's simple name | the file must be renamed by the same pass that renames the view; until then the fallback convention misses and the artifact is still found by its header | handled by the header path; the convention list exists only for a pre-DEC-028 document |
-| view file | the metadata's `views[].file` — an FQN resolved through the class index | the generator re-records the FQN and the index the path, on the next pass; the page follows both | **no** — the FQN and the path are data, and no name is written into committed source |
-| field's declaring file | the metadata's `properties[].file` / `allFields[].file` (FQNs) | likewise re-recorded by the generator | **no** |
-| view file, only when the metadata predates DEC-028 | the view's simple name, resolved to `<markerPackage>.<name>`, else the unique type with that simple name | the page follows the new name on the next pass | **no** — nothing is written into committed source either way |
-| field name | the metadata's field name, matched against members by identifier | the page follows the metadata | **no** |
-| column header, role labels, `data-member` | the role vocabulary (`accessor`, `enum constant`, `setter`, …) | nothing — these are explicit page labels, not derived from Java | explicitly **refactor-insensitive** |
+| view file                                          | the metadata's `views[].file` — an FQN resolved through the class index | the generator re-records the FQN and the index the path, on the next pass; the page follows both | **no** — the FQN and the path are data, and no name is written into committed source   |
+| field's declaring file                             | the metadata's `properties[].file` / `allFields[].file` (FQNs)          | likewise re-recorded by the generator                                                            | **no**                                                                                 |
+| view file, only when the metadata predates DEC-028 | the view's simple name, resolved to `<markerPackage>.<name>`, else the unique type with that simple name | the page follows the new name on the next pass                  | **no** — nothing is written into committed source either way                           |
+| field name                                         | the metadata's field name, matched against members by identifier        | the page follows the metadata                                                                    | **no**                                                                                 |
+| column header, role labels, `data-member`          | the role vocabulary (`accessor`, `enum constant`, `setter`, …)          | nothing — these are explicit page labels, not derived from Java                                  | explicitly **refactor-insensitive**                                                    |
 
 Nothing in this renderer is committed, so no rendered name can diverge from canonical source in a
 way a reviewer has to reconcile.
@@ -149,13 +149,13 @@ way a reviewer has to reconcile.
 Reported on stdout and on the page's footer, in DEC-022's `kind, location, cause, current,
 canonical, action` format:
 
-| kind | severity | meaning |
-| --- | --- | --- |
-| `html_link_stale` | error (exit 1) | a candidate link's target line does not contain the member, or the file/line does not exist — the link is dropped |
-| `html_index_missing` | error (exit 1) | a document carries fully qualified type names and the class index cannot be read — absent, unparsable, an unknown `format`, or a shape the renderer cannot use; **nothing is rendered**, because an FQN is not a path |
-| `html_view_file_missing` | error | the metadata names a view with no type of that simple name under the source root (the pre-DEC-028 fallback only) |
-| `html_view_file_ambiguous` | error | several types share the view's simple name and none is in the marker's package (the pre-DEC-028 fallback only) |
-| `html_field_not_in_ledger` | warning | the metadata attributes a field to a view whose field enum has no constant for it; the page shows the row without an ordinal (DEC-023 makes the ledger the ordinal contract) |
+| kind                       | severity       | meaning |
+| -------------------------- | -------------- | ------- |
+| `html_link_stale`          | error (exit 1) | a candidate link's target line does not contain the member, or the file/line does not exist — the link is dropped |
+| `html_index_missing`       | error (exit 1) | a document carries fully qualified type names and the class index cannot be read — absent, unparsable, an unknown `format`, or a shape the renderer cannot use; **nothing is rendered**, because an FQN is not a path |
+| `html_view_file_missing`   | error          | the metadata names a view with no type of that simple name under the source root (the pre-DEC-028 fallback only) |
+| `html_view_file_ambiguous` | error          | several types share the view's simple name and none is in the marker's package (the pre-DEC-028 fallback only) |
+| `html_field_not_in_ledger` | warning        | the metadata attributes a field to a view whose field enum has no constant for it; the page shows the row without an ordinal (DEC-023 makes the ledger the ordinal contract) |
 
 `html_field_not_in_ledger` is a ledger/metadata disagreement in the generator surfaced by the
 renderer, and it does not fail a pass. It no longer fires on the committed example: the ledger is now

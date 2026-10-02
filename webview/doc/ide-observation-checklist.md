@@ -72,10 +72,10 @@ alongside.
 
 3. **Turn the bridge on.** `File → Settings → Tools → WebView Explorer` (the plugin's own settings page) and set:
 
-   | Field | Value |
-   | --- | --- |
-   | Port | `18881` |
-   | Token | `obs-token` |
+| Field | Value       |
+| ----- | ----------- |
+| Port  | `18881`     |
+| Token | `obs-token` |
 
    Apply. **The bridge is off until a port is set** — that is deliberate, not a fault: a plugin that opened a
    listening socket by default would be a surprise, and the settings label tells you which state you are in.
@@ -115,14 +115,14 @@ So:
 
 ### What the output should say
 
-| Step | Expected |
-| --- | --- |
-| `/health` | `"plugin": "hr.hrg.jetbrains.webview"`, `"tokenRequired": true`, `"capabilities": ["edit","open","select"]` |
-| `/api/v1/diff` | 200, `"applied": false`, a `unifiedDiff` — a proposal writes nothing |
+| Step                | Expected                                                             |
+| ------------------- | -------------------------------------------------------------------- |
+| `/health`           | `"plugin": "hr.hrg.jetbrains.webview"`, `"tokenRequired": true`, `"capabilities": ["edit","open","select"]` |
+| `/api/v1/diff`      | 200, `"applied": false`, a `unifiedDiff` — a proposal writes nothing |
 | `/api/v1/applyEdit` | 200, `"applied": true`, `"target": "buffer"`, a `digest`, and a `detail` saying the file on disk is unchanged until the editor saves |
-| disk digest after | **identical** to before (the script says DISK UNCHANGED) |
-| wrong token | 403 `the token is required for state-changing routes` |
-| stale digest | 409 `"reason": "stale"` |
+| disk digest after   | **identical** to before (the script says DISK UNCHANGED)             |
+| wrong token         | 403 `the token is required for state-changing routes`                |
+| stale digest        | 409 `"reason": "stale"`                                              |
 
 ---
 
@@ -163,15 +163,15 @@ observed in one run: the Phase 1 caret landing and the Phase 3 buffer edit.
 
 ### What the output should say
 
-| Step | Expected |
-| --- | --- |
-| `/health` | `"plugin": "hr.hrg.eclipse.webview"`, `"ide": "Eclipse"`, `"tokenRequired": true`, `"capabilities": ["edit","open","select","serveFile"]` |
-| `/api/v1/diff` | 200, `"applied": false`, a `unifiedDiff` — a proposal writes nothing |
+| Step                                            | Expected                                                             |
+| ----------------------------------------------- | -------------------------------------------------------------------- |
+| `/health`                                       | `"plugin": "hr.hrg.eclipse.webview"`, `"ide": "Eclipse"`, `"tokenRequired": true`, `"capabilities": ["edit","open","select","serveFile"]` |
+| `/api/v1/diff`                                  | 200, `"applied": false`, a `unifiedDiff` — a proposal writes nothing |
 | `/api/v1/applyEdit`, file **open** in an editor | 200, `"applied": true`, `"target": "buffer"`, a `digest`, and the `detail` saying the disk is unchanged until the editor saves |
-| `/api/v1/applyEdit`, file **not open** | 200, `"applied": true` **on disk** — the shared surface's documented fallback when the platform holds no buffer for the path; `/api/v1/undo` takes it back, even after an Eclipse restart (the checkpoint is persistent) |
-| disk digest after a buffer apply | **identical** to before (DISK UNCHANGED) |
-| wrong token | 403 `the token is required for state-changing routes` |
-| stale digest | 409 `"reason": "stale"` |
+| `/api/v1/applyEdit`, file **not open**          | 200, `"applied": true` **on disk** — the shared surface's documented fallback when the platform holds no buffer for the path; `/api/v1/undo` takes it back, even after an Eclipse restart (the checkpoint is persistent) |
+| disk digest after a buffer apply                | **identical** to before (DISK UNCHANGED)                             |
+| wrong token                                     | 403 `the token is required for state-changing routes`                |
+| stale digest                                    | 409 `"reason": "stale"`                                              |
 
 ---
 
@@ -207,15 +207,15 @@ observed in one run: the Phase 1 caret landing and the Phase 3 buffer edit.
 
 ### What the output should say
 
-| Step | Expected |
-| --- | --- |
-| `/health` | `"plugin": "vscode-webview-explorer"`, `"tokenRequired": true`, `"capabilities": ["edit","open","serveFile"]` |
-| `/api/v1/diff` | **409 `no-disk-write`** — by design: this host has no bytes of its own to diff, and its README says so |
-| `/api/v1/applyEdit` | 200, `"applied": true`, `"target": "buffer"` |
-| `/undo`, `/redo` | **409 `no-disk-write`** — that history belongs to a host that owns the file |
-| disk digest when the host answered | identical to before |
-| wrong token | 403 |
-| stale digest | 409 `"reason": "stale"` |
+| Step                               | Expected                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| `/health`                          | `"plugin": "vscode-webview-explorer"`, `"tokenRequired": true`, `"capabilities": ["edit","open","serveFile"]` |
+| `/api/v1/diff`                     | **409 `no-disk-write`** — by design: this host has no bytes of its own to diff, and its README says so |
+| `/api/v1/applyEdit`                | 200, `"applied": true`, `"target": "buffer"`                                |
+| `/undo`, `/redo`                   | **409 `no-disk-write`** — that history belongs to a host that owns the file |
+| disk digest when the host answered | identical to before                                                         |
+| wrong token                        | 403                                                                         |
+| stale digest                       | 409 `"reason": "stale"`                                                     |
 
 The autosave caveat from § 1 applies here too: a VS Code window can save on focus change, so give
 `--watchSeconds 20` and attribute a *later* change to the editor, not the host.
@@ -224,10 +224,10 @@ The autosave caveat from § 1 applies here too: a VS Code window can save on foc
 
 ## 2a. Recorded observations
 
-| Host | Date | Result |
-| --- | --- | --- |
-| **JetBrains** 2026.2.3, `runIde` sandbox, commit `bc24ee6` | 2026-09-26 | **Observed.** `"target": "buffer"`; disk unchanged when the host answered; the replacement appeared in the editor; the IDE's own undo restored the original text. The one disk write was IntelliJ's autosave on frame deactivation — the editor saving, which the contract allows. Reported by the maintainer, who checked the save behaviour himself. |
-| **VS Code** (Extension Development Host, commit `51950eb`) | 2026-09-26 | **Observed.** The buffer edit landed: the editor showed the new text, the buffer was **not saved**, and the editor's own undo/redo moved it back and forth. Two host-side fixes made the run possible at all: `webviewExplorer.token` had to exist before any write route could be exercised (they refused everything with 403), and the extension needed `activationEvents: ["onStartupFinished"]` — without it the extension never activated, so port 18882 was closed with nothing to explain it. |
+| Host                                                                             | Date       | Result |
+| -------------------------------------------------------------------------------- | ---------- | ------ |
+| **JetBrains** 2026.2.3, `runIde` sandbox, commit `bc24ee6`                       | 2026-09-26 | **Observed.** `"target": "buffer"`; disk unchanged when the host answered; the replacement appeared in the editor; the IDE's own undo restored the original text. The one disk write was IntelliJ's autosave on frame deactivation — the editor saving, which the contract allows. Reported by the maintainer, who checked the save behaviour himself. |
+| **VS Code** (Extension Development Host, commit `51950eb`)                       | 2026-09-26 | **Observed.** The buffer edit landed: the editor showed the new text, the buffer was **not saved**, and the editor's own undo/redo moved it back and forth. Two host-side fixes made the run possible at all: `webviewExplorer.token` had to exist before any write route could be exercised (they refused everything with 403), and the extension needed `activationEvents: ["onStartupFinished"]` — without it the extension never activated, so port 18882 was closed with nothing to explain it. |
 | **Eclipse** 4.41 (2026-09 train), dropins install, module as of commit `d7c5fb7` | 2026-09-27 | **Not observed — outstanding.** The headless half passed on 2026-09-27 (58 module tests: routes, statuses, the persistent-checkpoint undo across a host restart). The caret landing, the unsaved buffer edit and the single `Ctrl+Z` need a real workbench and a human — § 1a is the run sheet, and this row becomes the dated observation when someone does it. |
 
 Recorded in this file's own § 2a, and summarised in [`README.md`](../README.md) § "What is implemented, and what
@@ -239,15 +239,15 @@ has actually been observed". The plan's Phase 3 record keeps the sequence.
 
 Diagnose before reporting; the interesting outcomes are the ones *not* in the tables above.
 
-| Symptom | Likely cause |
-| --- | --- |
-| `no host answered on …/health` | JetBrains: no port set in Settings, or no project open (the bridge is a *project* service). VS Code: the extension is not activated in that window, or the port is taken by something else. Eclipse: no port preference and no committed project default — the bridge is off until a port is named (E17) — or the workspace's project location is not the directory you pointed `--file` at. |
-| `403 Forbidden: the token is required…` | The token is empty in the IDE, or the `-Token` differs from it. |
-| `409 no-buffer-edit` | VS Code: the file is not open in that window. JetBrains: the platform has no document for the path (a binary file, or a path the IDE does not know). Eclipse: the workbench has no page at all, so no edit capability is declared — a *per-path* "no open document" is **not** a 409 there; see the next row. |
+| Symptom                                                                       | Likely cause                                                                |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `no host answered on …/health`                                                | JetBrains: no port set in Settings, or no project open (the bridge is a *project* service). VS Code: the extension is not activated in that window, or the port is taken by something else. Eclipse: no port preference and no committed project default — the bridge is off until a port is named (E17) — or the workspace's project location is not the directory you pointed `--file` at. |
+| `403 Forbidden: the token is required…`                                       | The token is empty in the IDE, or the `-Token` differs from it.             |
+| `409 no-buffer-edit`                                                          | VS Code: the file is not open in that window. JetBrains: the platform has no document for the path (a binary file, or a path the IDE does not know). Eclipse: the workbench has no page at all, so no edit capability is declared — a *per-path* "no open document" is **not** a 409 there; see the next row. |
 | 200 with `"applied": true` **on disk** when you expected the buffer (Eclipse) | The file was not open in an editor, so no platform document existed to carry the change and the shared `WriteSurface` took its documented disk fallback. Open the file in an editor and rerun for the buffer path; the disk write is undoable with `/api/v1/undo` — even after a restart of the workbench, because the Eclipse checkpoint is persistent. |
-| `409 stale` | The bytes changed between the script's read and its request — most likely a save in the IDE. Re-run. |
-| `404 not-found` (VS Code) | Path mismatch: pass the absolute path, and prefer a path without a symlink. |
-| 200 with `target: "buffer"` but **nothing visible** in the editor | The most valuable report: the document changed without a visible editor. Say so, and include the response body. |
+| `409 stale`                                                                   | The bytes changed between the script's read and its request — most likely a save in the IDE. Re-run. |
+| `404 not-found` (VS Code)                                                     | Path mismatch: pass the absolute path, and prefer a path without a symlink. |
+| 200 with `target: "buffer"` but **nothing visible** in the editor             | The most valuable report: the document changed without a visible editor. Say so, and include the response body. |
 
 ---
 

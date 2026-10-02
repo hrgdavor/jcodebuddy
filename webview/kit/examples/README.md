@@ -30,10 +30,10 @@ file is about the two examples and how to check them.
 
 ## How to open them
 
-| Where | How |
-| --- | --- |
+| Where              | How |
+| ------------------ | --- |
 | Inside an IDE host | open the `.html` file **through the host**, not from the file manager — in the JetBrains plugin that is right-click &rarr; **Open in WebView Explorer**, or `Ctrl+Alt+Shift+W` |
-| Any browser | just open the file — clicks fall back to the host's HTTP transport on `data-bridge-port`, then to the clipboard |
+| Any browser        | just open the file — clicks fall back to the host's HTTP transport on `data-bridge-port`, then to the clipboard |
 
 Opening a page through the host is what installs `window.openFile(path, line, column)`, so a click lands the
 caret on the exact line. In an ordinary browser the same click goes to the loopback transport, which needs

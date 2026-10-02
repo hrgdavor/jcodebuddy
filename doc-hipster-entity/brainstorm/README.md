@@ -17,15 +17,15 @@ For a deeper rationale on why the project avoids annotation processing as its pr
 
 The current generator produces enough information to drive type mapping analysis at code-generation time, without touching the runtime classpath.
 
-| Metadata element | Location | What it enables |
-|------------------|----------|-----------------|
-| `EntityFieldMeta.type` | `allFields[].type` | Primary (non-derived-preferred) type for each field across all views |
-| `EntityFieldMeta.typeByView` | `allFields[].typeByView` | Exact type each view declares — the source-of-truth for per-view converters |
-| `EntityFieldMeta.hasTypeDivergence()` | Java model | Quick predicate to filter only fields that *need* conversion |
-| `EntityFieldMeta.fieldKind` | `allFields[].fieldKind` | Distinguishes COLUMN / DERIVED / JOINED — determines when a converter is needed vs when a field can be skipped |
-| `TypeDescriptor` (parsed) | internal to generator | Full generic tree (e.g. `Map<String, List<Long>>`) for deep type comparison and nested converter lookup |
-| `Property.type` per view | `views[].properties[].type` | Original declared type exactly as the developer wrote it |
-| Primitive metadata | `type` / `unboxed` / `primitive` | Correct boxing/unboxing decisions for converters |
+| Metadata element                      | Location                         | What it enables                                                             |
+| ------------------------------------- | -------------------------------- | --------------------------------------------------------------------------- |
+| `EntityFieldMeta.type`                | `allFields[].type`               | Primary (non-derived-preferred) type for each field across all views        |
+| `EntityFieldMeta.typeByView`          | `allFields[].typeByView`         | Exact type each view declares — the source-of-truth for per-view converters |
+| `EntityFieldMeta.hasTypeDivergence()` | Java model                       | Quick predicate to filter only fields that *need* conversion                |
+| `EntityFieldMeta.fieldKind`           | `allFields[].fieldKind`          | Distinguishes COLUMN / DERIVED / JOINED — determines when a converter is needed vs when a field can be skipped |
+| `TypeDescriptor` (parsed)             | internal to generator            | Full generic tree (e.g. `Map<String, List<Long>>`) for deep type comparison and nested converter lookup |
+| `Property.type` per view              | `views[].properties[].type`      | Original declared type exactly as the developer wrote it                    |
+| Primitive metadata                    | `type` / `unboxed` / `primitive` | Correct boxing/unboxing decisions for converters                            |
 
 ### 1.2 Type converter registry — deriving required converters
 
@@ -93,11 +93,11 @@ This approach catches conversion gaps **before** the application runs, during th
 
 Not all fields need converters the same way:
 
-| FieldKind | Read → Read mapper | Read → Write mapper | Write → Read mapper | Notes |
-|-----------|----|----|----|------|
-| COLUMN | Copy or convert | Copy or convert | Copy or convert | Primary case for DB round-trip |
-| DERIVED | Copy or convert | **Skip** (not stored) | N/A (cannot write) | Derived fields are computed; write views should not receive them |
-| JOINED | Copy or convert | **Skip** (managed by relation) | N/A (relation managed) | Joined fields come from joins, not direct insert/update |
+| FieldKind   | Read → Read mapper | Read → Write mapper            | Write → Read mapper    | Notes                                                            |
+| ----------- | ------------------ | ------------------------------ | ---------------------- | ---------------------------------------------------------------- |
+| COLUMN      | Copy or convert    | Copy or convert                | Copy or convert        | Primary case for DB round-trip                                   |
+| DERIVED     | Copy or convert    | **Skip** (not stored)          | N/A (cannot write)     | Derived fields are computed; write views should not receive them |
+| JOINED      | Copy or convert    | **Skip** (managed by relation) | N/A (relation managed) | Joined fields come from joins, not direct insert/update          |
 
 The generator already knows the `fieldKind` for every field. A mapper generator can use this to:
 - Skip DERIVED/JOINED fields when generating write-direction mappers.
@@ -143,12 +143,12 @@ The generator already uses `MethodDeclaration.getAnnotationByName("FieldSource")
 
 Extend the generator to collect, for each method:
 
-| Data | Source |
-|------|--------|
-| Annotation fully-qualified name | `AnnotationExpr.getName()` + import resolution |
-| Annotation attributes | Key-value pairs from `MemberValuePair` |
-| Attribute types | String literal, enum reference, class literal, array, nested annotation |
-| Position in annotation list | Ordering from source |
+| Data                            | Source                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| Annotation fully-qualified name | `AnnotationExpr.getName()` + import resolution                          |
+| Annotation attributes           | Key-value pairs from `MemberValuePair`                                  |
+| Attribute types                 | String literal, enum reference, class literal, array, nested annotation |
+| Position in annotation list     | Ordering from source                                                    |
 
 This would produce a model extension:
 
@@ -367,14 +367,14 @@ This section is a high-level blueprint; a dedicated design doc should cover:
 
 Not every annotation is useful for code generation. A practical filter:
 
-| Category | Examples | Value for generation |
-|----------|----------|---------------------|
-| Field source | `@FieldSource` | Already collected; drives field-kind logic |
+| Category               | Examples                                        | Value for generation                                                    |
+| ---------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Field source           | `@FieldSource`                                  | Already collected; drives field-kind logic                              |
 | Validation constraints | `@NotNull`, `@Size`, `@Pattern`, `@Min`, `@Max` | Generate validation boilerplate, form field constraints, OpenAPI schema |
-| Serialization hints | `@JsonProperty`, `@JsonFormat`, `@JsonIgnore` | Generate serializer configuration without runtime reflection |
-| Database mapping | `@Column`, `@JoinColumn`, `@Temporal` | Generate DDL, query builders |
-| Documentation | Custom `@Description`, `@Deprecated` | Generate API docs, deprecation warnings |
-| Custom domain | Any project-specific annotation | Extensible by design |
+| Serialization hints    | `@JsonProperty`, `@JsonFormat`, `@JsonIgnore`   | Generate serializer configuration without runtime reflection            |
+| Database mapping       | `@Column`, `@JoinColumn`, `@Temporal`           | Generate DDL, query builders                                            |
+| Documentation          | Custom `@Description`, `@Deprecated`            | Generate API docs, deprecation warnings                                 |
+| Custom domain          | Any project-specific annotation                 | Extensible by design                                                    |
 
 The generator should collect **all** annotations by default, letting downstream consumers filter by name. Alternatively, a configuration option can whitelist/blacklist annotation names.
 
@@ -603,17 +603,17 @@ LEFT JOIN department d ON p.department_id = d.id      -- JOINED: inferred from r
 
 The metadata type system maps to JDBC accessors:
 
-| Java type | ResultSet getter | PreparedStatement setter |
-|-----------|-----------------|------------------------|
-| `java.lang.String` | `getString()` | `setString()` |
-| `java.lang.Long` / `long` | `getLong()` | `setLong()` |
-| `java.lang.Integer` / `int` | `getInt()` | `setInt()` |
-| `java.lang.Boolean` / `boolean` | `getBoolean()` | `setBoolean()` |
-| `java.lang.Double` / `double` | `getDouble()` | `setDouble()` |
-| `java.time.Instant` | `getTimestamp()` + `.toInstant()` | `setTimestamp(Timestamp.from())` |
-| `java.time.LocalDate` | `getDate()` + `.toLocalDate()` | `setDate(Date.valueOf())` |
-| `java.util.UUID` | `getObject(col, UUID.class)` | `setObject()` |
-| Parameterized/complex | Custom deserializer (JSON column or skip) | Custom serializer |
+| Java type                       | ResultSet getter                          | PreparedStatement setter         |
+| ------------------------------- | ----------------------------------------- | -------------------------------- |
+| `java.lang.String`              | `getString()`                             | `setString()`                    |
+| `java.lang.Long` / `long`       | `getLong()`                               | `setLong()`                      |
+| `java.lang.Integer` / `int`     | `getInt()`                                | `setInt()`                       |
+| `java.lang.Boolean` / `boolean` | `getBoolean()`                            | `setBoolean()`                   |
+| `java.lang.Double` / `double`   | `getDouble()`                             | `setDouble()`                    |
+| `java.time.Instant`             | `getTimestamp()` + `.toInstant()`         | `setTimestamp(Timestamp.from())` |
+| `java.time.LocalDate`           | `getDate()` + `.toLocalDate()`            | `setDate(Date.valueOf())`        |
+| `java.util.UUID`                | `getObject(col, UUID.class)`              | `setObject()`                    |
+| Parameterized/complex           | Custom deserializer (JSON column or skip) | Custom serializer                |
 
 The `primitive` flag determines whether to handle `rs.wasNull()` (for boxed types: set to `null`; for unboxed: use default value or throw).
 
@@ -894,16 +894,16 @@ public final class PersonCreateFormBuilder
 
 ## 4. Implementation Priority
 
-| Priority | Proposal | Prerequisite | Complexity | Impact |
-|----------|----------|-------------|-----------|--------|
-| **1** | P-2: ViewReader / ViewWriter impls | Property enum (exists) | Low | Foundational — all other proposals build on this |
-| **2** | P-7: Builder pattern | P-2 | Low | Critical for write path; natural companion to reader |
-| **3** | P-1: View-to-view mappers | P-2, P-7 | Medium | Eliminates most hand-written mapping code |
-| **4** | P-3: Database adapters | P-2, type-to-JDBC mapping | Medium | Core persistence; high ROI for DB-backed apps |
-| **5** | §2: Annotation collection | Generator extension | Low-Medium | Enables P-6, enriches P-3 and P-4 |
-| **6** | P-6: Validation | Annotation collection (§2) | Medium | Valuable for write views; depends on annotation data |
-| **7** | P-5: KV store adapters | P-2, serialization helpers | Medium | Specialized; high value for cache/NoSQL use cases |
-| **8** | P-4: Message queue adapters | P-2, serialization helpers | Medium | Specialized; high value for event-driven architectures |
+| Priority   | Proposal                           | Prerequisite               | Complexity  | Impact                                                 |
+| ---------- | ---------------------------------- | -------------------------- | ----------- | ------------------------------------------------------ |
+| **1**      | P-2: ViewReader / ViewWriter impls | Property enum (exists)     | Low         | Foundational — all other proposals build on this       |
+| **2**      | P-7: Builder pattern               | P-2                        | Low         | Critical for write path; natural companion to reader   |
+| **3**      | P-1: View-to-view mappers          | P-2, P-7                   | Medium      | Eliminates most hand-written mapping code              |
+| **4**      | P-3: Database adapters             | P-2, type-to-JDBC mapping  | Medium      | Core persistence; high ROI for DB-backed apps          |
+| **5**      | §2: Annotation collection          | Generator extension        | Low-Medium  | Enables P-6, enriches P-3 and P-4                      |
+| **6**      | P-6: Validation                    | Annotation collection (§2) | Medium      | Valuable for write views; depends on annotation data   |
+| **7**      | P-5: KV store adapters             | P-2, serialization helpers | Medium      | Specialized; high value for cache/NoSQL use cases      |
+| **8**      | P-4: Message queue adapters        | P-2, serialization helpers | Medium      | Specialized; high value for event-driven architectures |
 
 ### Critical path
 

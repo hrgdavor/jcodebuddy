@@ -48,8 +48,8 @@ committed example regenerates byte-identically, so no generated artifact changed
 ---
 ## 1. What is left, exactly
 
-| file | lines | what it does with a tree | imports |
-| --- | --- | --- | --- |
+| file | lines | what it does with a tree                                                                      | imports                 |
+| ---- | ----- | --------------------------------------------------------------------------------------------- | ----------------------- |
 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` | 1007 | **builds** a whole `CompilationUnit` (`addEnum`, `addEntry`, `addMember`, `setJavadocComment`, `parseExpression`, `parseBodyDeclaration`) and prints it through `PrettyPrinterConfiguration`, then applies two textual fix-ups | 35 JavaParser |
 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` | 403 | **mutates** a parsed enum — drops `forName` switch arms and removes constants — and prints it | 12 JavaParser |
 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` | — | drives the mutation and asserts on its output | via `EnumCompactionCli` |
@@ -153,13 +153,13 @@ bun test scripts/rewrite-migration
 
 Green baselines to preserve, measured at the time of writing:
 
-| module | tests | note |
-| --- | --- | --- |
-| `hipster-entity-tooling` | 362 | includes `ExampleRegenerationTest` (byte-identical example) |
-| `jwa-builder` | 20 | includes the 6 `ClassMemberProcessorTest` tests added by this phase |
-| `jwa-sidecar` | 3 | |
-| `hipster-entity-core` | 88 | untouched by the migration; listed so a drop is noticed |
-| `java-watch-agent` | 0 | it has no tests: `-pl java-watch-agent -am -DskipTests clean compile` is its gate |
+| module                   | tests | note                                                                              |
+| ------------------------ | ----- | --------------------------------------------------------------------------------- |
+| `hipster-entity-tooling` | 362   | includes `ExampleRegenerationTest` (byte-identical example)                       |
+| `jwa-builder`            | 20    | includes the 6 `ClassMemberProcessorTest` tests added by this phase               |
+| `jwa-sidecar`            | 3     |                                                                                   |
+| `hipster-entity-core`    | 88    | untouched by the migration; listed so a drop is noticed                           |
+| `java-watch-agent`       | 0     | it has no tests: `-pl java-watch-agent -am -DskipTests clean compile` is its gate |
 
 ## 6. Definition of done for Phase 6
 

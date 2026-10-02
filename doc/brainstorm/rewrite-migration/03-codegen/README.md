@@ -13,16 +13,16 @@ generator described here now exists, in place, in the module that owns it.
 
 ## Where the generators actually are
 
-| Generator | Home |
-| --- | --- |
-| `ViewInterfaceGenerator` | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/` |
-| `ViewBuilderGenerator`, `ViewTrackingBuilderGenerator` | same |
-| `ViewRecordGenerator`, `ViewAdapterGenerator`, `ViewMapperGenerator` | same |
-| `ValidationGenerator` | same |
-| `FieldBoilerplateGenerator` (field enum) | same |
-| `EntityMetadataGenerator` | same |
-| `RecordBuilderProcessor`, `ClassMemberProcessor`, `BuilderTransformationEngine` | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/` |
-| `EnumCompactionCli` and the ported validation rules | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/` |
+| Generator                                                                       | Home                                                                                            |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ViewInterfaceGenerator`                                                        | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/`            |
+| `ViewBuilderGenerator`, `ViewTrackingBuilderGenerator`                          | same                                                                                            |
+| `ViewRecordGenerator`, `ViewAdapterGenerator`, `ViewMapperGenerator`            | same                                                                                            |
+| `ValidationGenerator`                                                           | same                                                                                            |
+| `FieldBoilerplateGenerator` (field enum)                                        | same                                                                                            |
+| `EntityMetadataGenerator`                                                       | same                                                                                            |
+| `RecordBuilderProcessor`, `ClassMemberProcessor`, `BuilderTransformationEngine` | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/`                                   |
+| `EnumCompactionCli` and the ported validation rules                             | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/` |
 
 They emit **text**, not a mutated tree: each one reads an OpenRewrite LST for facts and renders the file it
 owns, with javac line spans used where a position is needed. The decision, the five printer artefacts it

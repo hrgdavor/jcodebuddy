@@ -469,14 +469,14 @@ Why this helps:
 
 The following table is the safe way to frame the relationship.
 
-| Project technique | Direct project benefit | Can recover similar outcome class | Why |
-|------------------|------------------------|----------------------------------|-----|
-| Reflection elimination | Yes | Yes | Reduces dynamic overhead and leaves cleaner hot paths for advanced optimization |
-| Direct generated adapters instead of proxies | Yes | Yes | Better inlining and profiling opportunities |
-| Build-time-initialization-friendly metadata holders | Yes | Yes | Better startup baseline; compiler has less runtime setup to preserve |
-| Constant metadata registration in code | Yes | Partially | Improves compatibility and reduces metadata noise, but not a compiler optimization itself |
-| Primitive/ordinal specialization | Yes | Yes | Gives stronger optimization passes more explicit hot loops to optimize |
-| Compiler-level profiling | No | No | Compiler feature, not reproducible by this project |
+| Project technique                                   | Direct project benefit   | Can recover similar outcome class  | Why                                                                                       |
+| --------------------------------------------------- | ------------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------- |
+| Reflection elimination                              | Yes                      | Yes                                | Reduces dynamic overhead and leaves cleaner hot paths for advanced optimization           |
+| Direct generated adapters instead of proxies        | Yes                      | Yes                                | Better inlining and profiling opportunities                                               |
+| Build-time-initialization-friendly metadata holders | Yes                      | Yes                                | Better startup baseline; compiler has less runtime setup to preserve                      |
+| Constant metadata registration in code              | Yes                      | Partially                          | Improves compatibility and reduces metadata noise, but not a compiler optimization itself |
+| Primitive/ordinal specialization                    | Yes                      | Yes                                | Gives stronger optimization passes more explicit hot loops to optimize                    |
+| Compiler-level profiling                            | No                       | No                                 | Compiler feature, not reproducible by this project                                        |
 
 ## 4.10 Recommended project position
 

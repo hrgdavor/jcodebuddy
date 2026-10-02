@@ -27,13 +27,13 @@ green. Tick the box in [§ Progress](#progress) in the same commit that finishes
 
 ### Command vocabulary
 
-| Name | Command | Notes |
-| --- | --- | --- |
-| **GATE** | `bun scripts/mvn-jdk25.js` | the recorded gate: the hipster-entity module set, `clean test`, incremental compilation off. Resolves JDK 25 itself. |
-| **MODULE** | `bun scripts/mvn-jdk25.js -pl <modules> -am test` | any module set; add `install` instead of `test` when a consumer resolves it from the local repository |
-| **LINKS** | `node scripts/check-repo-links.mjs` and `node webview/check-links.mjs` | every relative link in every Markdown file must resolve |
-| **EXAMPLES** | `npm run check:examples` | the `@hrg/inject-examples` markers in `merge-java/docs/resolvers` and `materialization-levels.md` are not stale |
-| **JMH** | `bun run scripts/run-jmh.js --include "<regex>"` | decision-grade results need the default profile (3 forks, 6×2 s warmup, 8×2 s measurement); never record a trimmed run as evidence |
+| Name         | Command                                                                | Notes                                                   |
+| ------------ | ---------------------------------------------------------------------- | ------------------------------------------------------- |
+| **GATE**     | `bun scripts/mvn-jdk25.js`                                             | the recorded gate: the hipster-entity module set, `clean test`, incremental compilation off. Resolves JDK 25 itself. |
+| **MODULE**   | `bun scripts/mvn-jdk25.js -pl <modules> -am test`                      | any module set; add `install` instead of `test` when a consumer resolves it from the local repository |
+| **LINKS**    | `node scripts/check-repo-links.mjs` and `node webview/check-links.mjs` | every relative link in every Markdown file must resolve |
+| **EXAMPLES** | `npm run check:examples`                                               | the `@hrg/inject-examples` markers in `merge-java/docs/resolvers` and `materialization-levels.md` are not stale |
+| **JMH**      | `bun run scripts/run-jmh.js --include "<regex>"`                       | decision-grade results need the default profile (3 forks, 6×2 s warmup, 8×2 s measurement); never record a trimmed run as evidence |
 
 **Sizes** are rough: **S** ≤ half a day, **M** 1–2 days, **L** 3+ days. **Who** is `agent` (doable in a
 checkout with no human) or `human` (needs a person, a running IDE, or an external tool).
@@ -126,20 +126,20 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 
 ## 3. What this plan schedules
 
-| Document | What it contributed here | Its own state after this plan |
-| --- | --- | --- |
-| [`plans/enumset-overlap-jmh-plan.md`](enumset-overlap-jmh-plan.md) | step 0.1 — land the finished work | closed |
-| the stale-document pass of 2026-10-01 | step 0.2 — commit it | closed |
+| Document                                                                          | What it contributed here          | Its own state after this plan                      |
+| --------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------- |
+| [`plans/enumset-overlap-jmh-plan.md`](enumset-overlap-jmh-plan.md)                | step 0.1 — land the finished work | closed                                             |
+| the stale-document pass of 2026-10-01                                             | step 0.2 — commit it              | closed                                             |
 | [`doc-hipster-entity/architecture/decisions/DEC-021.md`](../doc-hipster-entity/architecture/decisions/DEC-021.md) § 6 | step 1.1 — `enabled: false` | note removed when the step lands |
 | [`doc-hipster-entity/architecture/decisions/DEC-W008.md`](../doc/architecture/decisions-watch/DEC-W008.md), the `.kilo` metadata-server plan | steps 1.2–1.4 | closed into steps |
-| the `.kilo` metadata-arena plan | steps 2.1–2.2 | closed into steps |
+| the `.kilo` metadata-arena plan                                                   | steps 2.1–2.2                     | closed into steps                                  |
 | the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md), and [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) | steps 3.0a–3.0k (the one metadata engine in `jcodebuddy-core`, then moving this generator onto it **as one consumer**); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | the prototype is delivered; Phase 3's banner says what "prototyping" means, why the rest waits, that hipster-ioc is project-wide and does not extract metadata, and that the engine comes before the consumers |
-| [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md) | steps 4.1–4.4 | Phase 9 residue + Phase 13 closed |
-| [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md) | steps 5.1–5.3 | Phase 6 and Q3/Q5 closed |
-| [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md) | steps 5.4, 8.2 | Phase 5 + observations closed |
-| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5 | open rows closed |
+| [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md)       | steps 4.1–4.4                     | Phase 9 residue + Phase 13 closed                  |
+| [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | Phase 6 and Q3/Q5 closed                           |
+| [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | Phase 5 + observations closed                      |
+| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5                     | open rows closed                                   |
 | [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | "Future Refinement"/"Open questions" lists emptied |
-| [`plans/rewrite-migration/`](rewrite-migration/README.md) | nothing — it is **complete** | stays in place as the historical record (step 9.2) |
+| [`plans/rewrite-migration/`](rewrite-migration/README.md)                         | nothing — it is **complete**      | stays in place as the historical record (step 9.2) |
 
 ---
 
@@ -612,21 +612,21 @@ package wholesale: `validation/` and the emitters stay consumers.
 own summaries, not from their package names. It is deliberately not per package: `meta/` splits, and one
 package-level guess in the measurement above was wrong (`meta/` is *not* all engine).
 
-| Verdict | Files | Why |
-| --- | --- | --- |
-| **Engine → `jcodebuddy-core`** | `index/ClassIndex`, `index/ClassRecord`, `index/TypeFacts` | the class index: one row per type with kind, modifiers, enclosing, line (DEC-029). These are the engine's rows; 3.0b adds relations to them |
-| **Engine** | `index/ContentHash`, `index/Wyhash64` | a file's content identity — the key the engine's invalidation is built on |
-| **Engine** | `SourceReader` | the one place an existing source is read, through DEC-030's one representation |
-| **Engine** | `TreeQueries` | the read-only queries over the parsed tree |
-| **Engine** | `JavaSyntaxCheck` | the javac positions the LST cannot answer (DEC-030: positions come from javac) |
-| **Engine** *(judgement call 1)* | `SourceSplicer` | the write half of the same one representation — see below, and see 3.0f-2's evidence |
-| **Engine** | `meta/SourceMetadata` | the file-scoped metadata a parse produces (DEC-W008's shape) |
-| **Engine** | `meta/SourceLocation` | "one place a field is, as a pass recorded it" — a position record, engine-shaped |
-| **Consumer — corrected by the compiler** | `meta/InterfaceInfo` | **was classified engine; it is not.** It holds `Property` and `ViewAttributes`, so it is the entity model's view of an interface. 3.0f-2's build proved it; the engine set is 11 files |
-| **Consumer — emitters** | `EntityMetadataGenerator` (the pass), `FieldBoilerplateGenerator`, `ValidationGenerator`, `ViewAdapterGenerator`, `ViewBuilderGenerator`, `ViewInterfaceGenerator`, `ViewMapperGenerator`, `ViewRecordGenerator`, `ViewTrackingBuilderGenerator` | they *read* the model and *write* Java; moving them would put entity codegen inside the engine |
-| **Consumer — the entity model** | `meta/EntityMeta`, `meta/EntityFieldMeta`, `meta/ViewMeta`, `meta/ViewFieldMeta`, `meta/ArtifactMeta`, `meta/Property`, `meta/ViewAttributes`, `meta/FieldConstraint`, `meta/TrackableType`, `MetadataLocations` | views, entities, artifacts, constraints, tracking levels: **domain**, not engine. The measurement called `meta/` "the representation and the parse path" — true of the three engine rows above, wrong for these nine |
-| **Consumer — generator behaviour** | `CooperativeCodegen`, `DivergenceReporter`, `GenLevelResolver`, `GeneratorPreflight`, `TypeLiterals`, `JcodebuddyDirectory`, `ViewAnnotationReader` | DEC-020 preservation, DEC-022 diagnostics, entity gen-levels, preflight, literal spelling, output plumbing, the `@View` reader |
-| **Consumer — rules** | all 12 of `validation/` | the entity conventions and their CLIs |
+| Verdict                                  | Files                                                      | Why                                                                                            |
+| ---------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Engine → `jcodebuddy-core`**           | `index/ClassIndex`, `index/ClassRecord`, `index/TypeFacts` | the class index: one row per type with kind, modifiers, enclosing, line (DEC-029). These are the engine's rows; 3.0b adds relations to them |
+| **Engine**                               | `index/ContentHash`, `index/Wyhash64`                      | a file's content identity — the key the engine's invalidation is built on                      |
+| **Engine**                               | `SourceReader`                                             | the one place an existing source is read, through DEC-030's one representation                 |
+| **Engine**                               | `TreeQueries`                                              | the read-only queries over the parsed tree                                                     |
+| **Engine**                               | `JavaSyntaxCheck`                                          | the javac positions the LST cannot answer (DEC-030: positions come from javac)                 |
+| **Engine** *(judgement call 1)*          | `SourceSplicer`                                            | the write half of the same one representation — see below, and see 3.0f-2's evidence           |
+| **Engine**                               | `meta/SourceMetadata`                                      | the file-scoped metadata a parse produces (DEC-W008's shape)                                   |
+| **Engine**                               | `meta/SourceLocation`                                      | "one place a field is, as a pass recorded it" — a position record, engine-shaped               |
+| **Consumer — corrected by the compiler** | `meta/InterfaceInfo`                                       | **was classified engine; it is not.** It holds `Property` and `ViewAttributes`, so it is the entity model's view of an interface. 3.0f-2's build proved it; the engine set is 11 files |
+| **Consumer — emitters**                  | `EntityMetadataGenerator` (the pass), `FieldBoilerplateGenerator`, `ValidationGenerator`, `ViewAdapterGenerator`, `ViewBuilderGenerator`, `ViewInterfaceGenerator`, `ViewMapperGenerator`, `ViewRecordGenerator`, `ViewTrackingBuilderGenerator` | they *read* the model and *write* Java; moving them would put entity codegen inside the engine |
+| **Consumer — the entity model**          | `meta/EntityMeta`, `meta/EntityFieldMeta`, `meta/ViewMeta`, `meta/ViewFieldMeta`, `meta/ArtifactMeta`, `meta/Property`, `meta/ViewAttributes`, `meta/FieldConstraint`, `meta/TrackableType`, `MetadataLocations` | views, entities, artifacts, constraints, tracking levels: **domain**, not engine. The measurement called `meta/` "the representation and the parse path" — true of the three engine rows above, wrong for these nine |
+| **Consumer — generator behaviour**       | `CooperativeCodegen`, `DivergenceReporter`, `GenLevelResolver`, `GeneratorPreflight`, `TypeLiterals`, `JcodebuddyDirectory`, `ViewAnnotationReader` | DEC-020 preservation, DEC-022 diagnostics, entity gen-levels, preflight, literal spelling, output plumbing, the `@View` reader |
+| **Consumer — rules**                     | all 12 of `validation/`                                    | the entity conventions and their CLIs                                                          |
 
 **3.0f-2 landed on 2026-10-02** (its first attempt was reverted, and the compiler is why). The
 twelve files were moved, the packages rewritten and every reference re-pointed (`scripts/extract-engine.js`,
@@ -634,13 +634,13 @@ kept and now correct); `jcodebuddy-core` then failed to compile with **five of t
 into classes that stay**. That is not a build accident — it is the dependency direction DEC-037 forbids, and
 the evidence is better than the guess the classification made:
 
-| Moved file | Reaches back to (consumer, stays) | What it means |
-| --- | --- | --- |
-| `meta/InterfaceInfo` | `Property`, `ViewAttributes` | **it is not engine at all**: it holds a view's properties and its `@View` attributes. The classification was wrong on this one; it belongs with the entity model that stays, and the engine set is **11 files**, not 12 |
-| `index/TypeFacts` | `MetadataLocations` (an import *and* a use) | the index row reaches into the artifact-location model — the engine needs its own answer to "where is this declaration", or that helper moves in |
-| `index/ClassIndex` | `EntityMetadataGenerator`, `JcodebuddyDirectory` (+ three more symbols) | the index reaches into the *pass* (a package filter?) and into the output-directory marker. `EntityMetadataGenerator` is unambiguously the consumer; `JcodebuddyDirectory` is arguably engine vocabulary, because the index **is** a file under `.jcodebuddy/index/` |
-| `source/SourceReader` | `DivergenceReporter` | the reader reports diagnostics through the entity pass's reporter — the engine needs a diagnostic channel of its own, or the DEC-022 vocabulary needs to move with it |
-| `source/SourceSplicer` | `ViewInterfaceGenerator` (a static member) | a write helper that needs an *emitter* to work. This is evidence against judgement call 1 below: either the member it needs is engine vocabulary and moves, or `SourceSplicer` is a consumer and 3.0n's survivor is `jwa-builder`'s copy |
+| Moved file             | Reaches back to (consumer, stays)                                       | What it means |
+| ---------------------- | ----------------------------------------------------------------------- | ------------- |
+| `meta/InterfaceInfo`   | `Property`, `ViewAttributes`                                            | **it is not engine at all**: it holds a view's properties and its `@View` attributes. The classification was wrong on this one; it belongs with the entity model that stays, and the engine set is **11 files**, not 12 |
+| `index/TypeFacts`      | `MetadataLocations` (an import *and* a use)                             | the index row reaches into the artifact-location model — the engine needs its own answer to "where is this declaration", or that helper moves in |
+| `index/ClassIndex`     | `EntityMetadataGenerator`, `JcodebuddyDirectory` (+ three more symbols) | the index reaches into the *pass* (a package filter?) and into the output-directory marker. `EntityMetadataGenerator` is unambiguously the consumer; `JcodebuddyDirectory` is arguably engine vocabulary, because the index **is** a file under `.jcodebuddy/index/` |
+| `source/SourceReader`  | `DivergenceReporter`                                                    | the reader reports diagnostics through the entity pass's reporter — the engine needs a diagnostic channel of its own, or the DEC-022 vocabulary needs to move with it |
+| `source/SourceSplicer` | `ViewInterfaceGenerator` (a static member)                              | a write helper that needs an *emitter* to work. This is evidence against judgement call 1 below: either the member it needs is engine vocabulary and moves, or `SourceSplicer` is a consumer and 3.0n's survivor is `jwa-builder`'s copy |
 
 **So 3.0f-2 has four small decisions before it can be a move**, and each has three shapes: **move it in** (it
 is engine vocabulary), **invert it** (the engine defines a minimal contract — a diagnostic sink, a package
@@ -661,14 +661,14 @@ The move landed with `jcodebuddy-core` holding the engine (**12 files**: the fiv
 new `TypeKinds`, the four `source/` helpers, `meta/SourceMetadata`, `meta/SourceLocation`, and
 `JcodebuddyDirectory`), and the six fixes were:
 
-| Decision as recommended | What it actually was |
-| --- | --- |
-| `InterfaceInfo` back to the consumers | as recommended — the compiler had already decided it |
-| `JcodebuddyDirectory` into the engine | as recommended, and its `DIR` constant is **defined** in the engine now instead of read from the pass |
-| `EntityMetadataGenerator` inverted | **not a filter**: the index used three shared *utilities* (`escapeJson`, `OBJECT_MAPPER`, `JCODEBUDDY_DIR`), so they became the engine's `MetadataJson` (one escaping rule, one mapper) and `JcodebuddyDirectory.DIR`, with the pass's own members delegating — one definition each |
+| Decision as recommended                     | What it actually was                                 |
+| ------------------------------------------- | ---------------------------------------------------- |
+| `InterfaceInfo` back to the consumers       | as recommended — the compiler had already decided it |
+| `JcodebuddyDirectory` into the engine       | as recommended, and its `DIR` constant is **defined** in the engine now instead of read from the pass |
+| `EntityMetadataGenerator` inverted          | **not a filter**: the index used three shared *utilities* (`escapeJson`, `OBJECT_MAPPER`, `JCODEBUDDY_DIR`), so they became the engine's `MetadataJson` (one escaping rule, one mapper) and `JcodebuddyDirectory.DIR`, with the pass's own members delegating — one definition each |
 | `DivergenceReporter` inverted behind a sink | as recommended: the engine defines `DiagnosticSink` (one method, DEC-022's six parameters), the reporter implements it and keeps owning the format |
-| `TypeFacts`'s `MetadataLocations` use | **moved, not inverted**: `kindOf` became the engine's `TypeKinds`, because `MetadataLocations`' own javadoc said the method was public "only so `TypeFacts` can reuse it". The entity model delegates, so there is still one resolver |
-| `SourceSplicer`'s member | **judgement call 1 stands**: the member was *data* (`EntryPoint`, two strings), not emission logic, so it moved into the engine and the emitter converts at its one call site — the emitter's API and its 11 test references did not move |
+| `TypeFacts`'s `MetadataLocations` use       | **moved, not inverted**: `kindOf` became the engine's `TypeKinds`, because `MetadataLocations`' own javadoc said the method was public "only so `TypeFacts` can reuse it". The entity model delegates, so there is still one resolver |
+| `SourceSplicer`'s member                    | **judgement call 1 stands**: the member was *data* (`EntryPoint`, two strings), not emission logic, so it moved into the engine and the emitter converts at its one call site — the emitter's API and its 11 test references did not move |
 
 Two further consequences, recorded because they are the split's real cost: **(a)** helpers that were
 package-private because they shared a package with their only callers became the engine's public surface
@@ -747,13 +747,13 @@ pass is **3.0f-1: the classification**, which moves no code.
 **What 3.0f-2 will touch, measured (2026-10-02).** The engine types are imported by **five modules**, so the
 move is cross-module even though it is small:
 
-| Module | What it imports | Note |
-| --- | --- | --- |
-| `jcodebuddy-core` | — | gains the engine packages, and OpenRewrite + Jackson with them |
+| Module                   | What it imports                                              | Note                                                                                     |
+| ------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `jcodebuddy-core`        | —                                                            | gains the engine packages, and OpenRewrite + Jackson with them                           |
 | `hipster-entity-tooling` | the engine types throughout (`validation/*`, `MetadataLocations`, `EntityMetadataGenerator`, `index/*`) | internal imports; it stays a consumer and keeps depending on core, which it already does |
-| `project-automation` | `SourceReader`, `TreeQueries`, `index.ContentHash` (`SourceFacts`, `runner/SourceMetadataParser`), `meta.SourceMetadata` (`MetadataTypeResolver`), plus one test | outside the recorded gate → own build evidence |
+| `project-automation`     | `SourceReader`, `TreeQueries`, `index.ContentHash` (`SourceFacts`, `runner/SourceMetadataParser`), `meta.SourceMetadata` (`MetadataTypeResolver`), plus one test | outside the recorded gate → own build evidence |
 | `jcodebuddy-codegen-api` | `meta.SourceMetadata` in `CodeContext` and `CodeContextImpl` | **this is the one-type dependency DEC-037's third fact describes**; after 3.0f-2 it points at core, and 3.0i dissolves the module |
-| `hipster-ioc-tooling` | `SourceReader`, `TreeQueries` (`ContextReader`) | outside the gate → own build evidence |
+| `hipster-ioc-tooling`    | `SourceReader`, `TreeQueries` (`ContextReader`)              | outside the gate → own build evidence                                                    |
 
 Only `hipster-entity-tooling` is in the recorded gate, so 3.0f-2's evidence is the gate **plus** a targeted
 build of `project-automation`, `jcodebuddy-codegen-api` and `hipster-ioc-tooling`.
@@ -1200,12 +1200,12 @@ boundary had to be fixed first, and this step fixes it.
 **Do:** make the check pass. It has been written and it measures **17 violations on 2026-10-02**, which is the
 list this step works through:
 
-| Module | Violation | The shape of the fix |
-| --- | --- | --- |
-| `java-watch-agent` | depends on `jcodebuddy-codegen-api`, and `ActionToolAdapter` (main) + `ToolSeamTest` (test) import `hr.hrg.jcodebuddy.codegen.*` | the watcher keeps **its own** port (`ActionTool` already is one); the adapter that bridges it to a JCodeBuddy SPI moves into a module that legitimately depends on both (`project-automation`, the project's own dev-time assistant) |
-| `java-watch-agent` | depends on `jwa-builder-api` and `jwa-builder` | find what uses them — the JWA builder is absorbed into `jcodebuddy/` (DEC-038), so a use in the watcher is either a bridge to move out or a leftover to delete, and the record says which |
-| `java-watch-agent` | Jackson: the dependency, plus imports in `AuditManager`, `CommandServer`, `WatchAgent` | the watcher writes its own audit JSON; either hand-rolled writing (it is a small, fixed document) or a JSON library the watcher chooses for itself — what it may not do is inherit this workspace's Jackson |
-| `java-watch-run-sample` | depends on Jackson | a sample module: either its JSON use is removed or it depends on a library it declares itself, with the same rule |
+| Module                  | Violation                                                                              | The shape of the fix |
+| ----------------------- | -------------------------------------------------------------------------------------- | -------------------- |
+| `java-watch-agent`      | depends on `jcodebuddy-codegen-api`, and `ActionToolAdapter` (main) + `ToolSeamTest` (test) import `hr.hrg.jcodebuddy.codegen.*` | the watcher keeps **its own** port (`ActionTool` already is one); the adapter that bridges it to a JCodeBuddy SPI moves into a module that legitimately depends on both (`project-automation`, the project's own dev-time assistant) |
+| `java-watch-agent`      | depends on `jwa-builder-api` and `jwa-builder`                                         | find what uses them — the JWA builder is absorbed into `jcodebuddy/` (DEC-038), so a use in the watcher is either a bridge to move out or a leftover to delete, and the record says which |
+| `java-watch-agent`      | Jackson: the dependency, plus imports in `AuditManager`, `CommandServer`, `WatchAgent` | the watcher writes its own audit JSON; either hand-rolled writing (it is a small, fixed document) or a JSON library the watcher chooses for itself — what it may not do is inherit this workspace's Jackson |
+| `java-watch-run-sample` | depends on Jackson                                                                     | a sample module: either its JSON use is removed or it depends on a library it declares itself, with the same rule |
 
 **Progress 2026-10-03 — the SPI is gone from the watcher, 17 violations down to 13.** `ActionToolAdapter` was
 **deleted, not moved**, and that is the honest reading the check made possible: nothing in `java-watch-agent`'s
@@ -1255,11 +1255,11 @@ modules left in `watch/`.
 That is the honest accounting of the whole step: **17 → 0**, but by three different means, and only one of them
 was "fix the leak":
 
-| Violations | How they went |
-| --- | --- |
-| 4 (SPI in the agent) | `ActionToolAdapter` **deleted** — nothing used it but its own test — which is what unblocked 3.0i |
-| 5 (Jackson in the sample) | the demo rewritten without Jackson: its point was hot-reload, not the library |
-| 8 (Jackson + `jwa-builder` in the agent) | **the module left the group**: it was JCodeBuddy's server sitting in the watcher's library group |
+| Violations                               | How they went                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 4 (SPI in the agent)                     | `ActionToolAdapter` **deleted** — nothing used it but its own test — which is what unblocked 3.0i |
+| 5 (Jackson in the sample)                | the demo rewritten without Jackson: its point was hot-reload, not the library                     |
+| 8 (Jackson + `jwa-builder` in the agent) | **the module left the group**: it was JCodeBuddy's server sitting in the watcher's library group  |
 
 The check's scope is now stated in it and in AGENTS.md § 2: **the boundary is the `watch/` group**, so a future
 module that needs a workspace artifact is moved to the group it belongs to rather than having its imports
@@ -2261,12 +2261,12 @@ These are not "later"; they are the only deliverable that needs a person. Each e
 version-named record, because a claim that is not observed is not a claim
 ([`doc/ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md)).
 
-| # | What | Who | Record lands in |
-| --- | --- | --- | --- |
+| #   | What                                   | Who                                  | Record lands in                                                                 |
+| --- | -------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
 | 8.1 | JetBrains § 8's five maintainer questions (vendor identity, the empty-allow-list default, one vs two settings services, dropping Kotlin, plan location) and acceptance criteria 2/5/7 in a running IDE | maintainer | [`plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) § 8, and `webview-jetbrains`' own docs |
 | 8.2 | Eclipse 4.41 workbench observations — the caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim; then answer **Q2** (dropins vs p2) | maintainer | [`ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md) § 1a/§ 2a, then `PLAN-eclipse-host.md` |
 | 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the existing `intellij-jwa`/`vscode-jwa` are sidecar clients, not these) | maintainer decides, agent implements | [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md) |
-| 8.4 | The ACP spike's Zed run (see step 5.3) | maintainer | `PLAN-webview-suite.md` Phase 5 record |
+| 8.4 | The ACP spike's Zed run (see step 5.3) | maintainer                           | `PLAN-webview-suite.md` Phase 5 record                                          |
 
 ---
 
@@ -2374,78 +2374,78 @@ a decision that is not made** — deliberately unscheduled, with the decision na
 it is not the same as `[~]`, which waits on something outside the plan, nor as `[ ]`, which is ready to
 start)
 
-| Step | What | Who | Size | State |
-| --- | --- | --- | --- | --- |
-| 0.1 | Commit the EEnumSet overlap JMH delivery | agent | S | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer) |
-| 0.2 | Commit the stale-document corrections | agent | S | `[x]` (landed as `ff0dc49`) |
-| 1.1 | Honour `enabled: false` (DEC-018 / DEC-021 § 6) | agent | M | `[x]` |
-| 1.2 | `MetadataProvider.parse` (DEC-W008) | agent | M | `[x]` |
-| 1.3 | `WatchMetadataProvider` over the watch cache | agent | M | `[x]` |
-| 1.4 | Test the MCP tool surface | agent | S | `[x]` |
-| 2.1 | metadata-arena unit tests | agent | M | `[x]` |
-| 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
-| 2.3 | Decision-grade arena run + the backend decision | agent | S | `[x]` |
-| 3.0a | Settle the engine decision's open points (DEC-037, ADR first) | agent + maintainer | S–M | `[x]` — DEC-037 `Accepted`, DEC-038 created |
-| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index | agent | M | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
-| 3.0c | The cache: what is cached, and what invalidates it | agent | M | `[ ]` |
-| 3.0d | One implementation of `TypeResolver` over the index | agent | M | `[ ]` |
-| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |
-| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
-| 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
-| 3.0h | Search: the queries every consumer asks | agent | M | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
-| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
-| 3.0j | Move the remaining consumers onto the engine | agent | L | `[ ]` |
-| 3.0k | Grow the recorded gate to cover the engine's contract | agent | S | `[ ]` |
-| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038) | agent | S | `[ ]` |
-| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038) | agent | M | `[ ]` |
-| 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038) | agent | L | `[ ]` |
+| Step | What                                                                                  | Who                | Size | State                                                                                       |
+| ---- | ------------------------------------------------------------------------------------- | ------------------ | ---- | ------------------------------------------------------------------------------------------- |
+| 0.1  | Commit the EEnumSet overlap JMH delivery                                              | agent              | S    | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer)                                    |
+| 0.2  | Commit the stale-document corrections                                                 | agent              | S    | `[x]` (landed as `ff0dc49`)                                                                 |
+| 1.1  | Honour `enabled: false` (DEC-018 / DEC-021 § 6)                                       | agent              | M    | `[x]`                                                                                       |
+| 1.2  | `MetadataProvider.parse` (DEC-W008)                                                   | agent              | M    | `[x]`                                                                                       |
+| 1.3  | `WatchMetadataProvider` over the watch cache                                          | agent              | M    | `[x]`                                                                                       |
+| 1.4  | Test the MCP tool surface                                                             | agent              | S    | `[x]`                                                                                       |
+| 2.1  | metadata-arena unit tests                                                             | agent              | M    | `[x]`                                                                                       |
+| 2.2  | metadata-arena JMH benchmarks (or close as not needed)                                | agent              | S–M  | `[x]`                                                                                       |
+| 2.3  | Decision-grade arena run + the backend decision                                       | agent              | S    | `[x]`                                                                                       |
+| 3.0a | Settle the engine decision's open points (DEC-037, ADR first)                         | agent + maintainer | S–M  | `[x]` — DEC-037 `Accepted`, DEC-038 created                                                 |
+| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index                  | agent              | M    | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
+| 3.0c | The cache: what is cached, and what invalidates it                                    | agent              | M    | `[ ]`                                                                                       |
+| 3.0d | One implementation of `TypeResolver` over the index                                   | agent              | M    | `[ ]`                                                                                       |
+| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                          | agent              | M    | `[ ]` (shape-defining)                                                                      |
+| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037)        | agent              | L    | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
+| 3.0g | Freshness: the watch loop, its events and its invalidation                            | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
+| 3.0h | Search: the queries every consumer asks                                               | agent              | M    | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
+| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine                                     | agent              | M    | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
+| 3.0j | Move the remaining consumers onto the engine                                          | agent              | L    | `[ ]`                                                                                       |
+| 3.0k | Grow the recorded gate to cover the engine's contract                                 | agent              | S    | `[ ]`                                                                                       |
+| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                            | agent              | S    | `[ ]`                                                                                       |
+| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                 | agent              | M    | `[ ]`                                                                                       |
+| 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038)                | agent              | L    | `[ ]`                                                                                       |
 | 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
-| 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent | M | `[ ]` |
-| 3.0q | Merge what 3.0p found worth keeping, delete the rest | agent | M–L | ` [ ] ` (content decided by 3.0p) |
-| 3.0r | The index grows members and annotations (DEC-029 format change) | agent | M | ` [ ] ` — what 3.0h's Do asked for and its model could not answer |
-| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace | agent | M | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
-| 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
-| 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
-| 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |
-| 3.4 | The `@Circular` two-phase form | agent | ? | `[TBD]` — waits on how a lazily-resolved dependency is spelled |
-| 3.5 | `init*` methods in creation order | agent | S | `[TBD]` — waits on the initialisation seam |
-| 3.6 | Region markers above the thresholds | agent | S | `[TBD]` — waits on the generated layout |
-| 3.7 | Cross-context `dependencies()` / `ChildContext` creation | agent | M | `[TBD]` — waits on context-to-context creation |
-| 3.8 | The dependency-graph report page | agent | M | `[TBD]` — waits on the graph model being settled |
-| 3.9 | Drive the generator from the dev-time pass and watch mode | agent | M | `[TBD]` — waits on 7.8 and the shape |
-| 3.10 | Retire `hipster-ioc-test`'s hand-written context | agent | S–M | `[TBD]` — waits on DEC-036 being `Accepted` |
-| 3.11 | Editor-agnostic graph navigation + embedded host | human | ? | `[TBD]` — waits on 3.8, or gets dropped with a reason |
-| 4.1 | Replace `WIDENING_CHAINS` with supertype resolution | agent | S–M | `[x]` |
-| 4.2 | merge-java Phase 13 step 1 — review render | agent | M | `[ ]` |
-| 4.3 | merge-java Phase 13 step 2 — action display + sticky decisions | agent | M | `[ ]` |
-| 4.4 | merge-java Phase 13 step 3 — LLM proposer behind the gate | agent | M | `[ ]` |
-| 4.5 | Residual structural conflict should not veto a partly-overlapping block | agent | S–M | `[ ]` |
-| 5.1 | webview Phase 6 — headless parity as a build gate | agent | M | `[ ]` |
-| 5.2 | Record the webview Q3/Q5 answers (Q2 by delivery) | agent + maintainer | S | `[ ]` |
-| 5.3 | ACP go/no-go spike | human | S | `[ ]` |
-| 5.4 | Eclipse Phase 5 — p2 update site (after Q2) | agent | M | `[ ]` |
-| 6.1 | `FieldAnnotation` exposure in view enums | agent | M | `[ ]` |
-| 6.2 | Deep tracking: generator wiring 6.5 + patch applier | agent | L | `[ ]` |
-| 6.3 | Decide advisory → hard rule enforcement | agent + maintainer | M | `[ ]` |
-| 6.4 | Type divergence analyzer + converter manifest (DEC-006) | agent | L | `[ ]` |
-| 6.5 | Projection/DTO marker pattern (DEC-003/DEC-007) | agent | L | `[ ]` |
-| 7.1 | jwa-sidecar reads the client's indentation | agent | S | `[ ]` |
-| 7.2 | Agent web UI remote-jump front-end | agent | S | `[ ]` |
-| 7.3 | `View1Builder.merge` + proxy merge | agent | M | `[ ]` |
-| 7.4 | Documentation front door + cross-references | agent | S | `[ ]` |
-| 7.5 | Agent OpenRewrite tool prototype | agent | M | `[ ]` |
-| 7.6 | Decide the three `todo.java_watch2.md` remainders | agent + maintainer | S | `[ ]` |
-| 7.7 | Manual-mode CLI for DEC-W008 (`metadata parse`) | agent | S | `[ ]` |
-| 7.8 | Two kinds of generator: file-scoped and project-scoped | agent | M | `[ ]` |
-| 7.9 | Set up the `jsx6` checkout every UI is built from (rule § 2.9) | agent | S–M | `[ ]` |
-| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps) | agent | M | `[ ]` |
-| 8.1 | JetBrains maintainer questions + IDE observations | human | — | `[ ]` |
-| 8.2 | Eclipse observations, then Q2 | human | — | `[ ]` |
-| 8.3 | Agent IDE hooks | human decides | — | `[ ]` |
-| 8.4 | Zed ACP run | human | — | `[ ]` |
-| 9.1 | Coverage check | agent | S | `[ ]` |
-| 9.2 | Archive the superseded plans | agent | S | `[ ]` |
-| 9.3 | Remove local scratch (`.kilo` plans, worktree, stray files) | agent | S | `[ ]` |
-| 9.4 | Retire the per-plan open lists | agent | S | `[ ]` |
-| 9.5 | Full sweep (gate + links + examples) | agent | S | `[ ]` |
-| 9.6 | Close the books | agent | S | `[ ]` |
+| 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent              | M    | `[ ]`                                                                                       |
+| 3.0q | Merge what 3.0p found worth keeping, delete the rest                                  | agent              | M–L  | ` [ ] ` (content decided by 3.0p)                                                           |
+| 3.0r | The index grows members and annotations (DEC-029 format change)                       | agent              | M    | ` [ ] ` — what 3.0h's Do asked for and its model could not answer                           |
+| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace     | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
+| 3.1  | The hipster-ioc ADR                                                                   | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
+| 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                  | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |
+| 3.3  | Make the hipster-ioc generator runnable and documented                                | agent              | M    | `[x]` (prototype)                                                                           |
+| 3.4  | The `@Circular` two-phase form                                                        | agent              | ?    | `[TBD]` — waits on how a lazily-resolved dependency is spelled                              |
+| 3.5  | `init*` methods in creation order                                                     | agent              | S    | `[TBD]` — waits on the initialisation seam                                                  |
+| 3.6  | Region markers above the thresholds                                                   | agent              | S    | `[TBD]` — waits on the generated layout                                                     |
+| 3.7  | Cross-context `dependencies()` / `ChildContext` creation                              | agent              | M    | `[TBD]` — waits on context-to-context creation                                              |
+| 3.8  | The dependency-graph report page                                                      | agent              | M    | `[TBD]` — waits on the graph model being settled                                            |
+| 3.9  | Drive the generator from the dev-time pass and watch mode                             | agent              | M    | `[TBD]` — waits on 7.8 and the shape                                                        |
+| 3.10 | Retire `hipster-ioc-test`'s hand-written context                                      | agent              | S–M  | `[TBD]` — waits on DEC-036 being `Accepted`                                                 |
+| 3.11 | Editor-agnostic graph navigation + embedded host                                      | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
+| 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                   | agent              | S–M  | `[x]`                                                                                       |
+| 4.2  | merge-java Phase 13 step 1 — review render                                            | agent              | M    | `[ ]`                                                                                       |
+| 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                        | agent              | M    | `[ ]`                                                                                       |
+| 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                             | agent              | M    | `[ ]`                                                                                       |
+| 4.5  | Residual structural conflict should not veto a partly-overlapping block               | agent              | S–M  | `[ ]`                                                                                       |
+| 5.1  | webview Phase 6 — headless parity as a build gate                                     | agent              | M    | `[ ]`                                                                                       |
+| 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                     | agent + maintainer | S    | `[ ]`                                                                                       |
+| 5.3  | ACP go/no-go spike                                                                    | human              | S    | `[ ]`                                                                                       |
+| 5.4  | Eclipse Phase 5 — p2 update site (after Q2)                                           | agent              | M    | `[ ]`                                                                                       |
+| 6.1  | `FieldAnnotation` exposure in view enums                                              | agent              | M    | `[ ]`                                                                                       |
+| 6.2  | Deep tracking: generator wiring 6.5 + patch applier                                   | agent              | L    | `[ ]`                                                                                       |
+| 6.3  | Decide advisory → hard rule enforcement                                               | agent + maintainer | M    | `[ ]`                                                                                       |
+| 6.4  | Type divergence analyzer + converter manifest (DEC-006)                               | agent              | L    | `[ ]`                                                                                       |
+| 6.5  | Projection/DTO marker pattern (DEC-003/DEC-007)                                       | agent              | L    | `[ ]`                                                                                       |
+| 7.1  | jwa-sidecar reads the client's indentation                                            | agent              | S    | `[ ]`                                                                                       |
+| 7.2  | Agent web UI remote-jump front-end                                                    | agent              | S    | `[ ]`                                                                                       |
+| 7.3  | `View1Builder.merge` + proxy merge                                                    | agent              | M    | `[ ]`                                                                                       |
+| 7.4  | Documentation front door + cross-references                                           | agent              | S    | `[ ]`                                                                                       |
+| 7.5  | Agent OpenRewrite tool prototype                                                      | agent              | M    | `[ ]`                                                                                       |
+| 7.6  | Decide the three `todo.java_watch2.md` remainders                                     | agent + maintainer | S    | `[ ]`                                                                                       |
+| 7.7  | Manual-mode CLI for DEC-W008 (`metadata parse`)                                       | agent              | S    | `[ ]`                                                                                       |
+| 7.8  | Two kinds of generator: file-scoped and project-scoped                                | agent              | M    | `[ ]`                                                                                       |
+| 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                        | agent              | S–M  | `[ ]`                                                                                       |
+| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)              | agent              | M    | `[ ]`                                                                                       |
+| 8.1  | JetBrains maintainer questions + IDE observations                                     | human              | —    | `[ ]`                                                                                       |
+| 8.2  | Eclipse observations, then Q2                                                         | human              | —    | `[ ]`                                                                                       |
+| 8.3  | Agent IDE hooks                                                                       | human decides      | —    | `[ ]`                                                                                       |
+| 8.4  | Zed ACP run                                                                           | human              | —    | `[ ]`                                                                                       |
+| 9.1  | Coverage check                                                                        | agent              | S    | `[ ]`                                                                                       |
+| 9.2  | Archive the superseded plans                                                          | agent              | S    | `[ ]`                                                                                       |
+| 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                           | agent              | S    | `[ ]`                                                                                       |
+| 9.4  | Retire the per-plan open lists                                                        | agent              | S    | `[ ]`                                                                                       |
+| 9.5  | Full sweep (gate + links + examples)                                                  | agent              | S    | `[ ]`                                                                                       |
+| 9.6  | Close the books                                                                       | agent              | S    | `[ ]`                                                                                       |

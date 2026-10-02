@@ -4,11 +4,11 @@ Machine-written and regenerable, so the whole subtree is ignored by
 `.jcodebuddy/.gitignore`; only the `README.md` files are tracked, so the shape of the
 tree is visible without carrying the data.
 
-| Subdir | Written by | Contents |
-|---|---|---|
-| `entity/` | a generation pass: `scripts\gen.cmd` (manual or watched), this module's explicit, phase-less `exec:java@hipster-entity-generate` goal, or `EntityRegenerationWatcher`. No Maven build writes it | one `<Entity>.metadata.json` per entity/view, plus `generation.json` — the run record of the last pass (revision, artifact, roots, flags, counts) |
-| `watch/` | the watch agent's `MetadataCache` and `AuditManager` | `metadata.db` checksum cache, plus `audit/<toolSet>/<timestamp>_<action>/{manifest.json,summary.md,before/,after/}` |
-| `project/` | whole-project metadata passes | `index.fury` and related index files |
+| Subdir     | Written by                                           | Contents                             |
+| ---------- | ---------------------------------------------------- | ------------------------------------ |
+| `entity/`  | a generation pass: `scripts\gen.cmd` (manual or watched), this module's explicit, phase-less `exec:java@hipster-entity-generate` goal, or `EntityRegenerationWatcher`. No Maven build writes it | one `<Entity>.metadata.json` per entity/view, plus `generation.json` — the run record of the last pass (revision, artifact, roots, flags, counts) |
+| `watch/`   | the watch agent's `MetadataCache` and `AuditManager` | `metadata.db` checksum cache, plus `audit/<toolSet>/<timestamp>_<action>/{manifest.json,summary.md,before/,after/}` |
+| `project/` | whole-project metadata passes                        | `index.fury` and related index files |
 
 To commit a subtree as a contract instead, add an opt-in rule to
 `.jcodebuddy/.gitignore`, for example:

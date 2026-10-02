@@ -39,11 +39,11 @@ too?". Three cases are excluded by design, and the reasoning, worked examples an
 enforcement map are written up in full in
 [`DESIGN_NEVER_AUTO_RESOLVED.md`](DESIGN_NEVER_AUTO_RESOLVED.md):
 
-| Excluded | Conflict types | Instead |
-|---|---|---|
-| Structural change (members added/removed incompatibly) | `STRUCTURAL_CHANGE` | Manual, with a per-side diff summary |
-| Public contract change | `API_INCOMPATIBILITY` | Manual, naming the exact contract elements that moved |
-| Overlapping edits to one method body | `METHOD_BODY_CHANGE` (overlap only) | Disjoint edits combined for `REVIEW`; overlapping edits reported |
+| Excluded                                               | Conflict types                      | Instead                                                          |
+| ------------------------------------------------------ | ----------------------------------- | ---------------------------------------------------------------- |
+| Structural change (members added/removed incompatibly) | `STRUCTURAL_CHANGE`                 | Manual, with a per-side diff summary                             |
+| Public contract change                                 | `API_INCOMPATIBILITY`               | Manual, naming the exact contract elements that moved            |
+| Overlapping edits to one method body                   | `METHOD_BODY_CHANGE` (overlap only) | Disjoint edits combined for `REVIEW`; overlapping edits reported |
 
 The governing asymmetry: an **additive** change (both sides add, neither removes)
 has a correct answer that is a function of its inputs, and getting it wrong
@@ -112,18 +112,18 @@ Consequence for the workstreams below: improving these cases means better
 
 Ten resolvers, one per conflict type:
 
-| Resolver | Outcome |
-|---|---|
-| `ImportConflictResolver` | Union of imports, rendered as valid statements |
-| `CommentAddConflictResolver` | Union of comments, de-duplicated |
-| `ConstantAddConflictResolver` | Union; review when a name has different values |
-| `OverloadAddConflictResolver` | Both kept if parameter lists differ; review if identical |
-| `TypeChangeConflictResolver` | Adopts the wider type; review if unrelated |
-| `MethodBodyChangeConflictResolver` | Combines disjoint edits for review |
-| `RenameConflictResolver` | Offers the competing names; sticky |
-| `PackageChangeConflictResolver` | Adopts a one-sided move; sticky when both moved |
-| `StructuralChangeConflictResolver` | Always manual, with a structural diff summary |
-| `ApiIncompatibilityConflictResolver` | Always manual, naming the moved contract element |
+| Resolver                             | Outcome                                                  |
+| ------------------------------------ | -------------------------------------------------------- |
+| `ImportConflictResolver`             | Union of imports, rendered as valid statements           |
+| `CommentAddConflictResolver`         | Union of comments, de-duplicated                         |
+| `ConstantAddConflictResolver`        | Union; review when a name has different values           |
+| `OverloadAddConflictResolver`        | Both kept if parameter lists differ; review if identical |
+| `TypeChangeConflictResolver`         | Adopts the wider type; review if unrelated               |
+| `MethodBodyChangeConflictResolver`   | Combines disjoint edits for review                       |
+| `RenameConflictResolver`             | Offers the competing names; sticky                       |
+| `PackageChangeConflictResolver`      | Adopts a one-sided move; sticky when both moved          |
+| `StructuralChangeConflictResolver`   | Always manual, with a structural diff summary            |
+| `ApiIncompatibilityConflictResolver` | Always manual, naming the moved contract element         |
 
 ## Phase 4 — Detection [done]
 

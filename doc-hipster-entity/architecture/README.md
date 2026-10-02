@@ -112,11 +112,11 @@ public interface PersonUpdateForm extends PersonCreateForm, PersonEntity {}
 
 Use `@FieldSource` on view interface methods to declare the data origin of each field:
 
-| Kind | Meaning | Example |
-|------|---------|---------|
-| `COLUMN` | Directly mapped to a DB column (default) | `String firstName()` |
-| `DERIVED` | Computed from other fields, not stored | `@FieldSource(kind=DERIVED, expression="...")` |
-| `JOINED` | Sourced from a related table via join | `@FieldSource(kind=JOINED, relation="department.name")` |
+| Kind      | Meaning                                  | Example                                                 |
+| --------- | ---------------------------------------- | ------------------------------------------------------- |
+| `COLUMN`  | Directly mapped to a DB column (default) | `String firstName()`                                    |
+| `DERIVED` | Computed from other fields, not stored   | `@FieldSource(kind=DERIVED, expression="...")`          |
+| `JOINED`  | Sourced from a related table via join    | `@FieldSource(kind=JOINED, relation="department.name")` |
 
 When `@FieldSource` is absent, the field defaults to `COLUMN`.
 

@@ -11,29 +11,29 @@ webview/core/README.md         this file
 
 ## What is in the module
 
-| Type | Responsibility |
-| --- | --- |
-| `InjectedBridge` | the exact script that defines `window.openFile` and `window.__jcbWebViewBridge`, with the host's transport passed in as `{}` |
-| `BridgeMessage` | parses the JSON that script sends; ignores unknown kinds so a newer page cannot break an older host |
-| `AllowedOrigins` | the origin allow-list, where **an empty list denies everyone** |
-| `RateLimiter`, `Clock` | the sliding window shared by every transport, with an injectable clock so policy is tested by moving time, not sleeping |
-| `UrlNormalizer` | address-bar text (or a `#L42` URL) → what to load, with the file-existence probe injected |
+| Type                             | Responsibility                                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `InjectedBridge`                 | the exact script that defines `window.openFile` and `window.__jcbWebViewBridge`, with the host's transport passed in as `{}` |
+| `BridgeMessage`                  | parses the JSON that script sends; ignores unknown kinds so a newer page cannot break an older host |
+| `AllowedOrigins`                 | the origin allow-list, where **an empty list denies everyone**                                      |
+| `RateLimiter`, `Clock`           | the sliding window shared by every transport, with an injectable clock so policy is tested by moving time, not sleeping |
+| `UrlNormalizer`                  | address-bar text (or a `#L42` URL) → what to load, with the file-existence probe injected           |
 | `PathResolver`, `PathResolution` | turns a page's path into an absolute one, and refuses anything that escapes the project root (the *path jail*) |
-| `EditorHost`, `NullHost` | what a host must implement to be driven (open, reveal, select, capabilities), and the host that drives nothing |
+| `EditorHost`, `NullHost`         | what a host must implement to be driven (open, reveal, select, capabilities), and the host that drives nothing |
 | `Navigator`, `NavigationOutcome` | the one place a navigation request becomes a host call: rate limit → resolve → jail → host, returning *why* a request was refused rather than a bare false |
-| `PageServer` | serves one project file to a page, and decides which files a page may read — the route that used to exist only in the VS Code host and answered `Access-Control-Allow-Origin: *` |
-| `HostHealth` | the document every host answers `GET /health` with, so a page reads the same keys from all of them |
-| `TextRange` | a one-based span, so nothing converts at the boundary |
+| `PageServer`                     | serves one project file to a page, and decides which files a page may read — the route that used to exist only in the VS Code host and answered `Access-Control-Allow-Origin: *` |
+| `HostHealth`                     | the document every host answers `GET /health` with, so a page reads the same keys from all of them  |
+| `TextRange`                      | a one-based span, so nothing converts at the boundary                                               |
 
 ## Why it exists
 
 Before this module the same security model existed three times and disagreed with itself:
 
-| Host | Auth | CORS on the state-changing route |
-| --- | --- | --- |
-| `webview/webview-jetbrains` (`HttpBridgeService`) | empty allow-list denies; token or allowed origin | sent to an allowed origin only |
-| `webview/webview-vscode` (`HttpBridge.ts`) | `allowedOrigins` list, empty denies *only when an `Origin` is present* | `/file/` answers `Access-Control-Allow-Origin: *` |
-| `jwa-sidecar` (`SidecarApp`) | none | `Access-Control-Allow-Origin: *` on `/jump` |
+| Host                                              | Auth                                                                   | CORS on the state-changing route                  |
+| ------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------- |
+| `webview/webview-jetbrains` (`HttpBridgeService`) | empty allow-list denies; token or allowed origin                       | sent to an allowed origin only                    |
+| `webview/webview-vscode` (`HttpBridge.ts`)        | `allowedOrigins` list, empty denies *only when an `Origin` is present* | `/file/` answers `Access-Control-Allow-Origin: *` |
+| `jwa-sidecar` (`SidecarApp`)                      | none                                                                   | `Access-Control-Allow-Origin: *` on `/jump`       |
 
 Two of the three would therefore let any page in the user's browser drive the editor. The module makes
 the safe behaviour the only one a host can get by accident: `AllowedOrigins` cannot be forgotten, the
@@ -47,13 +47,13 @@ them saying what the host could actually do. `HostHealth` fixes that, and
 
 ## Consumers
 
-| Consumer | How |
-| --- | --- |
-| `webview/core/webviewd` | the reference host, in the same reactor: its routes, page serving (`PageServer`), port claim (`HostPortClaim`), descriptor (`HostDescriptor`), write surface (`WriteSurface`, `EditService`, `CheckpointStore`) and `/health` all come from this module |
+| Consumer                          | How |
+| --------------------------------- | --- |
+| `webview/core/webviewd`           | the reference host, in the same reactor: its routes, page serving (`PageServer`), port claim (`HostPortClaim`), descriptor (`HostDescriptor`), write surface (`WriteSurface`, `EditService`, `CheckpointStore`) and `/health` all come from this module |
 | `webview/eclipse/webview-eclipse` | same-reactor Maven dependency; the build **unpacks** `webview-core` (and Gson) into the bundle's own classes so the OSGi runtime never has to resolve them — the Eclipse host's navigator, page serving, port claim, descriptor, write surface and `/health` come from here |
-| `webview/webview-jetbrains` | Gradle dependency on `hr.hrg.jcodebuddy:webview-core`; its `NavigatorService` is the `EditorHost`, its HTTP bridge builds `/health` with `HostHealth`, and the bridge types come from here |
-| `webview/jwa-sidecar` | Maven dependency; the LSP sidecar's `/jump` uses `AllowedOrigins` + `RateLimiter` + `PathResolver`, and its `/health` uses `HostHealth` |
-| `webview/webview-vscode` | cannot consume a jar: it is checked against the same decision tables in `webview/conformance/bridge-decisions.json` (origins, CORS, rate limit, and the `/health` key list), which the Java tests and the TypeScript tests both read |
+| `webview/webview-jetbrains`       | Gradle dependency on `hr.hrg.jcodebuddy:webview-core`; its `NavigatorService` is the `EditorHost`, its HTTP bridge builds `/health` with `HostHealth`, and the bridge types come from here |
+| `webview/jwa-sidecar`             | Maven dependency; the LSP sidecar's `/jump` uses `AllowedOrigins` + `RateLimiter` + `PathResolver`, and its `/health` uses `HostHealth` |
+| `webview/webview-vscode`          | cannot consume a jar: it is checked against the same decision tables in `webview/conformance/bridge-decisions.json` (origins, CORS, rate limit, and the `/health` key list), which the Java tests and the TypeScript tests both read |
 
 The TypeScript host keeps its own {@code /file/} implementation — it cannot call a Java class — but not its
 own *decisions*: `PageServerTest` covers the Java route and `BridgePolicy.test.js` covers the decode-and-jail

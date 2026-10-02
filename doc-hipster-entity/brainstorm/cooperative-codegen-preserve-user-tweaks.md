@@ -113,16 +113,16 @@ annotate every block.
 
 ## User actions and what they trigger
 
-| User action                                                | Result              | Generator behaviour                   |
-| ---------------------------------------------------------- | ------------------- | ------------------------------------- |
-| Edit body, no markers used                                 | Preserved block     | Preserve edits.                       |
-| Delete the block, no markers used                          | Block missing       | Re-emit at canonical location.        |
-| Edit body, with the optional hint comment                  | Preserved block     | Preserve edits. Hint comment stays.   |
-| Delete the hint comment, keep the body                     | Preserved block     | Preserve body. (Hint is optional.)    |
+| User action                                                | Result              | Generator behaviour                    |
+| ---------------------------------------------------------- | ------------------- | -------------------------------------- |
+| Edit body, no markers used                                 | Preserved block     | Preserve edits.                        |
+| Delete the block, no markers used                          | Block missing       | Re-emit at canonical location.         |
+| Edit body, with the optional hint comment                  | Preserved block     | Preserve edits. Hint comment stays.    |
+| Delete the hint comment, keep the body                     | Preserved block     | Preserve body. (Hint is optional.)     |
 | Delete the body, keep the strict markers                   | Empty block         | Re-emit body between existing markers. |
-| Delete body **and** strict markers                         | Block missing       | Re-emit at canonical location.        |
-| Delete just the `// generator:end` marker                  | Dangling marker     | Re-emit the whole pair.               |
-| Add `@GeneratedFrozen` / `// generator:freeze` on file     | n/a (DEC-018)       | Leave the whole file alone.           |
+| Delete body **and** strict markers                         | Block missing       | Re-emit at canonical location.         |
+| Delete just the `// generator:end` marker                  | Dangling marker     | Re-emit the whole pair.                |
+| Add `@GeneratedFrozen` / `// generator:freeze` on file     | n/a (DEC-018)       | Leave the whole file alone.            |
 
 ## Patterns to make implicit detection robust and usable
 

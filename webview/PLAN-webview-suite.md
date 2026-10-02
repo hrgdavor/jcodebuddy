@@ -70,15 +70,15 @@ embeddable webview, is the first editor that is *only* reachable this way.
 
 ## 2. Where the code is today
 
-| Piece | Location | What it does | Reusable for this plan |
-| --- | --- | --- | --- |
-| Frozen page contract | `webview/kit/doc/contract.md` | `window.openFile(path, line, column)`, `data-open`/`data-line`, `GET /open`, `GET /health`, auth rules, §7 host checklist | **Yes — the base to extend, not replace** |
-| JetBrains host | `webview/webview-jetbrains` (Java, JCEF) | Injects `window.openFile` after each main-frame load; HTTP fallback on port 18881; `NavigatorService` resolves the path, rate-limits, opens the editor | Path resolution + rate-limit logic ports directly |
-| VS Code host | `webview/webview-vscode` (TS) | Same contract, port 18882, **plus** `/file/<path>` (a local static file server) and `postMessage` bridging inside an iframe | `/file/` server is the seed of the sidecar's page server |
-| JWA sidecar | `jwa-sidecar` (Java, LSP4J, shaded jar) | LSP server on stdio **and** an HTTP jump service on **port 7979**, `GET /jump?uri=&line=&column=` → custom `mytool/jump` notification **and** standard `window/showDocument` | **Yes — this is the LSP sidecar, already half-built** |
-| Page examples + harness | `webview/kit/examples/` | Two page shapes, a CDP smoke test (49 assertions, 4 pages), offline microlighter highlighting | The parity gate for "headless is not lacking" |
-| JWA/JSWA IDE clients | `vscode-jwa`, `vscode-jswa`, `intellij-jwa`, `intellij-jswa` | Thin clients that launch a sidecar for the Java/JS agent products | Host adapters of the same sidecar |
-| Eclipse host *(added after this plan was written)* | `webview/eclipse/webview-eclipse` (Java, SWT Browser) | The fifth host, built under [`PLAN-eclipse-host.md`](PLAN-eclipse-host.md): a workbench view with the injected bridge, the same `/health`, port claim and write verbs — Phases 1–3 implemented 2026-09-27 | Consumes `webview-core` from birth, so the "three times" duplication below never included it |
+| Piece                                              | Location                                                     | What it does                                                                                  | Reusable for this plan                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Frozen page contract                               | `webview/kit/doc/contract.md`                                | `window.openFile(path, line, column)`, `data-open`/`data-line`, `GET /open`, `GET /health`, auth rules, §7 host checklist | **Yes — the base to extend, not replace**                        |
+| JetBrains host                                     | `webview/webview-jetbrains` (Java, JCEF)                     | Injects `window.openFile` after each main-frame load; HTTP fallback on port 18881; `NavigatorService` resolves the path, rate-limits, opens the editor | Path resolution + rate-limit logic ports directly |
+| VS Code host                                       | `webview/webview-vscode` (TS)                                | Same contract, port 18882, **plus** `/file/<path>` (a local static file server) and `postMessage` bridging inside an iframe | `/file/` server is the seed of the sidecar's page server       |
+| JWA sidecar                                        | `jwa-sidecar` (Java, LSP4J, shaded jar)                      | LSP server on stdio **and** an HTTP jump service on **port 7979**, `GET /jump?uri=&line=&column=` → custom `mytool/jump` notification **and** standard `window/showDocument` | **Yes — this is the LSP sidecar, already half-built** |
+| Page examples + harness                            | `webview/kit/examples/`                                      | Two page shapes, a CDP smoke test (49 assertions, 4 pages), offline microlighter highlighting | The parity gate for "headless is not lacking"                                                |
+| JWA/JSWA IDE clients                               | `vscode-jwa`, `vscode-jswa`, `intellij-jwa`, `intellij-jswa` | Thin clients that launch a sidecar for the Java/JS agent products                             | Host adapters of the same sidecar                                                            |
+| Eclipse host *(added after this plan was written)* | `webview/eclipse/webview-eclipse` (Java, SWT Browser)        | The fifth host, built under [`PLAN-eclipse-host.md`](PLAN-eclipse-host.md): a workbench view with the injected bridge, the same `/health`, port claim and write verbs — Phases 1–3 implemented 2026-09-27 | Consumes `webview-core` from birth, so the "three times" duplication below never included it |
 
 **The duplication that motivates the rewrite.** The auth model, CORS emission, allow-list semantics, and the
 "20 navigations / 20 s" rate limit exist **three times** — `HttpBridgeService.java`, `HttpBridge.ts`, and
@@ -88,18 +88,18 @@ no host that works without an editor.
 
 ## 3. Decisions
 
-| # | Decision | Choice | Why | Status |
-| --- | --- | --- | --- | --- |
-| D1 | Where the page is served from | **A standalone sidecar is the canonical host.** IDE plugins become thin adapters that either proxy to it or keep injecting into their own webview | The page must work with no editor; only a separate process can exist in all cases. Avoids a *third* copy of bridge/auth code in ZED | proposed |
-| D2 | How the webview gets a host per editor | JetBrains/VS Code: **unchanged injection** (keep working exactly as today). ZED: **no embedded webview exists**, so the standalone window is the webview | Do not regress two working hosts to gain a third. Zed extensions cannot create UI panels (see §5) | proposed |
-| D3 | ZED integration order | **Tier 1 LSP channel (`window/showDocument` + `workspace/applyEdit`) → Tier 2 `zed` CLI adapter as the fallback when no LSP client is connected → Tier 3 Zed extension (`process:exec` / language-server registration) for distribution → Tier 4 ACP/MCP as a separate surface** | Tier 1's *verbs* are confirmed working on the installed 1.21.0 (§5.5, Phase 0) and need no ZED cooperation. **Corrected 2026-09-25:** the registration half of Tier 1 needs an **extension** — Zed refuses config-only custom server names (§5.4, A′) — so Tier 3 is a prerequisite for Tier 1, not merely distribution; and Tier 2 cannot place a caret on Windows (§5.3, B), so it can only open files | proposed, **corrected** |
-| D4 | Is a ZED plugin that "opens a port" possible | **Yes, but not as a webview.** Zed extensions are Rust→`wasm32-wasip2`, cannot create panels/views, and their granted capabilities are only `process:exec`, `download_file`, `npm:install`. So: an extension may **launch our sidecar** (Tier 3), never host a page | Zed docs, [Developing Extensions](https://zed.dev/docs/extensions/developing-extensions), [Extension Capabilities](https://zed.dev/docs/extensions/capabilities) | **confirmed** |
-| D5 | ACP as the integration | **Deferred to an exploration phase, and explicitly not the webview's transport.** Zed deprecated ACP *extensions* in favour of the [ACP Registry](https://agentclientprotocol.com/registry) as of Zed v1.5.0 (we run 1.21.0), and ACP's content model has no HTML (§5.6) | Zed docs, [Agent Server Extensions](https://zed.dev/docs/extensions/agent-servers); the window is served over HTTP, and ACP would only ever be an agent-tool face | **confirmed (deprecation + no HTML)** |
-| D6 | "File changes from the webview" | A **digest-guarded edit API** (`/api/v1/applyEdit`) that writes to disk through one command layer, with `dryRun`, and never merges silently | Ambiguous in the request — see §10 Q1. This choice is the conservative default: the browser cannot clobber a file the reader did not see | proposed |
-| D7 | Port model | Sidecar picks an **ephemeral port by default** and publishes it in a per-workspace descriptor file; a fixed port is opt-in | A fixed port collides between projects and must not be assumed; the current docs already warn "never assume one" | proposed |
-| D8 | Security | **One** implementation, reused by every host: loopback bind, token in a `0600` file under `.jcodebuddy/webview/`, allow-list, rate limit, and **no `Access-Control-Allow-Origin: *`** on any state-changing route | The sidecar's `/jump` currently violates the contract's own §3 rules; a write API makes that a file-writing hole | proposed |
-| D9 | Repo layout | Sidecar/LSP code moves **under `webview/`** as siblings of the two plugins | Maintainer instruction in this session; the sidecar and the webview are the same product | proposed |
-| D10 | Headless parity | **The sidecar is the reference host.** A verb exists only when the sidecar implements it; each IDE host declares support per verb and the page feature-detects through `/health` | "Headless mode should not be lacking any features" becomes mechanically checkable instead of aspirational | proposed |
+| #   | Decision                                     | Choice                                                                     | Why                                                                                               | Status                                |
+| --- | -------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| D1  | Where the page is served from                | **A standalone sidecar is the canonical host.** IDE plugins become thin adapters that either proxy to it or keep injecting into their own webview | The page must work with no editor; only a separate process can exist in all cases. Avoids a *third* copy of bridge/auth code in ZED | proposed |
+| D2  | How the webview gets a host per editor       | JetBrains/VS Code: **unchanged injection** (keep working exactly as today). ZED: **no embedded webview exists**, so the standalone window is the webview | Do not regress two working hosts to gain a third. Zed extensions cannot create UI panels (see §5) | proposed |
+| D3  | ZED integration order                        | **Tier 1 LSP channel (`window/showDocument` + `workspace/applyEdit`) → Tier 2 `zed` CLI adapter as the fallback when no LSP client is connected → Tier 3 Zed extension (`process:exec` / language-server registration) for distribution → Tier 4 ACP/MCP as a separate surface** | Tier 1's *verbs* are confirmed working on the installed 1.21.0 (§5.5, Phase 0) and need no ZED cooperation. **Corrected 2026-09-25:** the registration half of Tier 1 needs an **extension** — Zed refuses config-only custom server names (§5.4, A′) — so Tier 3 is a prerequisite for Tier 1, not merely distribution; and Tier 2 cannot place a caret on Windows (§5.3, B), so it can only open files | proposed, **corrected** |
+| D4  | Is a ZED plugin that "opens a port" possible | **Yes, but not as a webview.** Zed extensions are Rust→`wasm32-wasip2`, cannot create panels/views, and their granted capabilities are only `process:exec`, `download_file`, `npm:install`. So: an extension may **launch our sidecar** (Tier 3), never host a page | Zed docs, [Developing Extensions](https://zed.dev/docs/extensions/developing-extensions), [Extension Capabilities](https://zed.dev/docs/extensions/capabilities) | **confirmed** |
+| D5  | ACP as the integration                       | **Deferred to an exploration phase, and explicitly not the webview's transport.** Zed deprecated ACP *extensions* in favour of the [ACP Registry](https://agentclientprotocol.com/registry) as of Zed v1.5.0 (we run 1.21.0), and ACP's content model has no HTML (§5.6) | Zed docs, [Agent Server Extensions](https://zed.dev/docs/extensions/agent-servers); the window is served over HTTP, and ACP would only ever be an agent-tool face | **confirmed (deprecation + no HTML)** |
+| D6  | "File changes from the webview"              | A **digest-guarded edit API** (`/api/v1/applyEdit`) that writes to disk through one command layer, with `dryRun`, and never merges silently | Ambiguous in the request — see §10 Q1. This choice is the conservative default: the browser cannot clobber a file the reader did not see | proposed |
+| D7  | Port model                                   | Sidecar picks an **ephemeral port by default** and publishes it in a per-workspace descriptor file; a fixed port is opt-in | A fixed port collides between projects and must not be assumed; the current docs already warn "never assume one" | proposed |
+| D8  | Security                                     | **One** implementation, reused by every host: loopback bind, token in a `0600` file under `.jcodebuddy/webview/`, allow-list, rate limit, and **no `Access-Control-Allow-Origin: *`** on any state-changing route | The sidecar's `/jump` currently violates the contract's own §3 rules; a write API makes that a file-writing hole | proposed |
+| D9  | Repo layout                                  | Sidecar/LSP code moves **under `webview/`** as siblings of the two plugins | Maintainer instruction in this session; the sidecar and the webview are the same product          | proposed                              |
+| D10 | Headless parity                              | **The sidecar is the reference host.** A verb exists only when the sidecar implements it; each IDE host declares support per verb and the page feature-detects through `/health` | "Headless mode should not be lacking any features" becomes mechanically checkable instead of aspirational | proposed |
 
 ## 4. Target layout
 
@@ -235,17 +235,17 @@ Phase 0's experiments against the installed build ([`PHASE0-ZED-FINDINGS.md`](PH
 `window.openFile` stays exactly as frozen. The sidecar surface becomes the reference, and every host adapter
 implements as many verbs as it can — the page never assumes:
 
-| Verb | HTTP (`/api/v1`) | Capability key |
-| --- | --- | --- |
-| open a file at a line | `GET /open` (frozen, kept) | `open` |
-| reveal in the project tree | `POST /reveal` | `reveal` |
-| select a range / highlight | `POST /select` | `select` |
-| **propose + apply an edit** | `POST /applyEdit` | `edit` |
-| **show a diff of a proposal** | `POST /diff` | `diff` |
-| **undo / redo the last applied edit** | `POST /undo`, `POST /redo` | `undo` |
-| notify the host a page changed | `POST /refresh` | `refresh` |
-| stream file-change events (SSE) | `GET /events` | `watch` |
-| what this host can do | `GET /health` (extended, backward compatible) | — |
+| Verb                                  | HTTP (`/api/v1`)                              | Capability key |
+| ------------------------------------- | --------------------------------------------- | -------------- |
+| open a file at a line                 | `GET /open` (frozen, kept)                    | `open`         |
+| reveal in the project tree            | `POST /reveal`                                | `reveal`       |
+| select a range / highlight            | `POST /select`                                | `select`       |
+| **propose + apply an edit**           | `POST /applyEdit`                             | `edit`         |
+| **show a diff of a proposal**         | `POST /diff`                                  | `diff`         |
+| **undo / redo the last applied edit** | `POST /undo`, `POST /redo`                    | `undo`         |
+| notify the host a page changed        | `POST /refresh`                               | `refresh`      |
+| stream file-change events (SSE)       | `GET /events`                                 | `watch`        |
+| what this host can do                 | `GET /health` (extended, backward compatible) | —              |
 
 `/health` grows a `capabilities` array and a `bridgeVersion`, so a page decides its ladder from data, not from a
 hard-coded port: `openFile` → editor host → localhost verbs → clipboard. The existing `window.__jcbWebViewBridge`
@@ -659,15 +659,15 @@ The Eclipse IDE host is planned and gated under its own plan, [`PLAN-eclipse-hos
 
 ## 9. Risks
 
-| Risk | Impact | Mitigation |
-| --- | --- | --- |
-| Zed's `ShowDocument`/`ApplyWorkspaceEdit` handlers differ in the released 1.21.0 from `main` | Tier 1 degrades to Tier 2 | Phase 0 observes them on the installed build before anything depends on them; the CLI/`zed://` adapter needs no LSP cooperation, only the documented CLI/URL surface |
+| Risk                                                                                         | Impact                                                     | Mitigation                                                                                      |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Zed's `ShowDocument`/`ApplyWorkspaceEdit` handlers differ in the released 1.21.0 from `main` | Tier 1 degrades to Tier 2                                  | Phase 0 observes them on the installed build before anything depends on them; the CLI/`zed://` adapter needs no LSP cooperation, only the documented CLI/URL surface |
 | A language server only runs when a matching file type is open, so a page opened before any file is touched has no channel | Navigation silently unavailable | Capability-aware ladder: the CLI adapter is the fallback, and `/health` says which host is live |
-| Zed extension capability policy changes or is restricted by the user | Auto-start stops working | Tiers 1 and 2 avoid extensions entirely; all three paths documented |
-| A free port is discovered by another local process / CSRF from a random web page | File writes triggered by a hostile page | Token required on every state-changing route, loopback bind, `Origin`-less requests refused unless the token is presented, rate limit, and the digest guard on writes |
-| The write API is the wrong interpretation of "trigger file changes" | Rework of Phase 3 | Phase 3 is deliberately after Phases 1–2, and §10 Q1 asks before it starts |
-| Moving `jwa-sidecar` breaks the JWA/JSWA clients and CI | Broken builds | The move is its own commit with a reactor build + the JWA client smoke path; the POM `relativePath` is the only path that changes |
-| Gradle needs `C:\Users\hrg\.gradle`, JDK 25 is not the default `java` | Host plugin builds fail confusingly | Every command in the phase notes pins `org.gradle.java.home` / `JAVA_HOME=…jdk-25`; already pinned in `gradle.properties` |
+| Zed extension capability policy changes or is restricted by the user                         | Auto-start stops working                                   | Tiers 1 and 2 avoid extensions entirely; all three paths documented                             |
+| A free port is discovered by another local process / CSRF from a random web page             | File writes triggered by a hostile page                    | Token required on every state-changing route, loopback bind, `Origin`-less requests refused unless the token is presented, rate limit, and the digest guard on writes |
+| The write API is the wrong interpretation of "trigger file changes"                          | Rework of Phase 3                                          | Phase 3 is deliberately after Phases 1–2, and §10 Q1 asks before it starts                      |
+| Moving `jwa-sidecar` breaks the JWA/JSWA clients and CI                                      | Broken builds                                              | The move is its own commit with a reactor build + the JWA client smoke path; the POM `relativePath` is the only path that changes |
+| Gradle needs `C:\Users\hrg\.gradle`, JDK 25 is not the default `java`                        | Host plugin builds fail confusingly                        | Every command in the phase notes pins `org.gradle.java.home` / `JAVA_HOME=…jdk-25`; already pinned in `gradle.properties` |
 | There is no supported headless SWT, so the Eclipse host's workbench half cannot run in a build (its plan's R22) | The fifth host's editor behaviour is not provable by tests | Narrow seams (`WorkspaceFiles`, `EclipseDocumentEditor`) with hand-written fakes; every workbench behaviour is an outstanding *observation* recorded in `doc/ide-observation-checklist.md` § 1a/§ 2a — claimed nowhere as observed |
 
 ## 10. Open questions (answer before the phase that needs them)

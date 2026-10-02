@@ -11,12 +11,12 @@ a path.
 The module has two families, and they are deliberately separate rather than two
 spellings of one thing:
 
-| Entry point | Starts from | Writes | Classpath |
-| --- | --- | --- | --- |
-| `MergeFileTool.forFile(path)` | one marked-up file on disk | the file, when asked; a fixture workspace for what remains | `classpath(...)` / `--classpath`, else the JVM's own |
-| `MergeFileTool.reverify(caseDir, resolver)` | a prepared fixture case | nothing (it reports) | the case's own reconstruction |
-| `MergeUtil.create(typeContext)` | three strings in memory | nothing | **required**: the caller passes one |
-| `MergeWorkflow` / `MergeBatch` | a repository, a branch, a path set | per its options | built per run from the repository root |
+| Entry point                                 | Starts from                        | Writes                                                     | Classpath                                            |
+| ------------------------------------------- | ---------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
+| `MergeFileTool.forFile(path)`               | one marked-up file on disk         | the file, when asked; a fixture workspace for what remains | `classpath(...)` / `--classpath`, else the JVM's own |
+| `MergeFileTool.reverify(caseDir, resolver)` | a prepared fixture case            | nothing (it reports)                                       | the case's own reconstruction                        |
+| `MergeUtil.create(typeContext)`             | three strings in memory            | nothing                                                    | **required**: the caller passes one                  |
+| `MergeWorkflow` / `MergeBatch`              | a repository, a branch, a path set | per its options                                            | built per run from the repository root               |
 
 The **single-file** family is the one this page is about: it exists because a merge
 in progress is one file at a time, and it is kept separate from the batch family
@@ -69,13 +69,13 @@ java -cp … com.codebuddy.merge.MergeFileTool <file> [--apply] [--apply-recorde
      [--no-fixtures] [--fixtures <dir>] [--branch <name>]
 ```
 
-| Flag | Meaning |
-|---|---|
-| `--apply` | write the safely resolved blocks back to the file (default is a dry run) |
-| `--apply-recorded` | also write blocks whose answer was replayed from this branch's recorded decisions |
-| `--no-fixtures` | do not prepare the temporary fixture workspace |
-| `--fixtures <dir>` | where workspaces are created (default: `${java.io.tmpdir}/merge-java-fixtures`) |
-| `--branch <name>` | the branch whose decision history is consulted (default: the repository's current branch) |
+| Flag                    | Meaning                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| `--apply`               | write the safely resolved blocks back to the file (default is a dry run)                  |
+| `--apply-recorded`      | also write blocks whose answer was replayed from this branch's recorded decisions         |
+| `--no-fixtures`         | do not prepare the temporary fixture workspace                                            |
+| `--fixtures <dir>`      | where workspaces are created (default: `${java.io.tmpdir}/merge-java-fixtures`)           |
+| `--branch <name>`       | the branch whose decision history is consulted (default: the repository's current branch) |
 | `--classpath <entries>` | the project's compile classpath, so a conflict about its own types can be **decided instead of escalated**. Entries are separated by the platform's path separator and may repeat; each must exist. They are **added to** the JVM classpath, which is what carries the platform |
 
 ## The classpath, and what it changes
@@ -153,17 +153,17 @@ A block's replacement is applied only when **all** of these hold:
 
 Everything else keeps its markers and becomes a fixture case:
 
-| Outcome | Meaning |
-|---|---|
-| `APPLIED_AUTO` | one automatic resolution covered the block |
-| `APPLIED_IDENTICAL_SIDES` | both sides were the same text; collapsed to one copy |
-| `APPLIED_RECORDED_DECISION` | a replayed sticky decision was written (opt-in) |
-| `LEFT_REVIEW` | viable, but a human must confirm - fixtured |
-| `LEFT_MANUAL` | no safe automatic answer - fixtured |
-| `LEFT_DEFERRED` | history has an answer; re-run with `applyRecordedDecisions(true)` - no fixture, the shape is already understood |
-| `LEFT_MULTIPLE_AUTOMATIC` | several automatic answers for one block cannot be composed safely - fixtured |
-| `LEFT_PARTIAL_RESOLUTION` | the automatic answer rewrites only part of the block - fixtured |
-| `LEFT_UNCLASSIFIED` | the sides differ but detection recognised no type - fixtured |
+| Outcome                     | Meaning                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `APPLIED_AUTO`              | one automatic resolution covered the block                                   |
+| `APPLIED_IDENTICAL_SIDES`   | both sides were the same text; collapsed to one copy                         |
+| `APPLIED_RECORDED_DECISION` | a replayed sticky decision was written (opt-in)                              |
+| `LEFT_REVIEW`               | viable, but a human must confirm - fixtured                                  |
+| `LEFT_MANUAL`               | no safe automatic answer - fixtured                                          |
+| `LEFT_DEFERRED`             | history has an answer; re-run with `applyRecordedDecisions(true)` - no fixture, the shape is already understood |
+| `LEFT_MULTIPLE_AUTOMATIC`   | several automatic answers for one block cannot be composed safely - fixtured |
+| `LEFT_PARTIAL_RESOLUTION`   | the automatic answer rewrites only part of the block - fixtured              |
+| `LEFT_UNCLASSIFIED`         | the sides differ but detection recognised no type - fixtured                 |
 
 ## The fixture workspace
 

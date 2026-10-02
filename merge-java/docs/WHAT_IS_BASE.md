@@ -11,12 +11,12 @@ wrong for the workflow this module targets.
 For a long-lived branch (`dev`) that periodically takes changes from its upstream
 (`main`):
 
-| Name in this module | What it is | Git equivalent |
-|---|---|---|
-| **`lastSynced`** | `main` exactly as it stood the **last time `main` was merged into `dev`** | the upstream commit recorded on `dev` at the last sync |
-| `ours` | `dev` as it is now | `dev` tip |
-| `theirs` | `main` as it is now | `main` tip |
-| `mergeBase` | the best common ancestor of `ours` and `theirs` | `git merge-base dev main` |
+| Name in this module | What it is                                                                | Git equivalent                                         |
+| ------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **`lastSynced`**    | `main` exactly as it stood the **last time `main` was merged into `dev`** | the upstream commit recorded on `dev` at the last sync |
+| `ours`              | `dev` as it is now                                                        | `dev` tip                                              |
+| `theirs`            | `main` as it is now                                                       | `main` tip                                             |
+| `mergeBase`         | the best common ancestor of `ours` and `theirs`                           | `git merge-base dev main`                              |
 
 `lastSynced` and `mergeBase` are **not the same commit**, and conflating them is the
 mistake this document exists to prevent.

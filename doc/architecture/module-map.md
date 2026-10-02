@@ -50,12 +50,12 @@ jcodebuddy-parent (POM)
 ### Layer 1: Framework Libraries
 The following modules have **no dependency** on any other JCodeBuddy module:
 
-| Module | Role |
-|--------|------|
-| `hipster-entity-api` | Shared entity interfaces and annotations |
-| `java-watch-core` | File monitoring, hashing, change detection |
-| `jwa-builder-api` | Lightweight annotations for JWA Builder |
-| `webview-core` | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
+| Module               | Role                                       |
+| -------------------- | ------------------------------------------ |
+| `hipster-entity-api` | Shared entity interfaces and annotations   |
+| `java-watch-core`    | File monitoring, hashing, change detection |
+| `jwa-builder-api`    | Lightweight annotations for JWA Builder    |
+| `webview-core`       | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
 
 `project-automation` used to be listed here and does not belong: it depends on Layer 2 modules, so it was
 never a Layer 1 library, and it is now not a library at all. It is one project's private dev-time
@@ -65,13 +65,13 @@ assistant — never installed, never deployed, and not depended on by anything (
 ### Layer 2: Add-on Libraries
 These modules depend on Layer 1:
 
-| Module | Depends On |
-|--------|-----------|
-| `hipster-entity-core` | `hipster-entity-api` |
-| `jwa-builder` | `jwa-builder-api` + `java-watch-core` |
+| Module                   | Depends On                                          |
+| ------------------------ | --------------------------------------------------- |
+| `hipster-entity-core`    | `hipster-entity-api`                                |
+| `jwa-builder`            | `jwa-builder-api` + `java-watch-core`               |
 | `hipster-entity-tooling` | `hipster-entity-api` + `hipster-entity-core` (test) |
-| `hipster-ioc-api` | `hipster-entity-api` |
-| `jcodebuddy-core` | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25` — DEC-030's one representation) and Jackson (`tools.jackson.core:jackson-databind`, the metadata JSON); JUnit in test scope |
+| `hipster-ioc-api`        | `hipster-entity-api`                                |
+| `jcodebuddy-core`        | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25` — DEC-030's one representation) and Jackson (`tools.jackson.core:jackson-databind`, the metadata JSON); JUnit in test scope |
 
 `jcodebuddy-core` was a leaf with no dependencies at all until step 3.0f gave it the engine, which is what
 DEC-037 decision 1 is about. **Step 3.0l extracts the generated-code marker vocabulary and its parser into a
@@ -81,23 +81,23 @@ until that lands, `jcodebuddy-core` carries both.
 ### Layer 3: Applications & Runtimes
 These modules depend on Layer 1 and/or Layer 2, or are applications built from them:
 
-| Module | Depends On |
-|--------|-----------|
-| `java-watch-app` | `directory-watcher`, `slf4j` — the watcher's own app, and no workspace artifact |
-| `java-watch-scp` | `java-watch-core` |
-| `java-watch-run` | `java-watch-core`, `ecj`, `polyglot` |
-| `java-watch-run-sample` | `java-watch-run` (provided) |
-| `jwa-sidecar` | `java-watch-core`, `jwa-builder-api`, `jwa-builder` |
-| `jcodebuddy-agent` | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `jackson-databind`, `slf4j` (it was `java-watch-agent`, and it left `watch/` at step 3.0s) |
-| `jcodebuddy-watch-tools` | `jcodebuddy-agent`, `java-watch-core`, `jwa-builder`, `jwa-builder-api`, `slf4j` |
-| `hipster-ioc-tooling` | `hipster-ioc-api`, `hipster-entity-tooling`, `java-watch-core`, `jcodebuddy-core` |
-| `merge-java` | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
-| `webviewd` | `webview-core` — the reference host of the webview contract, and the only one that needs no editor |
-| `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core` |
-| `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api` |
-| `hipster-entity-test` | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson` |
-| `hipster-ioc-test` | `hipster-ioc-api`, `hipster-ioc-tooling` (test) |
-| `webview-eclipse` | `webview-core` (core + Gson unpacked into the bundle jar; Eclipse platform bundles are provided) |
+| Module                   | Depends On                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `java-watch-app`         | `directory-watcher`, `slf4j` — the watcher's own app, and no workspace artifact                    |
+| `java-watch-scp`         | `java-watch-core`                                                                                  |
+| `java-watch-run`         | `java-watch-core`, `ecj`, `polyglot`                                                               |
+| `java-watch-run-sample`  | `java-watch-run` (provided)                                                                        |
+| `jwa-sidecar`            | `java-watch-core`, `jwa-builder-api`, `jwa-builder`                                                |
+| `jcodebuddy-agent`       | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `jackson-databind`, `slf4j` (it was `java-watch-agent`, and it left `watch/` at step 3.0s) |
+| `jcodebuddy-watch-tools` | `jcodebuddy-agent`, `java-watch-core`, `jwa-builder`, `jwa-builder-api`, `slf4j`                   |
+| `hipster-ioc-tooling`    | `hipster-ioc-api`, `hipster-entity-tooling`, `java-watch-core`, `jcodebuddy-core`                  |
+| `merge-java`             | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
+| `webviewd`               | `webview-core` — the reference host of the webview contract, and the only one that needs no editor |
+| `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core`                                                        |
+| `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api`                                                        |
+| `hipster-entity-test`    | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`                              |
+| `hipster-ioc-test`       | `hipster-ioc-api`, `hipster-ioc-tooling` (test)                                                    |
+| `webview-eclipse`        | `webview-core` (core + Gson unpacked into the bundle jar; Eclipse platform bundles are provided)   |
 
 *This table describes the tree as of 2026-10-03 (step 3.0i). It is a description, not a check: nothing in the
 build reads it, so a module that moves or gains a dependency has to be written here by hand in the same
@@ -175,14 +175,14 @@ change — which is what did not happen for `java-watch-agent`'s rename, three s
 
 The following directories are **NOT** part of the Maven build:
 
-| Directory | Reason |
-|-----------|--------|
-| `vscode-jwa` | VS Code extension (npm/Gradle build) |
-| `vscode-jswa` | VS Code extension (npm/Gradle build) |
-| `intellij-jwa` | IntelliJ plugin (Gradle build) |
-| `intellij-jswa` | IntelliJ plugin (Gradle build) |
-| `jswa-core` | Vendored TypeScript/undici node_modules runtime |
-| `demo` | Static HTML demo |
+| Directory       | Reason                                          |
+| --------------- | ----------------------------------------------- |
+| `vscode-jwa`    | VS Code extension (npm/Gradle build)            |
+| `vscode-jswa`   | VS Code extension (npm/Gradle build)            |
+| `intellij-jwa`  | IntelliJ plugin (Gradle build)                  |
+| `intellij-jswa` | IntelliJ plugin (Gradle build)                  |
+| `jswa-core`     | Vendored TypeScript/undici node_modules runtime |
+| `demo`          | Static HTML demo                                |
 
 ## Naming Convention Rationale
 
@@ -194,8 +194,8 @@ Do **not** rename `jswa` to `watch`. The `jwa`/`jswa` branding is intentional: J
 
 ## JUnit Strategy
 
-| Layer | Test Framework |
-|-------|---------------|
+| Layer   | Test Framework                           |
+| ------- | ---------------------------------------- |
 | `java-watch-app`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jwa-builder-api`, `jwa-builder`, `jwa-sidecar`, `jcodebuddy-agent` | JUnit 4 |
 | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling`, `jcodebuddy-core`, `webview-core`, `webviewd`, `webview-eclipse` | JUnit 5 (the default; no profile needed) |
 

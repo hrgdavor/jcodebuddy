@@ -7,12 +7,12 @@ from documentation. Everything marked *unverified* has not been confirmed and sh
 
 This document is deliberately separate from `MIGRATION-GUIDE.md`:
 
-| Document | Purpose |
-| --- | --- |
-| `MIGRATION-GUIDE.md` | The procedure — how to port a file, step by step |
-| **this document** | **The traps — what will go wrong, how it fails, and what to do** |
-| `Checklist.md` | Which files remain and what each needs |
-| `mappings.js` | The type-by-type mapping table |
+| Document             | Purpose                                                          |
+| -------------------- | ---------------------------------------------------------------- |
+| `MIGRATION-GUIDE.md` | The procedure — how to port a file, step by step                 |
+| **this document**    | **The traps — what will go wrong, how it fails, and what to do** |
+| `Checklist.md`       | Which files remain and what each needs                           |
+| `mappings.js`        | The type-by-type mapping table                                   |
 
 Read this document **before** porting a file. Every entry here cost real time to find; none of
 them is obvious from the OpenRewrite documentation, and most fail *silently* — producing code
@@ -78,9 +78,9 @@ empty problem list — because the thrown exception was being swallowed into "un
 
 **Measured** on `interface PersonEntity extends EntityBase<String>`:
 
-| accessor | value |
-| --- | --- |
-| `getExtends()` | `null` |
+| accessor          | value                  |
+| ----------------- | ---------------------- |
+| `getExtends()`    | `null`                 |
 | `getImplements()` | `[EntityBase<String>]` |
 
 The obvious translation of JavaParser's `getExtendedTypes()` is `getExtends()`. It finds **no
@@ -170,8 +170,8 @@ recursive — matching them up by name rather than by reach is what goes wrong.
 JavaParser's pretty printer separates type arguments with a **bare comma**; OpenRewrite's printer
 puts a **space** after it:
 
-| written | JavaParser `asString()` | OpenRewrite `toString()` |
-| --- | --- | --- |
+| written                   | JavaParser `asString()`  | OpenRewrite `toString()`  |
+| ------------------------- | ------------------------ | ------------------------- |
 | `Map<String, List<Long>>` | `Map<String,List<Long>>` | `Map<String, List<Long>>` |
 
 This is not cosmetic in this repository, for two independent reasons:
@@ -255,13 +255,13 @@ structural shape, using ranges and comments. Port it **last**, with the three-st
 JavaParser's `NodeList` was always non-null, so `decl.getTypeParameters().forEach(...)` was safe
 and idiomatic. Several LST accessors instead return **`null`** when the construct is absent:
 
-| accessor | empty case |
-| --- | --- |
-| `J.ClassDeclaration.getTypeParameters()` | **null** |
-| `J.MethodDeclaration.getTypeParameters()` | **null** |
-| `J.ClassDeclaration.getImplements()` | **null** |
-| `J.Annotation.getArguments()` | **null** (bare `@Foo` vs `@Foo()`) |
-| `J.ClassDeclaration.getPrimaryConstructor()` | **null** (not a record) |
+| accessor                                     | empty case                         |
+| -------------------------------------------- | ---------------------------------- |
+| `J.ClassDeclaration.getTypeParameters()`     | **null**                           |
+| `J.MethodDeclaration.getTypeParameters()`    | **null**                           |
+| `J.ClassDeclaration.getImplements()`         | **null**                           |
+| `J.Annotation.getArguments()`                | **null** (bare `@Foo` vs `@Foo()`) |
+| `J.ClassDeclaration.getPrimaryConstructor()` | **null** (not a record)            |
 
 Only some return empty lists. There is no rule you can guess from the name — the verified shapes
 are recorded in `mappings.js` per type, and the safe habit is to null-check before iterating:
@@ -286,11 +286,11 @@ rather than an empty list. Chasing the collection for elements therefore yields 
 real child, prints as `Empty`, and has no name to read. The same placeholder appears in at least
 three positions:
 
-| construct | LST shape | populated shape |
-| --- | --- | --- |
-| `@Foo()` / `@Foo(addons = {})` | one `J.Empty` | assignments / `J.NewArray` elements |
-| no-argument method | `getParameters()` = one `J.Empty` | `J.VariableDeclarations` entries |
-| empty array initialiser | one `J.Empty` | the elements |
+| construct                      | LST shape                         | populated shape                     |
+| ------------------------------ | --------------------------------- | ----------------------------------- |
+| `@Foo()` / `@Foo(addons = {})` | one `J.Empty`                     | assignments / `J.NewArray` elements |
+| no-argument method             | `getParameters()` = one `J.Empty` | `J.VariableDeclarations` entries    |
+| empty array initialiser        | one `J.Empty`                     | the elements                        |
 
 **What to do:** treat `J.Empty` as "no entry", not as "an entry whose name could not be read".
 Skipping it silently is right; diagnosing it produces a false report on correct source. Existing
@@ -338,24 +338,24 @@ interface rather than after a trailing type).
 Not traps exactly — they are unavoidable — but each one is a rewrite rather than a rename, and
 knowing which is which is what makes estimates honest.
 
-| Task | JavaParser | OpenRewrite | Nature of the change |
-| --- | --- | --- | --- |
-| Find nodes | `cu.findAll(X.class)` | visitor, or `TreeQueries.findAll` | mechanical |
-| Parent access | `node.getParentNode()` | **none** — use a cursor or an explicit stack | rewrite |
-| Ancestry for an FQN | walk `getParentNode()` | capture during traversal | rewrite |
-| Line numbers | `getName().getBegin().line` **and** `getBegin().line` | **none** — javac `LineMap`, and the two differ | rewrite |
-| Build a tree | `new X()` + `setY()` | immutable `withY()`, or `JavaTemplate` | rewrite |
-| Print | `LexicalPreservingPrinter` | `printAll()`; formatting is inherent | **deletion** |
-| Print a *type* | `asString()` — bare comma between arguments | `toString()` — comma **and space** | **silent trap** |
-| Package name | `getPackageDeclaration().map(...)` | `TreeQueries.packageName(cu)` | mechanical |
-| Class members | `decl.getMembers()` | `getBody().getStatements()`, filtered | rewrite |
-| One field | `FieldDeclaration` (+ N variables) | `J.VariableDeclarations` (+ N `J.VariableDeclarator`) | rewrite |
-| Constructor | `ConstructorDeclaration` | `J.MethodDeclaration` with `isConstructor()` | mechanical-ish |
-| Modifiers | `Modifier.Keyword` enum | ordered `List<J.Modifier>`; `hasModifier(...)` | mechanical |
-| Empty parameter list | empty `NodeList` | a single **`J.Empty`** placeholder | **silent trap** |
-| Literals | one class per literal type | one `J.Literal`; `toString()` is the **value** | **silent trap** |
-| Enum constants | `EnumDeclaration.getEntries()` | one `J.EnumValueSet` statement holding `J.EnumValue`s | mechanical |
-| Annotation member | `MemberValuePair` | `J.Assignment`; a single arg is normalised to `value` | mechanical |
+| Task                 | JavaParser                                            | OpenRewrite                                           | Nature of the change |
+| -------------------- | ----------------------------------------------------- | ----------------------------------------------------- | -------------------- |
+| Find nodes           | `cu.findAll(X.class)`                                 | visitor, or `TreeQueries.findAll`                     | mechanical           |
+| Parent access        | `node.getParentNode()`                                | **none** — use a cursor or an explicit stack          | rewrite              |
+| Ancestry for an FQN  | walk `getParentNode()`                                | capture during traversal                              | rewrite              |
+| Line numbers         | `getName().getBegin().line` **and** `getBegin().line` | **none** — javac `LineMap`, and the two differ        | rewrite              |
+| Build a tree         | `new X()` + `setY()`                                  | immutable `withY()`, or `JavaTemplate`                | rewrite              |
+| Print                | `LexicalPreservingPrinter`                            | `printAll()`; formatting is inherent                  | **deletion**         |
+| Print a *type*       | `asString()` — bare comma between arguments           | `toString()` — comma **and space**                    | **silent trap**      |
+| Package name         | `getPackageDeclaration().map(...)`                    | `TreeQueries.packageName(cu)`                         | mechanical           |
+| Class members        | `decl.getMembers()`                                   | `getBody().getStatements()`, filtered                 | rewrite              |
+| One field            | `FieldDeclaration` (+ N variables)                    | `J.VariableDeclarations` (+ N `J.VariableDeclarator`) | rewrite              |
+| Constructor          | `ConstructorDeclaration`                              | `J.MethodDeclaration` with `isConstructor()`          | mechanical-ish       |
+| Modifiers            | `Modifier.Keyword` enum                               | ordered `List<J.Modifier>`; `hasModifier(...)`        | mechanical           |
+| Empty parameter list | empty `NodeList`                                      | a single **`J.Empty`** placeholder                    | **silent trap**      |
+| Literals             | one class per literal type                            | one `J.Literal`; `toString()` is the **value**        | **silent trap**      |
+| Enum constants       | `EnumDeclaration.getEntries()`                        | one `J.EnumValueSet` statement holding `J.EnumValue`s | mechanical           |
+| Annotation member    | `MemberValuePair`                                     | `J.Assignment`; a single arg is normalised to `value` | mechanical           |
 
 **Three entries deserve emphasis:**
 
@@ -491,12 +491,12 @@ precisely than that, because the answer depends on whether a file **owns whole f
 text** — and, for two of them, on something the framing did not anticipate: **the printer's output is
 itself a committed contract.**
 
-| what the file does | how the port emits | why |
-| --- | --- | --- |
+| what the file does                                              | how the port emits                                                                              | why                                                                                           |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | builds a file it owns from a model (`ValidationGenerator`, `ViewRecordGenerator`, the builders, `EntityMetadataGenerator`, `FieldBoilerplateGenerator`) | **text** — `StringBuilder`, then `SourceSplicer` where a piece lands inside hand-written source | the committed example is compared byte-for-byte (`ExampleRegenerationTest`), and the generator recognises its own previous output by that text (DEC-020). Text it wrote is text it can match. |
-| adds a member to a developer's file (`ViewInterfaceGenerator`) | **text splice** before the closing brace | the LST is immutable, and `LexicalPreservingPrinter` could not place a `default` modifier at all (see § 1.8) |
-| reads a previous revision and carries members through | **text slice by javac offset** (`TreeQueries.memberText`) | a print round-trip normalises the developer's formatting; DEC-020 requires verbatim |
-| **deletes** members from a generated file (`EnumCompactionCli`) | **text slice by javac offset** (`TreeQueries.memberTextSpan`, `TreeQueries.caseSpans`) | there is no `remove` on an immutable tree, and deleting a span is what `entry.remove()` meant |
+| adds a member to a developer's file (`ViewInterfaceGenerator`)  | **text splice** before the closing brace                                                        | the LST is immutable, and `LexicalPreservingPrinter` could not place a `default` modifier at all (see § 1.8) |
+| reads a previous revision and carries members through           | **text slice by javac offset** (`TreeQueries.memberText`)                                       | a print round-trip normalises the developer's formatting; DEC-020 requires verbatim           |
+| **deletes** members from a generated file (`EnumCompactionCli`) | **text slice by javac offset** (`TreeQueries.memberTextSpan`, `TreeQueries.caseSpans`)          | there is no `remove` on an immutable tree, and deleting a span is what `entry.remove()` meant |
 
 `TreeQueries` stays neutral, as it was designed to: it constructs nothing, so a future emitter can still
 choose `JavaTemplate`.
@@ -635,12 +635,12 @@ answer.
 **What the cost actually looked like, measured.** Of the five files ported after the hub, the two that
 needed *new* javac facts were not the biggest ones:
 
-| file | lines | new javac facts needed |
-| --- | --- | --- |
-| `MetadataLocations` | 611 | enum constants, record components, switch-arm lines |
-| `CooperativeCodegen` | 399 | member spans, and the attached-comment rule |
-| `ClassIndex`, `TypeFacts` | 1030 + 234 | none — the queries already existed |
-| `FieldBoilerplateGenerator` | 1007 | **n/a — it writes trees, see § 4.2** |
+| file                        | lines      | new javac facts needed                              |
+| --------------------------- | ---------- | --------------------------------------------------- |
+| `MetadataLocations`         | 611        | enum constants, record components, switch-arm lines |
+| `CooperativeCodegen`        | 399        | member spans, and the attached-comment rule         |
+| `ClassIndex`, `TypeFacts`   | 1030 + 234 | none — the queries already existed                  |
+| `FieldBoilerplateGenerator` | 1007       | **n/a — it writes trees, see § 4.2**                |
 
 So the real rule is narrower than "budget by position usage": **budget by whether the file reads
 positions, and note that the LST's missing positions are only half the problem — its missing
@@ -715,22 +715,22 @@ least one artifact end-to-end before marking anything complete.
 
 ## 6. Quick reference
 
-| Question | Answer |
-| --- | --- |
-| Is this file readable? | `SourceReader.readText(source).readable()` — asks javac, not just the parser |
-| Why is my second read failing? | You did not `reset()` the parser |
-| Why does my interface have no supertype? | `getImplements()`, not `getExtends()` |
-| Why does my "interfaces" query return records? | Missing the `getKind()` test |
-| Why is my no-arg method filter matching nothing? | Empty parameter list is a single `J.Empty` |
-| Where did `getAllComments()` go? | Comment text is a prefix; the DEC-021 header is on the unit's prefix, one `TextComment` |
-| How do I build a node? | `JavaTemplate` or `withXxx` — decide per module first |
-| How do I get a declaration's line? | `TreeQueries.lineOf` / `lineOfChained` — javac's `LineMap`, matched on name **and** chain (§ 4.1) |
-| How do I find a node's parent? | You do not; capture ancestry during traversal |
-| Where do I add a type mapping? | `scripts/rewrite-migration/mappings.js`, marked `verified` or `inferred` |
-| Why does a module fail to compile? | Check *who references* the broken code first — it may be dead (see § 4.3) |
-| Why can I not gate `java-watch-agent`? | It has never compiled: `FileChange`/`ToolContext` never existed (§ 4.4) |
-| How do I size a port? | By **position usage**, not line count: `getBegin().line` has no LST equivalent (§ 4.5) |
-| Where is a member's line? | `TreeQueries.methodLineOf` / `annotationLineOf` — one cached javac parse (§ 4.5) |
+| Question                                         | Answer                                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Is this file readable?                           | `SourceReader.readText(source).readable()` — asks javac, not just the parser                      |
+| Why is my second read failing?                   | You did not `reset()` the parser                                                                  |
+| Why does my interface have no supertype?         | `getImplements()`, not `getExtends()`                                                             |
+| Why does my "interfaces" query return records?   | Missing the `getKind()` test                                                                      |
+| Why is my no-arg method filter matching nothing? | Empty parameter list is a single `J.Empty`                                                        |
+| Where did `getAllComments()` go?                 | Comment text is a prefix; the DEC-021 header is on the unit's prefix, one `TextComment`           |
+| How do I build a node?                           | `JavaTemplate` or `withXxx` — decide per module first                                             |
+| How do I get a declaration's line?               | `TreeQueries.lineOf` / `lineOfChained` — javac's `LineMap`, matched on name **and** chain (§ 4.1) |
+| How do I find a node's parent?                   | You do not; capture ancestry during traversal                                                     |
+| Where do I add a type mapping?                   | `scripts/rewrite-migration/mappings.js`, marked `verified` or `inferred`                          |
+| Why does a module fail to compile?               | Check *who references* the broken code first — it may be dead (see § 4.3)                         |
+| Why can I not gate `java-watch-agent`?           | It has never compiled: `FileChange`/`ToolContext` never existed (§ 4.4)                           |
+| How do I size a port?                            | By **position usage**, not line count: `getBegin().line` has no LST equivalent (§ 4.5)            |
+| Where is a member's line?                        | `TreeQueries.methodLineOf` / `annotationLineOf` — one cached javac parse (§ 4.5)                  |
 
 ---
 

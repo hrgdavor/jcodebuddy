@@ -15,12 +15,12 @@ These libraries are widely used for creating interactive terminal applications i
 
 ### Library Comparison
 
-| Library | Primary Use Case | Features | License |
-| :-- | :-- | :-- | :-- |
-| **Lanterna** | Full-scale terminal GUIs | Windowing system, Swing fallback, mouse support [^1] | LGPL |
-| **TUI4J** | Interactive, stateful TUIs | Bubble Tea style, functional state management [^8] | MIT |
-| **Spring Shell** | Enterprise CLI apps | Integration with Spring, pre-built TUI components [^1] | Apache 2.0 |
-| **Java TUI** | Simple input/output | Minimalist, focuses on reducing boilerplate for stdin/stdout [^5] | MIT |
+| Library          | Primary Use Case           | Features                                                          | License    |
+| :--              | :--                        | :--                                                               | :--        |
+| **Lanterna**     | Full-scale terminal GUIs   | Windowing system, Swing fallback, mouse support [^1]              | LGPL       |
+| **TUI4J**        | Interactive, stateful TUIs | Bubble Tea style, functional state management [^8]                | MIT        |
+| **Spring Shell** | Enterprise CLI apps        | Integration with Spring, pre-built TUI components [^1]            | Apache 2.0 |
+| **Java TUI**     | Simple input/output        | Minimalist, focuses on reducing boilerplate for stdin/stdout [^5] | MIT        |
 
 ### Implementation Considerations
 

@@ -33,20 +33,20 @@ The generator emits a `<View>BuilderTracking` class for a view at
 the array-backed updatable proxy implement
 `hr.hrg.hipster.entity.core.ViewChangeTracking<E, S>`:
 
-| Member | Contract |
-|---|---|
-| `isChanged()` | whether any field was written with a value different from the one it held |
-| `changes()` | an **immutable snapshot** of the changed fields, safe to retain and iterate |
-| `changesBuilder()` | the **live, mutable** change set — a plain ordinal set, no value state |
-| `clearChanges()` | resets the change set (no value baseline is involved, because none is kept) |
-| `currentValue(E field)` | the value a changed field currently holds |
-| `changedValues()` | one `FieldChange` per marked ordinal, in ascending ordinal order — its `field` and its `current`; there is no `previous` component |
-| `changesDeep()` | deep change paths, one per changed leaf |
-| `shallowPaths()` | one `ChangePath` per marked ordinal |
-| `nestedTrackers()` | the nested trackers of this view, keyed by field ordinal |
-| `collectionDeltas()` | the add/remove/reorder/field findings of each tracked `List` field, keyed by field ordinal |
-| `hasCollection(int ordinal)` | whether that field holds a tracked collection |
-| `collectionDiagnostics()` | findings that could not be expressed as a delta (e.g. `NOT_IDENTIFIABLE`) |
+| Member                       | Contract                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `isChanged()`                | whether any field was written with a value different from the one it held                  |
+| `changes()`                  | an **immutable snapshot** of the changed fields, safe to retain and iterate                |
+| `changesBuilder()`           | the **live, mutable** change set — a plain ordinal set, no value state                     |
+| `clearChanges()`             | resets the change set (no value baseline is involved, because none is kept)                |
+| `currentValue(E field)`      | the value a changed field currently holds                                                  |
+| `changedValues()`            | one `FieldChange` per marked ordinal, in ascending ordinal order — its `field` and its `current`; there is no `previous` component |
+| `changesDeep()`              | deep change paths, one per changed leaf                                                    |
+| `shallowPaths()`             | one `ChangePath` per marked ordinal                                                        |
+| `nestedTrackers()`           | the nested trackers of this view, keyed by field ordinal                                   |
+| `collectionDeltas()`         | the add/remove/reorder/field findings of each tracked `List` field, keyed by field ordinal |
+| `hasCollection(int ordinal)` | whether that field holds a tracked collection                                              |
+| `collectionDiagnostics()`    | findings that could not be expressed as a delta (e.g. `NOT_IDENTIFIABLE`)                  |
 
 `changes()` and `changesBuilder()` are **two views over one shared
 piece of state**, never two copies, so they cannot disagree. Only

@@ -24,14 +24,14 @@ Read [`MIGRATION-CAVEATS.md`](MIGRATION-CAVEATS.md) **before** porting a file: i
 
 ## Phase 6 state
 
-| Measure | Count |
-| --- | --- |
-| Files in the migration queue | 34 |
-| Settled (complete or exempt) | 34 (100%) |
-| Remaining | 0 |
-| Still importing JavaParser | 0 |
-| Unclassified by curation | 0 |
-| JavaParser import lines to remove | 0 |
+| Measure                           | Count     |
+| --------------------------------- | --------- |
+| Files in the migration queue      | 34        |
+| Settled (complete or exempt)      | 34 (100%) |
+| Remaining                         | 0         |
+| Still importing JavaParser        | 0         |
+| Unclassified by curation          | 0         |
+| JavaParser import lines to remove | 0         |
 
 ## Phase-0 prerequisites
 
@@ -39,15 +39,15 @@ These are not part of the queue: they are the conditions that must hold
 before a port can be verified. Each was found by running the tooling, and each
 is real in the tree today.
 
-| Id | Prerequisite | Done |
-| --- | --- | --- |
-| P0-1 | Repair project-automation staging code so the module compiles | yes |
-| P0-2 | Re-point the hr.hrg.rewrite package at the real OpenRewrite API | yes |
-| P0-6 | Repair java-watch-agent, which has never compiled | **no** |
+| Id   | Prerequisite                                                                | Done   |
+| ---- | --------------------------------------------------------------------------- | ------ |
+| P0-1 | Repair project-automation staging code so the module compiles               | yes    |
+| P0-2 | Re-point the hr.hrg.rewrite package at the real OpenRewrite API             | yes    |
+| P0-6 | Repair java-watch-agent, which has never compiled                           | **no** |
 | P0-7 | metadata-server has a failing test that blocks every downstream module gate | **no** |
-| P0-3 | Add the OpenRewrite dependency set to project-automation | yes |
-| P0-4 | Establish the clean-build baseline for every module in the queue | **no** |
-| P0-5 | Reconcile the plan’s file list with the tree | **no** |
+| P0-3 | Add the OpenRewrite dependency set to project-automation                    | yes    |
+| P0-4 | Establish the clean-build baseline for every module in the queue            | **no** |
+| P0-5 | Reconcile the plan’s file list with the tree                                | **no** |
 
 ### P0-6 — Repair java-watch-agent, which has never compiled
 
@@ -79,10 +79,10 @@ Leaving JavaParser 3.28.0, arriving at OpenRewrite 8.90.4.
 Versions are managed by the root POM; the set below mirrors `merge-java`, which
 is the one module already fully ported.
 
-| Artifact | Version | Why |
-| --- | --- | --- |
-| `org.openrewrite:rewrite-core` | (parent-managed) | LST, visitors, execution context, markers. |
-| `org.openrewrite:rewrite-java` | (parent-managed) | The Java LST types (`J`), `JavaIsoVisitor`, `org.openrewrite.java.JavaParser`. |
+| Artifact                          | Version                             | Why                                                                            |
+| --------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
+| `org.openrewrite:rewrite-core`    | (parent-managed)                    | LST, visitors, execution context, markers.                                     |
+| `org.openrewrite:rewrite-java`    | (parent-managed)                    | The Java LST types (`J`), `JavaIsoVisitor`, `org.openrewrite.java.JavaParser`. |
 | `org.openrewrite:rewrite-java-25` | 8.90.4 (pinned, not parent-managed) | The version-specific parser implementation. `rewrite-java` is a facade and needs exactly one of these; -25 is the newest in 8.90.4 and matches the parent’s `maven.compiler.release=25`. |
 
 ## How to read an entry
@@ -101,42 +101,42 @@ OpenRewrite mapping for each type, and the migration notes from
 
 Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 
-| Status | Priority | Risk | Imports | File |
-| --- | --- | --- | --- | --- |
-| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java` |
-| `[x]` complete | high | high | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
-| `[x]` complete | high | high | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
-| `[x]` complete | high | medium | 0 | `jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
-| `[x]` complete | high | medium | 0 | `jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
-| `[x]` complete | high | medium | 0 | `jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
-| `[x]` complete | high | medium | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java` |
-| `[x]` complete | high | medium | 0 | `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
-| `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java` |
-| `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java` |
-| `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java` |
-| `[x]` complete | high | low | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java` |
-| `[x]` complete | medium | medium | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` |
-| `[x]` complete | medium | medium | 0 | `jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` |
-| `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
-| `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
-| `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java` |
+| Status         | Priority | Risk   | Imports | File                                                                                          |
+| -------------- | -------- | ------ | ------- | --------------------------------------------------------------------------------------------- |
+| `[x]` complete | high     | high   | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java` |
+| `[x]` complete | high     | high   | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java` |
+| `[x]` complete | high     | high   | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` |
+| `[x]` complete | high     | high   | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java` |
+| `[x]` complete | high     | high   | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java` |
+| `[x]` complete | high     | high   | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` |
+| `[x]` complete | high     | high   | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java` |
+| `[x]` complete | high     | high   | 0       | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
+| `[x]` complete | high     | high   | 0       | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java`      |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` |
+| `[x]` complete | high     | medium | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
+| `[x]` complete | high     | medium | 0       | `jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java`  |
+| `[x]` complete | high     | medium | 0       | `jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java`  |
+| `[x]` complete | high     | medium | 0       | `jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java`   |
+| `[x]` complete | high     | medium | 0       | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java`               |
+| `[x]` complete | high     | medium | 0       | `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java`                 |
+| `[x]` complete | high     | low    | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java` |
+| `[x]` complete | high     | low    | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java` |
+| `[x]` complete | high     | low    | 0       | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java` |
+| `[x]` complete | high     | low    | 0       | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java`                  |
+| `[x]` complete | medium   | medium | 0       | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` |
+| `[x]` complete | medium   | medium | 0       | `jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java`  |
+| `[x]` complete | medium   | low    | 0       | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
+| `[x]` complete | medium   | low    | 0       | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
+| `[x]` complete | medium   | low    | 0       | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java` |
 
 ## Per-file detail
 
@@ -1155,15 +1155,15 @@ removes the exemption — an allowlist entry without an exit condition is a hole
 Documentation and archive. These files *are* the migration’s own notes or a
 historical record, so their JavaParser references are the subject matter.
 
-| File | Why excluded |
-| --- | --- |
-| `doc/brainstorm/rewrite-migration/01-foundation/api-compatibility/CompilationUnitAdapter.java` | lives under doc/ |
-| `doc/brainstorm/rewrite-migration/02-utilities/util/AstPrinter.java` | lives under doc/ |
-| `doc/brainstorm/rewrite-migration/02-utilities/util/NodeTraversal.java` | lives under doc/ |
-| `doc/brainstorm/rewrite-migration/02-utilities/util/TypeUtils.java` | lives under doc/ |
-| `plans/rewrite-migration/01-foundation/api-compatibility/AstManipulator.java` | lives under plans/ |
-| `plans/rewrite-migration/01-foundation/api-compatibility/CompilationUnitAdapter.java` | lives under plans/ |
-| `plans/rewrite-migration/01-foundation/tests/ApiCompatibilityTests.java` | lives under plans/ |
+| File                                                                                           | Why excluded       |
+| ---------------------------------------------------------------------------------------------- | ------------------ |
+| `doc/brainstorm/rewrite-migration/01-foundation/api-compatibility/CompilationUnitAdapter.java` | lives under doc/   |
+| `doc/brainstorm/rewrite-migration/02-utilities/util/AstPrinter.java`                           | lives under doc/   |
+| `doc/brainstorm/rewrite-migration/02-utilities/util/NodeTraversal.java`                        | lives under doc/   |
+| `doc/brainstorm/rewrite-migration/02-utilities/util/TypeUtils.java`                            | lives under doc/   |
+| `plans/rewrite-migration/01-foundation/api-compatibility/AstManipulator.java`                  | lives under plans/ |
+| `plans/rewrite-migration/01-foundation/api-compatibility/CompilationUnitAdapter.java`          | lives under plans/ |
+| `plans/rewrite-migration/01-foundation/tests/ApiCompatibilityTests.java`                       | lives under plans/ |
 
 ## Corrections to the plan’s file list
 
@@ -1171,15 +1171,15 @@ historical record, so their JavaParser references are the subject matter.
 paths that do not exist and omits files that do. Following it literally migrates
 the wrong set. The differences:
 
-| Plan says | Reality |
-| --- | --- |
-| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` | does not exist |
-| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` | the real file is `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
-| `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/JavaParserTool.java` | the real `JavaParserTool` is main-source, at `.../tooling/validation/JavaParserTool.java` |
-| `validation/EnumCompactionCliTest.java` listed twice | one file: `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/EnumCompactionCliTest.java` |
-| `project-automation` — "all files using JavaParser" | the `hr.hrg.rewrite` package uses no JavaParser and does not compile; it needs Phase-0 repair, not a port |
-| (not listed) | seven files use JavaParser **fully qualified with no import**: `ViewBuilderGenerator.java` (main), `meta/InterfaceInfo.java` (main),
-| | `AddonAndInheritanceTest.java`, `CompactionRoundTripTest.java`, `SourceReaderTest.java`, `EnumCompactionCliTest.java`, and the `test` half of `DependencyBoundaryTest.java` |
+| Plan says                                                                                         | Reality                                                                                        |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` | does not exist                                                                                 |
+| `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java`    | the real file is `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
+| `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/JavaParserTool.java`          | the real `JavaParserTool` is main-source, at `.../tooling/validation/JavaParserTool.java`      |
+| `validation/EnumCompactionCliTest.java` listed twice                                              | one file: `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/EnumCompactionCliTest.java` |
+| `project-automation` — "all files using JavaParser"                                               | the `hr.hrg.rewrite` package uses no JavaParser and does not compile; it needs Phase-0 repair, not a port |
+| (not listed)                                                                                      | seven files use JavaParser **fully qualified with no import**: `ViewBuilderGenerator.java` (main), `meta/InterfaceInfo.java` (main), |
+|                                                                                                   | `AddonAndInheritanceTest.java`, `CompactionRoundTripTest.java`, `SourceReaderTest.java`, `EnumCompactionCliTest.java`, and the `test` half of `DependencyBoundaryTest.java` |
 
 ## Verification
 

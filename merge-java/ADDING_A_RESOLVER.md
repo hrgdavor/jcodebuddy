@@ -34,12 +34,12 @@ deserves:
 CONSTRUCTOR_PARAM_ADD(Handling.AUTO),
 ```
 
-| `Handling` | Meaning | Effect |
-|---|---|---|
-| `AUTO` | Safe to apply without asking | `ResolutionKind.AUTO`, sticky by default |
-| `REVIEW` | Correct, but a human should confirm | `ResolutionKind.REVIEW`, not sticky |
-| `STICKY` | The answer is a preference | `ResolutionKind.REVIEW`, sticky by default |
-| `MANUAL` | Must go to a human | `ResolutionKind.MANUAL` |
+| `Handling` | Meaning                             | Effect                                     |
+| ---------- | ----------------------------------- | ------------------------------------------ |
+| `AUTO`     | Safe to apply without asking        | `ResolutionKind.AUTO`, sticky by default   |
+| `REVIEW`   | Correct, but a human should confirm | `ResolutionKind.REVIEW`, not sticky        |
+| `STICKY`   | The answer is a preference          | `ResolutionKind.REVIEW`, sticky by default |
+| `MANUAL`   | Must go to a human                  | `ResolutionKind.MANUAL`                    |
 
 Choosing `Handling` decides two things at once: the conflict's automation level
 and whether decisions are remembered. That keeps the policy in one place instead
@@ -99,15 +99,15 @@ public final class ConstructorParamAddResolver extends AbstractConflictResolver 
 
 ## What the base class does for you
 
-| Provided | Why it matters |
-|---|---|
-| `supports(ConflictType)` derived from `supportedType()` | A resolver cannot accidentally claim a second type |
+| Provided                                                | Why it matters                                             |
+| ------------------------------------------------------- | ---------------------------------------------------------- |
+| `supports(ConflictType)` derived from `supportedType()` | A resolver cannot accidentally claim a second type         |
 | `resolve(Conflict)` wraps `doResolve` and converts `null` **or a thrown exception** into the manual fallback | One broken resolver cannot abort a merge |
-| `getFixPaths(Conflict)` guarantees a non-empty list | A reviewer always has at least the manual escape hatch |
-| `newFixPath(Conflict)` pre-fills the conflict type | Fix paths are uniformly shaped |
-| `autoResolution` / `reviewResolution` / `resolutionFor` | Correct `ResolutionKind` without restating it |
-| `stickyByDefault()` derived from `Handling` | Remembering decisions is declared once, not per build site |
-| `manualFixPath(Conflict)` | The standard "hand it to a human" option |
+| `getFixPaths(Conflict)` guarantees a non-empty list     | A reviewer always has at least the manual escape hatch     |
+| `newFixPath(Conflict)` pre-fills the conflict type      | Fix paths are uniformly shaped                             |
+| `autoResolution` / `reviewResolution` / `resolutionFor` | Correct `ResolutionKind` without restating it              |
+| `stickyByDefault()` derived from `Handling`             | Remembering decisions is declared once, not per build site |
+| `manualFixPath(Conflict)`                               | The standard "hand it to a human" option                   |
 
 Override `stickyByDefault()` only to diverge from the table above — for example
 to force a heuristic resolver to always ask again.

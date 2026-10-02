@@ -25,14 +25,14 @@ members implied by the cumulative
 ladder (`DEFAULT < META < RECORD < WRITABLE < BUILDER < BUILDER_TRACKED
 < BUILDER_ALL`):
 
-| Output | Emitted by | Generator |
-|---|---|---|
-| `<View>_` field enum (implements `FieldDef`, with `ViewMeta`, `forName`, `NAME_MAPPER`) | `META` and above | `FieldBoilerplateGenerator` |
-| `<View>Record` / the nested record | `RECORD` and above | `ViewRecordGenerator` |
-| the nested `Write` interface | `WRITABLE` and above | — (declared in the view) |
-| `<View>Builder` | `BUILDER` and above | `ViewBuilderGenerator` |
-| `<View>BuilderTracking` | `BUILDER_TRACKED` / `BUILDER_ALL` | `ViewTrackingBuilderGenerator` |
-| `<View>RowAdapter` + `<View>Binder` — **DRAFT / EXPLORATION, opt-in** | `--adapters` only | `ViewAdapterGenerator` |
+| Output                                                                                  | Emitted by                        | Generator                      |
+| --------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------ |
+| `<View>_` field enum (implements `FieldDef`, with `ViewMeta`, `forName`, `NAME_MAPPER`) | `META` and above                  | `FieldBoilerplateGenerator`    |
+| `<View>Record` / the nested record                                                      | `RECORD` and above                | `ViewRecordGenerator`          |
+| the nested `Write` interface                                                            | `WRITABLE` and above              | — (declared in the view)       |
+| `<View>Builder`                                                                         | `BUILDER` and above               | `ViewBuilderGenerator`         |
+| `<View>BuilderTracking`                                                                 | `BUILDER_TRACKED` / `BUILDER_ALL` | `ViewTrackingBuilderGenerator` |
+| `<View>RowAdapter` + `<View>Binder` — **DRAFT / EXPLORATION, opt-in**                   | `--adapters` only                 | `ViewAdapterGenerator`         |
 
 Adapters give you
 `<View>RowAdapter.fromResultSet(ResultSet, ViewMeta)` and
@@ -256,17 +256,17 @@ java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir>
                                     [--run-record <file>] [--version]
 ```
 
-| Flag | Meaning |
-|---|---|
-| *(positional 1)* | the source root, or a single `.java` file (the tool then searches upward for `src/main/java` or `src/test/java`) |
-| *(positional 2)* | the output directory for the metadata JSON, one `<Marker>.metadata.json` per entity. It **must not be under a `.jcodebuddy/` directory** when generated Java would land there — see the layout guard below |
-| `--packages a.b,c.d` | restrict **generation** to these packages. It does **not** restrict indexing: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omitting the flag generates everything (the historical behaviour) |
-| `--adapters` | **[DRAFT/EXPLORATION, opt-in]** also emit `<View>RowAdapter` / `<View>Binder` next to each view. Off unless given; no other flag, property or profile enables it |
-| `--java-out <dir>` | write generated `.java` there instead of into the positional output directory. A pass passes it so committed source is regenerated **in place** while the metadata JSON stays in `.jcodebuddy/metadata/entity` — `bun scripts/gen.js`, the module POM's explicit `exec:java` goal, and a hand run all do |
+| Flag                                 | Meaning |
+| ------------------------------------ | ------- |
+| *(positional 1)*                     | the source root, or a single `.java` file (the tool then searches upward for `src/main/java` or `src/test/java`) |
+| *(positional 2)*                     | the output directory for the metadata JSON, one `<Marker>.metadata.json` per entity. It **must not be under a `.jcodebuddy/` directory** when generated Java would land there — see the layout guard below |
+| `--packages a.b,c.d`                 | restrict **generation** to these packages. It does **not** restrict indexing: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omitting the flag generates everything (the historical behaviour) |
+| `--adapters`                         | **[DRAFT/EXPLORATION, opt-in]** also emit `<View>RowAdapter` / `<View>Binder` next to each view. Off unless given; no other flag, property or profile enables it |
+| `--java-out <dir>`                   | write generated `.java` there instead of into the positional output directory. A pass passes it so committed source is regenerated **in place** while the metadata JSON stays in `.jcodebuddy/metadata/entity` — `bun scripts/gen.js`, the module POM's explicit `exec:java` goal, and a hand run all do |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two **views**. Repeatable. Defaults: class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
-| `--validate[=OFF\|REPORT\|STRICT]` | run the entity rules over the source root **before** writing anything. Bare `--validate` means `REPORT`: print every issue and continue. `STRICT` refuses to write until they are fixed, so a violating tree is never half-regenerated. `OFF` is the default for a library caller, so introducing validation cannot change an unrelated build. Warnings (the R1 `allowReorder` escape hatch) do not fail a pass unless `STRICT` |
-| `--run-record <file>` | also write what this pass ran with — generator revision, the artifact its classes came from, resolved roots, flags, validation count, divergences, and `status` (`ok` / `failed`) — as JSON. Opt-in, so a library caller and the existing tests are unaffected. The example's pass — `bun scripts/gen.js` — writes `.jcodebuddy/metadata/entity/generation.json` |
-| `--version` | print the generator identity (name, revision, and the artifact the classes came from) plus its flag surface, then stop. This is the first thing to run when a pass appears to have mis-generated a tree |
+| `--validate[=OFF\|REPORT\|STRICT]`   | run the entity rules over the source root **before** writing anything. Bare `--validate` means `REPORT`: print every issue and continue. `STRICT` refuses to write until they are fixed, so a violating tree is never half-regenerated. `OFF` is the default for a library caller, so introducing validation cannot change an unrelated build. Warnings (the R1 `allowReorder` escape hatch) do not fail a pass unless `STRICT` |
+| `--run-record <file>`                | also write what this pass ran with — generator revision, the artifact its classes came from, resolved roots, flags, validation count, divergences, and `status` (`ok` / `failed`) — as JSON. Opt-in, so a library caller and the existing tests are unaffected. The example's pass — `bun scripts/gen.js` — writes `.jcodebuddy/metadata/entity/generation.json` |
+| `--version`                          | print the generator identity (name, revision, and the artifact the classes came from) plus its flag surface, then stop. This is the first thing to run when a pass appears to have mis-generated a tree |
 
 Flags may appear anywhere after the two positionals, and `--packages=a.b`
 is accepted as well as `--packages a.b`. That matters because **every
@@ -322,12 +322,12 @@ java -jar hipster-entity-tooling.jar validate [<source-root>] [--strict]
 Four rules plus the R1 ledger rule, registered literally in `EntityRulesValidator` (no discovery
 mechanism — the list is an array, so an IDE's find-usages shows exactly what runs):
 
-| Rule | Reports |
-|---|---|
-| `MarkerEntityRule` | a marker named `*Entity` that extends `EntityBase` and **declares an accessor** — that accessor would appear in every view's field list |
-| `ViewInterfaceRule` | `view_does_not_derive_from_marker` (an interface named like a view that reaches no marker, so the generator silently emits nothing) and `view_name_convention` (a view whose name ends in none of `Summary`/`Details`/`Update`/`Form`/`Dto`) |
-| `ViewAnnotationRule` | `@View` on a non-interface, `addon_on_non_view`, unknown `gen` levels, a builder level with no accessor |
-| `AuditableRule` | an `Auditable` interface outside an entity module or package |
+| Rule                       | Reports                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `MarkerEntityRule`         | a marker named `*Entity` that extends `EntityBase` and **declares an accessor** — that accessor would appear in every view's field list |
+| `ViewInterfaceRule`        | `view_does_not_derive_from_marker` (an interface named like a view that reaches no marker, so the generator silently emits nothing) and `view_name_convention` (a view whose name ends in none of `Summary`/`Details`/`Update`/`Form`/`Dto`) |
+| `ViewAnnotationRule`       | `@View` on a non-interface, `addon_on_non_view`, unknown `gen` levels, a builder level with no accessor |
+| `AuditableRule`            | an `Auditable` interface outside an entity module or package                         |
 | `EntityFieldEnumOrderRule` | `empty_field_enum`, an undecodable DEC-021 header, and the R1 `allowReorder` warning |
 
 Exit codes: **0** clean (or warnings only), **1** a violation, **2** usage error. `--strict` promotes
@@ -366,15 +366,15 @@ lives elsewhere.
 
 Type policy — map what is provably safe, report the rest:
 
-| Source → target | Emitted |
-|---|---|
-| identical erased type | `src.x()` |
-| anything → `Object` | `src.x()` |
-| `Integer`/`Short`/`Byte` → `Long` | `src.x() == null ? null : src.x().longValue()` |
-| `Integer`/`Long`/`Float`/`Short`/`Byte` → `Double` | `… doubleValue()` |
-| `Short`/`Byte` → `Integer` | `… intValue()` |
-| a primitive widening (`int` → `Long`, `long` → `Double`, …) | `src.x()` |
-| **anything else** | a literal `null` plus a `mapper_type_incompatible` divergence |
+| Source → target                                             | Emitted                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------- |
+| identical erased type                                       | `src.x()`                                                     |
+| anything → `Object`                                         | `src.x()`                                                     |
+| `Integer`/`Short`/`Byte` → `Long`                           | `src.x() == null ? null : src.x().longValue()`                |
+| `Integer`/`Long`/`Float`/`Short`/`Byte` → `Double`          | `… doubleValue()`                                             |
+| `Short`/`Byte` → `Integer`                                  | `… intValue()`                                                |
+| a primitive widening (`int` → `Long`, `long` → `Double`, …) | `src.x()`                                                     |
+| **anything else**                                           | a literal `null` plus a `mapper_type_incompatible` divergence |
 
 A narrowing (`Long` → `Integer`) is refused even though a cast would
 compile, because it truncates on overflow; a nullable source into a
@@ -509,18 +509,18 @@ generated declaration findable from the view.
 
 ### Refactor-sensitive: derived from `<View>`
 
-| Emitted name | Derivation | IDE contract |
-|---|---|---|
-| `View_` (the field enum) | `<View>` + `_` | DEC-021 header `{@link <view-fqn>}`; the enum is the package-mate of the view |
-| `ViewBuilder` | `<View>` + `Builder` | DEC-021 header `{@link <view-fqn>}` |
-| `ViewBuilderTracking` | `<View>` + `BuilderTracking` | DEC-021 header `{@link <view-fqn>}` |
-| `ViewRecord` | `<View>` + `Record` (or the nested `record Record`) | DEC-021 header `{@link <view-fqn>}` |
-| `Write` (nested interface) | fixed member name on the view | declared in the view itself; the IDE sees the declaration |
-| `toBuilder()` | fixed method name on the view | declared on the view (or emitted as a `default`); the IDE sees the declaration |
-| `toBuilderTracking()` | fixed method name on the view | declared on the view (or emitted as a `default`); the IDE sees the declaration |
-| `META` | fixed constant on `View_` | static field on the field enum, which already links to the view |
-| `forName` | fixed method on `View_` | declared on the field enum |
-| `NAME_MAPPER` | fixed constant on `View_` | declared on the field enum |
+| Emitted name               | Derivation                                          | IDE contract                                                                   |
+| -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `View_` (the field enum)   | `<View>` + `_`                                      | DEC-021 header `{@link <view-fqn>}`; the enum is the package-mate of the view  |
+| `ViewBuilder`              | `<View>` + `Builder`                                | DEC-021 header `{@link <view-fqn>}`                                            |
+| `ViewBuilderTracking`      | `<View>` + `BuilderTracking`                        | DEC-021 header `{@link <view-fqn>}`                                            |
+| `ViewRecord`               | `<View>` + `Record` (or the nested `record Record`) | DEC-021 header `{@link <view-fqn>}`                                            |
+| `Write` (nested interface) | fixed member name on the view                       | declared in the view itself; the IDE sees the declaration                      |
+| `toBuilder()`              | fixed method name on the view                       | declared on the view (or emitted as a `default`); the IDE sees the declaration |
+| `toBuilderTracking()`      | fixed method name on the view                       | declared on the view (or emitted as a `default`); the IDE sees the declaration |
+| `META`                     | fixed constant on `View_`                           | static field on the field enum, which already links to the view                |
+| `forName`                  | fixed method on `View_`                             | declared on the field enum                                                     |
+| `NAME_MAPPER`              | fixed constant on `View_`                           | declared on the field enum                                                     |
 
 Rule of thumb: **if the name is `<View>` plus a suffix, or a fixed
 member of a generated class that the header already links to the view, it
@@ -537,15 +537,15 @@ refactor must **not** touch them — that is the correct behaviour, because
 they are contracts with a database or a peer system, not with the Java
 type system:
 
-| Label | Where it lives | Why the rename must not reach it |
-|---|---|---|
-| `case "firstName" ->` arms | the generated `forName` switch | the label is the persisted field name; renaming the accessor would break every stored payload that carries the old name |
-| `case "firstName"` JSON names | the generated `forName` switch used by the Jackson path | same — an incoming payload uses the wire name |
-| `@FieldSource(column = "…")` values | the generated enum's `column()` override | the value is the database column name; a Java rename must not issue a DDL change |
-| an unannotated `COLUMN` field's `column()` | the generated enum's `column()` override | the value is the **accessor name** (`FieldDef.column()`'s documented default), so this one *is* refactor-sensitive by construction: renaming the accessor renames the column. Every `COLUMN` field carries the override, annotated or not, so an adapter never needs a name table of its own |
-| discriminator values (`discriminatorValue`) | generated polymorphic wiring | the value is the wire/database discriminator for a subtype; it is a protocol constant |
-| the `entityFieldEnum: true` key | the DEC-021 header | a config key, not a Java identifier |
-| the header `enabled` / `allowReorder` keys | the DEC-021 header | config keys, not Java identifiers |
+| Label                                       | Where it lives                                          | Why the rename must not reach it                                                      |
+| ------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `case "firstName" ->` arms                  | the generated `forName` switch                          | the label is the persisted field name; renaming the accessor would break every stored payload that carries the old name |
+| `case "firstName"` JSON names               | the generated `forName` switch used by the Jackson path | same — an incoming payload uses the wire name                                         |
+| `@FieldSource(column = "…")` values         | the generated enum's `column()` override                | the value is the database column name; a Java rename must not issue a DDL change      |
+| an unannotated `COLUMN` field's `column()`  | the generated enum's `column()` override                | the value is the **accessor name** (`FieldDef.column()`'s documented default), so this one *is* refactor-sensitive by construction: renaming the accessor renames the column. Every `COLUMN` field carries the override, annotated or not, so an adapter never needs a name table of its own |
+| discriminator values (`discriminatorValue`) | generated polymorphic wiring                            | the value is the wire/database discriminator for a subtype; it is a protocol constant |
+| the `entityFieldEnum: true` key             | the DEC-021 header                                      | a config key, not a Java identifier                                                   |
+| the header `enabled` / `allowReorder` keys  | the DEC-021 header                                      | config keys, not Java identifiers                                                     |
 
 There is no derivation from a Java identifier here: the value is chosen
 explicitly (by the annotation, by the discriminator declaration, or by
@@ -665,13 +665,13 @@ kept in place as a tombstone; do not delete it by hand.
 java -jar hipster-entity-tooling.jar enum-order --repo <path> (--baseline <git-ref> | --diff <file>) [--target <ref>] [--strict]
 ```
 
-| Flag | Meaning |
-|---|---|
-| `--repo <path>` | the repository root to read (default: the working directory) |
-| `--baseline <git-ref>` | `HEAD`, a commit, or a PR base such as `origin/main` |
-| `--diff <file>` | a unified diff to use as the baseline — what a PR check has when the branch is not fetched locally. It is reverse-applied to `--repo` (via `git apply -R`), and a diff that does not apply exactly is refused with exit 2 rather than approximated |
-| `--target <ref>` | the revision to compare; default `WORKING_TREE` |
-| `--strict` | promote warnings (an `allowReorder` escape hatch) to a failure |
+| Flag                   | Meaning                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `--repo <path>`        | the repository root to read (default: the working directory)   |
+| `--baseline <git-ref>` | `HEAD`, a commit, or a PR base such as `origin/main`           |
+| `--diff <file>`        | a unified diff to use as the baseline — what a PR check has when the branch is not fetched locally. It is reverse-applied to `--repo` (via `git apply -R`), and a diff that does not apply exactly is refused with exit 2 rather than approximated |
+| `--target <ref>`       | the revision to compare; default `WORKING_TREE`                |
+| `--strict`             | promote warnings (an `allowReorder` escape hatch) to a failure |
 
 Exactly one of `--baseline` / `--diff` is required; giving both exits 2. Neither is "the previous
 run": the baseline must be reproducible from the repository.
@@ -718,12 +718,12 @@ repository-wide guide is
 [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md); this is the
 module's half of it, and the classes below are in this module unless stated.
 
-| | Class | What to reach for |
-|---|---|---|
-| **Read** | [`SourceReader`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/SourceReader.java) | `read(Path)` / `readText(String)` / `readUnit(Path)` / `readSourceText(String)`. Returns a `Read` whose **`readable()` is the verdict**; `problemsIn(String)` is the parser's detail and can be empty for a file that is *not* readable. A file javac recovers from is not a readable file. `readFragmentUnit(String)` reads an expression fragment and throws rather than returning a partial answer. |
+|              | Class | What to reach for |
+| ------------ | ----- | ----------------- |
+| **Read**     | [`SourceReader`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/SourceReader.java) | `read(Path)` / `readText(String)` / `readUnit(Path)` / `readSourceText(String)`. Returns a `Read` whose **`readable()` is the verdict**; `problemsIn(String)` is the parser's detail and can be empty for a file that is *not* readable. A file javac recovers from is not a readable file. `readFragmentUnit(String)` reads an expression fragment and throws rather than returning a partial answer. |
 | **Position** | [`JavaSyntaxCheck`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/JavaSyntaxCheck.java) | The javac line map. The LST has **no** positions, so this is the only source of a line or an offset. `inspect(source)` returns `FileCheck` with `types()`, `methods()`, `annotations()`, `members()` and `spans()`; `typeNameLines(source)` and `isSyntacticallyValid(source)` are the two entry points `SourceReader` itself uses. |
-| **Query** | [`TreeQueries`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/TreeQueries.java) | Traversal (`findAll`, `typeDeclarations`, `topLevelTypes`), kinds (`interfaces`, `classes`, `records`, `enums`, `annotations`), members (`methodsOf`, `noArgMethodNames`), supertypes (`supertypeTypes` / `Names` / `Texts`), annotations (`annotationNamed`, `annotationArg`), type and expression text (`typeText`, `expressionText`), ancestry (`typesWithEnclosing`) and the position queries over `JavaSyntaxCheck` (`lineOf`, `declarationLineOf`, `methodLineOf`, `annotationLineOf`, `memberLineOf`). |
-| **Write** | [`SourceSplicer`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/SourceSplicer.java) | `withMembers(source, typeName, members, indent)` — splices generated members into a hand-written interface. **The generator splices text; it never reprints a tree.** Reprinting reformats the developer's file, which is the defect the splice rule exists to prevent (DEC-020), so `SourceSplicer` is the write path and there is no print path. |
+| **Query**    | [`TreeQueries`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/TreeQueries.java) | Traversal (`findAll`, `typeDeclarations`, `topLevelTypes`), kinds (`interfaces`, `classes`, `records`, `enums`, `annotations`), members (`methodsOf`, `noArgMethodNames`), supertypes (`supertypeTypes` / `Names` / `Texts`), annotations (`annotationNamed`, `annotationArg`), type and expression text (`typeText`, `expressionText`), ancestry (`typesWithEnclosing`) and the position queries over `JavaSyntaxCheck` (`lineOf`, `declarationLineOf`, `methodLineOf`, `annotationLineOf`, `memberLineOf`). |
+| **Write**    | [`SourceSplicer`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/SourceSplicer.java) | `withMembers(source, typeName, members, indent)` — splices generated members into a hand-written interface. **The generator splices text; it never reprints a tree.** Reprinting reformats the developer's file, which is the defect the splice rule exists to prevent (DEC-020), so `SourceSplicer` is the write path and there is no print path. |
 
 Two rules that cover most of the mistakes:
 

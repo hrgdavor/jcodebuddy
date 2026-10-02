@@ -7,9 +7,9 @@ passed on this machine on 2026-09-27**; the measured results are committed in
 [`../PHASE0-ECLIPSE-FINDINGS.md`](../PHASE0-ECLIPSE-FINDINGS.md) and the raw output in
 [`probe-run.txt`](probe-run.txt).
 
-| File | What it is |
-| --- | --- |
-| `probe.mjs` | Bun script: resolves the pinned Eclipse bundles (SWT `3.135.0`, `org.eclipse.ui` `3.209.100`, `org.eclipse.ui.browser` `3.9.200` — see `../PLAN-eclipse-host.md` § 5.1.1) into `target/`, compiles `SwtProbe.java` with `javac` from `JAVA_HOME`, runs it with those jars on the classpath, and prints one line per experiment |
+| File            | What it is |
+| --------------- | ---------- |
+| `probe.mjs`     | Bun script: resolves the pinned Eclipse bundles (SWT `3.135.0`, `org.eclipse.ui` `3.209.100`, `org.eclipse.ui.browser` `3.9.200` — see `../PLAN-eclipse-host.md` § 5.1.1) into `target/`, compiles `SwtProbe.java` with `javac` from `JAVA_HOME`, runs it with those jars on the classpath, and prints one line per experiment |
 | `SwtProbe.java` | The probe itself: creates a `Display` without a workbench, creates a `Browser` with `SWT.EDGE`, reports `getBrowserType()` and the `org.eclipse.swt.browser.EdgeVersion` property SWT sets itself, registers a `BrowserFunction` that reports its own thread and argument (including a throw and a dispose/re-register cycle), loads a `data:` splash, a loopback page and a `file://` page, and — with a `java.net` server started by the script — prints the `Origin` each page sends |
 | `probe-run.txt` | The raw output of the 2026-09-27 run, committed as the observation record (`probe-run.log` is kept in `target/`, which is ignored) |
 

@@ -79,15 +79,15 @@ The cache supports two-phase population to avoid blocking the initial project-st
 
 Each `SourceMetadata` instance represents one compilation unit and contains:
 
-| Level                    | Descriptor          | Key content                                                                                    |
-| ------------------------ | ------------------- | ---------------------------------------------------------------------------------------------- |
-| File                     | `FileMeta`          | package, module, file-level annotations, declared types                                        |
-| Import section           | `ImportSectionMeta` | imports (static, wildcard, on-demand)                                                          |
-| Class / interface / enum | `TypeMeta`          | modifiers, annotations, type parameters, superclass, interfaces, nested types, fields, methods |
-| Field                    | `FieldMeta`         | modifiers, annotations, type descriptor, initializer                                           |
-| Record component         | `RecordComponentMeta` | name, type descriptor, annotations (sibling of `FieldMeta`)                                  |
-| Method                   | `MethodMeta`        | modifiers, annotations, return type descriptor, type parameters, parameters, called method signatures, range |
-| Parameter                | `ParameterMeta`     | modifiers, annotations, type descriptor, varargs, index                                        |
+| Level                    | Descriptor            | Key content                                                                                    |
+| ------------------------ | --------------------- | ---------------------------------------------------------------------------------------------- |
+| File                     | `FileMeta`            | package, module, file-level annotations, declared types                                        |
+| Import section           | `ImportSectionMeta`   | imports (static, wildcard, on-demand)                                                          |
+| Class / interface / enum | `TypeMeta`            | modifiers, annotations, type parameters, superclass, interfaces, nested types, fields, methods |
+| Field                    | `FieldMeta`           | modifiers, annotations, type descriptor, initializer                                           |
+| Record component         | `RecordComponentMeta` | name, type descriptor, annotations (sibling of `FieldMeta`)                                    |
+| Method                   | `MethodMeta`          | modifiers, annotations, return type descriptor, type parameters, parameters, called method signatures, range |
+| Parameter                | `ParameterMeta`       | modifiers, annotations, type descriptor, varargs, index                                        |
 
 All type references use the `TypeDescriptor` record (moved to `hipster-entity-api.meta`) extended with type-use annotation support. Every descriptor that can carry Java modifiers includes a `Set<Modifier>` and a list of `AnnotationMeta`. Modern Java features are supported explicitly:
 
@@ -331,13 +331,13 @@ For each hash in module index:
 
 ### Module ownership and dependencies
 
-| Component | Module | Depends on |
-|-----------|--------|------------|
-| `CacheEntry`, `SourceMetadata`, descriptors | `hipster-entity-tooling` | `hipster-entity-api` |
-| `TypeDescriptor`, `AnnotationMeta`, `Range` | `hipster-entity-api` | - |
-| `MetadataTypeResolver`, `MetadataSerializer`, `MetadataCache` interface, `MetadataNode` | `project-automation` | `hipster-entity-api` |
-| `MetadataCache` implementation, `index.fury` handling | `project-automation` | `hipster-entity-tooling` |
-| `EntityMetadataGenerator` migration | `hipster-entity-tooling` | `hipster-entity-api`, `project-automation` |
+| Component                                                                               | Module                   | Depends on                                 |
+| --------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------ |
+| `CacheEntry`, `SourceMetadata`, descriptors                                             | `hipster-entity-tooling` | `hipster-entity-api`                       |
+| `TypeDescriptor`, `AnnotationMeta`, `Range`                                             | `hipster-entity-api`     | -                                          |
+| `MetadataTypeResolver`, `MetadataSerializer`, `MetadataCache` interface, `MetadataNode` | `project-automation`     | `hipster-entity-api`                       |
+| `MetadataCache` implementation, `index.fury` handling                                   | `project-automation`     | `hipster-entity-tooling`                   |
+| `EntityMetadataGenerator` migration                                                     | `hipster-entity-tooling` | `hipster-entity-api`, `project-automation` |
 
 `hipster-entity-api` must not depend on `hipster-entity-tooling`. `project-automation` depends on both modules and is the correct owner for `MetadataTypeResolver`.
 
@@ -405,18 +405,18 @@ These approaches depend on the metadata model defined here but are not part of t
 
 ### Edge cases and failure modes
 
-| Edge case | Behavior |
-|-----------|----------|
-| Duplicate class names in same module | Index keyed by `fullClassName` must handle collisions. The index stores `fullClassName` → list of hashes; lookup requires `relativePath` disambiguation. |
-| File deleted then restored within retention window | Cache hit on restored file if wayhash is still present. Cleanup does not evict. |
-| Corrupted `index.fury` | Rebuild index by scanning all `<hash>.fury` files in the module cache directory. Recovery mode, not happy path. |
-| Concurrent cache writes | Per-module cache directory and index. Writers use atomic rename. Index updates are single-writer per module (the watcher daemon). Enrichment threads write to distinct `CacheEntry` files, so they do not conflict. |
-| Non-Java resources | `CacheEntry.fullClassName` is `null`. `SourceMetadata` is empty or contains only `FileMeta` with package/module info. Optional future extension. |
-| Java 9+ `module-info.java` | Parsed as a special `TypeMeta` with `kind=MODULE`. `javaModule` is set on `FileMeta`. |
-| Schema version mismatch | `MetadataSerializer.deserialize` checks `schemaVersion`. If incompatible, throw `MetadataSchemaException` and fall back to re-parsing source. |
-| Metadata absent (`metadata == null`) | All cache read APIs return `null` or empty results instead of throwing. Generators that require metadata must check for null and either skip, return defaults, or trigger enrichment. |
-| Enrichment thread failure | If a worker thread fails to parse a file, the `CacheEntry` remains with `metadata == null`. The enrichment scheduler retries failed entries in the next cycle. |
-| Stale index after enrichment | After a thread writes enriched metadata, the index must be updated atomically. If the index update fails, the entry exists on disk but is unreachable by lookup; cleanup on the next full recompile will either find it via directory scan or leave it for manual recovery. |
+| Edge case                                          | Behavior                                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Duplicate class names in same module               | Index keyed by `fullClassName` must handle collisions. The index stores `fullClassName` → list of hashes; lookup requires `relativePath` disambiguation. |
+| File deleted then restored within retention window | Cache hit on restored file if wayhash is still present. Cleanup does not evict.       |
+| Corrupted `index.fury`                             | Rebuild index by scanning all `<hash>.fury` files in the module cache directory. Recovery mode, not happy path. |
+| Concurrent cache writes                            | Per-module cache directory and index. Writers use atomic rename. Index updates are single-writer per module (the watcher daemon). Enrichment threads write to distinct `CacheEntry` files, so they do not conflict. |
+| Non-Java resources                                 | `CacheEntry.fullClassName` is `null`. `SourceMetadata` is empty or contains only `FileMeta` with package/module info. Optional future extension. |
+| Java 9+ `module-info.java`                         | Parsed as a special `TypeMeta` with `kind=MODULE`. `javaModule` is set on `FileMeta`. |
+| Schema version mismatch                            | `MetadataSerializer.deserialize` checks `schemaVersion`. If incompatible, throw `MetadataSchemaException` and fall back to re-parsing source. |
+| Metadata absent (`metadata == null`)               | All cache read APIs return `null` or empty results instead of throwing. Generators that require metadata must check for null and either skip, return defaults, or trigger enrichment. |
+| Enrichment thread failure                          | If a worker thread fails to parse a file, the `CacheEntry` remains with `metadata == null`. The enrichment scheduler retries failed entries in the next cycle. |
+| Stale index after enrichment                       | After a thread writes enriched metadata, the index must be updated atomically. If the index update fails, the entry exists on disk but is unreachable by lookup; cleanup on the next full recompile will either find it via directory scan or leave it for manual recovery. |
 
 ### Validation plan
 
@@ -442,13 +442,13 @@ These approaches depend on the metadata model defined here but are not part of t
 
 § "Source-position Range" justifies `Range(startLine, endLine, startColumn, endColumn)` with "Line/column pairs are used because JavaParser natively provides line numbers". That is precisely the assumption the rewrite migration invalidated: an OpenRewrite LST node carries **no position at all**. Positions come from javac's own line map, owned by [`JavaSyntaxCheck`](../../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/JavaSyntaxCheck.java) and queried through [`TreeQueries`](../../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/TreeQueries.java) (`lineOf`, `declarationLineOf`, `methodLineOf`, `annotationLineOf`, `memberLineOf`), so a `Range` is filled from javac rather than read off a node. `MethodMeta` keeps its `range` field, with a different supplier.
 
-| § | Was | Is |
-| --- | --- | --- |
-| Source-position `Range` | `Node.getRange()` off a parsed node | javac's line map via `JavaSyntaxCheck` + `TreeQueries` |
-| Inventory "must not invoke JavaParser" | no parsing during inventory | the same rule: no parser and no expensive metadata generation during inventory |
-| Enrichment "parses source with JavaParser" | JavaParser per worker thread | `SourceReader.read(Path)` per worker thread |
-| "from ad-hoc JavaParser walks to tree construction" | a JavaParser walk | an LST traversal through `TreeQueries` |
-| "Generators continue to use JavaParser AST for source manipulation" | an AST to be modified | the tree is read for its shape and then discarded; writes splice text through `SourceSplicer` |
+| §                                                                   | Was                                 | Is                                                                                            |
+| ------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| Source-position `Range`                                             | `Node.getRange()` off a parsed node | javac's line map via `JavaSyntaxCheck` + `TreeQueries`                                        |
+| Inventory "must not invoke JavaParser"                              | no parsing during inventory         | the same rule: no parser and no expensive metadata generation during inventory                |
+| Enrichment "parses source with JavaParser"                          | JavaParser per worker thread        | `SourceReader.read(Path)` per worker thread                                                   |
+| "from ad-hoc JavaParser walks to tree construction"                 | a JavaParser walk                   | an LST traversal through `TreeQueries`                                                        |
+| "Generators continue to use JavaParser AST for source manipulation" | an AST to be modified               | the tree is read for its shape and then discarded; writes splice text through `SourceSplicer` |
 
 Everything else stands as written, because it is independent of which parser produced the tree: two-phase population, one `CacheEntry` per wayhash, the `SourceMetadata` hierarchy, the file-scoped-only rule, correlation metadata keyed by `dependencyHash`, the per-module `index.fury`, the `MetadataTypeResolver` bridge and the `RuntimeTypeView` projection. `hipster-entity-tooling` declares `org.openrewrite:rewrite-core`, `rewrite-java` and `rewrite-java-25`; `javaparser-core` is gone from its POM.
 

@@ -60,17 +60,17 @@ feature       o       what our branch did since we last synced
 
 ## Options
 
-| Option | Meaning |
-|---|---|
-| `--list` | list every fixture that can be simulated |
-| `--out <dir>` | where to build (default: `<tmp>/merge-java-<fixture>`) |
-| `--base-branch <name>` | branch holding the base commit (default `base`) |
-| `--feature-branch <name>` | our side (default `feature`) |
-| `--upstream-branch <name>` | their side (default `upstream`) |
-| `--merge` | leave the repository mid-merge, with conflict markers in the tree |
-| `--force` | replace an existing `--out` directory |
-| `--json` | print the manifest as JSON instead of a summary |
-| `--capture <file>` | write this run's output there instead of the console |
+| Option                     | Meaning                                                           |
+| -------------------------- | ----------------------------------------------------------------- |
+| `--list`                   | list every fixture that can be simulated                          |
+| `--out <dir>`              | where to build (default: `<tmp>/merge-java-<fixture>`)            |
+| `--base-branch <name>`     | branch holding the base commit (default `base`)                   |
+| `--feature-branch <name>`  | our side (default `feature`)                                      |
+| `--upstream-branch <name>` | their side (default `upstream`)                                   |
+| `--merge`                  | leave the repository mid-merge, with conflict markers in the tree |
+| `--force`                  | replace an existing `--out` directory                             |
+| `--json`                   | print the manifest as JSON instead of a summary                   |
+| `--capture <file>`         | write this run's output there instead of the console              |
 
 Exit codes: `0` built, `1` the fixture or repository is unusable, `2` bad usage.
 An existing `--out` directory is refused unless `--force` is given.
@@ -95,11 +95,11 @@ bun run scripts/git-sample/sample-repo.js import-add-both --out /tmp/case --merg
 
 ## What is in the generated repository
 
-| Path | What it is |
-|---|---|
-| `README.md` | the case, its commits, the commands to try, whether git conflicts here, and which side actually changed the file |
-| `expected/ours.diff`, `expected/theirs.diff` | the fixture's own diffs, verbatim — the documented intent a resolution should be compared against |
-| `.jcodebuddy/merge-history/<branch>/last-sync` | the marker `MergeWorkflow` reads, uncommitted |
+| Path                                           | What it is                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `README.md`                                    | the case, its commits, the commands to try, whether git conflicts here, and which side actually changed the file |
+| `expected/ours.diff`, `expected/theirs.diff`   | the fixture's own diffs, verbatim — the documented intent a resolution should be compared against |
+| `.jcodebuddy/merge-history/<branch>/last-sync` | the marker `MergeWorkflow` reads, uncommitted                                                     |
 
 The manifest (`--json`) carries the same facts as data: `changes` says, per path,
 which sides differ from the base; `conflictsUnderGit` says which paths git conflicts

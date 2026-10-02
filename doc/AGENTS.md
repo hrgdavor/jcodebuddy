@@ -10,11 +10,11 @@
 
 ## Read first
 
-| File | Why |
-| ---- | --- |
-| [`AGENTS.md`](../AGENTS.md) (root) | § 1 source-visible, IDE-navigable wiring and § 2's Bun-JavaScript rule bind everything, including this file. § 3 says how this file and `proto/AGENTS.md` relate. |
-| [`README.md`](../README.md) | the recorded gate, the driver-project boundary, and the expectation that JCodeBuddy changes until a major release so that `proto/` projects can be implemented properly |
-| [`doc/architecture/module-map.md`](architecture/module-map.md) | which module owns what, before you look for a home for a change |
+| File                                                            | Why                                                                                          |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`AGENTS.md`](../AGENTS.md) (root)                              | § 1 source-visible, IDE-navigable wiring and § 2's Bun-JavaScript rule bind everything, including this file. § 3 says how this file and `proto/AGENTS.md` relate. |
+| [`README.md`](../README.md)                                     | the recorded gate, the driver-project boundary, and the expectation that JCodeBuddy changes until a major release so that `proto/` projects can be implemented properly |
+| [`doc/architecture/module-map.md`](architecture/module-map.md)  | which module owns what, before you look for a home for a change                              |
 | [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md) | the reading/querying/writing contract for Java source. Read it before touching any generator |
 | [`doc-hipster-entity/architecture/decisions/`](../doc-hipster-entity/architecture/decisions/README.md) | the decision that governs whatever you are about to change, most likely |
 

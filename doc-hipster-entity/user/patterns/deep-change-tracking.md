@@ -22,13 +22,13 @@ If your views are flat — scalars only — you do not need any of this. `change
 
 ## Shallow vs deep: two different questions
 
-| | Shallow | Deep |
-|---|---|---|
-| Method | `changes()`, `changesBuilder()` | `changesDeep()` |
-| Answers | **which** fields of *this* view changed | **where** every changed leaf is, this view and everything it holds |
-| Returns | an `EEnumSet` of marked ordinals | a `List<ChangePath>` |
-| A nested view's change | invisible if the reference was not reassigned | reported, with the path to the leaf |
-| Cost | one bitset | a walk on read (pull) |
+|                        | Shallow                                       | Deep                                                               |
+| ---------------------- | --------------------------------------------- | ------------------------------------------------------------------ |
+| Method                 | `changes()`, `changesBuilder()`               | `changesDeep()`                                                    |
+| Answers                | **which** fields of *this* view changed       | **where** every changed leaf is, this view and everything it holds |
+| Returns                | an `EEnumSet` of marked ordinals              | a `List<ChangePath>`                                               |
+| A nested view's change | invisible if the reference was not reassigned | reported, with the path to the leaf                                |
+| Cost                   | one bitset                                    | a walk on read (pull)                                              |
 
 The two are **not** overloads and neither is context-dependent. `changes()` always means "these
 fields of this view"; `changesDeep()` always means "these paths, all the way down". A call site
@@ -107,12 +107,12 @@ document member.
 A `List<Address>` where `Address` is a tracked view is the hard case. It changes in two independent
 ways, and both are reported **distinctly** — one is not expressed in terms of the other:
 
-| You did | You get |
-|---|---|
+| You did                                      | You get                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
 | edited a field of an element that stayed put | a `ChangePath` with `listIndex` set (`ListDelta.kind() == FIELD_CHANGED`) |
-| added an element | `ListDelta.kind() == ADDED` |
-| removed an element | `ListDelta.kind() == REMOVED` |
-| moved an element | `ListDelta.kind() == REORDERED` |
+| added an element                             | `ListDelta.kind() == ADDED`                                               |
+| removed an element                           | `ListDelta.kind() == REMOVED`                                             |
+| moved an element                             | `ListDelta.kind() == REORDERED`                                           |
 
 ```java
 Map<Integer, List<ListDelta>> deltas = view.collectionDeltas();

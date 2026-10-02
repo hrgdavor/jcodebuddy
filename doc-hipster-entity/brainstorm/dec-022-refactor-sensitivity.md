@@ -40,12 +40,12 @@ classified as one of two contracts:
 
 **Concrete examples.**
 
-| Emitted name                       | Derivation         | Contract          | Why |
-| ---------------------------------- | ------------------ | ----------------- | --- |
-| `OrderView` record name            | implicit (`Order` + `View` suffix) | refactor-sensitive | Renaming `Order` should offer to rename `OrderView` |
-| `withTotal` builder method name    | implicit (`total` field) | refactor-sensitive | Renaming `total()` accessor should offer to rename `withTotal` |
-| `"users.get"` JSON-RPC case label  | explicit (`@RpcMethod.value()`) | refactor-insensitive | API label must not change when Java method is renamed |
-| `"shipment.create"` next-step trigger | explicit (workflow name) | refactor-insensitive | Workflow name is an external contract |
+| Emitted name                          | Derivation                         | Contract             | Why                                                            |
+| ------------------------------------- | ---------------------------------- | -------------------- | -------------------------------------------------------------- |
+| `OrderView` record name               | implicit (`Order` + `View` suffix) | refactor-sensitive   | Renaming `Order` should offer to rename `OrderView`            |
+| `withTotal` builder method name       | implicit (`total` field)           | refactor-sensitive   | Renaming `total()` accessor should offer to rename `withTotal` |
+| `"users.get"` JSON-RPC case label     | explicit (`@RpcMethod.value()`)    | refactor-insensitive | API label must not change when Java method is renamed          |
+| `"shipment.create"` next-step trigger | explicit (workflow name)           | refactor-insensitive | Workflow name is an external contract                          |
 
 **What generators must do.**
 

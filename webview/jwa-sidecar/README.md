@@ -32,16 +32,16 @@ This module contains the heavy logic, source parsing, and transformation engines
 The sidecar itself is **six classes** — it is an LSP shell, not a library — plus the one test class that guards
 its HTTP surface:
 
-| Class | Role |
-|---|---|
-| `SidecarApp` | the entry point (LSP on stdin/stdout, Jump HTTP on 127.0.0.1:7979) |
-| `JwaLanguageServer` | LSP server wiring; delegates navigation to `webview-core`'s `Navigator` |
-| `JwaLanguageClient` | client callbacks |
-| `JwaTextDocumentService` | text-document lifecycle and the builder code actions |
-| `JwaWorkspaceService` | workspace-level requests; handles the `jwa.syncBuilder` command the code action carries |
-| `JumpParams` | the `mytool/jump` Remote Jump parameters |
-| `SidecarAppJumpServiceTest` | the jump endpoint's authorization, over a real socket |
-| `SidecarCodeActionTest` | when "Sync Builder" is offered, and that picking it reaches the editor |
+| Class                       | Role                                                                                    |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| `SidecarApp`                | the entry point (LSP on stdin/stdout, Jump HTTP on 127.0.0.1:7979)                      |
+| `JwaLanguageServer`         | LSP server wiring; delegates navigation to `webview-core`'s `Navigator`                 |
+| `JwaLanguageClient`         | client callbacks                                                                        |
+| `JwaTextDocumentService`    | text-document lifecycle and the builder code actions                                    |
+| `JwaWorkspaceService`       | workspace-level requests; handles the `jwa.syncBuilder` command the code action carries |
+| `JumpParams`                | the `mytool/jump` Remote Jump parameters                                                |
+| `SidecarAppJumpServiceTest` | the jump endpoint's authorization, over a real socket                                   |
+| `SidecarCodeActionTest`     | when "Sync Builder" is offered, and that picking it reaches the editor                  |
 
 The behaviour it drives still lives in the worker modules (`jwa-builder`'s `RecordBuilderProcessorTest`,
 `RecordBuilderFormattingTest` and `ClassMemberProcessorTest`); what the sidecar's own test covers is the part

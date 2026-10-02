@@ -249,17 +249,17 @@ All automation code must comply with:
 `doc/brainstorm/rewrite-migration/05-automation/` were reviewed line by line and rewritten into
 `project-automation/src/main/java/hr/hrg/jcodebuddy/automation/`; nothing was copied unchanged.
 
-| Delivered | Where | What it does |
-| --- | --- | --- |
-| `Transformation` | same package | text → text, `throws TransformationException`; the extension point |
-| `TransformationRegistry` | same package | the one registry, owned by the engine, fail-fast on duplicates, no reflection |
-| `AutomationEngine` | same package | `apply`, `applyInPlace`, `applyAll`, `applyAllSequential`, `applySequential`, `validate`, `analyze` |
-| `BatchProcessor` + `BatchReport` | same package | parallel and sequential batch runs, a tally as data, `processMatching` |
-| `ProjectAutomation` | same package | the facade: register, list, run on a file, run on a tree, validate, analyse |
-| `TransformationResult`, `ValidationResult`, `AnalysisResult` | same package | the result records |
-| `TransformationException` | same package | the checked refusal a transformation reports |
-| `SourceFiles` | same package | which files a run covers: sorted, glob-matched, `target`/`.jcodebuddy`/`.git` excluded |
-| `SourceFacts` | same package | package-private; LST structure plus a text line classifier |
+| Delivered                                                    | Where        | What it does                                                                                        |
+| ------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------- |
+| `Transformation`                                             | same package | text → text, `throws TransformationException`; the extension point                                  |
+| `TransformationRegistry`                                     | same package | the one registry, owned by the engine, fail-fast on duplicates, no reflection                       |
+| `AutomationEngine`                                           | same package | `apply`, `applyInPlace`, `applyAll`, `applyAllSequential`, `applySequential`, `validate`, `analyze` |
+| `BatchProcessor` + `BatchReport`                             | same package | parallel and sequential batch runs, a tally as data, `processMatching`                              |
+| `ProjectAutomation`                                          | same package | the facade: register, list, run on a file, run on a tree, validate, analyse                         |
+| `TransformationResult`, `ValidationResult`, `AnalysisResult` | same package | the result records                                                                                  |
+| `TransformationException`                                    | same package | the checked refusal a transformation reports                                                        |
+| `SourceFiles`                                                | same package | which files a run covers: sorted, glob-matched, `target`/`.jcodebuddy`/`.git` excluded              |
+| `SourceFacts`                                                | same package | package-private; LST structure plus a text line classifier                                          |
 
 ### Where the delivered code differs from the signature above
 

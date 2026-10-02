@@ -97,13 +97,13 @@ record's own indent), which is what `RecordBuilderFormattingTest` pins.
 
 ## The classes, and what each owns
 
-| Class | Owns |
-|---|---|
-| `RecordBuilderProcessor` | Which record in the text is the target, and what it declares: `target(source, line)` (nearest record within five lines of the caret, else the first), `recordOnLine(source, line)` (exact line, for a code action), `annotatedRecords(source)` (`@GenerateBuilder` records with their name lines), `Component` (a component's declared type and name), `complete(recordText, recordName, components)`. |
-| `LineLookup` | The one fact the tree cannot supply: **positions**, from javac's line map. `spanOf(source, simpleName)` gives the record's `Span` (start/end offset, name line, start/end line). |
-| `SourceSplicer` | The text: `withBuilder(source, recordName, components, indent)`. |
+| Class                         | Owns                                                             |
+| ----------------------------- | ---------------------------------------------------------------- |
+| `RecordBuilderProcessor`      | Which record in the text is the target, and what it declares: `target(source, line)` (nearest record within five lines of the caret, else the first), `recordOnLine(source, line)` (exact line, for a code action), `annotatedRecords(source)` (`@GenerateBuilder` records with their name lines), `Component` (a component's declared type and name), `complete(recordText, recordName, components)`. |
+| `LineLookup`                  | The one fact the tree cannot supply: **positions**, from javac's line map. `spanOf(source, simpleName)` gives the record's `Span` (start/end offset, name line, start/end line). |
+| `SourceSplicer`               | The text: `withBuilder(source, recordName, components, indent)`. |
 | `BuilderTransformationEngine` | The editor-facing entry point: `generate(uri, source, line)` returns a `TransformationResult` carrying the `CodeEdit` a sidecar or agent applies. |
-| `ClassMemberProcessor` | The sibling operation on plain classes — `withAccessors`, `withBuilder`, `withConstructors` over a `Target` built by `target(source, line)`. |
+| `ClassMemberProcessor`        | The sibling operation on plain classes — `withAccessors`, `withBuilder`, `withConstructors` over a `Target` built by `target(source, line)`. |
 
 ### Two behaviours worth knowing
 

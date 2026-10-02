@@ -35,12 +35,12 @@ public record TransformationResult(
 
 ## 3. Comparison: Agent vs. Sidecar
 
-| Feature | `java-watch-agent` | `jwa-sidecar` |
-| :--- | :--- | :--- |
-| **Trigger** | File System Events (Watcher) | LSP Requests (Save, Command, Lightbulb) |
-| **IO Strategy** | Surgical Disk Writes | WorkspaceEdits (VFS-aware) |
-| **User Flow** | Background / "Live Synchronizer" | Interactive / "On-Demand Assistant" |
-| **Navigation** | CLI/WebUI Logging | Remote Jump (`mytool/jump`) |
+| Feature         | `java-watch-agent`               | `jwa-sidecar`                           |
+| :-------------- | :------------------------------- | :-------------------------------------- |
+| **Trigger**     | File System Events (Watcher)     | LSP Requests (Save, Command, Lightbulb) |
+| **IO Strategy** | Surgical Disk Writes             | WorkspaceEdits (VFS-aware)              |
+| **User Flow**   | Background / "Live Synchronizer" | Interactive / "On-Demand Assistant"     |
+| **Navigation**  | CLI/WebUI Logging                | Remote Jump (`mytool/jump`)             |
 
 ---
 

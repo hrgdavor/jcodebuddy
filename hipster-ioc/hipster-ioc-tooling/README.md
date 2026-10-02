@@ -60,13 +60,13 @@ Exit code is non-zero when a context was **refused**, so a check can depend on i
 
 ## What it refuses, and why refusing is the answer
 
-| Diagnostic | When | What it means |
-| --- | --- | --- |
-| `circular_dependency_unmarked` | the factories' parameters form a cycle and no parameter is `@Circular` | no creation order exists; the file is left untouched |
-| `circular_dependency_marked_unsupported` | a parameter *is* marked `@Circular` | the two-phase form that would honour the mark needs a `Supplier` parameter, which the API cannot express yet (DEC-036 § 5) |
-| `lazy_bean_needs_factory` | a `Supplier<X>`/`DynamicResource<X>` bean with no `build…` method | `new Supplier<X>()` is not valid Java, and inventing one would capture a bean nobody built |
-| `context_implementation_present` | `@HipsterContext(impl = …)` names a class | an implementation already exists; the generator must not compete with it |
-| `source_not_parsed` | the file cannot be read cleanly | nothing is generated — a half-read context is a half-wired one |
+| Diagnostic                               | When                                                                   | What it means                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `circular_dependency_unmarked`           | the factories' parameters form a cycle and no parameter is `@Circular` | no creation order exists; the file is left untouched                                       |
+| `circular_dependency_marked_unsupported` | a parameter *is* marked `@Circular`                                    | the two-phase form that would honour the mark needs a `Supplier` parameter, which the API cannot express yet (DEC-036 § 5) |
+| `lazy_bean_needs_factory`                | a `Supplier<X>`/`DynamicResource<X>` bean with no `build…` method      | `new Supplier<X>()` is not valid Java, and inventing one would capture a bean nobody built |
+| `context_implementation_present`         | `@HipsterContext(impl = …)` names a class                              | an implementation already exists; the generator must not compete with it                   |
+| `source_not_parsed`                      | the file cannot be read cleanly                                        | nothing is generated — a half-read context is a half-wired one                             |
 
 A factory parameter the context cannot provide is **not** an error: it becomes a constructor parameter of the
 generated class, so the caller supplies it and no generated code ever passes a `null`.
@@ -80,13 +80,13 @@ generator (DEC-027/029).
 
 ## Naming contract (DEC-022)
 
-| Source | Generated | Rename-sensitive? |
-| --- | --- | --- |
-| `@HipsterContext interface CtxMain` | `CtxMainImpl`, same package | **yes** — the class names the interface in its `{@link}` and implements it, so an IDE rename of the interface reaches the generated class |
-| accessor `ObjectMapper mapper()` | field `mapper` + `@Override mapper()` | **yes** — the name is the interface's own |
-| `default Widget buildWidget(Gadget gadget)` | the creation call `buildWidget(gadget)` | **yes** — the generator reads the method name on every pass, so a rename regenerates the call |
-| `@HipsterContext(impl = ManualContext.class)` | nothing generated; the diagnostic names the class | **no** — a user-supplied reference, passed through as written |
-| the generated file itself | `// @generated file hr.hrg.hipster.ioc.tooling.IocContextGenerator …` | **no** — the marker names the generator, which is stable |
+| Source                                        | Generated                                                             | Rename-sensitive?                                                                             |
+| --------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `@HipsterContext interface CtxMain`           | `CtxMainImpl`, same package                                           | **yes** — the class names the interface in its `{@link}` and implements it, so an IDE rename of the interface reaches the generated class |
+| accessor `ObjectMapper mapper()`              | field `mapper` + `@Override mapper()`                                 | **yes** — the name is the interface's own                                                     |
+| `default Widget buildWidget(Gadget gadget)`   | the creation call `buildWidget(gadget)`                               | **yes** — the generator reads the method name on every pass, so a rename regenerates the call |
+| `@HipsterContext(impl = ManualContext.class)` | nothing generated; the diagnostic names the class                     | **no** — a user-supplied reference, passed through as written                                 |
+| the generated file itself                     | `// @generated file hr.hrg.hipster.ioc.tooling.IocContextGenerator …` | **no** — the marker names the generator, which is stable                                      |
 
 ## Boundaries
 

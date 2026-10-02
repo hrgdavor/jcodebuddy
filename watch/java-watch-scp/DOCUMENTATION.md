@@ -115,19 +115,19 @@ java -jar target/java-watch-scp.jar <source-dir> <host> <user> <pass> <remote-pa
 
 ### Command Line Options
 
-| Flag | Description |
-|------|-------------|
-| `-c, --config <path>` | Path to config file — use `-c -` to read from **stdin** |
-| `-w, --watch` | Enable watch mode (continuous monitoring) |
-| `-x, --compress` | Enable SSH compression |
-| `--cleanup` | Remove remote files not present locally |
-| `--dry-run` | Show what would be synced/removed without making changes |
-| `--exec <cmd>` | Execute command on remote after each sync |
-| `--check <hash\|mtime_size>` | Change detection mode (default: `hash`) |
-| `--no-db` | Disable checksum database on remote server |
-| `--var VARNAME=value` | Set a config variable (repeatable, highest priority) |
-| `-D VARNAME=value` | Short form of `--var` |
-| `-h, --help` | Show help message |
+| Flag                         | Description                                              |
+| ---------------------------- | -------------------------------------------------------- |
+| `-c, --config <path>`        | Path to config file — use `-c -` to read from **stdin**  |
+| `-w, --watch`                | Enable watch mode (continuous monitoring)                |
+| `-x, --compress`             | Enable SSH compression                                   |
+| `--cleanup`                  | Remove remote files not present locally                  |
+| `--dry-run`                  | Show what would be synced/removed without making changes |
+| `--exec <cmd>`               | Execute command on remote after each sync                |
+| `--check <hash\|mtime_size>` | Change detection mode (default: `hash`)                  |
+| `--no-db`                    | Disable checksum database on remote server               |
+| `--var VARNAME=value`        | Set a config variable (repeatable, highest priority)     |
+| `-D VARNAME=value`           | Short form of `--var`                                    |
+| `-h, --help`                 | Show help message                                        |
 
 ### Reading Config from Stdin
 
@@ -163,26 +163,26 @@ EOF
 
 ### Global Settings
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `host` | — | Remote hostname or SSH config alias |
-| `username` | — | SSH username |
-| `password` | — | SSH password (prefer key auth or agent) |
-| `key_path` | — | Path to SSH private key |
-| `passphrase` | — | Passphrase for private key |
-| `port` | `22` | SSH port (or set via `host:port`) |
-| `parallel_threads` | `4` | Upload threads for initial sync |
-| `watch_delay_ms` | `200` | Debounce delay for file-change events (ms) |
-| `compress` | `false` | Enable SSH compression |
-| `cleanup` | `false` | Remove remote files missing locally |
-| `dry_run` | `false` | Dry run mode (don't upload or delete) |
-| `color` | auto | Force (`true`) or disable (`false`) color output |
-| `exec_cmd` | — | Remote command to run after each sync |
-| `text_extensions` | built-in list | Comma-separated extensions treated as text |
-| `version_from` | — | Local version template file path |
-| `version_to` | — | Remote path to upload processed version file |
-| `version_name` | — | Project name injected into version file |
-| `ENV.VARNAME` | — | Config-level default for `${VARNAME}` expansion |
+| Key                | Default       | Description                                      |
+| ------------------ | ------------- | ------------------------------------------------ |
+| `host`             | —             | Remote hostname or SSH config alias              |
+| `username`         | —             | SSH username                                     |
+| `password`         | —             | SSH password (prefer key auth or agent)          |
+| `key_path`         | —             | Path to SSH private key                          |
+| `passphrase`       | —             | Passphrase for private key                       |
+| `port`             | `22`          | SSH port (or set via `host:port`)                |
+| `parallel_threads` | `4`           | Upload threads for initial sync                  |
+| `watch_delay_ms`   | `200`         | Debounce delay for file-change events (ms)       |
+| `compress`         | `false`       | Enable SSH compression                           |
+| `cleanup`          | `false`       | Remove remote files missing locally              |
+| `dry_run`          | `false`       | Dry run mode (don't upload or delete)            |
+| `color`            | auto          | Force (`true`) or disable (`false`) color output |
+| `exec_cmd`         | —             | Remote command to run after each sync            |
+| `text_extensions`  | built-in list | Comma-separated extensions treated as text       |
+| `version_from`     | —             | Local version template file path                 |
+| `version_to`       | —             | Remote path to upload processed version file     |
+| `version_name`     | —             | Project name injected into version file          |
+| `ENV.VARNAME`      | —             | Config-level default for `${VARNAME}` expansion  |
 
 Credentials can also be set via environment variables:
 - `SYNC_SSH_PWD` — SSH password fallback
@@ -192,22 +192,22 @@ Credentials can also be set via environment variables:
 
 Each `[folder]` section (or `[file]` alias) supports:
 
-| Key | Description |
-|-----|-------------|
-| `local_dir` | Local directory to watch/sync |
-| `local_file` | (`[file]` only) Single local file — sets `local_dir` + `includes` automatically |
-| `remote_dir` | Remote destination directory |
-| `includes` | Comma-separated glob patterns to include |
-| `excludes` | Comma-separated glob patterns to exclude |
-| `check` | `hash` (default) or `mtime_size` |
-| `no_db` | `true` to skip the `.scpdb` database |
-| `local_db` | `true` to store `.scpdb` locally |
-| `scpdb` | Custom path/name for the database file |
-| `trigger_from` | Local file to upload as sync trigger |
-| `trigger_to` | Remote path to write the sync trigger |
-| `version_from` | Per-folder override for version template |
-| `version_to` | Per-folder override for version remote path |
-| `version_name` | Per-folder override for project name |
+| Key            | Description                                                                     |
+| -------------- | ------------------------------------------------------------------------------- |
+| `local_dir`    | Local directory to watch/sync                                                   |
+| `local_file`   | (`[file]` only) Single local file — sets `local_dir` + `includes` automatically |
+| `remote_dir`   | Remote destination directory                                                    |
+| `includes`     | Comma-separated glob patterns to include                                        |
+| `excludes`     | Comma-separated glob patterns to exclude                                        |
+| `check`        | `hash` (default) or `mtime_size`                                                |
+| `no_db`        | `true` to skip the `.scpdb` database                                            |
+| `local_db`     | `true` to store `.scpdb` locally                                                |
+| `scpdb`        | Custom path/name for the database file                                          |
+| `trigger_from` | Local file to upload as sync trigger                                            |
+| `trigger_to`   | Remote path to write the sync trigger                                           |
+| `version_from` | Per-folder override for version template                                        |
+| `version_to`   | Per-folder override for version remote path                                     |
+| `version_name` | Per-folder override for project name                                            |
 
 ### Config Variable Expansion
 
@@ -215,12 +215,12 @@ Any config value can contain `${VARNAME}` placeholders resolved at load time.
 
 **Resolution order (highest to lowest priority):**
 
-| Priority | Source | Example |
-|----------|--------|---------|
-| 1 | `--var` CLI flag | `--var SUBDIR=v2` |
-| 2 | Real environment variable | `export SUBDIR=v2` |
-| 3 | `ENV.VARNAME=` config default | `ENV.SUBDIR=project` in config |
-| — | **Error** | Variable missing from all three sources |
+| Priority   | Source                        | Example                                 |
+| ---------- | ----------------------------- | --------------------------------------- |
+| 1          | `--var` CLI flag              | `--var SUBDIR=v2`                       |
+| 2          | Real environment variable     | `export SUBDIR=v2`                      |
+| 3          | `ENV.VARNAME=` config default | `ENV.SUBDIR=project` in config          |
+| —          | **Error**                     | Variable missing from all three sources |
 
 **Why this order?**
 
@@ -382,20 +382,20 @@ Maintains a "heartbeat" version file on the remote, updated every sync.
 
 **Placeholder injection (all formats):**
 
-| Placeholder | Replaced with |
-|-------------|---------------|
-| `${timestamp}` | Current Unix timestamp (seconds) |
-| `${name}` | Value of `version_name` |
-| `${version_name}` | Value of `version_name` (alias) |
+| Placeholder       | Replaced with                    |
+| ----------------- | -------------------------------- |
+| `${timestamp}`    | Current Unix timestamp (seconds) |
+| `${name}`         | Value of `version_name`          |
+| `${version_name}` | Value of `version_name` (alias)  |
 
 **Automatic field injection by file extension:**
 
-| Extension | Field replaced | Example result |
-|-----------|---------------|----------------|
-| `.json` | `"timestamp": <old>` | `"timestamp": 1715170800` |
-| `.json` | `"name": "<old>"` | `"name": "MyProject-1.0"` |
-| `.ini` | `timestamp=<old>` | `timestamp=1715170800` |
-| `.ini` | `name=<old>` | `name=MyProject-1.0` |
+| Extension   | Field replaced       | Example result            |
+| ----------- | -------------------- | ------------------------- |
+| `.json`     | `"timestamp": <old>` | `"timestamp": 1715170800` |
+| `.json`     | `"name": "<old>"`    | `"name": "MyProject-1.0"` |
+| `.ini`      | `timestamp=<old>`    | `timestamp=1715170800`    |
+| `.ini`      | `name=<old>`         | `name=MyProject-1.0`      |
 
 **JSON template:**
 ```json

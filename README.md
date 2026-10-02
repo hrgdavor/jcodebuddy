@@ -63,17 +63,17 @@ The reactor requires **JDK 25** on *both* the Maven JVM and the forked test JVM 
 `maven.compiler.release=25`, and `.mvn/jvm.config` cannot select a JDK (it only passes JVM options to
 the Maven process). The committed launchers set `JAVA_HOME` for you:
 
-| Command | What it does |
-|---|---|
-| `scripts/mvn-jdk25.js` | `mvn -o -pl <six hipster-entity modules> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.js` below) |
-| `scripts/mvn-jdk25.js hipster-entity test` | the same module set with an explicit goal (no implicit `clean`) |
-| `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository |
-| `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned |
-| `scripts/gen.js` | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
-| `scripts/gen.js with-tests` | the same pass, then the entity test set |
-| `scripts/gen.js watch` | the same pass, then regenerate on every save (long-running, Ctrl+C to stop) |
-| `scripts/run-demo.js` | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
-| `scripts/entity-html/index.js` | render the HTML entity index from the JSON a pass wrote (DEC-027); `--module <dir>` for another module |
+| Command                                       | What it does                                                                |
+| --------------------------------------------- | --------------------------------------------------------------------------- |
+| `scripts/mvn-jdk25.js`                        | `mvn -o -pl <six hipster-entity modules> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.js` below) |
+| `scripts/mvn-jdk25.js hipster-entity test`    | the same module set with an explicit goal (no implicit `clean`)             |
+| `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository                           |
+| `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned                            |
+| `scripts/gen.js`                              | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
+| `scripts/gen.js with-tests`                   | the same pass, then the entity test set                                     |
+| `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop) |
+| `scripts/run-demo.js`                         | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
+| `scripts/entity-html/index.js`                | render the HTML entity index from the JSON a pass wrote (DEC-027); `--module <dir>` for another module |
 
 Every one of them is a **Bun** script — run them as `bun scripts/mvn-jdk25.js`, and so on. They were batch and
 shell files until 2026-09-26; `AGENTS.md` § 2 requires Bun JavaScript for anything an agent writes to run or check
@@ -112,10 +112,10 @@ than trusting whatever `java` is on `PATH`.
 JCodeBuddy works with **just the first layer**. The other two exist to make it more pleasant to use,
 and neither is a prerequisite for the generator:
 
-| Layer | What it is | Needed? |
-|---|---|---|
-| **The pass** | `java -cp … EntityMetadataGenerator …`, or the `bun scripts/gen.js` wrapper around it. Run it whenever you want the generated source refreshed. | **Required.** This is the whole tool. |
-| **Watch mode** | The same pass, run continuously: `bun scripts/gen.js watch` (`EntityRegenerationWatcher`) regenerates after each save, so generated output keeps up with your edits without you asking. | Optional, and worth it — this is the normal development loop. Still just the generator, triggered by a file watcher. |
+| Layer             | What it is | Needed?                               |
+| ----------------- | ---------- | ------------------------------------- |
+| **The pass**      | `java -cp … EntityMetadataGenerator …`, or the `bun scripts/gen.js` wrapper around it. Run it whenever you want the generated source refreshed. | **Required.** This is the whole tool. |
+| **Watch mode**    | The same pass, run continuously: `bun scripts/gen.js watch` (`EntityRegenerationWatcher`) regenerates after each save, so generated output keeps up with your edits without you asking. | Optional, and worth it — this is the normal development loop. Still just the generator, triggered by a file watcher. |
 | **Sidecar / LSP** | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings. The `project-automation` module is the conventional home for it. | **Purely a user-friendliness expansion.** Not implemented for the entity generator in this repository; the pipeline above works fully without it. |
 
 The important part of that table is the boundary between the last two rows: **watch mode is

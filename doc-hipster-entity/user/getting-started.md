@@ -11,13 +11,13 @@ The modules are published under the `hr.hrg.jcodebuddy` group id at
 version `1.0-SNAPSHOT` (the version declared by the reactor's parent
 POM). The real artifact ids are:
 
-| Artifact | What it gives you |
-|---|---|
-| `hipster-entity-api` | `EntityBase`, `ViewReader`, `ViewWriter`, `FieldDef`, `ViewMeta`, `@View`, `@FieldSource`, `GenLevel` — contracts only |
-| `hipster-entity-core` | the ordinal-array runtime: `EntityReadArray`, `EntityUpdateArray`, `EntityUpdateTrackingArray`, the `EEnumSet` family, `ViewChangeTracking`, `ArrayBackedViewProxyFactory` |
+| Artifact                 | What it gives you                                                  |
+| ------------------------ | ------------------------------------------------------------------ |
+| `hipster-entity-api`     | `EntityBase`, `ViewReader`, `ViewWriter`, `FieldDef`, `ViewMeta`, `@View`, `@FieldSource`, `GenLevel` — contracts only |
+| `hipster-entity-core`    | the ordinal-array runtime: `EntityReadArray`, `EntityUpdateArray`, `EntityUpdateTrackingArray`, the `EEnumSet` family, `ViewChangeTracking`, `ArrayBackedViewProxyFactory` |
 | `hipster-entity-tooling` | the generator (`EntityMetadataGenerator`) and the R1 order checker |
-| `hipster-entity-jackson` | Jackson 3 integration (`EntityJacksonMapper`) |
-| `hipster-entity-test` | integration fixtures used by the other modules' tests |
+| `hipster-entity-jackson` | Jackson 3 integration (`EntityJacksonMapper`)                      |
+| `hipster-entity-test`    | integration fixtures used by the other modules' tests              |
 
 A minimal Maven dependency on the contracts and the runtime:
 

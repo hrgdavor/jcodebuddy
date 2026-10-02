@@ -42,38 +42,38 @@ has to ask twice.
 
 ## 2. The routes
 
-| Route | Method | Auth | Body | Answers |
-| --- | --- | --- | --- | --- |
-| `/api/v1/applyEdit` | POST | **token** | `{filePath, expectedDigest, edits, dryRun?, target?}` | `200` applied, `200` `no-change`, `400` `invalid-edit`/`invalid-path`, `403` `outside-project`, `404` `not-found`, `405` non-POST, `409` `stale`/`no-buffer-edit`/`no-disk-write`, `429` `rate-limited`, `500` `not-readable` |
-| `/api/v1/diff` | POST | **token** | the same body, `dryRun` forced true | as above, always `applied: false` |
-| `/api/v1/undo` | POST | **token** | `{filePath}` | `200`, `400`, `403`, `404` `nothing-to-undo`, `409` `stale`/`no-disk-write`, `429` |
-| `/api/v1/redo` | POST | **token** | `{filePath}` | `200`, `400`, `403`, `404` `nothing-to-redo`, `409` `stale`/`no-disk-write`, `429` |
-| `/api/v1/events` | GET | **token** | — | `200` `text/event-stream` until the client goes away |
+| Route               | Method | Auth      | Body                                                  | Answers                                                                            |
+| ------------------- | ------ | --------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `/api/v1/applyEdit` | POST   | **token** | `{filePath, expectedDigest, edits, dryRun?, target?}` | `200` applied, `200` `no-change`, `400` `invalid-edit`/`invalid-path`, `403` `outside-project`, `404` `not-found`, `405` non-POST, `409` `stale`/`no-buffer-edit`/`no-disk-write`, `429` `rate-limited`, `500` `not-readable` |
+| `/api/v1/diff`      | POST   | **token** | the same body, `dryRun` forced true                   | as above, always `applied: false`                                                  |
+| `/api/v1/undo`      | POST   | **token** | `{filePath}`                                          | `200`, `400`, `403`, `404` `nothing-to-undo`, `409` `stale`/`no-disk-write`, `429` |
+| `/api/v1/redo`      | POST   | **token** | `{filePath}`                                          | `200`, `400`, `403`, `404` `nothing-to-redo`, `409` `stale`/`no-disk-write`, `429` |
+| `/api/v1/events`    | GET    | **token** | —                                                     | `200` `text/event-stream` until the client goes away                               |
 
-| Status | Reason | What it means, and what a page does |
-| --- | --- | --- |
-| `200` | — | applied, proposed, restored, or `no-change` — the body says which |
-| `400` | `invalid-edit` | an overlap, an out-of-range position, no edits at all, or an `expectedDigest` that is not a digest. The page's bug; do not retry the same request |
-| `400` | `invalid-path` | the name is not a usable path |
-| `403` | — | the caller proved nothing (**token** alone, § 6) |
-| `403` | `outside-project` | the path escaped the project root; nothing was written |
-| `404` | `not-found` | nothing is there |
-| `404` | `nothing-to-undo` / `nothing-to-redo` | this host has no history for that file, or the last action was not the one asked for |
-| `405` | — | not a `POST` (or not a `GET`, for `/events`) |
-| `409` | `stale` | the file changed since the page read it. **The body carries the current digest** — re-read and propose again (§ 4) |
-| `409` | `no-buffer-edit` | `target: "buffer"` was asked for and the attached host cannot put a change in a buffer — never a silent write to disk |
-| `409` | `no-disk-write` | the host owns no bytes of its own: it can edit an editor's buffer, and `/diff`, `/undo` and `/redo` are refused rather than faked |
-| `429` | `rate-limited` | writes share the navigation limiter (§ 4) |
-| `500` | `not-readable` | the file is there and could not be read (or could not be written); a host-side condition, not the page's |
+| Status | Reason                                | What it means, and what a page does                                                  |
+| ------ | ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `200`  | —                                     | applied, proposed, restored, or `no-change` — the body says which                    |
+| `400`  | `invalid-edit`                        | an overlap, an out-of-range position, no edits at all, or an `expectedDigest` that is not a digest. The page's bug; do not retry the same request |
+| `400`  | `invalid-path`                        | the name is not a usable path                                                        |
+| `403`  | —                                     | the caller proved nothing (**token** alone, § 6)                                     |
+| `403`  | `outside-project`                     | the path escaped the project root; nothing was written                               |
+| `404`  | `not-found`                           | nothing is there                                                                     |
+| `404`  | `nothing-to-undo` / `nothing-to-redo` | this host has no history for that file, or the last action was not the one asked for |
+| `405`  | —                                     | not a `POST` (or not a `GET`, for `/events`)                                         |
+| `409`  | `stale`                               | the file changed since the page read it. **The body carries the current digest** — re-read and propose again (§ 4) |
+| `409`  | `no-buffer-edit`                      | `target: "buffer"` was asked for and the attached host cannot put a change in a buffer — never a silent write to disk |
+| `409`  | `no-disk-write`                       | the host owns no bytes of its own: it can edit an editor's buffer, and `/diff`, `/undo` and `/redo` are refused rather than faked |
+| `429`  | `rate-limited`                        | writes share the navigation limiter (§ 4)                                            |
+| `500`  | `not-readable`                        | the file is there and could not be read (or could not be written); a host-side condition, not the page's |
 
 **`target` decides who performs the change**, and it is the field that makes the two destinations explicit
 rather than implicit:
 
-| `target` | Behaviour |
-| --- | --- |
+| `target`             | Behaviour                                                     |
+| -------------------- | ------------------------------------------------------------- |
 | `auto` (the default) | the attached editor's **buffer** when the host declares `edit`, otherwise this host's own write to disk |
-| `buffer` | the editor's buffer; `409 no-buffer-edit` when no attached host can do it — never a silent fall back to disk |
-| `disk` | this host's own atomic write, even when an editor is attached |
+| `buffer`             | the editor's buffer; `409 no-buffer-edit` when no attached host can do it — never a silent fall back to disk |
+| `disk`               | this host's own atomic write, even when an editor is attached |
 
 A buffer apply answers `{"applied": true, "target": "buffer", "digest": …, "unifiedDiff": …, "detail": …}`,
 and the `detail` says the file on disk is unchanged until the editor saves. **That asymmetry is the point of
@@ -174,12 +174,12 @@ A host may implement **the write half, the buffer half, or neither**: owning a p
 open buffer are different powers, and no host is obliged to have both. That is not a gap to route around — it
 is what `GET /health`'s `capabilities` array is for ([`contract.md`](contract.md) § 3.2):
 
-| Capability | The verbs it covers |
-| --- | --- |
-| `edit` | a change can land in an editor's **buffer**; without it, `target: "auto"` is this host's own write |
-| `diff` | a proposal and its unified diff |
-| `undo` | the checkpoint history, and therefore `/undo` and `/redo` |
-| `watch` | the event stream of § 5 |
+| Capability | The verbs it covers                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `edit`     | a change can land in an editor's **buffer**; without it, `target: "auto"` is this host's own write |
+| `diff`     | a proposal and its unified diff                                                                    |
+| `undo`     | the checkpoint history, and therefore `/undo` and `/redo`                                          |
+| `watch`    | the event stream of § 5                                                                            |
 
 **A host that owns no bytes refuses the verbs that need bytes rather than pretending.** A buffer-only host
 answers `/diff`, `/undo` and `/redo` with `409 no-disk-write` and a `detail` naming which host does own the

@@ -196,15 +196,15 @@ for (FieldMeta meta : prop.fieldMetas()) {
 
 ## Comparison
 
-| Aspect | Option 1: Direct getters | Option 2: Class-keyed map | Option 3: Real annotation impls | Option 4: Sealed hierarchy |
-|--------|-----|------|------|------|
-| Type safety at call site | Full | Full (via class key) | Full | Full (pattern match) |
-| Enum constructor stability | Fragile (grows per annotation) | Stable (2 params) | Stable (2 params) | Stable (2 params) |
-| Adding new annotation kind | New param everywhere | New record only | New impl only | New record + permits |
-| Works with validation frameworks | No (custom records) | Possible with Option 3 hybrid | Yes | No (custom records) |
-| Discoverability (IDE autocomplete) | Best (direct methods) | Good (`get(X.class)`) | Good (`get(X.class)`) | Good (sealed switch) |
-| Java 21 pattern matching | N/A | N/A | N/A | Best |
-| Extensible to unknown annotations | No | Yes (add `GenericMeta`) | Yes (if class available) | Partial (needs fallback case) |
+| Aspect                             | Option 1: Direct getters       | Option 2: Class-keyed map     | Option 3: Real annotation impls | Option 4: Sealed hierarchy    |
+| ---------------------------------- | ------------------------------ | ----------------------------- | ------------------------------- | ----------------------------- |
+| Type safety at call site           | Full                           | Full (via class key)          | Full                            | Full (pattern match)          |
+| Enum constructor stability         | Fragile (grows per annotation) | Stable (2 params)             | Stable (2 params)               | Stable (2 params)             |
+| Adding new annotation kind         | New param everywhere           | New record only               | New impl only                   | New record + permits          |
+| Works with validation frameworks   | No (custom records)            | Possible with Option 3 hybrid | Yes                             | No (custom records)           |
+| Discoverability (IDE autocomplete) | Best (direct methods)          | Good (`get(X.class)`)         | Good (`get(X.class)`)           | Good (sealed switch)          |
+| Java 21 pattern matching           | N/A                            | N/A                           | N/A                             | Best                          |
+| Extensible to unknown annotations  | No                             | Yes (add `GenericMeta`)       | Yes (if class available)        | Partial (needs fallback case) |
 
 ---
 
@@ -396,17 +396,17 @@ public record FieldSourceMeta(FieldKind kind, String column, String relation, St
 
 The generator must coerce JavaParser annotation expression values to record component types:
 
-| Annotation value | Record component type | Coercion |
-|-----------------|----------------------|----------|
-| String literal `"abc"` | `String` | Direct |
-| Integer literal `42` | `int` / `Integer` | Direct |
-| Long literal `42L` | `long` / `Long` | Direct |
-| Boolean literal `true` | `boolean` / `Boolean` | Direct |
-| Enum reference `FieldKind.DERIVED` | `FieldKind` (enum) | Resolve enum constant |
-| Class literal `String.class` | `Class<?>` | Store as `String` (class name) or `Class` if on classpath |
-| Array `{"a", "b"}` | `String[]` / `List<String>` | Collect elements |
-| Nested annotation `@Inner(...)` | Nested record | Recursive mapping |
-| Absent (default) | Any | Use annotation default or `null`/`0`/`false` |
+| Annotation value                   | Record component type       | Coercion                                                  |
+| ---------------------------------- | --------------------------- | --------------------------------------------------------- |
+| String literal `"abc"`             | `String`                    | Direct                                                    |
+| Integer literal `42`               | `int` / `Integer`           | Direct                                                    |
+| Long literal `42L`                 | `long` / `Long`             | Direct                                                    |
+| Boolean literal `true`             | `boolean` / `Boolean`       | Direct                                                    |
+| Enum reference `FieldKind.DERIVED` | `FieldKind` (enum)          | Resolve enum constant                                     |
+| Class literal `String.class`       | `Class<?>`                  | Store as `String` (class name) or `Class` if on classpath |
+| Array `{"a", "b"}`                 | `String[]` / `List<String>` | Collect elements                                          |
+| Nested annotation `@Inner(...)`    | Nested record               | Recursive mapping                                         |
+| Absent (default)                   | Any                         | Use annotation default or `null`/`0`/`false`              |
 
 ### Example: end-to-end
 
@@ -601,14 +601,14 @@ HTML tooling that needs to know the *type* of each attribute value (e.g. to rend
 
 ### What this enables for HTML-based tooling
 
-| Use case | How JSON registry helps |
-|----------|----------------------|
-| Entity structure explorer | Render entity → views → fields tree with annotation badges |
-| Dynamic form builder | Use `collectedAnnotations` component types to generate input controls for annotation values |
-| Validation rule viewer | List all `@NotNull`, `@Size`, `@Pattern` constraints per field across all views |
-| Schema documentation | Auto-generate per-field documentation tables with constraint details |
-| Field comparison | Show annotation differences between views for the same field (typeByView + annotations) |
-| Project-wide annotation usage report | Aggregate which annotations are used on which fields across all entities |
+| Use case                             | How JSON registry helps                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Entity structure explorer            | Render entity → views → fields tree with annotation badges                                  |
+| Dynamic form builder                 | Use `collectedAnnotations` component types to generate input controls for annotation values |
+| Validation rule viewer               | List all `@NotNull`, `@Size`, `@Pattern` constraints per field across all views             |
+| Schema documentation                 | Auto-generate per-field documentation tables with constraint details                        |
+| Field comparison                     | Show annotation differences between views for the same field (typeByView + annotations)     |
+| Project-wide annotation usage report | Aggregate which annotations are used on which fields across all entities                    |
 
 ### Generator implementation notes
 
@@ -715,13 +715,13 @@ Both produce their own generated metadata class in their own package — no coll
 
 Given `MyAppEntityModule` above, the generator emits:
 
-| Output | Location |
-|--------|----------|
-| Property enums | `com.example.myapp.entity.person.PersonSummaryProperty`, etc. (entity's own package) |
-| `CollectedAnnotations` | `com.example.myapp.entity.CollectedAnnotations` (module output package) |
-| `MyAppEntityModule_Meta` | `com.example.myapp.entity.MyAppEntityModule_Meta` (generated, implements `EntityModuleMeta`) |
-| `META-INF/services/...EntityModuleMeta` | ServiceLoader registration for `MyAppEntityModule_Meta` |
-| `collected-annotations.json` | alongside entity metadata files (for HTML tooling) |
+| Output                                  | Location                                                                                     |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Property enums                          | `com.example.myapp.entity.person.PersonSummaryProperty`, etc. (entity's own package)         |
+| `CollectedAnnotations`                  | `com.example.myapp.entity.CollectedAnnotations` (module output package)                      |
+| `MyAppEntityModule_Meta`                | `com.example.myapp.entity.MyAppEntityModule_Meta` (generated, implements `EntityModuleMeta`) |
+| `META-INF/services/...EntityModuleMeta` | ServiceLoader registration for `MyAppEntityModule_Meta`                                      |
+| `collected-annotations.json`            | alongside entity metadata files (for HTML tooling)                                           |
 
 #### Generated metadata class
 
@@ -846,10 +846,10 @@ No JSON parsing, no resource scanning, no string-based lookups. `ServiceLoader` 
 
 ##### Summary: two ServiceLoader registrations per module
 
-| Registration | Interface | Class | Who writes it | When available |
-|-------------|-----------|-------|---------------|----------------|
-| `META-INF/services/HipsterEntityModuleDescriptor` | `HipsterEntityModuleDescriptor` | `MyAppEntityModule` (hand-written) | Developer | From the start — drives code gen and validation |
-| `META-INF/services/EntityModuleMeta` | `EntityModuleMeta` | `MyAppEntityModule_Meta` (generated) | Generator | After code gen — drives runtime frameworks |
+| Registration                                      | Interface                       | Class                                | Who writes it   | When available                                  |
+| ------------------------------------------------- | ------------------------------- | ------------------------------------ | --------------- | ----------------------------------------------- |
+| `META-INF/services/HipsterEntityModuleDescriptor` | `HipsterEntityModuleDescriptor` | `MyAppEntityModule` (hand-written)   | Developer       | From the start — drives code gen and validation |
+| `META-INF/services/EntityModuleMeta`              | `EntityModuleMeta`              | `MyAppEntityModule_Meta` (generated) | Generator       | After code gen — drives runtime frameworks      |
 
 ### Compile-time flow
 
@@ -868,11 +868,11 @@ No JSON parsing, no resource scanning, no string-based lookups. `ServiceLoader` 
 
 ### Multi-module classpath: no conflicts
 
-| Module jar | Module class | Output package | `CollectedAnnotations` FQCN | Generated `_Meta` class |
-|------------|-------------|----------------|------------------------------|--------------------------|
-| myapp-entities.jar | `c.e.myapp.entity.MyAppEntityModule` | `c.e.myapp.entity` | `c.e.myapp.entity.CollectedAnnotations` | `c.e.myapp.entity.MyAppEntityModule_Meta` |
+| Module jar           | Module class                             | Output package       | `CollectedAnnotations` FQCN               | Generated `_Meta` class                       |
+| -------------------- | ---------------------------------------- | -------------------- | ----------------------------------------- | --------------------------------------------- |
+| myapp-entities.jar   | `c.e.myapp.entity.MyAppEntityModule`     | `c.e.myapp.entity`   | `c.e.myapp.entity.CollectedAnnotations`   | `c.e.myapp.entity.MyAppEntityModule_Meta`     |
 | billing-entities.jar | `c.e.billing.entity.BillingEntityModule` | `c.e.billing.entity` | `c.e.billing.entity.CollectedAnnotations` | `c.e.billing.entity.BillingEntityModule_Meta` |
-| hr-entities.jar | `c.e.hr.entity.HrEntityModule` | `c.e.hr.entity` | `c.e.hr.entity.CollectedAnnotations` | `c.e.hr.entity.HrEntityModule_Meta` |
+| hr-entities.jar      | `c.e.hr.entity.HrEntityModule`           | `c.e.hr.entity`      | `c.e.hr.entity.CollectedAnnotations`      | `c.e.hr.entity.HrEntityModule_Meta`           |
 
 Each jar contributes its own `_Meta` class and `META-INF/services/` entry. `ServiceLoader` merges them at runtime. No class-name or package conflicts.
 
@@ -1049,14 +1049,14 @@ public interface PersonApiResponse extends PersonEntity { ... }
 
 The generator reads `@StoreBinding` and produces the matching adapter:
 
-| `StoreKind` | Generated adapter | From proposal |
-|-------------|-------------------|---------------|
-| `POSTGRES` | ResultSet reader, PreparedStatement binder, SQL fragments | P-3 |
-| `MONGODB` | Document codec (BSON ↔ entity) | P-3 variant |
-| `NATS` / `KAFKA` | Message serializer/deserializer | P-4 |
-| `REDIS` | Hash adapter, key builder | P-5 |
-| `REST` / `GRPC` | DTO mapper (may overlap with P-1 view-to-view mapper) | P-1 |
-| `LOG` | Structured log formatter | new, lightweight |
+| `StoreKind`      | Generated adapter                                         | From proposal    |
+| ---------------- | --------------------------------------------------------- | ---------------- |
+| `POSTGRES`       | ResultSet reader, PreparedStatement binder, SQL fragments | P-3              |
+| `MONGODB`        | Document codec (BSON ↔ entity)                            | P-3 variant      |
+| `NATS` / `KAFKA` | Message serializer/deserializer                           | P-4              |
+| `REDIS`          | Hash adapter, key builder                                 | P-5              |
+| `REST` / `GRPC`  | DTO mapper (may overlap with P-1 view-to-view mapper)     | P-1              |
+| `LOG`            | Structured log formatter                                  | new, lightweight |
 
 ### Cross-cutting fields: shared across stores
 

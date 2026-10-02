@@ -20,12 +20,12 @@ source line a reader clicks.
 
 ## Requirements
 
-| | |
-| --- | --- |
-| JDK | **25** — the project pins `org.gradle.java.home` and compiles with `--release 25` |
-| Gradle | 9.2.1 (via the wrapper) |
-| IntelliJ Platform | 2026.2.3, `since-build` 262 |
-| IntelliJ Platform Gradle Plugin | 2.19.0 |
+|                                 |                                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------- |
+| JDK                             | **25** — the project pins `org.gradle.java.home` and compiles with `--release 25` |
+| Gradle                          | 9.2.1 (via the wrapper)                                                           |
+| IntelliJ Platform               | 2026.2.3, `since-build` 262                                                       |
+| IntelliJ Platform Gradle Plugin | 2.19.0                                                                            |
 
 JCEF must be available in the runtime you install into. The plugin declares
 `<depends>com.intellij.modules.jcef</depends>`, so an IDE without the JCEF module will refuse to load it

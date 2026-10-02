@@ -15,16 +15,16 @@ because the failure mode was a conflict *disappearing*.
 
 ## Summary by workstream
 
-| # | Workstream | Status | What was built |
-|---|---|---|---|
+| #   | Workstream                                  | Status   | What was built                                                                           |
+| --- | ------------------------------------------- | -------- | ---------------------------------------------------------------------------------------- |
 | WS1 | Compose conflicts instead of replacing them | **Done** | `Region`, region attribution, `MergeReport.getIndependentlyApplicable()`, `describeRegions()`, `isFullyAutomatic()` |
-| WS2 | Replace line-based parsing | **Done** | Step 1: `DeclarationScanner`. Step 2: `ResolvedTypeReader` + `TypeContext`, comparing **resolved** types |
-| WS3 | Verification gate | **Done** | `ResolutionVerifier`, downgrade-to-review, `ConflictResolution.Verification` |
-| WS4 | History that stays trustworthy | **Done** | Schema versioning, load diagnostics, pruning, signature property tests |
-| WS5 | Continuous resolution via JGit | **Done** | `MergeWorkflow`: branch and merge-base discovery, object-database reads, dry-run, working-tree writes |
-| WS6 | Reviewer-facing report | **Done** | `MergeReportWriter` (JSON) + `scripts/merge-report/render.js` (Bun, self-contained HTML) |
-| WS7 | Batch mode and dry run | **Done** | `MergeBatch`, `MergeBatch.Summary`, `exitCode()`, `applyTo` |
-| WS8 | Type resolver gaps | **Done** | JDK supertype chains, varargs/array equivalence, generic-type canonicalisation |
+| WS2 | Replace line-based parsing                  | **Done** | Step 1: `DeclarationScanner`. Step 2: `ResolvedTypeReader` + `TypeContext`, comparing **resolved** types |
+| WS3 | Verification gate                           | **Done** | `ResolutionVerifier`, downgrade-to-review, `ConflictResolution.Verification`             |
+| WS4 | History that stays trustworthy              | **Done** | Schema versioning, load diagnostics, pruning, signature property tests                   |
+| WS5 | Continuous resolution via JGit              | **Done** | `MergeWorkflow`: branch and merge-base discovery, object-database reads, dry-run, working-tree writes |
+| WS6 | Reviewer-facing report                      | **Done** | `MergeReportWriter` (JSON) + `scripts/merge-report/render.js` (Bun, self-contained HTML) |
+| WS7 | Batch mode and dry run                      | **Done** | `MergeBatch`, `MergeBatch.Summary`, `exitCode()`, `applyTo`                              |
+| WS8 | Type resolver gaps                          | **Done** | JDK supertype chains, varargs/array equivalence, generic-type canonicalisation           |
 
 ---
 
@@ -32,14 +32,14 @@ because the failure mode was a conflict *disappearing*.
 
 Each row was reproduced before the work started; the tests named here now guard it.
 
-| # | Limitation | Status | Guarded by |
-|---|---|---|---|
-| L1 | One unrecognised change downgraded a whole file to manual, losing the mechanical part | **Fixed** | `ConflictCompositionTest.composesRecognisedAndStructuralConflicts`, `appliesAutomaticSubsetIndependently` |
-| L2 | A comment between declarations hid the conflict | **Fixed** | `DeclarationScannerTest.findsDeclarationDespiteComment` |
-| L3 | A brace on the following line hid the conflict | **Fixed** | `DeclarationScannerTest.findsDeclarationWithAllmanBrace` |
-| L4 | A generic type change was invisible | **Fixed** | `OverloadAddConflictResolverTest.resolvesEquivalentParameterSpellings`, `keepsOverloadsWithDifferentResolvedTypes` |
-| — | Nothing checked that an automatic resolution was well formed | **Fixed** | `VerificationGateTest` (21 tests) |
-| — | History had no version, validation or pruning | **Fixed** | `HistoryTrustTest` (16 tests) |
+| #   | Limitation                                                                            | Status    | Guarded by                                               |
+| --- | ------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------- |
+| L1  | One unrecognised change downgraded a whole file to manual, losing the mechanical part | **Fixed** | `ConflictCompositionTest.composesRecognisedAndStructuralConflicts`, `appliesAutomaticSubsetIndependently` |
+| L2  | A comment between declarations hid the conflict                                       | **Fixed** | `DeclarationScannerTest.findsDeclarationDespiteComment`  |
+| L3  | A brace on the following line hid the conflict                                        | **Fixed** | `DeclarationScannerTest.findsDeclarationWithAllmanBrace` |
+| L4  | A generic type change was invisible                                                   | **Fixed** | `OverloadAddConflictResolverTest.resolvesEquivalentParameterSpellings`, `keepsOverloadsWithDifferentResolvedTypes` |
+| —   | Nothing checked that an automatic resolution was well formed                          | **Fixed** | `VerificationGateTest` (21 tests)                        |
+| —   | History had no version, validation or pruning                                         | **Fixed** | `HistoryTrustTest` (16 tests)                            |
 
 ### L1 was the important one
 
@@ -168,12 +168,12 @@ Resolved comparison makes them one signature and escalates correctly. Conversely
 
 ### Decisions taken, with their reasons
 
-| Decision | Reason |
-|---|---|
-| Type context is **optional**; only declarers require it | The correction that shaped this: most conflicts are decidable from text alone, so demanding type information for them would burden every caller for nothing |
-| `ConflictResolver.requiresTypeContext()` declares the need | Keeps the requirement next to the resolver that has it, and the extension pattern stays three overrides for everything else |
-| A resolver set that needs types but has none **fails at construction** | A caller can fix a missing classpath immediately; discovering it conflict by conflict would look like the tool failing on ordinary input |
-| Comparison is **AST-only** — the token path is deleted | One comparison path cannot disagree with itself, which was the point of the step |
+| Decision                                                                        | Reason                                                                           |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Type context is **optional**; only declarers require it                         | The correction that shaped this: most conflicts are decidable from text alone, so demanding type information for them would burden every caller for nothing |
+| `ConflictResolver.requiresTypeContext()` declares the need                      | Keeps the requirement next to the resolver that has it, and the extension pattern stays three overrides for everything else |
+| A resolver set that needs types but has none **fails at construction**          | A caller can fix a missing classpath immediately; discovering it conflict by conflict would look like the tool failing on ordinary input |
+| Comparison is **AST-only** — the token path is deleted                          | One comparison path cannot disagree with itself, which was the point of the step |
 | Parse failure escalates **that conflict** to `MANUAL` with the parser's message | A limitation in one method must not force a human to re-review an unrelated import merge in the same file |
 
 ### Findings that only surfaced by building it

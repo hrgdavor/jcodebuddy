@@ -20,14 +20,14 @@ conflict-resolution tool.
 
 ## 1. What this round measured
 
-| Thing | Value |
-|---|---|
-| Main source | 7,345 lines across 33 classes |
-| Tests | 5,565 lines across 32 classes; 612 test methods, all passing |
-| Conflict types declared | 10 |
-| Three-way fixtures on disk | 2 |
-| Test classes that read a three-way fixture | 1 (`ThreeWayFixtureTest`, 12 tests) |
-| Largest class | `ConflictDetectionService`, 787 lines |
+| Thing                                      | Value                                                        |
+| ------------------------------------------ | ------------------------------------------------------------ |
+| Main source                                | 7,345 lines across 33 classes                                |
+| Tests                                      | 5,565 lines across 32 classes; 612 test methods, all passing |
+| Conflict types declared                    | 10                                                           |
+| Three-way fixtures on disk                 | 2                                                            |
+| Test classes that read a three-way fixture | 1 (`ThreeWayFixtureTest`, 12 tests)                          |
+| Largest class                              | `ConflictDetectionService`, 787 lines                        |
 
 ## 2. What is already strong
 
@@ -106,10 +106,10 @@ Set<String> theirsRemovedInDiff = ThreeWayFixture.removedImportsInDiff(fixture.t
 `import-add-both` passes that guard, because its imports do agree with its diffs.
 Measured against the base, however:
 
-| Side | Differing lines vs base | Documented by the fixture's `.diff` |
-|---|---|---|
-| `ours` | 3 | 1 (`+import java.time.Instant;`) |
-| `theirs` | 9 | 1 (`-import java.util.Set;`) |
+| Side     | Differing lines vs base | Documented by the fixture's `.diff` |
+| -------- | ----------------------- | ----------------------------------- |
+| `ours`   | 3                       | 1 (`+import java.time.Instant;`)    |
+| `theirs` | 9                       | 1 (`-import java.util.Set;`)        |
 
 The other 2 and 8 lines are the class javadoc, which both sides rewrote — `ours`
 replaces *"Base version. Both branches start from exactly this file."* with *"Ours:
@@ -271,14 +271,14 @@ measured evidence.
 
 ## 4. Priority and sequencing
 
-| Order | Finding | Effort | Why here |
-|---|---|---|---|
-| 1 | ~~**F4** marker validation~~ | hours | **Done.** See §7. |
-| 2 | **F2** widen the fixture guard | hours | Small, and it protects every fixture F1 adds. Adding fixtures before the guard would multiply the "silently carries a second change" problem. **This is now the next thing to do.** |
-| 3 | **F1** a fixture per conflict type | days | The highest-value work, and now the cheapest it has been: three files per case plus one generator invocation to check the shape it produces. |
-| 4 | **F3** rename to the shape | minutes | Do it with F1, so the naming rule and the fixtures are fixed together. |
-| 5 | **F5** split detection | days | Verifiable only once F1 exists; the composition tests keep it honest. |
-| 6 | **F6** remove the drifting number | minutes | Anytime. |
+| Order | Finding                            | Effort  | Why here                                                               |
+| ----- | ---------------------------------- | ------- | ---------------------------------------------------------------------- |
+| 1     | ~~**F4** marker validation~~       | hours   | **Done.** See §7.                                                      |
+| 2     | **F2** widen the fixture guard     | hours   | Small, and it protects every fixture F1 adds. Adding fixtures before the guard would multiply the "silently carries a second change" problem. **This is now the next thing to do.** |
+| 3     | **F1** a fixture per conflict type | days    | The highest-value work, and now the cheapest it has been: three files per case plus one generator invocation to check the shape it produces. |
+| 4     | **F3** rename to the shape         | minutes | Do it with F1, so the naming rule and the fixtures are fixed together. |
+| 5     | **F5** split detection             | days    | Verifiable only once F1 exists; the composition tests keep it honest.  |
+| 6     | **F6** remove the drifting number  | minutes | Anytime.                                                               |
 
 ## 5. What this round delivered, and what it makes possible
 
@@ -328,14 +328,14 @@ the three versions rather than inferred from the fixture's name.
 
 Three files changed and two added:
 
-| File | Change |
-|---|---|
+| File                  | Change                                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
 | `SyncMarkerException` | **new** — unchecked, extends `IllegalStateException`, raised only for a present-but-unusable marker |
-| `LastSyncMarker` | **new** — `isCommitId(String)` and `requireCommitId(Path)`; javadoc states the field's contract and why parsing stays permissive |
-| `MergeWorkflow` | `recordedBase(repository, historyRoot, marker)` replaces the `resolveQuietly` lookup; `resolveQuietly` deleted |
-| `LastSyncMarkerTest` | **+4** tests (16 total) |
-| `MergeWorkflowTest` | **+8** tests (22 total) |
-| `SampleRepoTest` | **+1** test (12 total) — the original symptom, on the original fixture |
+| `LastSyncMarker`      | **new** — `isCommitId(String)` and `requireCommitId(Path)`; javadoc states the field's contract and why parsing stays permissive |
+| `MergeWorkflow`       | `recordedBase(repository, historyRoot, marker)` replaces the `resolveQuietly` lookup; `resolveQuietly` deleted |
+| `LastSyncMarkerTest`  | **+4** tests (16 total)                                                                             |
+| `MergeWorkflowTest`   | **+8** tests (22 total)                                                                             |
+| `SampleRepoTest`      | **+1** test (12 total) — the original symptom, on the original fixture                              |
 
 ### The four decisions
 

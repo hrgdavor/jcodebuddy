@@ -13,13 +13,13 @@ classpath, and what to do when you would rather copy an example than write from 
 
 ## 1. What an automation module is
 
-| | |
-| --- | --- |
-| **Where it lives** | `src/main/java` of a module in the project it automates — never a jar a host loads at runtime, never `META-INF/services`, never annotation scanning (DEC-031 § Decision 1–2) |
-| **What it declares** | the markers the user writes in ordinary code (`@GenerateBuilder` and anything like it), in its own `-api` module if the project wants the markers callable from code that must not depend on the implementation |
-| **What it does** | the transformation, the code action, the report — as plain Java that a stock IDE can follow from entry point to leaf (DEC-019) |
+|                           |     |
+| ------------------------- | --- |
+| **Where it lives**        | `src/main/java` of a module in the project it automates — never a jar a host loads at runtime, never `META-INF/services`, never annotation scanning (DEC-031 § Decision 1–2) |
+| **What it declares**      | the markers the user writes in ordinary code (`@GenerateBuilder` and anything like it), in its own `-api` module if the project wants the markers callable from code that must not depend on the implementation |
+| **What it does**          | the transformation, the code action, the report — as plain Java that a stock IDE can follow from entry point to leaf (DEC-019) |
 | **Where its output goes** | `.jcodebuddy/` in the module it applies to: `metadata/` for derived output, `context/` for specs, `reports/` for run records, `agent-state/` for scratch. **Generated `.java` does not go there** — it stays under `src/main/java` (DEC-026) |
-| **How it is run** | by the project's own script or build step, with the module's classes and dependencies on the classpath — the shape [`scripts/gen.js`](../../scripts/gen.js) already uses for this repository's generator (`dependency:build-classpath` into a file, then `java -cp <module>/target/classes:<exported> <MainClass>`) |
+| **How it is run**         | by the project's own script or build step, with the module's classes and dependencies on the classpath — the shape [`scripts/gen.js`](../../scripts/gen.js) already uses for this repository's generator (`dependency:build-classpath` into a file, then `java -cp <module>/target/classes:<exported> <MainClass>`) |
 
 A host that wants a project's automations gets them **on its classpath when it is launched**
 (DEC-031 § Decision 2). There is no second way.
@@ -95,10 +95,10 @@ Either way the automation is **visible**: it appears in `git diff`, in code revi
 Listed so nobody plans around them, and mirrored in
 [DEC-031](../architecture/decisions/DEC-031-project-automations-are-living-code.md):
 
-| Item | State |
-| --- | --- |
-| The stub generator (Route B) | not built |
-| The host's `run(args, automations)` entry point (Shape 1) | not built |
-| A generated, committed launcher per project (Shape 2) | not built |
-| A canonical example to copy, documented as such | **this page points at the repository's own modules**, which is a real example but not yet written as a copy-me template |
-| `jwa-sidecar.txt` (the classloader route this replaced) | withdrawn, not to be built (DEC-031) |
+| Item                                                      | State                                |
+| --------------------------------------------------------- | ------------------------------------ |
+| The stub generator (Route B)                              | not built                            |
+| The host's `run(args, automations)` entry point (Shape 1) | not built                            |
+| A generated, committed launcher per project (Shape 2)     | not built                            |
+| A canonical example to copy, documented as such           | **this page points at the repository's own modules**, which is a real example but not yet written as a copy-me template |
+| `jwa-sidecar.txt` (the classloader route this replaced)   | withdrawn, not to be built (DEC-031) |

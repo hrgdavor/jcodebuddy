@@ -60,10 +60,10 @@ user-home directory. See DEC-032.
 project that has not asked for it in git should not get a diff for it. Two top-level files and
 one subfolder are the exceptions:
 
-| Subtree | Policy | Why |
-|---|---|---|
-| `conf/` | **tracked, reserved** | the things that must survive a clone and a commit: shared settings, a naming contract, an invariant a tool must honour. This is the *only* subtree whose purpose is to be committed — `conf/webview.json` is the worked example |
-| `README.md`, `.gitignore` (top level) | **tracked** | they are what explains the tree and encodes the split; without them the directory cannot document itself |
+| Subtree                               | Policy                 | Why |
+| ------------------------------------- | ---------------------- | --- |
+| `conf/`                               | **tracked, reserved**  | the things that must survive a clone and a commit: shared settings, a naming contract, an invariant a tool must honour. This is the *only* subtree whose purpose is to be committed — `conf/webview.json` is the worked example |
+| `README.md`, `.gitignore` (top level) | **tracked**            | they are what explains the tree and encodes the split; without them the directory cannot document itself |
 | every other subfolder — `metadata/`, `index/`, `cache/`, `reports/`, `context/`, `agent-state/`, `webview/`, and whatever comes next | **ignored by default** | derived, regenerable, machine-local, or scratch. A project opts in the subtree it wants, and only that subtree |
 
 This module opts in two things, and both shapes are instructive:

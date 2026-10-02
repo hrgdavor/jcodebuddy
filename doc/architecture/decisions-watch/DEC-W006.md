@@ -50,7 +50,7 @@ A single file produces a **tree of metadata nodes** as defined in [DEC-W007](DEC
 | Import section | `imports`                                                         | Common import block data                                                |
 | Class          | `class:<simpleName>`                                              | Per-class metadata (modifiers, annotations, superclass)                 |
 | Field          | `class:<simpleName>.field:<name>`                                 | Per-field metadata (type, modifiers, annotations)                       |
-| Method         | `class:<simpleName>.method:<name>(<paramTypeList>)`               | Per-method metadata (return type, modifiers, annotations, body hash) |
+| Method         | `class:<simpleName>.method:<name>(<paramTypeList>)`               | Per-method metadata (return type, modifiers, annotations, body hash)    |
 | Parameter      | `class:<simpleName>.method:<name>(<paramTypeList>).param:<index>` | Per-parameter metadata (type, annotations)                              |
 
 Generators write only to the nodes they own within the `CacheEntry`. The `metadata` field is nullable: it is `null` during the inventory phase and populated later during enrichment.

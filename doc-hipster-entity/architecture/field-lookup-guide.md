@@ -32,13 +32,13 @@ unnecessary hash operations per second.
 
 ## Quick reference
 
-| Do | Don't |
-|----|-------|
-| Pre-build `readers[]` once per instance | Rebuild `readers[]` every call |
-| `forName.forName(name)` in parse loop | `HashMap.get(name)` in parse loop |
-| Capture `field.ordinal()` once | Call `forName` twice for the same field |
+| Do                                                                    | Don't                                       |
+| --------------------------------------------------------------------- | ------------------------------------------- |
+| Pre-build `readers[]` once per instance                               | Rebuild `readers[]` every call              |
+| `forName.forName(name)` in parse loop                                 | `HashMap.get(name)` in parse loop           |
+| Capture `field.ordinal()` once                                        | Call `forName` twice for the same field     |
 | `private static final TypeReference<…> REF = new TypeReference<>(){}` | `new TypeReference<>(){}` inside any method |
-| `p.skipChildren()` for unknown fields | `throw` for unknown fields |
+| `p.skipChildren()` for unknown fields                                 | `throw` for unknown fields                  |
 
 ---
 

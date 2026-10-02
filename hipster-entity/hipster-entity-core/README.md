@@ -14,13 +14,13 @@ Jackson, the source parser, or the generator.
 
 ### Ordinal arrays
 
-| Class | Role |
-|---|---|
-| [`EntityReadArray`](src/main/java/hr/hrg/hipster/entity/core/EntityReadArray.java) | a read-only `ViewReader` over an `Object[]`; validates that the field-enum constant count matches `values.length` at construction |
+| Class                                                                                  | Role                                                                         |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`EntityReadArray`](src/main/java/hr/hrg/hipster/entity/core/EntityReadArray.java)     | a read-only `ViewReader` over an `Object[]`; validates that the field-enum constant count matches `values.length` at construction |
 | [`EntityUpdateArray`](src/main/java/hr/hrg/hipster/entity/core/EntityUpdateArray.java) | a plain `ViewWriter` over an `Object[]`; last write wins, no change tracking |
 | [`EntityUpdateTrackingArray`](src/main/java/hr/hrg/hipster/entity/core/EntityUpdateTrackingArray.java) | the abstract base for change-tracking arrays; implements `ViewWriter` and `ViewChangeTracking<F, EEnumSet<F>>` |
 | [`EntityUpdateTrackingArray64`](src/main/java/hr/hrg/hipster/entity/core/EntityUpdateTrackingArray64.java) | the ≤ 64-field variant: one `long` bitmask, no bitmask array allocation |
-| [`EntityUpdateTrackingArrayLarge`](src/main/java/hr/hrg/hipster/entity/core/EntityUpdateTrackingArrayLarge.java) | the > 64-field variant: `long[]` bitmask |
+| [`EntityUpdateTrackingArrayLarge`](src/main/java/hr/hrg/hipster/entity/core/EntityUpdateTrackingArrayLarge.java) | the > 64-field variant: `long[]` bitmask           |
 
 Use the factory rather than a constructor — it picks the variant from the
 field count. The first argument is a `ForNameOrdinal`, **not** the field enum:
@@ -46,15 +46,15 @@ to the enum class at all.
 A minimal, allocation-conscious bitset over an enum's ordinals, used as
 the change set both by the arrays and by generated tracking builders.
 
-| Type | Role |
-|---|---|
-| `EEnumSetRead<E>` | the read surface: `has(int)`, `has(E)`, `hasAny`, `hasAll`, `size()`, `isEmpty()`, `forEach` (both `ObjIntConsumer` and `Consumer`), `getBits0()`, `getBits(int)`, `getSegmentCount()`, `toEnumSet()`, `toList()`, `toArray(E[])` |
-| `EEnumSet<E>` | the immutable set; adds `union`, `intersect`, `difference`, `toBuilder()`, and the `copyOf` factories |
-| `EEnumSetBuilder<E>` | the mutable builder; adds `add`/`remove` (ordinal and enum-value forms), `addOrdinal(int)`/`removeOrdinal(int)`, `addAll`/`removeAll`/`retainAll`, `clear()`, and `toImmutable()` |
-| `EEnumSetBuilder64` / `EEnumSetBuilderLarge` | the two concrete builders, picked by `EEnumSetBuilder.create(Class)` at 64 constants |
-| `EEnumSet64` / `EEnumSetLarge` | the two concrete immutable sets |
-| `EEnumSetEmpty` | the cached empty singleton; `EEnumSetEmpty.of(Class)` keeps the empty case allocation-free |
-| `EEnumSetAll` | the full-universe set |
+| Type                                         | Role                                                                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `EEnumSetRead<E>`                            | the read surface: `has(int)`, `has(E)`, `hasAny`, `hasAll`, `size()`, `isEmpty()`, `forEach` (both `ObjIntConsumer` and `Consumer`), `getBits0()`, `getBits(int)`, `getSegmentCount()`, `toEnumSet()`, `toList()`, `toArray(E[])` |
+| `EEnumSet<E>`                                | the immutable set; adds `union`, `intersect`, `difference`, `toBuilder()`, and the `copyOf` factories |
+| `EEnumSetBuilder<E>`                         | the mutable builder; adds `add`/`remove` (ordinal and enum-value forms), `addOrdinal(int)`/`removeOrdinal(int)`, `addAll`/`removeAll`/`retainAll`, `clear()`, and `toImmutable()` |
+| `EEnumSetBuilder64` / `EEnumSetBuilderLarge` | the two concrete builders, picked by `EEnumSetBuilder.create(Class)` at 64 constants       |
+| `EEnumSet64` / `EEnumSetLarge`               | the two concrete immutable sets                                                            |
+| `EEnumSetEmpty`                              | the cached empty singleton; `EEnumSetEmpty.of(Class)` keeps the empty case allocation-free |
+| `EEnumSetAll`                                | the full-universe set                                                                      |
 
 `EEnumSet64` and `EEnumSetEmpty` are **siblings**, not subtype and
 supertype. That is why the tracking contract's `S` parameter is the
@@ -64,12 +64,12 @@ supertype. That is why the tracking contract's `S` parameter is the
 
 ### Change tracking
 
-| Type | Role |
-|---|---|
+| Type                                                                                     | Role |
+| ---------------------------------------------------------------------------------------- | ---- |
 | [`ViewChangeTracking`](src/main/java/hr/hrg/hipster/entity/core/ViewChangeTracking.java) | the shared contract of the generated `<View>BuilderTracking` and the array-backed updatable proxy: **which** fields changed, and the value each holds now |
-| [`FieldChange`](src/main/java/hr/hrg/hipster/entity/core/FieldChange.java) | one `record FieldChange<E extends Enum<E>>(E field, Object current)` — the unit of `changedValues()`; there is no `previous` component |
-| [`ListDelta`](src/main/java/hr/hrg/hipster/entity/core/ListDelta.java) | one finding about a tracked collection: an entry added, removed or moved (an **identity** baseline from `Identifiable.id()`), or a per-entry field change |
-| [`ChangePath`](src/main/java/hr/hrg/hipster/entity/core/ChangePath.java) | one link of a **deep** change path: `record ChangePath(FieldDef field, int listIndex, ChangePath next)`, with `of`, `then`, `isListElement`, `leaf()`, `depth()`, `render()` |
+| [`FieldChange`](src/main/java/hr/hrg/hipster/entity/core/FieldChange.java)               | one `record FieldChange<E extends Enum<E>>(E field, Object current)` — the unit of `changedValues()`; there is no `previous` component |
+| [`ListDelta`](src/main/java/hr/hrg/hipster/entity/core/ListDelta.java)                   | one finding about a tracked collection: an entry added, removed or moved (an **identity** baseline from `Identifiable.id()`), or a per-entry field change |
+| [`ChangePath`](src/main/java/hr/hrg/hipster/entity/core/ChangePath.java)                 | one link of a **deep** change path: `record ChangePath(FieldDef field, int listIndex, ChangePath next)`, with `of`, `then`, `isListElement`, `leaf()`, `depth()`, `render()` |
 
 ### The array-backed proxy
 

@@ -20,11 +20,11 @@ depend on it.
 A small, complete view built by hand so every module can test against
 the same shape:
 
-| Type | Role |
-|---|---|
-| `PersonEntity` | the marker: `extends EntityBase<Long>` |
-| `PersonSummary` | the view: `firstName`, `lastName`, plus a `DERIVED` `age` and a `JOINED` `departmentName`, and a `metadata` field |
-| `PersonSummary_` | the field enum implementing `FieldDef`, with `javaType()`, `forName`, `NAME_MAPPER` and `META` |
+| Type                   | Role                                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `PersonEntity`         | the marker: `extends EntityBase<Long>`                                                         |
+| `PersonSummary`        | the view: `firstName`, `lastName`, plus a `DERIVED` `age` and a `JOINED` `departmentName`, and a `metadata` field |
+| `PersonSummary_`       | the field enum implementing `FieldDef`, with `javaType()`, `forName`, `NAME_MAPPER` and `META` |
 | `TrackedPersonSummary` | a fixture view that adds the write surface (`ViewWriter`) and the tracking surface (`ViewChangeTracking<PersonSummary_, EEnumSet<PersonSummary_>>`) to `PersonSummary`, so one view type can be handed to `ArrayBackedViewProxyFactory.createUpdatable` and driven through both contracts |
 
 The fixture is **hand-written, not generated**: this module deliberately
@@ -39,11 +39,11 @@ itself and letting the generator emit the classes.
 
 ### Tests (`src/test/java`)
 
-| Test | Covers |
-|---|---|
-| `jackson/EntityJacksonMapperTest` | JSON round trips: serialize and deserialize the `PersonSummary` view, the generated view helpers, registration into a stock `ObjectMapper` via `EntityJacksonMapper.registerModule`, and deserialization through the boilerplate deserializer |
-| `jackson/EntityJacksonChangeSerializerTest` | the change-set patch: one-field patch from the proxy path and from the builder path, the assertion that **both paths produce the same patch** (the exit gate), the current-values-only merge-patch shape (there is no `includePrevious` mode), and the S4 presence distinction — an unchanged field is **absent**, a changed `null` is an explicit `null`, a no-op write produces no patch, and `clearChanges()` empties it |
-| `person/ViewChangeTrackingStateSharingTest` | the S5 state-sharing acceptance test, run against **both** materializations through the *same* fixture view type: the array-backed proxy and a hand-written tracking holder standing in for the generated `<View>BuilderTracking`. The assertion that catches a `changesBuilder()` that returns a copy is the one that matters |
+| Test                                                               | Covers                                                                                            |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `jackson/EntityJacksonMapperTest`                                  | JSON round trips: serialize and deserialize the `PersonSummary` view, the generated view helpers, registration into a stock `ObjectMapper` via `EntityJacksonMapper.registerModule`, and deserialization through the boilerplate deserializer |
+| `jackson/EntityJacksonChangeSerializerTest`                        | the change-set patch: one-field patch from the proxy path and from the builder path, the assertion that **both paths produce the same patch** (the exit gate), the current-values-only merge-patch shape (there is no `includePrevious` mode), and the S4 presence distinction — an unchanged field is **absent**, a changed `null` is an explicit `null`, a no-op write produces no patch, and `clearChanges()` empties it |
+| `person/ViewChangeTrackingStateSharingTest`                        | the S5 state-sharing acceptance test, run against **both** materializations through the *same* fixture view type: the array-backed proxy and a hand-written tracking holder standing in for the generated `<View>BuilderTracking`. The assertion that catches a `changesBuilder()` that returns a copy is the one that matters |
 | `jackson/EntityJacksonJmhBenchmark`, `PersonSummaryFileBenchmark*` | JMH benchmarks and the file-scan runner; the numbers are discussed in the jackson module's README |
 | `jackson/PersonSummaryConcreteImpl`, `PersonSummaryBoilerplateDeserializer`, `PersonSummaryGeneratedDeserializer` | benchmark-only stand-ins for a concrete implementation and for generated deserializers |
 

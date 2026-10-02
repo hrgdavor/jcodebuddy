@@ -8,13 +8,13 @@ stub server, its self-test and the DB probe are in [`zed/phase0/`](zed/phase0).
 **Two of the plan's assumptions did not survive contact with the installed build**, and one of them changes the
 tier order in §5.4/§D3:
 
-| # | Experiment | Result | Consequence for the plan |
-| --- | --- | --- | --- |
-| A | `window/showDocument` (with selection) and `workspace/applyEdit` over LSP | **PASSED** — both executed; the edit landed in Zed's buffer and its undo stack, not on disk | §5.5's source reading holds for the installed build. Tier 1's *verbs* are real |
-| A′ | Registering the sidecar as "a custom language server in configuration only" | **IMPOSSIBLE in 1.21.0** — Zed only accepts LSP names an extension or built-in adapter registered | §5.4 and Phase 4's `settings-snippet.json` are wrong as written; the extension is a **prerequisite**, not an auto-start nicety |
-| B | `zed <file>:<line>:<column>` (the documented CLI form) on Windows | **FAILED** — `error parsing path argument … (os error 123)` | Phase 2's `ZedCliHost` cannot set a caret this way on Windows |
-| C | `zed://file/<path>` URL handler | **PARTIAL** — handler present, URL parses; whether the file reaches a *running* window is unverified | Navigation fallback is probably the URL form, pending one check |
-| D | Dev extension with `process:exec` | **NOT RUN** — `cargo`/`rustup` are installed; installing a dev extension is a UI action | Carried forward; Phase 4 owns it |
+| #   | Experiment                                                                  | Result                                                                                            | Consequence for the plan                                                       |
+| --- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A   | `window/showDocument` (with selection) and `workspace/applyEdit` over LSP   | **PASSED** — both executed; the edit landed in Zed's buffer and its undo stack, not on disk       | §5.5's source reading holds for the installed build. Tier 1's *verbs* are real |
+| A′  | Registering the sidecar as "a custom language server in configuration only" | **IMPOSSIBLE in 1.21.0** — Zed only accepts LSP names an extension or built-in adapter registered | §5.4 and Phase 4's `settings-snippet.json` are wrong as written; the extension is a **prerequisite**, not an auto-start nicety |
+| B   | `zed <file>:<line>:<column>` (the documented CLI form) on Windows           | **FAILED** — `error parsing path argument … (os error 123)`                                       | Phase 2's `ZedCliHost` cannot set a caret this way on Windows                  |
+| C   | `zed://file/<path>` URL handler                                             | **PARTIAL** — handler present, URL parses; whether the file reaches a *running* window is unverified | Navigation fallback is probably the URL form, pending one check             |
+| D   | Dev extension with `process:exec`                                           | **NOT RUN** — `cargo`/`rustup` are installed; installing a dev extension is a UI action           | Carried forward; Phase 4 owns it                                               |
 
 ---
 

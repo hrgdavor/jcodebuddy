@@ -12,10 +12,10 @@ to cross this line, it must first argue with this document.
 
 ## 1. The three excluded cases
 
-| Case | Conflict types | What the module does today |
-|---|---|---|
-| Structural change | `STRUCTURAL_CHANGE` | Always `MANUAL`; summarises what each side does that the other does not |
-| Public contract change | `API_INCOMPATIBILITY` | Always `MANUAL`; names exactly which contract element moved |
+| Case                   | Conflict types                      | What the module does today                                                             |
+| ---------------------- | ----------------------------------- | -------------------------------------------------------------------------------------- |
+| Structural change      | `STRUCTURAL_CHANGE`                 | Always `MANUAL`; summarises what each side does that the other does not                |
+| Public contract change | `API_INCOMPATIBILITY`               | Always `MANUAL`; names exactly which contract element moved                            |
 | Overlapping body edits | `METHOD_BODY_CHANGE` (overlap only) | Combines **disjoint** edits for `REVIEW`; overlapping edits are reported, never merged |
 
 ---
@@ -201,15 +201,15 @@ excluded cases automatic.
 
 Not by convention — by construction:
 
-| Mechanism | Effect |
-|---|---|
-| `ConflictType.STRUCTURAL_CHANGE` and `API_INCOMPATIBILITY` declare `Handling.MANUAL` | The type's policy, not a per-resolver choice |
-| `AbstractResolverTest.kindAgreesWithStrategy` | A `MANUAL` strategy producing anything but a `MANUAL` kind fails the suite |
-| `StructuralChangeConflictResolver` / `ApiIncompatibilityConflictResolver` return `null` from `doResolve` unconditionally | They cannot resolve even by accident |
-| `AbstractConflictResolver.resolve` converts `null` and exceptions into the manual fallback | A future resolver cannot fail *into* an auto-resolution |
-| `ConflictResolversTest.everyConflictTypeIsHandled` | A new type must declare a policy; it cannot be left unclassified |
-| `AbstractResolverTest.resolutionCarriesFixPathsWhenNotAuto` | A refusal must still be actionable |
-| `ResolverExtensionTest` | The worked example is an *additive-only* body resolver that declines every removal, demonstrating the boundary in executable form |
+| Mechanism                                                                                  | Effect                                                                     |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `ConflictType.STRUCTURAL_CHANGE` and `API_INCOMPATIBILITY` declare `Handling.MANUAL`       | The type's policy, not a per-resolver choice                               |
+| `AbstractResolverTest.kindAgreesWithStrategy`                                              | A `MANUAL` strategy producing anything but a `MANUAL` kind fails the suite |
+| `StructuralChangeConflictResolver` / `ApiIncompatibilityConflictResolver` return `null` from `doResolve` unconditionally | They cannot resolve even by accident         |
+| `AbstractConflictResolver.resolve` converts `null` and exceptions into the manual fallback | A future resolver cannot fail *into* an auto-resolution                    |
+| `ConflictResolversTest.everyConflictTypeIsHandled`                                         | A new type must declare a policy; it cannot be left unclassified           |
+| `AbstractResolverTest.resolutionCarriesFixPathsWhenNotAuto`                                | A refusal must still be actionable                                         |
+| `ResolverExtensionTest`                                                                    | The worked example is an *additive-only* body resolver that declines every removal, demonstrating the boundary in executable form |
 
 The last row matters most: the extension pattern's own worked example encodes this
 rule. A contributor copying it inherits the conservative behaviour rather than

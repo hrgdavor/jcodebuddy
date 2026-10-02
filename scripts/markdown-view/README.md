@@ -48,11 +48,11 @@ Read that first if you are writing your own; this file is about *this* implement
 
 ## The three files
 
-| File | What it owns |
-| --- | --- |
-| `open-file.js` | the **client half**: the click handler, the fallback ladder, the stylesheet, the attribute escaping. Copy this file into any custom page and it works. |
-| `render.js` | the **document half**: a small Markdown renderer and the link resolver, including the class-index lookup. |
-| `index.js` | the **CLI half**: discovery, the page shell, the index page, and `--verify`. |
+| File                    | What it owns                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `open-file.js`          | the **client half**: the click handler, the fallback ladder, the stylesheet, the attribute escaping. Copy this file into any custom page and it works. |
+| `render.js`             | the **document half**: a small Markdown renderer and the link resolver, including the class-index lookup. |
+| `index.js`              | the **CLI half**: discovery, the page shell, the index page, and `--verify`. |
 | `markdown-view.test.js` | the tests: the line-suffix parser, the link resolver, the Markdown renderer, and a full run whose links are all verified. |
 
 ### `open-file.js` — the client
@@ -74,13 +74,13 @@ do something. The full rules, including `data-link-base`, are in
 **The resolver is the interesting part.** Given the text of a link or a code span, `resolveTarget`
 returns a target only when it can point at something real:
 
-| In the Markdown | Resolves to |
-| --- | --- |
-| `` `src/main/java/.../PersonSummary.java` `` | that file, line 1 |
-| `` `PersonSummary` `` — a type the class index knows | its declaring file and **its declaration line** |
-| `[the builder](src/main/java/.../PersonSummaryBuilder.java#L48)` | that file, line 48 |
-| `` `scripts/gen.cmd` `` or `` `../AGENTS.md` `` | the file, resolved against the module **or** the repository root |
-| `` `.java` ``, `` `src/main/java/…` ``, `` `some_prose_word` `` | **nothing** — left as plain text |
+| In the Markdown                                                  | Resolves to                                                      |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `` `src/main/java/.../PersonSummary.java` ``                     | that file, line 1                                                |
+| `` `PersonSummary` `` — a type the class index knows             | its declaring file and **its declaration line**                  |
+| `[the builder](src/main/java/.../PersonSummaryBuilder.java#L48)` | that file, line 48                                               |
+| `` `scripts/gen.cmd` `` or `` `../AGENTS.md` ``                  | the file, resolved against the module **or** the repository root |
+| `` `.java` ``, `` `src/main/java/…` ``, `` `some_prose_word` ``  | **nothing** — left as plain text                                 |
 
 That last row is the rule that matters: **resolve or leave alone**. A document generator that linkifies
 everything path-shaped produces a page of links that look right and go nowhere, which is worse than plain

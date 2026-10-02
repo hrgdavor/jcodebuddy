@@ -4,11 +4,11 @@ These four files are the apparatus for Phase 0 of [the plan](../../PLAN-webview-
 [PHASE0-ZED-FINDINGS.md](../../PHASE0-ZED-FINDINGS.md). Nothing here is production code and nothing in the build
 reads it.
 
-| File | What it is |
-| --- | --- |
-| `stub-lsp.mjs` | A minimal LSP server over stdio. On `initialized` it sends `window/showDocument` (with a selection and `takeFocus`) and then `workspace/applyEdit`, logging the client's own `initialize` capabilities and both responses to a file. |
-| `self-test-client.mjs` | A synthetic LSP *client* that plays Zed's part, so the stub can be proven correct with no editor attached. 5 checks; exit code 0 means pass. |
-| `probe-zed-db.mjs` | Reads Zed's sqlite databases (read-only) and prints rows mentioning a needle — used to prove the edit reached Zed's buffer while the file on disk was untouched. |
+| File                          | What it is                                                          |
+| ----------------------------- | ------------------------------------------------------------------- |
+| `stub-lsp.mjs`                | A minimal LSP server over stdio. On `initialized` it sends `window/showDocument` (with a selection and `takeFocus`) and then `workspace/applyEdit`, logging the client's own `initialize` capabilities and both responses to a file. |
+| `self-test-client.mjs`        | A synthetic LSP *client* that plays Zed's part, so the stub can be proven correct with no editor attached. 5 checks; exit code 0 means pass. |
+| `probe-zed-db.mjs`            | Reads Zed's sqlite databases (read-only) and prints rows mentioning a needle — used to prove the edit reached Zed's buffer while the file on disk was untouched. |
 | `scratch/Sample.{java,md,rs}` | Disposable targets. `Sample.rs` is the one the successful run used. |
 
 The one dangerous part of the apparatus is **not** committed: the project-local `.zed/settings.json` that pointed

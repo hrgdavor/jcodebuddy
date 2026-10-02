@@ -46,13 +46,13 @@ This document outlines a multi-step plan to migrate the JCodeBuddy project from 
 
 Based on codebase scan, JavaParser is used in:
 
-| Module | Location | Primary Use Cases |
-|--------|----------|-------------------|
-| `hipster-entity-tooling` | `src/main/java/hr/hrg/hipster/entity/tooling/` | View generation, boilerplate generation, metadata extraction, validation rules |
-| `jwa-builder` | `src/main/java/hr/hrg/watch2/builder/` | Record builder generation |
-| `java-watch-agent` | `src/main/java/hr/hrg/watch2/agent/` | Contextual analysis, builder generation |
-| `webview/webview-jetbrains` | `src/main/java/hr/hrg/jetbrains/webview/` | LSP server support |
-| `project-automation` | `src/main/java/` | Various tooling utilities |
+| Module                      | Location                                       | Primary Use Cases                                                              |
+| --------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| `hipster-entity-tooling`    | `src/main/java/hr/hrg/hipster/entity/tooling/` | View generation, boilerplate generation, metadata extraction, validation rules |
+| `jwa-builder`               | `src/main/java/hr/hrg/watch2/builder/`         | Record builder generation                                                      |
+| `java-watch-agent`          | `src/main/java/hr/hrg/watch2/agent/`           | Contextual analysis, builder generation                                        |
+| `webview/webview-jetbrains` | `src/main/java/hr/hrg/jetbrains/webview/`      | LSP server support                                                             |
+| `project-automation`        | `src/main/java/`                               | Various tooling utilities                                                      |
 
 ### 1.2 Key JavaParser Components Used
 
@@ -116,15 +116,15 @@ public class MyVisitor extends JavaVisitor<Void> {
 
 ### 2.3 OpenRewrite LST Types Mapping
 
-| JavaParser Type | OpenRewrite Equivalent |
-|-----------------|------------------------|
-| `CompilationUnit` | `JavaType` / `Tree` |
-| `ClassOrInterfaceDeclaration` | `TypeTree` / `ClassTree` |
-| `MethodDeclaration` | `MethodTree` |
-| `FieldDeclaration` | `FieldTree` |
-| `RecordDeclaration` | `TypeTree` (with record modifier) |
-| `EnumDeclaration` | `TypeTree` (with enum modifier) |
-| `AnnotationExpr` | `AnnotationTree` |
+| JavaParser Type               | OpenRewrite Equivalent            |
+| ----------------------------- | --------------------------------- |
+| `CompilationUnit`             | `JavaType` / `Tree`               |
+| `ClassOrInterfaceDeclaration` | `TypeTree` / `ClassTree`          |
+| `MethodDeclaration`           | `MethodTree`                      |
+| `FieldDeclaration`            | `FieldTree`                       |
+| `RecordDeclaration`           | `TypeTree` (with record modifier) |
+| `EnumDeclaration`             | `TypeTree` (with enum modifier)   |
+| `AnnotationExpr`              | `AnnotationTree`                  |
 
 ---
 
@@ -664,20 +664,20 @@ Create `project-automation/rollback.sh`:
 
 ### 11.1 Technical Risks
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| OpenRewrite API changes | Medium | Medium | Use stable API, monitor releases |
-| Lexical preservation issues | Low | High | Thorough testing |
-| Performance degradation | Low | Medium | Benchmark and optimize |
-| Missing features | Medium | High | Map all JavaParser features, implement equivalents |
+| Risk                        | Probability   | Impact   | Mitigation                                         |
+| --------------------------- | ------------- | -------- | -------------------------------------------------- |
+| OpenRewrite API changes     | Medium        | Medium   | Use stable API, monitor releases                   |
+| Lexical preservation issues | Low           | High     | Thorough testing                                   |
+| Performance degradation     | Low           | Medium   | Benchmark and optimize                             |
+| Missing features            | Medium        | High     | Map all JavaParser features, implement equivalents |
 
 ### 11.2 Project Risks
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Migration timeline exceeded | Medium | Medium | Phased approach, clear milestones |
-| Developer learning curve | Medium | Low | Documentation, training |
-| Code review overhead | Low | Low | Clear migration guidelines |
+| Risk                        | Probability   | Impact   | Mitigation                        |
+| --------------------------- | ------------- | -------- | --------------------------------- |
+| Migration timeline exceeded | Medium        | Medium   | Phased approach, clear milestones |
+| Developer learning curve    | Medium        | Low      | Documentation, training           |
+| Code review overhead        | Low           | Low      | Clear migration guidelines        |
 
 ---
 
@@ -685,15 +685,15 @@ Create `project-automation/rollback.sh`:
 
 ### 12.1 Phase Timelines
 
-| Phase | Duration | Dependencies |
-|-------|----------|--------------|
-| Phase 1: Foundation | 2 weeks | None |
-| Phase 2: Core Utilities | 2 weeks | Phase 1 |
-| Phase 3: Code Generation | 4 weeks | Phase 2 |
-| Phase 4: Validation | 3 weeks | Phase 3 |
-| Phase 5: Automation | 2 weeks | Phase 4 |
-| Phase 6: Migration | 4 weeks | Phase 5 |
-| Phase 7: Testing | 3 weeks | Phase 6 |
+| Phase                    | Duration   | Dependencies   |
+| ------------------------ | ---------- | -------------- |
+| Phase 1: Foundation      | 2 weeks    | None           |
+| Phase 2: Core Utilities  | 2 weeks    | Phase 1        |
+| Phase 3: Code Generation | 4 weeks    | Phase 2        |
+| Phase 4: Validation      | 3 weeks    | Phase 3        |
+| Phase 5: Automation      | 2 weeks    | Phase 4        |
+| Phase 6: Migration       | 4 weeks    | Phase 5        |
+| Phase 7: Testing         | 3 weeks    | Phase 6        |
 
 ### 12.2 Total Duration
 

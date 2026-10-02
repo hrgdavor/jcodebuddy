@@ -21,20 +21,20 @@ removed, not migrated.
 
 ## Where each named class lives now
 
-| Name in the plan | Reality today |
-| --- | --- |
-| `EntityRulesValidator` | `hipster-entity/hipster-entity-tooling/.../validation/EntityRulesValidator.java` — ported |
-| `EntityRule` | `hipster-entity/hipster-entity-tooling/.../validation/EntityRule.java` — the rule interface, ported |
-| `AuditableRule` | `hipster-entity/hipster-entity-tooling/.../validation/AuditableRule.java` — ported |
-| `MarkerEntityRule` | `hipster-entity/hipster-entity-tooling/.../validation/MarkerEntityRule.java` — ported |
-| `ViewInterfaceRule` | `hipster-entity/hipster-entity-tooling/.../validation/ViewInterfaceRule.java` — ported |
-| `ViewAnnotationRule` | `hipster-entity/hipster-entity-tooling/.../validation/ViewAnnotationRule.java` — ported |
-| `EnumConstantOrderChecker` | `hipster-entity/hipster-entity-tooling/.../validation/EnumConstantOrderChecker.java` — ported |
-| `EnumCompactionCli` | `hipster-entity/hipster-entity-tooling/.../validation/EnumCompactionCli.java` — ported (compaction) |
-| `JavaParserTool` | Renamed to `hipster-entity/hipster-entity-tooling/.../validation/SourceQuery.java` during the port |
-| `ContextualAnalyzer` | `jcodebuddy/jcodebuddy-agent/.../agent/core/ContextualAnalyzer.java` — ported (it is an agent tool, not a rule) |
-| `AccessorGenerator`, `BuilderGenerator`, `ConstructorGenerator` | `jcodebuddy/jcodebuddy-agent/.../agent/tools/` — ported; they now delegate to `jwa-builder`'s `ClassMemberProcessor` |
-| `ValidationResult`, `AnalysisResult` | Exist only as sketches in `doc/brainstorm/rewrite-migration/05-automation/`; nothing compiles them, and the ported rules return their own types (`EntityRulesValidator.ValidationIssue`, `DivergenceReporter` entries) |
+| Name in the plan                                                                | Reality today                                                                                       |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `EntityRulesValidator`                                                          | `hipster-entity/hipster-entity-tooling/.../validation/EntityRulesValidator.java` — ported           |
+| `EntityRule`                                                                    | `hipster-entity/hipster-entity-tooling/.../validation/EntityRule.java` — the rule interface, ported |
+| `AuditableRule`                                                                 | `hipster-entity/hipster-entity-tooling/.../validation/AuditableRule.java` — ported                  |
+| `MarkerEntityRule`                                                              | `hipster-entity/hipster-entity-tooling/.../validation/MarkerEntityRule.java` — ported               |
+| `ViewInterfaceRule`                                                             | `hipster-entity/hipster-entity-tooling/.../validation/ViewInterfaceRule.java` — ported              |
+| `ViewAnnotationRule`                                                            | `hipster-entity/hipster-entity-tooling/.../validation/ViewAnnotationRule.java` — ported             |
+| `EnumConstantOrderChecker`                                                      | `hipster-entity/hipster-entity-tooling/.../validation/EnumConstantOrderChecker.java` — ported       |
+| `EnumCompactionCli`                                                             | `hipster-entity/hipster-entity-tooling/.../validation/EnumCompactionCli.java` — ported (compaction) |
+| `JavaParserTool`                                                                | Renamed to `hipster-entity/hipster-entity-tooling/.../validation/SourceQuery.java` during the port  |
+| `ContextualAnalyzer`                                                            | `jcodebuddy/jcodebuddy-agent/.../agent/core/ContextualAnalyzer.java` — ported (it is an agent tool, not a rule) |
+| `AccessorGenerator`, `BuilderGenerator`, `ConstructorGenerator`                 | `jcodebuddy/jcodebuddy-agent/.../agent/tools/` — ported; they now delegate to `jwa-builder`'s `ClassMemberProcessor` |
+| `ValidationResult`, `AnalysisResult`                                            | Exist only as sketches in `doc/brainstorm/rewrite-migration/05-automation/`; nothing compiles them, and the ported rules return their own types (`EntityRulesValidator.ValidationIssue`, `DivergenceReporter` entries) |
 | `ToolResult`, `AnnotationChecker`, `MethodChecker`, `FieldChecker`, `README.md` | **Never existed in compilable form.** They were staging-only, or (for the checkers) plan sketches with no implementation anywhere |
 
 The rule that replaced the last row's intent is worth naming, because it is better than what the plan

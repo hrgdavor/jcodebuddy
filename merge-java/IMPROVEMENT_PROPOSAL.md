@@ -37,14 +37,14 @@ The following were reproduced, not assumed. `LimitationProbe` was a temporary
 test used to establish them; the findings are recorded here so the probe is not
 needed. Suggested regression tests are named for each.
 
-| # | Input | Observed | Should be |
-|---|---|---|---|
-| L1 | Branch 1 adds an import; branch 2 deletes an unrelated method | `STRUCTURAL_CHANGE` only — the import addition is **lost** | `IMPORT_ADD` (auto) *and* a structural conflict |
-| L2 | A comment line sits between two method declarations | **nothing detected** | `OVERLOAD_ADD` |
-| L3 | Opening brace on the following line | **nothing detected** | `OVERLOAD_ADD` |
-| L4 | `Map<String, List<String>> x` vs `Collection<String> x` | **nothing detected** | `TYPE_CHANGE` (review) |
-| L5 | Both branches add statements to the same body (control) | `METHOD_BODY_CHANGE` ✓ | — |
-| L6 | Both branches add an import *and* edit the body (control) | `IMPORT_ADD` ✓ | — |
+| #   | Input                                                         | Observed                                                   | Should be                                       |
+| --- | ------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
+| L1  | Branch 1 adds an import; branch 2 deletes an unrelated method | `STRUCTURAL_CHANGE` only — the import addition is **lost** | `IMPORT_ADD` (auto) *and* a structural conflict |
+| L2  | A comment line sits between two method declarations           | **nothing detected**                                       | `OVERLOAD_ADD`                                  |
+| L3  | Opening brace on the following line                           | **nothing detected**                                       | `OVERLOAD_ADD`                                  |
+| L4  | `Map<String, List<String>> x` vs `Collection<String> x`       | **nothing detected**                                       | `TYPE_CHANGE` (review)                          |
+| L5  | Both branches add statements to the same body (control)       | `METHOD_BODY_CHANGE` ✓                                     | —                                               |
+| L6  | Both branches add an import *and* edit the body (control)     | `IMPORT_ADD` ✓                                             | —                                               |
 
 Two distinct root causes:
 
@@ -344,13 +344,13 @@ most of the value.
 
 ## 7. Risks
 
-| Risk | Mitigation |
-|---|---|
-| WS2 changes existing behaviour | Land behind the suite; parser fallback keeps old behaviour available; run both paths in CI |
-| Region attribution (WS1) is approximate | Conflicts with unknown or overlapping regions are never reported as independently applicable — conservative by construction |
-| Writing to a working tree (WS5) is destructive | `dry-run` default in tests, explicit opt-in to write, and every write reported |
-| Checked-in history grows unbounded | WS4 pruning plus a size check in CI |
-| Verifier gives false confidence | Parse-level verification is a floor, not a proof; documentation must say so |
+| Risk                                           | Mitigation                                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| WS2 changes existing behaviour                 | Land behind the suite; parser fallback keeps old behaviour available; run both paths in CI |
+| Region attribution (WS1) is approximate        | Conflicts with unknown or overlapping regions are never reported as independently applicable — conservative by construction |
+| Writing to a working tree (WS5) is destructive | `dry-run` default in tests, explicit opt-in to write, and every write reported             |
+| Checked-in history grows unbounded             | WS4 pruning plus a size check in CI                                                        |
+| Verifier gives false confidence                | Parse-level verification is a floor, not a proof; documentation must say so                |
 
 ---
 

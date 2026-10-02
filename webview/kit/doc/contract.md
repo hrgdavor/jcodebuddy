@@ -21,8 +21,8 @@ A page asks for navigation by **calling one global function**:
 window.openFile(filePath, line, column);
 ```
 
-| Argument   | Type   | Meaning |
-| ---------- | ------ | ------- |
+| Argument   | Type   | Meaning                                                               |
+| ---------- | ------ | --------------------------------------------------------------------- |
 | `filePath` | string | The file to open. Absolute (`C:/work/proj/src/main/java/A.java`, `/home/me/proj/…`) or relative to the project root (`src/main/java/A.java`). Forward slashes and backslashes are both accepted. |
 | `line`     | number | **1-based** line to place the caret on. `1` when unknown. `0` or negative is clamped to the first line. |
 | `column`   | number | **1-based** column. `1` is fine for every use case this contract has. |
@@ -117,12 +117,12 @@ GET http://127.0.0.1:<port>/health
 
 ### 3.1 The port is per host, so discover it
 
-| Host | Conventional port | Where the running port is published |
-| --- | --- | --- |
-| JetBrains plugin (`WebView Explorer`) | `18881` (setting `webview.explorer.port`) | `<project>/.jcodebuddy/webview/host.json` |
-| VS Code extension | `18882` (setting `webviewExplorer.port`) | `<project>/.jcodebuddy/webview/host.json` |
-| Eclipse view (`WebView`) | `18883` (preference `hr.hrg.eclipse.webview.port`) — and the endpoint stays **off** until a port is named | `<project>/.jcodebuddy/webview/host.json` |
-| A standalone host | ephemeral — it asks for `0` unless told otherwise | `<project>/.jcodebuddy/webview/host.json` |
+| Host                                  | Conventional port                                 | Where the running port is published       |
+| ------------------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| JetBrains plugin (`WebView Explorer`) | `18881` (setting `webview.explorer.port`)         | `<project>/.jcodebuddy/webview/host.json` |
+| VS Code extension                     | `18882` (setting `webviewExplorer.port`)          | `<project>/.jcodebuddy/webview/host.json` |
+| Eclipse view (`WebView`)              | `18883` (preference `hr.hrg.eclipse.webview.port`) — and the endpoint stays **off** until a port is named | `<project>/.jcodebuddy/webview/host.json` |
+| A standalone host                     | ephemeral — it asks for `0` unless told otherwise | `<project>/.jcodebuddy/webview/host.json` |
 
 **The listed port is a request, not an address.** A host takes the next free port when something unrelated
 holds the one it asked for, so a generated page carries a **configured** port (the kit writes
@@ -148,16 +148,16 @@ data instead of by calling something and watching it fail.
   "project": "D:/wrk/myproject" }
 ```
 
-| Key | Meaning |
-| --- | --- |
-| `plugin` | which host is answering — lets a script tell one host's convention from another's |
-| `port` | the port actually bound, which is how a page learns an ephemeral one |
+| Key              | Meaning                                                                           |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `plugin`         | which host is answering — lets a script tell one host's convention from another's |
+| `port`           | the port actually bound, which is how a page learns an ephemeral one              |
 | `allowedOrigins` | how many origins are trusted; **`0` means every caller is refused**, and that is the default rather than an error |
-| `tokenRequired` | whether a token is configured |
-| `bridgeVersion` | the same number a page sees as `window.__jcbWebViewBridge` (§ 1.2) |
-| `capabilities` | what the host can do **now**, sorted. **An empty array is the honest answer for a host with no editor attached**, and it is how a page chooses its fallback instead of calling a verb and watching it fail |
-| `ide` | a human name for the editor — `"IntelliJ IDEA"`, `"Visual Studio Code"`, `"unknown"`, or a standalone host's own name |
-| `project` | the directory **this endpoint serves**, forward-slashed and absolute, or the empty string when the host does not know it yet |
+| `tokenRequired`  | whether a token is configured                                                     |
+| `bridgeVersion`  | the same number a page sees as `window.__jcbWebViewBridge` (§ 1.2)                |
+| `capabilities`   | what the host can do **now**, sorted. **An empty array is the honest answer for a host with no editor attached**, and it is how a page chooses its fallback instead of calling a verb and watching it fail |
+| `ide`            | a human name for the editor — `"IntelliJ IDEA"`, `"Visual Studio Code"`, `"unknown"`, or a standalone host's own name |
+| `project`        | the directory **this endpoint serves**, forward-slashed and absolute, or the empty string when the host does not know it yet |
 
 `capabilities` may contain `open`, `select`, `reveal`, `serveFile`, `edit`, `diff`, `undo` and `watch`. The
 ones this kit's pages use are `open` (§ 1) and, when a page edits, `edit` and `diff`
@@ -172,14 +172,14 @@ ones this kit's pages use are `open` (§ 1) and, when a page edits, `edit` and `
 | `column`   | no                              | 1-based; defaults to `1`                                             |
 | `token`    | only when a token is configured | the shared secret, as an alternative to the `X-WebView-Token` header |
 
-| Status | Meaning                                            | What a page should do |
-| ------ | -------------------------------------------------- | --------------------- |
-| `200`  | accepted and opened                                | — |
-| `400`  | no usable path                                     | the link is malformed; fix the generator |
+| Status | Meaning                                                             | What a page should do                                                                |
+| ------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `200`  | accepted and opened                                                 | —                                                                                    |
+| `400`  | no usable path                                                      | the link is malformed; fix the generator                                             |
 | `403`  | the caller proved nothing, or the path resolved outside the project | authorise the caller (§ 3.4); if the path is the cause, the link escaped the project |
-| `404`  | the path did not resolve                           | the link is stale; a broken link must be dropped, not shipped |
-| `405`  | not a `GET`                                        | — |
-| `429`  | the rate limit refused the request                 | the page is navigating too fast; do not wire `mouseover` to navigation |
+| `404`  | the path did not resolve                                            | the link is stale; a broken link must be dropped, not shipped                        |
+| `405`  | not a `GET`                                                         | —                                                                                    |
+| `429`  | the rate limit refused the request                                  | the page is navigating too fast; do not wire `mouseover` to navigation               |
 
 **A page must not depend on which failure it was.** Treat "not 200" as "it did not open", which is the only
 reading this contract ever promised. The set of statuses has grown — an escaping path answers `403` and the

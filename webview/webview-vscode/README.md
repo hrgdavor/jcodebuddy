@@ -58,10 +58,10 @@ carries a *configured* port and never a constant.
 Two sets of decisions, both as pure functions with no VS Code dependency and both asserted against the tables
 every host shares:
 
-| What | Where | Asserted by |
-| --- | --- | --- |
-| who may drive the editor: the origin allow-list, CORS, the rate limit, the write-token rule | [`src/BridgePolicy.ts`](src/BridgePolicy.ts) | [`../conformance/bridge-decisions.json`](../conformance/bridge-decisions.json) |
-| which port this host serves on: the claim table, the `/health` identity, the descriptor | [`src/BridgePolicy.ts`](src/BridgePolicy.ts) + [`src/HostRegistration.ts`](src/HostRegistration.ts) | `HostRegistration.test.js` (real sockets) and `BridgePolicy.test.js` |
+| What                                                                                        | Where                                                                                               | Asserted by                                                                    |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| who may drive the editor: the origin allow-list, CORS, the rate limit, the write-token rule | [`src/BridgePolicy.ts`](src/BridgePolicy.ts)                                                        | [`../conformance/bridge-decisions.json`](../conformance/bridge-decisions.json) |
+| which port this host serves on: the claim table, the `/health` identity, the descriptor     | [`src/BridgePolicy.ts`](src/BridgePolicy.ts) + [`src/HostRegistration.ts`](src/HostRegistration.ts) | `HostRegistration.test.js` (real sockets) and `BridgePolicy.test.js`           |
 
 ```bash
 npm run test:unit      # BridgePolicy + HostRegistration: no VS Code download, about a second

@@ -13,15 +13,15 @@ with **one deliberate exception**: `WRITABLE` emits no record (see below).
 
 ## The ladder
 
-| `GenLevel` | Emits | Cumulative effect |
-|---|---|---|
-| `DEFAULT` | nothing on its own | resolved to `META`, `RECORD` or `BUILDER` by the view's shape (below) |
-| `META` | the field enum `<View>_` implementing `FieldDef` + a `ViewMeta` | the entry point; read-only through interface accessors |
-| `RECORD` | a record implementing the view | `META` + the immutable concrete materialization |
-| `WRITABLE` | a nested `Write` interface extending the view and `ViewWriter` | `META` + a writable contract, materialized through the array-backed updatable proxy — **not** a record |
-| `BUILDER` | `<View>Builder` | `META` + `RECORD` + the write contract + a concrete mutable builder with typed setters and `build()` |
-| `BUILDER_TRACKED` | `<View>BuilderTracking` | everything `BUILDER` emits + field-level change tracking |
-| `BUILDER_ALL` | both `<View>Builder` **and** `<View>BuilderTracking` | everything above; no tracking is traded away |
+| `GenLevel`        | Emits                                                           | Cumulative effect                                                     |
+| ----------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `DEFAULT`         | nothing on its own                                              | resolved to `META`, `RECORD` or `BUILDER` by the view's shape (below) |
+| `META`            | the field enum `<View>_` implementing `FieldDef` + a `ViewMeta` | the entry point; read-only through interface accessors                |
+| `RECORD`          | a record implementing the view                                  | `META` + the immutable concrete materialization                       |
+| `WRITABLE`        | a nested `Write` interface extending the view and `ViewWriter`  | `META` + a writable contract, materialized through the array-backed updatable proxy — **not** a record |
+| `BUILDER`         | `<View>Builder`                                                 | `META` + `RECORD` + the write contract + a concrete mutable builder with typed setters and `build()` |
+| `BUILDER_TRACKED` | `<View>BuilderTracking`                                         | everything `BUILDER` emits + field-level change tracking              |
+| `BUILDER_ALL`     | both `<View>Builder` **and** `<View>BuilderTracking`            | everything above; no tracking is traded away                          |
 
 The order of the enum constants is exactly
 `DEFAULT < META < RECORD < WRITABLE < BUILDER < BUILDER_TRACKED < BUILDER_ALL`.
@@ -229,14 +229,14 @@ without choosing one at generation time.
 
 ## How the level relates to the usage matrix
 
-| Usage | Interface | record | builder | builder-tracking | meta |
-| --- | --- | --- | --- | --- | --- |
-| RPC param | | record | | | optional metadata |
-| complex method param | | | builder | | |
-| entity | interface | record | | builder-tracking | metadata |
-| POJO inside entity (doc part) | interface | record | | builder-tracking | metadata |
-| EntityDTO | interface | | | | optional metadata |
-| EntityForm | interface | | | | optional metadata |
+| Usage                         | Interface | record | builder | builder-tracking | meta              |
+| ----------------------------- | --------- | ------ | ------- | ---------------- | ----------------- |
+| RPC param                     |           | record |         |                  | optional metadata |
+| complex method param          |           |        | builder |                  |                   |
+| entity                        | interface | record |         | builder-tracking | metadata          |
+| POJO inside entity (doc part) | interface | record |         | builder-tracking | metadata          |
+| EntityDTO                     | interface |        |         |                  | optional metadata |
+| EntityForm                    | interface |        |         |                  | optional metadata |
 
 > "optional metadata" — metadata is not needed at runtime if
 > serialization/deserialization is delegated to a framework that uses
@@ -248,13 +248,13 @@ Deserializing/reading into a materialized view is expressed as
 `set(...)` returning whether the field exists (or an enum: `NO_CHANGE`,
 `CHANGE`, `NOT_FOUND`):
 
-| Source | Shape |
-|---|---|
-| JSON | `set(String, Object)` |
-| JDBC | `set(int, Object)` |
-| MONGO | `set(String, Object)` |
-| Proxy | `set(String, Object)` — useful when generating a concrete impl is not desirable |
-| BIN | `set(int, Object)` — binary formats (Fory, MQ) that require enum-backed validation |
+| Source | Shape                                                                              |
+| ------ | ---------------------------------------------------------------------------------- |
+| JSON   | `set(String, Object)`                                                              |
+| JDBC   | `set(int, Object)`                                                                 |
+| MONGO  | `set(String, Object)`                                                              |
+| Proxy  | `set(String, Object)` — useful when generating a concrete impl is not desirable    |
+| BIN    | `set(int, Object)` — binary formats (Fory, MQ) that require enum-backed validation |
 
 The user-facing API rarely needs `set(F extends Enum<F>, Object)`: it is
 better to generate the typed setters (the generated classes implement

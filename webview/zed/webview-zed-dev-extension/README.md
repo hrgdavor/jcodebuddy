@@ -15,11 +15,11 @@ touching Rust.
 
 ## What it does, and what it deliberately does not
 
-| Does | Does not |
-| --- | --- |
-| Registers the language-server name `webview-sidecar` and binds it to the Java language | Render anything — a Zed extension cannot create a panel or a webview (plan §D4) |
+| Does                                                                                   | Does not                                                                                       |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Registers the language-server name `webview-sidecar` and binds it to the Java language | Render anything — a Zed extension cannot create a panel or a webview (plan §D4)                |
 | Returns a command for Zed to spawn: `JCB_WEBVIEW_SIDECAR` → `webviewd --lsp` on `PATH` → `JCB_WEBVIEW_JAVA` / `$JAVA_HOME/bin/java` `-jar webview/jwa-sidecar/target/jwa-sidecar.jar` | Own the port, or open one itself: the **sidecar** owns the port and serves the page (plan §D1) |
-| — | Use `process:exec`: this crate never spawns a process, Zed does, so no `[[capabilities]]` grant is needed |
+| —                                                                                      | Use `process:exec`: this crate never spawns a process, Zed does, so no `[[capabilities]]` grant is needed |
 
 ## Install it as a dev extension
 

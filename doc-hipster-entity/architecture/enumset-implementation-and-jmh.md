@@ -151,17 +151,17 @@ benchmarks keep the agent set in place and vary two axes:
 
 Everything below comes from one full run of the decision-grade profile, with this shape:
 
-| Setting | Value |
-| --- | --- |
-| JMH | 1.37 |
-| JDK | 25.0.3+9-LTS-195 (HotSpot 64-Bit Server VM) |
-| JVM args | `-Xmx4g` |
-| Forks | 3 |
-| Warmup | 6 iterations × 2 s |
-| Measurement | 8 iterations × 2 s |
-| Threads | 1 (synchronized iterations) |
-| Mode | Throughput (`ops/ms`) |
-| Variants | 76 |
+| Setting     | Value                                       |
+| ----------- | ------------------------------------------- |
+| JMH         | 1.37                                        |
+| JDK         | 25.0.3+9-LTS-195 (HotSpot 64-Bit Server VM) |
+| JVM args    | `-Xmx4g`                                    |
+| Forks       | 3                                           |
+| Warmup      | 6 iterations × 2 s                          |
+| Measurement | 8 iterations × 2 s                          |
+| Threads     | 1 (synchronized iterations)                 |
+| Mode        | Throughput (`ops/ms`)                       |
+| Variants    | 76                                          |
 
 Re-run it with:
 
@@ -176,19 +176,19 @@ kept at `target/jmh/overlap-full2.log` and the allocation/GC probe at `target/jm
 
 #### Pairwise overlap, single agent set (`ops/ms`)
 
-| Benchmark | 0.05 | 0.25 | 0.5 | 0.9 |
-| --- | --- | --- | --- | --- |
-| `overlapEEnumSet64` | 869,543 | 826,517 | 719,214 | 859,759 |
-| `overlapEEnumSet96` | 610,970 | 616,510 | 623,629 | 617,329 |
-| `overlapEEnumSet256` | 304,090 † | 608,114 | 604,264 | 614,204 |
-| `overlapEEnumSetBuilder64` | 828,548 | 836,466 | 804,305 | 816,442 |
-| `overlapEEnumSetBuilder256` | 300,070 † | 625,741 | 617,127 | 615,602 |
-| `overlapRawLong64` | 1,752,893 | 1,762,388 | 1,760,516 | 1,779,034 |
-| `overlapBitSet96` | 80,123 | 79,975 | 83,392 | 86,074 |
-| `overlapBitSet256` | 75,800 | 82,873 | 82,498 | 81,306 |
-| `overlapHashSet64` | 13,853 | 3,156 | 1,845 | 1,164 |
-| `overlapHashSet96` | 10,653 | 2,182 | 1,249 | 844 |
-| `overlapHashSet256` | 4,522 | 942 | 485 | 285 |
+| Benchmark                   | 0.05      | 0.25      | 0.5       | 0.9       |
+| --------------------------- | --------- | --------- | --------- | --------- |
+| `overlapEEnumSet64`         | 869,543   | 826,517   | 719,214   | 859,759   |
+| `overlapEEnumSet96`         | 610,970   | 616,510   | 623,629   | 617,329   |
+| `overlapEEnumSet256`        | 304,090 † | 608,114   | 604,264   | 614,204   |
+| `overlapEEnumSetBuilder64`  | 828,548   | 836,466   | 804,305   | 816,442   |
+| `overlapEEnumSetBuilder256` | 300,070 † | 625,741   | 617,127   | 615,602   |
+| `overlapRawLong64`          | 1,752,893 | 1,762,388 | 1,760,516 | 1,779,034 |
+| `overlapBitSet96`           | 80,123    | 79,975    | 83,392    | 86,074    |
+| `overlapBitSet256`          | 75,800    | 82,873    | 82,498    | 81,306    |
+| `overlapHashSet64`          | 13,853    | 3,156     | 1,845     | 1,164     |
+| `overlapHashSet96`          | 10,653    | 2,182     | 1,249     | 844       |
+| `overlapHashSet256`         | 4,522     | 942       | 485       | 285       |
 
 † Both width-256 EEnumSet rows read roughly half their neighbours at `density=0.05` and match them
 everywhere else. This is a real measurement, not a transcription slip, and it is left visible rather
@@ -199,12 +199,12 @@ margin) and ~67× against `overlapHashSet256`.
 
 #### Disjoint sets, worst case for the primitive (`ops/ms`)
 
-| Benchmark | 0.05 | 0.25 | 0.5 | 0.9 |
-| --- | --- | --- | --- | --- |
-| `disjointEEnumSet64` | 1,124,064 | 1,104,362 | 1,098,006 | 1,093,059 |
-| `disjointEEnumSet256` | 330,039 | 313,422 | 321,583 | 326,029 |
-| `disjointHashSet64` | 1,939 | 2,040 | 2,144 | 1,958 |
-| `disjointHashSet256` | 567 | 509 | 540 | 564 |
+| Benchmark             | 0.05      | 0.25      | 0.5       | 0.9       |
+| --------------------- | --------- | --------- | --------- | --------- |
+| `disjointEEnumSet64`  | 1,124,064 | 1,104,362 | 1,098,006 | 1,093,059 |
+| `disjointEEnumSet256` | 330,039   | 313,422   | 321,583   | 326,029   |
+| `disjointHashSet64`   | 1,939     | 2,040     | 2,144     | 1,958     |
+| `disjointHashSet256`  | 567       | 509       | 540       | 564       |
 
 `disjoint*` is the pathological case for `hasAny` — the scan has to visit everything before it can
 answer "no". Both EEnumSet rows stay within ±3% of their mean across the whole density axis, so the worst
@@ -212,12 +212,12 @@ case costs essentially nothing over the best case.
 
 #### Whole-corpus filtering, the actual use case (`ops/ms`)
 
-| Benchmark | agents | 0.05 | 0.25 | 0.5 | 0.9 |
-| --- | --- | --- | --- | --- | --- |
-| `filterAgents64` | 100 | 15,201 | 18,321 | 20,338 | 20,468 |
-| `filterAgentsHashSet64` | 100 | 135.3 | 31.3 | 17.6 | 10.6 |
-| `filterAgents64` | 1000 | 1,009 | 1,000 | 1,355 | 1,543 |
-| `filterAgentsHashSet64` | 1000 | 11.8 | 2.13 | 1.25 | 1.07 |
+| Benchmark               | agents | 0.05   | 0.25   | 0.5    | 0.9    |
+| ----------------------- | ------ | ------ | ------ | ------ | ------ |
+| `filterAgents64`        | 100    | 15,201 | 18,321 | 20,338 | 20,468 |
+| `filterAgentsHashSet64` | 100    | 135.3  | 31.3   | 17.6   | 10.6   |
+| `filterAgents64`        | 1000   | 1,009  | 1,000  | 1,355  | 1,543  |
+| `filterAgentsHashSet64` | 1000   | 11.8   | 2.13   | 1.25   | 1.07   |
 
 This is the shape the use case is actually about: one session set tested against every agent set in
 turn. EEnumSet gets *faster* as density rises (more early exits), while the `HashSet` baseline gets
@@ -228,10 +228,10 @@ turn. EEnumSet gets *faster* as density rises (more early exits), while the `Has
 `-prof gc`, `density=0.5`, 1 fork × 5 × 1 s (allocation behaviour is structural, so the reduced
 profile is sufficient for it; the throughput column of this probe is not decision-grade):
 
-| Benchmark | `gc.alloc.rate.norm` | `gc.alloc.rate` | `gc.count` | `gc.time` |
-| --- | --- | --- | --- | --- |
-| `overlapEEnumSet64` | ≈ 10⁻⁵ B/op | 0.007 MB/sec | ≈ 0 counts | — |
-| `overlapHashSet64` | 1,376.004 B/op | 2,145.761 MB/sec | 18 counts | 22 ms |
+| Benchmark           | `gc.alloc.rate.norm` | `gc.alloc.rate`  | `gc.count` | `gc.time` |
+| ------------------- | -------------------- | ---------------- | ---------- | --------- |
+| `overlapEEnumSet64` | ≈ 10⁻⁵ B/op          | 0.007 MB/sec     | ≈ 0 counts | —         |
+| `overlapHashSet64`  | 1,376.004 B/op       | 2,145.761 MB/sec | 18 counts  | 22 ms     |
 
 The EEnumSet path is allocation-free in steady state: bitwise AND over `long` fields with no boxing and
 no iterator. The `HashSet` path allocates ~1.4 KB per operation and collects ~18 times per second-long
@@ -240,17 +240,17 @@ this is the difference between "no GC pressure" and "GC pressure proportional to
 
 #### Headline ratios
 
-| Comparison | Ratio |
-| --- | --- |
-| `overlapEEnumSet64` vs `overlapHashSet64` @0.5 | ~390× |
-| `overlapEEnumSet64` vs `overlapHashSet64` @0.9 | ~739× |
-| `overlapEEnumSet256` vs `overlapHashSet256` @0.5 | ~1,246× |
-| `disjointEEnumSet64` vs `disjointHashSet64` @0.5 | ~512× |
-| `disjointEEnumSet256` vs `disjointHashSet256` @0.5 | ~596× |
-| `filterAgents64` vs `filterAgentsHashSet64`, 100 agents @0.9 | ~1,933× |
-| `filterAgents64` vs `filterAgentsHashSet64`, 1000 agents @0.9 | ~1,444× |
-| `overlapEEnumSet96` vs `overlapBitSet96` @0.5 | ~7.5× |
-| `overlapRawLong64` vs `overlapEEnumSet64` @0.5 | ~2.5× (raw `long` is faster) |
+| Comparison                                                    | Ratio                        |
+| ------------------------------------------------------------- | ---------------------------- |
+| `overlapEEnumSet64` vs `overlapHashSet64` @0.5                | ~390×                        |
+| `overlapEEnumSet64` vs `overlapHashSet64` @0.9                | ~739×                        |
+| `overlapEEnumSet256` vs `overlapHashSet256` @0.5              | ~1,246×                      |
+| `disjointEEnumSet64` vs `disjointHashSet64` @0.5              | ~512×                        |
+| `disjointEEnumSet256` vs `disjointHashSet256` @0.5            | ~596×                        |
+| `filterAgents64` vs `filterAgentsHashSet64`, 100 agents @0.9  | ~1,933×                      |
+| `filterAgents64` vs `filterAgentsHashSet64`, 1000 agents @0.9 | ~1,444×                      |
+| `overlapEEnumSet96` vs `overlapBitSet96` @0.5                 | ~7.5×                        |
+| `overlapRawLong64` vs `overlapEEnumSet64` @0.5                | ~2.5× (raw `long` is faster) |
 
 Interpretation:
 

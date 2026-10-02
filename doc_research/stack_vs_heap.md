@@ -117,11 +117,11 @@ public void MemorySegmentExample() {
 
 ### Summary Matrix: Off-Heap Parameter Alternatives
 
-| Technique | Inlining Needed? | Allocation Cost | GC Impact | Best For |
-| --- | --- | --- | --- | --- |
-| **Scalar Replacement (JIT EA)** | **Yes** (Mandatory) | Zero (Stack slots) | Zero | Simple records/tuples passed to short methods. |
-| **Primitive Decomposition / Bit Packing** | No | Zero (CPU Registers) | Zero | 2–3 small fields (e.g., coordinates, IDs, flags). |
-| **Project Valhalla (`value record`)** | No | Zero (Flattened Stack) | Zero | Domain entities, lightweight models, builders. |
-| **ThreadLocal Flyweight** | No | Amortized Zero | Low | Heavy mutable context wrappers. |
-| **FFM `MemorySegment**` | No | Off-Heap Native | Zero (GC-Free) | Large byte buffers, inter-op with C/Native libraries. |
+| Technique                                 | Inlining Needed?    | Allocation Cost        | GC Impact      | Best For                                              |
+| ----------------------------------------- | ------------------- | ---------------------- | -------------- | ----------------------------------------------------- |
+| **Scalar Replacement (JIT EA)**           | **Yes** (Mandatory) | Zero (Stack slots)     | Zero           | Simple records/tuples passed to short methods.        |
+| **Primitive Decomposition / Bit Packing** | No                  | Zero (CPU Registers)   | Zero           | 2–3 small fields (e.g., coordinates, IDs, flags).     |
+| **Project Valhalla (`value record`)**     | No                  | Zero (Flattened Stack) | Zero           | Domain entities, lightweight models, builders.        |
+| **ThreadLocal Flyweight**                 | No                  | Amortized Zero         | Low            | Heavy mutable context wrappers.                       |
+| **FFM `MemorySegment**`                   | No                  | Off-Heap Native        | Zero (GC-Free) | Large byte buffers, inter-op with C/Native libraries. |
 

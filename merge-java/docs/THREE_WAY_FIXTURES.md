@@ -98,12 +98,12 @@ A fixture that a two-way text comparison handles correctly proves nothing. The
 valuable cases are the ones where comparing the two branches *cannot* see what
 happened:
 
-| Case shape | Why text comparison fails |
-|---|---|
-| Ours adds an import, theirs removes a **different** one | Two-way shows each side holding an import the other lacks, which reads as a clash over the block. Only the base reveals an independent addition and removal. |
-| Both branches add a method into the same class body | The insertions sit at the same location, so a line diff interleaves them and can produce a method nested inside another — syntactically broken code. |
-| Both add a constant with **different** values | Textually both are "a new line"; only the base shows it is the *same name* being defined twice. |
-| One branch renames, the other adds a use of the old name | The addition looks harmless until you know the base declared it. |
+| Case shape                                               | Why text comparison fails                                                                       |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Ours adds an import, theirs removes a **different** one  | Two-way shows each side holding an import the other lacks, which reads as a clash over the block. Only the base reveals an independent addition and removal. |
+| Both branches add a method into the same class body      | The insertions sit at the same location, so a line diff interleaves them and can produce a method nested inside another — syntactically broken code. |
+| Both add a constant with **different** values            | Textually both are "a new line"; only the base shows it is the *same name* being defined twice. |
+| One branch renames, the other adds a use of the old name | The addition looks harmless until you know the base declared it.                                |
 
 ### 4. Assert the structure survived, not just the text
 

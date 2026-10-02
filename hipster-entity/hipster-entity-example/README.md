@@ -7,14 +7,14 @@ committed source is the source of truth (DEC-019 / `AGENTS.md` § 1).
 
 ## What is generated, and what is hand-written
 
-| Path | Owner |
-|---|---|
-| `person/entity/*_`, `person/entity/*Builder*`, `person/entity/*Record*` | **generated** (`--packages` filter) |
-| `paymentMethod/entity/*PaymentMethod_` (four subclasses) | **generated** |
-| `paymentMethod/entity/PaymentMethod_.java` | **hand-written** — the polymorphic root's discriminator constant and permitted subtypes live here (§ 9/4.9) |
-| `paymentMethod/entity/PaymentMethod.java` | hand-written marker (not a view; deliberately carries no `@View`) |
-| `person/iface/Person.java`, `person/record/Person.java` | hand-written documentation samples, included by `architecture/materialization-levels.md` via `<!-- INCLUDE -->`; excluded from generation |
-| `example/` (`Auditable`, …) | hand-written field sources, outside the generation filter |
+| Path                                                                    | Owner                                                             |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `person/entity/*_`, `person/entity/*Builder*`, `person/entity/*Record*` | **generated** (`--packages` filter)                               |
+| `paymentMethod/entity/*PaymentMethod_` (four subclasses)                | **generated**                                                     |
+| `paymentMethod/entity/PaymentMethod_.java`                              | **hand-written** — the polymorphic root's discriminator constant and permitted subtypes live here (§ 9/4.9) |
+| `paymentMethod/entity/PaymentMethod.java`                               | hand-written marker (not a view; deliberately carries no `@View`) |
+| `person/iface/Person.java`, `person/record/Person.java`                 | hand-written documentation samples, included by `architecture/materialization-levels.md` via `<!-- INCLUDE -->`; excluded from generation |
+| `example/` (`Auditable`, …)                                             | hand-written field sources, outside the generation filter         |
 
 ## How generation is wired
 

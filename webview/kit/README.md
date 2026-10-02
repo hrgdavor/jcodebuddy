@@ -24,11 +24,11 @@ A page reaches the editor through **two attributes and one function**, and the A
 window.openFile(filePath, line, column);   // line and column are 1-based; defaults are 1
 ```
 
-| Document | What it answers | Read it when |
-| --- | --- | --- |
-| [`doc/contract.md`](doc/contract.md) | the **frozen** API: `data-open` / `data-line` / `data-member` / `data-role`, `window.openFile`, `GET /open`, `GET /health`, the fallback ladder, what may change and what may not | you need the exact behaviour of a call, or you are writing anything that emits links |
-| [`doc/page-authoring.md`](doc/page-authoring.md) | how to **build** a page: the two shapes, the skeleton, the link base, offline syntax highlighting, the verifier, troubleshooting | you are starting a page, or a generator was written and its output looks wrong in the IDE |
-| [`doc/edit-api.md`](doc/edit-api.md) | how a page **changes** a file: propose, show the diff, apply, undo, redo, and the file-change event stream | a page is allowed to write, not only to navigate |
+| Document                                                     | What it answers | Read it when                                                                              |
+| ------------------------------------------------------------ | --------------- | ----------------------------------------------------------------------------------------- |
+| [`doc/contract.md`](doc/contract.md)                         | the **frozen** API: `data-open` / `data-line` / `data-member` / `data-role`, `window.openFile`, `GET /open`, `GET /health`, the fallback ladder, what may change and what may not | you need the exact behaviour of a call, or you are writing anything that emits links |
+| [`doc/page-authoring.md`](doc/page-authoring.md)             | how to **build** a page: the two shapes, the skeleton, the link base, offline syntax highlighting, the verifier, troubleshooting | you are starting a page, or a generator was written and its output looks wrong in the IDE |
+| [`doc/edit-api.md`](doc/edit-api.md)                         | how a page **changes** a file: propose, show the diff, apply, undo, redo, and the file-change event stream | a page is allowed to write, not only to navigate |
 | [`doc/host-in-this-project.md`](doc/host-in-this-project.md) | how the host in *your* project is found and authorised: the port record, `GET /health`, tokens vs origins, the security rules your page lives under | clicks do nothing, or `403`/`404` shows up, or you are setting the environment up |
 
 ## What this kit ships

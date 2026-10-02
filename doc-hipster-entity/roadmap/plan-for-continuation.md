@@ -268,12 +268,12 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 
 ## Risk Assessment & Mitigation
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Generated code conflicts with manual changes | Medium | High | Document freeze markers; provide migration path |
-| Performance benchmarks show no improvement | Low | Medium | Establish baseline early; document expected variance |
-| Builder API decisions remain contested | Medium | High | Focus on concrete use cases; defer abstract design questions |
-| Documentation grows faster than implementation | Low | Medium | Write docs concurrently with each ADR completion |
+| Risk                                           | Likelihood  | Impact   | Mitigation                                                   |
+| ---------------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
+| Generated code conflicts with manual changes   | Medium      | High     | Document freeze markers; provide migration path              |
+| Performance benchmarks show no improvement     | Low         | Medium   | Establish baseline early; document expected variance         |
+| Builder API decisions remain contested         | Medium      | High     | Focus on concrete use cases; defer abstract design questions |
+| Documentation grows faster than implementation | Low         | Medium   | Write docs concurrently with each ADR completion             |
 
 ### Phase 3: Integrate Existing Generators into Code-Buddy (Week 5)
 

@@ -19,17 +19,17 @@ rendered from it.
 
 ## What the gate checks
 
-| Check | Fails when |
-| --- | --- |
-| `queue-import-free` | a queue file is marked `complete`/`testing` while still importing the removed library |
-| `staging-compiles` | the `hr.hrg.rewrite` staging package is present but its OpenRewrite dependency or its type names are wrong |
-| `tracker-agreement` | a queue file has no tracker row, or an unsettled row names a file with no use |
-| `tracker-vocabulary` | a row uses an unknown status, or `blocked` gives no reason |
-| `curation-coverage` | the scanner found a Java file that `curation.js` neither queues nor exempts |
+| Check                | Fails when                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| `queue-import-free`  | a queue file is marked `complete`/`testing` while still importing the removed library    |
+| `staging-compiles`   | the `hr.hrg.rewrite` staging package is present but its OpenRewrite dependency or its type names are wrong |
+| `tracker-agreement`  | a queue file has no tracker row, or an unsettled row names a file with no use            |
+| `tracker-vocabulary` | a row uses an unknown status, or `blocked` gives no reason                               |
+| `curation-coverage`  | the scanner found a Java file that `curation.js` neither queues nor exempts              |
 | `curation-freshness` | `curation.js` names a file that no longer exists, or exempts one that no longer needs it |
-| `allowlist-honest` | an allowlisted source file is not `exempt` in the tracker |
-| `pom-dependencies` | a queue module still declares `javaparser-core` (**warn**, not fail) |
-| **`docs-honest`** | **a live document names the removed library without a recorded reason — or *teaches* the removed API at all** |
+| `allowlist-honest`   | an allowlisted source file is not `exempt` in the tracker                                |
+| `pom-dependencies`   | a queue module still declares `javaparser-core` (**warn**, not fail)                     |
+| **`docs-honest`**    | **a live document names the removed library without a recorded reason — or *teaches* the removed API at all** |
 
 `docs-honest` is Phase 8's addition and the reason this gate still runs. The code
 was migrated in Phase 6, but nothing in the build fails when a **document**
@@ -67,11 +67,11 @@ to use the removed library" is answered by classification rather than by a grep.
 **Three classifications are legitimate without an allowlist entry**, and the
 scanner derives each from the path alone:
 
-| Kind | What it means | Examples |
-| --- | --- | --- |
+| Kind        | What it means                                                | Examples                                                             |
+| ----------- | ------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `generated` | a script writes it, so a mention is a property of the inputs | `Checklist.md`, `tracker.md`, `TEST-REPORT.md`, `BenchmarkReport.md` |
-| `record` | it exists to describe the migration | `doc/brainstorm/rewrite-migration/**`, `plans/rewrite-migration/**` |
-| `decision` | a DEC or brainstorm, corrected by an appended note | `doc-hipster-entity/**`, `doc/architecture/decisions-watch/**` |
+| `record`    | it exists to describe the migration                          | `doc/brainstorm/rewrite-migration/**`, `plans/rewrite-migration/**`  |
+| `decision`  | a DEC or brainstorm, corrected by an appended note           | `doc-hipster-entity/**`, `doc/architecture/decisions-watch/**`       |
 
 Everything else is `live`, and a `live` document that mentions the removed
 library must be on the **documentation allowlist** in
@@ -95,18 +95,18 @@ The plan (`06-Migration-Checklist.md` § Deliverables) names four shell scripts.
 On this checkout they are these four JavaScript entry points; the `.sh` name in
 the plan is the only thing that changed.
 
-| Plan name | Here | What it does |
-| --- | --- | --- |
-| `scan-remaining-javafiles.sh` | `scan-remaining-javafiles.js` | Finds every remaining use in Java source, classifies it, prints a summary |
-| `migrate-file.sh` | `migrate-file.js` | Pre-flight for one file: surface, plan steps, baseline hash, after-action check |
-| `verify-migration.sh` | `verify-migration.js` | **The gate** (above) |
-| `generate-migration-report.sh` | `generate-migration-report.js` | Writes the migration report in the format the plan specifies |
+| Plan name                      | Here                           | What it does                                                                    |
+| ------------------------------ | ------------------------------ | ------------------------------------------------------------------------------- |
+| `scan-remaining-javafiles.sh`  | `scan-remaining-javafiles.js`  | Finds every remaining use in Java source, classifies it, prints a summary       |
+| `migrate-file.sh`              | `migrate-file.js`              | Pre-flight for one file: surface, plan steps, baseline hash, after-action check |
+| `verify-migration.sh`          | `verify-migration.js`          | **The gate** (above)                                                            |
+| `generate-migration-report.sh` | `generate-migration-report.js` | Writes the migration report in the format the plan specifies                    |
 
 Two more render Phase 7's and Phase 8's evidence:
 
-| Script | What it does |
-| --- | --- |
-| `generate-test-report.js` | Renders `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md` from the Surefire XML, the benchmark JSON and a captured gate run |
+| Script                      | What it does                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `generate-test-report.js`   | Renders `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md` from the Surefire XML, the benchmark JSON and a captured gate run |
 | `run-tooling-benchmarks.js` | Runs the module's JMH read-path benchmarks on the same JDK 25 the recorded gate uses |
 
 ## Usage

@@ -85,14 +85,14 @@ Use this when the same view needs both bulk creation and patch-aware updates.
 
 ## Choosing a level
 
-| Need | Recommended level |
-|---|---|
-| Read-only view metadata | Level 0 |
-| Immutable DTO or JSON shape | Level 1 |
-| Form/update payloads | Level 2 |
-| Fluent builder construction | Level 3 |
-| Patch-aware change tracking | Level 4 |
-| Both untracked and tracked builders | Level 5 |
+| Need                                | Recommended level |
+| ----------------------------------- | ----------------- |
+| Read-only view metadata             | Level 0           |
+| Immutable DTO or JSON shape         | Level 1           |
+| Form/update payloads                | Level 2           |
+| Fluent builder construction         | Level 3           |
+| Patch-aware change tracking         | Level 4           |
+| Both untracked and tracked builders | Level 5           |
 
 ## See also
 

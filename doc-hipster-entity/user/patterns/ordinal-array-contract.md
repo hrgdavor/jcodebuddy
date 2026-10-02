@@ -26,14 +26,14 @@ You do **not** need this contract to *consume* a view. A caller that only invoke
 
 ## Terminology
 
-| Term | Meaning |
-|---|---|
-| view | a `hipster-entity` interface, e.g. `PersonSummary`, whose zero-argument methods are its fields |
-| field enum | the generated companion enum, e.g. `PersonSummary_`, which `implements FieldDef` |
-| field constant | one constant of that enum, e.g. `PersonSummary_.firstName` |
-| ordinal | `FieldDef.ordinal()` — the constant's declaration position, which is also its array index |
-| values array | the `Object[]` an adapter produces, indexed by ordinal |
-| `META` | the generated `ViewMeta` singleton, e.g. `PersonSummary_.META` |
+| Term           | Meaning                                                                                        |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| view           | a `hipster-entity` interface, e.g. `PersonSummary`, whose zero-argument methods are its fields |
+| field enum     | the generated companion enum, e.g. `PersonSummary_`, which `implements FieldDef`               |
+| field constant | one constant of that enum, e.g. `PersonSummary_.firstName`                                     |
+| ordinal        | `FieldDef.ordinal()` — the constant's declaration position, which is also its array index      |
+| values array   | the `Object[]` an adapter produces, indexed by ordinal                                         |
+| `META`         | the generated `ViewMeta` singleton, e.g. `PersonSummary_.META`                                 |
 
 ## The contract
 
@@ -44,16 +44,16 @@ The contract is stated once in the plan and once in code
 (`EntityUpdateTrackingArray`'s class Javadoc); this page is its normative, user-facing form.
 Written as rules:
 
-| # | Rule |
-|---|---|
-| 1 | `values[f.ordinal()] ==` the value of field `f`, for every `f` in the companion `FieldDef` enum. |
-| 2 | `values.length == FieldDef.values().length == meta.fieldCount()`. |
-| 3 | Ordinal `0` is the **identity field of an entity root**. See [Ordinal 0](#ordinal-0-identity) — it is immutable in tracking arrays but writable through the generated tracking builder. |
-| 4 | A `DERIVED` or `JOINED` field **still occupies its ordinal**. An adapter that cannot fill it stores `null`. |
-| 5 | Column order comes from `ViewMeta`, **never** from `SELECT *`. |
-| 6 | The ordinal list is **append-only**: new fields get new ordinals at the end. A retired field keeps its ordinal and its slot. |
-| 7 | Field **names** are `enum.name()`, and must match the zero-argument accessor name on the view interface exactly. |
-| 8 | Name→ordinal resolution goes through `ViewMeta.forName()`, never a per-call `HashMap`. |
+| #   | Rule                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------ |
+| 1   | `values[f.ordinal()] ==` the value of field `f`, for every `f` in the companion `FieldDef` enum. |
+| 2   | `values.length == FieldDef.values().length == meta.fieldCount()`.                                |
+| 3   | Ordinal `0` is the **identity field of an entity root**. See [Ordinal 0](#ordinal-0-identity) — it is immutable in tracking arrays but writable through the generated tracking builder. |
+| 4   | A `DERIVED` or `JOINED` field **still occupies its ordinal**. An adapter that cannot fill it stores `null`. |
+| 5   | Column order comes from `ViewMeta`, **never** from `SELECT *`.                                   |
+| 6   | The ordinal list is **append-only**: new fields get new ordinals at the end. A retired field keeps its ordinal and its slot. |
+| 7   | Field **names** are `enum.name()`, and must match the zero-argument accessor name on the view interface exactly. |
+| 8   | Name→ordinal resolution goes through `ViewMeta.forName()`, never a per-call `HashMap`.           |
 
 Rules 1, 2, 4, 5 and 7 are the adapter's daily working rules. Rule 3 is the one asymmetry to be
 aware of; rule 6 is the change-management rule; rule 8 is a performance rule with a correctness
@@ -63,14 +63,14 @@ component.
 
 `PersonSummary_` declares six constants. Its array always has six slots, in exactly this order:
 
-| Ordinal | Constant | `values[ordinal]` holds |
-|---|---|---|
-| 0 | `id` | the entity identity |
-| 1 | `firstName` | the first name, or `null` |
-| 2 | `lastName` | the last name, or `null` |
-| 3 | `age` | `@FieldSource(kind = DERIVED)` — `null` when the adapter cannot compute it |
-| 4 | `departmentName` | `@FieldSource(kind = JOINED)` — `null` when the adapter cannot join it |
-| 5 | `metadata` | an arbitrary `Map`, or `null` |
+| Ordinal | Constant         | `values[ordinal]` holds                                                    |
+| ------- | ---------------- | -------------------------------------------------------------------------- |
+| 0       | `id`             | the entity identity                                                        |
+| 1       | `firstName`      | the first name, or `null`                                                  |
+| 2       | `lastName`       | the last name, or `null`                                                   |
+| 3       | `age`            | `@FieldSource(kind = DERIVED)` — `null` when the adapter cannot compute it |
+| 4       | `departmentName` | `@FieldSource(kind = JOINED)` — `null` when the adapter cannot join it     |
+| 5       | `metadata`       | an arbitrary `Map`, or `null`                                              |
 
 An adapter that "skips" the derived and joined fields by *omitting their slots* and returns a
 four-element array has not produced a `PersonSummary`. It has produced an array that no longer

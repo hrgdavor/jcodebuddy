@@ -89,10 +89,10 @@ System.out.println("{\"firstName\":{\"previous\":\"" + baseline.firstName()
 
 Three rules make this shape predictable:
 
-| Rule | Why |
-|---|---|
-| A field that did **not** change is not written at all | S4: absence means "leave it alone", which is exactly what a partial `UPDATE` needs. It is never an explicit `null`. |
-| A changed field whose value is `null` **is** written, as `null` | "absent" and "changed to null" are different instructions; only the second clears a column. |
+| Rule                                                                                          | Why                                                                                                |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| A field that did **not** change is not written at all                                         | S4: absence means "leave it alone", which is exactly what a partial `UPDATE` needs. It is never an explicit `null`. |
+| A changed field whose value is `null` **is** written, as `null`                               | "absent" and "changed to null" are different instructions; only the second clears a column.        |
 | Fields are written in **ordinal order**, and a retired (`retired() == true`) field is skipped | the order matches the field enum, so output is deterministic; a tombstone is never written (R1.4). |
 
 `EntityJacksonMapper.changeSerializer(meta)` returns the reusable

@@ -289,21 +289,21 @@ scripts/rewrite-migration/verify-migration.js` reports **`RESULT: PASS.`** with 
 
 ### What exists now
 
-| Deliverable | Path | Measured |
-| --- | --- | --- |
-| Position queries (`TreeQueries`) | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java` | 40 tests |
-| Validity and positions (`JavaSyntaxCheck`) | `.../JavaSyntaxCheckTest.java` | 22 tests |
-| Read-path entry points (`SourceReader`) | `.../SourceReaderTest.java`, nested `OtherEntryPoints` | +4 tests (16 in the class) |
-| Large and annotation-heavy sources | `.../LargeSourceEdgeCaseTest.java` | 4 tests |
-| Regression sweep over the real tree | `.../MigrationCompletenessTest.java` | 3 tests over 283 files |
-| Automation integration | `project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java` | 4 tests |
-| Agent tool seam | `jcodebuddy/jcodebuddy-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java` | 18 tests (module had none) |
-| JMH benchmarks | `.../ReadPathJmhBenchmark.java`, `.../PositionQueryJmhBenchmark.java` | 18 results, `jmh` profile |
-| Benchmark runner (Bun) | `scripts/rewrite-migration/run-tooling-benchmarks.js` | refuses a non-25 JVM |
-| Report generator (Bun) | `scripts/rewrite-migration/generate-test-report.js` | +5 Bun tests, 35 in the file |
-| Generated report | `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md` | 1326 tests, 128 suites |
-| Benchmark write-up | `doc/brainstorm/rewrite-migration/07-testing/benchmarks/BenchmarkReport.md` | rendered from `benchmarks.json` |
-| Captured gate run | `doc/brainstorm/rewrite-migration/07-testing/gate-run.txt` | the input the report reads |
+| Deliverable                                | Path                                                                                                | Measured                        |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Position queries (`TreeQueries`)           | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java` | 40 tests                   |
+| Validity and positions (`JavaSyntaxCheck`) | `.../JavaSyntaxCheckTest.java`                                                                      | 22 tests                        |
+| Read-path entry points (`SourceReader`)    | `.../SourceReaderTest.java`, nested `OtherEntryPoints`                                              | +4 tests (16 in the class)      |
+| Large and annotation-heavy sources         | `.../LargeSourceEdgeCaseTest.java`                                                                  | 4 tests                         |
+| Regression sweep over the real tree        | `.../MigrationCompletenessTest.java`                                                                | 3 tests over 283 files          |
+| Automation integration                     | `project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java` | 4 tests                         |
+| Agent tool seam                            | `jcodebuddy/jcodebuddy-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java`             | 18 tests (module had none)      |
+| JMH benchmarks                             | `.../ReadPathJmhBenchmark.java`, `.../PositionQueryJmhBenchmark.java`                               | 18 results, `jmh` profile       |
+| Benchmark runner (Bun)                     | `scripts/rewrite-migration/run-tooling-benchmarks.js`                                               | refuses a non-25 JVM            |
+| Report generator (Bun)                     | `scripts/rewrite-migration/generate-test-report.js`                                                 | +5 Bun tests, 35 in the file    |
+| Generated report                           | `doc/brainstorm/rewrite-migration/07-testing/TEST-REPORT.md`                                        | 1326 tests, 128 suites          |
+| Benchmark write-up                         | `doc/brainstorm/rewrite-migration/07-testing/benchmarks/BenchmarkReport.md`                         | rendered from `benchmarks.json` |
+| Captured gate run                          | `doc/brainstorm/rewrite-migration/07-testing/gate-run.txt`                                          | the input the report reads      |
 
 Per module: `hipster-entity-tooling` 361 to 434, `project-automation` 81 to 85, `java-watch-agent` 0 to 18;
 every other module unchanged (`merge-java` 601, `hipster-entity-core` 88, `hipster-entity-test` 31,

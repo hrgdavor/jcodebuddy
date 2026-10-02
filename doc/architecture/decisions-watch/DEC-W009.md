@@ -158,24 +158,24 @@ runner warns about *only* when it is lowered; the run took 22 min 29 s and wrote
 (`results-smoke.json` is the marker of a run that must not be recorded, and it does not exist). Throughput
 in ops/ms, higher is better; 24 samples per case except where noted. `ns/op` is derived (10⁶ ÷ ops/ms).
 
-| Mode | Backend | Entries | ops/ms | ±(99.9%) | ns/op |
-| --- | --- | ---: | ---: | ---: | ---: |
-| `getHot` | ByteBuffer | 1 000 | 121 774.1 | 5 153.2 | 8.2 |
-| `getHot` | ByteBuffer | 100 000 | 127 583.8 | 4 766.5 | 7.8 |
-| `getHot` | FFM | 1 000 | 11 989.2 | 527.0 | 83.4 |
-| `getHot` | FFM | 100 000 | 10 989.4 | 1 016.0 | 91.0 |
-| `getRandom` | ByteBuffer | 1 000 | 86 943.5 | 10 400.4 | 11.5 |
-| `getRandom` | ByteBuffer | 100 000 | 50 281.2 | 2 352.2 | 19.9 |
-| `getRandom` | FFM | 1 000 | 10 721.7 | 381.2 | 93.3 |
-| `getRandom` | FFM | 100 000 | 9 942.1 | 493.6 | 100.6 |
-| `rebuild` | ByteBuffer | 1 000 | 92.773 | 6.894 | 10.8 µs |
-| `rebuild` | ByteBuffer | 100 000 | 0.579 | 0.025 | 1.73 ms |
-| `rebuild` | FFM | 1 000 | 7.273 | 0.753 | 137 µs |
-| `rebuild` | FFM | 100 000 | 0.071 | 0.004 | 14.1 ms |
-| `mmapLoad` | ByteBuffer | 1 000 | 5.549 | 0.246 | 180 µs |
-| `mmapLoad` | ByteBuffer | 100 000 | 0.246 | 0.016 | 4.06 ms |
-| `mmapLoad` | FFM | 1 000 | 5.858 | 0.349 | 171 µs |
-| `mmapLoad` | FFM | 100 000 | 0.212 | 0.022 | 4.72 ms |
+| Mode        | Backend    | Entries | ops/ms    | ±(99.9%) | ns/op   |
+| ----------- | ---------- | ------: | --------: | -------: | ------: |
+| `getHot`    | ByteBuffer | 1 000   | 121 774.1 | 5 153.2  | 8.2     |
+| `getHot`    | ByteBuffer | 100 000 | 127 583.8 | 4 766.5  | 7.8     |
+| `getHot`    | FFM        | 1 000   | 11 989.2  | 527.0    | 83.4    |
+| `getHot`    | FFM        | 100 000 | 10 989.4  | 1 016.0  | 91.0    |
+| `getRandom` | ByteBuffer | 1 000   | 86 943.5  | 10 400.4 | 11.5    |
+| `getRandom` | ByteBuffer | 100 000 | 50 281.2  | 2 352.2  | 19.9    |
+| `getRandom` | FFM        | 1 000   | 10 721.7  | 381.2    | 93.3    |
+| `getRandom` | FFM        | 100 000 | 9 942.1   | 493.6    | 100.6   |
+| `rebuild`   | ByteBuffer | 1 000   | 92.773    | 6.894    | 10.8 µs |
+| `rebuild`   | ByteBuffer | 100 000 | 0.579     | 0.025    | 1.73 ms |
+| `rebuild`   | FFM        | 1 000   | 7.273     | 0.753    | 137 µs  |
+| `rebuild`   | FFM        | 100 000 | 0.071     | 0.004    | 14.1 ms |
+| `mmapLoad`  | ByteBuffer | 1 000   | 5.549     | 0.246    | 180 µs  |
+| `mmapLoad`  | ByteBuffer | 100 000 | 0.246     | 0.016    | 4.06 ms |
+| `mmapLoad`  | FFM        | 1 000   | 5.858     | 0.349    | 171 µs  |
+| `mmapLoad`  | FFM        | 100 000 | 0.212     | 0.022    | 4.72 ms |
 
 ### Decision 1 — the allocator is `ByteBufferArena` direct allocation
 
@@ -211,12 +211,12 @@ The watcher's debounce is **300 ms** by default (`HotSwapDaemon.DEFAULT_DEBOUNCE
 in `EntityRegenerationWatcher`), so that is the budget a batch trigger has. Measured, on the default
 backend:
 
-| Entries | Full rebuild | Share of a 300 ms batch |
-| ---: | ---: | ---: |
-| 1 000 | 10.8 µs | 0.004 % |
-| 100 000 | 1.73 ms | 0.6 % |
-| 1 000 000 (extrapolated, 17.3 ns/entry) | ≈ 17 ms | 6 % |
-| 10 000 000 (extrapolated) | ≈ 173 ms | 58 % |
+| Entries                                 | Full rebuild | Share of a 300 ms batch |
+| --------------------------------------: | -----------: | ----------------------: |
+| 1 000                                   | 10.8 µs      | 0.004 %                 |
+| 100 000                                 | 1.73 ms      | 0.6 %                   |
+| 1 000 000 (extrapolated, 17.3 ns/entry) | ≈ 17 ms      | 6 %                     |
+| 10 000 000 (extrapolated)               | ≈ 173 ms     | 58 %                    |
 
 On `ByteBuffer` a batch's budget holds **≈ 17 million entries** (on FFM ≈ 2.1 million at 141 ns/entry).
 Both are orders of magnitude above a plausible relations count for one project, and the cold-start path
@@ -235,11 +235,11 @@ measurement: `HEADER + 16 × capacity + 12 × entries + slack`, where `capacity`
 or above twice the entries (the table sits well under its load factor). With the rounding, that is between
 ~44 and ~76 bytes per entry:
 
-| Entries | Capacity | Arena |
-| ---: | ---: | ---: |
-| 1 000 | 2 048 | ≈ 49 KB |
-| 100 000 | 262 144 | ≈ 5.4 MB |
-| 1 000 000 | 2 097 152 | ≈ 46 MB |
+| Entries    | Capacity   | Arena    |
+| ---------: | ---------: | -------: |
+| 1 000      | 2 048      | ≈ 49 KB  |
+| 100 000    | 262 144    | ≈ 5.4 MB |
+| 1 000 000  | 2 097 152  | ≈ 46 MB  |
 | 10 000 000 | 33 554 432 | ≈ 657 MB |
 
 A reasonable default is "measure the relation count, then size by this formula with ~25 % slack", and the

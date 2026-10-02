@@ -38,27 +38,27 @@ parser module shortly afterwards. That is the trigger.
 
 Useful as a worked example of the cadence, and of how to look:
 
-| Fact | Value |
-|---|---|
-| `rewrite-java-25` first published | OpenRewrite **8.61.3**, 2025-09-03 |
-| Version this repo was previously pinned to | **8.40.1** — twenty minor releases earlier, so no Java 25 parser |
-| Latest OpenRewrite release at the time of writing | **8.90.4** |
-| No parser for Java 26 yet | `rewrite-java-26` returned 404 |
-| `rewrite-java-next` | a single release, 8.83.0 — worth watching |
+| Fact                                              | Value                                                            |
+| ------------------------------------------------- | ---------------------------------------------------------------- |
+| `rewrite-java-25` first published                 | OpenRewrite **8.61.3**, 2025-09-03                               |
+| Version this repo was previously pinned to        | **8.40.1** — twenty minor releases earlier, so no Java 25 parser |
+| Latest OpenRewrite release at the time of writing | **8.90.4**                                                       |
+| No parser for Java 26 yet                         | `rewrite-java-26` returned 404                                   |
+| `rewrite-java-next`                               | a single release, 8.83.0 — worth watching                        |
 
 ---
 
 ## What to bump, and where
 
-| Artifact | Where | Notes |
-|---|---|---|
-| `openrewrite.version` | **root `pom.xml`** `<dependencyManagement>` | The parent only *manages* it. Bumping here covers `rewrite-core`, `rewrite-java`, `rewrite-maven` |
-| `openrewrite.version` | **`merge-java/pom.xml`** | Pinned separately because the version-specific parser module is **not** managed by the parent |
-| `rewrite-java-NN` | **`merge-java/pom.xml`** | Swap the artifact when the JDK level moves |
-| `maven.compiler.release` | root `pom.xml` | Currently 25. No module-level override should be needed — if one appears, that is a signal something is stale |
-| `jgit.version` | `merge-java/pom.xml` | Not managed by the parent; independent of the JDK cadence |
-| `mockito.version` | `merge-java/pom.xml` | Ditto |
-| `junit5.version` | root `pom.xml` | Ditto |
+| Artifact                 | Where                                       | Notes                                                                                             |
+| ------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `openrewrite.version`    | **root `pom.xml`** `<dependencyManagement>` | The parent only *manages* it. Bumping here covers `rewrite-core`, `rewrite-java`, `rewrite-maven` |
+| `openrewrite.version`    | **`merge-java/pom.xml`**                    | Pinned separately because the version-specific parser module is **not** managed by the parent     |
+| `rewrite-java-NN`        | **`merge-java/pom.xml`**                    | Swap the artifact when the JDK level moves                                                        |
+| `maven.compiler.release` | root `pom.xml`                              | Currently 25. No module-level override should be needed — if one appears, that is a signal something is stale |
+| `jgit.version`           | `merge-java/pom.xml`                        | Not managed by the parent; independent of the JDK cadence                                         |
+| `mockito.version`        | `merge-java/pom.xml`                        | Ditto                                                                                             |
+| `junit5.version`         | root `pom.xml`                              | Ditto                                                                                             |
 
 Nothing else in the repository consumes OpenRewrite. The `org.openrewrite` imports
 under `doc/brainstorm/rewrite-migration/` and `plans/rewrite-migration/` are

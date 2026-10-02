@@ -181,9 +181,9 @@ check.explanation();
 
 Report one row per case:
 
-| original case (folder name only) | anonymized fixture | resolver class | anonymized tests | re-verification on original |
-|---|---|---|---|---|
-| `case-1-structural_change-…` | `method-add-both-same-body` | `MethodAddBothResolver` | 12 passed | viable (AUTO) |
+| original case (folder name only) | anonymized fixture          | resolver class          | anonymized tests | re-verification on original |
+| -------------------------------- | --------------------------- | ----------------------- | ---------------- | --------------------------- |
+| `case-1-structural_change-…`     | `method-add-both-same-body` | `MethodAddBothResolver` | 12 passed        | viable (AUTO)               |
 
 The folder name of an original case is safe to report; its **contents** are not.
 

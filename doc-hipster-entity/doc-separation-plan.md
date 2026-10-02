@@ -29,13 +29,13 @@ The goal: **make benefits easy to spot on first read, and let users explore deep
 
 ## Guiding Principles
 
-| Principle                                          | Rationale                                                                                               |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **Benefits first, mechanics later**                | A user should understand *what they gain* before learning *how it works internally*                     |
-| **Progressive disclosure**                         | Layer 1: pitch + quick start. Layer 2: patterns & recipes. Layer 3: internals for contributors          |
-| **Separate concerns by audience**                  | User docs answer "how do I use this?"; architecture docs answer "why is it built this way?"             |
+| Principle                                          | Rationale                                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Benefits first, mechanics later**                | A user should understand *what they gain* before learning *how it works internally*              |
+| **Progressive disclosure**                         | Layer 1: pitch + quick start. Layer 2: patterns & recipes. Layer 3: internals for contributors   |
+| **Separate concerns by audience**                  | User docs answer "how do I use this?"; architecture docs answer "why is it built this way?"      |
 | **No duplication, only linking**                   | Internal docs already exist and are well-structured — user docs should reference them, not copy content |
-| **Conventions are discoverable, not prerequisite** | Naming rules, ADR guides, and enum casing rationale should be reachable but not required reading        |
+| **Conventions are discoverable, not prerequisite** | Naming rules, ADR guides, and enum casing rationale should be reachable but not required reading |
 
 ---
 
@@ -43,16 +43,16 @@ The goal: **make benefits easy to spot on first read, and let users explore deep
 
 ### What exists
 
-| Location                           | Content                                                                                                                                | Audience      |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `README.md` (root)                 | Project vision, tooling CLI, JMH results                                                                                               | Lib-dev heavy |
-| `doc/architecture/`                | 330-line entity design guide, naming conventions, materialization levels, field-type divergence, enumset internals, ADR guide, 17 ADRs | Lib-dev       |
-| `doc/brainstorm/`                  | 13 exploratory proposals, annotation typing options, metadata generator design                                                         | Lib-dev       |
-| `doc/roadmap/`                     | Milestones, decision traceability, phase tracker                                                                                       | Maintainers   |
-| `doc/user/`                        | Placeholder README + field-lookup-guide (actually implementation-focused)                                                              | Placeholder   |
-| `hipster-entity/hipster-entity-api/README.md`     | API contracts, proxy behavior, interface patterns                                                                                      | Mixed         |
-| `hipster-entity/hipster-entity-jackson/README.md` | 400 lines of JMH benchmarks + root-cause perf analysis                                                                                 | Lib-dev       |
-| `hipster-entity/hipster-entity-example/doc/`      | Payment method polymorphic example                                                                                                     | Mixed         |
+| Location                                          | Content                                                                        | Audience      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ | ------------- |
+| `README.md` (root)                                | Project vision, tooling CLI, JMH results                                       | Lib-dev heavy |
+| `doc/architecture/`                               | 330-line entity design guide, naming conventions, materialization levels, field-type divergence, enumset internals, ADR guide, 17 ADRs | Lib-dev |
+| `doc/brainstorm/`                                 | 13 exploratory proposals, annotation typing options, metadata generator design | Lib-dev       |
+| `doc/roadmap/`                                    | Milestones, decision traceability, phase tracker                               | Maintainers   |
+| `doc/user/`                                       | Placeholder README + field-lookup-guide (actually implementation-focused)      | Placeholder   |
+| `hipster-entity/hipster-entity-api/README.md`     | API contracts, proxy behavior, interface patterns                              | Mixed         |
+| `hipster-entity/hipster-entity-jackson/README.md` | 400 lines of JMH benchmarks + root-cause perf analysis                         | Lib-dev       |
+| `hipster-entity/hipster-entity-example/doc/`      | Payment method polymorphic example                                             | Mixed         |
 
 ### Key gaps
 
@@ -183,12 +183,12 @@ Each pattern doc follows a consistent template:
 ## See also
 ```
 
-| Pattern file           | Source material                                                       |
-| ---------------------- | --------------------------------------------------------------------- |
-| `crud-views.md`        | `architecture/README.md` CRUD layering section                        |
+| Pattern file           | Source material                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| `crud-views.md`        | `architecture/README.md` CRUD layering section                                       |
 | `polymorphic-views.md` | `hipster-entity/hipster-entity-example/doc/README.md` payment method example         |
 | `jackson-setup.md`     | `hipster-entity/hipster-entity-jackson/README.md` integration parts (not benchmarks) |
-| `builder-usage.md`     | DEC-008, DEC-012 conclusions (user-facing subset)                     |
+| `builder-usage.md`     | DEC-008, DEC-012 conclusions (user-facing subset)                                    |
 
 ### 6. `doc/user/faq.md` — Quick Answers
 
@@ -220,13 +220,13 @@ This doc targets deserializer/serializer implementers, not end users. It belongs
 
 ## Content Migration Rules
 
-| Rule                    | Detail                                                                                                                      |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Don't duplicate**     | User docs summarize concepts and link to architecture docs for full detail                                                  |
-| **Don't delete**        | All existing architecture/brainstorm docs stay in place                                                                     |
+| Rule                    | Detail                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| **Don't duplicate**     | User docs summarize concepts and link to architecture docs for full detail       |
+| **Don't delete**        | All existing architecture/brainstorm docs stay in place                          |
 | **Rewrite, don't copy** | When extracting from architecture docs, rewrite for a user audience (remove ADR references, explain benefits not tradeoffs) |
-| **Link forward**        | Each user doc should have a "Deeper dive" section linking to relevant architecture docs for curious users                   |
-| **Link backward**       | Architecture docs can add a "User-facing guide" cross-reference where applicable                                            |
+| **Link forward**        | Each user doc should have a "Deeper dive" section linking to relevant architecture docs for curious users |
+| **Link backward**       | Architecture docs can add a "User-facing guide" cross-reference where applicable |
 
 ---
 

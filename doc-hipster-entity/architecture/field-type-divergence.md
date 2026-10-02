@@ -6,12 +6,12 @@ In the hipster-entity model, multiple views of the same entity can declare a fie
 
 ## How the generator handles it today
 
-| Aspect                    | Behaviour                                                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Per-view `properties[]`   | Each view keeps its own declared type — no conflict.                                                               |
-| Entity-wide `allFields[]` | One primary `type` per field name, with `typeByView` map showing type per view.                                    |
+| Aspect                    | Behaviour                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| Per-view `properties[]`   | Each view keeps its own declared type — no conflict.                                             |
+| Entity-wide `allFields[]` | One primary `type` per field name, with `typeByView` map showing type per view.                  |
 | Primary type selection    | Non-derived (`COLUMN`, `JOINED`) takes priority over `DERIVED`. Among equal priority, first-encountered type wins. |
-| Generated enums           | Each `<View>Property` enum independently reflects that view's type — no cross-view interference.                   |
+| Generated enums           | Each `<View>Property` enum independently reflects that view's type — no cross-view interference. |
 
 ---
 

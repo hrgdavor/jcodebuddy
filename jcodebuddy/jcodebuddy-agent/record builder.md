@@ -31,7 +31,7 @@ gone — the *behaviour* was specified by this chat and is what the current
 implementation reproduces:
 
 | The chat settled | Where it lives now |
-|---|---|
+| ---------------- | ------------------ |
 | **Idempotency** — running the update on every save must not duplicate members. The chat's mechanism was to remove the existing `Builder` before adding a new one. | The processor recognises its previous output **by name and structure** and replaces that span, so the mechanism is a splice rather than a sweep of a live tree. |
 | **Replacement is too blunt** — the conversation's own follow-up ("it is more complicated but nicer if builder is updated instead of replaced") chose *synchronisation*: add what is missing, leave what a developer wrote alone. | `SourceSplicer.withBuilder` lets a hand-written setter or javadoc inside the `Builder` survive a pass; DEC-020's shape recognition is the rule behind it. |
 | **`build()` is the exception** — it must be refreshed rather than left alone, or it stops matching the record's signature and the file does not compile. | `build()` is regenerated on every pass; `RecordBuilderProcessorTest` pins the constructor call and the member grouping. |

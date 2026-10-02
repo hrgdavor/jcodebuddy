@@ -8,7 +8,7 @@ Two other files are authorities this one does not replace:
 
 | File                                             | What it owns                                         |
 | ------------------------------------------------ | ---------------------------------------------------- |
-| [`../AGENTS.md`](../../AGENTS.md)                   | repo-wide rules: source-visible wiring (§ 1), cooperative codegen, the `.jcodebuddy/` layout rule (§ 2) |
+| [`../AGENTS.md`](../../AGENTS.md)                | repo-wide rules: source-visible wiring (§ 1), cooperative codegen, the `.jcodebuddy/` layout rule (§ 2) |
 | [`.jcodebuddy/README.md`](.jcodebuddy/README.md) | the output layout and its git track policy (DEC-026) |
 
 `hipster-entity-example` is currently the **only** JCodeBuddy-converted module in

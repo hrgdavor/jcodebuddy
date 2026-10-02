@@ -53,14 +53,14 @@ because the `/file/` and `/page/` routes exist whenever the bridge runs, editor 
 one is covered by a headless test or is an outstanding observation — nothing is declared on hope (the plan's
 criterion 14):
 
-| Capability | State | Backed by |
-| --- | --- | --- |
-| `open` — caret lands on the line and column | declared while a workbench page exists | routing, the path jail and the rate rule: `EclipseHttpBridgeTest`, `EclipseNavigatorTest`; the caret landing itself is an outstanding **observation** (checklist § 1a) |
-| `select` — a span in an already-open editor | the same | the same split |
-| `edit` — a buffer edit in one compound change, never a save | the same | the seam and its routing: `EclipseEditorHostTest`, `DocumentBufferEditorTest`, `EclipseWriteApiTest`; the unsaved change and the single `Ctrl+Z` are an outstanding **observation** (checklist § 2a) |
-| `serveFile` — `/file/` and `/page/` with the bridge injected | declared always, headless included | the routes and the headers they answer with: `EclipseHttpBridgeTest` (served bytes, `X-WebView-Digest`, `ETag`, the token rule on pages) |
-| `reveal` | **absent, not missing** | not observed through a supported route; the rule is declare-because-implemented-and-observed, and the JetBrains host makes the same call |
-| `watch` | **absent, not missing** | no SSE route is planned; `/api/v1/events` answers 404 with that reason rather than holding a page open |
+| Capability                                                   | State                                  | Backed by      |
+| ------------------------------------------------------------ | -------------------------------------- | -------------- |
+| `open` — caret lands on the line and column                  | declared while a workbench page exists | routing, the path jail and the rate rule: `EclipseHttpBridgeTest`, `EclipseNavigatorTest`; the caret landing itself is an outstanding **observation** (checklist § 1a) |
+| `select` — a span in an already-open editor                  | the same                               | the same split |
+| `edit` — a buffer edit in one compound change, never a save  | the same                               | the seam and its routing: `EclipseEditorHostTest`, `DocumentBufferEditorTest`, `EclipseWriteApiTest`; the unsaved change and the single `Ctrl+Z` are an outstanding **observation** (checklist § 2a) |
+| `serveFile` — `/file/` and `/page/` with the bridge injected | declared always, headless included     | the routes and the headers they answer with: `EclipseHttpBridgeTest` (served bytes, `X-WebView-Digest`, `ETag`, the token rule on pages) |
+| `reveal`                                                     | **absent, not missing**                | not observed through a supported route; the rule is declare-because-implemented-and-observed, and the JetBrains host makes the same call |
+| `watch`                                                      | **absent, not missing**                | no SSE route is planned; `/api/v1/events` answers 404 with that reason rather than holding a page open |
 
 The disk half of the write contract (`target: "disk"`, and the shared surface's documented fallback when the
 platform holds no buffer for a path) is core's `EditService` with the persistent checkpoint journal under

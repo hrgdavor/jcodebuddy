@@ -21,12 +21,12 @@ A **host** is a process that (a) knows your project directory and (b) can move t
 The page never starts one, and must not assume one is running: the environment has to exist before a
 page's links mean anything. Three ways a host comes to exist:
 
-| Host | How it starts | When it is the right answer |
-| --- | --- | --- |
+| Host                                   | How it starts                                                                                  | When it is the right answer                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | **The IDE plugin**, `WebView Explorer` | installed in the IDE; its tool window serves pages itself (`Ctrl+Alt+Shift+W` in JetBrains). Its HTTP transport is **off until configured** | you read pages inside your IDE — the common case, and the one the injection path exists for |
-| **The Eclipse view**, `WebView` | installed from `dropins/` (`webview/eclipse/README.md`); Window → Show View, and its HTTP transport is **off until a port is named** in Window → Preferences → JCodeBuddy → WebView | you read pages inside Eclipse |
-| **A standalone host** | started by hand or by a script: it serves pages itself and drives an editor through an adapter | you want a page in an ordinary browser, or in a host that owns no webview of its own |
-| **Another editor's extension** | same contract, different port | the editor is not JetBrains, not VS Code and not Eclipse |
+| **The Eclipse view**, `WebView`        | installed from `dropins/` (`webview/eclipse/README.md`); Window → Show View, and its HTTP transport is **off until a port is named** in Window → Preferences → JCodeBuddy → WebView | you read pages inside Eclipse |
+| **A standalone host**                  | started by hand or by a script: it serves pages itself and drives an editor through an adapter | you want a page in an ordinary browser, or in a host that owns no webview of its own        |
+| **Another editor's extension**         | same contract, different port                                                                  | the editor is not JetBrains, not VS Code and not Eclipse                                    |
 
 **The minimum a person must do** — this is the whole prerequisite list:
 
@@ -110,11 +110,11 @@ reports "no host: clipboard only" is reporting this response, not guessing.
 A standalone host additionally publishes a **manifest** at `/.well-known/webview.json`, which names the
 editor adapter and how precisely it can place a caret:
 
-| `host.lineNavigation` | Meaning |
-| --- | --- |
-| `exact` | the caret lands on the requested line and column |
-| `file-only` | the file opens; the line and column are **not** applied |
-| `none` | no editor adapter is attached; navigation is refused |
+| `host.lineNavigation` | Meaning                                                 |
+| --------------------- | ------------------------------------------------------- |
+| `exact`               | the caret lands on the requested line and column        |
+| `file-only`           | the file opens; the line and column are **not** applied |
+| `none`                | no editor adapter is attached; navigation is refused    |
 
 `file-only` is not hypothetical — one measured editor refuses the `path:line:column` command-line form, so
 its CLI adapter can open a file and nothing more. A page cannot fix that; it can only be honest about it,
@@ -128,10 +128,10 @@ The transport opens an arbitrary file in your editor and, when a page is allowed
 your project. So it is **denied unless the caller proves it may**, and the two proofs are different in an
 important way:
 
-| Route | What it needs |
-| --- | --- |
+| Route                                     | What it needs                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------ |
 | `GET /open`, `GET /file/…`, `GET /page/…` | an allowed **`Origin`** **or** the token — navigation only moves a caret |
-| every state-changing route (`/api/v1/…`) | the **token alone**, never merely an allowed origin |
+| every state-changing route (`/api/v1/…`)  | the **token alone**, never merely an allowed origin                      |
 
 The reason for the asymmetry is not caution, it is precision: the origin rule is shared by *every page the
 reader has open in that browser*, while the token is held only by a page this host served. A host with no
@@ -157,16 +157,16 @@ Two more facts that save an afternoon:
 
 ## 5. When it does not work
 
-| Symptom | Most likely cause | What to check |
-| --- | --- | --- |
-| A click falls to the clipboard rung, always | the page is not being loaded by the host, or no host is running | is `window.openFile` a function in the page's console? is `/health` answering? was the page opened *through* the host? |
-| `403` from `/open` | the caller proved nothing: a `file://` page sends no usable origin | configure a token and pass `?token=…`, or serve the page through `/page/` |
-| `403` naming a path as outside the project | the link escaped the project root, or the host is serving a different directory | compare `project` in `/health` with your page's link base |
-| `404` from `/open` | the path did not resolve against the host's project | check the link's path and that the host's `project` is your project |
-| `429` from `/open` | the rate limit | remove the handler that navigates without a click |
-| Works in JetBrains, silently does nothing in VS Code | the page hard-coded a port | put the port in configuration; discover it from `/health` |
-| The right file opens on line 1 | `data-line` is missing or not a number | 1-based `data-line`; the client falls back to `1` |
-| The wrong file opens | the link base is wrong for the page's depth, or an absolute path was committed | re-check the link base and run the verifier |
+| Symptom                                              | Most likely cause                                                               | What to check                                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| A click falls to the clipboard rung, always          | the page is not being loaded by the host, or no host is running                 | is `window.openFile` a function in the page's console? is `/health` answering? was the page opened *through* the host? |
+| `403` from `/open`                                   | the caller proved nothing: a `file://` page sends no usable origin              | configure a token and pass `?token=…`, or serve the page through `/page/` |
+| `403` naming a path as outside the project           | the link escaped the project root, or the host is serving a different directory | compare `project` in `/health` with your page's link base                 |
+| `404` from `/open`                                   | the path did not resolve against the host's project                             | check the link's path and that the host's `project` is your project       |
+| `429` from `/open`                                   | the rate limit                                                                  | remove the handler that navigates without a click                         |
+| Works in JetBrains, silently does nothing in VS Code | the page hard-coded a port                                                      | put the port in configuration; discover it from `/health`                 |
+| The right file opens on line 1                       | `data-line` is missing or not a number                                          | 1-based `data-line`; the client falls back to `1`                         |
+| The wrong file opens                                 | the link base is wrong for the page's depth, or an absolute path was committed  | re-check the link base and run the verifier                               |
 
 The last two are page bugs rather than environment bugs, and they are the two this kit exists to prevent:
 [`page-authoring.md`](page-authoring.md) § "Verifying before you ship" has the checks, and

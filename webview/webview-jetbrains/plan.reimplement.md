@@ -20,18 +20,18 @@ must be widened before any Gradle command.)
 
 All ten steps are done. What was built, and what proves it:
 
-| Step | Outcome |
-| --- | --- |
-| 1 | Pure logic extracted: `BridgeMessage`, `UrlNormalizer`, `AllowedOrigins`, `RateLimiter` + injectable `Clock`, and `NavigatorService` as the single path→editor entry point |
-| 2 | **52 unit tests** in 9 classes, `gradlew test` green; no IDE required |
-| 3 | Identity moved into `intellijPlatform { pluginConfiguration { … } }`; vendor/URL fixed; catalog cleaned; Kotlin plugin and `withJcef.xml` removed; `until-build` deliberately absent |
-| 4 | `withJcef.xml` deleted and replaced by the plain `<depends>com.intellij.modules.jcef</depends>` |
-| 5 | `WebViewPanel` owns the browser, `WebViewService` owns the panel, `WebViewActions` names the four buttons, `JBCefScrollbarsHelper` applied, load errors shown in an error card, splash page added |
-| 6 | `JcefBridgeNew` replaced by `WebViewBridge`: one `JBCefJSQuery`, one load handler, JSON parsing, disposed with the panel |
-| 7 | HTTP bridge binds to loopback, denies when unauthenticated, accepts a token or an allowed origin, single rate limit, `/health`, `404` + log on an unresolvable path |
-| 8 | Port validation reports instead of swallowing, bridge status line, optional token field |
-| 9 | README rewritten (JDK 25, the JCEF `<depends>` rule, the bridge's security model), CHANGELOG entry |
-| 10 | `clean test buildPlugin verifyPluginProjectConfiguration` green; `verifyPlugin` reports **Compatible** against IU-262.10968.63 and IU-263.5153.40 |
+| Step | Outcome                                                                                            |
+| ---- | -------------------------------------------------------------------------------------------------- |
+| 1    | Pure logic extracted: `BridgeMessage`, `UrlNormalizer`, `AllowedOrigins`, `RateLimiter` + injectable `Clock`, and `NavigatorService` as the single path→editor entry point |
+| 2    | **52 unit tests** in 9 classes, `gradlew test` green; no IDE required                              |
+| 3    | Identity moved into `intellijPlatform { pluginConfiguration { … } }`; vendor/URL fixed; catalog cleaned; Kotlin plugin and `withJcef.xml` removed; `until-build` deliberately absent |
+| 4    | `withJcef.xml` deleted and replaced by the plain `<depends>com.intellij.modules.jcef</depends>`    |
+| 5    | `WebViewPanel` owns the browser, `WebViewService` owns the panel, `WebViewActions` names the four buttons, `JBCefScrollbarsHelper` applied, load errors shown in an error card, splash page added |
+| 6    | `JcefBridgeNew` replaced by `WebViewBridge`: one `JBCefJSQuery`, one load handler, JSON parsing, disposed with the panel |
+| 7    | HTTP bridge binds to loopback, denies when unauthenticated, accepts a token or an allowed origin, single rate limit, `/health`, `404` + log on an unresolvable path |
+| 8    | Port validation reports instead of swallowing, bridge status line, optional token field            |
+| 9    | README rewritten (JDK 25, the JCEF `<depends>` rule, the bridge's security model), CHANGELOG entry |
+| 10   | `clean test buildPlugin verifyPluginProjectConfiguration` green; `verifyPlugin` reports **Compatible** against IU-262.10968.63 and IU-263.5153.40 |
 
 Acceptance criteria 1, 3, 4, 6 and 8 are verified as recorded in the table above and below. Criterion 2
 (the report renders and a field link lands on the right line) and criterion 5 (degrading to the
@@ -74,17 +74,17 @@ The module has **zero test sources** while declaring `junit` + `opentest4j` and
 
 ### 2.1 Source files (11 commits' worth of behaviour in 9 files)
 
-| File | Role |
-| --- | --- |
-| `src/main/java/.../toolWindow/JcefToolWindowFactory.java` | Builds the whole UI: JCEF browser, address bar, back/forward/refresh/settings actions, load handler, initial HTML, `reloadWithFile` static entry point for the action |
-| `src/main/java/.../toolWindow/JcefBridgeNew.java` | Injects `window.openFile(path,line,col)` on every load; parses the incoming message with **three regexes** |
-| `src/main/java/.../services/HttpBridgeService.java` | `com.sun.net.httpserver` on `webview.explorer.port`; `/open` endpoint; Origin allow-list; 20-requests/20-s rate limiter; `navigateToFile` |
-| `src/main/java/.../services/HttpBridgeStartupActivity.java` | `ProjectActivity` whose only statement forces the service to initialise so the port starts at project open |
-| `src/main/java/.../services/PluginStateService.java` | `@State` in the **workspace** file: `lastUrl`, `port`, `allowedOrigins` |
-| `src/main/java/.../settings/WebViewSettingsConfigurable.java` | Project `Configurable`, parent `tools` |
-| `src/main/java/.../settings/WebViewSettingsComponent.java` | `FormBuilder` panel: port field, allowed-origins text area |
-| `src/main/java/.../actions/ToggleToolWindowAction.java` | `Ctrl+Alt+Shift+W`, id `WebView Explorer` |
-| `src/main/java/.../actions/OpenFileInWebViewAction.java` | Project view / editor / editor-tab popup, **HTML-only**, `file:///` + cache-busting `?v=<millis>` |
+| File                                                          | Role                                                                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `src/main/java/.../toolWindow/JcefToolWindowFactory.java`     | Builds the whole UI: JCEF browser, address bar, back/forward/refresh/settings actions, load handler, initial HTML, `reloadWithFile` static entry point for the action |
+| `src/main/java/.../toolWindow/JcefBridgeNew.java`             | Injects `window.openFile(path,line,col)` on every load; parses the incoming message with **three regexes** |
+| `src/main/java/.../services/HttpBridgeService.java`           | `com.sun.net.httpserver` on `webview.explorer.port`; `/open` endpoint; Origin allow-list; 20-requests/20-s rate limiter; `navigateToFile` |
+| `src/main/java/.../services/HttpBridgeStartupActivity.java`   | `ProjectActivity` whose only statement forces the service to initialise so the port starts at project open |
+| `src/main/java/.../services/PluginStateService.java`          | `@State` in the **workspace** file: `lastUrl`, `port`, `allowedOrigins`                           |
+| `src/main/java/.../settings/WebViewSettingsConfigurable.java` | Project `Configurable`, parent `tools`                                                            |
+| `src/main/java/.../settings/WebViewSettingsComponent.java`    | `FormBuilder` panel: port field, allowed-origins text area                                        |
+| `src/main/java/.../actions/ToggleToolWindowAction.java`       | `Ctrl+Alt+Shift+W`, id `WebView Explorer`                                                         |
+| `src/main/java/.../actions/OpenFileInWebViewAction.java`      | Project view / editor / editor-tab popup, **HTML-only**, `file:///` + cache-busting `?v=<millis>` |
 
 Resources: `META-INF/plugin.xml` (tool window, 2 project services, `postStartupActivity`,
 `projectConfigurable`, 2 actions) and `META-INF/withJcef.xml` (a second, **unreferenced** copy of the
@@ -92,30 +92,30 @@ tool-window registration).
 
 ### 2.2 External contracts that must not break
 
-| Contract | Consumer | Where it is stated |
-| --- | --- | --- |
-| `window.openFile(path, line, column)` injected into every loaded page | `scripts/entity-html/render.js` line 473 | DEC-027 §7 |
-| `GET http://127.0.0.1:<port>/open?filePath=…&line=…&column=1` | `render.js` line 479, hidden-iframe fallback | `scripts/entity-html/README.md` `--bridge-port` (default `18881`) |
-| VM options `-Dwebview.explorer.port`, `-Dwebview.explorer.allowedOrigins` | `README.md` §"VM options" | `HttpBridgeService.loadAllowedOrigins/startServerIfNeeded` |
-| Tool window id `WebView Explorer`, action text "Open in WebView Explorer", `Ctrl+Alt+Shift+W` | `codebuddy.md` §3.10, `hipster-entity/hipster-entity-example/README.md` | `plugin.xml` |
-| "Open in WebView Explorer" appears for `.html` files in Project view, editor, editor tab popups | same | `OpenFileInWebViewAction` |
+| Contract                                                                                        | Consumer                                                                | Where it is stated                                                |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `window.openFile(path, line, column)` injected into every loaded page                           | `scripts/entity-html/render.js` line 473                                | DEC-027 §7                                                        |
+| `GET http://127.0.0.1:<port>/open?filePath=…&line=…&column=1`                                   | `render.js` line 479, hidden-iframe fallback                            | `scripts/entity-html/README.md` `--bridge-port` (default `18881`) |
+| VM options `-Dwebview.explorer.port`, `-Dwebview.explorer.allowedOrigins`                       | `README.md` §"VM options"                                               | `HttpBridgeService.loadAllowedOrigins/startServerIfNeeded`        |
+| Tool window id `WebView Explorer`, action text "Open in WebView Explorer", `Ctrl+Alt+Shift+W`   | `codebuddy.md` §3.10, `hipster-entity/hipster-entity-example/README.md` | `plugin.xml`                                                      |
+| "Open in WebView Explorer" appears for `.html` files in Project view, editor, editor tab popups | same                                                                    | `OpenFileInWebViewAction`                                         |
 
 ### 2.3 Defects and drift found while reading the code
 
-| # | Finding | Evidence |
-| --- | --- | --- |
-| F1 | **The bridge message is parsed by regex, not JSON** — a path containing `"line":` or a quote breaks it; the three `find()` calls share one `Matcher`-per-pattern sequence that happens to work only because each pattern is matched once | `JcefBridgeNew.handleMessage` |
-| F2 | **`System.out.println` as logging** in the bridge (4 call sites) instead of `Logger` | `JcefBridgeNew` |
-| F3 | **Two independent load handlers on the same browser**, each calling `executeJavaScript`: one in `JcefBridgeNew` (injects the function), one in the factory (address bar + `lastUrl`). Ordering is implicit | `JcefBridgeNew` ctor, `JcefToolWindowFactory.createBrowserContent` |
-| F4 | **The JS-to-plugin message shape is hand-rolled twice** — the injected function builds `JSON.stringify`, the Java side re-parses it with regexes; there is no shared record | same |
-| F5 | **Rate limiting is applied twice** for one JCEF click — `navigateToFile` calls `checkRateLimit()`, and the HTTP path calls it in `GlobalHandler` before `OpenFileHandler` | `navigateToFile`, `GlobalHandler` |
-| F6 | **An empty Origin allow-list is fail-open.** `loadAllowedOrigins` matches any Origin against an empty set; the guard at `/open` is `if (!isAllowed)`, and `isAllowed` is `origin != null && allowedOrigins.contains(...)` — so with no `allowedOrigins` configured (the default), *every* web page that can reach the port gets its `filePath` opened in the IDE. The `POST`-style CSRF surface is real: any local browser tab can drive it | `GlobalHandler`, `loadAllowedOrigins` |
-| F7 | **The server binds to all interfaces** — `new InetSocketAddress(port)` resolves to `0.0.0.0:port`, so the `/open` endpoint is reachable from the LAN even though it is documented as `127.0.0.1` | `startServerIfNeeded` |
-| F8 | **FIXED — no `com.intellij.modules.jcef` `<depends>`, which made the whole plugin fail to start.** The module was declared as a build-time `platformBundledModules = com.intellij.modules.jcef` only. `com.intellij.modules.jcef` is a **content module whose jar is not on the plugin classloader's parents unless it is declared with `<depends>`**, so `JBCefApp`, `JBCefBrowser`, `JBCefBrowserBase` and `JBCefJSQuery` — every one of them lives in `intellij.platform.ui.jcef.jar` — were unresolvable at runtime. `JcefToolWindowFactory` has method descriptors naming `JBCefBrowser`/`JBCefBrowserBase`, so JVM reflective member resolution failed and `MethodHandles.Lookup.findConstructor` reported *no* constructor, producing the misleading `Cannot find suitable constructor for class JcefToolWindowFactory, expected (), (CoroutineScope), (Application), or (Application, CoroutineScope)` — a no-arg constructor was present in the bytecode all along. **Confirmed fixed** by adding `<depends>com.intellij.modules.jcef</depends>` and re-running `runIde`: 0 occurrences of the error, tool window created. | `gradle.properties` vs `plugin.xml`; reproduced and fixed in a sandbox IDE |
-| F9 | **`withJcef.xml` is dead.** Nothing references it; `plugin.xml` registers the tool window unconditionally, so the file expresses an intent (JCEF-only content) that the build does not implement | `withJcef.xml` vs `plugin.xml` |
+| #   | Finding                                                                              | Evidence                                                                   |
+| --- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| F1  | **The bridge message is parsed by regex, not JSON** — a path containing `"line":` or a quote breaks it; the three `find()` calls share one `Matcher`-per-pattern sequence that happens to work only because each pattern is matched once | `JcefBridgeNew.handleMessage` |
+| F2  | **`System.out.println` as logging** in the bridge (4 call sites) instead of `Logger` | `JcefBridgeNew`                                                            |
+| F3  | **Two independent load handlers on the same browser**, each calling `executeJavaScript`: one in `JcefBridgeNew` (injects the function), one in the factory (address bar + `lastUrl`). Ordering is implicit | `JcefBridgeNew` ctor, `JcefToolWindowFactory.createBrowserContent` |
+| F4  | **The JS-to-plugin message shape is hand-rolled twice** — the injected function builds `JSON.stringify`, the Java side re-parses it with regexes; there is no shared record | same |
+| F5  | **Rate limiting is applied twice** for one JCEF click — `navigateToFile` calls `checkRateLimit()`, and the HTTP path calls it in `GlobalHandler` before `OpenFileHandler` | `navigateToFile`, `GlobalHandler` |
+| F6  | **An empty Origin allow-list is fail-open.** `loadAllowedOrigins` matches any Origin against an empty set; the guard at `/open` is `if (!isAllowed)`, and `isAllowed` is `origin != null && allowedOrigins.contains(...)` — so with no `allowedOrigins` configured (the default), *every* web page that can reach the port gets its `filePath` opened in the IDE. The `POST`-style CSRF surface is real: any local browser tab can drive it | `GlobalHandler`, `loadAllowedOrigins` |
+| F7  | **The server binds to all interfaces** — `new InetSocketAddress(port)` resolves to `0.0.0.0:port`, so the `/open` endpoint is reachable from the LAN even though it is documented as `127.0.0.1` | `startServerIfNeeded` |
+| F8  | **FIXED — no `com.intellij.modules.jcef` `<depends>`, which made the whole plugin fail to start.** The module was declared as a build-time `platformBundledModules = com.intellij.modules.jcef` only. `com.intellij.modules.jcef` is a **content module whose jar is not on the plugin classloader's parents unless it is declared with `<depends>`**, so `JBCefApp`, `JBCefBrowser`, `JBCefBrowserBase` and `JBCefJSQuery` — every one of them lives in `intellij.platform.ui.jcef.jar` — were unresolvable at runtime. `JcefToolWindowFactory` has method descriptors naming `JBCefBrowser`/`JBCefBrowserBase`, so JVM reflective member resolution failed and `MethodHandles.Lookup.findConstructor` reported *no* constructor, producing the misleading `Cannot find suitable constructor for class JcefToolWindowFactory, expected (), (CoroutineScope), (Application), or (Application, CoroutineScope)` — a no-arg constructor was present in the bytecode all along. **Confirmed fixed** by adding `<depends>com.intellij.modules.jcef</depends>` and re-running `runIde`: 0 occurrences of the error, tool window created. | `gradle.properties` vs `plugin.xml`; reproduced and fixed in a sandbox IDE |
+| F9  | **`withJcef.xml` is dead.** Nothing references it; `plugin.xml` registers the tool window unconditionally, so the file expresses an intent (JCEF-only content) that the build does not implement | `withJcef.xml` vs `plugin.xml` |
 | F10 | **No graceful degradation.** `addErrorContent` is good, but the *actions* remain enabled and the toolbar is gone; there is no `CefLoadHandler.onLoadError` handling, so a failed load is an empty tool window | `JcefToolWindowFactory.createToolWindowContent` |
-| F11 | **`vendor` is `JetBrains`** for a third-party plugin — wrong on the Marketplace, and no `url`/`email` | `plugin.xml` |
-| F12 | **`pluginRepositoryUrl` points at the JetBrains template repo**, and `CHANGELOG` versions are not linked to a real repository | `gradle.properties:5` |
+| F11 | **`vendor` is `JetBrains`** for a third-party plugin — wrong on the Marketplace, and no `url`/`email` | `plugin.xml`                                              |
+| F12 | **`pluginRepositoryUrl` points at the JetBrains template repo**, and `CHANGELOG` versions are not linked to a real repository | `gradle.properties:5`             |
 | F13 | **No tests, no test source tree** despite `testImplementation(libs.junit)`, `libs.opentest4j`, `testFramework(TestFrameworkType.Platform)` | `build.gradle.kts:35-51`, `src/test` absent |
 | F14 | **Kotlin is applied but no Kotlin source exists** (`plugins { alias(libs.plugins.kotlin) }`, `kotlin.stdlib.default.dependency = false`) — harmless, but it should be a stated decision, not an accident | `build.gradle.kts`, `gradle.properties` |
 | F15 | **`README.md` is stale and internally inconsistent** — it claims "Java 21 or higher" while the build requires JDK 25, and a link (`[Run Plugin.run.xml](.run/Run%20Plugin.run.xml)`) was accidentally pasted mid-sentence in the Features list | `README.md:14`, `README.md:37` |
@@ -137,20 +137,20 @@ everything else has to reach into the UI to find it. The rewrite fixes the owner
 
 Researched against the live sources (2026-07; see §7 for links).
 
-| Area | Recommended now | What this module has | Action |
-| --- | --- | --- | --- |
-| Build plugin | `org.jetbrains.intellij.platform` **2.x** (`2.19.0` is latest) | 2.19.0 | keep |
-| Template layout | Plugin template **2.6.0**; the current template declares plugin versions **inline in `build.gradle.kts`**, not in a `libs.versions.toml` (`gradle/libs.versions.toml` no longer exists upstream) | version catalog | **keep the catalog** — one deliberate deviation, documented in §4.1 |
+| Area                       | Recommended now                                                                            | What this module has                                                                      | Action                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Build plugin               | `org.jetbrains.intellij.platform` **2.x** (`2.19.0` is latest)                             | 2.19.0                                                                                    | keep                                                                                           |
+| Template layout            | Plugin template **2.6.0**; the current template declares plugin versions **inline in `build.gradle.kts`**, not in a `libs.versions.toml` (`gradle/libs.versions.toml` no longer exists upstream) | version catalog | **keep the catalog** — one deliberate deviation, documented in §4.1 |
 | IDE/plugin manifest fields | `<id>`, `<name>`, `<vendor>`, and `idea-version` are patched by `patchPluginXml` from `pluginConfiguration`; **do not** set `until-build` | `id`/`name` hardcoded in `plugin.xml`, `sinceBuild` from `pluginSinceBuild`, vendor wrong | move to `pluginConfiguration`, fix vendor, never set `until-build` |
-| Plugin dependencies | `<depends>` in `plugin.xml`; **optional dependency + `config-file`** is the documented pattern for content that needs a module that may be absent ("optional content modules") | `<depends>com.intellij.modules.platform</depends>` only; `withJcef.xml` unreferenced | add `<depends>com.intellij.modules.jcef</depends>` and wire `withJcef.xml` or delete it (§4.2) |
-| JCEF availability | `JBCefApp.isSupported()` before any JCEF use | present | keep, and extend to the actions (F10) |
-| JCEF bridge | `JBCefJSQuery.create(browser)` + `addHandler` returning `JBCefJSQuery.Response`, injection in `onLoadEnd` | present but regex-parsed and duplicated | rebuild as §4.3 |
-| JCEF scrollbars | `JBCefScrollbarsHelper.buildScrollbarsStyle()` injected for IDE-consistent look | absent | add |
-| Disposal | `JBCefBrowser`, `JBCefClient`, `JBCefJSQuery` are `JBCefDisposable`; dispose via `Disposer` / `Content.setDisposer` | `content.setDisposer(browser)` only; the `JBCefJSQuery` is never disposed | fix: dispose the query with the browser's content |
-| Threading | `loadURL` / `executeJavaScript` callable from EDT and background; actions must declare `getActionUpdateThread()` | declared correctly (EDT/BGT mix) | keep |
-| Action system | `AnAction` subclasses are fine; `DumbAwareAction` for tool-window-local actions | correct | keep, move to dedicated classes (§4.4) |
-| Testing | `testFramework(TestFrameworkType.Platform)` + JUnit; **pure logic should be testable without the platform** | nothing | add tests (§4.7) |
-| Marketplace/publishing | `signing` + `publishing` blocks from the template, `pluginVerification.ides.recommended()` | present | keep |
+| Plugin dependencies        | `<depends>` in `plugin.xml`; **optional dependency + `config-file`** is the documented pattern for content that needs a module that may be absent ("optional content modules") | `<depends>com.intellij.modules.platform</depends>` only; `withJcef.xml` unreferenced | add `<depends>com.intellij.modules.jcef</depends>` and wire `withJcef.xml` or delete it (§4.2) |
+| JCEF availability          | `JBCefApp.isSupported()` before any JCEF use                                               | present                                                                                   | keep, and extend to the actions (F10)                                                          |
+| JCEF bridge                | `JBCefJSQuery.create(browser)` + `addHandler` returning `JBCefJSQuery.Response`, injection in `onLoadEnd` | present but regex-parsed and duplicated                                    | rebuild as §4.3                                                                                |
+| JCEF scrollbars            | `JBCefScrollbarsHelper.buildScrollbarsStyle()` injected for IDE-consistent look            | absent                                                                                    | add                                                                                            |
+| Disposal                   | `JBCefBrowser`, `JBCefClient`, `JBCefJSQuery` are `JBCefDisposable`; dispose via `Disposer` / `Content.setDisposer` | `content.setDisposer(browser)` only; the `JBCefJSQuery` is never disposed | fix: dispose the query with the browser's content                                     |
+| Threading                  | `loadURL` / `executeJavaScript` callable from EDT and background; actions must declare `getActionUpdateThread()` | declared correctly (EDT/BGT mix)                                    | keep                                                                                           |
+| Action system              | `AnAction` subclasses are fine; `DumbAwareAction` for tool-window-local actions            | correct                                                                                   | keep, move to dedicated classes (§4.4)                                                         |
+| Testing                    | `testFramework(TestFrameworkType.Platform)` + JUnit; **pure logic should be testable without the platform** | nothing                                                                  | add tests (§4.7)                                                                               |
+| Marketplace/publishing     | `signing` + `publishing` blocks from the template, `pluginVerification.ides.recommended()` | present                                                                                   | keep                                                                                           |
 
 **Not recommended / not applicable:** JavaFX web rendering (deprecated since 2020.2, unavailable since
 2025.1) — JCEF is the only supported path; the legacy 1.x Gradle plugin; `until-build` pinning.
@@ -279,12 +279,12 @@ plugin change — record it as a follow-up, do not do it here).
 
 ### 4.4 Tool window — explicit ownership, no component-tree spelunking (§2.4)
 
-| New class | Responsibility | Replaces |
-| --- | --- | --- |
+| New class                               | Responsibility | Replaces                                                                      |
+| --------------------------------------- | -------------- | ----------------------------------------------------------------------------- |
 | `toolWindow/JcefToolWindowFactory.java` | `DumbAware`; `JBCefApp.isSupported()` check; creates a `WebViewPanel`, registers it in the content manager, sets the browser as the content's `Disposer` | slimmed-down factory |
-| `toolWindow/WebViewPanel.java` | Owns `JBCefBrowser` + address bar + toolbar; `loadUrl(String)`; `reload()`; `back()`/`forward()`; load handler that syncs the address bar, records `lastUrl`, and calls `bridge.inject()`; injects `JBCefScrollbarsHelper.buildScrollbarsStyle()` | the 130-line body of the current factory + `reloadWithFile`'s property lookup |
-| `toolWindow/WebViewService.java` | `@Service(PROJECT)`; `@Nullable WebViewPanel getPanel()`, `void openInPanel(String url)`, `void disposePanel()`. The panel registers itself on creation and clears itself on dispose | `panel.getProperty("JBCefBrowser")`, `ToolWindowManager.getToolWindow(id).getContentManager().getContent(0)` |
-| `toolWindow/WebViewActions.java` | The four toolbar actions as named `DumbAwareAction` classes (back / forward / refresh / settings) instead of four anonymous classes | the anonymous inner classes |
+| `toolWindow/WebViewPanel.java`          | Owns `JBCefBrowser` + address bar + toolbar; `loadUrl(String)`; `reload()`; `back()`/`forward()`; load handler that syncs the address bar, records `lastUrl`, and calls `bridge.inject()`; injects `JBCefScrollbarsHelper.buildScrollbarsStyle()` | the 130-line body of the current factory + `reloadWithFile`'s property lookup |
+| `toolWindow/WebViewService.java`        | `@Service(PROJECT)`; `@Nullable WebViewPanel getPanel()`, `void openInPanel(String url)`, `void disposePanel()`. The panel registers itself on creation and clears itself on dispose | `panel.getProperty("JBCefBrowser")`, `ToolWindowManager.getToolWindow(id).getContentManager().getContent(0)` |
+| `toolWindow/WebViewActions.java`        | The four toolbar actions as named `DumbAwareAction` classes (back / forward / refresh / settings) instead of four anonymous classes | the anonymous inner classes |
 
 `OpenFileInWebViewAction` then becomes:
 
@@ -352,13 +352,13 @@ absent).
 
 Add `src/test/java` and, per §4.1.7, `useJUnitPlatform()`.
 
-| Test | Level | Asserts |
-| --- | --- | --- |
-| `BridgeMessageTest` | pure unit | valid `openFile` JSON parses; a `filePath` containing `"`, `:`, `\`, spaces, `", "line": 1, "` survives; missing `line`/`column` default to 1; negative/zero line clamps; malformed JSON and unknown `kind` are rejected and logged, not thrown |
-| `UrlNormalizationTest` | pure unit | `https://x` kept; `x.com` → `https://x.com`; an existing local file path → its `file:` URI; a non-existent path without a scheme → `https://` + it (or a documented error — pick one and pin it) |
-| `AllowedOriginsTest` | pure unit | empty allow-list → denied; exact match → allowed; different case → allowed; `null` Origin → denied; suffix trick (`http://localhost:3000.evil.com`) → denied |
-| `RateLimiterTest` | pure unit | 20 in the window pass, the 21st is refused, the window rolls over via an injectable clock |
-| `WebViewToolWindowTest` | platform | tool window registers under id `WebView Explorer`; `createToolWindowContent` produces one content whose component holds a browser (skipped when `JBCefApp.isSupported()` is false); the injected script is present after a load |
+| Test                    | Level     | Asserts                                                                                   |
+| ----------------------- | --------- | ----------------------------------------------------------------------------------------- |
+| `BridgeMessageTest`     | pure unit | valid `openFile` JSON parses; a `filePath` containing `"`, `:`, `\`, spaces, `", "line": 1, "` survives; missing `line`/`column` default to 1; negative/zero line clamps; malformed JSON and unknown `kind` are rejected and logged, not thrown |
+| `UrlNormalizationTest`  | pure unit | `https://x` kept; `x.com` → `https://x.com`; an existing local file path → its `file:` URI; a non-existent path without a scheme → `https://` + it (or a documented error — pick one and pin it) |
+| `AllowedOriginsTest`    | pure unit | empty allow-list → denied; exact match → allowed; different case → allowed; `null` Origin → denied; suffix trick (`http://localhost:3000.evil.com`) → denied |
+| `RateLimiterTest`       | pure unit | 20 in the window pass, the 21st is refused, the window rolls over via an injectable clock |
+| `WebViewToolWindowTest` | platform  | tool window registers under id `WebView Explorer`; `createToolWindowContent` produces one content whose component holds a browser (skipped when `JBCefApp.isSupported()` is false); the injected script is present after a load |
 
 The pure-unit tests are the point: they are why `BridgeMessage.parse`, the URL normaliser, the origin
 checker, and the rate limiter must be extractable classes with no `Project` in their signature.
@@ -380,19 +380,19 @@ checker, and the rate limiter must be extractable classes with no `Project` in t
 
 Each step should build green on its own.
 
-| Step | Work | Files | Verification |
-| --- | --- | --- | --- |
-| 0 | Baseline: record that the current build compiles and that `index.html` link clicks work in `runIde` | — | `.\gradlew.bat compileJava`; manual `runIde` + click a report link |
-| 1 | Extract pure logic with no behaviour change: `BridgeMessage`, `UrlNormalizer`, `AllowedOrigins`, `RateLimiter` (with clock seam) | new `bridge/`, `util/` classes; `JcefBridgeNew`/`HttpBridgeService` delegate to them | `.\gradlew.bat test` (new unit tests) + manual smoke |
-| 2 | Add the test suite of §4.7 and `useJUnitPlatform()` | `build.gradle.kts`, `src/test/**` | `.\gradlew.bat test` |
-| 3 | Build/manifest alignment §4.1 (identity into `pluginConfiguration`, vendor, repository URL, catalog cleanup, Kotlin decision) | `build.gradle.kts`, `gradle.properties`, `libs.versions.toml`, `plugin.xml` | `.\gradlew.bat buildPlugin`; inspect the patched `plugin.xml` in `build/` |
-| 4 | Plugin structure §4.2 (optional JCEF content module) | `plugin.xml`, `withJcef.xml` | `buildPlugin` + `verifyPluginProjectConfiguration` |
-| 5 | Tool window rewrite §4.4 (`WebViewPanel`, `WebViewService`, named actions, scrollbars, load-error state) | `toolWindow/**`, `actions/OpenFileInWebViewAction` | `runIde`: toggle, back/forward/refresh, right-click an HTML file, settings button |
-| 6 | Bridge rewrite §4.3 (single load handler, one `JBCefJSQuery`, JSON parse, disposal) | `bridge/WebViewBridge`, delete `JcefBridgeNew` | `runIde`: open the entity `index.html`, click a field link → right line; break the JSON on purpose and confirm the log is a warning, not a stack trace |
-| 7 | HTTP bridge hardening §4.5 | `services/**` | `curl http://127.0.0.1:18881/health`; `curl` `/open` with no allow-list → 403; with the origin allowed → opens; 21st call → 429; confirm the port is not reachable from another host |
-| 8 | Settings/state polish §4.6 | `settings/**`, `services/PluginStateService` | invalid port shows a message; changing the port restarts the bridge; `lastUrl` survives an IDE restart |
-| 9 | Docs: README rewrite, CHANGELOG entry | `README.md`, `CHANGELOG.md` | read-through against the DEC-027 §7 and `scripts/entity-html/README.md` contracts |
-| 10 | Final gate | — | `.\gradlew.bat clean buildPlugin verifyPlugin test`; then the §6 acceptance walk |
+| Step | Work                                                                                                | Files                                                                                | Verification                                                                      |
+| ---- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| 0    | Baseline: record that the current build compiles and that `index.html` link clicks work in `runIde` | —                                                                                    | `.\gradlew.bat compileJava`; manual `runIde` + click a report link                |
+| 1    | Extract pure logic with no behaviour change: `BridgeMessage`, `UrlNormalizer`, `AllowedOrigins`, `RateLimiter` (with clock seam) | new `bridge/`, `util/` classes; `JcefBridgeNew`/`HttpBridgeService` delegate to them | `.\gradlew.bat test` (new unit tests) + manual smoke |
+| 2    | Add the test suite of §4.7 and `useJUnitPlatform()`                                                 | `build.gradle.kts`, `src/test/**`                                                    | `.\gradlew.bat test`                                                              |
+| 3    | Build/manifest alignment §4.1 (identity into `pluginConfiguration`, vendor, repository URL, catalog cleanup, Kotlin decision) | `build.gradle.kts`, `gradle.properties`, `libs.versions.toml`, `plugin.xml` | `.\gradlew.bat buildPlugin`; inspect the patched `plugin.xml` in `build/` |
+| 4    | Plugin structure §4.2 (optional JCEF content module)                                                | `plugin.xml`, `withJcef.xml`                                                         | `buildPlugin` + `verifyPluginProjectConfiguration`                                |
+| 5    | Tool window rewrite §4.4 (`WebViewPanel`, `WebViewService`, named actions, scrollbars, load-error state) | `toolWindow/**`, `actions/OpenFileInWebViewAction`                              | `runIde`: toggle, back/forward/refresh, right-click an HTML file, settings button |
+| 6    | Bridge rewrite §4.3 (single load handler, one `JBCefJSQuery`, JSON parse, disposal)                 | `bridge/WebViewBridge`, delete `JcefBridgeNew`                                       | `runIde`: open the entity `index.html`, click a field link → right line; break the JSON on purpose and confirm the log is a warning, not a stack trace |
+| 7    | HTTP bridge hardening §4.5                                                                          | `services/**`                                                                        | `curl http://127.0.0.1:18881/health`; `curl` `/open` with no allow-list → 403; with the origin allowed → opens; 21st call → 429; confirm the port is not reachable from another host |
+| 8    | Settings/state polish §4.6                                                                          | `settings/**`, `services/PluginStateService`                                         | invalid port shows a message; changing the port restarts the bridge; `lastUrl` survives an IDE restart |
+| 9    | Docs: README rewrite, CHANGELOG entry                                                               | `README.md`, `CHANGELOG.md`                                                          | read-through against the DEC-027 §7 and `scripts/entity-html/README.md` contracts |
+| 10   | Final gate                                                                                          | —                                                                                    | `.\gradlew.bat clean buildPlugin verifyPlugin test`; then the §6 acceptance walk  |
 
 ---
 
