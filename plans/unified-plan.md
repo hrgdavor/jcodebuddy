@@ -110,6 +110,17 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
    gap → the library cannot serve that specific output, so it is a decision about an additional library,
    taken with the evidence and recorded as its own decision rather than assumed. That is step 7.10's
    deliverable, not a note.
+10. **The engine parses and analyses; a consumer projects.** `jcodebuddy-core` owns parsing and analysis in
+   one place — the one source representation (DEC-030), the rich general model, the indexes with their
+   relations, search and freshness — so that **no consumer duplicates the effort**. A consumer owns its
+   **domain shape**: hipster-entity defines and serialises its own entity and relation data (the JSON a JS UI
+   or a visual entity/relations page reads), because that is a *projection* of the engine's facts. What stays
+   forbidden is a consumer parsing Java itself, running its own watch loop, or keeping its own type index
+   because the engine's answer was inconvenient — and a fact a consumer needs three times is a signal to widen
+   the engine's model rather than to derive it locally. The test for any change: **does it derive a fact from
+   source (engine), or project a fact the engine already answers (consumer)?** DEC-037's "what a consumer
+   owns" section is the decision this rule restates. Enforcement: steps 3.0f-3, 3.0g–3.0j, and every
+   hipster-entity step that reads the engine.
 
 ---
 
@@ -677,6 +688,14 @@ declaration file, checksum, relations — and a *missing* answer stays distingui
 the prose that still says these classes live in the tooling (the two watch decisions' "the tooling module is
 still where source bytes are turned into a `SourceMetadata` tree", and `DEC-009`'s "All three live in
 `hipster-entity-tooling`").
+
+**3.0f-3's shape is set by rule 10 and DEC-037's "what a consumer owns" (clarified 2026-10-02)**: the model is
+**general and rich** — the facts a *class* of consumers needs, not only what the entity pass wants today — and
+it grows **no entity concept** (`@View`, views, artifacts, builder levels). hipster-entity keeps its own
+entity/relation shape and serialises it for its UI and its visual documentation, because that is a projection
+of the engine's facts; what it may not do is parse source or re-derive a fact the engine already answers. So
+3.0f-3 is judged by two things: can a consumer extract what it needs **without touching source text**, and does
+the model still contain nothing that is only one consumer's domain.
 
 **Judgement calls, recorded rather than buried.** *(1) `SourceSplicer` goes to the engine.* DEC-030 names
 the splice as the write half of the one representation, and DEC-037 lists parsing but not writing — so this
