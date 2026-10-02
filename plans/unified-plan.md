@@ -607,14 +607,42 @@ package-level guess in the measurement above was wrong (`meta/` is *not* all eng
 | **Engine** | `SourceReader` | the one place an existing source is read, through DEC-030's one representation |
 | **Engine** | `TreeQueries` | the read-only queries over the parsed tree |
 | **Engine** | `JavaSyntaxCheck` | the javac positions the LST cannot answer (DEC-030: positions come from javac) |
-| **Engine** *(judgement call 1)* | `SourceSplicer` | the write half of the same one representation — see below |
+| **Engine** *(judgement call 1)* | `SourceSplicer` | the write half of the same one representation — see below, and see 3.0f-2's evidence |
 | **Engine** | `meta/SourceMetadata` | the file-scoped metadata a parse produces (DEC-W008's shape) |
 | **Engine** | `meta/SourceLocation` | "one place a field is, as a pass recorded it" — a position record, engine-shaped |
-| **Engine** | `meta/InterfaceInfo` | a discovered interface — the engine's type-level answer (kind + members) |
+| **Consumer — corrected by the compiler** | `meta/InterfaceInfo` | **was classified engine; it is not.** It holds `Property` and `ViewAttributes`, so it is the entity model's view of an interface. 3.0f-2's build proved it; the engine set is 11 files |
 | **Consumer — emitters** | `EntityMetadataGenerator` (the pass), `FieldBoilerplateGenerator`, `ValidationGenerator`, `ViewAdapterGenerator`, `ViewBuilderGenerator`, `ViewInterfaceGenerator`, `ViewMapperGenerator`, `ViewRecordGenerator`, `ViewTrackingBuilderGenerator` | they *read* the model and *write* Java; moving them would put entity codegen inside the engine |
 | **Consumer — the entity model** | `meta/EntityMeta`, `meta/EntityFieldMeta`, `meta/ViewMeta`, `meta/ViewFieldMeta`, `meta/ArtifactMeta`, `meta/Property`, `meta/ViewAttributes`, `meta/FieldConstraint`, `meta/TrackableType`, `MetadataLocations` | views, entities, artifacts, constraints, tracking levels: **domain**, not engine. The measurement called `meta/` "the representation and the parse path" — true of the three engine rows above, wrong for these nine |
 | **Consumer — generator behaviour** | `CooperativeCodegen`, `DivergenceReporter`, `GenLevelResolver`, `GeneratorPreflight`, `TypeLiterals`, `JcodebuddyDirectory`, `ViewAnnotationReader` | DEC-020 preservation, DEC-022 diagnostics, entity gen-levels, preflight, literal spelling, output plumbing, the `@View` reader |
 | **Consumer — rules** | all 12 of `validation/` | the entity conventions and their CLIs |
+
+**3.0f-2 was attempted on 2026-10-02 and reverted, because the compiler corrected the classification.** The
+twelve files were moved, the packages rewritten and every reference re-pointed (`scripts/extract-engine.js`,
+kept and now correct); `jcodebuddy-core` then failed to compile with **five of the moved files reaching back
+into classes that stay**. That is not a build accident — it is the dependency direction DEC-037 forbids, and
+the evidence is better than the guess the classification made:
+
+| Moved file | Reaches back to (consumer, stays) | What it means |
+| --- | --- | --- |
+| `meta/InterfaceInfo` | `Property`, `ViewAttributes` | **it is not engine at all**: it holds a view's properties and its `@View` attributes. The classification was wrong on this one; it belongs with the entity model that stays, and the engine set is **11 files**, not 12 |
+| `index/TypeFacts` | `MetadataLocations` (an import *and* a use) | the index row reaches into the artifact-location model — the engine needs its own answer to "where is this declaration", or that helper moves in |
+| `index/ClassIndex` | `EntityMetadataGenerator`, `JcodebuddyDirectory` (+ three more symbols) | the index reaches into the *pass* (a package filter?) and into the output-directory marker. `EntityMetadataGenerator` is unambiguously the consumer; `JcodebuddyDirectory` is arguably engine vocabulary, because the index **is** a file under `.jcodebuddy/index/` |
+| `source/SourceReader` | `DivergenceReporter` | the reader reports diagnostics through the entity pass's reporter — the engine needs a diagnostic channel of its own, or the DEC-022 vocabulary needs to move with it |
+| `source/SourceSplicer` | `ViewInterfaceGenerator` (a static member) | a write helper that needs an *emitter* to work. This is evidence against judgement call 1 below: either the member it needs is engine vocabulary and moves, or `SourceSplicer` is a consumer and 3.0n's survivor is `jwa-builder`'s copy |
+
+**So 3.0f-2 has four small decisions before it can be a move**, and each has three shapes: **move it in** (it
+is engine vocabulary), **invert it** (the engine defines a minimal contract — a diagnostic sink, a package
+filter, a source-location query — and the consumer supplies it), or **drop the dependency** (the engine can
+answer without it). Recommended, from the evidence above: `InterfaceInfo` back to the consumer set;
+`JcodebuddyDirectory` **into the engine**; `EntityMetadataGenerator` **inverted** (filter as a parameter);
+`DivergenceReporter` **inverted** behind a sink, with DEC-022's diagnostic vocabulary moving into the engine,
+because "a missing answer is reported, never inferred as absent" is an engine rule; `TypeFacts`'s
+`MetadataLocations` use **inverted or moved**; and `SourceSplicer`'s `ViewInterfaceGenerator` member
+**moved into the engine if it is a marker**, otherwise judgement call 1 flips and the splice stays a consumer.
+The tree was left green (the attempt reverted) rather than either dragging consumer classes into the engine or
+committing a build that does not compile; `scripts/extract-engine.js` stays, with its two heuristic bugs fixed
+(it now adds an import only for a file that **shared the class's old package**, skips a class the file declares
+itself, and ignores comment lines).
 
 **Judgement calls, recorded rather than buried.** *(1) `SourceSplicer` goes to the engine.* DEC-030 names
 the splice as the write half of the one representation, and DEC-037 lists parsing but not writing — so this
