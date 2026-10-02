@@ -1,4 +1,4 @@
-package hr.hrg.jcodebuddy.codegen;
+package hr.hrg.jcodebuddy.engine.codegen;
 
 /**
  * Something that generates code for a file, when it applies.

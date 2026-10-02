@@ -20,8 +20,9 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * Every committed source file in the reactor, put through the read path the migration installed.
  *
  * <p>This is the plan's {@code MigrationCompletenessTests} with a subject. The scale that matters for a
- * migration is not a synthetic file with four thousand members - it is the 283 main source files the
- * project actually compiles, read the way the generators read them. Three properties are checked over all
+ * migration is not a synthetic file with four thousand members - it is the main source files this reactor
+ * actually compiles (287 of them on 2026-10-03, when {@link #MODULES} was corrected), read the way the
+ * generators read them. Three properties are checked over all
  * of them, and each is a property the port could silently break:</p>
  *
  * <ol>
@@ -45,22 +46,28 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  */
 class MigrationCompletenessTest {
 
-    /** Modules whose sources the migration ported, or whose generators read them. */
+    /**
+     * Modules whose sources the migration ported, or whose generators read them — **by artifactId, never by
+     * path**, because `hipster-entity/hipster-entity-tooling`-style paths keep changing while an artifactId
+     * is what the root POM resolves. `hipster-ioc` is deliberately absent: it is the group's documentation
+     * directory, and the module is `hipster-ioc-api`.
+     */
     private static final List<String> MODULES = List.of(
             "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling", "hipster-entity-jackson",
             "hipster-entity-test", "hipster-entity-example", "project-automation", "merge-java",
-            "jwa-builder", "jwa-builder-api", "webview/jwa-sidecar", "webview/eclipse/webview-eclipse", "java-watch-agent", "java-watch-core",
-            "metadata-arena", "metadata-server", "hipster-ioc", "hipster-ioc-api");
+            "jwa-builder", "jwa-builder-api", "jwa-sidecar", "webview-eclipse", "jcodebuddy-agent",
+            "java-watch-core", "metadata-arena", "metadata-server", "hipster-ioc-api");
 
     private static List<Path> committedSources() {
         Path root = CompileHarness.findRepoRoot();
         List<Path> files = new ArrayList<>();
+        List<String> unresolved = new ArrayList<>();
         for (String module : MODULES) {
             // By name, through the root POM: these are artifactIds, and the modules live in group folders
-            // (`hipster-entity/…`, `jcodebuddy/…`, `watch/…`) that will keep changing. A name that is not a
-            // module — `hipster-ioc` is a documentation directory — is skipped, as it always was.
+            // (`hipster-entity/…`, `jcodebuddy/…`, `watch/…`) that keep changing.
             Path moduleDir = CompileHarness.moduleDirOrNull(module);
             if (moduleDir == null) {
+                unresolved.add(module);
                 continue;
             }
             Path sourceRoot = moduleDir.resolve("src/main/java");
@@ -73,6 +80,15 @@ class MigrationCompletenessTest {
                 throw new UncheckedIOException(e);
             }
         }
+        // Silence is the failure mode this assertion exists for, and the count floor below is not enough on
+        // its own: it says *that* the sweep shrank, never *what* left it, and it is a total a single added
+        // module can mask. A name in this list that resolves to no module means the sweep is not reading
+        // sources it claims to read. It has happened: step 3.0s renamed `java-watch-agent` to
+        // `jcodebuddy-agent`, this list kept the old name, and 21 sources quietly left the sweep until a
+        // later step's build tripped the floor three steps after the fact.
+        Assertions.assertEquals(List.of(), unresolved,
+                "these names are not reactor modules, so the sweep silently skipped their sources: " + unresolved
+                        + " — fix the name here (an artifactId, not a directory path) or remove it deliberately");
         Assertions.assertTrue(files.size() > 250,
                 "the sweep is only evidence if it really walks the tree; found " + files.size() + " files");
         return files;

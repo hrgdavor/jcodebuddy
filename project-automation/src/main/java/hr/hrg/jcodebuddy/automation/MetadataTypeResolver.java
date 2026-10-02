@@ -1,7 +1,7 @@
 package hr.hrg.jcodebuddy.automation;
 
 import hr.hrg.jcodebuddy.engine.meta.SourceMetadata;
-import hr.hrg.jcodebuddy.codegen.TypeResolver;
+import hr.hrg.jcodebuddy.engine.query.TypeResolver;
 
 /**
  * A {@link TypeResolver} that builds its knowledge from metadata passes.

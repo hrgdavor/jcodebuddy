@@ -242,4 +242,6 @@ if (process.argv.includes('--fix-doc-paths')) {
     for (const line of touched) console.log(`    ${line}`);
 }
 
-console.log('  next: jcodebuddy-core needs OpenRewrite + Jackson, and jcodebuddy-codegen-api needs core instead of the tooling');
+// A note from the run that made this script, kept as the record it is: both things it names were done at step
+// 3.0f, and step 3.0i then dissolved `jcodebuddy-codegen-api` into the engine altogether.
+console.log('  (as of 2026-10-02) next: jcodebuddy-core needs OpenRewrite + Jackson, and jcodebuddy-codegen-api needs core instead of the tooling');

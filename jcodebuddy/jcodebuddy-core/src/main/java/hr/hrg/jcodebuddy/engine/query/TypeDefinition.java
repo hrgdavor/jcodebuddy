@@ -1,4 +1,4 @@
-package hr.hrg.jcodebuddy.codegen;
+package hr.hrg.jcodebuddy.engine.query;
 
 import java.util.List;
 import java.util.Map;
@@ -10,6 +10,11 @@ import java.util.Map;
  * the class loader or the rest of the project — so generation stays a function of what it was handed,
  * which is the property that makes generated output reproducible and a generator testable as a pure
  * function.
+ *
+ * <p>Since 2026-10-03 (step 3.0i) it lives in the engine, and it is the <em>generator-facing</em> answer
+ * shape rather than the engine's full one: it carries a type's fields and no relations, so "who extends
+ * whom" is a question for {@link MetadataQuery}, not for this record. Growing this seam over the index —
+ * relations included — is plan step 3.0d.
  *
  * @param qualifiedName the type's fully qualified name
  * @param simpleName    the type's simple name, so a generator need not take the FQN apart

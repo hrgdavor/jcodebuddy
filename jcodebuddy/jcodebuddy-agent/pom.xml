@@ -32,14 +32,12 @@
         </dependency>
 
         <!--
-            The generator SPI, from the shared library rather than from `project-automation`.
-
-            This dependency used to name `project-automation`, which was wrong twice over: a JCodeBuddy
-            library must never depend on a project's private dev-time assistant, and that module must
-            never be installed or deployed. The dependency was only satisfiable because that artifact
-            was being installed into the local repository, so the two faults concealed each other.
-            `ActionToolAdapter` implements `CodeGenerator`, and the types it needs are now a library of
-            their own. See AGENTS.md § 1 and `jcodebuddy/jcodebuddy-codegen-api/pom.xml`.
+            This module declares no generator SPI, and the comment that used to sit here described one it
+            had already stopped having. The history is worth keeping straight: the class that forced the SPI
+            out of `project-automation` was `ActionToolAdapter`, a bridge from the watcher's own
+            `ActionTool` port to the JCodeBuddy `CodeGenerator` SPI — and step 3.0s deleted it, because
+            nothing used it but its own test. Step 3.0i then dissolved the SPI's module into the engine.
+            This module is not a consumer: its code-action tools drive `jwa-builder`'s processors directly.
         -->
 
         <!-- `javaparser-core` was removed here on 2026-09-22 (Phase 6 of the rewrite-migration plan).

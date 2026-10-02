@@ -591,12 +591,13 @@ consumers are all written down.
 **Who:** agent · **Size:** L
 
 The generator-facing seam is **empty and too small**: `jcodebuddy-codegen-api`'s
-[`TypeResolver`](../jcodebuddy/jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeResolver.java)
+[`TypeResolver`](../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/query/TypeResolver.java)
 (`resolve(fqn)`) has no implementation but `EmptyTypeResolver`, and
-[`TypeDefinition`](../jcodebuddy/jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeDefinition.java)
+[`TypeDefinition`](../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/query/TypeDefinition.java)
 (qualified name, simple name, fields, field types) carries **no relations**, so it cannot answer the question
 hipster-ioc actually has. That is a symptom: the model a consumer needs is spread across the tooling module
-and two watch modules, and the SPI lives in a fifth.
+and two watch modules, and the SPI lives in a fifth. *(Those two links point where the types live today — the
+engine's query seam; step 3.0i dissolved the module that held them and deleted it.)*
 
 **Measured before starting (2026-10-02), so this step's real shape is visible:** `hipster-entity-tooling` is
 **51 main sources** — 22 in the module's own package (the generators, the LST helpers, the divergence
@@ -888,8 +889,9 @@ the `SourceMetadata` edge (the reason codegen-api depends on `hipster-entity-too
 SPI cannot be implemented next to the index it reads) disappears with the move.
 
 **Do:** move the SPI into the engine, delete the module, and update every consumer's POM and imports —
-`project-automation` (``ActionToolAdapter`` (removed in step 3.0s: the watcher keeps its own `ActionTool` port)
-and the generator implementations), `java-watch-agent`, `hipster-ioc-tooling`. Update
+`project-automation` (the generator implementations and `MetadataTypeResolver`; `ActionToolAdapter`, the
+watcher-side bridge, was already gone: step 3.0s removed it when the watcher kept its own `ActionTool` port),
+`jcodebuddy-agent` (called `java-watch-agent` when this Do was written), and `hipster-ioc-tooling`. Update
 [`module-map.md`](../doc/architecture/module-map.md) (which states the five-type leaf property) and the places
 that cite codegen-api as the precedent for promoting a shared type out of `project-automation`
 ([`ProjectAutomationIsolationTest`](../hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ProjectAutomationIsolationTest.java)
@@ -902,6 +904,66 @@ complete).
 
 **Done when:** the SPI has one home, the module is gone, and nothing depends on a project's assistant to
 implement a generator.
+
+**Done 2026-10-03.** The module is gone, and the five types are the engine's: `TypeResolver`/`TypeDefinition`
+in `hr.hrg.jcodebuddy.engine.query`, `CodeGenerator`/`CodeContext`/`CodeContextImpl` in
+`hr.hrg.jcodebuddy.engine.codegen`. It left the root POM's `<modules>` and its managed `dependencyManagement`
+entry, and [`scripts/dissolve-codegen-api.js`](../scripts/dissolve-codegen-api.js) did the move, the import
+rewrite and the POM changes — so this is reproducible rather than a story about five files.
+
+**The decision this step had to make that the record did not state: two packages, not one.** The script written
+for the first attempt argued for keeping `hr.hrg.jcodebuddy.codegen`, because moving five files between modules
+without changing an import is the cheapest possible migration. Two things beat that argument: the engine's own
+convention is `hr.hrg.jcodebuddy.engine.<area>` (index, source, meta, fresh, query — and now codegen), and this
+step's own gate is *no `import hr.hrg.jcodebuddy.codegen.` left anywhere*, which a surviving package cannot
+satisfy and which would leave a module-shaped name inside a module that no longer exists. The churn was **two
+consumer files**.
+
+**What the Do named that had already changed, which is the part worth keeping.** Its consumer list was written
+before 3.0s: it named `java-watch-agent` (renamed `jcodebuddy-agent` on 2026-10-03) and `ActionToolAdapter` as
+things to update. `ActionToolAdapter` was deleted in 3.0s — nothing used it but its own test — so **the watcher
+had no SPI dependency left to drop**: all that remained in its POM was a comment describing a dependency it no
+longer declared, and rewriting that comment is the whole of the agent's part of this step. A finding is a
+hypothesis with a date on it, and this one was two revisions old by the time the step ran.
+
+**The consumer that was reaching the engine transitively.** `project-automation` imports `SourceReader`,
+`TreeQueries`, `index.ContentHash` and `meta.SourceMetadata` while declaring no dependency on `jcodebuddy-core`
+at all — it got them from `hipster-entity-tooling`. Its SPI dependency became an explicit `jcodebuddy-core` one
+here, which is both the honest replacement and the fix for that reach. `hipster-ioc-tooling` already declared
+the engine (for `GeneratedCodeMarkers`), so its SPI entry was **dropped rather than re-pointed**: a second
+`<dependency>` on the same artifact is a POM smell, and Maven says so at every build.
+
+**The gate caught something this step did not break, and the fix is not the move.** The first build failed in
+`MigrationCompletenessTest` — *"the sweep is only evidence if it really walks the tree; found 243 files"*
+against a floor of 250. `jcodebuddy-codegen-api` was never in that sweep, so the move could not have caused it;
+the count was 243 before this step too. The cause was three names in the sweep's `MODULES` list that resolve to
+no reactor module: `java-watch-agent` (renamed at 3.0s — **21 sources quietly left the sweep**, which is the
+243) and `webview/jwa-sidecar` + `webview/eclipse/webview-eclipse` (written as *paths* in a list resolved by
+*artifactId*, so 23 sources had never been swept at all). The count floor is what noticed, three steps late,
+because the rename's own evidence was a targeted `-pl` build that never ran this test. Fixed here: the names
+are artifactIds, the agent and the two webview modules are in the sweep (**287 sources**), and
+`committedSources()` now asserts that *every* listed name resolves — so the next rename fails naming what
+stopped resolving instead of reporting a bare count. The widened sweep passes unchanged, which is the honest
+result: it was blind, not lenient.
+
+**Evidence:** `bun scripts/mvn-jdk25.js -o -pl
+:jcodebuddy-core,:hipster-ioc-tooling,:project-automation,:jcodebuddy-agent,:jcodebuddy-watch-tools -am clean
+test` → **BUILD SUCCESS** (core 77 tests, `hipster-entity-tooling` 466, `project-automation` 92,
+`hipster-ioc-tooling` 11, `metadata-server` 15, `metadata-mcp-server` 8); the recorded `GATE` →
+**BUILD SUCCESS** (6:10) with `jcodebuddy-core` in it; `dissolve-codegen-api.js`'s own last check reports no
+`hr.hrg.jcodebuddy.codegen` reference in any Java source; `LINKS` green.
+
+**Docs in the same change:** `module-map.md` (the five-type leaf section replaced by where the SPI lives now;
+`jcodebuddy-core` described as the engine it is — its "no dependencies at all" had been false since 3.0f — and
+the tree and Layer tables brought to the reactor's actual shape, since the tree had not been re-derived since
+the group move and `java-watch-agent` was still in the Layer 3 table), AGENTS.md § 1.1's precedent bullet,
+DEC-037 decision 2 (dated execution note), DEC-W003 (amendment), DEC-036 (where the seam went), DEC-038 (both
+halves done), `hipster-ioc/doc/ROADMAP.md`, `ProjectAutomationIsolationTest`'s failure message, and the two
+places in this plan that still told a later step to put a type in the deleted module.
+
+**Not this step:** nothing implements `TypeResolver` but `empty()` (3.0d), no consumer has moved onto the
+engine's queries (3.0j), and the moved types are still the file-scoped seam they were. This step moved code and
+deleted a module; it changed no behaviour.
 
 ### 3.0j — Move the remaining consumers onto the engine
 **Who:** agent · **Size:** L
@@ -1440,7 +1502,8 @@ seam is the metadata layer's).
 - **`ContextSource`** renders `<Context>Impl`: the DEC-035 file marker, creation in the computed order with
   each line naming its factory, one accessor per bean returning its field, and `getParent`/`setParent` when
   the context implements `ChildContext`.
-- **`IocContextGenerator`** is the shared `CodeGenerator` (`jcodebuddy-codegen-api`), with a cheap
+- **`IocContextGenerator`** is the shared `CodeGenerator` (since 3.0i the engine's SPI,
+  `hr.hrg.jcodebuddy.engine.codegen`), with a cheap
   `isApplicable` (a substring test, not a parse) and a `generate` that **returns text**; the text goes
   through `CooperativeCodegen.reconcileMembers`, so step 1.1's freeze and DEC-020's preservation apply to
   what this generator writes. It also refuses a `Supplier`/`DynamicResource` bean with no factory
@@ -2060,11 +2123,13 @@ Three facts about the current tree:
   source root and a package list and write generated Java plus `.jcodebuddy/metadata/entity/…`, so there is
   no per-file door to walk through.
 
-**Do:** put the distinction in `jcodebuddy-codegen-api` as a type rather than a comment. A project-scoped
+**Do:** put the distinction in the engine's SPI as a type rather than a comment (`hr.hrg.jcodebuddy.engine.codegen`,
+which absorbed `jcodebuddy-codegen-api` at step 3.0i). A project-scoped
 generator's contract is **metadata in, code out** — it is handed the project model (3.0d's resolver) and
 what to generate for, and it never receives a single-file `CodeContext` as its input. Concretely: a second
-interface for the project-scoped kind, the delegable case handled (`ActionToolAdapter` forwards its
-delegate's kind rather than declaring one), and the caller side refusing to offer a project-scoped
+interface for the project-scoped kind, the delegable case stated as a contract (the one wrapper that existed,
+`ActionToolAdapter`, was deleted in step 3.0s, so this is a shape to define rather than a class to fix), and
+the caller side refusing to offer a project-scoped
 generator per file. Say which kind each generator is on its README, and amend DEC-036 § 11 with the
 classification and with the rule this whole thread has been circling: **a type the metadata cannot resolve
 is reported, never inferred as absent** — the step 3.2 evidence is the reason.
@@ -2074,7 +2139,7 @@ reads; a pass's kind is what it writes.** The IoC generator returns text (no sid
 `IocGeneration` writes the graph, and a rule that says "needs another file *or* writes a tree artifact"
 would call the same generator two kinds depending on which half you looked at.
 
-**Gate:** `MODULE` for `jcodebuddy-codegen-api,java-watch-agent` green, with tests that a project-scoped
+**Gate:** `MODULE` for `jcodebuddy-core,jcodebuddy-agent` green, with tests that a project-scoped
 generator is not offered per file, that a wrapper's kind follows its delegate, and that an unresolvable
 type produces a diagnostic instead of an empty answer.
 
@@ -2328,7 +2393,7 @@ start)
 | 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
 | 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
 | 3.0h | Search: the queries every consumer asks | agent | M | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
-| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[ ]` |
+| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
 | 3.0j | Move the remaining consumers onto the engine | agent | L | `[ ]` |
 | 3.0k | Grow the recorded gate to cover the engine's contract | agent | S | `[ ]` |
 | 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038) | agent | S | `[ ]` |

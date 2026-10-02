@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-24
 - Updated: 2026-09-26 — corrected to the tree, and extended with the *publishing* half of the rule.
+- Updated: 2026-10-03 — the SPI's module dissolved into the engine (step 3.0i); see the amendment.
 - Owners: project
 - Related docs: [Module map](../module-map.md), [AGENTS.md § 1.1](../../../AGENTS.md)
 - Supersedes: -
@@ -51,13 +52,35 @@ not a Layer 1 library: it is one project's own assistant, and nothing else may b
   `CodeContext`, `CodeContextImpl`, `TypeResolver`, `TypeDefinition`) became a library so the rule could
   hold.
 - It depends on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`,
-  `jcodebuddy-codegen-api`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`.
+  `jcodebuddy-core`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`.
   `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation
   representation is OpenRewrite's LST — see
   [DEC-030](../../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
 
 The module is the sole location for this project's automation code and configuration. No production
 runtime code belongs here. It exists exclusively to assist development.
+
+## Amendment — the SPI's module is gone (2026-10-03)
+
+The generator SPI this record describes as promoted — `CodeGenerator`, `CodeContext`, `CodeContextImpl`,
+`TypeResolver`, `TypeDefinition` — no longer has a module of its own. Step 3.0i dissolved
+`jcodebuddy-codegen-api` into `jcodebuddy-core`, where it is `hr.hrg.jcodebuddy.engine.codegen` and
+`hr.hrg.jcodebuddy.engine.query`
+([DEC-037](../../../doc-hipster-entity/architecture/decisions/DEC-037.md) decision 2). Two sentences above
+are therefore history rather than description, and they stay as written because a record is a record:
+
+- **"The generator SPI now lives in `jcodebuddy-codegen-api`"** (Context, point 1) — it lived there from
+  2026-09-26 until 2026-10-03, and the sentence was true when it was written.
+- **"the types it needed were reusable and were promoted to `jcodebuddy-codegen-api`"** (Decision) — the
+  promotion was the right fix for the rule, and *where* the promoted types belong was still an open
+  question. The engine answered it: the SPI could not be implemented anywhere its own class index was not,
+  and the consumer that forced the promotion (`java-watch-agent`) stopped implementing it altogether in
+  step 3.0s.
+
+What does **not** change: no module depends on `project-automation`, all four clauses above stand, and
+`ProjectAutomationIsolationTest` still enforces them. The dependency list in the Decision section was
+corrected rather than amended, because a list of what a module depends on is a fact about today rather
+than a finding with a date on it.
 
 ## Alternatives considered
 

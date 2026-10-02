@@ -35,14 +35,16 @@
             <artifactId>hipster-entity-tooling</artifactId>
         </dependency>
         <!--
-            The generator SPI, which is a shared library and not this module's own. It lives in
-            `jcodebuddy-codegen-api` so that a tool which generates code (java-watch-agent is the one
-            that forced the split) can implement a generator without depending on a project's private
-            dev-time assistant. See that module's POM.
+            The engine — the metadata model, the parse path and, since 2026-10-03 (step 3.0i, DEC-037
+            decision 2), the generator SPI `MetadataTypeResolver` extends. It is a shared library and not
+            this module's own, so a tool which generates code can implement a generator without depending
+            on a project's private dev-time assistant. This module already used the engine's
+            `SourceReader` and `TreeQueries` through `hipster-entity-tooling`; naming it here is the same
+            dependency stated rather than inherited.
         -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>jcodebuddy-codegen-api</artifactId>
+            <artifactId>jcodebuddy-core</artifactId>
         </dependency>
         <dependency>
             <groupId>tools.jackson.core</groupId>

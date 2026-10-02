@@ -5,30 +5,44 @@
 ```
 jcodebuddy-parent (POM)
 │
-├── watch
-├── java-watch-core
-├── java-watch-scp
-├── java-watch-run
-├── java-watch-run-sample
-├── jwa-builder-api
-├── jwa-builder
-├── java-watch-agent
+├── watch/                     the standalone watcher library and its own tools
+│   ├── java-watch-app
+│   ├── java-watch-core
+│   ├── java-watch-scp
+│   ├── java-watch-run
+│   └── java-watch-run-sample
 │
-├── hipster-entity-api
-├── hipster-entity-core
-├── hipster-entity-example
-├── hipster-entity-jackson
-├── hipster-entity-test
-├── hipster-entity-tooling
-├── jcodebuddy-core          (leaf: markers + the generated-code parser)
-├── jcodebuddy-codegen-api
+├── hipster-entity/            the entity model, its tooling, its examples
+│   ├── hipster-entity-api
+│   ├── hipster-entity-core
+│   ├── hipster-entity-example
+│   ├── hipster-entity-jackson
+│   ├── hipster-entity-test
+│   └── hipster-entity-tooling
 │
-├── webview/core/webview-core
-├── webview/core/webviewd
-├── webview/jwa-sidecar      (the LSP sidecar lives with the webview product — PLAN-webview-suite D9)
-├── webview/eclipse/webview-eclipse
+├── jcodebuddy/                the JCodeBuddy libraries, the engine and the tools
+│   ├── jcodebuddy-core        the engine: one parse path, the model, the index, the queries, freshness
+│   ├── jcodebuddy-agent       the code-action server (was `java-watch-agent`; it left `watch/` at 3.0s)
+│   ├── jcodebuddy-watch-tools
+│   ├── jwa-builder
+│   ├── jwa-builder-api
+│   ├── metadata-server
+│   ├── metadata-mcp-server
+│   └── metadata-arena
 │
-└── project-automation          (strictly private: never installed, never deployed)
+├── hipster-ioc/               the IoC product; its own `doc/` stays at the group root
+│   ├── hipster-ioc-api
+│   ├── hipster-ioc-tooling
+│   └── hipster-ioc-test
+│
+├── webview/                   the webview product and its editor hosts
+│   ├── core/webview-core
+│   ├── core/webviewd
+│   ├── jwa-sidecar            (the LSP sidecar lives with the webview product — PLAN-webview-suite D9)
+│   └── eclipse/webview-eclipse
+│
+├── merge-java
+└── project-automation         strictly private: never installed, never deployed (§ 1.1)
 ```
 
 ## Dependency Direction
@@ -56,31 +70,44 @@ These modules depend on Layer 1:
 | `hipster-entity-core` | `hipster-entity-api` |
 | `jwa-builder` | `jwa-builder-api` + `java-watch-core` |
 | `hipster-entity-tooling` | `hipster-entity-api` + `hipster-entity-core` (test) |
-| `jcodebuddy-codegen-api` | `hipster-entity-tooling` (for `SourceMetadata` only) |
-| `jcodebuddy-core` | none — a leaf, and deliberately so |
+| `hipster-ioc-api` | `hipster-entity-api` |
+| `jcodebuddy-core` | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25` — DEC-030's one representation) and Jackson (`tools.jackson.core:jackson-databind`, the metadata JSON); JUnit in test scope |
+
+`jcodebuddy-core` was a leaf with no dependencies at all until step 3.0f gave it the engine, which is what
+DEC-037 decision 1 is about. **Step 3.0l extracts the generated-code marker vocabulary and its parser into a
+leaf of their own**, so a tool that only wants to know where generated code stops does not resolve a parser;
+until that lands, `jcodebuddy-core` carries both.
 
 ### Layer 3: Applications & Runtimes
-These modules depend on Layer 1 and/or Layer 2:
+These modules depend on Layer 1 and/or Layer 2, or are applications built from them:
 
 | Module | Depends On |
 |--------|-----------|
-| `watch` | `directory-watcher`, `slf4j` |
+| `java-watch-app` | `directory-watcher`, `slf4j` — the watcher's own app, and no workspace artifact |
 | `java-watch-scp` | `java-watch-core` |
 | `java-watch-run` | `java-watch-core`, `ecj`, `polyglot` |
 | `java-watch-run-sample` | `java-watch-run` (provided) |
 | `jwa-sidecar` | `java-watch-core`, `jwa-builder-api`, `jwa-builder` |
-| `java-watch-agent` | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `jcodebuddy-codegen-api` |
+| `jcodebuddy-agent` | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `jackson-databind`, `slf4j` (it was `java-watch-agent`, and it left `watch/` at step 3.0s) |
+| `jcodebuddy-watch-tools` | `jcodebuddy-agent`, `java-watch-core`, `jwa-builder`, `jwa-builder-api`, `slf4j` |
+| `hipster-ioc-tooling` | `hipster-ioc-api`, `hipster-entity-tooling`, `java-watch-core`, `jcodebuddy-core` |
+| `merge-java` | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
 | `webviewd` | `webview-core` — the reference host of the webview contract, and the only one that needs no editor |
 | `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core` |
 | `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api` |
 | `hipster-entity-test` | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson` |
+| `hipster-ioc-test` | `hipster-ioc-api`, `hipster-ioc-tooling` (test) |
 | `webview-eclipse` | `webview-core` (core + Gson unpacked into the bundle jar; Eclipse platform bundles are provided) |
+
+*This table describes the tree as of 2026-10-03 (step 3.0i). It is a description, not a check: nothing in the
+build reads it, so a module that moves or gains a dependency has to be written here by hand in the same
+change — which is what did not happen for `java-watch-agent`'s rename, three steps before this correction.*
 
 ## Critical Boundaries
 
 ### `project-automation` — Dev-Time Only, and Strictly Private
-- **This module is the ORCHESTRATOR.** It wires together generators from `java-watch-agent` and `hipster-entity-tooling`.
-- It has compile-scope dependencies on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jcodebuddy-codegen-api`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
+- **This module is the ORCHESTRATOR.** It wires together generators from `jcodebuddy-agent` and `hipster-entity-tooling`.
+- It has compile-scope dependencies on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`, `jcodebuddy-core`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md). *(The engine replaced the SPI module here at step 3.0i; `jcodebuddy-core` is what `MetadataTypeResolver` extends, and it is also where the `SourceReader`/`TreeQueries` this module uses already came from — previously by inheritance through `hipster-entity-tooling`.)*
 - **It must NOT be a transitive dependency of any production/runtime module.**
 - **No module may depend on it at all** — not in this reactor, not from a driver project. It is one
   project's own assistant, not a library; see [AGENTS.md § 1.1](../../AGENTS.md) and
@@ -89,7 +116,9 @@ These modules depend on Layer 1 and/or Layer 2:
   skipped in its POM. `java-watch-agent` used to depend on it, which both broke the clause above and
   required the module to be published for the dependency to resolve — the two faults concealed each other.
   The reusable generator SPI (`CodeGenerator<T>`, `CodeContext`, `CodeContextImpl`, `TypeResolver`,
-  `TypeDefinition`) was promoted to `jcodebuddy-codegen-api` so that neither is needed.
+  `TypeDefinition`) was promoted out of it so that neither is needed: first to a library of its own
+  (`jcodebuddy-codegen-api`), and at step 3.0i into the engine, `jcodebuddy-core` — the module that library
+  existed for, `jcodebuddy-agent`, no longer implements the SPI at all.
 - `ProjectAutomationIsolationTest` asserts all of the above, so a removed skip or a new dependency fails
   the gate rather than silently reopening the hole.
 
@@ -103,41 +132,44 @@ These modules depend on Layer 1 and/or Layer 2:
 ### `hipster-entity-tooling` — Standalone Library
 - This module depends only on `hipster-entity-api` (and `hipster-entity-core` for tests), plus the OpenRewrite parser artifacts (`rewrite-core`, `rewrite-java`, `rewrite-java-25`).
 - It has **zero dependency** on `project-automation` or any `watch` modules.
-- `project-automation` consumes it as a library, and so does `jcodebuddy-codegen-api` — the latter for
-  `SourceMetadata` alone, which is the one type its `CodeContext` carries.
+- `project-automation` consumes it as a library, and so does `hipster-ioc-tooling`. Its metadata types (the
+  representation, the parse path, the class index) are the **engine's** since step 3.0f, and its own
+  `meta`/`index` packages are re-exports of them; the emitters and the validators are what remains here.
+  Until step 3.0i, `jcodebuddy-codegen-api` also depended on this module — for `SourceMetadata` alone, which
+  was the one-type dependency that made the SPI impossible to implement next to the index it reads.
 
-### `jcodebuddy-core` — Generated-Code Markers and Their Parser, and a Leaf
+### `jcodebuddy-core` — The Engine, and the Generated-Code Markers
 
-> **Where this is going ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md), `Proposed`):**
-> `jcodebuddy-core` is proposed as the home of the one metadata engine — parsing, the metadata model, the
-> indexes with their relations, search, and the watch loop that keeps them fresh and fires events — which
-> means it gains OpenRewrite and Jackson, and the leaf property described below has to be re-established
-> deliberately rather than quietly given up (the recommendation is that the marker vocabulary and its parser
-> move to a leaf of their own). The bullets below describe the tree as it is **today**; read DEC-037 before
-> changing what this module depends on.
+> **Where this is going ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md), `Accepted`
+> 2026-10-02):** the module **is** the home of the one metadata engine — parsing, the metadata model, the
+> indexes with their relations, search, and the freshness contract — and it gained OpenRewrite and Jackson
+> with it (steps 3.0f–3.0h, and the generator SPI's own module dissolved into it at 3.0i). The leaf property
+> below is therefore no longer true of this module as a whole: **step 3.0l extracts the marker vocabulary and
+> its parser into a leaf of their own**, which is what restores it for a tool that only reads
+> generated-region spans. The bullets below describe the marker half, which is still here.
 
 - Holds `GeneratedCodeMarkers` (the marker vocabulary: how a generator spells one, and how a parser
   recognises one), `GeneratedCodeParser` (the parser that turns markers into line spans) and
   `GeneratedBlock` (a span).
-- It exists so that a tool which is **not** the generator can find the generated regions of a file —
+- That half exists so that a tool which is **not** the generator can find the generated regions of a file —
   DEC-035's vocabulary, DEC-020's cooperative preservation. The consumer is an external linter, a
   migration tool, an IDE inspection or an AI agent, and the point is that none of them can depend on a
   generator's internals.
-- **It has no dependencies at all**, and that is the reason it is separate from
-  `hipster-entity-tooling`, where the emitters live. The tooling carries the OpenRewrite LST, Jackson and
-  the entity model; a tool that only wants to know where generated code stops should not resolve any of
-  that. The dependency direction is the honest one: the generator depends on the vocabulary it emits, and
-  the parser never depends on the generator.
+- **The marker half has no dependencies at all**, and that is why it belongs in the leaf 3.0l creates: a tool
+  that only wants to know where generated code stops should not resolve OpenRewrite, Jackson or the engine's
+  model — which is what this module now carries for everything else. The dependency direction is the honest
+  one: the generator depends on the vocabulary it emits, and the parser never depends on the generator.
 
-### `jcodebuddy-codegen-api` — The Generator SPI, and a Leaf
-- Holds exactly five types: `CodeGenerator`, `CodeContext`, `CodeContextImpl`, `TypeResolver`,
-  `TypeDefinition`. All are leaf declarations depending on nothing but `SourceMetadata` and the JDK.
-- It exists so that a tool which generates code can implement a generator **without depending on a
-  project's `project-automation`** (AGENTS.md § 1.1). `java-watch-agent` is the consumer that forced the
-  split: it implements `CodeGenerator`, and those types previously lived in `project-automation`, which
-  made a JCodeBuddy library depend on a private dev-time assistant.
+### The generator SPI — `hr.hrg.jcodebuddy.engine.codegen`, in the engine (since step 3.0i)
+- Holds `CodeGenerator`, `CodeContext`, `CodeContextImpl`; the engine's query seam holds `TypeResolver` and
+  `TypeDefinition` (`hr.hrg.jcodebuddy.engine.query`). They were the module `jcodebuddy-codegen-api`, and
+  DEC-037 decision 2 is why they are not one package: two are metadata queries, three are the SPI.
+- The SPI exists so that a tool which generates code can implement a generator **without depending on a
+  project's `project-automation`** (AGENTS.md § 1.1). That was the reason the five types were promoted into a
+  library at all, and the reason it no longer needs to be one is that the engine — the only place an
+  implementation can read the class index from — is their home now.
 - It must stay thin. A type here that needs a generator *implementation* belongs in
-  `hipster-entity-tooling` instead — this module holds the seam, not the machinery.
+  `hipster-entity-tooling` or the engine's own machinery — this is the seam, not the machinery.
 
 ## Excluded from Maven Reactor
 
@@ -164,8 +196,8 @@ Do **not** rename `jswa` to `watch`. The `jwa`/`jswa` branding is intentional: J
 
 | Layer | Test Framework |
 |-------|---------------|
-| `watch`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jwa-builder-api`, `jwa-builder`, `jwa-sidecar`, `java-watch-agent` | JUnit 4 |
-| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling`, `webview-core`, `webviewd`, `webview-eclipse` | JUnit 5 (the default; no profile needed) |
+| `java-watch-app`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jwa-builder-api`, `jwa-builder`, `jwa-sidecar`, `jcodebuddy-agent` | JUnit 4 |
+| `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling`, `jcodebuddy-core`, `webview-core`, `webviewd`, `webview-eclipse` | JUnit 5 (the default; no profile needed) |
 
 JUnit 5 is not gated behind profile activation. Each module with tests declares
 `junit-jupiter-engine` as an ordinary test dependency, and surefire 3.2.5 selects its

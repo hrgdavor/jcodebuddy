@@ -1,6 +1,6 @@
 package hr.hrg.hipster.ioc.tooling;
 
-import hr.hrg.jcodebuddy.codegen.CodeContextImpl;
+import hr.hrg.jcodebuddy.engine.codegen.CodeContextImpl;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;

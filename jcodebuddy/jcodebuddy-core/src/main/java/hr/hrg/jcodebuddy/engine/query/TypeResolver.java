@@ -1,4 +1,4 @@
-package hr.hrg.jcodebuddy.codegen;
+package hr.hrg.jcodebuddy.engine.query;
 
 import java.util.List;
 
@@ -13,6 +13,12 @@ import java.util.List;
  * rather than guessing. A generator that needs a type and gets {@code null} back should fail loudly;
  * an implementation that invented a plausible {@code TypeDefinition} would let a wrong type reach
  * committed source, which is the failure this whole boundary exists to prevent.
+ *
+ * <p>Since 2026-10-03 (step 3.0i, DEC-037 decision 2) this type lives in the engine, next to the model it
+ * describes, because that is the only place an implementation can be written — the class index it must read
+ * is the engine's. Nothing implements it but {@link #empty()} today: plan step 3.0d is that implementation,
+ * and the engine's own query surface in the meantime is {@link MetadataQuery}, which is richer and is what a
+ * consumer should ask first.
  */
 public interface TypeResolver {
 

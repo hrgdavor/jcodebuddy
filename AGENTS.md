@@ -314,10 +314,16 @@ The impulse is usually right about the *code* and wrong about the *boundary*. Tw
 being asked for, and they have different answers:
 
 - **"I need this reusable type."** Then it was never project-specific. Promote it: move it into a
-  JCodeBuddy library module with its own POM, and have both the `project-automation` and the new consumer
-  depend on that. The precedent is [`jcodebuddy-codegen-api`](jcodebuddy/jcodebuddy-codegen-api/pom.xml), created for
-  exactly this reason when `java-watch-agent` turned out to need the generator SPI that lived in
-  `project-automation`: five leaf types became a library, and the dependency became legal.
+  JCodeBuddy library module, and have both the `project-automation` and the new consumer
+  depend on that. The precedent is the generator SPI — `CodeGenerator`, `CodeContext`, `CodeContextImpl`,
+  `TypeResolver`, `TypeDefinition` — promoted out of `project-automation` when `java-watch-agent` turned out
+  to need it: five leaf types became a library of their own, and the dependency became legal. **Its next move
+  is the second half of the precedent, and the more useful one:** when the engine arrived ([DEC-037](doc-hipster-entity/architecture/decisions/DEC-037.md)),
+  the same five types moved again — into `jcodebuddy-core`, as `hr.hrg.jcodebuddy.engine.codegen` and
+  `hr.hrg.jcodebuddy.engine.query` (step 3.0i, 2026-10-03) — because *where* a promoted type lives is still a
+  question, and the honest answer is the module that can implement it: the SPI could not be implemented
+  anywhere its own class index was not, and the watcher that forced the split no longer implements it at all.
+  A promotion is the right first answer; it is not a promise that the type has found its home.
 - **"I need this project's specific behaviour."** Then it is not reusable and must not be depended on. If
   a JCodeBuddy tool genuinely needs to know how *a* project generates code, the right shape is for the
   project to hand the tool an implementation of a published interface — an SPI boundary — rather than for
@@ -332,8 +338,9 @@ satisfiable because the artifact was being installed. Either one alone would hav
 
 - [`project-automation/README.md`](project-automation/README.md) — the module's own statement of what it
   is and is not.
-- [`jcodebuddy/jcodebuddy-codegen-api/pom.xml`](jcodebuddy/jcodebuddy-codegen-api/pom.xml) — the promotion that made the rule
-  hold, and the reasoning written at the point it applies.
+- [`jcodebuddy/jcodebuddy-core/pom.xml`](jcodebuddy/jcodebuddy-core/pom.xml) — the engine, and since step
+  3.0i the home of the five promoted types; the SPI's own POM was where the promotion's reasoning was written,
+  and it is in `git log` with the module it belonged to.
 - [`doc/architecture/decisions-watch/DEC-W003.md`](doc/architecture/decisions-watch/DEC-W003.md) —
   the decision record. It covers the *runtime dependency* half of the rule; this section adds the
   *publishing* half, which no decision record stated and which was therefore the half that failed.

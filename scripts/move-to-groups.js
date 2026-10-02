@@ -51,7 +51,11 @@ const MOVES = [
   { group: 'hipster-entity', from: 'hipster-entity-example', to: 'hipster-entity/hipster-entity-example' },
   { group: 'hipster-entity', from: 'hipster-entity-test', to: 'hipster-entity/hipster-entity-test' },
   { group: 'jcodebuddy', from: 'jcodebuddy-core', to: 'jcodebuddy/jcodebuddy-core' },
-  { group: 'jcodebuddy', from: 'jcodebuddy-codegen-api', to: 'jcodebuddy/jcodebuddy-codegen-api' },
+  // `jcodebuddy-codegen-api` → `jcodebuddy/jcodebuddy-codegen-api` was here, and step 3.0i deleted the module
+  // (its five types are the engine's now, DEC-037 decision 2). The entry is removed rather than kept as a
+  // record: step 4 below rewrites bare `jcodebuddy-codegen-api/` paths in text, and an entry that rewrites
+  // references to a directory nobody can open is a script that edits documentation wrongly. The move itself is
+  // in this file's git history.
   { group: 'jcodebuddy', from: 'jwa-builder', to: 'jcodebuddy/jwa-builder' },
   { group: 'jcodebuddy', from: 'jwa-builder-api', to: 'jcodebuddy/jwa-builder-api' },
   { group: 'jcodebuddy', from: 'metadata-server', to: 'jcodebuddy/metadata-server' },

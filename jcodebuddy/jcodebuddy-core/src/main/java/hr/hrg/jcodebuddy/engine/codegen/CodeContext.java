@@ -1,8 +1,9 @@
-package hr.hrg.jcodebuddy.codegen;
+package hr.hrg.jcodebuddy.engine.codegen;
 
 import java.nio.file.Path;
 
 import hr.hrg.jcodebuddy.engine.meta.SourceMetadata;
+import hr.hrg.jcodebuddy.engine.query.TypeResolver;
 
 /**
  * Where a generator is being asked to work, and what it is allowed to know about the place.
@@ -11,8 +12,9 @@ import hr.hrg.jcodebuddy.engine.meta.SourceMetadata;
  * actually has — which file, which line, how to indent, what types are in scope — and deliberately
  * answers no others: a generator that wants to read a database, a configuration file or another
  * project's sources has nothing here to do it with. That restraint is the same boundary JCodeBuddy
- * draws everywhere else, and it is why this type can live in a shared API rather than in the project
- * whose files are being written.
+ * draws everywhere else, and it is why this type belongs to the engine, which publishes the SPI, rather
+ * than to the project whose files are being written — a generator implements it without depending on
+ * anybody's `project-automation` (step 3.0i, DEC-037 decision 2).
  *
  * <p>{@link #getTypeResolver()} is optional in practice — a generator that only rewrites syntax can
  * ignore it — and {@link #getSourceMetadata()} may be {@code null} for a file no metadata pass has

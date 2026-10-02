@@ -80,12 +80,11 @@
         <module>hipster-entity/hipster-entity-jackson</module>
         <module>hipster-entity/hipster-entity-test</module>
         <module>hipster-entity/hipster-entity-tooling</module>
-        <!-- The generator SPI: what a code generator is, the context it is handed, and how it resolves
-             a type. A leaf library, and the reason it exists is a rule rather than a feature — a tool
-             that generates code must not have to depend on anybody's `project-automation` to do it.
-             See the module's POM and AGENTS.md § 1. -->
+        <!-- The engine, and since 2026-10-03 also the home of the generator SPI (step 3.0i,
+             DEC-037 decision 2): what a code generator is, the context it is handed, and how it
+             resolves a type. The reason it is a library rather than a project's own is a rule, not a
+             feature — a tool that generates code must not depend on anybody's `project-automation`. -->
         <module>jcodebuddy/jcodebuddy-core</module>
-        <module>jcodebuddy/jcodebuddy-codegen-api</module>
         <module>jcodebuddy/jcodebuddy-watch-tools</module>
         <module>project-automation</module>
         <module>hipster-ioc/hipster-ioc-api</module>
@@ -368,11 +367,6 @@
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>jcodebuddy-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>hr.hrg.jcodebuddy</groupId>
-                <artifactId>jcodebuddy-codegen-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!--

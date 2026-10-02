@@ -110,7 +110,10 @@ class ProjectAutomationIsolationTest {
                 "no other project may depend on a project-automation module (AGENTS.md § 1.1). If a second "
                         + "place needs something that lives in one, the reusable part was never "
                         + "project-specific: promote it to a JCodeBuddy library and let both depend on "
-                        + "that. jcodebuddy-codegen-api is the precedent.");
+                        + "that. The generator SPI is the precedent, and it shows both halves — promoted "
+                        + "out of project-automation when a watch library needed it, then dissolved into "
+                        + "the engine (jcodebuddy-core, step 3.0i) once the engine existed, because where a "
+                        + "promoted type lives is a question a promotion answers only the first time.");
     }
 
     @Test

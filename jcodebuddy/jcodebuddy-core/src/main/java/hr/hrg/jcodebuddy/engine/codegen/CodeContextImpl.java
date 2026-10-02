@@ -1,8 +1,9 @@
-package hr.hrg.jcodebuddy.codegen;
+package hr.hrg.jcodebuddy.engine.codegen;
 
 import java.nio.file.Path;
 
 import hr.hrg.jcodebuddy.engine.meta.SourceMetadata;
+import hr.hrg.jcodebuddy.engine.query.TypeResolver;
 
 /**
  * A {@link CodeContext} as a value, for tests and for a caller that has no framework around it.

@@ -2,8 +2,8 @@ package hr.hrg.hipster.ioc.tooling;
 
 import hr.hrg.hipster.entity.tooling.CooperativeCodegen;
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
-import hr.hrg.jcodebuddy.codegen.CodeContext;
-import hr.hrg.jcodebuddy.codegen.CodeGenerator;
+import hr.hrg.jcodebuddy.engine.codegen.CodeContext;
+import hr.hrg.jcodebuddy.engine.codegen.CodeGenerator;
 
 import java.io.IOException;
 import java.nio.file.Files;

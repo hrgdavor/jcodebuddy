@@ -27,8 +27,9 @@
 > what, what is assignable) to decide how beans are wired, and no single file contains them — so it cannot
 > work file by file, and it does not. **Extracting metadata is not its job:** it *consumes* the project's
 > metadata to produce IoC code, while the metadata layer (the class index with its checksums, the cache,
-> the arena-backed index) reads and indexes sources. The seam for that already exists in
-> `jcodebuddy-codegen-api` — `TypeResolver`/`TypeDefinition` — and is empty: `TypeDefinition` carries a
+> the arena-backed index) reads and indexes sources. The seam for that exists in the metadata engine —
+> `hr.hrg.jcodebuddy.engine.query`'s `TypeResolver`/`TypeDefinition`, in `jcodebuddy-core` since step **3.0i**
+> dissolved the SPI's own module into it — and is empty: `TypeDefinition` carries a
 > type's fields and **no relations**, and nothing but `EmptyTypeResolver` implements `TypeResolver`. The
 > plan schedules the contract for it as steps **3.0a–3.0k**, which since 2026-10-02 means one metadata
 > engine in `jcodebuddy-core` ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md)) with
