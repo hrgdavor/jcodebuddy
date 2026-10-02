@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jcodebuddy-watch-tools</artifactId>
+    <name>JCodeBuddy Watch Tools</name>
+    <description>
+        JCodeBuddy's code actions for the watcher: tools a launcher registers into java-watch-agent's
+        ToolRegistry. It exists because the watcher must not know about JCodeBuddy — `java-watch*` depends on
+        no Jackson, no OpenRewrite and nothing else from this workspace (DEC-038's amendment, plan step 3.0s)
+        — while these tools are JCodeBuddy work: they drive `jwa-builder` to read a Java type out of source
+        and complete it.
+    </description>
+
+    <!--
+        WHY THIS MODULE EXISTS, AND WHY IT IS NOT `project-automation`.
+
+        The obvious home for a bridge between the watcher's ActionTool port and jwa-builder is
+        `project-automation`, which already depends on both — and it is **forbidden**: no other module may
+        depend on a `project-automation` (AGENTS.md § 1.1), and a launcher would have to, in order to register
+        a tool. So the bridge is a small library instead, which the app may depend on.
+
+        The direction is the honest one: this module depends on `java-watch-agent` (for the ActionTool port),
+        never the other way round. The watcher knows a directory changed; this module knows what to do about a
+        Java file.
+    -->
+
+    <dependencies>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>java-watch-agent</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>java-watch-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jwa-builder</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jwa-builder-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+    </dependencies>
+</project>

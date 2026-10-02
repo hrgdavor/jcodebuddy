@@ -37,7 +37,6 @@ public class WatchAgent {
         globalRegistry.register(new AccessorGenerator("setters", false, true));
         globalRegistry.register(new AccessorGenerator("accessors", true, true));
         globalRegistry.register(new ConstructorGenerator());
-        globalRegistry.register(new RecordBuilderGenerator());
         if (config.getToolSets().isEmpty()) {
             AgentConfig.ToolSet defaultSet = new AgentConfig.ToolSet();
             defaultSet.setName("java");

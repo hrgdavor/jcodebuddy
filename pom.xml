@@ -86,6 +86,7 @@
              See the module's POM and AGENTS.md § 1. -->
         <module>jcodebuddy/jcodebuddy-core</module>
         <module>jcodebuddy/jcodebuddy-codegen-api</module>
+        <module>jcodebuddy/jcodebuddy-watch-tools</module>
         <module>project-automation</module>
         <module>hipster-ioc/hipster-ioc-api</module>
         <module>hipster-ioc/hipster-ioc-tooling</module>

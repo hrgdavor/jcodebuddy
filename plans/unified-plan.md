@@ -1173,6 +1173,29 @@ so the next pass does not re-derive it):
    Jackson dependency there is the **wire format between this server and its clients**. Hand-rolling a small
    reader for the flat shapes actually used is feasible; changing the format is a decision about clients. This
    is the slice to decide before writing code.
+**Progress 2026-10-03, slice 3 (started, not finished) — the library exists; the `jwa-builder` boundary is a
+*family*, not one class.** New module **`jcodebuddy/jcodebuddy-watch-tools`** (a small library the app may
+depend on, per the maintainer's direction), depending on `java-watch-agent` — never the other way round — with
+`RecordBuilderGenerator` as its first tool. `java-watch-agent` also lost four `Test*.java` files that were
+manual-test scratch living in a library's `src/main/java`. Both modules build (`BUILD SUCCESS`).
+
+**What the compiler then showed, which the recon had missed twice:** the agent's *other* tools —
+`AccessorGenerator`, `ConstructorGenerator`, `BuilderGenerator` and `ContextualAnalyzer` — use
+`ClassMemberProcessor`, which is also `jwa-builder`'s. So the jwa-builder dependency is not one bridge class
+but the agent's **Java-codegen tool family**, and the honest fix is one of:
+
+- **move the family** (`AccessorGenerator`, `ConstructorGenerator`, `BuilderGenerator`, `ContextualAnalyzer`,
+  and anything else that reads Java) into `jcodebuddy-watch-tools`, leaving the watcher with its own port,
+  the server, the audit and the non-Java tools. This is the coherent reading: *what to do about a Java file*
+  is JCodeBuddy's work, and the watcher only knows a directory changed; or
+- **invert a port**: the agent defines "read a Java member out of source" and the library implements it,
+  which keeps the tools in the agent but means the watcher owns an interface only a JCodeBuddy module can
+  implement.
+
+The agent's POM was restored so the tree stays green, and the check is back to 8; this slice's value is the
+library and the moved tool, not a lower count. The next pass picks one of the two options above and moves the
+family in one go, because moving half of it is what the compiler rejected here.
+
 3. **`jwa-builder*` — the bridge needs a *library* home, and that is a decision.** `WatchAgent` registers
    `new RecordBuilderGenerator()` (an `ActionTool` that drives `BuilderTransformationEngine`), and
    `TestDiscovery`/`TestStateSync` are `@GenerateBuilder` demos. The obvious home — `project-automation`,
