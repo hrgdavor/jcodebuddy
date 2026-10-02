@@ -30,8 +30,10 @@
 > the arena-backed index) reads and indexes sources. The seam for that already exists in
 > `jcodebuddy-codegen-api` — `TypeResolver`/`TypeDefinition` — and is empty: `TypeDefinition` carries a
 > type's fields and **no relations**, and nothing but `EmptyTypeResolver` implements `TypeResolver`. The
-> plan schedules the contract for it as steps **3.0a–3.0d**, and moving this generator onto it as
-> **3.0e**. The prototype's file-scoped `CodeGenerator` implementation is a shortcut that 3.0e removes.
+> plan schedules the contract for it as steps **3.0a–3.0k**, which since 2026-10-02 means one metadata
+> engine in `jcodebuddy-core` ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md)) with
+> this generator as one of its consumers, and moving this generator onto it as
+> **3.0e/3.0j**. The prototype's file-scoped `CodeGenerator` implementation is a shortcut that 3.0e removes.
 >
 > **What the prototype does not do, stated rather than discovered:** no cross-context wiring (a context's
 > `dependencies()` are recorded in the graph and never used to build anything), no `init*` methods, no

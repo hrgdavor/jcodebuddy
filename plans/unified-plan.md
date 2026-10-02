@@ -65,7 +65,7 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
    offered to every file, one at a time, in any order, from a saved buffer with no tree around it. A
    **project-scoped** generator needs the project's *type relations* — who extends whom, who implements
    what, what is assignable — which no single file contains, so its input is the project's **metadata**
-   (the type index, 3.0a–3.0d) and never a lone `CodeContext`: it is run as its own pass and **never
+   (the engine's metadata, DEC-037 and steps 3.0a–3.0k) and never a lone `CodeContext`: it is run as its own pass and **never
    offered per-file** by a caller that believes it is asking about one file.
 
    Two clarifications that using this rule forced, because the earlier phrasing of it was wrong:
@@ -86,7 +86,7 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
    never inferred as absent**. The tree shows both kinds: the entity generator takes a source root and a
    package list and writes Java plus metadata JSON (project-scoped by construction, no per-file entry point
    to misuse), while `IocContextGenerator` wears the file-scoped SPI and reads whatever sits beside the
-   context. Enforcement: steps 3.0a–3.0e and 7.8.
+   context. Enforcement: steps 3.0a–3.0k (the engine, DEC-037) and 7.8.
 9. **Any UI built uses `jsx6`, from a local checkout whose own `AGENTS.md` is the authority.** The
    instruction and its download directions are kept verbatim in
    [`AGENTS.md` § 2](../AGENTS.md) (the jsx6 bullet) — clone <https://github.com/hrgdavor/jsx6> into a
@@ -122,7 +122,7 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 | [`doc-hipster-entity/architecture/decisions/DEC-021.md`](../doc-hipster-entity/architecture/decisions/DEC-021.md) § 6 | step 1.1 — `enabled: false` | note removed when the step lands |
 | [`doc-hipster-entity/architecture/decisions/DEC-W008.md`](../doc/architecture/decisions-watch/DEC-W008.md), the `.kilo` metadata-server plan | steps 1.2–1.4 | closed into steps |
 | the `.kilo` metadata-arena plan | steps 2.1–2.2 | closed into steps |
-| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) | steps 3.0a–3.0e (the metadata contract it must consume, and moving onto it); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | the prototype is delivered; Phase 3's banner says what "prototyping" means, why the rest waits, and that hipster-ioc is project-wide and does not extract metadata |
+| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md), and [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) | steps 3.0a–3.0k (the one metadata engine in `jcodebuddy-core`, then moving this generator onto it **as one consumer**); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | the prototype is delivered; Phase 3's banner says what "prototyping" means, why the rest waits, that hipster-ioc is project-wide and does not extract metadata, and that the engine comes before the consumers |
 | [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md) | steps 4.1–4.4 | Phase 9 residue + Phase 13 closed |
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md) | steps 5.1–5.3 | Phase 6 and Q3/Q5 closed |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md) | steps 5.4, 8.2 | Phase 5 + observations closed |
@@ -475,11 +475,13 @@ answer — is written into DEC-W009's implementation note.
 > factories rather than an error — step 3.2).
 >
 > **Extracting metadata is not hipster-ioc's job.** hipster-ioc *consumes* metadata to produce IoC code.
-> Extraction, caching and indexing belong to the metadata side, which already has most of the pieces:
-> [`metadata-server`](../metadata-server)'s providers and RPC/MCP surfaces, the **class index**
-> (`hipster-entity-tooling`'s `ClassIndex`/`ClassRecord`, DEC-029) with per-file checksums
-> (`ContentHash`), and [`metadata-arena`](../metadata-arena) for index storage. What is missing is the
-> **contract between them** — steps 3.0a–3.0d below, which come *before* any consumer work.
+> Extraction, caching and indexing belong to the metadata side, and since 2026-10-02 that side is **one
+> engine in `jcodebuddy-core`** ([DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md)) rather
+> than the four modules that hold the pieces today: [`metadata-server`](../metadata-server)'s providers and
+> RPC/MCP surfaces, the **class index** (`hipster-entity-tooling`'s `ClassIndex`/`ClassRecord`, DEC-029) with
+> per-file checksums (`ContentHash`), [`metadata-arena`](../metadata-arena) for index storage, and
+> `java-watch-core` for the watch loop. What is missing is the **engine and its contract** — steps 3.0a–3.0k
+> below, which come *before* any consumer work, because a consumer migrating onto a moving model moves twice.
 >
 > > **This phase is not a delivery, and its steps are not a contract.** hipster-ioc is still in
 > > **prototyping**: the point of the work here is to *find the shape* of the generated code, and that shape
@@ -502,46 +504,192 @@ answer — is written into DEC-W009's implementation note.
 > >   to `Accepted` (or is superseded), and the steps below become ordinary steps with real gates. Until
 > >   then a `[TBD]` row is a *known* item, not a forgotten one — an empty cell would be the latter.
 >
-> **Order in this phase:** 3.0a–3.0d define the metadata contract the consumer needs (scheduled — they are
-> decisions about a shared layer, not about hipster-ioc's output); 3.0e moves the prototype onto it
-> (shape-defining work); 3.1–3.3 are the prototype already delivered; 3.4–3.11 are `[TBD]`, and each one's
-> "waits on" now names the metadata piece it needs where that is the real blocker.
+> **Order in this phase:** 3.0a settles the engine decision's open points; 3.0b–3.0e are the metadata work
+> this phase always needed (relations, freshness, one resolver, moving the prototype onto it); **3.0f–3.0k are
+> the engine itself** ([DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md): one metadata engine
+> in `jcodebuddy-core` as the backbone for codegen, analysis, reporting, the watch loop and an LSP sidecar);
+> 3.1–3.3 are the prototype already delivered; 3.4–3.11 are `[TBD]`, and each one's "waits on" now names the
+> metadata piece it needs where that is the real blocker.
 >
-> The step numbers `3.0a`–`3.0e` say *before 3.1* deliberately: this plan renumbers nothing, and these
+> **The engine (DEC-037) reframes what "the metadata contract" means here.** It is no longer only the seam a
+> generator reads: parsing, the model, the indexes (with relations), search and the watch loop that keeps them
+> fresh and fires events are **one library in `jcodebuddy-core`**, and every other module is a consumer or a
+> transport — `jcodebuddy-codegen-api` dissolves into it. So 3.0f–3.0k precede nothing in this phase but are
+> the reason 3.0b–3.0e are worth doing once, in the right place: build the engine, then move consumers onto it
+> rather than each consumer growing its own path. DEC-037 is `Proposed` until its three open points are
+> settled by 3.0a.
+>
+> The step numbers `3.0a`–`3.0k` say *before 3.1* deliberately: this plan renumbers nothing, and these
 > steps must land before the consumer ones to be worth anything.
 
-### 3.0a — The metadata contract generators consume (ADR first)
+### 3.0a — Settle the engine decision's open points (ADR first)
+**Who:** agent + maintainer · **Size:** S–M
+
+[DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) records the direction: one metadata engine
+in `jcodebuddy-core` as the backbone for codegen, code analysis, code reporting, the watch loop and an LSP
+sidecar; `jcodebuddy-codegen-api` dissolves into it; consumers never keep a private metadata path. It is
+`Proposed` because three points are the maintainer's call and each changes code:
+
+1. **What stays a leaf** — recommendation: the marker vocabulary and its parser (`GeneratedCodeMarkers`,
+   `GeneratedCodeParser`, `GeneratedBlock`) move to a small leaf module, because the tools that read generated
+   regions must not resolve OpenRewrite, which `jcodebuddy-core` gains the moment it is the engine. The
+   alternative keeps the three types in the engine and gives that case the dependency the leaf exists to
+   avoid.
+2. **How far `metadata-server` is absorbed** — recommendation: keep it and re-point its providers at the
+   engine, so DEC-W006–W009's serving shapes survive while their ownership of the model does not.
+3. **What happens to `java-watch-core`'s watcher and checksums** — recommendation: it becomes the engine's
+   freshness implementation (the engine owns the contract), because DEC-W006's cache and DEC-W009's rebuild
+   protocol are exactly the freshness semantics the engine must publish.
+
+**Do:** settle the three, flip DEC-037 from `Proposed` to `Accepted` (or amend it where the answer differs),
+and update the records the answers change — [`module-map.md`](../doc/architecture/module-map.md) (which
+today states `jcodebuddy-core`'s leaf property as its reason to exist, and the gate's own comment in
+[`scripts/lib/gate.js`](../scripts/lib/gate.js) names it), DEC-029, and DEC-W006/W008/W009. Also record the
+fact this step starts from, because it shapes every later step: **the recorded gate covers none of the
+modules the migration touches** (`GATE_MODULES` is `jcodebuddy-core` plus the six `hipster-entity` modules),
+so each migration step carries its own build/test evidence until 3.0k grows the gate.
+
+**Gate:** DEC-037 is `Accepted` with every open point answered in it; the amended records are consistent with
+the answer; `LINKS` green. (No code gate: this step is a decision.)
+
+**Done when:** 3.0f can start without a second decision — the engine's home, its leaf exceptions and its
+consumers are all written down.
+
+### 3.0f — The engine's skeleton in `jcodebuddy-core`, and the model it carries
+**Who:** agent · **Size:** L
+
+The generator-facing seam is **empty and too small**: `jcodebuddy-codegen-api`'s
+[`TypeResolver`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeResolver.java)
+(`resolve(fqn)`) has no implementation but `EmptyTypeResolver`, and
+[`TypeDefinition`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeDefinition.java)
+(qualified name, simple name, fields, field types) carries **no relations**, so it cannot answer the question
+hipster-ioc actually has. That is a symptom: the model a consumer needs is spread across the tooling module
+and two watch modules, and the SPI lives in a fifth.
+
+**Do:** make `jcodebuddy-core` the engine's home and give it the model — one type with its kind, modifiers,
+members, declaration file and checksum; relations expressed rather than implied; a *missing* answer reported,
+never an inferred absence (the lesson from step 3.2 and `TypeChangeConflictResolver`'s `UNRESOLVED_WARNING`);
+no file handles, no class loader, no second parser — the engine reads through DEC-030's one representation.
+Move the representation and the parse path out of `hipster-entity-tooling` into it (and the marker
+vocabulary out to the leaf 3.0a chose, if that is the answer), keep `hipster-entity-tooling` as a consumer,
+and leave the entity pass working: this step moves code, it does not change what a generator emits.
+
+**Gate:** the modules this touches are **outside the recorded gate** (DEC-037's second fact), so this step
+publishes its own evidence: `MODULE` green for `jcodebuddy-core,jcodebuddy-core-leaf?,hipster-entity-tooling`
+plus an explicit build of every module that referenced what moved, and the entity pass regenerating the
+committed example byte-identically.
+
+**Done when:** one module holds the model and the parse path, `TypeDefinition` (or its successor) can express
+a relation, and nothing outside the engine parses Java for metadata.
+
+### 3.0g — Freshness: the watch loop, its events and its invalidation
+**Who:** agent · **Size:** L
+
+A consumer that reads stale metadata is the failure this whole layer exists to prevent, and today freshness
+lives in `java-watch-core` (the watcher, `ChecksumDatabase`, `ChangeSet`) and in `metadata-server`
+(`WatchMetadataProvider`) while the model lives somewhere else entirely.
+
+**Do:** the engine publishes the freshness contract — what a subscriber observes (**events**, with enough to
+act: which file, which row, which relation, what kind of change), what is cached, and what invalidates it. A
+row depends on the file that declares it **and on the types it names**, so an edit to `B` can stale `A`'s row
+even though `A.java` was untouched; a rename, a delete and a new file each have a defined effect. Use 3.0a's
+answer about `java-watch-core` (its watcher and checksums become the implementation beneath this contract, or
+move in), and settle 3.0c with it rather than separately.
+
+**Gate:** own evidence (outside the recorded gate) plus a test for the three transitions that matter: an edit
+invalidates its own row; an edit that changes a relation invalidates the *dependent* rows; a deleted file
+removes its row and the rows that named it (or marks them unresolved, as the contract says). And one test
+that a subscriber actually receives an event — a freshness contract nobody can observe is a cache.
+
+**Done when:** "is this metadata safe to read?" has a mechanical answer, and a consumer can subscribe instead
+of watching files itself.
+
+### 3.0h — Search: the queries every consumer asks
 **Who:** agent · **Size:** M
 
-The generator-facing seam already exists and is **empty**: `jcodebuddy-codegen-api`'s
-[`TypeResolver`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeResolver.java)
-(`resolve(fqn)`) and
-[`TypeDefinition`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeDefinition.java)
-(qualified name, simple name, fields, field types). A grep for `implements TypeResolver` finds only
-`EmptyTypeResolver` — the interface says the right thing ("a metadata pass resolves types from the sources
-it has read, a watch agent from the editor's model, a test from a map") and nothing implements it. And
-`TypeDefinition` carries **no relations**, so it cannot answer the question hipster-ioc actually has: is
-`Gadget` assignable to `Widget`, and what implements `Widget`.
+Codegen, analysis, reporting and an LSP sidecar ask the same questions in different words, and today each
+answers them its own way (`ClassIndex` lookups, sibling-file reads, classpath resolution in the merge tool).
 
-**Do:** write the decision first (this plan's own rule: an ADR before the code that depends on it) covering
-at least: which questions a generator may ask the project model — resolve a type; its kind and modifiers;
-its supertypes/interfaces; its subtypes/implementors; assignability — and in which direction the indexes
-are stored; what a generator is *not* given (no file handles, no class loader: `TypeDefinition`'s
-"snapshot, not a handle" property is the one to keep); whether the seam is `TypeResolver` extended, a richer
-`TypeDefinition`, or a separate query interface beside it; and how a *missing* answer is reported (the
-prototype's lesson: an unresolvable type must be a diagnostic, never an inferred absence — see
-`TypeChangeConflictResolver`'s `UNRESOLVED_WARNING` for the shape of that rule already in the tree).
+**Do:** publish the engine's query surface over the model and the indexes: by fully qualified name; by kind
+and modifier; by relation (supertype, subtype, implementor — in the direction the index stores and the
+direction a consumer asks); by annotation; by member; by package. Say what a query returns when the metadata
+is *unavailable* (beyond the sources the engine was given) and keep the distinction between "not yet indexed"
+and "does not exist" visible, because collapsing them is what produces confident wrong answers.
 
-**Gate:** the ADR is registered in
-[`decisions/README.md`](../doc-hipster-entity/architecture/decisions/README.md); the contract covers the
-entity generator's existing needs as well as hipster-ioc's (so it is not a single consumer's private
-shape); and every question above has an answer rather than a "later".
+**Gate:** own evidence, with tests per query against a fixture whose relations cross a module boundary (the
+case a per-module index cannot answer), and a test that an unknown name is distinguishable from an
+unindexed one.
 
-**Done when:** `TypeResolver` has a documented implementation contract and `TypeDefinition` (or its
-successor) can express a relation, not only a field list.
+**Done when:** a consumer can ask a relation question and get one answer, from one place.
+
+### 3.0i — Dissolve `jcodebuddy-codegen-api` into the engine
+**Who:** agent · **Size:** M
+
+DEC-037 decision 2: the five types split by what they are. `TypeResolver`/`TypeDefinition` are engine
+metadata queries; `CodeGenerator`/`CodeContext`/`CodeContextImpl` are the generator SPI the engine publishes;
+the `SourceMetadata` edge (the reason codegen-api depends on `hipster-entity-tooling` today, and the reason the
+SPI cannot be implemented next to the index it reads) disappears with the move.
+
+**Do:** move the SPI into the engine, delete the module, and update every consumer's POM and imports —
+`project-automation` ([`ActionToolAdapter`](../java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ActionToolAdapter.java)
+and the generator implementations), `java-watch-agent`, `hipster-ioc-tooling`. Update
+[`module-map.md`](../doc/architecture/module-map.md) (which states the five-type leaf property) and the places
+that cite codegen-api as the precedent for promoting a shared type out of `project-automation`
+([`ProjectAutomationIsolationTest`](../hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ProjectAutomationIsolationTest.java)
+names it in a message). **`project-automation` stays private** — the SPI moving to the engine must not become
+a reason for anyone to depend on a project's assistant.
+
+**Gate:** own evidence: `MODULE` green for every module that moved to the new coordinates, the engine's own
+tests green, and no `import hr.hrg.jcodebuddy.codegen.` left anywhere (a grep is the check that the move is
+complete).
+
+**Done when:** the SPI has one home, the module is gone, and nothing depends on a project's assistant to
+implement a generator.
+
+### 3.0j — Move the remaining consumers onto the engine
+**Who:** agent · **Size:** L
+
+`metadata-server` (transport and providers), the dev-time passes (`project-automation`), the watch tools
+(`java-watch-agent`), reporting (the Bun renderers that read the engine's JSON) and the future LSP sidecar are
+all readers of the same facts; none of them may keep a path of its own.
+
+**Do:** re-point each consumer at the engine, in the order 3.0a's answers allow, deleting the private paths as
+they go (a consumer's own cache, its own sibling-file read, its own classpath resolution for types the engine
+can answer). `metadata-server` keeps its transports and its serving shapes (DEC-W006–W009) and loses its
+ownership of the model. Each consumer that moves gets its own commit, because a move that breaks it must be
+visible as that move.
+
+**Gate:** per consumer: its own build/test green plus the engine's contract test that it reads the engine
+rather than a file (for the passes: the same regeneration output as before the move; for the server: the
+existing RPC tests unchanged).
+
+**Done when:** no consumer has a metadata path of its own — one model, one index, one freshness contract, many
+readers.
+
+### 3.0k — Grow the recorded gate to cover the engine's contract
+**Who:** agent · **Size:** S
+
+DEC-037's second fact: `GATE_MODULES` is `jcodebuddy-core` plus the six `hipster-entity` modules, so every
+step above lands in modules **no gate run covers**. The gate's own comment says why being in it is a decision
+rather than an accident, which is the reason this is a step and not a line of configuration.
+
+**Do:** add the modules that now carry the engine's contract to
+[`GATE_MODULES`](../scripts/lib/gate.js) — the engine's consumers as they finish migrating — and update
+`GateContractTest`'s recorded list in the same change, since it asserts the constants are still what the notes
+recorded. State the cost honestly: a larger gate is a slower gate, so add the modules that hold the
+*contract*, not every module that happens to compile.
+
+**Gate:** `GATE` green with the enlarged set, `GateContractTest` green, and the plan's gate line updated.
+
+**Done when:** a later change that breaks the engine or a migrated consumer fails `bun scripts/mvn-jdk25.js`
+rather than being discovered by hand.
 
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
+
+> **Under DEC-037 this is engine work.** The relations belong to the model the engine owns (3.0f moves it into
+> `jcodebuddy-core`); until that move this step lands wherever the index lives then, and its gate is stated in
+> terms of the index's own module so it stays true either way.
 
 DEC-029's class index is real and tested: `classes.json`, one row per type, keyed by FQN, with the file's
 path, its content checksum, the checksum instant, size, and the type's kind and modifiers
@@ -566,6 +714,11 @@ without parsing a file.
 ### 3.0c — The cache: what is cached, and what invalidates it
 **Who:** agent · **Size:** M
 
+> **Under DEC-037 this is the other half of 3.0g**, which is where it is implemented and where its answer is
+> recorded: the engine publishes one freshness contract — change detection, invalidation, events — rather
+> than a cache per module. Read this step's questions as the questions that contract must answer, and settle
+> them once, in 3.0g, instead of here.
+
 The checksum machinery exists (`ContentHash`/`Wyhash64`, the watch cache behind
 `WatchMetadataProvider`, the step 1.3 work) and it answers "has *this file* changed". The relations from
 3.0b introduce a second question the current cache cannot answer: a row for `A` depends on the file
@@ -589,6 +742,11 @@ and the rows that named it (or marks them unresolved, whichever the decision say
 ### 3.0d — One implementation of `TypeResolver` over the index
 **Who:** agent · **Size:** M
 
+> **Under DEC-037 this is the engine's own resolver**, because the SPI and the index end up in one module
+> (3.0f/3.0i) — which is what makes an implementation possible at all: it cannot sit next to the index it
+> reads while the SPI lives above it. If 3.0f lands first, this step is a thin layer over 3.0h's queries
+> rather than a second implementation.
+
 The seam from 3.0a needs at least one real implementation before any consumer can be written against it,
 and the honest one is the metadata pass: index first, sources only when the index cannot answer.
 
@@ -605,6 +763,10 @@ file parsing of its own.
 
 ### 3.0e — Move hipster-ioc onto the metadata contract
 **Who:** agent · **Size:** M · *(shape-defining)*
+
+> **Under DEC-037 this is one consumer of 3.0j.** The generator becomes a reader of the engine like every
+> other consumer, which is the point of moving the engine first: hipster-ioc's own step should not have to
+> negotiate what the model is.
 
 The prototype implements the per-file `CodeGenerator` SPI and reads the sibling module interface itself.
 Both go: hipster-ioc becomes a project-wide generator handed the metadata (3.0a–3.0d) and a context to
@@ -1550,11 +1712,17 @@ start)
 | 2.1 | metadata-arena unit tests | agent | M | `[x]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[x]` |
-| 3.0a | The metadata contract generators consume (ADR first) | agent | M | `[ ]` — prerequisite of every consumer step |
+| 3.0a | Settle the engine decision's open points (DEC-037, ADR first) | agent + maintainer | S–M | `[ ]` — prerequisite of every engine and consumer step |
 | 3.0b | Class relations (supertypes/interfaces + reverse) in the class index | agent | M | `[ ]` |
 | 3.0c | The cache: what is cached, and what invalidates it | agent | M | `[ ]` |
 | 3.0d | One implementation of `TypeResolver` over the index | agent | M | `[ ]` |
 | 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |
+| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[ ]` |
+| 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[ ]` |
+| 3.0h | Search: the queries every consumer asks | agent | M | `[ ]` |
+| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[ ]` |
+| 3.0j | Move the remaining consumers onto the engine | agent | L | `[ ]` |
+| 3.0k | Grow the recorded gate to cover the engine's contract | agent | S | `[ ]` |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |

@@ -107,6 +107,15 @@ These modules depend on Layer 1 and/or Layer 2:
   `SourceMetadata` alone, which is the one type its `CodeContext` carries.
 
 ### `jcodebuddy-core` — Generated-Code Markers and Their Parser, and a Leaf
+
+> **Where this is going ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md), `Proposed`):**
+> `jcodebuddy-core` is proposed as the home of the one metadata engine — parsing, the metadata model, the
+> indexes with their relations, search, and the watch loop that keeps them fresh and fires events — which
+> means it gains OpenRewrite and Jackson, and the leaf property described below has to be re-established
+> deliberately rather than quietly given up (the recommendation is that the marker vocabulary and its parser
+> move to a leaf of their own). The bullets below describe the tree as it is **today**; read DEC-037 before
+> changing what this module depends on.
+
 - Holds `GeneratedCodeMarkers` (the marker vocabulary: how a generator spells one, and how a parser
   recognises one), `GeneratedCodeParser` (the parser that turns markers into line spans) and
   `GeneratedBlock` (a span).

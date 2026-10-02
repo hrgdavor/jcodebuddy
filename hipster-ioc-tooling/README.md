@@ -18,8 +18,9 @@ The decision it implements is [DEC-036](../doc-hipster-entity/architecture/decis
 > the arena-backed index) reads and indexes sources. This prototype instead implements the *file-scoped*
 > `CodeGenerator` SPI and reads the sibling module interface itself. That is a category error kept as a
 > shortcut, and it is removed rather than re-labelled by
-> [the plan's step 3.0e](../plans/unified-plan.md), which lands on top of the metadata contract in steps
-> 3.0a–3.0d. Until then, `bun scripts/ioc-gen.js` is the supported entry point — do not offer this
+> [the plan's step 3.0e](../plans/unified-plan.md), which lands on top of the one metadata engine
+> [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) puts in `jcodebuddy-core` (steps
+> 3.0a–3.0k, of which this generator is one consumer). Until then, `bun scripts/ioc-gen.js` is the supported entry point — do not offer this
 > generator to an isolated file.
 
 ## What it does
