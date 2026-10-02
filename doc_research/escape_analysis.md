@@ -87,13 +87,11 @@ Monomorphic          Polymorphic (3+ types)
 
 ```
 
-| Pattern Variant | Inlining Probability | Escape Analysis Success | Performance Trade-Off |
-| --- | --- | --- | --- |
-| **Direct Record** | Extremely High | High (`NoEscape`) | Best performance; zero allocation overhead. |
-| **Builder Pattern** | High | High (`NoEscape`) | Eliminates builder instance overhead *if* builder methods inline cleanly. |
-| **Interface Abstraction** | Monomorphic: High<br>
-
-<br>Polymorphic: Low | Depends on target call-site profile | Virtual dispatch overhead can block inlining and force heap allocation. |
+| Pattern Variant           | Inlining Probability                      | Escape Analysis Success             | Performance Trade-Off                                                     |
+| ------------------------- | ----------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------- |
+| **Direct Record**         | Extremely High                            | High (`NoEscape`)                   | Best performance; zero allocation overhead.                               |
+| **Builder Pattern**       | High                                      | High (`NoEscape`)                   | Eliminates builder instance overhead *if* builder methods inline cleanly. |
+| **Interface Abstraction** | Monomorphic: High<br><br>Polymorphic: Low | Depends on target call-site profile | Virtual dispatch overhead can block inlining and force heap allocation.   |
 
 ---
 

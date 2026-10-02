@@ -19,12 +19,12 @@
 
 Three `AGENTS.md` files apply, and the **nearest one wins** for what it states:
 
-| File | Applies to |
-| ---- | ---------- |
-| **this file** (repository root) | everything in this checkout |
-| [`doc/AGENTS.md`](doc/AGENTS.md) | changing JCodeBuddy itself — a generator, a library module, the gate, the entity tooling |
-| [`proto/AGENTS.md`](proto/AGENTS.md) | working in the `proto/` area, on a driver project |
-| `proto/<project>/AGENTS.md` | **one** driver project, in that project's own repository |
+| File                                 | Applies to                                                                               |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **this file** (repository root)      | everything in this checkout                                                              |
+| [`doc/AGENTS.md`](doc/AGENTS.md)     | changing JCodeBuddy itself — a generator, a library module, the gate, the entity tooling |
+| [`proto/AGENTS.md`](proto/AGENTS.md) | working in the `proto/` area, on a driver project                                        |
+| `proto/<project>/AGENTS.md`          | **one** driver project, in that project's own repository                                 |
 
 Each of those two files marks what is **JCodeBuddy-only** — written for this repository's tree, and not
 binding a driver project. A driver project that copied this repository's Maven reactor layout, for
@@ -487,6 +487,46 @@ canonical statement of a boundary that has no other home.
     be runnable and reviewable by whoever reads the repository next,
     on whatever machine they have. A script that only runs in one
     shell on one OS is invisible wiring for the *workflow*.
+- **Markdown tables are normalised with `md-fix-tables`, which must be on `PATH`.** After writing or editing a
+  Markdown document, run the tool once for each file that changed:
+
+  `md-fix-tables path/to/document.md`
+
+  It takes **exactly one argument** — the path to a `.md` file — and **edits that file in place**. There is no
+  dry run and nothing on stdout to read, so a document you care about goes through `git diff` like any other
+  edit. What it does is pad every cell to its column's width, so a table is readable **in the Markdown source**
+  and not only when rendered — which is what a reviewer (human or agent) reading a diff actually sees. The
+  requirement is that whoever runs the agent has the tool installed and on `PATH`, and **a missing
+  `md-fix-tables` is reported rather than worked around**: hand-aligning is not the same thing, and this
+  repository has the scar to prove it — one row's escaped `\|` had padding inserted *inside* the escape, which
+  silently added a column to the table.
+
+  **For anything more than a file or two, use the sweep: `bun scripts/fix-markdown-tables.js`** (add `--check`
+  to see what it would do, and to prove a run is idempotent). It invokes the tool **once per tracked Markdown
+  file**, restores the fenced lines the tool rewrites, keeps every line's own ending — 133 tracked documents are
+  checked out CRLF, 128 LF and two mixed, and the tool writes LF on the lines it touches — and **refuses, rather
+  than guesses at, the two inputs that are document bugs**. Same rule, with the checking a sweep needs and a
+  single document does not.
+
+  Three things the tool does that "pad the cells" does not cover, all verified on 2026-10-03 rather than
+  assumed:
+
+  - **A `|` inside a code span is a cell separator, exactly as it is in GFM.** `` `a | b` `` in a table must be
+    written `` `a \| b` `` — for the renderer as much as for this tool, which will otherwise split the row and
+    pad the header to the wider table, inventing a column instead of keeping the pipe. A stray backtick does the
+    same, because the span then swallows a cell boundary; so does a row broken across a blank line. These are
+    bugs in the document, so the sweep **leaves the file untouched and names it** — the source gets fixed first.
+  - **It rewrites `|`-bearing lines *inside* fenced code blocks as if they were table rows**, which is never
+    table formatting. Measured, not guessed: a lone `|` used as a flow-diagram shaft came back as `|  |`, a
+    directory tree's pointer shafts were re-padded out of alignment under their `^` markers, and a Java
+    continuation line beginning with `||` in a fenced ```java sample became
+    `|     | resolution.getExplanation().contains("both"), |` — the operator and the indentation gone, the
+    sample no longer Java. Running the tool by hand on a document whose fence holds a diagram does exactly this;
+    the sweep restores those lines and prints what it restored.
+  - **A Markdown table shown inside a fenced block as an example is reformatted too**, for the same reason.
+
+  So the rule is not "run it and trust it": after any run, **every changed line must be a table line** — that is
+  what makes a sweep reviewable, and it is how all of the above was found.
 - **JCodeBuddy output goes in the module's `.jcodebuddy/`.** A
   `.jcodebuddy/` directory means "this module applies
   `project-automation`" — it is per-module, never a repository-wide

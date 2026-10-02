@@ -8,13 +8,13 @@ function, two attributes, and a small write API. No framework, no build step, no
 The same contract is implemented by **five hosts**, which is why this folder holds one shared core rather than
 five copies of one security model:
 
-| Host | What it is | Reaches the editor by | Asks for | Publishes |
-| --- | --- | --- | --- | --- |
-| [`webview-jetbrains`](webview-jetbrains/README.md) | JetBrains plugin: a JCEF tool window, plus an HTTP fallback for a browser | its own IDE APIs | 18881 (`webview.explorer.port`) | the port it bound, in `.jcodebuddy/webview/host.json` |
-| [`webview-vscode`](webview-vscode/README.md) | VS Code extension: a webview view, plus an HTTP fallback and a file server for the view | `vscode.window`/`workspace` | 18882 (`webviewExplorer.port`) | the port it bound, in `.jcodebuddy/webview/host.json` |
-| [`eclipse/webview-eclipse`](eclipse/README.md) | Eclipse plugin: an SWT `Browser` (Edge/WebView2) view, plus an HTTP fallback for a browser | its own workbench APIs | 18883 (`hr.hrg.eclipse.webview.port`), and **off** until that port is named | the port it bound, in `.jcodebuddy/webview/host.json` |
-| [`core/webviewd`](core/README.md) | **the standalone host**: a page server with no editor of its own, for any browser | a CLI adapter, an LSP sidecar, or nothing | ephemeral (`--port 0`) | the port it bound, in `.jcodebuddy/webview/host.json` |
-| [`jwa-sidecar`](jwa-sidecar/README.md) | an LSP server (also the JWA addon host) | `window/showDocument`, `workspace/applyEdit` | 7979 (`jwa.sidecar.jumpPort`) | the port it bound, once the client says where the project is |
+| Host                                               | What it is                                                                                 | Reaches the editor by                        | Asks for                                                                    | Publishes                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`webview-jetbrains`](webview-jetbrains/README.md) | JetBrains plugin: a JCEF tool window, plus an HTTP fallback for a browser                  | its own IDE APIs                             | 18881 (`webview.explorer.port`)                                             | the port it bound, in `.jcodebuddy/webview/host.json`        |
+| [`webview-vscode`](webview-vscode/README.md)       | VS Code extension: a webview view, plus an HTTP fallback and a file server for the view    | `vscode.window`/`workspace`                  | 18882 (`webviewExplorer.port`)                                              | the port it bound, in `.jcodebuddy/webview/host.json`        |
+| [`eclipse/webview-eclipse`](eclipse/README.md)     | Eclipse plugin: an SWT `Browser` (Edge/WebView2) view, plus an HTTP fallback for a browser | its own workbench APIs                       | 18883 (`hr.hrg.eclipse.webview.port`), and **off** until that port is named | the port it bound, in `.jcodebuddy/webview/host.json`        |
+| [`core/webviewd`](core/README.md)                  | **the standalone host**: a page server with no editor of its own, for any browser          | a CLI adapter, an LSP sidecar, or nothing    | ephemeral (`--port 0`)                                                      | the port it bound, in `.jcodebuddy/webview/host.json`        |
+| [`jwa-sidecar`](jwa-sidecar/README.md)             | an LSP server (also the JWA addon host)                                                    | `window/showDocument`, `workspace/applyEdit` | 7979 (`jwa.sidecar.jumpPort`)                                               | the port it bound, once the client says where the project is |
 
 **The listed port is a request, not an address.** Every host publishes the port it actually bound in the
 served project's `.jcodebuddy/webview/host.json`, and moves to the next free port when something unrelated
@@ -88,23 +88,23 @@ that is written for a project that only *consumes* webview, and every document i
 that project as it stands. **Building or changing a host, or working on this repository's own webview
 modules?** Read the rest of this table.
 
-| You want to… | Read |
-| --- | --- |
-| write a page that navigates code | [`kit/doc/page-authoring.md`](kit/doc/page-authoring.md) |
-| get the exact navigation contract | [`kit/doc/contract.md`](kit/doc/contract.md) — frozen, page-side normative |
-| **edit a file from a page** | [`kit/doc/edit-api.md`](kit/doc/edit-api.md) — diff first, then apply; `target: buffer|disk` |
-| make webview available in a project | [`kit/doc/host-in-this-project.md`](kit/doc/host-in-this-project.md) |
-| copy the whole consumer half | [`kit/README.md`](kit/README.md) |
-| copy a working page | [`kit/examples/`](kit/examples/README.md) — start with [`self-contained/index.html`](kit/examples/self-contained/index.html) |
-| see a page that edits | [`kit/examples/with-assets/pages/edit-demo.html`](kit/examples/with-assets/pages/edit-demo.html) |
-| use the JetBrains plugin | [`webview-jetbrains/README.md`](webview-jetbrains/README.md) — `Ctrl+Alt+Shift+W`, right-click an `.html` file → **Open in WebView Explorer** |
-| use the VS Code extension | [`webview-vscode/README.md`](webview-vscode/README.md) |
-| use the Eclipse plugin | [`eclipse/README.md`](eclipse/README.md) — dropins install, the port preference, what is declared and what backs each claim |
-| serve a page from a host that needs no editor | [`core/README.md`](core/README.md) — `webviewd --project . --port 0` |
-| **implement a new host** | [`doc/webview-host-api.md`](doc/webview-host-api.md), plus [`core/README.md`](core/README.md) and the [`conformance/`](conformance/README.md) vectors |
-| drive an editor that has no plugin | [`jwa-sidecar/README.md`](jwa-sidecar/README.md) — LSP, `window/showDocument` |
-| verify the IDE claims yourself | [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) — one command, two visual facts |
-| see what is planned and what was measured | [`PLAN-webview-suite.md`](PLAN-webview-suite.md) |
+| You want to…                                  | Read                                                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| write a page that navigates code              | [`kit/doc/page-authoring.md`](kit/doc/page-authoring.md)                                         |
+| get the exact navigation contract             | [`kit/doc/contract.md`](kit/doc/contract.md) — frozen, page-side normative                       |
+| **edit a file from a page**                   | [`kit/doc/edit-api.md`](kit/doc/edit-api.md) — diff first, then apply; `target: buffer\|disk`    |
+| make webview available in a project           | [`kit/doc/host-in-this-project.md`](kit/doc/host-in-this-project.md)                             |
+| copy the whole consumer half                  | [`kit/README.md`](kit/README.md)                                                                 |
+| copy a working page                           | [`kit/examples/`](kit/examples/README.md) — start with [`self-contained/index.html`](kit/examples/self-contained/index.html) |
+| see a page that edits                         | [`kit/examples/with-assets/pages/edit-demo.html`](kit/examples/with-assets/pages/edit-demo.html) |
+| use the JetBrains plugin                      | [`webview-jetbrains/README.md`](webview-jetbrains/README.md) — `Ctrl+Alt+Shift+W`, right-click an `.html` file → **Open in WebView Explorer** |
+| use the VS Code extension                     | [`webview-vscode/README.md`](webview-vscode/README.md)                                           |
+| use the Eclipse plugin                        | [`eclipse/README.md`](eclipse/README.md) — dropins install, the port preference, what is declared and what backs each claim |
+| serve a page from a host that needs no editor | [`core/README.md`](core/README.md) — `webviewd --project . --port 0`                             |
+| **implement a new host**                      | [`doc/webview-host-api.md`](doc/webview-host-api.md), plus [`core/README.md`](core/README.md) and the [`conformance/`](conformance/README.md) vectors |
+| drive an editor that has no plugin            | [`jwa-sidecar/README.md`](jwa-sidecar/README.md) — LSP, `window/showDocument`                    |
+| verify the IDE claims yourself                | [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) — one command, two visual facts |
+| see what is planned and what was measured     | [`PLAN-webview-suite.md`](PLAN-webview-suite.md)                                                 |
 
 ## One contract, one implementation of the security model
 
@@ -131,16 +131,16 @@ share an origin rule while only a page this host served can hold the secret.
 The distinction matters here and is kept everywhere in this folder: a claim is *implemented and unit-tested*,
 or *observed on a named build and date*, never "works" without one of the two.
 
-| Capability | State |
-| --- | --- |
-| Navigation (page → editor caret) | observed in JetBrains, VS Code and Zed |
+| Capability                                                     | State                                  |
+| -------------------------------------------------------------- | -------------------------------------- |
+| Navigation (page → editor caret)                               | observed in JetBrains, VS Code and Zed |
 | Buffer edit (page → unsaved change in the editor's undo stack) | observed in **JetBrains** (2026-09-26) and **VS Code** (2026-09-26); **Zed** observed 2026-09-25 over LSP |
-| Disk edit (digest-guarded, atomic, journalled undo) | `webviewd` and the Eclipse host, unit-tested; the Eclipse checkpoint is **persistent** — `/undo` restores byte-for-byte after a restart of the host (headless test, 2026-09-27); the page-side flow is exercised against `webviewd` by `examples/webview-client.test.mjs` |
-| File serving and page serving | `webviewd` (`/file/`, `/page/` with the bridge injected, `X-WebView-Digest`); the same two routes are implemented and headless-tested in the Eclipse host |
+| Disk edit (digest-guarded, atomic, journalled undo)            | `webviewd` and the Eclipse host, unit-tested; the Eclipse checkpoint is **persistent** — `/undo` restores byte-for-byte after a restart of the host (headless test, 2026-09-27); the page-side flow is exercised against `webviewd` by `examples/webview-client.test.mjs` |
+| File serving and page serving                                  | `webviewd` (`/file/`, `/page/` with the bridge injected, `X-WebView-Digest`); the same two routes are implemented and headless-tested in the Eclipse host |
 | Eclipse host (view, injected bridge, HTTP bridge, write verbs) | implemented and unit-tested headlessly (58 tests, 2026-09-27); the in-IDE observations — caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install — are **outstanding**: they need a real Eclipse 4.41 and a human, and [`eclipse/README.md`](eclipse/README.md) records every claim with its backing |
-| Code actions (JWA "Sync Builder") | implemented **and tested** (5 tests, 2026-09-26): offered on a record's name, the command is advertised in `executeCommandProvider` and handled, and the generated edits reach the editor as `workspace/applyEdit` |
-| Zed `process:exec` (launching the host from the extension) | **dropped, not missing**: a sidecar the extension spawns is not Zed's language server, so it has no editor attached (the sidecar answers `/health` with an empty capability list in exactly that state). Zed spawns the sidecar when it opens a Java file, which is the one-step cold start |
-| The `jwa-sidecar.txt` addon-file mechanism | **withdrawn** by [DEC-031](../doc-hipster-entity/architecture/decisions/DEC-031-project-automations-are-living-code.md): never implemented, and replaced by the model where an automation is a module in *your* project — generated as a stub or copied from an example — with no classloader |
+| Code actions (JWA "Sync Builder")                              | implemented **and tested** (5 tests, 2026-09-26): offered on a record's name, the command is advertised in `executeCommandProvider` and handled, and the generated edits reach the editor as `workspace/applyEdit` |
+| Zed `process:exec` (launching the host from the extension)     | **dropped, not missing**: a sidecar the extension spawns is not Zed's language server, so it has no editor attached (the sidecar answers `/health` with an empty capability list in exactly that state). Zed spawns the sidecar when it opens a Java file, which is the one-step cold start |
+| The `jwa-sidecar.txt` addon-file mechanism                     | **withdrawn** by [DEC-031](../doc-hipster-entity/architecture/decisions/DEC-031-project-automations-are-living-code.md): never implemented, and replaced by the model where an automation is a module in *your* project — generated as a stub or copied from an example — with no classloader |
 
 ## Verifying
 
@@ -195,12 +195,12 @@ Markdown file of the repository, which covers the links *out* of this folder.
 
 ## Two page shapes, one contract
 
-| | [`kit/examples/self-contained/`](kit/examples/self-contained/index.html) | [`kit/examples/with-assets/`](kit/examples/with-assets/index.html) |
-| --- | --- | --- |
-| Files | 1 | 4 assets + one file per page |
-| Travels alone (attachment, CI artifact) | yes | needs the folder |
-| Several pages share a shell and client | no | yes |
-| A generator regenerates one page without touching the rest | no | yes |
+|                                                            | [`kit/examples/self-contained/`](kit/examples/self-contained/index.html) | [`kit/examples/with-assets/`](kit/examples/with-assets/index.html) |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Files                                                      | 1                                                                        | 4 assets + one file per page                                       |
+| Travels alone (attachment, CI artifact)                    | yes                                                                      | needs the folder                                                   |
+| Several pages share a shell and client                     | no                                                                       | yes                                                                |
+| A generator regenerates one page without touching the rest | no                                                                       | yes                                                                |
 
 Both are **offline at view time**: no CDN, no network. A vanilla document page (the two shapes below) also
 carries no bundler and no `node_modules`; an **interactive or advanced page is a `jsx6` page** and is

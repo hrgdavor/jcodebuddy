@@ -88,7 +88,7 @@ HOST=prod.example.com java -jar target/java-watch-scp.jar -c config.properties
 | `-c <path>` or `-c -`                | Config file path or stdin           |
 | `-w`                                 | Watch mode                          |
 | `--var NAME=value` / `-D NAME=value` | Set config variable (repeatable)    |
-| `--check hash\                       | mtime_size`                         | Change detection mode |
+| `--check hash\|mtime_size`           | Change detection mode               |
 | `--no-db`                            | Skip remote checksum database       |
 | `--cleanup`                          | Remove remote files missing locally |
 | `--dry-run`                          | Show changes without making them    |

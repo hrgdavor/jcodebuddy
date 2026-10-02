@@ -43,12 +43,12 @@ J.CompilationUnit unit = read.unit();
 `SourceReader.read(Path)` and `readText(String)` both return a
 `SourceReader.Read`, and the record is the whole contract:
 
-| Member | Meaning |
-|---|---|
-| `readable()` | **the verdict** — `unit != null`, i.e. this file parsed as Java |
-| `unit()` | the `J.CompilationUnit`, or `null` |
-| `unparseable()` | the file exists and could not be read (a boolean component) |
-| `SourceReader.problemsIn(String)` | the parser's own words — **detail, not a verdict** |
+| Member                            | Meaning                                                         |
+| --------------------------------- | --------------------------------------------------------------- |
+| `readable()`                      | **the verdict** — `unit != null`, i.e. this file parsed as Java |
+| `unit()`                          | the `J.CompilationUnit`, or `null`                              |
+| `unparseable()`                   | the file exists and could not be read (a boolean component)     |
+| `SourceReader.problemsIn(String)` | the parser's own words — **detail, not a verdict**              |
 
 ### The two channels are not redundant, and the second one lies
 
@@ -134,14 +134,14 @@ answers it.
 `methods()`, `annotations()`, `members()` and `spans()`. `TreeQueries` wraps it in
 the typed queries a caller actually wants:
 
-| Query | Answers |
-|---|---|
-| `TreeQueries.lineOf(declaration, source)` | the line the declaration's **name** sits on |
-| `TreeQueries.declarationLineOf(declaration, source)` | the line the declaration **begins** on — annotations included |
-| `TreeQueries.lineOfChained` / `declarationLineOfChained` | the same for a nested type, given the enclosing names outermost-first |
-| `TreeQueries.methodLineOf(method, ownerName, source)` | a method name's line, keyed by owner **and** arity |
-| `TreeQueries.annotationLineOf(declaringType, ownerName, name, source)` | an annotation's own line |
-| `TreeQueries.memberLineOf(ownerDisplayName, name, role, source)` | an enum constant, record component or field name |
+| Query                                                                  | Answers                                                               |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `TreeQueries.lineOf(declaration, source)`                              | the line the declaration's **name** sits on                           |
+| `TreeQueries.declarationLineOf(declaration, source)`                   | the line the declaration **begins** on — annotations included         |
+| `TreeQueries.lineOfChained` / `declarationLineOfChained`               | the same for a nested type, given the enclosing names outermost-first |
+| `TreeQueries.methodLineOf(method, ownerName, source)`                  | a method name's line, keyed by owner **and** arity                    |
+| `TreeQueries.annotationLineOf(declaringType, ownerName, name, source)` | an annotation's own line                                              |
+| `TreeQueries.memberLineOf(ownerDisplayName, name, role, source)`       | an enum constant, record component or field name                      |
 
 `-1` means "unknown", and DEC-029 already reads that as such.
 
@@ -219,15 +219,15 @@ and immutable `withXxx(...)` construction.
 
 Each of these has a wrong version that compiles:
 
-| Trap | The wrong version | The right version |
-|---|---|---|
-| An **interface's** `extends` clause is held in `getImplements()`; `getExtends()` is `null` for it | read `getExtends()` alone | `TreeQueries.supertypeTypes` / `supertypeNames` / `supertypeTexts` |
-| `getImplements()` and `getTypeParameters()` are **`null** when absent, not empty | bare `for`-each (throws) | null check, as `TreeQueries.typeParameterNames` does |
-| An **empty parameter list** is a single `J.Empty` placeholder | `method.getParameters().isEmpty()` | `TreeQueries.hasNoParameters` / `hasOneParameter` |
-| `J.MethodDeclaration` covers **constructors** too | `findAll(decl, J.MethodDeclaration.class)` | `TreeQueries.methodsOf` (excludes constructors, and reads only direct members) |
-| A **`void`** method's return type is *not* absent — it is a `J.Primitive` of `Primitive.Void` | test for a missing return-type expression | `TreeQueries.isVoidReturn` |
+| Trap                                                                                              | The wrong version                                         | The right version                                                              |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| An **interface's** `extends` clause is held in `getImplements()`; `getExtends()` is `null` for it | read `getExtends()` alone                                 | `TreeQueries.supertypeTypes` / `supertypeNames` / `supertypeTexts`             |
+| `getImplements()` and `getTypeParameters()` are **`null`** when absent, not empty                 | bare `for`-each (throws)                                  | null check, as `TreeQueries.typeParameterNames` does                           |
+| An **empty parameter list** is a single `J.Empty` placeholder                                     | `method.getParameters().isEmpty()`                        | `TreeQueries.hasNoParameters` / `hasOneParameter`                              |
+| `J.MethodDeclaration` covers **constructors** too                                                 | `findAll(decl, J.MethodDeclaration.class)`                | `TreeQueries.methodsOf` (excludes constructors, and reads only direct members) |
+| A **`void`** method's return type is *not* absent — it is a `J.Primitive` of `Primitive.Void`     | test for a missing return-type expression                 | `TreeQueries.isVoidReturn`                                                     |
 | `J.ClassDeclaration.getExtends()` vs `getImplements()` for a supertype **as a name**: bare is a `J.Identifier`, generic is a `J.ParameterizedType` | read `J.Identifier` only (misses every generic supertype) | `TreeQueries.simpleTypeName` unwraps both |
-| `findAll` is **root-inclusive**, and its reach matches the old `findAll` — a caller wanting only top-level types must filter | assume `findAll` starts at children | `TreeQueries.topLevelTypes` |
+| `findAll` is **root-inclusive**, and its reach matches the old `findAll` — a caller wanting only top-level types must filter | assume `findAll` starts at children | `TreeQueries.topLevelTypes`                                               |
 
 Two more, for annotation reading, which is where the shapes differ most:
 
@@ -288,10 +288,10 @@ construction.
 
 Where the modules do it:
 
-| Module | Splicer | What it inserts |
-|---|---|---|
-| `hipster-entity-tooling` | `SourceSplicer.withMembers` | generated members into a hand-written view interface |
-| `jwa-builder` | `SourceSplicer.withBuilder` | the `builder()` / `toBuilder()` entry points and the nested `Builder` class into a record |
+| Module                   | Splicer                     | What it inserts                                                                           |
+| ------------------------ | --------------------------- | ----------------------------------------------------------------------------------------- |
+| `hipster-entity-tooling` | `SourceSplicer.withMembers` | generated members into a hand-written view interface                                      |
+| `jwa-builder`            | `SourceSplicer.withBuilder` | the `builder()` / `toBuilder()` entry points and the nested `Builder` class into a record |
 
 Recognition of a generator's **previous** output is by name and structure, not by
 a marker comment: the generator sees the member it would have emitted and replaces
@@ -317,13 +317,13 @@ Measured in Phase 7 with JMH (`benchmarks/latest.json`, interpretation in
 Absolute baselines only: the alternative implementation is gone, so there is
 nothing to compare against.
 
-| Operation | Cost | Note |
-|---|---|---|
-| `readCommittedView` | ~56 ms | a real view interface from the example |
-| `readLargestFileInRepository` | ~165 ms | the largest hand-written file here |
-| `coldSyntaxCheckCommittedView` | ~32 ms | ~60% of a cold read; ~0% warm |
+| Operation                         | Cost    | Note                                                                   |
+| --------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `readCommittedView`               | ~56 ms  | a real view interface from the example                                 |
+| `readLargestFileInRepository`     | ~165 ms | the largest hand-written file here                                     |
+| `coldSyntaxCheckCommittedView`    | ~32 ms  | ~60% of a cold read; ~0% warm                                          |
 | `coldReadLargestFileInRepository` | ~176 ms | ~30–55 ms of it is parsing, the rest is classpath and first-touch cost |
-| `syntaxCheckAlreadyInspected` | ~9 ns | the guard is free when the file was already inspected |
+| `syntaxCheckAlreadyInspected`     | ~9 ns   | the guard is free when the file was already inspected                  |
 
 **A read is ~30–55 ms and does not scale with file size.** The dominant cost is
 per-read setup, not text length — which is why the parser is shared and why the
