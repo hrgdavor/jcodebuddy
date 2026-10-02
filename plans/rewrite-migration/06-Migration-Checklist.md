@@ -108,7 +108,7 @@ Run verification script:
 - `RecordBuilderProcessor.java`
 - `BuilderTransformationEngine.java`
 
-#### watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/
+#### jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/
 
 - `ContextualAnalyzer.java`
 - `JavaParserFactory.java`

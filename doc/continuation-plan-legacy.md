@@ -37,7 +37,7 @@ The user explicitly stated:
 
 #### Phase 2.0: Refactor java_watch2 Generators for Code-Buddy (Week 1)
 1. **Create `java-watch-agent` submodule** under jcodebuddy parent:
-   - `jcodebuddy/watch/java-watch-agent/pom.xml`
+   - `jcodebuddy/jcodebuddy/java-watch-agent/pom.xml`
      - Parent: jcodebuddy
      - Dependencies: hipster-entity-api, jackson-databind, javaparser-core (3.28.0)
    - **Copy & refactor generators** to use CodeContext interface instead of SimpleToolContext
@@ -108,7 +108,7 @@ jcodebuddy/
 │   ├── CodeGenerator.java         # Core interface (done)
 │   ├── HelloWorldGenerator.java  # Demo example (done)
 │   
-├── watch/java-watch-agent/              # NEW: Refactored from java_watch2
+├── jcodebuddy/java-watch-agent/              # NEW: Refactored from java_watch2
 │   └── pom.xml                    # Will have hipster-entity-api dependency
 │
 ├── src/main/java/hr/hrg/hipster/jcodebuddy/context/
@@ -149,7 +149,7 @@ jcodebuddy/
 
 **"Legacy" is in the filename: this is the record of the starting point, and it is left as written.**
 
-The four mentions describe a pre-migration module layout — "All generators parse Java source and modify AST nodes", a `watch/java-watch-agent/pom.xml` depending on `javaparser-core:3.28.0`, and a demo generator applying "imperative transformations using JavaParser AST". That layout is what this plan was written against, and the plan's own deprecation banner already says so; no reader should take `javaparser-core:3.28.0` as the current dependency.
+The four mentions describe a pre-migration module layout — "All generators parse Java source and modify AST nodes", a `jcodebuddy/java-watch-agent/pom.xml` depending on `javaparser-core:3.28.0`, and a demo generator applying "imperative transformations using JavaParser AST". That layout is what this plan was written against, and the plan's own deprecation banner already says so; no reader should take `javaparser-core:3.28.0` as the current dependency.
 
 The generators now read through [`RecordBuilderProcessor`](../jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java) and take source positions from [`LineLookup`](../jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java) in `jwa-builder`, over OpenRewrite's LST.
 

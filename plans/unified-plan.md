@@ -138,7 +138,7 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md) | steps 5.1–5.3 | Phase 6 and Q3/Q5 closed |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md) | steps 5.4, 8.2 | Phase 5 + observations closed |
 | [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5 | open rows closed |
-| [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`watch/java-watch-agent/plan.md`](../watch/java-watch-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | "Future Refinement"/"Open questions" lists emptied |
+| [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`jcodebuddy/java-watch-agent/plan.md`](../jcodebuddy/java-watch-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | "Future Refinement"/"Open questions" lists emptied |
 | [`plans/rewrite-migration/`](rewrite-migration/README.md) | nothing — it is **complete** | stays in place as the historical record (step 9.2) |
 
 ---
@@ -176,7 +176,7 @@ untouched),
 [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md) (status
 banner; items 12–13 open),
 [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) (backlog, nothing implemented),
-[`watch/java-watch-agent/plan.md`](../watch/java-watch-agent/plan.md) (the two Phase 4 boxes),
+[`jcodebuddy/java-watch-agent/plan.md`](../jcodebuddy/java-watch-agent/plan.md) (the two Phase 4 boxes),
 [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md) (two Future Refinement boxes),
 [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) (§ 8
 unanswered),
@@ -1173,7 +1173,32 @@ so the next pass does not re-derive it):
    Jackson dependency there is the **wire format between this server and its clients**. Hand-rolling a small
    reader for the flat shapes actually used is feasible; changing the format is a decision about clients. This
    is the slice to decide before writing code.
-**Progress 2026-10-03, slice 3 (started, not finished) — the library exists; the `jwa-builder` boundary is a
+**Resolved 2026-10-03 — the remaining 8 were the wrong module in the wrong group.** The maintainer's read:
+*"java-watch-agent may be better suited to be part of jcodebuddy family."* It is, and that is a better answer
+than moving tools: the agent is **JCodeBuddy's code-action server** — `AccessorGenerator`,
+`ConstructorGenerator`, `BuilderGenerator`, `ContextualAnalyzer`, `RecordBuilderGenerator`, an HTTP command
+server and a codegen-session audit — and it consumes `java-watch-core`, which is the standalone library that
+must stay clean. So it moved to **`jcodebuddy/java-watch-agent`** (artifact unchanged, package unchanged: the
+group is a fact the build reads, and the package is the code's identity), the root reactor points at the new
+path, and `bun scripts/check-watch-standalone.js` now says **`OK: java-watch* is standalone`** over the six
+modules left in `watch/`.
+
+That is the honest accounting of the whole step: **17 → 0**, but by three different means, and only one of them
+was "fix the leak":
+
+| Violations | How they went |
+| --- | --- |
+| 4 (SPI in the agent) | `ActionToolAdapter` **deleted** — nothing used it but its own test — which is what unblocked 3.0i |
+| 5 (Jackson in the sample) | the demo rewritten without Jackson: its point was hot-reload, not the library |
+| 8 (Jackson + `jwa-builder` in the agent) | **the module left the group**: it was JCodeBuddy's server sitting in the watcher's library group |
+
+The check's scope is now stated in it and in AGENTS.md § 2: **the boundary is the `watch/` group**, so a future
+module that needs a workspace artifact is moved to the group it belongs to rather than having its imports
+rewritten. Recorded as a naming question rather than fixed here: the module keeps the name `java-watch-agent`
+inside `jcodebuddy/`, which reads oddly for a JCodeBuddy server — renaming it (module directory, artifactId
+and the group's docs, not the package) is its own small step if the name matters more than the churn.
+
+**Progress 2026-10-03, slice 3 (started, not finished)** — the library exists; the `jwa-builder` boundary is a
 *family*, not one class.** New module **`jcodebuddy/jcodebuddy-watch-tools`** (a small library the app may
 depend on, per the maintainer's direction), depending on `java-watch-agent` — never the other way round — with
 `RecordBuilderGenerator` as its first tool. `java-watch-agent` also lost four `Test*.java` files that were
@@ -1919,7 +1944,7 @@ toolsets".
 **Who:** agent · **Size:** S
 
 The sidecar's `/jump` endpoint, its token/origin gate and its loopback bind all exist; the agent's web UI
-never calls it (`watch/java-watch-agent/src/main/resources/web/` has no `jump` and no `7979`).
+never calls it (`jcodebuddy/java-watch-agent/src/main/resources/web/` has no `jump` and no `7979`).
 
 **Do:** make the dashboard send the jump request with the token the sidecar requires, and show the
 outcome (the sidecar reports a navigation *outcome*, not an assumed success, since 2026-09-25).
@@ -1957,7 +1982,7 @@ items are closed.
 ### 7.5 — java-watch-agent: the OpenRewrite-based tool prototype
 **Who:** agent · **Size:** M
 
-Phase 4's second box. Nothing under `watch/java-watch-agent/` references OpenRewrite today. It must be built
+Phase 4's second box. Nothing under `jcodebuddy/java-watch-agent/` references OpenRewrite today. It must be built
 the repository's way (DEC-030): read through `SourceReader`, query through `TreeQueries`, splice text —
 not parse with a second parser and not reprint a tree.
 
@@ -2168,7 +2193,7 @@ version-named record, because a claim that is not observed is not a claim
 | --- | --- | --- | --- |
 | 8.1 | JetBrains § 8's five maintainer questions (vendor identity, the empty-allow-list default, one vs two settings services, dropping Kotlin, plan location) and acceptance criteria 2/5/7 in a running IDE | maintainer | [`plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) § 8, and `webview-jetbrains`' own docs |
 | 8.2 | Eclipse 4.41 workbench observations — the caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim; then answer **Q2** (dropins vs p2) | maintainer | [`ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md) § 1a/§ 2a, then `PLAN-eclipse-host.md` |
-| 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the existing `intellij-jwa`/`vscode-jwa` are sidecar clients, not these) | maintainer decides, agent implements | [`watch/java-watch-agent/plan.md`](../watch/java-watch-agent/plan.md) |
+| 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the existing `intellij-jwa`/`vscode-jwa` are sidecar clients, not these) | maintainer decides, agent implements | [`jcodebuddy/java-watch-agent/plan.md`](../jcodebuddy/java-watch-agent/plan.md) |
 | 8.4 | The ACP spike's Zed run (see step 5.3) | maintainer | `PLAN-webview-suite.md` Phase 5 record |
 
 ---
@@ -2306,7 +2331,7 @@ start)
 | 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent | M | `[ ]` |
 | 3.0q | Merge what 3.0p found worth keeping, delete the rest | agent | M–L | ` [ ] ` (content decided by 3.0p) |
 | 3.0r | The index grows members and annotations (DEC-029 format change) | agent | M | ` [ ] ` — what 3.0h's Do asked for and its model could not answer |
-| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace | agent | M | `[ ]` — 17 measured violations listed in the step; blocks 3.0i |
+| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace | agent | M | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to the `jcodebuddy` group (it was JCodeBuddy's server in the watcher's group) |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |

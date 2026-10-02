@@ -152,7 +152,7 @@ For complex refactorings and large-scale migrations, we propose integrating [Ope
 >   but they are JWA/JSWA **sidecar** clients under the `webview` product, not the lightweight hooks
 >   this plan asked for; nothing here implements them.
 > - **OpenRewrite tool prototype** — nothing in this module references OpenRewrite (`Recipe` /
->   `org.openrewrite` appear in no source file under `watch/java-watch-agent/`), so the prototype was never
+>   `org.openrewrite` appear in no source file under `jcodebuddy/java-watch-agent/`), so the prototype was never
 >   started. The representation decision that would govern it is
 >   [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
 >

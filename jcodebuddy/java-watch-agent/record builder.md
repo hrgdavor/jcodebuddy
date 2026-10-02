@@ -20,8 +20,8 @@ The full original transcript, code samples included, is in this file's git
 history:
 
 ```sh
-git log --follow -- "watch/java-watch-agent/record builder.md"
-git show <the-commit-before-the-retirement>:"watch/java-watch-agent/record builder.md"
+git log --follow -- "jcodebuddy/java-watch-agent/record builder.md"
+git show <the-commit-before-the-retirement>:"jcodebuddy/java-watch-agent/record builder.md"
 ```
 
 ## What the transcript got right, and where it went

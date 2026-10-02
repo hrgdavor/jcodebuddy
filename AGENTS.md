@@ -590,10 +590,21 @@ canonical statement of a boundary that has no other home.
   A `watch/*` module therefore declares no dependency on a workspace artifact (`hr.hrg.jcodebuddy:*`,
   `hr.hrg.hipster:*`, any `jcodebuddy-*` / `hipster-*` / `metadata-*` / `jwa-*` artifactId), on Jackson or on
   OpenRewrite, and its sources import none of them. The shared build parent is not a dependency and is not
-  covered. **A port the watcher needs must be the watcher's own** (`ActionTool` is); the adapter that bridges it
-  to a JCodeBuddy SPI belongs in the module that legitimately depends on both, not in the watcher.
-  `bun scripts/check-watch-standalone.js` enforces it (17 violations when it was written; plan step 3.0s fixes
-  them and unblocks 3.0i). See [`DEC-038`](doc-hipster-entity/architecture/decisions/DEC-038.md)'s amendment.
+  covered. **A port the watcher needs must be the watcher's own** (`ActionTool` is); an adapter that bridges it
+  to a JCodeBuddy SPI belongs in a module that legitimately depends on both.
+
+  **The boundary is the `watch/` group, and moving a module into the right group is a fix too.** A module that
+  needs Jackson, `jwa-builder` or another workspace artifact to do JCodeBuddy's work does not belong in
+  `watch/`: `java-watch-agent` was exactly that — JCodeBuddy's code-action server, with an HTTP command server
+  and a codegen-session audit — and on 2026-10-03 it moved to the `jcodebuddy` group, still consuming
+  `java-watch-core`, which is the library that stays clean. A leak *inside* `watch/` is what the check is for.
+
+  `bun scripts/check-watch-standalone.js` enforces all of it, and plan step 3.0s is what made it pass: the
+  original 17 violations went three ways — the SPI deleted from the agent (nothing used it but its own test,
+  which also unblocked 3.0i), the sample's Jackson demo rewritten (its point was hot-reload, not the library),
+  and the agent moved to the group it belongs to. See
+  [`DEC-038`](doc-hipster-entity/architecture/decisions/DEC-038.md)'s amendment.
+
 
 ## 3. Notes for whoever reads next
 

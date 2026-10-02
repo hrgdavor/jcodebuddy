@@ -123,9 +123,9 @@ Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
-| `[x]` complete | high | medium | 0 | `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
-| `[x]` complete | high | medium | 0 | `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
-| `[x]` complete | high | medium | 0 | `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
+| `[x]` complete | high | medium | 0 | `jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
+| `[x]` complete | high | medium | 0 | `jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
+| `[x]` complete | high | medium | 0 | `jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
 | `[x]` complete | high | medium | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java` |
 | `[x]` complete | high | medium | 0 | `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
 | `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java` |
@@ -729,7 +729,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java
 ```
 
-### `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java`
+### `jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 130
 
@@ -748,13 +748,13 @@ Analyses a file for context: types, records and members. Record handling collaps
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
 ```
 
-### `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java`
+### `jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 71
 
@@ -773,13 +773,13 @@ One of three near-identical tools (Accessor/Builder/Constructor) sharing a shape
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
 ```
 
-### `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java`
+### `jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 66
 
@@ -798,10 +798,10 @@ See AccessorGenerator — identical shape, port as one unit with it.
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
 ```
 
 ### `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java`

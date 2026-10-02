@@ -32,8 +32,8 @@ removed, not migrated.
 | `EnumConstantOrderChecker` | `hipster-entity/hipster-entity-tooling/.../validation/EnumConstantOrderChecker.java` — ported |
 | `EnumCompactionCli` | `hipster-entity/hipster-entity-tooling/.../validation/EnumCompactionCli.java` — ported (compaction) |
 | `JavaParserTool` | Renamed to `hipster-entity/hipster-entity-tooling/.../validation/SourceQuery.java` during the port |
-| `ContextualAnalyzer` | `watch/java-watch-agent/.../agent/core/ContextualAnalyzer.java` — ported (it is an agent tool, not a rule) |
-| `AccessorGenerator`, `BuilderGenerator`, `ConstructorGenerator` | `watch/java-watch-agent/.../agent/tools/` — ported; they now delegate to `jwa-builder`'s `ClassMemberProcessor` |
+| `ContextualAnalyzer` | `jcodebuddy/java-watch-agent/.../agent/core/ContextualAnalyzer.java` — ported (it is an agent tool, not a rule) |
+| `AccessorGenerator`, `BuilderGenerator`, `ConstructorGenerator` | `jcodebuddy/java-watch-agent/.../agent/tools/` — ported; they now delegate to `jwa-builder`'s `ClassMemberProcessor` |
 | `ValidationResult`, `AnalysisResult` | Exist only as sketches in `doc/brainstorm/rewrite-migration/05-automation/`; nothing compiles them, and the ported rules return their own types (`EntityRulesValidator.ValidationIssue`, `DivergenceReporter` entries) |
 | `ToolResult`, `AnnotationChecker`, `MethodChecker`, `FieldChecker`, `README.md` | **Never existed in compilable form.** They were staging-only, or (for the checkers) plan sketches with no implementation anywhere |
 
