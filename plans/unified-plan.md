@@ -396,26 +396,46 @@ green (38 tests).
 ### 2.3 — The decision-grade arena run, and the backend decision it settles
 **Who:** agent, on a quiet machine · **Size:** S
 
-Step 2.2 left one thing deliberately unrecorded: the smoke run's numbers are not evidence, and the module
-still ships two backends with nothing choosing between them. This step is the run that produces the
-evidence, and the decision that consumes it.
+**Done 2026-10-01 — run at the default profile, and the decision is in DEC-W009's implementation note.**
 
-**Do:** on a machine that is not building anything else, run the default profile:
+- **The run**: `bun run scripts/run-jmh.js --include ".*ArenaIndexJmhBenchmark.*"` — 3 forks, 6 × 2 s warmup,
+  8 × 2 s measurement, JMH 1.37, **22 min 29 s**, written to `target/jmh/results.json`. The profile is
+  verified **from the JSON itself** (`forks: 3`, `warmupIterations: 6`, `warmupTime: 2 s`,
+  `measurementIterations: 8`, `measurementTime: 2 s`) rather than from the absence of a console line, and
+  `results-smoke.json` — the marker of a run that must not be recorded — does not exist.
+- **Step 2.2's hypothesis is now a finding, and it is large.** `ByteBufferArena` is ~10× `FfmArena` on the
+  hot path: `getHot` 121 774 vs 11 989 ops/ms at 1 000 entries and 127 584 vs 10 989 at 100 000; `getRandom`
+  86 943 vs 10 722 and 50 281 vs 9 942; `rebuild` 92.8 vs 7.3 and 0.579 vs 0.071. The intervals do not come
+  within a factor of four of meeting. The **cause** stays a hypothesis (no profiler was run) — what is
+  established is direction and magnitude.
+- **The one mode where they are equal is the cold start**: `mmapLoad` 171 µs vs 180 µs at 1 000 and 4.72 ms
+  vs 4.06 ms at 100 000, intervals overlapping — consistent with a path dominated by mapping and page
+  faults rather than by the accessor.
+- **Decision 1 — the allocator is `ByteBufferArena`, with `FfmArena` kept for the two cases a `ByteBuffer`
+  cannot serve**: size (int-indexed, 2 GiB per arena, which binds at roughly 30–40 million entries) and the
+  platform's own direction. `sun.misc.Unsafe` is rejected outright and `Chronicle Bytes` is rejected as
+  buying nothing — both named options answered rather than deferred.
+- **Decision 2 — rebuild on the existing debounced batch, and incremental updates are not needed for
+  latency.** The watcher's debounce is 300 ms by default (`HotSwapDaemon.DEFAULT_DEBOUNCE_MS`); a full
+  rebuild is 10.8 µs at 1 000 entries and **1.73 ms at 100 000** (0.6 % of the budget), ~17 ms at a million
+  by the linear 17.3 ns/entry figure. A batch's budget holds ≈ 17 million entries on ByteBuffer and ≈ 2.1
+  million on FFM. The constraint is therefore not the rebuild but the **arena size**, which is why the note
+  gives the sizing formula (`HEADER + 16 × capacity + 12 × entries + slack`, capacity the next power of two
+  at or above twice the entries) with its per-size figures — that is the third follow-up answered too.
+- **One irregularity, disclosed rather than smoothed over**: `getRandom/bytebuffer/1000` produced **5, 5 and
+  6** measurement iterations per fork instead of 8/8/8 — uniform across its three forks, no error in the
+  JSON, cause not established (the console output was not kept). Every other case is complete. It does not
+  carry the decision: its 100 000-entry sibling is complete, and even its wider interval (±10 400 on
+  86 943) leaves the gap to FFM's 10 722 intact.
+- **Recorded in DEC-W009, not in a README**: the record's implementation note carries the full table, both
+  decisions, the sizing rule and a "what this run does not establish" section; its three follow-ups are
+  marked settled and a fourth was added (the unexplained FFM gap — anything that puts FFM on a default path
+  owes a profile first). `metadata-arena/README.md` keeps its rule that numbers live where the decision is
+  and now points at that note.
 
-```
-bun run scripts/run-jmh.js --include ".*ArenaIndexJmhBenchmark.*"
-```
-
-That is 3 forks with 6×2 s warmup and 8×2 s measurement per case — roughly half an hour, and the runner
-warns if any of it is lowered. Then record the outcome where the decision lives: which backend
-`metadata-server` should use for the index (and why), and whether a `rebuild` at the expected table size fits
-the watcher batch the DEC-W009 rebuild protocol is meant to serve. Write it into DEC-W009's implementation
-note, not into a README.
-
-**Gate:** the numbers come from a default-profile run (the runner's own warning line is absent), and the
-decision — including "either backend will do, and here is why that is the answer" — is written down.
-
-**Done when:** no reader has to run the benchmark to learn which backend to use.
+**Gate:** ✅ the numbers come from a default-profile run (the profile recorded inside `results.json`, no
+`results-smoke.json`, 24 samples per case in 15 of 16) and the decision — backend, why, and the batch
+answer — is written into DEC-W009's implementation note.
 
 ---
 
@@ -1380,7 +1400,7 @@ start)
 | 1.4 | Test the MCP tool surface | agent | S | `[x]` |
 | 2.1 | metadata-arena unit tests | agent | M | `[x]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
-| 2.3 | Decision-grade arena run + the backend decision | agent | S | `[ ]` |
+| 2.3 | Decision-grade arena run + the backend decision | agent | S | `[x]` |
 | 3.0a | The metadata contract generators consume (ADR first) | agent | M | `[ ]` — prerequisite of every consumer step |
 | 3.0b | Class relations (supertypes/interfaces + reverse) in the class index | agent | M | `[ ]` |
 | 3.0c | The cache: what is cached, and what invalidates it | agent | M | `[ ]` |

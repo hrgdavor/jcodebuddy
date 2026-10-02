@@ -111,9 +111,22 @@ The index SHOULD be rebuilt on a schedule aligned with the project's full-recomp
 
 ### Follow-up
 
-- Define the arena allocator implementation details (off-heap via `sun.misc.Unsafe`, `ByteBuffer` direct allocation, or a library like `Chronicle Bytes`).
-- Determine the rebuild trigger policy (full-recompile cycle, debounced batch, on-demand).
-- Benchmark arena size vs. project size to establish default configuration values.
+The first three are settled by the implementation note at the end of this record — the allocator, the
+rebuild trigger, and the sizing rule. The fourth is new and comes out of measuring.
+
+- **Define the arena allocator implementation details** (off-heap via `sun.misc.Unsafe`, `ByteBuffer`
+  direct allocation, or a library like `Chronicle Bytes`). → **Settled: `ByteBufferArena` direct
+  allocation is the default, `FfmArena` stays as the escape hatch** — see Decision 1 in the note.
+- **Determine the rebuild trigger policy** (full-recompile cycle, debounced batch, on-demand). →
+  **Settled: a debounced full rebuild per watcher batch** (the existing 300 ms debounce), because the
+  rebuild is two to four orders of magnitude inside that budget at realistic sizes — see Decision 2.
+- **Benchmark arena size vs. project size to establish default configuration values.** → **Settled: the
+  formula in the note** (`HEADER + 16 × capacity + 12 × entries + slack`, capacity the next power of two
+  at or above twice the entries), with the resulting per-size figures.
+- **Why the FFM backend is ~10× slower on the hot path is a hypothesis, not a finding.** The consistent
+  explanation — an intrinsified `ByteBuffer` against alignment-1 var-handle access in `FfmMemoryView` — was
+  not profiled, and the note records it as unexplained. Anything that puts FFM on a default path owes a
+  profile first.
 
 ## Out of scope
 
@@ -132,3 +145,117 @@ The index SHOULD be rebuilt on a schedule aligned with the project's full-recomp
 - The dependency graph MUST support lookup of all correlation entries affected by a changed file's wayhash.
 - `parse` in DEC-W008 MUST produce file-scoped `SourceMetadata` only; correlation data MUST be stored in the arena index, not in cache entries.
 - Arena allocation MUST not use per-entry heap allocations for individual edges or index entries.
+
+## Implementation note — the backend and the rebuild trigger, measured (2026-10-01)
+
+This note answers the first three follow-ups above. It is the decision-grade run `plans/unified-plan.md`
+step 2.3 asked for, and the numbers live here rather than in a README because a number in a README is stale
+the moment the machine changes.
+
+**How it was produced.** `bun run scripts/run-jmh.js --include ".*ArenaIndexJmhBenchmark.*"` at the
+runner's default profile — 3 forks, 6 × 2 s warmup, 8 × 2 s measurement per case, JMH 1.37 — which the
+runner warns about *only* when it is lowered; the run took 22 min 29 s and wrote `target/jmh/results.json`
+(`results-smoke.json` is the marker of a run that must not be recorded, and it does not exist). Throughput
+in ops/ms, higher is better; 24 samples per case except where noted. `ns/op` is derived (10⁶ ÷ ops/ms).
+
+| Mode | Backend | Entries | ops/ms | ±(99.9%) | ns/op |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `getHot` | ByteBuffer | 1 000 | 121 774.1 | 5 153.2 | 8.2 |
+| `getHot` | ByteBuffer | 100 000 | 127 583.8 | 4 766.5 | 7.8 |
+| `getHot` | FFM | 1 000 | 11 989.2 | 527.0 | 83.4 |
+| `getHot` | FFM | 100 000 | 10 989.4 | 1 016.0 | 91.0 |
+| `getRandom` | ByteBuffer | 1 000 | 86 943.5 | 10 400.4 | 11.5 |
+| `getRandom` | ByteBuffer | 100 000 | 50 281.2 | 2 352.2 | 19.9 |
+| `getRandom` | FFM | 1 000 | 10 721.7 | 381.2 | 93.3 |
+| `getRandom` | FFM | 100 000 | 9 942.1 | 493.6 | 100.6 |
+| `rebuild` | ByteBuffer | 1 000 | 92.773 | 6.894 | 10.8 µs |
+| `rebuild` | ByteBuffer | 100 000 | 0.579 | 0.025 | 1.73 ms |
+| `rebuild` | FFM | 1 000 | 7.273 | 0.753 | 137 µs |
+| `rebuild` | FFM | 100 000 | 0.071 | 0.004 | 14.1 ms |
+| `mmapLoad` | ByteBuffer | 1 000 | 5.549 | 0.246 | 180 µs |
+| `mmapLoad` | ByteBuffer | 100 000 | 0.246 | 0.016 | 4.06 ms |
+| `mmapLoad` | FFM | 1 000 | 5.858 | 0.349 | 171 µs |
+| `mmapLoad` | FFM | 100 000 | 0.212 | 0.022 | 4.72 ms |
+
+### Decision 1 — the allocator is `ByteBufferArena` direct allocation
+
+`ByteBufferArena` is **one order of magnitude faster on every hot-path mode** and the gaps are far outside
+the intervals: `getHot` 10.2× at 1 000 entries and 11.6× at 100 000; `getRandom` 8.1× and 5.1×; `rebuild`
+12.8× and 8.2×. The 99.9 % interval of the *slower* backend and the *faster* one do not come within a
+factor of four of meeting.
+
+`FfmArena` is not slower on the cold-start path — `mmapLoad` is a wash (FFM 171 µs vs 180 µs at 1 000; FFM
+4.72 ms vs 4.06 ms at 100 000, intervals overlapping), which is what one would expect from a path dominated
+by mapping and page faults rather than by the accessor.
+
+So: **the relations index allocates through `ByteBufferArena`**, and `FfmArena` stays in the module as the
+escape hatch for the two cases where a `ByteBuffer` cannot serve:
+
+- **size** — `ByteBuffer` is indexed by `int`, so one arena is capped at 2 GiB. That binds at roughly 30–40
+  million entries with the formula below, far beyond a project's relation count, but it is a hard wall
+  rather than a slow path;
+- **the platform's own direction** — FFM is the supported API and `sun.misc.Unsafe` is not. `Unsafe` is
+  rejected outright (it is deprecated and the JDK already warns when it is touched; the module has no need
+  for it), and a new dependency such as `Chronicle Bytes` is rejected because it buys nothing this module
+  does not already have in `ByteBuffer` — the third option the follow-up named, answered rather than
+  deferred.
+
+**For `metadata-server` this decides the backend it must use when it grows the index**: `ByteBufferArena`,
+for the reasons above. It decides nothing about *when* — `metadata-server` does not depend on
+`metadata-arena` today (its POM declares slf4j, Jackson and Fory), so this record's storage is not wired
+into the server at all yet, and that wiring is a change of its own rather than a line in this note.
+
+### Decision 2 — a full rebuild per watcher batch, and incremental updates are not needed for latency
+
+The watcher's debounce is **300 ms** by default (`HotSwapDaemon.DEFAULT_DEBOUNCE_MS`, and the same fallback
+in `EntityRegenerationWatcher`), so that is the budget a batch trigger has. Measured, on the default
+backend:
+
+| Entries | Full rebuild | Share of a 300 ms batch |
+| ---: | ---: | ---: |
+| 1 000 | 10.8 µs | 0.004 % |
+| 100 000 | 1.73 ms | 0.6 % |
+| 1 000 000 (extrapolated, 17.3 ns/entry) | ≈ 17 ms | 6 % |
+| 10 000 000 (extrapolated) | ≈ 173 ms | 58 % |
+
+On `ByteBuffer` a batch's budget holds **≈ 17 million entries** (on FFM ≈ 2.1 million at 141 ns/entry).
+Both are orders of magnitude above a plausible relations count for one project, and the cold-start path
+(`mmapLoad`, 4.06 ms at 100 000 entries) is inside the same budget.
+
+**Therefore: rebuild on a debounced batch, not on a compile cycle and not on demand**, and treat the
+incremental path this record permits as an optimisation nobody currently needs — the measured margin is
+large enough that a full rebuild per batch is simpler *and* fast enough, which is the combination
+DEC-W009 already prefers for correctness. What the batch cannot absorb is not the rebuild but the arena
+size the rebuild needs, which is why the numbers below matter more than the timings.
+
+### Arena sizing, from the format rather than from a guess
+
+`ArenaIndexJmhBenchmark.IndexState.arenaBytes` is the formula a caller must satisfy, and it is not a
+measurement: `HEADER + 16 × capacity + 12 × entries + slack`, where `capacity` is the next power of two at
+or above twice the entries (the table sits well under its load factor). With the rounding, that is between
+~44 and ~76 bytes per entry:
+
+| Entries | Capacity | Arena |
+| ---: | ---: | ---: |
+| 1 000 | 2 048 | ≈ 49 KB |
+| 100 000 | 262 144 | ≈ 5.4 MB |
+| 1 000 000 | 2 097 152 | ≈ 46 MB |
+| 10 000 000 | 33 554 432 | ≈ 657 MB |
+
+A reasonable default is "measure the relation count, then size by this formula with ~25 % slack", and the
+`ByteBuffer` cap is reached at the tens of millions of entries computed above.
+
+### What this run does not establish
+
+- **the cause** of the ByteBuffer advantage. No profiler was used; the consistent explanation remains the
+  alignment-1 var-handle access in `FfmMemoryView` against an intrinsified `ByteBuffer`, and it is recorded
+  as a hypothesis in the follow-up above. What *is* established is the direction and the magnitude;
+- **one case's iteration count.** `getRandom/bytebuffer/1000` ran **5, 5 and 6** measurement iterations per
+  fork instead of 8 each — uniform across its three forks, with no error recorded in `results.json`, and the
+  cause is not established either (the console output of that run was not kept). Every other case is
+  8/8/8. This is disclosed rather than smoothed over, and it does not carry the decision: its 100 000-entry
+  sibling is complete, and even its wider interval (±10 400 on 86 943) leaves the gap to FFM's 10 722
+  intact. Anyone who needs that one case complete can re-measure it alone —
+  `--include ".*getRandom.*"` at the same default profile;
+- **anything above 100 000 entries** except by the linear per-entry figure, which is a derivation and is
+  labelled as one.

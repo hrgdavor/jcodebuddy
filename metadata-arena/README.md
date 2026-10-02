@@ -110,7 +110,12 @@ compile, the build stays green, and no `*_jmhTest` harness exists to run.
 
 The numbers decide one thing worth deciding — which backend the metadata cache should default to, and
 whether a full rebuild is cheap enough to run on every watcher batch. They are recorded where that decision
-is made, not here: a number in a README is stale the moment the machine changes.
+is made, not here: a number in a README is stale the moment the machine changes. The recorded run and the
+decision it settled are in
+[DEC-W009's implementation note](../doc/architecture/decisions-watch/DEC-W009.md): `ByteBufferArena` is the
+default (about 10× the hot-path throughput of `FfmArena`, measured), a full rebuild fits the watcher's
+300 ms debounce by two orders of magnitude at realistic sizes, and `FfmArena` remains the answer for an
+arena beyond the 2 GiB a `ByteBuffer` can address.
 
 ## Position in JCodeBuddy
 
