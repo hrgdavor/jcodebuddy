@@ -596,6 +596,61 @@ is **3 main + 3 test**. So most of this step is a **classification** ("is this t
 generator reading it?"), and the move itself is small next to deciding what belongs where. Do not move a
 package wholesale: `validation/` and the emitters stay consumers.
 
+**The classification (2026-10-02), per file — the artefact this step starts with.** Read from the sources'
+own summaries, not from their package names. It is deliberately not per package: `meta/` splits, and one
+package-level guess in the measurement above was wrong (`meta/` is *not* all engine).
+
+| Verdict | Files | Why |
+| --- | --- | --- |
+| **Engine → `jcodebuddy-core`** | `index/ClassIndex`, `index/ClassRecord`, `index/TypeFacts` | the class index: one row per type with kind, modifiers, enclosing, line (DEC-029). These are the engine's rows; 3.0b adds relations to them |
+| **Engine** | `index/ContentHash`, `index/Wyhash64` | a file's content identity — the key the engine's invalidation is built on |
+| **Engine** | `SourceReader` | the one place an existing source is read, through DEC-030's one representation |
+| **Engine** | `TreeQueries` | the read-only queries over the parsed tree |
+| **Engine** | `JavaSyntaxCheck` | the javac positions the LST cannot answer (DEC-030: positions come from javac) |
+| **Engine** *(judgement call 1)* | `SourceSplicer` | the write half of the same one representation — see below |
+| **Engine** | `meta/SourceMetadata` | the file-scoped metadata a parse produces (DEC-W008's shape) |
+| **Engine** | `meta/SourceLocation` | "one place a field is, as a pass recorded it" — a position record, engine-shaped |
+| **Engine** | `meta/InterfaceInfo` | a discovered interface — the engine's type-level answer (kind + members) |
+| **Consumer — emitters** | `EntityMetadataGenerator` (the pass), `FieldBoilerplateGenerator`, `ValidationGenerator`, `ViewAdapterGenerator`, `ViewBuilderGenerator`, `ViewInterfaceGenerator`, `ViewMapperGenerator`, `ViewRecordGenerator`, `ViewTrackingBuilderGenerator` | they *read* the model and *write* Java; moving them would put entity codegen inside the engine |
+| **Consumer — the entity model** | `meta/EntityMeta`, `meta/EntityFieldMeta`, `meta/ViewMeta`, `meta/ViewFieldMeta`, `meta/ArtifactMeta`, `meta/Property`, `meta/ViewAttributes`, `meta/FieldConstraint`, `meta/TrackableType`, `MetadataLocations` | views, entities, artifacts, constraints, tracking levels: **domain**, not engine. The measurement called `meta/` "the representation and the parse path" — true of the three engine rows above, wrong for these nine |
+| **Consumer — generator behaviour** | `CooperativeCodegen`, `DivergenceReporter`, `GenLevelResolver`, `GeneratorPreflight`, `TypeLiterals`, `JcodebuddyDirectory`, `ViewAnnotationReader` | DEC-020 preservation, DEC-022 diagnostics, entity gen-levels, preflight, literal spelling, output plumbing, the `@View` reader |
+| **Consumer — rules** | all 12 of `validation/` | the entity conventions and their CLIs |
+
+**Judgement calls, recorded rather than buried.** *(1) `SourceSplicer` goes to the engine.* DEC-030 names
+the splice as the write half of the one representation, and DEC-037 lists parsing but not writing — so this
+extends the record rather than following it. The reason to extend it: with the splice in the engine, "one
+splice path" is structural and **3.0n** (absorb `jwa-builder*`) has an unambiguous replacement to point its
+consumers at. The alternative — writing stays with generators, and `jwa-builder`'s copy becomes the survivor
+in `jcodebuddy-builder` while the tooling's is deleted — is equally coherent and is recorded here so the
+choice is visible rather than accidental. *(2) `meta/` splits*, above. *(3) `JcodebuddyDirectory` stays a
+consumer* although "where output goes" sounds shared: it is the generator's output plumbing (DEC-026), and
+the engine does not write files. *(4) What the engine gains*: OpenRewrite (`rewrite-core`, `rewrite-java`,
+`rewrite-java-25`) and Jackson — exactly the dependency change DEC-037 predicted, and the reason the marker
+leaf (3.0l) exists. *(5) `SourceMetadata` moving* is what lets `jcodebuddy-codegen-api`'s single-type
+dependency on `hipster-entity-tooling` disappear at 3.0i — the cycle DEC-037's third fact described.
+
+**Execution order for this step** (each lands with its own evidence, because nothing here is in the recorded
+gate): **3.0f-2** `jcodebuddy-core` gains `index/` and the parse/position/write helpers plus the three
+`meta/` engine files, packages re-imported, `hipster-entity-tooling` depending on core — behaviour unchanged;
+**3.0f-3** the engine's *model* answers with one type (kind, modifiers, members, declaration file, checksum,
+relations) and a *missing* answer stays distinguishable from an absent one; **3.0f-4** the entity pass
+still regenerates the committed example byte-identically and the tooling's 65 test sources stay green. This
+pass is **3.0f-1: the classification**, which moves no code.
+
+**What 3.0f-2 will touch, measured (2026-10-02).** The engine types are imported by **five modules**, so the
+move is cross-module even though it is small:
+
+| Module | What it imports | Note |
+| --- | --- | --- |
+| `jcodebuddy-core` | — | gains the engine packages, and OpenRewrite + Jackson with them |
+| `hipster-entity-tooling` | the engine types throughout (`validation/*`, `MetadataLocations`, `EntityMetadataGenerator`, `index/*`) | internal imports; it stays a consumer and keeps depending on core, which it already does |
+| `project-automation` | `SourceReader`, `TreeQueries`, `index.ContentHash` (`SourceFacts`, `runner/SourceMetadataParser`), `meta.SourceMetadata` (`MetadataTypeResolver`), plus one test | outside the recorded gate → own build evidence |
+| `jcodebuddy-codegen-api` | `meta.SourceMetadata` in `CodeContext` and `CodeContextImpl` | **this is the one-type dependency DEC-037's third fact describes**; after 3.0f-2 it points at core, and 3.0i dissolves the module |
+| `hipster-ioc-tooling` | `SourceReader`, `TreeQueries` (`ContextReader`) | outside the gate → own build evidence |
+
+Only `hipster-entity-tooling` is in the recorded gate, so 3.0f-2's evidence is the gate **plus** a targeted
+build of `project-automation`, `jcodebuddy-codegen-api` and `hipster-ioc-tooling`.
+
 **Do:** make `jcodebuddy-core` the engine's home and give it the model — one type with its kind, modifiers,
 members, declaration file and checksum; relations expressed rather than implied; a *missing* answer reported,
 never an inferred absence (the lesson from step 3.2 and `TypeChangeConflictResolver`'s `UNRESOLVED_WARNING`);
