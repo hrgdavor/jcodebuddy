@@ -350,7 +350,7 @@ public final class ClassIndex {
         typeLessFiles.remove(moduleRelativePath);
         for (TypeFacts type : types) {
             put(new ClassRecord(type.fqn(), moduleRelativePath, type.kind(), type.modifiers(),
-                    type.enclosing(), type.line(), type.depth(), generated, "", null, -1L));
+                    type.enclosing(), type.line(), type.depth(), generated, "", null, -1L, type.relations()));
         }
     }
 
@@ -446,6 +446,36 @@ public final class ClassIndex {
     /** The row {@code fqn} names, or {@code null} when this module has no such type. */
     public ClassRecord row(String fqn) {
         return fqn == null ? null : byFqn.get(fqn);
+    }
+
+    /**
+     * Every indexed type that names {@code writtenName} as a supertype — the reverse direction 3.0b exists for
+     * ("who implements {@code CtxModule}"), answered from the table alone, without parsing a file.
+     *
+     * <p><strong>The match is on the spelling the source used.</strong> A row records the name as written
+     * ({@link TypeRelation} says why), so a caller asking about {@code a.b.CtxModule} finds the types that
+     * wrote {@code a.b.CtxModule} and not the ones that wrote {@code CtxModule} after importing it. That is a
+     * real limit, stated rather than papered over: closing it needs name resolution over imports, which is
+     * search's work (3.0h), and a helper here that guessed would be the confident-wrong-answer this index
+     * already learned to avoid. Matching is case-sensitive and includes {@code extends} and {@code implements}
+     * edges alike, because "is A a subtype of B" does not depend on which clause made it so.</p>
+     *
+     * <p>The result is in the table's own order, so two runs answer identically.</p>
+     */
+    public List<ClassRecord> subtypesOf(String writtenName) {
+        if (writtenName == null) {
+            return List.of();
+        }
+        List<ClassRecord> subtypes = new ArrayList<>();
+        for (ClassRecord row : byFqn.values()) {
+            for (TypeRelation relation : row.relations()) {
+                if (writtenName.equals(relation.name())) {
+                    subtypes.add(row);
+                    break;
+                }
+            }
+        }
+        return List.copyOf(subtypes);
     }
 
     /**
@@ -817,6 +847,18 @@ public final class ClassIndex {
             sb.append("\"").append(MetadataJson.escape(row.modifiers().get(i))).append("\"");
         }
         sb.append("], \"line\": ").append(row.line()).append(", \"depth\": ").append(row.depth());
+        // Always emitted, even when empty: a table without the field is one written before 3.0b, and "no
+        // relations recorded" must not read the same as "this type has no supertypes" (3.0b's whole point).
+        sb.append(", \"relations\": [");
+        for (int i = 0; i < row.relations().size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            TypeRelation relation = row.relations().get(i);
+            sb.append("{ \"name\": \"").append(MetadataJson.escape(relation.name()))
+                    .append("\", \"kind\": \"").append(relation.kind().json()).append("\" }");
+        }
+        sb.append("]");
         if (row.generated()) {
             sb.append(", \"generated\": 1");
         }
@@ -965,12 +1007,27 @@ public final class ClassIndex {
             for (JsonNode modifier : node.path("modifiers")) {
                 modifiers.add(modifier.asText());
             }
+            List<TypeRelation> relations = new ArrayList<>();
+            for (JsonNode relation : node.path("relations")) {
+                TypeRelation.Kind kind = TypeRelation.Kind.fromJson(relation.path("kind").asText(null));
+                if (kind == null) {
+                    // Refuse rather than guess, exactly as an unknown format version is refused: a relation
+                    // kind this contract has no case for would silently become an absence of a relation.
+                    if (problems != null) {
+                        problems.add("the class index cannot describe " + entry.getKey()
+                                + ": its relations carry the unknown kind '"
+                                + relation.path("kind").asText("") + "'");
+                    }
+                    return null;
+                }
+                relations.add(new TypeRelation(relation.path("name").asText(""), kind));
+            }
             index.put(new ClassRecord(entry.getKey(), node.path("path").asText(""),
                     node.path("kind").asText(""), modifiers,
                     node.hasNonNull("enclosing") ? node.path("enclosing").asText() : null,
                     node.path("line").asInt(-1), node.path("depth").asInt(0),
                     node.path("generated").asInt(0) == 1, node.path("checksum").asText(""),
-                    node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L)));
+                    node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations));
         }
         index.readMtimes(index.indexFile.resolveSibling(MTIME_FILE_NAME), problems);
         return index;

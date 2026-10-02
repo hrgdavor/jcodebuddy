@@ -23,7 +23,7 @@ class TypeAnswerTest {
         ClassIndex index = ClassIndex.forPass(tree.resolve("report"), tree.resolve("module"),
                 tree.resolve("module/src/main/java"));
         index.addTypes("a/b/Person.java",
-                List.of(new TypeFacts("a.b.Person", "interface", List.of("public"), null, 3, 0)), false);
+                List.of(new TypeFacts("a.b.Person", "interface", List.of("public"), null, 3, 0, List.of())), false);
         return index;
     }
 

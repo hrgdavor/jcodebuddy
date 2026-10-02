@@ -1051,6 +1051,42 @@ the name it is (not dropped), and that an unresolvable supertype is visible as s
 **Done when:** a consumer can answer "is A a subtype of B" and "who implements I" from the index alone,
 without parsing a file.
 
+**Landed 2026-10-02, in the engine (`jcodebuddy-core`), and the tests corrected the design twice.**
+
+- **`TypeRelation(name, kind)`** (`engine.index`): one supertype, the name as written, and whether it came
+  from an `extends` or an `implements` clause. `ClassRecord` and `TypeFacts` carry a `List<TypeRelation>`
+  (`extends` first, then `implements`), `ClassRecord.sameTypeFacts` compares them — a type that starts
+  implementing an interface must not look unchanged to a pass comparing only file content — and
+  `ClassIndex.subtypesOf(name)` answers the reverse direction ("who implements I") from the table alone.
+- **The writer always emits `relations`, even as `[]`.** `enclosing` and `generated` are omitted when they say
+  nothing; this field is not, because *not recorded* must not read as *none* — a pre-3.0b table has no key at
+  all, which is a gap rather than a fact. A test writes a table, takes the field back out, and reads it as
+  empty to pin exactly that. An unknown `kind` makes the reader refuse the table, in the same spirit as an
+  unknown format version.
+- **Two corrections the tests forced, both recorded rather than smoothed over.** *(1)* `TreeQueries.supertypeNames`
+  answers with the **last segment only** (`Serializable` for `java.io.Serializable`), so recording it threw the
+  qualification away and made two different types one relation; the extraction now uses `supertypeTexts` and
+  removes balanced `<…>` groups, so the name is the form written without its arguments — and balanced groups
+  rather than a cut at the first `<`, because `Outer<T>.Inner` is two names and one argument. *(2)*
+  `ClassIndex.write()` hashes every row's file and refuses a row "whose size and checksum describe a file
+  nobody read", which the first version of the fixture tripped; the tests now write the sources they describe,
+  which is better evidence anyway.
+- **The interface trap is a test, not a comment.** `interface PersonSummary extends a.b.Person` must record
+  one `EXTENDS` relation: the LST holds an interface's `extends` clause in `getImplements()` and its
+  `getExtends()` is `null`, so a reader of `getExtends()` alone finds *no* supertype for the commonest
+  declaration in this project (DEC-030's measured trap). A class keeps the two clauses apart in one list.
+- **Evidence:** `TypeRelationsTest` (6 tests: round trip through write+read; an outside type recorded as
+  written and honestly *not* a row; the interface trap; a class's two clauses; the reverse lookup, including
+  that the match is the spelling used and that an unresolvable name finds no subtypes while staying visible as
+  a name; and the pre-3.0b table reading as not-recorded). Core 59 tests `BUILD SUCCESS`.
+- **DEC-029 amended** with the field, its three inner choices, the reverse lookup and the
+  refuse-unknown-kind rule; and its two stale references to the tooling (`MetadataLocations.kindOf`,
+  "vendored into the tooling") now name the engine.
+- **What this step does not do:** the names are *not* resolved to FQNs, so a simple name is matched as
+  written. That limit is in DEC-029, in `TypeRelation`'s javadoc and in `subtypesOf`'s, and closing it is
+  search's work (3.0h) — a resolution helper here would be the confident-wrong-answer 3.0f-3 exists to
+  prevent.
+
 ### 3.0c — The cache: what is cached, and what invalidates it
 **Who:** agent · **Size:** M
 
@@ -2053,7 +2089,7 @@ start)
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[x]` |
 | 3.0a | Settle the engine decision's open points (DEC-037, ADR first) | agent + maintainer | S–M | `[x]` — DEC-037 `Accepted`, DEC-038 created |
-| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index | agent | M | `[ ]` |
+| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index | agent | M | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
 | 3.0c | The cache: what is cached, and what invalidates it | agent | M | `[ ]` |
 | 3.0d | One implementation of `TypeResolver` over the index | agent | M | `[ ]` |
 | 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |

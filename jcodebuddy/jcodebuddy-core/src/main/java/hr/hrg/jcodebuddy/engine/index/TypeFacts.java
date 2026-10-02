@@ -26,8 +26,12 @@ import java.util.Set;
  * @param enclosing the FQN of the enclosing type, or {@code null} for a top-level type
  * @param line      the declaration's start line (its <em>name</em>), 1-based, or {@code -1}
  * @param depth     0 for a top-level type, the number of enclosing types otherwise
+ * @param relations the type's supertypes, {@code extends} clause first and then {@code implements}, as
+ *                  {@link TypeRelation}s — the names as written, since a row is a fact about one declaration
+ *                  and resolving a name needs the whole index (DEC-029's relation half, plan step 3.0b)
  */
-public record TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth) {
+public record TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
+                        List<TypeRelation> relations) {
 
     /**
      * The modifier vocabulary the index records.
@@ -43,6 +47,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
 
     public TypeFacts {
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
+        relations = relations == null ? List.of() : List.copyOf(relations);
     }
 
     /**
@@ -58,6 +63,12 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      */
     public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
                                String kind, List<String> modifiers, int line) {
+        return of(packageName, simpleName, enclosingNames, kind, modifiers, line, List.of());
+    }
+
+    /** {@link #of(String, String, List, String, List, int)} with the type's relations (plan step 3.0b). */
+    public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
+                               String kind, List<String> modifiers, int line, List<TypeRelation> relations) {
         List<String> chain = new ArrayList<>(enclosingNames);
         chain.add(simpleName);
         String prefix = packageName == null || packageName.isEmpty() ? "" : packageName + ".";
@@ -69,7 +80,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                         ? null
                         : prefix + String.join(".", enclosingNames),
                 line,
-                enclosingNames == null ? 0 : enclosingNames.size());
+                enclosingNames == null ? 0 : enclosingNames.size(),
+                relations);
     }
 
     /**
@@ -95,7 +107,75 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 // The enclosing chain is the line lookup's key half: `Shape` and `Shape.Circle` differ
                 // only by it, and a lookup missing it answers the outer declaration with the inner
                 // declaration's line.
-                TreeQueries.lineOfChained(declaration, enclosingChain, source));
+                TreeQueries.lineOfChained(declaration, enclosingChain, source),
+                relationsOf(declaration, TypeKinds.kindOf(declaration)));
+    }
+
+    /**
+     * The declaration's supertypes as relations, in source order: the {@code extends} clause first, then the
+     * {@code implements} clause (plan step 3.0b).
+     *
+     * <p>The clause is <strong>not</strong> read from {@link J.ClassDeclaration#getExtends()} alone, and that
+     * is why this method exists: an <em>interface's</em> {@code extends} clause is held in
+     * {@code getImplements()} while its {@code getExtends()} is {@code null} — DEC-030's measured trap, where
+     * reading {@code getExtends()} finds no supertype at all for the commonest declaration in this project.
+     * So the declaration's kind decides what an entry of {@code getImplements()} means: for an interface or an
+     * annotation it is an {@code extends}, for a class, enum or record an {@code implements}. A table that had
+     * this backwards would draw an {@code implements} edge from a declaration that cannot have one.</p>
+     *
+     * <p>Names come from {@link TreeQueries#supertypeTexts} — the form written in the source, with balanced type
+     * arguments removed — rather than from {@link TreeQueries#supertypeNames}, and the first test of this step
+     * is why: {@code supertypeNames} answers with the <em>last segment</em> only ({@code Serializable} for
+     * {@code java.io.Serializable}), so recording it would throw away the qualification and make two different
+     * types one relation. Dropping the arguments keeps a name from becoming source text: the relation is
+     * {@code EntityBase}, not {@code EntityBase<Long>} (see {@link TypeRelation}).</p>
+     */
+    public static List<TypeRelation> relationsOf(J.ClassDeclaration declaration, String kind) {
+        if (declaration == null) {
+            return List.of();
+        }
+        boolean interfaceLike = "interface".equals(kind) || "annotation".equals(kind);
+        boolean extendsClause = declaration.getExtends() != null;
+        List<String> names = TreeQueries.supertypeTexts(declaration);
+        List<TypeRelation> relations = new ArrayList<>(names.size());
+        for (int i = 0; i < names.size(); i++) {
+            // Only the first name can come from an `extends` clause, and only when there is one; everything
+            // after it came from `implements`, except on an interface, where the whole list is `extends`.
+            boolean fromExtends = interfaceLike || (extendsClause && i == 0);
+            relations.add(new TypeRelation(withoutTypeArguments(names.get(i)),
+                    fromExtends ? TypeRelation.Kind.EXTENDS : TypeRelation.Kind.IMPLEMENTS));
+        }
+        return List.copyOf(relations);
+    }
+
+    /**
+     * Removes balanced {@code <…>} groups from a type's source text, keeping everything else.
+     *
+     * <p>Balanced groups rather than a cut at the first {@code <}: the first is wrong for
+     * {@code Outer<T>.Inner}, which is two names and one argument, and it would answer {@code Outer} for a
+     * relation to {@code Outer.Inner}. An unbalanced {@code <} (which cannot come from a parsed declaration)
+     * leaves the text as it is rather than truncating a name.</p>
+     */
+    public static String withoutTypeArguments(String typeText) {
+        if (typeText == null || typeText.indexOf('<') < 0) {
+            return typeText;
+        }
+        StringBuilder out = new StringBuilder(typeText.length());
+        int depth = 0;
+        for (int i = 0; i < typeText.length(); i++) {
+            char c = typeText.charAt(i);
+            if (c == '<') {
+                depth++;
+            } else if (c == '>') {
+                if (depth == 0) {
+                    return typeText; // unbalanced: not a shape a declaration produced, so do not guess
+                }
+                depth--;
+            } else if (depth == 0) {
+                out.append(c);
+            }
+        }
+        return depth == 0 ? out.toString() : typeText;
     }
 
     /**

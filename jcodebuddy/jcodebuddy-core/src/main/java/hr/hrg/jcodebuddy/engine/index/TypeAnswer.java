@@ -22,11 +22,12 @@ package hr.hrg.jcodebuddy.engine.index;
  *       path, never to conclude that the type, member or relation does not exist.</li>
  * </ul>
  *
- * <p>What this type does <em>not</em> yet carry is deliberate, and it is where 3.0b and 3.0h land: a
- * {@code ClassRecord} has the declaration's facts (kind, modifiers, enclosing chain, line, file, checksum)
- * and no <em>members</em> and no <em>relations</em>. Asking for those today must therefore answer
- * {@code NotIndexed} with a cause that says so, rather than an empty list that reads like "none" — that is
- * the same mistake in a new place, and the reason this contract exists before the facts do.</p>
+ * <p>What this type does <em>not</em> yet carry is deliberate. A {@link ClassRecord} has the declaration's
+ * facts (kind, modifiers, enclosing chain, line, file, checksum) and, since 3.0b, its {@code relations} — the
+ * supertypes as written, with the reverse direction answered by {@link ClassIndex#subtypesOf(String)}. It has
+ * no <em>members</em>: asking for those today must answer {@code NotIndexed} with a cause that says so, rather
+ * than an empty list that reads like "none" — the same mistake in a new place, and the reason this contract
+ * exists before the facts do (3.0h grows the model; this type is what keeps that growth honest).</p>
  */
 public sealed interface TypeAnswer permits TypeAnswer.Found, TypeAnswer.NotIndexed {
 
