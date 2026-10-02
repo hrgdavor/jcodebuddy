@@ -795,6 +795,39 @@ that a subscriber actually receives an event — a freshness contract nobody can
 **Done when:** "is this metadata safe to read?" has a mechanical answer, and a consumer can subscribe instead
 of watching files itself.
 
+**Landed 2026-10-02 in the engine (`hr.hrg.jcodebuddy.engine.fresh`), and it is deliberately not a watcher.**
+
+- **The division: the host watches, the engine says what it means.** DEC-038 settled that the engine takes no
+  watcher, so nothing here polls a file or holds a watch service; `Freshness.report(kind, path)` is what the
+  host calls after observing one, and it is the single entry point for all three transitions (a new file, an
+  edit, a removal differ only by kind).
+- **`FreshnessEvent(kind, path, rows, dependents, unresolved, cause)`** — and the second field is the whole
+  point. A row depends on its file **and on the types it names**, so editing `Person.java` stales
+  `Employee`'s row although `Employee.java` was never touched; that set is computed from 3.0b's relations
+  (`ClassIndex.subtypesOf`), not by parsing anything. `kind` reuses `ClassIndex.ChangeKind` rather than
+  introducing a second vocabulary for "what happened to a type".
+- **The dependent search matches the FQN *and* the simple name**, because a relation is stored as written
+  (`implements Person` contains no FQN) — and the fixture writes it that way on purpose, so a dependent match
+  that only looked for `a.b.Person` would fail the test rather than pass silently.
+- **`Freshness.stateOf(fqn)` answers SAFE / STALE / UNKNOWN**, with UNKNOWN kept apart from SAFE: a name the
+  engine never saw is not a name it can vouch for, which is 3.0f-3's rule applied to freshness. A removal marks
+  what named the gone type as **unresolved** rather than dropping the relation.
+- **What is cached is the index and nothing else** — no parse trees, no source text between calls — so the
+  invalidation unit is the row and a re-read of the file is always correct.
+- **A file the index has no row for is still reported**, with a cause saying the index has no row for that path;
+  silence would be indistinguishable from safety.
+- **Evidence (own evidence, this is outside the recorded gate):** `FreshnessTest`, 6 tests — an edit stales its
+  own row; an edit that touches a relation stales the **dependent** rows; a deleted file leaves what named it
+  **unresolved**; a subscriber actually receives the event and a closed subscription stops; an unknown path is
+  reported; and an unknown name is UNKNOWN rather than SAFE. `EngineHasNoWatcherTest`, 2 tests, makes DEC-038's
+  rule mechanical: the engine's own POM declares no `watch` artifact and no engine source names
+  `hr.hrg.watch2` or reaches for the JDK's `WatchService`. Core **67 tests `BUILD SUCCESS`**.
+- **Additive, so nothing else was re-run**: this step adds a package and edits no existing engine type, so the
+  tooling (and the gate path) cannot be affected — stated rather than claiming a run that did not happen.
+- **What this step does not do:** it does not re-read a changed file (a pass does that), does not resolve
+  relation names (3.0h), and does not decide *when* a pass runs (the host's policy). 3.0c's cache question is
+  settled by the same answer: the row is the invalidation unit.
+
 ### 3.0h — Search: the queries every consumer asks
 **Who:** agent · **Size:** M
 
@@ -2094,7 +2127,7 @@ start)
 | 3.0d | One implementation of `TypeResolver` over the index | agent | M | `[ ]` |
 | 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |
 | 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
-| 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[ ]` |
+| 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
 | 3.0h | Search: the queries every consumer asks | agent | M | `[ ]` |
 | 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[ ]` |
 | 3.0j | Move the remaining consumers onto the engine | agent | L | `[ ]` |
