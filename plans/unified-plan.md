@@ -1122,6 +1122,35 @@ index alone; a declaration with none of either reading as a fact rather than as 
 **Done when:** `membersOf` and `annotationsOf` answer from the model, and no consumer has to parse a file to ask
 what a type contains or what annotates it.
 
+### 3.0s — `java-watch*` is standalone: no Jackson, no OpenRewrite, nothing else from this workspace
+**Who:** agent · **Size:** M
+
+The maintainer's rule, given 2026-10-02 while 3.0i was being attempted:
+
+> java-watch* must not know about jackson or openrewrite or anything else from this workspace
+
+This is what 3.0i collided with, and the collision was real rather than formal: `java-watch-agent`'s
+`ActionToolAdapter implements CodeGenerator<List<FileChange>>`, so **the SPI module existed to keep the watcher
+compilable without `project-automation`** (AGENTS.md § 1.1 records exactly that promotion). Dissolving the SPI
+into the engine would have made the watcher depend on OpenRewrite and Jackson in order to compile — so the
+boundary had to be fixed first, and this step fixes it.
+
+**Do:** make the check pass. It has been written and it measures **17 violations on 2026-10-02**, which is the
+list this step works through:
+
+| Module | Violation | The shape of the fix |
+| --- | --- | --- |
+| `java-watch-agent` | depends on `jcodebuddy-codegen-api`, and `ActionToolAdapter` (main) + `ToolSeamTest` (test) import `hr.hrg.jcodebuddy.codegen.*` | the watcher keeps **its own** port (`ActionTool` already is one); the adapter that bridges it to a JCodeBuddy SPI moves into a module that legitimately depends on both (`project-automation`, the project's own dev-time assistant) |
+| `java-watch-agent` | depends on `jwa-builder-api` and `jwa-builder` | find what uses them — the JWA builder is absorbed into `jcodebuddy/` (DEC-038), so a use in the watcher is either a bridge to move out or a leftover to delete, and the record says which |
+| `java-watch-agent` | Jackson: the dependency, plus imports in `AuditManager`, `CommandServer`, `WatchAgent` | the watcher writes its own audit JSON; either hand-rolled writing (it is a small, fixed document) or a JSON library the watcher chooses for itself — what it may not do is inherit this workspace's Jackson |
+| `java-watch-run-sample` | depends on Jackson | a sample module: either its JSON use is removed or it depends on a library it declares itself, with the same rule |
+
+**Gate:** `bun scripts/check-watch-standalone.js` exits 0, plus each touched watch module's own build and tests
+green, and `java-watch-agent` still passing whatever it tests about the seam it used to expose as
+`CodeGenerator` (the port moves, its behaviour does not).
+
+**Done when:** the watcher knows a directory changed and decides nothing about Java, and 3.0i can dissolve the
+SPI into the engine without giving `java-watch*` anything.
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
 
@@ -2204,6 +2233,7 @@ start)
 | 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent | M | `[ ]` |
 | 3.0q | Merge what 3.0p found worth keeping, delete the rest | agent | M–L | ` [ ] ` (content decided by 3.0p) |
 | 3.0r | The index grows members and annotations (DEC-029 format change) | agent | M | ` [ ] ` — what 3.0h's Do asked for and its model could not answer |
+| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace | agent | M | `[ ]` — 17 measured violations listed in the step; blocks 3.0i |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |

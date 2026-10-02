@@ -582,6 +582,19 @@ canonical statement of a boundary that has no other home.
   taken with the evidence and recorded as its own decision.
 
 
+- **`java-watch*` is standalone — no Jackson, no OpenRewrite, nothing else from this workspace.** The rule, as
+  given by the maintainer on 2026-10-02:
+
+  > java-watch* must not know about jackson or openrewrite or anything else from this workspace
+
+  A `watch/*` module therefore declares no dependency on a workspace artifact (`hr.hrg.jcodebuddy:*`,
+  `hr.hrg.hipster:*`, any `jcodebuddy-*` / `hipster-*` / `metadata-*` / `jwa-*` artifactId), on Jackson or on
+  OpenRewrite, and its sources import none of them. The shared build parent is not a dependency and is not
+  covered. **A port the watcher needs must be the watcher's own** (`ActionTool` is); the adapter that bridges it
+  to a JCodeBuddy SPI belongs in the module that legitimately depends on both, not in the watcher.
+  `bun scripts/check-watch-standalone.js` enforces it (17 violations when it was written; plan step 3.0s fixes
+  them and unblocks 3.0i). See [`DEC-038`](doc-hipster-entity/architecture/decisions/DEC-038.md)'s amendment.
+
 ## 3. Notes for whoever reads next
 
 - **`proto/` is a local workspace, not a checkout target.** The whole directory is gitignored with no
