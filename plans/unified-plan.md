@@ -549,8 +549,29 @@ fact this step starts from, because it shapes every later step: **the recorded g
 modules the migration touches** (`GATE_MODULES` is `jcodebuddy-core` plus the six `hipster-entity` modules),
 so each migration step carries its own build/test evidence until 3.0k grows the gate.
 
-**Gate:** DEC-037 is `Accepted` with every open point answered in it; the amended records are consistent with
-the answer; `LINKS` green. (No code gate: this step is a decision.)
+**Done 2026-10-02 — every point settled, and the answer produced a second record.**
+
+- The maintainer answered all of them: `jcodebuddy-core` holds the engine **and what consumers need**,
+  `jcodebuddy-codegen-api` is merged into it "to simplify", the **markers move to a leaf**, and the watch side
+  is `metadata-server` **renamed `jcodebuddy-meta`** with `java-watch*` staying **its own library** (the engine
+  takes no watcher).
+- **[DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) is `Accepted`** with both points
+  answered, and the module layout they imply is **[DEC-038](../doc-hipster-entity/architecture/decisions/DEC-038.md)**
+  (`Accepted`), which also absorbs the third thing the direction named: `jwa-builder`/`jwa-builder-api`.
+- **The reconnaissance turned one of those into a finding worth the record**: there are **two
+  `SourceSplicer` implementations** — `hipster-entity-tooling`'s and `jwa-builder`'s
+  `hr.hrg.watch2.builder.SourceSplicer` (both package-private) — plus two read/position stacks, against
+  DEC-030's "one representation, one splice path". So the `jwa-builder*` absorption is a **consolidation**,
+  not a rename, and DEC-038 decision 5 makes one path survive.
+- **Also recorded, because it shapes every step below**: `metadata-server`'s `groupId` is already
+  `hr.hrg.jcodebuddy` while its package is `hr.hrg.watch2.server.metadata` (a half-rename waiting to happen),
+  and the consumers of `jwa-builder*` — `java-watch-agent`, `project-automation`, `webview/jwa-sidecar` — are
+  all **outside the recorded gate**.
+
+**Gate:** ✅ DEC-037 is `Accepted` with every open point answered; DEC-038 carries the module layout; the
+records that state the old shape are pointed at the new one
+([`module-map.md`](../doc/architecture/module-map.md)'s "where this is going" note); `LINKS` green. (No code
+gate: this step was a decision.)
 
 **Done when:** 3.0f can start without a second decision — the engine's home, its leaf exceptions and its
 consumers are all written down.
@@ -692,6 +713,66 @@ recorded. State the cost honestly: a larger gate is a slower gate, so add the mo
 
 **Done when:** a later change that breaks the engine or a migrated consumer fails `bun scripts/mvn-jdk25.js`
 rather than being discovered by hand.
+
+### 3.0l — Extract the marker leaf out of `jcodebuddy-core`
+**Who:** agent · **Size:** S
+[DEC-038](../doc-hipster-entity/architecture/decisions/DEC-038.md) decision 1. `GeneratedCodeMarkers`,
+`GeneratedCodeParser` and `GeneratedBlock` — three main types plus their test — move to a leaf of their own
+(*proposed name: `jcodebuddy-generated`*), so the engine may gain OpenRewrite and Jackson while a tool that
+only reads generated-region spans keeps resolving nothing heavy (DEC-035's consumers are not generators).
+
+**Do:** create the leaf, move the three types, re-point the two dependents (`hipster-entity-tooling`,
+`hipster-ioc-tooling`), add the leaf to the root POM and to `GATE_MODULES` (it is the module set that decides
+what a gate run watches, and this is exactly the "being in the gate is a decision" case
+[`gate.js`](../scripts/lib/gate.js) writes down), and update [`module-map.md`](../doc/architecture/module-map.md)
+and DEC-035's "where the vocabulary lives" sentence if it names the module.
+
+**Gate:** `GATE` green with the leaf in the set and `jcodebuddy-core` still green; `GateContractTest`'s
+recorded list updated in the same change; `LINKS` green.
+
+**Done when:** the engine's module can grow dependencies without giving them to the tools that only parse
+markers.
+
+### 3.0m — `metadata-server` becomes `jcodebuddy-meta`
+**Who:** agent · **Size:** M
+[DEC-038](../doc-hipster-entity/architecture/decisions/DEC-038.md) decisions 2 and 3. The module's `groupId`
+is already `hr.hrg.jcodebuddy`, but its package is `hr.hrg.watch2.server.metadata` — so the rename is the
+directory, the `artifactId`, the `<name>` **and the package** (`hr.hrg.jcodebuddy.meta.*`), with the MCP
+sibling following (`jcodebuddy-meta-mcp`), and with `java-watch*` staying an independent library it **depends
+on** rather than absorbs.
+
+**Do:** rename in that order (package first, so the compiler finds every reference), update every consumer
+(`metadata-mcp-server`, `webview/jwa-sidecar`, `java-watch-agent`, `project-automation` — the POMs and the
+imports), and keep the serving shapes and transports unchanged (DEC-W006–W009 stay true; what changes is the
+module's name and, later, that its providers read the engine rather than owning the model). Re-pointing the
+providers at the engine is 3.0j's work, not this step's — this step must not change behaviour.
+
+**Gate:** own evidence (the module is outside the recorded gate): every consumer of the renamed module builds
+and its tests pass, no `import hr.hrg.watch2.server.metadata` remains anywhere, and the module's own tests are
+green under the new coordinates.
+
+**Done when:** the family's names say what the modules are, and nothing has changed but names.
+
+### 3.0n — Absorb `jwa-builder*` and collapse the duplicate splice path
+**Who:** agent · **Size:** L
+[DEC-038](../doc-hipster-entity/architecture/decisions/DEC-038.md) decisions 4 and 5. `jwa-builder` and
+`jwa-builder-api` are already modules here, named for the agent they were first written for
+(`hr.hrg.watch2.builder[.api]`), and `jwa-builder` holds a **second** `SourceSplicer` (plus `LineLookup`)
+against DEC-030's one splice path.
+
+**Do:** rename them into the family (*proposed: `jcodebuddy-builder-api`* for `GenerateBuilder`, the
+annotations; *proposed: `jcodebuddy-builder`* for `BuilderTransformationEngine`, `ClassMemberProcessor`,
+`RecordBuilderProcessor`, and whichever of `LineLookup`/`SourceSplicer` 3.0f's classification leaves with the
+generator), packages following (`hr.hrg.jcodebuddy.builder[.api]`), and **delete the duplicate splice path**:
+one implementation survives and the other goes, rather than staying as a private helper the next generator
+picks up by accident. Update the consumers (`java-watch-agent`, `project-automation`, `webview/jwa-sidecar`),
+and give [`code.graph.md`](../doc_knowledge/code.graph.md) and DEC-030 the surviving home of the splice —
+they name `SourceSplicer` today without saying which module it lives in, which is how there came to be two.
+
+**Gate:** own evidence (all three consumers are outside the recorded gate): each builds and its tests pass;
+one `SourceSplicer` remains in the tree, and a grep proves it; the record and the guide name its home.
+
+**Done when:** the codegen modules are part of the family, and one splice path exists instead of two.
 
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
@@ -1721,7 +1802,7 @@ start)
 | 2.1 | metadata-arena unit tests | agent | M | `[x]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[x]` |
-| 3.0a | Settle the engine decision's open points (DEC-037, ADR first) | agent + maintainer | S–M | `[ ]` — prerequisite of every engine and consumer step |
+| 3.0a | Settle the engine decision's open points (DEC-037, ADR first) | agent + maintainer | S–M | `[x]` — DEC-037 `Accepted`, DEC-038 created |
 | 3.0b | Class relations (supertypes/interfaces + reverse) in the class index | agent | M | `[ ]` |
 | 3.0c | The cache: what is cached, and what invalidates it | agent | M | `[ ]` |
 | 3.0d | One implementation of `TypeResolver` over the index | agent | M | `[ ]` |
@@ -1732,6 +1813,9 @@ start)
 | 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[ ]` |
 | 3.0j | Move the remaining consumers onto the engine | agent | L | `[ ]` |
 | 3.0k | Grow the recorded gate to cover the engine's contract | agent | S | `[ ]` |
+| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038) | agent | S | `[ ]` |
+| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038) | agent | M | `[ ]` |
+| 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038) | agent | L | `[ ]` |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |
