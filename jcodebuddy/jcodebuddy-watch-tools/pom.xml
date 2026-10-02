@@ -29,7 +29,7 @@
         depend on a `project-automation` (AGENTS.md § 1.1), and a launcher would have to, in order to register
         a tool. So the bridge is a small library instead, which the app may depend on.
 
-        The direction is the honest one: this module depends on `java-watch-agent` (for the ActionTool port),
+        The direction is the honest one: this module depends on `jcodebuddy-agent` (for the ActionTool port),
         never the other way round. The watcher knows a directory changed; this module knows what to do about a
         Java file.
     -->
@@ -37,7 +37,7 @@
     <dependencies>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>java-watch-agent</artifactId>
+            <artifactId>jcodebuddy-agent</artifactId>
         </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>

@@ -8,7 +8,7 @@
 - [ ] Implement Remote Jump Front-end: Update Agent Web UI to send GET /jump requests to Sidecar.
       — **open**: the sidecar's `/jump` endpoint, its token/origin gate and loopback bind all exist
       (Phase 3 of [`jwa-sidecar/plan.md`](webview/jwa-sidecar/plan.md)), but the agent's web UI never
-      calls it: `jcodebuddy/java-watch-agent/src/main/resources/web/` contains no `jump` and no `7979`.
+      calls it: `jcodebuddy/jcodebuddy-agent/src/main/resources/web/` contains no `jump` and no `7979`.
 - [ ] Refine Configuration: Add support for custom indentation (tabs/spaces) in toolsets.
       — **open**: the indent is a constructor argument — `BuilderTransformationEngine(String indent)`,
       `RecordBuilderProcessor(String indent)` — and nothing reads the client's `tabSize`/`insertSpaces`.

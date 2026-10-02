@@ -297,7 +297,7 @@ scripts/rewrite-migration/verify-migration.js` reports **`RESULT: PASS.`** with 
 | Large and annotation-heavy sources | `.../LargeSourceEdgeCaseTest.java` | 4 tests |
 | Regression sweep over the real tree | `.../MigrationCompletenessTest.java` | 3 tests over 283 files |
 | Automation integration | `project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java` | 4 tests |
-| Agent tool seam | `jcodebuddy/java-watch-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java` | 18 tests (module had none) |
+| Agent tool seam | `jcodebuddy/jcodebuddy-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java` | 18 tests (module had none) |
 | JMH benchmarks | `.../ReadPathJmhBenchmark.java`, `.../PositionQueryJmhBenchmark.java` | 18 results, `jmh` profile |
 | Benchmark runner (Bun) | `scripts/rewrite-migration/run-tooling-benchmarks.js` | refuses a non-25 JVM |
 | Report generator (Bun) | `scripts/rewrite-migration/generate-test-report.js` | +5 Bun tests, 35 in the file |
@@ -451,7 +451,7 @@ Test files delivered:
 - `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ReadPathJmhBenchmark.java`
 - `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/PositionQueryJmhBenchmark.java`
 - `project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java`
-- `jcodebuddy/java-watch-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java`
+- `jcodebuddy/jcodebuddy-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java`
 
 Scripts and reports:
 - `scripts/rewrite-migration/run-tooling-benchmarks.js`

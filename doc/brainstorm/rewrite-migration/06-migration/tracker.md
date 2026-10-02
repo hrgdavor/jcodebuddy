@@ -56,17 +56,17 @@ Rules the gate enforces:
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` | hipster-entity-tooling | high | medium |  |
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` | hipster-entity-tooling | high | medium |  |
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` | hipster-entity-tooling | high | medium |  |
-| `- [x] jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` | java-watch-agent | high | medium | ported; type/line facts come from `ClassMemberProcessor.typesIn`, so the parent walk is gone |
-| `- [x] jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` | java-watch-agent | high | medium | ported; delegates to `ClassMemberProcessor` (6 new tests in jwa-builder) |
-| `- [x] jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` | java-watch-agent | high | medium | ported; delegates to `ClassMemberProcessor` |
-| `- [x] jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java` | java-watch-agent | high | medium | ported; delegates to `ClassMemberProcessor` |
+| `- [x] jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` | java-watch-agent | high | medium | ported; type/line facts come from `ClassMemberProcessor.typesIn`, so the parent walk is gone |
+| `- [x] jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` | java-watch-agent | high | medium | ported; delegates to `ClassMemberProcessor` (6 new tests in jwa-builder) |
+| `- [x] jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` | java-watch-agent | high | medium | ported; delegates to `ClassMemberProcessor` |
+| `- [x] jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java` | java-watch-agent | high | medium | ported; delegates to `ClassMemberProcessor` |
 | `- [x] jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` | jwa-sidecar | high | medium | ported; discovery moved into `RecordBuilderProcessor`, so the sidecar no longer parses |
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/AuditableRule.java` | hipster-entity-tooling | high | low |  |
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityFieldEnumOrderRule.java` | hipster-entity-tooling | high | low |  |
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java` | hipster-entity-tooling | high | low |  |
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java` | hipster-entity-tooling | high | low | Renamed from JavaParserTool during the port |
 | `- [x] hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewBuilderGenerator.java` | hipster-entity-tooling | high | low |  |
-| `- [x] jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/JavaParserFactory.java` | java-watch-agent | high | low | deleted with its last consumer; the shared parser is no longer handed out |
+| `- [x] jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/core/JavaParserFactory.java` | java-watch-agent | high | low | deleted with its last consumer; the shared parser is no longer handed out |
 | `- [x] hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` | hipster-entity-tooling | medium | medium | ported; its constant reader goes through the LST |
 | `- [x] hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java` | hipster-entity-tooling | medium | medium | ported; its constant reader goes through the LST |
 | `- [x] jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` | jwa-builder | medium | medium |  |

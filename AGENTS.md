@@ -596,16 +596,16 @@ canonical statement of a boundary that has no other home.
   **The boundary is the `watch/` group, and moving a module into the right group is a fix too.** A module that
   needs Jackson, `jwa-builder` or another workspace artifact to do JCodeBuddy's work does not belong in
   `watch/`: `java-watch-agent` was exactly that — JCodeBuddy's code-action server, with an HTTP command server
-  and a codegen-session audit — and on 2026-10-03 it moved to the `jcodebuddy` group, still consuming
-  `java-watch-core`, which is the library that stays clean. A leak *inside* `watch/` is what the check is for.
+  and a codegen-session audit — and on 2026-10-03 it moved to the `jcodebuddy` group and was renamed
+  **`jcodebuddy-agent`** (module directory, artifactId and `<name>`; the package stays `hr.hrg.watch2.agent`),
+  still consuming `java-watch-core`, which is the library that stays clean. **The `java-watch*` rules no longer
+  apply to it**: it is a JCodeBuddy module, and the maintainer said so when the rename was agreed.
 
-  `bun scripts/check-watch-standalone.js` enforces all of it, and plan step 3.0s is what made it pass: the
-  original 17 violations went three ways — the SPI deleted from the agent (nothing used it but its own test,
-  which also unblocked 3.0i), the sample's Jackson demo rewritten (its point was hot-reload, not the library),
-  and the agent moved to the group it belongs to. See
-  [`DEC-038`](doc-hipster-entity/architecture/decisions/DEC-038.md)'s amendment.
-
-
+  `bun scripts/check-watch-standalone.js` enforces the rule for `watch/`, and plan step 3.0s is what made it
+  pass: the original 17 violations went three ways — the SPI deleted from the agent (nothing used it but its own
+  test, which also unblocked 3.0i), the sample's Jackson demo rewritten (its point was hot-reload, not the
+  library), and the agent moved to the group it belongs to. A leak *inside* `watch/` is what the check is for.
+  See [`DEC-038`](doc-hipster-entity/architecture/decisions/DEC-038.md)'s amendment.
 ## 3. Notes for whoever reads next
 
 - **`proto/` is a local workspace, not a checkout target.** The whole directory is gitignored with no

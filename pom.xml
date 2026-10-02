@@ -73,7 +73,7 @@
         <!-- The Eclipse IDE host (Phase 1 of webview/PLAN-eclipse-host.md): an SWT Browser view with
               the injected bridge, packaged as a dropins bundle. -->
         <module>webview/eclipse/webview-eclipse</module>
-        <module>jcodebuddy/java-watch-agent</module>
+        <module>jcodebuddy/jcodebuddy-agent</module>
         <module>hipster-entity/hipster-entity-api</module>
         <module>hipster-entity/hipster-entity-core</module>
         <module>hipster-entity/hipster-entity-example</module>
@@ -337,7 +337,7 @@
             </dependency>
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
-                <artifactId>java-watch-agent</artifactId>
+                <artifactId>jcodebuddy-agent</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

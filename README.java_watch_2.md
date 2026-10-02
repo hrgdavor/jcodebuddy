@@ -5,7 +5,7 @@ A comprehensive suite of Java-based file monitoring and developer productivity t
 ## Project Structure
 
 - **[java-watch-core](watch/java-watch-core)**: Core models and utilities. Includes `ChecksumDatabase` for change detection, `CodeEdit` for surgical updates, and `CodeEditApplier`.
-- **[java-watch-agent](jcodebuddy/java-watch-agent)**: The "Agent" - an extensible file watcher that applies automated transformations (tools) to your source code in real-time.
+- **[java-watch-agent](jcodebuddy/jcodebuddy-agent)**: The "Agent" - an extensible file watcher that applies automated transformations (tools) to your source code in real-time.
 - **[webview/jwa-sidecar](webview/jwa-sidecar)**: An **LSP (Language Server Protocol)** wrapper for JWA, and the LSP transport of the webview product. Enables interactive surgical updates, a **Remote Jump** service to tunnel navigation from Web UIs back to your IDE, and — since the sidecar moved in with the webview hosts — the same origin allow-list, rate limit and path jail they use.
 - **[jwa-builder](jcodebuddy/jwa-builder)**: The core engine for Record Builder generation. IO-agnostic and shared between the Agent and the Sidecar.
 - **[java-watch-scp](watch/java-watch-scp)**: Specialized file watcher for automatic synchronization to remote servers via SCP/SSH.
@@ -32,7 +32,7 @@ mvn clean install -DskipTests
 The Agent uses a `.watch_agent.conf` file for configuration.
 
 ```powershell
-java -jar jcodebuddy/java-watch-agent/target/java-watch-agent.jar
+java -jar jcodebuddy/jcodebuddy-agent/target/java-watch-agent.jar
 ```
 
 ## Running the Sidecar (LSP)

@@ -11,8 +11,8 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>java-watch-agent</artifactId>
-    <name>Java Watch Agent</name>
+    <artifactId>jcodebuddy-agent</artifactId>
+    <name>JCodeBuddy Agent</name>
     <description>Agent module for Java Watch2: detects @gen markers, completes records and classes through
         jwa-builder's OpenRewrite-based processors, and audits the resulting file changes.</description>
 
