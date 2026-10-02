@@ -60,6 +60,11 @@ not mirror this reactor's module graph. The "never a transitive dependency" half
 - **`metadata-arena`** for memory and off-heap work: `Arena`, `LongToLongsIndex`, the mmap formats. Do not
   invent another.
 - **`hr.hrg.dialog` (dia-log)** for structured JSON logging, where a module needs it.
+- **`jsx6`** for any UI, from a local checkout updated on demand rather than a pinned version — the
+  instruction and its download directions are in the root [`AGENTS.md`](../AGENTS.md) § 2 (the jsx6
+  bullet), and [`plans/unified-plan.md`](../plans/unified-plan.md) step 7.9 sets the checkout up and
+  decides whether the generated report pages are in scope. **The checkout's own `AGENTS.md` is the
+  guidance to follow** for using it; do not write UI against a remembered version of the library.
 
 **JCodeBuddy-only.** A driver project consumes JCodeBuddy as an artifact and is under no obligation to
 mirror these choices. (If a project *does* generate Java source through JCodeBuddy, the splice rule still

@@ -535,6 +535,28 @@ canonical statement of a boundary that has no other home.
   state in `webview/host.json`. See
   [`doc-hipster-entity/architecture/decisions/DEC-033.md`](doc-hipster-entity/architecture/decisions/DEC-033.md)
   and [`webview/doc/webview-host-api.md`](webview/doc/webview-host-api.md) § 4a.
+- **Any UI built must use the `jsx6` library, from a local checkout whose `AGENTS.md` is the
+  authority.** The instruction, kept as given:
+
+  > Any ui built must use jsx6 library, and to do so project root needs to use temporary folder
+  > checkout <https://github.com/hrgdavor/jsx6> into temporary folder so you have a local copy. use git
+  > to checkout so you can update it on demand and use latest version. then inspect agents.md from jsx6
+  > root and use jsx6 for UI.
+
+  Concretely: `git clone https://github.com/hrgdavor/jsx6 <dir>`, `git -C <dir> pull --ff-only` whenever
+  you want the latest, then **read `<dir>/AGENTS.md` and follow it** — this file does not restate jsx6's
+  guidance, exactly as jsx6's own `AGENTS.md` does not restate its sub-documents. That file is a router:
+  for *using* the stack it points at `docs/stack/README.md` (setup, signals, the JSX/DOM contract, and the
+  rules that fail silently), and its gate is `bun run check` inside the checkout. Default location
+  `<repo>/.jsx6/` (gitignored, and not `target/` — the gate's `mvn clean` would delete a checkout there);
+  `JCODEBUDDY_JSX6_DIR` overrides it. **Nothing about JCodeBuddy's UI may be written against a
+  remembered version of jsx6** — the checkout you actually read is what counts, and it is updated on
+  demand rather than pinned. Scheduled as step 7.9 in [`plans/unified-plan.md`](plans/unified-plan.md).
+  **Conflict to resolve, not to ignore:** the generated report pages are pinned to *one self-contained
+  file with framework-free vanilla JavaScript, no bundler, no `node_modules`* (§ 1, DEC-027/029). A page
+  that is UI falls under this bullet, so step 7.9 must either narrow this rule to application UI or
+  amend DEC-027/029 for report pages — it is a decision, and it is recorded there rather than settled
+  here.
 
 
 ## 3. Notes for whoever reads next

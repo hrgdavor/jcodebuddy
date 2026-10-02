@@ -85,6 +85,15 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
    package list and writes Java plus metadata JSON (project-scoped by construction, no per-file entry point
    to misuse), while `IocContextGenerator` wears the file-scoped SPI and reads whatever sits beside the
    context. Enforcement: steps 3.0a–3.0e and 7.8.
+9. **Any UI built uses `jsx6`, from a local checkout whose own `AGENTS.md` is the authority.** The
+   instruction and its download directions are kept verbatim in
+   [`AGENTS.md` § 2](../AGENTS.md) (the jsx6 bullet) — clone <https://github.com/hrgdavor/jsx6> into a
+   temporary folder with git so it can be updated on demand to the latest, then read `AGENTS.md` from the
+   jsx6 root and use jsx6 for UI. This plan does not restate jsx6's guidance; the checkout you actually
+   read is what counts, and it is a **moving dependency** rather than a pinned version. Enforcement: step
+   7.9, which settles the one open question this rule collides with — the generated report pages are
+   pinned to framework-free vanilla JavaScript with no bundler and no `node_modules` (§ 1, DEC-027/029), so
+   either the rule narrows to application UI or that pair of decisions is amended.
 
 ---
 
@@ -993,6 +1002,11 @@ residual with nothing of its own to say.
 
 ## 9. Phase 5 — webview: close the suite
 
+> **Every UI step in this phase builds on `jsx6`** (rule § 2.9, [`AGENTS.md` § 2](../AGENTS.md)): no UI is
+> written against a remembered version of the library, and the checkout's own `AGENTS.md` is the guidance
+> to follow. Step 7.9 sets that checkout up and settles whether the generated report pages are in scope.
+> A webview step that finds the checkout missing should set it up rather than reach for another library.
+
 ### 5.1 — Phase 6: headless parity as a build gate
 **Who:** agent · **Size:** M
 
@@ -1269,6 +1283,55 @@ type produces a diagnostic instead of an empty answer.
 **Done when:** a caller holding a generator list can tell the kinds apart without reading the generator's
 source, and no project-wide generator implements the file-scoped interface.
 
+### 7.9 — Set up the `jsx6` checkout every UI must be built from
+**Who:** agent · **Size:** S–M
+
+Rule § 2.9 and [`AGENTS.md` § 2](../AGENTS.md) settle *that* any UI built here uses
+[`jsx6`](https://github.com/hrgdavor/jsx6); nothing in the tree settles *how an agent gets it*, and the
+instruction is explicit that it is a **local checkout updated on demand**, not a version in a lockfile.
+Nothing exists yet: there is no `jsx6` directory, no ignore entry for one, and no record anywhere that a
+UI author is supposed to read jsx6's own `AGENTS.md` before writing JSX.
+
+**Do:**
+
+1. **The checkout.** `git clone https://github.com/hrgdavor/jsx6` into the temporary folder the rule
+   names — default `<repo>/.jsx6/`, overridable with `JCODEBUDDY_JSX6_DIR` — and add the ignore entry so a
+   clone is never committed. Update with `git -C <dir> pull --ff-only`. **Not `target/`**: the recorded
+   gate runs `clean test`, so a checkout there would be deleted by every gate run — and the whole point is
+   a local copy that survives until it is deliberately updated.
+2. **Read, then record.** `<dir>/AGENTS.md` first — it is a router, so follow it to what *using* the stack
+   needs (in the version read on 2026-10-01 that is `docs/stack/README.md`: setup, signals, the JSX/DOM
+   contract and the rules that fail silently) — and write down in this step's record the facts a UI author
+   here needs: the package names a consumer imports, whether a build/transform step is required, how a
+   page or webview loads it, and how the checkout's own gate is run. Cite the jsx6 commit that was read,
+   because a moving dependency means "what I read" is part of the evidence.
+3. **Inventory the UI surfaces**, so the rule has a subject: the webview clients and kit
+   (`webview/kit`, `webview/webview-jetbrains`, `webview/webview-vscode`, `webview/webview-eclipse` if
+   present, `webview/jwa-sidecar`) versus the **generated report pages** (the entity index and the merge
+   review render).
+4. **Take the one decision this collides with, and write it into the record it belongs to.** The report
+   pages are pinned by § 1 and DEC-027/029 to **one self-contained file, framework-free vanilla
+   JavaScript, no bundler, no `node_modules`, no CDN**. A page a person looks at is UI, so either:
+   - **narrow the rule** — jsx6 governs interactive application UI (the webview clients), and the generated
+     report pages keep the vanilla-JS property because it is what makes them openable from a file path and
+     greppable in the repository; or
+   - **widen the rule and amend DEC-027/029** — reports are UI too, which costs the self-contained
+     property and needs a build step in the report pipeline, so that amendment has to say what replaces it
+     (a committed bundle? a vendored runtime? and how "no `node_modules`" survives).
+   Do not leave this implicit: pick one, amend the record the losing option came from, and say in the
+   record why.
+5. **Point the UI work at it.** Phase 5's banner already sends a webview step here; make sure
+   `webview/PLAN-webview-suite.md` and any UI-facing README name the checkout + jsx6's `AGENTS.md` rather
+   than repeating either.
+
+**Gate:** the checkout reproduces from the documented two commands on a clean machine; `<dir>/AGENTS.md`
+was read and the consumption facts above are recorded with the commit read; the surfaces are listed; the
+DEC-027/029 question is **decided and amended where it belongs** (not left as a note); `LINKS` green.
+
+**Done when:** a future UI task can start from the written instruction — checkout, read jsx6's
+`AGENTS.md`, know which surfaces are in scope — without re-deriving any of it, and no UI is written
+against a remembered version of the library.
+
 ---
 
 ## 12. Phase 8 — human-gated observations (no code; a checklist)
@@ -1439,6 +1502,7 @@ start)
 | 7.6 | Decide the three `todo.java_watch2.md` remainders | agent + maintainer | S | `[ ]` |
 | 7.7 | Manual-mode CLI for DEC-W008 (`metadata parse`) | agent | S | `[ ]` |
 | 7.8 | Two kinds of generator: file-scoped and project-scoped | agent | M | `[ ]` |
+| 7.9 | Set up the `jsx6` checkout every UI is built from (rule § 2.9) | agent | S–M | `[ ]` |
 | 8.1 | JetBrains maintainer questions + IDE observations | human | — | `[ ]` |
 | 8.2 | Eclipse observations, then Q2 | human | — | `[ ]` |
 | 8.3 | Agent IDE hooks | human decides | — | `[ ]` |
