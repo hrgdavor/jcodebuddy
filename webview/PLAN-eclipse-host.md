@@ -459,21 +459,21 @@ merely an allowed origin.
   if the reviewer judges it separate.
 - One commit updates every document that enumerates hosts, all of them incomplete today by construction:
 
-| File                                                                             | What is stale                                                                                     |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| [`webview/README.md`](README.md)                                                 | the title "four hosts", the host table, the folder map, "Zed is a fifth *client*", the "Which file to read" table, the "implemented and observed" table, and the per-host **Verifying** block |
-| [`webview/doc/webview-host-api.md`](doc/webview-host-api.md)                     | § 1's "Implemented in" column, § 2's `plugin` and `ide` examples, and **§ 8's support matrix**, which needs an Eclipse column (and its prose, which names hosts) |
-| [`webview/doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md)   | a new § 1a for Eclipse, a dated § 2a row, § 3's symptom table, and § 4's report template, which hard-codes the two hosts |
-| [`webview/core/README.md`](core/README.md)                                       | the **Consumers** table (a reactor module, not `mavenLocal`), and the "three times" history       |
-| [`webview/conformance/README.md`](conformance/README.md)                         | "The three hosts", and the **"Who reads it"** table, which must name the Eclipse test as a reader |
-| [`webview/kit/doc/contract.md`](kit/doc/contract.md) § 3.1                       | the port table gains an Eclipse row with 18883 and its setting name — a completeness edit to a frozen document, not a contract change |
-| [`webview/kit/doc/host-in-this-project.md`](kit/doc/host-in-this-project.md) § 1 | the "which host is the right answer" table                                                        |
-| [`webview/webview-jetbrains/README.md`](webview-jetbrains/README.md), [`webview-vscode/README.md`](webview-vscode/README.md), [`jwa-sidecar/README.md`](jwa-sidecar/README.md) | "the other three hosts" and the sibling-host prose |
-| [`doc/architecture/module-map.md`](../doc/architecture/module-map.md)            | **already stale**: its tree names a root-level `jwa-sidecar` and omits `webview-core` and `webviewd`; this phase brings it up to date for the whole product — the tree, the dependency table, and the JUnit Strategy table (the new module is JUnit 5) |
-| [`PLAN-webview-suite.md`](PLAN-webview-suite.md)                                 | § 2's host table, § 4's layout tree, § 8's criterion 1, § 9's risks, § 11's commands — plus the dated implementation record for this work |
-| root `README.md`, root `pom.xml`                                                 | the module count in the README's gate story, and the `<modules>` comment written in Phase 1       |
-| `scripts/entity-html/README.md`                                                  | `--bridge-port` documents the JetBrains default 18881 as *the* bridge port                        |
-| `zed/`, [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md)                       | the "one product, four hosts" framing and plan cross-references                                   |
+  | File                                                                             | What is stale                                                                                     |
+  | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+  | [`webview/README.md`](README.md)                                                 | the title "four hosts", the host table, the folder map, "Zed is a fifth *client*", the "Which file to read" table, the "implemented and observed" table, and the per-host **Verifying** block |
+  | [`webview/doc/webview-host-api.md`](doc/webview-host-api.md)                     | § 1's "Implemented in" column, § 2's `plugin` and `ide` examples, and **§ 8's support matrix**, which needs an Eclipse column (and its prose, which names hosts) |
+  | [`webview/doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md)   | a new § 1a for Eclipse, a dated § 2a row, § 3's symptom table, and § 4's report template, which hard-codes the two hosts |
+  | [`webview/core/README.md`](core/README.md)                                       | the **Consumers** table (a reactor module, not `mavenLocal`), and the "three times" history       |
+  | [`webview/conformance/README.md`](conformance/README.md)                         | "The three hosts", and the **"Who reads it"** table, which must name the Eclipse test as a reader |
+  | [`webview/kit/doc/contract.md`](kit/doc/contract.md) § 3.1                       | the port table gains an Eclipse row with 18883 and its setting name — a completeness edit to a frozen document, not a contract change |
+  | [`webview/kit/doc/host-in-this-project.md`](kit/doc/host-in-this-project.md) § 1 | the "which host is the right answer" table                                                        |
+  | [`webview/webview-jetbrains/README.md`](webview-jetbrains/README.md), [`webview-vscode/README.md`](webview-vscode/README.md), [`jwa-sidecar/README.md`](jwa-sidecar/README.md) | "the other three hosts" and the sibling-host prose |
+  | [`doc/architecture/module-map.md`](../doc/architecture/module-map.md)            | **already stale**: its tree names a root-level `jwa-sidecar` and omits `webview-core` and `webviewd`; this phase brings it up to date for the whole product — the tree, the dependency table, and the JUnit Strategy table (the new module is JUnit 5) |
+  | [`PLAN-webview-suite.md`](PLAN-webview-suite.md)                                 | § 2's host table, § 4's layout tree, § 8's criterion 1, § 9's risks, § 11's commands — plus the dated implementation record for this work |
+  | root `README.md`, root `pom.xml`                                                 | the module count in the README's gate story, and the `<modules>` comment written in Phase 1       |
+  | `scripts/entity-html/README.md`                                                  | `--bridge-port` documents the JetBrains default 18881 as *the* bridge port                        |
+  | `zed/`, [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md)                       | the "one product, four hosts" framing and plan cross-references                                   |
 
 - **Gate:** `node webview/check-links.mjs` and `node scripts/check-repo-links.mjs` pass; every new claim is a
   capability the honesty run covers, or a dated, version-named observation; and DEC-033 plus the index no longer

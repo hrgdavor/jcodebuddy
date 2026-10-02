@@ -503,30 +503,31 @@ canonical statement of a boundary that has no other home.
 
   **For anything more than a file or two, use the sweep: `bun scripts/fix-markdown-tables.js`** (add `--check`
   to see what it would do, and to prove a run is idempotent). It invokes the tool **once per tracked Markdown
-  file**, restores the fenced lines the tool rewrites, keeps every line's own ending — 133 tracked documents are
-  checked out CRLF, 128 LF and two mixed, and the tool writes LF on the lines it touches — and **refuses, rather
-  than guesses at, the two inputs that are document bugs**. Same rule, with the checking a sweep needs and a
-  single document does not.
+  file** and then **proves the run was table formatting and nothing else**: every changed line must be a table
+  row, every row's cells must be unchanged, fenced lines must be untouched, and each line must come back with
+  its own ending (133 tracked documents are checked out CRLF, 128 LF, two mixed). A file that fails the check is
+  left untouched and named. Same rule, with the checking a sweep needs and a single document does not.
 
-  Three things the tool does that "pad the cells" does not cover, all verified on 2026-10-03 rather than
-  assumed:
+  Four things it must not do, and the reason the sweep checks rather than trusts — **all four were found by
+  running it over this repository on 2026-10-03, and all four are fixed in the tool's 1.1.0**:
 
-  - **A `|` inside a code span is a cell separator, exactly as it is in GFM.** `` `a | b` `` in a table must be
-    written `` `a \| b` `` — for the renderer as much as for this tool, which will otherwise split the row and
-    pad the header to the wider table, inventing a column instead of keeping the pipe. A stray backtick does the
-    same, because the span then swallows a cell boundary; so does a row broken across a blank line. These are
-    bugs in the document, so the sweep **leaves the file untouched and names it** — the source gets fixed first.
-  - **It rewrites `|`-bearing lines *inside* fenced code blocks as if they were table rows**, which is never
-    table formatting. Measured, not guessed: a lone `|` used as a flow-diagram shaft came back as `|  |`, a
-    directory tree's pointer shafts were re-padded out of alignment under their `^` markers, and a Java
-    continuation line beginning with `||` in a fenced ```java sample became
-    `|     | resolution.getExplanation().contains("both"), |` — the operator and the indentation gone, the
-    sample no longer Java. Running the tool by hand on a document whose fence holds a diagram does exactly this;
-    the sweep restores those lines and prints what it restored.
-  - **A Markdown table shown inside a fenced block as an example is reformatted too**, for the same reason.
+  - **Rewrite a `|`-bearing line inside a fenced code block.** It did: a flow diagram's `|` shaft came back as
+    `|  |`, a directory tree's pointer shafts were re-padded out of alignment under their `^` markers, and a Java
+    `||` continuation line became `|     | resolution.getExplanation().contains("both"), |` — operator and
+    indentation gone, the sample no longer Java. Fences are skipped whole now.
+  - **Change a table row's line ending.** It wrote LF on every row it rewrote, so a CRLF document came back
+    mixed *within itself*. Every line keeps its own ending now, row by row.
+  - **Move an indented table to column 0.** It did, and that ends the list item a nested table belongs to: two
+    documents here were pulled apart that way and repaired by
+    [`scripts/restore-table-indent.js`](scripts/restore-table-indent.js). A row is re-emitted at its block's own
+    indentation now.
+  - **Widen a table to fit a row with too many cells.** One unescaped `|` inside a cell — a code span holding
+    one, say — used to add a column to the whole table, which is not what a renderer does with the excess. The
+    header and delimiter rows declare the columns now, as GFM does, and the excess cells stay in their row,
+    unpadded and never dropped.
 
-  So the rule is not "run it and trust it": after any run, **every changed line must be a table line** — that is
-  what makes a sweep reviewable, and it is how all of the above was found.
+  So the rule is not "run it and trust it": after any run, **every changed line must be a table line**. The tool
+  keeps that promise on its own now — but the check is what proved it did not, and it costs one command to keep.
 - **JCodeBuddy output goes in the module's `.jcodebuddy/`.** A
   `.jcodebuddy/` directory means "this module applies
   `project-automation`" — it is per-module, never a repository-wide

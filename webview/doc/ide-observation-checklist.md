@@ -72,10 +72,10 @@ alongside.
 
 3. **Turn the bridge on.** `File → Settings → Tools → WebView Explorer` (the plugin's own settings page) and set:
 
-| Field | Value       |
-| ----- | ----------- |
-| Port  | `18881`     |
-| Token | `obs-token` |
+   | Field | Value       |
+   | ----- | ----------- |
+   | Port  | `18881`     |
+   | Token | `obs-token` |
 
    Apply. **The bridge is off until a port is set** — that is deliberate, not a fault: a plugin that opened a
    listening socket by default would be a surprise, and the settings label tells you which state you are in.

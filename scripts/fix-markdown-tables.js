@@ -5,21 +5,29 @@
  * and nothing else.
  *
  * WHY THE RULE NEEDS A SCRIPT AT ALL. The rule is "run the tool on the document you changed", and for a single
- * document that is the whole of it. Over 263 files it is not, because of two properties of the tool that only a
- * sweep exposes:
+ * document that is the whole of it. Over 263 files it is not, because a sweep is where a formatter's mistakes
+ * stop being visible one at a time. This repository has the evidence: the first sweep (2026-10-03, commit
+ * 47f246c) ran `md-fix-tables` 1.0.0 and it did four things that were not table formatting —
  *
- *   1. **It rewrites `|`-bearing lines inside fenced code blocks as if they were table rows.** Measured, not
- *      guessed: a lone `|` used as a flow-diagram shaft comes back as `|  |`, a directory tree's pointer shafts
- *      are re-padded out of alignment under their `^` markers, and a Java continuation line beginning with `||`
- *      inside a ```java sample came back as
- *      `|     | resolution.getExplanation().contains("both"), |` — the operator and the indentation gone, and
- *      the sample no longer Java. This script **restores every line inside a fenced block to its original
- *      text** and prints what it restored, so the drawing and the code survive the sweep. (It is a real
- *      limitation of the tool, not of the document: AGENTS.md § 2 records it as such.)
- *   2. **It writes LF on the lines it rewrites.** The committed content here is LF, but the working tree is
- *      not uniform: 133 of the tracked Markdown files are checked out CRLF, 128 are LF, and two are already
- *      mixed. This script rebuilds each file with **every line keeping its own original ending**, so a CRLF
- *      file stays CRLF and a mixed one keeps its mix; only cell whitespace moves.
+ *   1. **It rewrote `|`-bearing lines inside fenced code blocks as if they were table rows.** A flow diagram's
+ *      `|` shaft came back as `|  |`, a directory tree's pointer shafts were re-padded out of alignment under
+ *      their `^` markers, and a Java continuation line beginning with `||` came back as
+ *      `|     | resolution.getExplanation().contains("both"), |` — operator and indentation gone, the sample no
+ *      longer Java. This script **restores every line inside a fenced block to its original text** and prints
+ *      what it restored.
+ *   2. **It wrote LF on every row it rewrote.** The committed content here is LF, but the working tree is not
+ *      uniform: 133 of the tracked Markdown files are checked out CRLF, 128 are LF, two are mixed. This script
+ *      rebuilds each file with **every line keeping its own original ending**, so nothing becomes mixed within
+ *      itself; only cell whitespace moves.
+ *   3. **It pulled an indented table out to column 0**, which ends the list item a nested table belongs to. Two
+ *      documents were damaged that way and repaired by `scripts/restore-table-indent.js`.
+ *   4. **It widened a table to fit a row with more cells than the header** — one unescaped `|` inside a cell was
+ *      enough to add a column to the whole table.
+ *
+ * All four are fixed in `md-fix-tables` 1.1.0 (D:\wrk\utils\md-fix-tables), and this script is what verified
+ * they were bugs rather than opinions: it kept the check while the tool could not pass it. **The check stays**,
+ * because a promise about a tool nobody re-measures is the promise that rots — and because a future version can
+ * regress in exactly these four ways.
  *
  * Nothing is written that fails the check: the tool runs on a temporary copy, the copy is repaired and
  * re-verified, and only a clean result is written back. A damaged file on disk is worse than an incomplete
@@ -32,7 +40,8 @@
  *     fence** — fenced changes are restored, not failed;
  *   - a row's cells differ after trimming — trailing empty cells ignored, because the tool pads a short row out
  *     to the table's column count and `| a | b |` and `| a | b |  |  |` render identically. A separator row is
- *     compared by cell count only, since rewriting its dashes to the column width is the tool's job.
+ *     compared by cell count only, since rewriting its dashes to the column width is the tool's job;
+ *   - a row lost its leading indentation (the check that would have caught 1.0.0's third bug on the day).
  * The cell comparison is what catches a phantom column: the count changes, or the content does.
  *
  * A cell-count change is *not* repaired automatically, and that is deliberate: it means a row was split on a
@@ -77,14 +86,24 @@ function findTool() {
     return null;
 }
 
-const tool = findTool();
-if (tool === null) {
+/**
+ * The command to run. `JCODEBUDDY_MD_FIX_TABLES` overrides it — a command, not only a path, so the check can be
+ * pointed at one build of the tool (`node /path/to/an-older/md-fix-tables.js`) and shown to fail on an input
+ * the current one gets right. That is how the check itself was verified rather than assumed to work; the shape
+ * matches `JCODEBUDDY_JDK25` / `JCODEBUDDY_MVN` in `scripts/lib/toolchain.js`.
+ */
+const override = (process.env.JCODEBUDDY_MD_FIX_TABLES ?? '').split(' ').filter(Boolean);
+const command = override.length > 0 ? override[0] : findTool();
+const commandArgs = override.slice(1);
+
+if (command === null || command === undefined) {
     console.error('md-fix-tables is not on PATH.\n\n'
         + 'It is the tool AGENTS.md Section 2 requires for Markdown tables: one argument, the path to a .md '
         + 'file, edited in place.\n'
         + 'Install it and put it on PATH for the user running the agent — hand-aligning is not the same thing, '
         + 'and this repository has the scar: one row\'s escaped \\| had padding inserted inside the escape, '
-        + 'which silently added a column.');
+        + 'which silently added a column.\n'
+        + '(`JCODEBUDDY_MD_FIX_TABLES` overrides the command, for checking a specific build.)');
     process.exit(2);
 }
 
@@ -93,6 +112,9 @@ const splitEndings = (text) => text.match(/\r\n|\n|\r/g) ?? [];
 
 /** A table row is a line that leads with `|`; this repository has no table without outer pipes (checked). */
 const isRow = (line) => line.trimStart().startsWith('|');
+
+/** The leading run of spaces and tabs: the indentation that keeps a nested table in its list item. */
+const indentOf = (line) => /^[ \t]*/.exec(line)[0];
 
 /** GFM cells: an unescaped `|` delimits, `\|` is literal, and the outer pipes are optional and dropped. */
 function cells(line) {
@@ -156,6 +178,25 @@ function inspect(beforeLines, afterLines) {
         return { restore, refuse };
     }
 
+    // The block's indentation is its first row's, and every row of the block is re-emitted at it. A row that
+    // leaves it is a table that has left whatever it was nested in — the list item whose content it was — so
+    // this is compared block by block rather than line by line. It is the check 1.0.0 would have failed on two
+    // documents in this repository. Lines inside a fence are not compared here: whatever the tool did to them is
+    // restored below, which is the repair rather than a refusal.
+    let blockIndent = null;
+    for (let i = 0; i < beforeLines.length; i++) {
+        if (!isRow(beforeLines[i])) {
+            blockIndent = null;
+            continue;
+        }
+        if (blockIndent === null) blockIndent = indentOf(beforeLines[i]);
+        if (fenced[i] || fencedAfter[i]) continue;
+        if (indentOf(afterLines[i]) !== blockIndent) {
+            refuse.push(`line ${i + 1}: the row left its indentation `
+                + `(${JSON.stringify(blockIndent)} -> ${JSON.stringify(indentOf(afterLines[i]))})`);
+        }
+    }
+
     for (let i = 0; i < beforeLines.length; i++) {
         const a = beforeLines[i];
         const b = afterLines[i];
@@ -195,7 +236,7 @@ try {
         // The tool always runs on a copy: anything that fails the check is never written back.
         const copy = join(scratch, file.replace(/[\\/]/g, '__'));
         copyFileSync(path, copy);
-        execFileSync(tool, [copy], { stdio: ['ignore', 'pipe', 'pipe'] });
+        execFileSync(command, [...commandArgs, copy], { stdio: ['ignore', 'pipe', 'pipe'] });
         const after = readFileSync(copy, 'utf8');
         const afterLines = splitLines(after);
 
