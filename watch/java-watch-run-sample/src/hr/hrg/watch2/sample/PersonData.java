@@ -1,27 +1,21 @@
 package hr.hrg.watch2.sample;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 /**
- * Simple Jackson-annotated POJO used by {@link DataProcessor}.
- * Edit fields here to test that Jackson picks up changes after a hot-reload.
+ * The sample's data type, and the class to edit to see a hot reload.
+ *
+ * <p>It used to be a Jackson-annotated POJO. The demo it served was "Jackson picks up your changes after a hot
+ * reload", but that made a `watch/*` module know Jackson — which the boundary forbids (`java-watch*` must not
+ * know about Jackson, OpenRewrite or anything else from this workspace; DEC-038's amendment, plan step 3.0s).
+ * The demo does not need Jackson to make its point: what it demonstrates is that <strong>editing this file is
+ * visible in the output without a restart</strong>, and hand-written formatting shows that just as well.</p>
  */
 public class PersonData {
 
-    @JsonProperty("name")
     private final String name;
-
-    @JsonProperty("age")
     private final int age;
-
-    @JsonProperty("skills")
     private final List<String> skills;
-
-    // Jackson requires a no-arg constructor for deserialization
-    public PersonData() {
-        this("", 0, List.of());
-    }
 
     public PersonData(String name, int age, List<String> skills) {
         this.name   = name;

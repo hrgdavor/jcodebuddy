@@ -79,8 +79,8 @@ public class SampleMain {
         System.out.println("╚══════════════════════════════════════════════════════╝");
         System.out.println();
 
-        // ── 4. Jackson demo ───────────────────────────────────────────────────
-        System.out.println("── Jackson demo ─────────────────────────────────────────");
+        // ── 4. Data processor demo (edit the class, watch the output) ─────────
+        System.out.println("── data-processor demo ─────────────────────────────────────────");
         System.out.println(DataProcessor.process());
         System.out.println();
 

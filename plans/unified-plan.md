@@ -1153,6 +1153,34 @@ genuinely owns (`ActionTool`, `SimpleToolContext`) stay: 15 tests green, `java-w
 The `jcodebuddy-codegen-api` dependency went with the class. **This is what unblocks 3.0i**: with the watcher no
 longer implementing the SPI, dissolving the five types into the engine gives `java-watch*` nothing.
 
+**Progress 2026-10-03, slice 2 — the sample is clean: 13 down to 8.** `java-watch-run-sample` no longer knows
+Jackson: its demo was "Jackson picks up your changes after a hot reload", and the demo's real point is that
+*editing a class changes the output without a restart* — a hand-written rendering shows that exactly as well,
+so `DataProcessor`/`PersonData` lost the annotations, the mapper and the round trip, `SampleMain`'s section
+names the demo rather than the library, and the POM dropped `jackson-databind`. The module builds
+(`BUILD SUCCESS`) and the check says 8.
+
+**The remaining 8 are all `java-watch-agent`, and they are three slices with three different shapes** (measured,
+so the next pass does not re-derive it):
+
+1. **`AuditManager` — one write, the easy one.** Its whole Jackson use is
+   `MAPPER.writeValue(manifest.json, Map.of("files", entries))` where `entries` is a `List<FileEntry>`; a
+   hand-rolled writer emits the identical shape in about twenty-five lines, and the keys must match
+   `FileEntry`'s components exactly because a consumer of the audit session reads that file.
+2. **`WatchAgent` (config) and `CommandServer` (HTTP) — a format and a protocol decision, not a mechanical
+   one.** `WatchAgent` *reads* a config file back (`readValue(...)` into `AgentConfig`), so it needs a parser,
+   not just a writer; `CommandServer` reads request bodies into a `Map` and writes responses as JSON, i.e. the
+   Jackson dependency there is the **wire format between this server and its clients**. Hand-rolling a small
+   reader for the flat shapes actually used is feasible; changing the format is a decision about clients. This
+   is the slice to decide before writing code.
+3. **`jwa-builder*` — the bridge needs a *library* home, and that is a decision.** `WatchAgent` registers
+   `new RecordBuilderGenerator()` (an `ActionTool` that drives `BuilderTransformationEngine`), and
+   `TestDiscovery`/`TestStateSync` are `@GenerateBuilder` demos. The obvious home — `project-automation`,
+   which already depends on `jwa-builder` — **is forbidden**: no other module may depend on a
+   `project-automation` (AGENTS.md § 1.1), and the watcher's app would have to, to register the tool. So this
+   is either a new small `jcodebuddy-*` library that the app may depend on, or the `record_builder` tool is
+   dropped from the agent. Recorded as a decision to take, not a move to make.
+
 **What remains (13, and the order to take them in):**
 
 - `java-watch-agent` → `jwa-builder-api` and `jwa-builder` (2 dependency violations, plus

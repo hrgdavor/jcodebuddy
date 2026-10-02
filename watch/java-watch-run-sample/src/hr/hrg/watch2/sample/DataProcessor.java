@@ -1,48 +1,33 @@
 package hr.hrg.watch2.sample;
 
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.SerializationFeature;
-import tools.jackson.databind.json.JsonMapper;
-
 import java.util.List;
 
 /**
- * Demonstrates Jackson usage inside a hot-reloaded class.
- * Modify the sample data or formatting here and watch the output change.
+ * A class to edit while {@code java-watch-run} is watching: change a value or the formatting below and the
+ * next run shows it, with no restart.
+ *
+ * <p>This used to serialise a Jackson-annotated POJO and read it back. That demo made a `watch/*` module know
+ * Jackson, which the boundary forbids — `java-watch*` must not know about Jackson, OpenRewrite or anything else
+ * from this workspace (DEC-038's amendment, plan step 3.0s) — and it demonstrated nothing about the watcher: a
+ * hand-written rendering proves that <em>editing this file changes the output</em> exactly as well, and the
+ * sample's dependency list is then honest about what it needs (the JDK and `java-watch-run`).</p>
  */
 public class DataProcessor {
 
     /**
-     * Jackson 3 removed the mutating {@code ObjectMapper.enable(...)} configuration methods — a mapper is
-     * configured by its builder and is then immutable — so the indent flag is set the way that API
-     * requires. The mapper type is unchanged, so nothing else in this sample moves. (The same fix was
-     * needed in {@code java-watch-agent}'s {@code AuditManager}, which is how this sample's identical
-     * pattern was found: it had never compiled.)
+     * Formats a sample person. Edit the values or the layout and watch the output change.
      */
-    private static final ObjectMapper MAPPER = JsonMapper.builder()
-            .enable(SerializationFeature.INDENT_OUTPUT)
-            .build();
-
-    /**
-     * Creates a sample person, serializes it to JSON, and returns the result.
-     * Edit the values below to verify hot-reload picked up your changes.
-     */
-    public static String process() throws Exception {
+    public static String process() {
         PersonData person = new PersonData(
                 "Alice Dev",
                 30,
                 List.of("Java", "Hot-Reload", "ECJ", "Fast Feedback")
         );
 
-        // Serialize to pretty JSON
-        String json = MAPPER.writeValueAsString(person);
-
-        // Parse it back (round-trip) to confirm deserialization works too
-        PersonData roundTrip = MAPPER.readValue(json, PersonData.class);
-
         return String.format(
-                "Serialized  : %s%nRound-trip  : %s",
-                json, roundTrip
+                "Rendered    : %s%nSkills      : %s",
+                person,
+                String.join(", ", person.getSkills())
         );
     }
 }
