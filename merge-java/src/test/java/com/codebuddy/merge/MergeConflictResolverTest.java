@@ -54,6 +54,43 @@ class MergeConflictResolverTest {
 
     // --------------------------------------------------------------- basics
 
+    /**
+     * The two halves of {@link ConflictResolver#requiresTypeContext()}: a resolver that
+     * can degrade must not make the context mandatory, and one that cannot must still
+     * refuse to be built without it.
+     */
+    @Test
+    @DisplayName("builds without a type context when every resolver can degrade")
+    void buildsWithoutAContextWhenNoResolverRequiresOne() {
+        MergeConflictResolver degrading = new MergeConflictResolver.Builder()
+            .setBranchName(BRANCH)
+            .setHistoryPath(tempDir.resolve(BRANCH))
+            .setResolvers(List.of(new TypeChangeConflictResolver()))
+            .build();
+
+        assertEquals(1, degrading.getResolvers().size(),
+            "a resolver that degrades answers from its own table, so the set builds");
+    }
+
+    @Test
+    @DisplayName("refuses to build without a context when a resolver cannot degrade")
+    void refusesWithoutAContextWhenAResolverRequiresOne() {
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+            new MergeConflictResolver.Builder()
+                .setBranchName(BRANCH)
+                .setHistoryPath(tempDir.resolve(BRANCH))
+                .setResolvers(List.of(new OverloadAddConflictResolver()))
+                .build());
+
+        assertTrue(failure.getMessage().contains("OverloadAddConflictResolver"),
+            "the message must name the resolver the caller has to remove by hand: "
+                + failure.getMessage());
+        assertTrue(failure.getMessage().contains("remove them from the resolver set"),
+            "and must say what to do about it: " + failure.getMessage());
+        assertFalse(failure.getMessage().contains("TypeChange"),
+            "and must not blame a resolver that degrades: " + failure.getMessage());
+    }
+
     @Test
     @DisplayName("uses the built-in resolver set by default")
     void usesBuiltInResolvers() {

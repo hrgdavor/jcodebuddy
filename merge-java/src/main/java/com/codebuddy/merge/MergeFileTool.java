@@ -337,6 +337,12 @@ public final class MergeFileTool {
          * Supply the context resolvers need to resolve types. Defaults to the
          * runtime classpath rooted at the file's source root, which resolves
          * JDK types - the same default {@link MergeWorkflow} uses.
+         *
+         * <p>That default cannot resolve the merged project's <em>own</em> types, so a
+         * conflict whose declarations are project types escalates with
+         * {@link TypeChangeConflictResolver#UNRESOLVED_WARNING} rather than being decided:
+         * nothing is guessed from a name, and the resolution says why. Pass a classpath
+         * covering those types to have such pairs decided.
          */
         public Builder typeContext(TypeContext typeContext) {
             this.typeContext = typeContext;

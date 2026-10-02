@@ -21,19 +21,27 @@ import java.util.Objects;
  * The same is true of comment and constant unions, and the structural and
  * API-conflict resolvers never decide anything at all.
  *
- * <p>A resolver that genuinely needs types declares it via
- * {@link ConflictResolver#requiresTypeContext()}. Today that is
- * {@link OverloadAddConflictResolver}, because deciding whether {@code List<String>}
- * and {@code java.util.List<java.lang.String>} are the same parameter list is a
- * question about resolved types, not about spelling, and
- * {@link TypeChangeConflictResolver}, because deciding which of two declared types is
- * the wider one is a question about the class hierarchy - {@code TreeSet} is a
- * {@code NavigableSet} because javac says so, not because a table lists it, and
- * {@code Integer} does <em>not</em> widen to {@code Long} however much the primitive
- * lattice suggests otherwise. Only the JLS primitive conversions avoid the question,
- * and that resolver asks for a context regardless: one resolver that answers
- * differently depending on how it was built is worse than one that insists on being
- * built properly.
+ * <p>A resolver that genuinely cannot work without compiled types declares it via
+ * {@link ConflictResolver#requiresTypeContext()}, which makes the context a hard
+ * requirement for the set it is in. Today that is {@link OverloadAddConflictResolver}:
+ * deciding whether {@code List<String>} and {@code java.util.List<java.lang.String>}
+ * are the same parameter list is a question about resolved types and nothing else, so
+ * there is no weaker answer worth giving — the caller supplies a context or removes
+ * that resolver from the set by hand.
+ *
+ * <p>{@link TypeChangeConflictResolver} is the other half of the rule: it
+ * <strong>degrades</strong> instead. Part of its rule is the language's (the JLS 5.1.2
+ * primitive conversions) and it carries a best-effort table of the common JDK
+ * hierarchies, so without a context it still decides those cases — and attaches a
+ * warning to every resolution it produces that way, because an answer reached without
+ * compiled types must not read like one reached with them. With a context it resolves,
+ * and a type it cannot resolve escalates with its own warning: it never falls back to
+ * matching simple names while a classpath was available.
+ *
+ * <p>So "when any registered resolver declares the requirement, the orchestrator
+ * refuses to be built without a context" holds for the hard requirement only, and
+ * choosing between the two declarations is a decision about the resolver, not about
+ * this record.
  *
  * <p>When any registered resolver declares the requirement, the orchestrator
  * refuses to be built without a context rather than silently degrading to a weaker

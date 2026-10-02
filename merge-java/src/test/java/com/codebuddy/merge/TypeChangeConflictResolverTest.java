@@ -169,24 +169,92 @@ class TypeChangeConflictResolverTest extends AbstractResolverTest {
         assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(conflict).getKind());
     }
 
-    //#region escalates-without-type-context
+    //#region degrades-without-a-context
     @Test
-    @DisplayName("escalates with a reason when no type context was supplied")
-    void escalatesWithoutTypeContext() {
-        // requiresTypeContext() is true, so the orchestrator refuses to build a set
-        // without a context and names this resolver. A direct caller gets a manual
-        // resolution carrying the reason instead of a weaker answer - which is the
-        // same shape OverloadAddConflictResolver uses for the same situation.
-        Conflict conflict = new Conflict(ConflictType.TYPE_CHANGE, ConflictFixtures.FILE,
-            "no context", "int count = 0;", "int count = 0;", "long count = 0;");
+    @DisplayName("degrades without a type context: decides the common cases and warns")
+    void degradesWithoutAContext() {
+        // A classpath is not a hard requirement for this resolver. The orchestrator
+        // therefore builds a set containing it with no context at all, and the resolver
+        // answers from what needs no classpath: the language's primitive rule and its own
+        // best-effort table.
+        assertFalse(resolver.requiresTypeContext(),
+            "it degrades, so it must not make the context mandatory for the whole set");
 
-        ConflictResolution resolution = resolver.resolve(conflict);
+        ConflictResolution primitive = resolver.resolve(new Conflict(ConflictType.TYPE_CHANGE,
+            ConflictFixtures.FILE, "primitive widening, no context",
+            "int count = 0;", "int count = 0;", "long count = 0;"));
+        assertEquals(ConflictResolution.ResolutionStrategy.PREFER_BRANCH2,
+            primitive.getResolutionStrategy(),
+            "the JLS conversion lattice needs no classpath");
+        assertTrue(primitive.getWarnings().contains(TypeChangeConflictResolver.DEGRADED_WARNING),
+            "and even that answer says it was reached without a context: " + primitive.getWarnings());
 
-        assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolution.getKind());
-        assertTrue(resolution.getExplanation().contains("no type context"),
-            "the reason must say what was missing: " + resolution.getExplanation());
-        assertTrue(resolver.requiresTypeContext(),
-            "and the resolver must declare the requirement, not just handle its absence");
+        ConflictResolution collection = resolver.resolve(new Conflict(ConflictType.TYPE_CHANGE,
+            ConflictFixtures.FILE, "collection widening, no context",
+            "HashMap<String, String> index = new HashMap<>();",
+            "HashMap<String, String> index = new HashMap<>();",
+            "Map<String, String> index = new HashMap<>();"));
+        assertEquals(ConflictResolution.ResolutionKind.AUTO, collection.getKind(),
+            "Map is a supertype of HashMap, which the built-in table knows");
+        assertTrue(collection.getWarnings().contains(TypeChangeConflictResolver.DEGRADED_WARNING),
+            "the basis is weaker, so the resolution says so: " + collection.getWarnings());
+    }
+    //#endregion
+
+    //#region degraded-escalation
+    @Test
+    @DisplayName("escalates what the built-in table does not carry, and says why")
+    void degradesToReviewForWhatTheTableDoesNotCarry() {
+        ConflictResolution resolution = resolver.resolve(new Conflict(ConflictType.TYPE_CHANGE,
+            ConflictFixtures.FILE, "project types, no context",
+            "com.example.Foo value = null;", "com.example.Foo value = null;",
+            "com.example.Bar value = null;"));
+
+        assertEquals(ConflictResolution.ResolutionKind.REVIEW, resolution.getKind(),
+            "a partial table can only add decisions, never remove safety");
+        assertTrue(resolution.getWarnings().contains(TypeChangeConflictResolver.DEGRADED_WARNING),
+            resolution.getWarnings().toString());
+    }
+
+    @Test
+    @DisplayName("warns when a type cannot be resolved even though a context was supplied")
+    void warnsWhenATypeCannotBeResolved() {
+        // The project-type case with a context: the declarations resolve to Unknown, so
+        // the resolver must not fall back to matching their simple names - that would be
+        // the name-based guess resolution exists to replace - and must tell the reviewer
+        // that this is why a human is being asked.
+        ConflictResolution resolution = resolver.resolve(withTypeContext(new Conflict(
+            ConflictType.TYPE_CHANGE, ConflictFixtures.FILE, "off classpath",
+            "com.example.Foo value = null;", "com.example.Foo value = null;",
+            "com.example.Bar value = null;")));
+
+        assertEquals(ConflictResolution.ResolutionKind.REVIEW, resolution.getKind());
+        assertTrue(resolution.getWarnings().contains(TypeChangeConflictResolver.UNRESOLVED_WARNING),
+            "the reviewer must see that the classpath, not the types, is the problem: "
+                + resolution.getWarnings());
+    }
+
+    @Test
+    @DisplayName("does not warn when the decision came from resolved types")
+    void resolvedDecisionsCarryNoWarnings() {
+        ConflictResolution resolution = resolver.resolve(
+            withTypeContext(ConflictFixtures.sample(ConflictType.TYPE_CHANGE)));
+
+        assertFalse(resolution.hasWarnings(),
+            "a decision javac made needs no caveat: " + resolution.getWarnings());
+    }
+
+    @Test
+    @DisplayName("keeps boxed siblings apart in the degraded table too")
+    void degradedTableKeepsBoxedSiblingsApart() {
+        assertFalse(TypeChangeConflictResolver.widensFromBuiltInTable("Long", "Integer"),
+            "the wrapper classes are not in each other's chains, in either mode");
+        assertTrue(TypeChangeConflictResolver.widensFromBuiltInTable("Number", "Integer"));
+        assertTrue(TypeChangeConflictResolver.widensFromBuiltInTable("Comparable", "Integer"));
+        assertFalse(TypeChangeConflictResolver.widensFromBuiltInTable("Comparable", "Number"),
+            "Number is not a Comparable: the two relations need separate chains");
+        assertTrue(TypeChangeConflictResolver.widensFromBuiltInTable("NavigableSet", "TreeSet"),
+            "and the fallback still knows a real supertype the removed table never listed");
     }
     //#endregion
 

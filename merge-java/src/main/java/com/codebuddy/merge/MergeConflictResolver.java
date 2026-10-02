@@ -123,10 +123,16 @@ public class MergeConflictResolver {
         /**
          * Supply the context needed to resolve types.
          *
-         * <p>Only required when a registered resolver declares
-         * {@link ConflictResolver#requiresTypeContext()}. A configuration whose
-         * resolvers need types but has none is rejected by {@link #build} rather
-         * than silently degrading to a comparison that cannot be trusted.
+         * <p>Required when a registered resolver declares
+         * {@link ConflictResolver#requiresTypeContext()} — that declaration means "I cannot
+         * degrade", so a configuration containing one is rejected by {@link #build} rather
+         * than answering from a weaker rule. A resolver that declares {@code false} because
+         * it <em>can</em> degrade does not need this, and says so per resolution instead:
+         * it attaches a warning when it had to answer without a context.
+         *
+         * <p>The context is also what decides how much of a decision is evidence rather
+         * than a table. A classpath covering only the JDK leaves the project's own types
+         * unresolvable, which escalates them with a warning — safe, and visible.
          */
         public Builder setTypeContext(TypeContext typeContext) {
             this.typeContext = typeContext;
@@ -176,14 +182,19 @@ public class MergeConflictResolver {
             }
             List<String> requiring = resolvers.stream()
                 .filter(ConflictResolver::requiresTypeContext)
-                .map(ConflictResolver::name)
+                // Both names, because this message is the instruction a caller follows to
+                // fix the problem: the short name is what diagnostics use, and the class
+                // name is what they have to remove from their set.
+                .map(resolver -> resolver.name() + " (" + resolver.getClass().getSimpleName() + ")")
                 .sorted()
                 .toList();
             if (!requiring.isEmpty()) {
                 throw new IllegalStateException(
                     "these resolvers need a type context but none was supplied: " + requiring
-                        + ". Build with setTypeContext(TypeContext.of(sourceRoot, classpath)), "
-                        + "or exclude them from the resolver set.");
+                        + ". A resolver that declares this cannot degrade, so a set containing "
+                        + "it cannot be built without a classpath. Build with "
+                        + "setTypeContext(TypeContext.of(sourceRoot, classpath)), or remove "
+                        + "them from the resolver set by hand.");
             }
         }
     }

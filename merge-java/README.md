@@ -359,14 +359,18 @@ cannot fix as a private, anonymization-first fixture for the next resolver.
 Overload comparison is now **type-aware**: it compares resolved parameter types, so
 two spellings of one signature are recognised as one. Placing imports, merging
 comments and the rest work from the conflict text alone, so a type context is
-optional and declared per resolver — **two** resolvers declare it today, overload
-comparison and type-change widening.
+optional and declared per resolver.
 
 `TypeChangeConflictResolver` classifies widening by resolving the two declared types
 and asking javac which is the supertype, so `TreeSet` → `NavigableSet` is recognised
 and so is any type in the project under merge. Only the JLS primitive conversions
 keep a table, because they are the language's rule and no class hierarchy expresses
-them.
+them — and the resolver **degrades** when no context is supplied rather than refusing
+to run: it falls back to a best-effort table of the common JDK hierarchies and warns
+on every resolution that came from it. `OverloadAddConflictResolver` is the one
+resolver whose classpath is a **hard requirement** — comparing resolved parameter
+types has no weaker form — so a set containing it must be given a context or have it
+removed by hand.
 
 Structural, API and overlapping-body conflicts are **never** resolved
 automatically, by design. The reasoning, with worked examples, is in

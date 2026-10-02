@@ -112,16 +112,33 @@ public interface ConflictResolver {
     }
 
     /**
-     * Whether this resolver needs a {@link TypeContext} to do its job.
+     * Whether a {@link TypeContext} is a <strong>hard requirement</strong> for this
+     * resolver — that is, whether it can say anything useful at all without one.
      *
-     * <p>Defaults to {@code false}, and should stay that way unless the resolver
-     * genuinely makes a judgement about <em>types</em>. Most conflicts are decided
-     * from text alone - keeping the union of two import lists, for example - and
-     * demanding type information for them would burden every caller for nothing.
+     * <p>Defaults to {@code false}. Most conflicts are decided from text alone —
+     * keeping the union of two import lists, for example — and demanding type
+     * information for them would burden every caller for nothing.
      *
      * <p>Declaring {@code true} makes the context mandatory: an orchestrator built
-     * without one fails at construction, naming this resolver, rather than falling
-     * back to a weaker comparison it was never designed to use.
+     * without one fails at construction, naming this resolver, and the caller's remedy
+     * is to supply a context or **remove this resolver from the set by hand**. That is
+     * the right answer only for a resolver that genuinely cannot degrade: comparing two
+     * <em>resolved</em> parameter types is impossible without a classpath, so
+     * {@link OverloadAddConflictResolver} declares it and always will.
+     *
+     * <p>A resolver that <em>can</em> still answer something — because part of its rule
+     * is the language's rather than the type system's, or because it carries a built-in
+     * table of the common cases — must leave this {@code false} and instead
+     * <strong>degrade visibly</strong>: answer as well as it can and attach a warning
+     * to the resolution ({@link ConflictResolution.Builder#warning(String)}), so the
+     * reviewer can see that the basis was weaker. Silence is the failure mode both
+     * options exist to prevent: a mandatory context hides a resolver's degraded answers
+     * behind an exception, while an undeclared degradation hides them behind a
+     * confident sentence.
+     *
+     * <p>{@link TypeChangeConflictResolver} is the working example of the second kind:
+     * it declares {@code false}, resolves through the type system when it can, and falls
+     * back to its own table — with a warning — when it cannot.
      */
     default boolean requiresTypeContext() {
         return false;

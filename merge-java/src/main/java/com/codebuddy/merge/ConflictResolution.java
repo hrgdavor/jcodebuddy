@@ -77,6 +77,20 @@ public final class ConflictResolution {
     private final Region region;
     private final Verification verification;
 
+    /**
+     * Advisory notes about <em>how</em> the decision was reached, as opposed to what
+     * was decided.
+     *
+     * <p>The distinction is what makes them worth carrying separately: the explanation
+     * states the decision and its justification, while a warning says something about
+     * the resolver's own basis — that it ran without a type context, that a declared
+     * type could not be resolved against the supplied classpath, or that it answered
+     * from a built-in table rather than from evidence. A reviewer reading only the
+     * explanation would see a confident sentence and no hint that the reasoning behind
+     * it was weaker than usual, which is exactly the state a warning exists to expose.
+     */
+    private final List<String> warnings;
+
     private ConflictResolution(Builder builder) {
         this.filePath = builder.filePath == null ? "<unknown>" : builder.filePath;
         this.type = Objects.requireNonNull(builder.type, "type");
@@ -98,6 +112,22 @@ public final class ConflictResolution {
         this.branchName = builder.branchName == null ? "unknown" : builder.branchName;
         this.region = builder.region == null ? Region.unknown() : builder.region;
         this.verification = builder.verification == null ? Verification.NOT_RUN : builder.verification;
+        this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
+    }
+
+    /**
+     * Advisory notes about how this decision was reached; empty when there are none.
+     *
+     * <p>Not part of the explanation: these describe the resolver's basis, not the
+     * decision — see the class's own note on why the two are kept apart.
+     */
+    public List<String> getWarnings() {
+        return warnings;
+    }
+
+    /** Whether this resolution was reached with a caveat worth showing a reviewer. */
+    public boolean hasWarnings() {
+        return !warnings.isEmpty();
     }
 
     /**
@@ -321,6 +351,7 @@ public final class ConflictResolution {
         private String branchName;
         private Region region;
         private Verification verification;
+        private final List<String> warnings = new ArrayList<>();
 
         Builder() {
         }
@@ -346,6 +377,7 @@ public final class ConflictResolution {
             this.branchName = source.branchName;
             this.region = source.region;
             this.verification = source.verification;
+            this.warnings.addAll(source.warnings);
         }
 
         public Builder filePath(String filePath) {
@@ -446,6 +478,27 @@ public final class ConflictResolution {
 
         public Builder verification(Verification verification) {
             this.verification = verification;
+            return this;
+        }
+
+        /**
+         * Add an advisory note about how the decision was reached.
+         *
+         * <p>Additive rather than a setter: a resolution can carry more than one
+         * caveat (a degraded comparison <em>and</em> an unresolvable type, for
+         * instance), and a setter would silently drop the first.
+         */
+        public Builder warning(String warning) {
+            if (warning != null && !warning.isBlank()) {
+                this.warnings.add(warning);
+            }
+            return this;
+        }
+
+        public Builder warnings(List<String> warnings) {
+            if (warnings != null) {
+                warnings.stream().filter(w -> w != null && !w.isBlank()).forEach(this.warnings::add);
+            }
             return this;
         }
 

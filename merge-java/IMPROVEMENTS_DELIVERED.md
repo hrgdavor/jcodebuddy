@@ -129,20 +129,18 @@ rather than trusting the suite - surfaced one more defect, and it was the worst 
 `DESIGN_NEVER_AUTO_RESOLVED.md` is the authority on the three conflict kinds that
 stay manual, and that is unchanged.
 
-- **Two resolvers are type-aware, and only where they must be.** Type context is
-  optional and required only where a resolver declares it. Placing imports needs
+- **Type context is declared per resolver, and in two strengths.** Placing imports needs
   nothing but text — de-duplicate and keep both — and neither do comment or constant
-  unions, or the two manual resolvers. `OverloadAddConflictResolver` declares it,
-  because deciding whether `List<String>` and `java.util.List<java.lang.String>` are
-  the same parameter list is a question about the language rather than about
-  spelling. `TypeChangeConflictResolver` declares it too, since replacing its
-  hardcoded JDK name table: which of two declared types is the wider one is a
-  question about the class hierarchy, and the table was both incomplete (nothing it
-  did not list, including every type in the project under merge, was escalated) and
-  wrong for boxed types (it called `Integer` → `Long` a widening, which javac
-  rejects). Only the JLS primitive conversions avoid the question, and that resolver
-  asks for a context anyway — one resolver that answers differently depending on how
-  it was built is worse than one that insists on being built properly.
+  unions, or the two manual resolvers. `OverloadAddConflictResolver` declares a **hard
+  requirement**, because comparing two resolved parameter types has no weaker form: a set
+  containing it is refused at construction without a context, and the caller supplies one
+  or removes that resolver by hand. `TypeChangeConflictResolver` **degrades** instead:
+  part of its rule is the language's (the JLS 5.1.2 primitive conversions) and it carries
+  a best-effort table of the common JDK hierarchies, so without a context it still decides
+  those cases and attaches a warning to every resolution reached that way. With a context
+  it resolves, and a type it cannot resolve escalates with its own warning rather than
+  being name-matched against the table. Silence is what both strengths exist to prevent:
+  one hides a degraded answer behind an exception, the other behind a confident sentence.
 - **The verification gate is parse-level, not compile-level.** It catches unbalanced
   delimiters, unterminated literals and leftover conflict markers. It is a floor, not
   a proof: it establishes well-formedness, never intent, which is exactly why it does

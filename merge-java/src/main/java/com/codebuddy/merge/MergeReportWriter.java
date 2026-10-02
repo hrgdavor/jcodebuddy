@@ -148,6 +148,10 @@ public final class MergeReportWriter {
             json.append("          \"sticky\": ").append(resolution.isSticky()).append(",\n");
             json.append("          \"explanation\": ").append(quote(resolution.getExplanation()))
                 .append(",\n");
+            // Written even when empty, so a renderer distinguishes "no caveats" from a
+            // key it does not know about.
+            json.append("          \"warnings\": ").append(stringListJson(resolution.getWarnings()))
+                .append(",\n");
             json.append("          \"resolvedCode\": ").append(quote(resolution.getResolvedCode()))
                 .append(",\n");
             json.append("          \"fixPaths\": ").append(fixPathsJson(resolution)).append('\n');

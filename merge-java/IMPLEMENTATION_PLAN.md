@@ -191,9 +191,12 @@ path — and a pair involving a primitive is decided by the JLS 5.1.2 lattice, w
 the language's rule rather than a claim about the JDK. Two things the table got wrong
 came out of doing it: it called `Integer` → `Long` a widening (javac rejects
 `Long x = anInteger`; they are siblings under `Number`), and it escalated pairs it
-simply had not listed (`TreeSet`/`NavigableSet`). The resolver declares
-`requiresTypeContext()`, so a context-less run is refused at construction instead of
-being resolved by a weaker rule.
+simply had not listed (`TreeSet`/`NavigableSet`). The resolver **degrades** rather than
+requiring a classpath: it declares `requiresTypeContext() == false` and, without a
+context, still decides the primitive conversions and the common JDK hierarchies from a
+built-in best-effort table, attaching a warning to every resolution reached that way. A
+resolver that cannot degrade at all declares `true` instead, and a set containing it
+must be given a context or have that resolver removed by hand.
 
 ## Phase 10 — JGit integration [done → WS5]
 

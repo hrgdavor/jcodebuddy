@@ -4,6 +4,41 @@
 
 ### Changed
 
+- **`requiresTypeContext()` now means "a classpath is a hard requirement *for this
+  resolver*", and `TypeChangeConflictResolver` no longer declares it.** The entry below
+  said the type-change resolver refuses to run without a context; that was true for one
+  revision and is superseded here — changelog entries are appended, never edited.
+
+  The rule is in two strengths, because a blanket requirement and a blanket silence are
+  both wrong:
+  - **`true` — cannot degrade.** `OverloadAddConflictResolver`: comparing resolved
+    parameter types has no weaker form. A resolver set containing it is refused at
+    construction, the message now names both the diagnostic name and the **class** so the
+    caller knows what to remove, and the remedy is to supply a context or remove it by
+    hand.
+  - **`false` — degrades visibly.** `TypeChangeConflictResolver`: without a context it
+    still decides the JLS 5.1.2 primitive conversions and the common JDK hierarchies from
+    a built-in best-effort table (`ArrayList → List → Collection → Iterable`,
+    `HashMap → Map`, the wrapper types into `Number`/`Comparable`/`Object`), and every
+    resolution it reaches that way carries a warning saying the declared types were not
+    checked against compiled types. With a context it resolves, and a type it cannot
+    resolve — a project type missing from the caller's classpath arrives as
+    `JavaType.Unknown` — escalates with its own warning instead of falling back to
+    matching simple names.
+
+- **Resolutions can carry warnings.** `ConflictResolution.Builder.warning(String)` /
+  `getWarnings()` / `hasWarnings()`, written to the report JSON as a `warnings` array
+  beside the explanation. They describe *how* the decision was reached rather than what
+  was decided, which is why they are separate: a degraded or unresolved comparison reads
+  exactly as confidently as a resolved one in the explanation alone.
+
+- The fallback table is written to the invariant the removed table broke: every chain
+  contains only true relations, and a type with two unrelated supertypes gets two chains
+  (`Integer → Number → Object` and `Integer → Comparable → Object`, since `Number` is not
+  a `Comparable`). A partial table can only add decisions; a wrong chain removes safety.
+
+### Added
+
 - **`TypeChangeConflictResolver` classifies widening by resolution.** The
   hand-written `WIDENING_CHAINS` list of JDK type names is gone. A pair of
   reference types is now decided by resolving both declarations against the type

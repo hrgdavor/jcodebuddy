@@ -5,6 +5,7 @@ package com.codebuddy.merge;
 import org.openrewrite.java.tree.JavaType;
 import org.openrewrite.java.tree.TypeUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -31,15 +32,22 @@ import java.util.regex.Pattern;
  * conversion rule (JLS 5.1.2), which no class hierarchy can express. For every
  * <b>reference</b> type it is resolved through javac: the wider declaration is the one
  * a value of the narrower declaration's type is assignable to. That replaced a
- * hand-written table of JDK supertype chains, which was both incomplete - anything
- * absent, including every type in the project under merge, was escalated - and wrong
- * in the boxed-type entries, where it read the primitive lattice across the wrapper
- * classes and claimed {@code Integer} widens to {@code Long}, which javac rejects
- * because they are siblings under {@code Number}.
+ * hand-written table of JDK supertype chains as the <em>primary</em> rule, because that
+ * table was both incomplete - anything absent, including every type in the project
+ * under merge, was escalated - and wrong in the boxed-type entries, where it read the
+ * primitive lattice across the wrapper classes and claimed {@code Integer} widens to
+ * {@code Long}, which javac rejects because they are siblings under {@code Number}.
  *
- * <p>Anything neither rule decides is treated as unrelated and escalated rather than
- * guessed at, and so is anything that cannot be resolved at all - a missing
- * declaration, an unattributable type or no type context: no answer is never a "no".
+ * <p><b>It degrades rather than demanding a classpath</b> (see
+ * {@link #requiresTypeContext()}). Without a type context the primitive rule still
+ * applies, because it is the language's, and {@link #JDK_SUPERTYPES} answers the common
+ * JDK hierarchies as a best effort; every resolution produced that way carries
+ * {@link #DEGRADED_WARNING}. With a context, a type that cannot be resolved — a project
+ * type missing from the caller's classpath — escalates with
+ * {@link #UNRESOLVED_WARNING} rather than falling back to a name match.
+ *
+ * <p>Anything no rule decides is treated as unrelated and escalated rather than guessed
+ * at: no answer is never a "no".
  */
 public final class TypeChangeConflictResolver extends AbstractConflictResolver {
 
@@ -93,25 +101,121 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
     private static final Set<String> PRIMITIVES = Set.of(
         "byte", "short", "int", "long", "float", "double", "char", "boolean", "void");
 
+    /**
+     * The built-in best-effort table of common JDK hierarchies, used <strong>only when
+     * there is no type context</strong>.
+     *
+     * <p>Not a revival of the removed {@code WIDENING_CHAINS}: that table was the
+     * primary rule, this is the fallback, and the difference shows in two ways.
+     *
+     * <ul>
+     *   <li><strong>Only true supertype relations appear.</strong> Every chain lists a
+     *       type and then types it really is assignable to — {@code ArrayList →
+     *       AbstractList → List → Collection → Iterable → Object}, {@code HashMap →
+     *       AbstractMap → Map → Object}, {@code Integer → Number → Object} and
+     *       {@code Integer → Comparable → Object} as two chains because {@code Number}
+     *       is <em>not</em> a {@code Comparable}. The removed table ran the primitive
+     *       lattice across the wrapper classes in one ascending list, which claimed
+     *       {@code Integer} widens to {@code Long} and {@code Number} to
+     *       {@code Comparable} — both false, and both would have auto-adopted a
+     *       declaration javac rejects.</li>
+     *   <li><strong>It is consulted only in the degraded mode</strong>, and every
+     *       resolution it decides carries {@link #DEGRADED_WARNING}. With a context, a
+     *       type that cannot be resolved escalates with {@link #UNRESOLVED_WARNING}
+     *       instead — matching simple names against this table while a classpath was
+     *       available would be exactly the name-based guess that resolution replaced.</li>
+     * </ul>
+     *
+     * <p>Being partial is the point: a pair the table does not carry escalates to a
+     * reviewer, which is the same outcome an unlisted pair had before, so the fallback
+     * can only add decisions, never remove safety.
+     */
+    static final List<List<String>> JDK_SUPERTYPES = List.of(
+        // Wrapper types into Number, and separately into Comparable: Number is not a
+        // Comparable, so the two relations must not share a chain.
+        List.of("Byte", "Number", "Object"),
+        List.of("Byte", "Comparable", "Object"),
+        List.of("Short", "Number", "Object"),
+        List.of("Short", "Comparable", "Object"),
+        List.of("Integer", "Number", "Object"),
+        List.of("Integer", "Comparable", "Object"),
+        List.of("Long", "Number", "Object"),
+        List.of("Long", "Comparable", "Object"),
+        List.of("Float", "Number", "Object"),
+        List.of("Float", "Comparable", "Object"),
+        List.of("Double", "Number", "Object"),
+        List.of("Double", "Comparable", "Object"),
+        List.of("Character", "Comparable", "Object"),
+        List.of("Boolean", "Comparable", "Object"),
+
+        // Text.
+        List.of("String", "CharSequence", "Comparable", "Object"),
+        List.of("StringBuilder", "CharSequence", "Comparable", "Object"),
+        List.of("StringBuffer", "CharSequence", "Comparable", "Object"),
+
+        // Collections. TreeSet gets both its interface chain and its class chain, which
+        // is why NavigableSet and SortedSet are recognisable without a classpath.
+        List.of("ArrayList", "AbstractList", "List", "Collection", "Iterable", "Object"),
+        List.of("LinkedList", "AbstractSequentialList", "List", "Collection", "Iterable", "Object"),
+        List.of("AbstractCollection", "Collection", "Iterable", "Object"),
+        List.of("HashSet", "AbstractSet", "Set", "Collection", "Iterable", "Object"),
+        List.of("TreeSet", "AbstractSet", "Set", "Collection", "Iterable", "Object"),
+        List.of("TreeSet", "NavigableSet", "SortedSet", "Set", "Collection", "Iterable", "Object"),
+        List.of("LinkedHashSet", "HashSet", "AbstractSet", "Set", "Collection", "Iterable", "Object"),
+        List.of("TreeMap", "AbstractMap", "Map", "Object"),
+        List.of("HashMap", "AbstractMap", "Map", "Object"),
+        List.of("LinkedHashMap", "HashMap", "AbstractMap", "Map", "Object"),
+        List.of("Iterator", "Object"),
+        List.of("Optional", "Object")
+    );
+
+    /**
+     * The warning every resolution carries when there was no type context.
+     *
+     * <p>States what was available and what was therefore not checked, because the
+     * explanation beside it reads exactly as confidently as a resolved one.
+     */
+    static final String DEGRADED_WARNING =
+        "resolved without a type context: only the JLS primitive conversions and a "
+            + "built-in table of common JDK hierarchies were available, so the declared "
+            + "types were not checked against compiled types";
+
+    /**
+     * The warning for a declaration that could not be resolved even though a context was
+     * supplied — typically a project type absent from the caller's classpath.
+     */
+    static final String UNRESOLVED_WARNING =
+        "a declared type could not be resolved against the supplied classpath, so this "
+            + "pair was escalated rather than decided; pass a classpath that covers the "
+            + "project's own types to have it decided";
+
     @Override
     public ConflictType supportedType() {
         return ConflictType.TYPE_CHANGE;
     }
 
     /**
-     * This resolver decides by resolved types, so it needs a context.
+     * A classpath is <strong>not</strong> a hard requirement for this resolver: it
+     * degrades, visibly.
      *
-     * <p>Declaring it is what makes a context-less run fail at construction with a
-     * message naming this resolver, rather than resolving conflicts with a weaker
-     * rule and no indication that it did (see
-     * {@code MergeConflictResolver.Builder.requireTypeContextIfNeeded}). The
-     * primitive lattice would work without a classpath, and deliberately does not
-     * get a context-free path: one resolver that answers differently depending on
-     * how it was built is worse than one that insists on being built properly.
+     * <p>Two of its three rules survive without one. The primitive conversions are the
+     * language's own (JLS 5.1.2) and no classpath can change them, and
+     * {@link #JDK_SUPERTYPES} carries the common JDK hierarchies — {@code ArrayList →
+     * List → Collection → Iterable}, {@code HashMap → Map}, the wrapper types into
+     * {@code Number}/{@code Comparable}/{@code Object} — as the best effort available
+     * without compiled types. So a caller who cannot supply a classpath still gets
+     * primitive widening and the common collection cases decided, rather than an
+     * exception or a blanket refusal.
+     *
+     * <p>What it must not do is pretend the answer is as good as the resolved one, so
+     * every resolution it produces without a context carries
+     * {@link #DEGRADED_WARNING}. A resolver that <em>cannot</em> degrade declares
+     * {@code true} instead and is removed from the set by hand — see
+     * {@link ConflictResolver#requiresTypeContext()} for both halves of the rule.
      */
     @Override
     public boolean requiresTypeContext() {
-        return true;
+        return false;
     }
 
     @Override
@@ -124,18 +228,15 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
         }
 
         TypeContext context = conflict.getTypeContext();
+        List<String> warnings = new ArrayList<>();
         if (context == null) {
-            // requiresTypeContext() is true, so the orchestrator refuses to build a
-            // set without a context; reaching here means this resolver was used
-            // directly.
-            return declined(conflict, "no type context was supplied, so the declared "
-                + "types cannot be resolved");
+            warnings.add(DEGRADED_WARNING);
         }
 
-        boolean branch1Widens = widensResolved(context, conflict.getFilePath(),
-            conflict.getBranch1Code(), branch1, conflict.getBranch2Code(), branch2);
-        boolean branch2Widens = widensResolved(context, conflict.getFilePath(),
-            conflict.getBranch2Code(), branch2, conflict.getBranch1Code(), branch1);
+        boolean branch1Widens = widens(conflict, context, conflict.getBranch1Code(), branch1,
+            conflict.getBranch2Code(), branch2, warnings);
+        boolean branch2Widens = widens(conflict, context, conflict.getBranch2Code(), branch2,
+            conflict.getBranch1Code(), branch1, warnings);
 
         if (branch1Widens == branch2Widens) {
             // Neither widens the other (unrelated types), or both do, which
@@ -146,6 +247,7 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
                     + branch2.type() + "') without a widening relationship, so the safe "
                     + "choice depends on the call sites.")
                 .alternativePaths(describeOptions(conflict))
+                .warnings(warnings)
                 .build();
         }
 
@@ -162,6 +264,7 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
             .explanation("'" + widerType + "' is a widening of '" + narrowerType
                 + "', so the wider declaration accepts every value the narrower one did.")
             .alternativePaths(describeOptions(conflict))
+            .warnings(warnings)
             .build();
     }
 
@@ -225,17 +328,36 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
      * a mixed primitive/reference pair answers.
      */
     static boolean widensPrimitive(String wider, String narrower) {
-        if (wider == null || narrower == null) {
+        return widensInTable(PRIMITIVE_CHAINS, canonical(wider), canonical(narrower));
+    }
+
+    /**
+     * The built-in table's answer, for the degraded mode only.
+     *
+     * <p>Exposed so a caller can ask what the fallback knows without building a
+     * conflict, and so the tests can pin the table's content rather than only its
+     * effect.
+     */
+    static boolean widensFromBuiltInTable(String wider, String narrower) {
+        return widensInTable(JDK_SUPERTYPES, canonical(wider), canonical(narrower));
+    }
+
+    /**
+     * A chain scan: {@code wider} is a supertype of {@code narrower} when one chain
+     * lists both and puts {@code wider} later.
+     *
+     * <p>Every chain must therefore contain only true relations, since one chain that
+     * places two unrelated types in an order is enough to make the answer wrong. That
+     * is the invariant the fallback table above is written to, and the one the removed
+     * table broke.
+     */
+    private static boolean widensInTable(List<List<String>> table, String wider, String narrower) {
+        if (wider == null || narrower == null || wider.equals(narrower)) {
             return false;
         }
-        String w = canonical(wider);
-        String n = canonical(narrower);
-        if (w.equals(n)) {
-            return false;
-        }
-        for (List<String> chain : PRIMITIVE_CHAINS) {
-            int widerIndex = chain.indexOf(w);
-            int narrowerIndex = chain.indexOf(n);
+        for (List<String> chain : table) {
+            int widerIndex = chain.indexOf(wider);
+            int narrowerIndex = chain.indexOf(narrower);
             if (widerIndex >= 0 && narrowerIndex >= 0 && widerIndex > narrowerIndex) {
                 return true;
             }
@@ -244,16 +366,29 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
     }
 
     /**
-     * Whether {@code wider} is a supertype of {@code narrower} according to javac.
+     * Whether {@code wider} is a supertype of {@code narrower}, by the best evidence
+     * available — and the place where "the answer is weaker than usual" is recorded.
      *
-     * <p>Resolution is attempted only for a pair of reference types that are not the
-     * same canonical text, and only when both declarations actually name their type in
-     * the fragments given. Every other combination falls back to the lattice, which
-     * answers false - and false means "escalate", the same outcome this resolver gave
-     * for an unknown pair before, so a type that cannot be attributed loses no safety.
+     * <p>Three rules, in order, and each is the strongest one that can apply:
+     * <ol>
+     *   <li><strong>a primitive on either side</strong> is the JLS conversion lattice.
+     *       No classpath changes it, so it is the same answer in both modes and needs no
+     *       caveat of its own;</li>
+     *   <li><strong>a context</strong> resolves both declarations and asks javac. A type
+     *       that cannot be resolved — a project type absent from the caller's classpath
+     *       arrives as {@code JavaType.Unknown} rather than as an absent one — escalates
+     *       with {@link #UNRESOLVED_WARNING}, deliberately <em>not</em> falling through
+     *       to the built-in table: matching simple names would be the name-based guess
+     *       resolution exists to replace;</li>
+     *   <li><strong>no context</strong> is the degraded mode: the built-in table, with
+     *       {@link #DEGRADED_WARNING} already attached by the caller.</li>
+     * </ol>
+     *
+     * <p>Every path answers {@code false} rather than throwing when it cannot decide, so
+     * the caller escalates — the one outcome that is never wrong, only less helpful.
      */
-    private static boolean widensResolved(TypeContext context, String filePath,
-        String widerCode, TypeAndName wider, String narrowerCode, TypeAndName narrower) {
+    private static boolean widens(Conflict conflict, TypeContext context, String widerCode,
+        TypeAndName wider, String narrowerCode, TypeAndName narrower, List<String> warnings) {
 
         String widerToken = canonical(wider.type());
         String narrowerToken = canonical(narrower.type());
@@ -261,23 +396,31 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
             return widensPrimitive(widerToken, narrowerToken);
         }
 
+        if (context == null) {
+            return widensFromBuiltInTable(widerToken, narrowerToken);
+        }
+
         Optional<JavaType> widerType =
-            ResolvedTypeReader.declaredType(widerCode, wider.name(), filePath, context);
+            ResolvedTypeReader.declaredType(widerCode, wider.name(), conflict.getFilePath(), context);
         Optional<JavaType> narrowerType =
-            ResolvedTypeReader.declaredType(narrowerCode, narrower.name(), filePath, context);
-        if (widerType.isEmpty() || narrowerType.isEmpty()) {
-            // The declaration is absent, the fragment is unreadable, or its type could
-            // not be attributed at all. No answer: escalate rather than guess, because a
-            // guess here would adopt a declaration on the strength of a name match.
+            ResolvedTypeReader.declaredType(narrowerCode, narrower.name(), conflict.getFilePath(), context);
+        if (!isAttributed(widerType) || !isAttributed(narrowerType)) {
+            warnings.add(UNRESOLVED_WARNING);
             return false;
         }
-        // A type that is merely off the classpath arrives as JavaType.Unknown rather
-        // than as an absent one, so this check does not catch it: `isAssignableTo`
-        // answers false for Unknown and the comparison escalates. Safe, but the
-        // escalation currently reads as "no widening relationship" when the truth may be
-        // "the type could not be resolved" - see the decision recorded in the plan's
-        // step 4.1 record and ResolvedTypeReaderTest.offClasspathTypeResolvesToUnknown.
         return widens(widerType.get(), narrowerType.get());
+    }
+
+    /**
+     * Whether a declaration's type was actually attributed.
+     *
+     * <p>Present is not enough. A type that is off the classpath comes back as
+     * {@link JavaType.Unknown} — present, and assignable to nothing — so a check on the
+     * {@code Optional} alone would read "no type information" as "compared, and not a
+     * widening", which is the conflation this method exists to prevent.
+     */
+    private static boolean isAttributed(Optional<JavaType> type) {
+        return type.isPresent() && !(type.get() instanceof JavaType.Unknown);
     }
 
     /**
@@ -300,37 +443,6 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
     /** Whether a canonical type token is a primitive keyword. */
     private static boolean isPrimitiveToken(String token) {
         return PRIMITIVES.contains(token);
-    }
-
-    /**
-     * A manual resolution carrying the reason the comparison could not be made.
-     *
-     * <p>The same shape {@code OverloadAddConflictResolver} uses, because a resolver
-     * that cannot decide must say so in the same terms as the resolver beside it: the
-     * reviewer sees one vocabulary whether the missing piece was a parameter type or a
-     * declaration type.
-     */
-    private ConflictResolution declined(Conflict conflict, String reason) {
-        return reviewResolution(conflict, ConflictResolution.ResolutionStrategy.MANUAL)
-            .kind(ConflictResolution.ResolutionKind.MANUAL)
-            .resolvedCode(ConflictResolution.MANUAL_MARKER)
-            .explanation("Type-change resolution could not decide this conflict: " + reason)
-            .alternativePaths(List.of(
-                newFixPath(conflict)
-                    .description("Resolve the type change by hand")
-                    .options("Keep branch 1", "Keep branch 2", "Keep the base declaration")
-                    .justification(reason)
-                    .impact("Requires reviewer time; nothing is applied automatically.")
-                    .build(),
-                newFixPath(conflict)
-                    .description("Provide a type context so the types can be resolved")
-                    .options("Build the resolver with a classpath covering these types")
-                    .recommended("Build the resolver with a classpath covering these types")
-                    .justification("A type context is what lets the wider declaration be "
-                        + "identified from the compiled types rather than from their spelling.")
-                    .impact("Automatic resolution becomes possible again.")
-                    .build()))
-            .build();
     }
 
     /**

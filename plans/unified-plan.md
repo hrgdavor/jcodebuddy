@@ -550,12 +550,30 @@ JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `Dive
   reading and the new declaration reading share one parser setup, one analysis context and one failure
   rule; `declaredType` returns empty for "no answer", and the caller treats that as escalate — never as
   "not assignable".
-- **`requiresTypeContext()` is now true for this resolver**, matching `OverloadAddConflictResolver`: the
-  orchestrator refuses to build a set without a context and names the resolver, and a direct caller gets
-  a `MANUAL` resolution carrying the reason. The primitive lattice deliberately gets no context-free
-  path — one resolver that answers differently depending on how it was built is worse than one that
-  insists on being built properly. `TypeContext`'s javadoc and `merge-java/README.md` were updated with
-  it.
+- **`requiresTypeContext()` means "a classpath is a hard requirement *for this resolver*", and this
+  resolver declares `false`** — it degrades instead. This is a decision taken after reviewing the first
+  cut, which had it declare `true`; the first cut's argument ("one resolver that answers differently
+  depending on how it was built is worse than one that insists on being built properly") is not wrong,
+  it is answered by *saying so* rather than by refusing to run. `OverloadAddConflictResolver` keeps
+  `true`: comparing resolved parameter types has no weaker form, so a set containing it is still refused
+  at construction — and its message now names both the diagnostic name and the **class**, because "remove
+  that resolver by hand" is only actionable if the caller knows which class to remove.
+- **The degraded mode is visible, not silent.** Without a context the resolver decides the JLS primitive
+  conversions and the common JDK hierarchies from `JDK_SUPERTYPES` (best effort: `ArrayList → List →
+  Collection → Iterable`, `HashMap → Map`, the wrapper types into `Number`/`Comparable`/`Object`), and
+  every resolution it produces that way carries a warning. With a context, a declaration that cannot be
+  resolved — a project type missing from the caller's classpath is `JavaType.Unknown`, **not** absent,
+  which `ResolvedTypeReaderTest` now pins — escalates with its own warning *instead of* falling back to
+  the table: matching simple names while a classpath is available would be the name-based guess
+  resolution exists to replace. `ConflictResolution` grew `warnings` for this and `MergeReportWriter`
+  writes them, so step 4.2's review page can show the basis beside the decision.
+- **The fallback table is not the old table.** It is written to the invariant the old one broke: every
+  chain holds only true relations, and a type with two unrelated supertypes gets two chains
+  (`Integer → Number → Object` *and* `Integer → Comparable → Object`, because `Number` is not a
+  `Comparable`). So the boxed-sibling defect stays fixed in both modes.
+- `TypeContext`'s and `ConflictResolver`'s javadoc and `merge-java/README.md` were updated with it, and
+  `merge-java/CHANGELOG.md` carries the correction as an **appended** entry — that file's own rule
+  forbids editing the one written an hour earlier.
 - **Two defects the table was hiding, both now pinned by tests.** (1) The boxed chain read the primitive
   lattice across the wrapper classes, so `widens("Long", "Integer")` was **true** — but javac rejects
   `Long x = anInteger`, and the two are siblings under `Number`; auto-adopting the `Long` declaration
