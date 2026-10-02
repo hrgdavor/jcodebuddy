@@ -110,8 +110,8 @@ Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 | `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java` |
 | `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` |
 | `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java` |
-| `[x]` complete | high | high | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
-| `[x]` complete | high | high | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` |
+| `[x]` complete | high | high | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
+| `[x]` complete | high | high | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
@@ -123,17 +123,17 @@ Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` |
 | `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
-| `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
-| `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
-| `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
-| `[x]` complete | high | medium | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java` |
+| `[x]` complete | high | medium | 0 | `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
+| `[x]` complete | high | medium | 0 | `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
+| `[x]` complete | high | medium | 0 | `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
+| `[x]` complete | high | medium | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java` |
 | `[x]` complete | high | medium | 0 | `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
 | `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java` |
 | `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java` |
 | `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java` |
-| `[x]` complete | high | low | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java` |
+| `[x]` complete | high | low | 0 | `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java` |
 | `[x]` complete | medium | medium | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` |
-| `[x]` complete | medium | medium | 0 | `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` |
+| `[x]` complete | medium | medium | 0 | `jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` |
 | `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
 | `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
 | `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java` |
@@ -383,7 +383,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java
 ```
 
-### `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java`
+### `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 81
 
@@ -407,13 +407,13 @@ Ported, and it lost three of its four steps: lexical preservation (no longer nee
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java
 ```
 
-### `jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java`
+### `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 290
 
@@ -437,10 +437,10 @@ Ported by replacing AST mutation with text generation, and that is the design ra
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java
 ```
 
 ### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java`
@@ -729,7 +729,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java
 ```
 
-### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java`
+### `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 130
 
@@ -748,13 +748,13 @@ Analyses a file for context: types, records and members. Record handling collaps
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
+bun run scripts/rewrite-migration/migrate-file.js --after watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java
 ```
 
-### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java`
+### `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 71
 
@@ -773,13 +773,13 @@ One of three near-identical tools (Accessor/Builder/Constructor) sharing a shape
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java
 ```
 
-### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java`
+### `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 66
 
@@ -798,13 +798,13 @@ See AccessorGenerator — identical shape, port as one unit with it.
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl java-watch-agent -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java
 ```
 
-### `jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java`
+### `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 325
 
@@ -824,10 +824,10 @@ Added when jwa-builder was ported: it is what replaced the AST mutation. The pro
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java
 ```
 
 ### `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java`
@@ -939,7 +939,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java
 ```
 
-### `jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java`
+### `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 164
 
@@ -958,10 +958,10 @@ Added when jwa-builder was ported: the engine selects a record by proximity to t
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java
 ```
 
 ### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java`
@@ -989,7 +989,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler
 bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
 ```
 
-### `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java`
+### `jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java`
 
 **Status**: `[x]` complete · **Priority**: medium · **Risk**: medium · **Detected**: comment-only · **Lines**: 216
 
@@ -1010,10 +1010,10 @@ Ported. It no longer parses anything itself — the processor reads a tree but n
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java
+bun run scripts/rewrite-migration/migrate-file.js --after jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java
 ```
 
 ### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java`
@@ -1132,13 +1132,13 @@ removes the exemption — an allowlist entry without an exit condition is a hole
 
 **Deferred to**: Never for the javadoc, which is the provenance of the current contract. The *guard* it used to be was re-expressed rather than deleted, so nothing here is waiting on a port.
 
-### `jwa-builder/src/main/java/hr/hrg/watch2/builder/ClassMemberProcessor.java`
+### `jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/ClassMemberProcessor.java`
 
 **Reason**: The only `JavaParser` this file names is OpenRewrite's own `org.openrewrite.java.JavaParser` — the trap MIGRATION-CAVEATS.md opens with, and the reason the scanner's bare-name test cannot be taken at face value. There is no `com.github.javaparser` reference here, and no dependency on one.
 
 **Deferred to**: Never: the name is the ported API's, and a file that parses with OpenRewrite has to say so. It is recorded rather than filtered because the scanner should keep reporting the collision — a rename in a future OpenRewrite release is exactly the event this entry makes visible.
 
-### `jwa-builder/src/test/java/hr/hrg/watch2/builder/ClassMemberProcessorTest.java`
+### `jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/ClassMemberProcessorTest.java`
 
 **Reason**: Same as its subject: the JavaParser mentions are OpenRewrite's class and prose about what the port replaced. No `com.github.javaparser` reference.
 

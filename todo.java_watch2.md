@@ -8,7 +8,7 @@
 - [ ] Implement Remote Jump Front-end: Update Agent Web UI to send GET /jump requests to Sidecar.
       — **open**: the sidecar's `/jump` endpoint, its token/origin gate and loopback bind all exist
       (Phase 3 of [`jwa-sidecar/plan.md`](webview/jwa-sidecar/plan.md)), but the agent's web UI never
-      calls it: `java-watch-agent/src/main/resources/web/` contains no `jump` and no `7979`.
+      calls it: `watch/java-watch-agent/src/main/resources/web/` contains no `jump` and no `7979`.
 - [ ] Refine Configuration: Add support for custom indentation (tabs/spaces) in toolsets.
       — **open**: the indent is a constructor argument — `BuilderTransformationEngine(String indent)`,
       `RecordBuilderProcessor(String indent)` — and nothing reads the client's `tabSize`/`insertSpaces`.
@@ -31,8 +31,8 @@
       `Wyhash64` as `ContentHash` (DEC-029 § 4), with golden vectors pinned by `ContentHashTest`.
 - [x] Configurable text extensions for SCP hashing.
       — **done**: `text_extensions` in
-      [`WatchScpConfig`](java-watch-scp/src/main/java/hr/hrg/watch2/scp/WatchScpConfig.java), documented
-      in [`DOCUMENTATION.md`](java-watch-scp/DOCUMENTATION.md).
+      [`WatchScpConfig`](watch/java-watch-scp/src/main/java/hr/hrg/watch2/scp/WatchScpConfig.java), documented
+      in [`DOCUMENTATION.md`](watch/java-watch-scp/DOCUMENTATION.md).
 
 ## Zig Integration
 - [ ] Port core hashing logic to Zig for learning and high-performance cross-platform builds.

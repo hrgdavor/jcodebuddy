@@ -315,7 +315,7 @@ being asked for, and they have different answers:
 
 - **"I need this reusable type."** Then it was never project-specific. Promote it: move it into a
   JCodeBuddy library module with its own POM, and have both the `project-automation` and the new consumer
-  depend on that. The precedent is [`jcodebuddy-codegen-api`](jcodebuddy-codegen-api/pom.xml), created for
+  depend on that. The precedent is [`jcodebuddy-codegen-api`](jcodebuddy/jcodebuddy-codegen-api/pom.xml), created for
   exactly this reason when `java-watch-agent` turned out to need the generator SPI that lived in
   `project-automation`: five leaf types became a library, and the dependency became legal.
 - **"I need this project's specific behaviour."** Then it is not reusable and must not be depended on. If
@@ -332,7 +332,7 @@ satisfiable because the artifact was being installed. Either one alone would hav
 
 - [`project-automation/README.md`](project-automation/README.md) — the module's own statement of what it
   is and is not.
-- [`jcodebuddy-codegen-api/pom.xml`](jcodebuddy-codegen-api/pom.xml) — the promotion that made the rule
+- [`jcodebuddy/jcodebuddy-codegen-api/pom.xml`](jcodebuddy/jcodebuddy-codegen-api/pom.xml) — the promotion that made the rule
   hold, and the reasoning written at the point it applies.
 - [`doc/architecture/decisions-watch/DEC-W003.md`](doc/architecture/decisions-watch/DEC-W003.md) —
   the decision record. It covers the *runtime dependency* half of the rule; this section adds the
@@ -422,7 +422,7 @@ canonical statement of a boundary that has no other home.
 - **Memory and off-heap work go through `metadata-arena`.** Use
   `Arena` / `LongToLongsIndex` / mmap formats from that module
   rather than inventing your own. See
-  [`metadata-arena/README.md`](metadata-arena/README.md).
+  [`jcodebuddy/metadata-arena/README.md`](jcodebuddy/metadata-arena/README.md).
 - **Scripts and tests are Bun JavaScript — never PowerShell, never
   shell.** Anything an agent writes to *run* or *check* something is
   a `.js` file with a `#!/usr/bin/env bun` header, run as

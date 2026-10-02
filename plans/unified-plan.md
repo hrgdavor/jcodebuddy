@@ -127,7 +127,7 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md) | steps 5.1–5.3 | Phase 6 and Q3/Q5 closed |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md) | steps 5.4, 8.2 | Phase 5 + observations closed |
 | [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5 | open rows closed |
-| [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`java-watch-agent/plan.md`](../java-watch-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | "Future Refinement"/"Open questions" lists emptied |
+| [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`watch/java-watch-agent/plan.md`](../watch/java-watch-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | "Future Refinement"/"Open questions" lists emptied |
 | [`plans/rewrite-migration/`](rewrite-migration/README.md) | nothing — it is **complete** | stays in place as the historical record (step 9.2) |
 
 ---
@@ -165,7 +165,7 @@ untouched),
 [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md) (status
 banner; items 12–13 open),
 [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) (backlog, nothing implemented),
-[`java-watch-agent/plan.md`](../java-watch-agent/plan.md) (the two Phase 4 boxes),
+[`watch/java-watch-agent/plan.md`](../watch/java-watch-agent/plan.md) (the two Phase 4 boxes),
 [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md) (two Future Refinement boxes),
 [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) (§ 8
 unanswered),
@@ -389,7 +389,7 @@ should default to (the module ships two and nothing chooses between them), and w
   that is how a caller performs it), `mmapLoad` (map the file written in setup, read every entry, unmap).
   Params: backend ∈ {`bytebuffer`, `ffm`} × entries ∈ {1 000, 100 000}. It declares no forks/iterations of
   its own, so the runner's profile governs.
-- `metadata-arena/pom.xml` gained the `jmh` profile (`-proc:full`, without which the harness is never
+- `jcodebuddy/metadata-arena/pom.xml` gained the `jmh` profile (`-proc:full`, without which the harness is never
   generated and the sources merely compile) and the same two surefire excludes `hipster-entity-core` has, so
   a `-Pjmh` build stays a build rather than running the benchmark as a test.
 - `scripts/run-jmh.js`: `metadata-arena` added to the benchmark module list, to the classpath and to the
@@ -455,7 +455,7 @@ green (38 tests).
 - **Recorded in DEC-W009, not in a README**: the record's implementation note carries the full table, both
   decisions, the sizing rule and a "what this run does not establish" section; its three follow-ups are
   marked settled and a fourth was added (the unexplained FFM gap — anything that puts FFM on a default path
-  owes a profile first). `metadata-arena/README.md` keeps its rule that numbers live where the decision is
+  owes a profile first). `jcodebuddy/metadata-arena/README.md` keeps its rule that numbers live where the decision is
   and now points at that note.
 
 **Gate:** ✅ the numbers come from a default-profile run (the profile recorded inside `results.json`, no
@@ -477,9 +477,9 @@ answer — is written into DEC-W009's implementation note.
 > **Extracting metadata is not hipster-ioc's job.** hipster-ioc *consumes* metadata to produce IoC code.
 > Extraction, caching and indexing belong to the metadata side, and since 2026-10-02 that side is **one
 > engine in `jcodebuddy-core`** ([DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md)) rather
-> than the four modules that hold the pieces today: [`metadata-server`](../metadata-server)'s providers and
+> than the four modules that hold the pieces today: [`metadata-server`](../jcodebuddy/metadata-server)'s providers and
 > RPC/MCP surfaces, the **class index** (`hipster-entity-tooling`'s `ClassIndex`/`ClassRecord`, DEC-029) with
-> per-file checksums (`ContentHash`), [`metadata-arena`](../metadata-arena) for index storage, and
+> per-file checksums (`ContentHash`), [`metadata-arena`](../jcodebuddy/metadata-arena) for index storage, and
 > `java-watch-core` for the watch loop. What is missing is the **engine and its contract** — steps 3.0a–3.0k
 > below, which come *before* any consumer work, because a consumer migrating onto a moving model moves twice.
 >
@@ -580,9 +580,9 @@ consumers are all written down.
 **Who:** agent · **Size:** L
 
 The generator-facing seam is **empty and too small**: `jcodebuddy-codegen-api`'s
-[`TypeResolver`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeResolver.java)
+[`TypeResolver`](../jcodebuddy/jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeResolver.java)
 (`resolve(fqn)`) has no implementation but `EmptyTypeResolver`, and
-[`TypeDefinition`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeDefinition.java)
+[`TypeDefinition`](../jcodebuddy/jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeDefinition.java)
 (qualified name, simple name, fields, field types) carries **no relations**, so it cannot answer the question
 hipster-ioc actually has. That is a symptom: the model a consumer needs is spread across the tooling module
 and two watch modules, and the SPI lives in a fifth.
@@ -661,7 +661,7 @@ the `SourceMetadata` edge (the reason codegen-api depends on `hipster-entity-too
 SPI cannot be implemented next to the index it reads) disappears with the move.
 
 **Do:** move the SPI into the engine, delete the module, and update every consumer's POM and imports —
-`project-automation` ([`ActionToolAdapter`](../java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ActionToolAdapter.java)
+`project-automation` ([`ActionToolAdapter`](../watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ActionToolAdapter.java)
 and the generator implementations), `java-watch-agent`, `hipster-ioc-tooling`. Update
 [`module-map.md`](../doc/architecture/module-map.md) (which states the five-type leaf property) and the places
 that cite codegen-api as the precedent for promoting a shared type out of `project-automation`
@@ -773,6 +773,39 @@ they name `SourceSplicer` today without saying which module it lives in, which i
 one `SourceSplicer` remains in the tree, and a grep proves it; the record and the guide name its home.
 
 **Done when:** the codegen modules are part of the family, and one splice path exists instead of two.
+
+### 3.0o — Group the reactor's modules (DEC-039)
+**Who:** agent · **Size:** M
+
+**Done 2026-10-02 — the four groups, before the engine work, as directed.** [DEC-039](../doc-hipster-entity/architecture/decisions/DEC-039.md)
+records it: `webview/` (already), `watch/` for `java-watch*`, `hipster-entity/` for `hipster-entity*`,
+`jcodebuddy/` for `jcodebuddy*` **plus `metadata-*` and `jwa*`**; a module keeps its full name inside its
+group; `java-watch*` stays its own library. "Others to be decided" is honoured — `hipster-ioc*`, `merge-java`
+and `project-automation` are still at the root.
+
+- **Group 1, `hipster-entity/`** (6 modules): gate `BUILD SUCCESS` (5:26 in tooling), links green.
+- **Groups 2 and 3, `watch/` and `jcodebuddy/`** (12 modules): gate `BUILD SUCCESS` (5:59) **and** a targeted
+  build of everything the gate does not cover — `BUILD SUCCESS` over 18 modules, including
+  `project-automation` (92 tests), `java-watch-agent`, `metadata-server`, `metadata-mcp-server`,
+  `metadata-arena`, `jwa-builder*` and `jcodebuddy-codegen-api` — because `GATE_MODULES` covers only
+  `jcodebuddy-core` and the six `hipster-entity` modules until 3.0k. Links green.
+- **The `watch/` collision was real**: a module named `watch` already occupied that path (a small
+  file-copying watcher app, no dependents). It was renamed into the family — directory
+  `watch/java-watch-app`, artifactId `java-watch-app` — rather than left as a module sitting on its group
+  folder.
+- **Two layout assumptions had to die, and that is the lasting part.** `scripts/lib/gate.js` selects modules
+  by `:artifactId` now (a bare directory name stops resolving once modules are nested), and
+  `CompileHarness.findRepoRoot()` no longer guesses "the nearest `pom.xml` whose directory starts with
+  `hipster-entity-`" — that returned the *module* directory the day the modules moved and left ~30 test
+  classes looking for a classpath that cannot exist. Its replacement is `pom.xml` **and** `.git`, plus
+  `CompileHarness.moduleDir(artifactId)`, which reads the root POM's `<module>` entries because that is the
+  one record of where a module lives.
+- **The move is scripted and the script is kept**: [`scripts/move-to-groups.js`](../scripts/move-to-groups.js)
+  (`--dry-run`, `--group`, `--all`, `--fix-links`, `--fix-segments`), idempotent, repairing only the links it
+  can prove and printing the rest. It also had to clean up after its own earlier non-idempotent run, which is
+  why the doubling repair is in it and in the commit history rather than hidden.
+
+**Gate:** ✅ both gates green, the 18-module build green, links green (256 files, 1555 links).
 
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
@@ -1418,7 +1451,7 @@ two decisions are updated to match what was built.
 The sidecar advertises incremental sync but never reads the client's formatting settings: a grep for
 `tabSize` / `insertSpaces` / `formatting` across `webview/jwa-sidecar` finds nothing, so the generated
 members use the indent the engine was constructed with
-([`BuilderTransformationEngine(String indent)`](../jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java),
+([`BuilderTransformationEngine(String indent)`](../jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java),
 default 4 spaces).
 
 **Do:** read `tabSize`/`insertSpaces` from the client (LSP `FormattingOptions` on the request, or
@@ -1433,7 +1466,7 @@ toolsets".
 **Who:** agent · **Size:** S
 
 The sidecar's `/jump` endpoint, its token/origin gate and its loopback bind all exist; the agent's web UI
-never calls it (`java-watch-agent/src/main/resources/web/` has no `jump` and no `7979`).
+never calls it (`watch/java-watch-agent/src/main/resources/web/` has no `jump` and no `7979`).
 
 **Do:** make the dashboard send the jump request with the token the sidecar requires, and show the
 outcome (the sidecar reports a navigation *outcome*, not an assumed success, since 2026-09-25).
@@ -1471,7 +1504,7 @@ items are closed.
 ### 7.5 — java-watch-agent: the OpenRewrite-based tool prototype
 **Who:** agent · **Size:** M
 
-Phase 4's second box. Nothing under `java-watch-agent/` references OpenRewrite today. It must be built
+Phase 4's second box. Nothing under `watch/java-watch-agent/` references OpenRewrite today. It must be built
 the repository's way (DEC-030): read through `SourceReader`, query through `TreeQueries`, splice text —
 not parse with a second parser and not reprint a tree.
 
@@ -1484,7 +1517,7 @@ menu against a sample and is asserted by a test.
 Each is a decision, and silence is the only wrong outcome:
 
 - **A configurable delay for delete events** — a debounce exists and is configurable
-  ([`BatchedFileWatcher`](../java-watch-core/src/main/java/hr/hrg/watch2/core/BatchedFileWatcher.java),
+  ([`BatchedFileWatcher`](../watch/java-watch-core/src/main/java/hr/hrg/watch2/core/BatchedFileWatcher.java),
   `ManagedFileWatcher`, `java-watch-scp`'s `watch_delay_ms`); a *delete-specific* delay does not. Decide
   whether one is wanted, and record why.
 - **A memory-based LocalDB** — `local_db` today chooses *where the `.scpdb` file lives*, not whether the
@@ -1682,7 +1715,7 @@ version-named record, because a claim that is not observed is not a claim
 | --- | --- | --- | --- |
 | 8.1 | JetBrains § 8's five maintainer questions (vendor identity, the empty-allow-list default, one vs two settings services, dropping Kotlin, plan location) and acceptance criteria 2/5/7 in a running IDE | maintainer | [`plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) § 8, and `webview-jetbrains`' own docs |
 | 8.2 | Eclipse 4.41 workbench observations — the caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim; then answer **Q2** (dropins vs p2) | maintainer | [`ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md) § 1a/§ 2a, then `PLAN-eclipse-host.md` |
-| 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the existing `intellij-jwa`/`vscode-jwa` are sidecar clients, not these) | maintainer decides, agent implements | [`java-watch-agent/plan.md`](../java-watch-agent/plan.md) |
+| 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the existing `intellij-jwa`/`vscode-jwa` are sidecar clients, not these) | maintainer decides, agent implements | [`watch/java-watch-agent/plan.md`](../watch/java-watch-agent/plan.md) |
 | 8.4 | The ACP spike's Zed run (see step 5.3) | maintainer | `PLAN-webview-suite.md` Phase 5 record |
 
 ---
@@ -1816,6 +1849,7 @@ start)
 | 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038) | agent | S | `[ ]` |
 | 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038) | agent | M | `[ ]` |
 | 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038) | agent | L | `[ ]` |
+| 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/` (DEC-039) | agent | M | `[x]` — `hipster-ioc*`, `merge-java` and `project-automation` wait on "others to be decided" |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |

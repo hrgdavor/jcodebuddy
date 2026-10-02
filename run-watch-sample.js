@@ -3,7 +3,7 @@
  * run-watch-sample.js
  * ─────────────────────────────────────────────────────────────────────────────
  * Builds the java-watch-run daemon and the sample project, then launches the
- * daemon watching java-watch-run-sample/src/ for .java changes.
+ * daemon watching watch/java-watch-run-sample/src/ for .java changes.
  *
  * Usage (from the java_watch2 root):
  *   bun run-watch-sample.js [--debounce=<ms>]

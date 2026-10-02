@@ -22,7 +22,7 @@ To test the extension:
 ## 3. Testing the "Sync Builder" Action
 Once the project is open in the [Extension Development Host]:
 1. Open a Java file with a `record`, for example
-   `java-watch-agent/src/main/java/hr/hrg/watch2/agent/TestRecord.java`.
+   `watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/TestRecord.java`.
 2. Click on the line with the record name: `public record TestRecord(...)`.
 3. You should see a **Lightbulb icon** (Quick Fix) appear.
 4. Click the lightbulb and select **Sync Builder**.
@@ -40,7 +40,7 @@ java "-Djwa.sidecar.token=local-dev" -cp "webview/jwa-sidecar/target/*" hr.hrg.w
 
 # In another terminal:
 Invoke-RestMethod -Uri ("http://127.0.0.1:7979/jump?token=local-dev" +
-    "&uri=file:///D:/wrk/java/jcodebuddy/java-watch-agent/src/main/java/hr/hrg/watch2/agent/TestRecord.java&line=2")
+    "&uri=file:///D:/wrk/java/jcodebuddy/watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/TestRecord.java&line=2")
 ```
 
 The [Extension Development Host] window should focus `TestRecord.java` at line 2. `GET /health` answers without

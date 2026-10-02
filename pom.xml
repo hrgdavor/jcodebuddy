@@ -52,11 +52,11 @@
     </properties>
 
     <modules>
-        <module>watch</module>
-        <module>java-watch-core</module>
-        <module>java-watch-scp</module>
-        <module>java-watch-run</module>
-        <module>java-watch-run-sample</module>
+        <module>watch/java-watch-app</module>
+        <module>watch/java-watch-core</module>
+        <module>watch/java-watch-scp</module>
+        <module>watch/java-watch-run</module>
+        <module>watch/java-watch-run-sample</module>
         <!-- The webview product: the host-neutral core, the standalone host, the LSP sidecar, and the
               Eclipse IDE host. The other two editor hosts are not Maven modules (webview-jetbrains is a
               Gradle IntelliJ Platform build, webview-vscode is a Node package). -->
@@ -64,8 +64,8 @@
         <!-- webviewd is the reference host of that contract and the only one that needs no editor
              (webview/PLAN-webview-suite.md, Phase 2). -->
         <module>webview/core/webviewd</module>
-        <module>jwa-builder-api</module>
-        <module>jwa-builder</module>
+        <module>jcodebuddy/jwa-builder-api</module>
+        <module>jcodebuddy/jwa-builder</module>
         <!-- The LSP sidecar lives with the webview product, not at the repository root: it is the same
              product (pages, navigation, edits), reached over LSP instead of over a webview. See
              webview/PLAN-webview-suite.md, decision D9. -->
@@ -73,7 +73,7 @@
         <!-- The Eclipse IDE host (Phase 1 of webview/PLAN-eclipse-host.md): an SWT Browser view with
               the injected bridge, packaged as a dropins bundle. -->
         <module>webview/eclipse/webview-eclipse</module>
-        <module>java-watch-agent</module>
+        <module>watch/java-watch-agent</module>
         <module>hipster-entity/hipster-entity-api</module>
         <module>hipster-entity/hipster-entity-core</module>
         <module>hipster-entity/hipster-entity-example</module>
@@ -84,15 +84,15 @@
              a type. A leaf library, and the reason it exists is a rule rather than a feature — a tool
              that generates code must not have to depend on anybody's `project-automation` to do it.
              See the module's POM and AGENTS.md § 1. -->
-        <module>jcodebuddy-core</module>
-        <module>jcodebuddy-codegen-api</module>
+        <module>jcodebuddy/jcodebuddy-core</module>
+        <module>jcodebuddy/jcodebuddy-codegen-api</module>
         <module>project-automation</module>
         <module>hipster-ioc-api</module>
         <module>hipster-ioc-tooling</module>
         <module>hipster-ioc-test</module>
-        <module>metadata-server</module>
-        <module>metadata-mcp-server</module>
-        <module>metadata-arena</module>
+        <module>jcodebuddy/metadata-server</module>
+        <module>jcodebuddy/metadata-mcp-server</module>
+        <module>jcodebuddy/metadata-arena</module>
         <module>merge-java</module>
     </modules>
 

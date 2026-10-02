@@ -84,7 +84,7 @@ export const QUEUE = {
   },
 
   // --------------------------------------------------- added by the first pass ---
-  'jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java': {
+  'jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['(none — generates text)'],
@@ -97,7 +97,7 @@ export const QUEUE = {
       '(recognised by name and structure) is what makes the operation idempotent without a marker ' +
       'comment.',
   },
-  'jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java': {
+  'jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java': {
     priority: 'high',
     risk: 'low',
     openrewrite: ['com.sun.source.util.JavacTask', 'com.sun.source.tree.LineMap'],
@@ -468,7 +468,7 @@ export const QUEUE = {
   // reports the already-converted staging package as unmigrated.
 
   // ------------------------------------------------------------- jwa-builder ---
-  'jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java': {
+  'jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -490,7 +490,7 @@ export const QUEUE = {
       'module therefore answers the migration guide’s open emission-strategy question ' +
       'for the append-style case: text, not `withXxx`.',
   },
-  'jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java': {
+  'jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -509,7 +509,7 @@ export const QUEUE = {
       'second set of sources declaring the same FQNs, which is exactly what completing ' +
       'a record twice produces (MIGRATION-CAVEATS.md § 1.2).',
   },
-  'jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java': {
+  'jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java': {
     priority: 'medium',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J'],
@@ -526,7 +526,7 @@ export const QUEUE = {
   },
 
   // -------------------------------------------------------- java-watch-agent --
-  'java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java': {
+  'watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration', 'org.openrewrite.java.tree.J'],
@@ -535,7 +535,7 @@ export const QUEUE = {
       'collapses into the kind test, and `Node`-typed traversal should become a ' +
       '`JavaIsoVisitor` rather than a hand-rolled parent walk.',
   },
-  'java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java': {
+  'watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.java.tree.J.VariableDeclarations'],
@@ -545,13 +545,13 @@ export const QUEUE = {
       'and prove the shared helper once; `BodyDeclaration` has no LST supertype, so ' +
       'each filter becomes a predicate over `J`.',
   },
-  'java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java': {
+  'watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.java.tree.J.VariableDeclarations'],
     note: 'See AccessorGenerator — identical shape, port as one unit with it.',
   },
-  'java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java': {
+  'watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ConstructorGenerator.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.java.tree.J.VariableDeclarations'],
@@ -636,7 +636,7 @@ export const QUEUE = {
  * @type {Record<string, {reason: string, deferredTo: string, status: 'exempt'}>}
  */
 export const ALLOWLIST = {
-  'jwa-builder/src/main/java/hr/hrg/watch2/builder/ClassMemberProcessor.java': {
+  'jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/ClassMemberProcessor.java': {
     status: 'exempt',
     reason:
       'The only `JavaParser` this file names is OpenRewrite\'s own ' +
@@ -649,7 +649,7 @@ export const ALLOWLIST = {
       'keep reporting the collision — a rename in a future OpenRewrite release is ' +
       'exactly the event this entry makes visible.',
   },
-  'jwa-builder/src/test/java/hr/hrg/watch2/builder/ClassMemberProcessorTest.java': {
+  'jcodebuddy/jwa-builder/src/test/java/hr/hrg/watch2/builder/ClassMemberProcessorTest.java': {
     status: 'exempt',
     reason:
       'Same as its subject: the JavaParser mentions are OpenRewrite\'s class and prose ' +
@@ -1142,7 +1142,7 @@ export const DOC_ALLOWLIST = {
       'Never: a legacy plan that is rewritten stops being the record of what the tree ' +
       'looked like before the migration.',
   },
-  'java-watch-agent/plan.md': {
+  'watch/java-watch-agent/plan.md': {
     status: 'exempt',
     reason:
       'One line — "Static Analysis: Uses `JavaParser` to analyze the code around the ' +
@@ -1158,7 +1158,7 @@ export const DOC_ALLOWLIST = {
     status: 'exempt',
     reason:
       'This became the *surviving* builder guide in Phase 8 — the AI-transcript ' +
-      'guide `java-watch-agent/record builder.md` was retired into it, and the ' +
+      'guide `watch/java-watch-agent/record builder.md` was retired into it, and the ' +
       'whole file was rewritten against `jwa-builder`\'s `RecordBuilderProcessor`. ' +
       'The mentions left are deliberate and load-bearing: the "Why the previous ' +
       'implementation was replaced" section names the removed package and ' +
@@ -1169,7 +1169,7 @@ export const DOC_ALLOWLIST = {
       'Never for that section while "splice, do not reprint" is the rule it ' +
       'justifies. If the section is ever cut, the entry goes with it.',
   },
-  'java-watch-agent/record builder.md': {
+  'watch/java-watch-agent/record builder.md': {
     status: 'exempt',
     reason:
       'The retired AI-transcript guide. Phase 8 replaced its body with a tombstone ' +

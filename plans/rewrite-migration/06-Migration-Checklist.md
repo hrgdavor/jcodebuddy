@@ -103,12 +103,12 @@ Run verification script:
 - `meta/InterfaceInfo.java`
 - `validation/*.java` (all validation rules)
 
-#### jwa-builder/src/main/java/hr/hrg/watch2/builder/
+#### jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/
 
 - `RecordBuilderProcessor.java`
 - `BuilderTransformationEngine.java`
 
-#### java-watch-agent/src/main/java/hr/hrg/watch2/agent/
+#### watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/
 
 - `ContextualAnalyzer.java`
 - `JavaParserFactory.java`
@@ -139,7 +139,7 @@ Run verification script:
 - `validation/MarkerEntityRuleTest.java`
 - `validation/JavaParserTool.java`
 
-#### jwa-builder/src/test/java/
+#### jcodebuddy/jwa-builder/src/test/java/
 
 - `RecordBuilderProcessorTest.java`
 

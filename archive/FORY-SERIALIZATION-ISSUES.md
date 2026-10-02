@@ -29,9 +29,9 @@ Caused by: java.lang.NullPointerException
 Initially we converted the RPC models from **records** to **plain classes** to work around Fory issues, but this did not resolve the NPE. The serialization failure persisted regardless of whether we used records or mutable classes.
 
 **Files affected:**
-- `metadata-server/src/main/java/hr/hrg/watch2/server/metadata/model/JsonRpcRequest.java`
-- `metadata-server/src/main/java/hr/hrg/watch2/server/metadata/model/JsonRpcResponse.java`
-- `metadata-server/src/main/java/hr/hrg/watch2/server/metadata/model/JsonRpcError.java`
+- `jcodebuddy/metadata-server/src/main/java/hr/hrg/watch2/server/metadata/model/JsonRpcRequest.java`
+- `jcodebuddy/metadata-server/src/main/java/hr/hrg/watch2/server/metadata/model/JsonRpcResponse.java`
+- `jcodebuddy/metadata-server/src/main/java/hr/hrg/watch2/server/metadata/model/JsonRpcError.java`
 
 ### 3. `ForyBuilder.withNumberCompressed()` Interaction
 

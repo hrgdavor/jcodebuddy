@@ -5,7 +5,7 @@ How `jwa-builder` completes a Java record with a fluent builder — meaning
 `User.builder().name("Alice").build()` at the call site afterwards.
 
 This is the surviving builder guide. An earlier one
-(`java-watch-agent/record builder.md`) was an AI chat transcript written against
+(`watch/java-watch-agent/record builder.md`) was an AI chat transcript written against
 the API the rewrite migration removed; it was retired in Phase 8 and points here.
 
 ## The problem

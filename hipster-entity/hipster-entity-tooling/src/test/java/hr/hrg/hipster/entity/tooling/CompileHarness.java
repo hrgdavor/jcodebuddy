@@ -55,7 +55,7 @@ final class CompileHarness {
      * <p>A module's location is recorded in exactly one place — the root {@code pom.xml}'s
      * {@code <module>} entries — and the modules now live in group folders
      * ({@code hipster-entity/hipster-entity-api}, {@code jcodebuddy/jcodebuddy-core}, {@code watch/…}), which
-     * is not the last move they will make. A test that spells out {@code root.resolve("hipster-entity-api")}
+     * is not the last move they will make. A test that spells out {@code root.resolve("hipster-entity/hipster-entity-api")}
      * breaks on every such move; one that asks this method does not. A name that is not a module fails
      * loudly with the list that is, because "silently resolved to a directory that does not exist" is how
      * the move produced thirty failing test classes instead of four.</p>
