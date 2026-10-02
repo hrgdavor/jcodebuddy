@@ -809,7 +809,9 @@ step 3.2 and it can change again with any of 3.4–3.7, so a renderer built now 
 **Its kind is settled even while its shape is not**: this is the page DEC-027's 2026-10-01 amendment exists
 for — project structure shown for navigation, relations shown as a picture — so it is a **`jsx6`** page and
 its diagram uses **`jsx6`/`nodditor`**, not a self-contained vanilla file. Read jsx6's own `AGENTS.md` from
-the checkout (rule § 2.9, steps 7.9–7.10) before starting.
+the checkout (rule § 2.9, steps 7.9–7.10) before starting. **Its renderer does not live under the root
+`scripts/`**: that subtree stays dependency-free for the vanilla renderers, so this page gets a home of its
+own that may declare a dependency (DEC-027's 2026-10-02 note, and DEC-036 § 10 amended to match).
 
 **Waits on:** the graph model being settled (it is DEC-036 § 10's shape, and it follows the generated
 shape).
@@ -1354,6 +1356,20 @@ UI author is supposed to read jsx6's own `AGENTS.md` before writing JSX.
    `scripts/`. Say which home in the record, because the next agent will otherwise try the obvious thing
    and break the gate.
 
+   **Read the guard's actual scope before deciding it needs an exception — it does not.** Its framework
+   check runs over an explicit five-file list (`RENDERER_CODE`, the `scripts/entity-html/*.js` sources), so
+   a `jsx6` page elsewhere is simply not its subject; no exception mechanism is wanted, and adding one
+   would weaken the one check that keeps the minimal page honest. **Decided 2026-10-02: `scripts/` stays
+   dependency-free and a `jsx6` page gets a home of its own** (a package beside that page's renderer, never
+   an entry under `scripts/`). The guard now walks the whole `scripts/` subtree — no `node_modules`
+   anywhere under it, no `"dependencies"` in any package under it — because the old check named two paths
+   and would have let the obvious mistake through; DEC-036 § 10's "a JavaScript renderer under `scripts/`"
+   is amended to match, since the graph page is a `jsx6` page. The page *class* stays prose for now
+   (2026-10-02, and see 7.10): a declaration mechanism is worth its cost once a second `jsx6` page exists,
+   while the vanilla half stays asserted. Also already strengthened: the guard asserts **both** halves of
+   the split — `AGENTS.md` must state the `jsx6` half, and DEC-027 must carry the amendment that classifies
+   pages — where the vanilla half alone used to satisfy it.
+
 **Gate:** the checkout reproduces from the documented two commands on a clean machine; `<dir>/AGENTS.md`
 was read and the consumption facts above are recorded with the commit read; the surfaces are listed with
 their class (vanilla / `jsx6` / `jsx6`+nodditor) and the page-authoring contract is reconciled; `LINKS`
@@ -1384,6 +1400,13 @@ the evidence, and recorded as its own decision rather than assumed in a page.
 **Gate:** a written assessment covering each page class, naming the jsx6/nodditor commit read, with every
 gap classified minor/critical and the critical ones routed to a decision (not to a workaround).
 `LINKS` green.
+
+**Not in this step, by decision (2026-10-02): the page *class* stays prose.** A declaration mechanism plus
+a guard — the shape step 7.8 gives the generator kinds — is worth its cost once a **second** `jsx6` page
+exists; until then DEC-027's amendment and this plan are the statement of which page is what, and the
+vanilla half (the page already in the tree) stays asserted by `HtmlRenderBoundaryTest`. Revisit when the
+second `jsx6` page lands, or when a page changes class — that is a change to DEC-027's amendment, never a
+quiet drift.
 
 **Done when:** the answer to "can we build this page with jsx6/nodditor?" is written down with evidence,
 and a missing capability has an owner (the library, or a decision) instead of a silent workaround in a page.

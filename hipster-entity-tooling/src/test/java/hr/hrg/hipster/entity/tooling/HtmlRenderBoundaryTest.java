@@ -142,14 +142,29 @@ class HtmlRenderBoundaryTest {
             }
         }
 
-        // The dependency-free claim, checked where a dependency would actually have to live.
-        for (String directory : List.of("scripts/node_modules", "scripts/entity-html/node_modules")) {
-            Assertions.assertFalse(Files.exists(repoRoot().resolve(directory)),
-                    "the renderer is Bun built-ins only: no package manager, no " + directory);
+        // The dependency-free claim, checked where a dependency would actually have to live. The rule is
+        // about the whole subtree rather than two paths: DEC-027's 2026-10-01 amendment lets a page be a
+        // jsx6 application, and such a page is *built* — but its build belongs in a home of its own,
+        // because this subtree must render with Bun and nothing else. Naming two directories would let the
+        // obvious mistake through, which is a new `scripts/<page>/package.json`.
+        Path scripts = repoRoot().resolve("scripts");
+        StringBuilder installed = new StringBuilder();
+        try (var walk = Files.walk(scripts)) {
+            for (Path path : walk.toList()) {
+                String relative = repoRoot().relativize(path).toString().replace('\\', '/');
+                if (Files.isDirectory(path) && path.getFileName().toString().equals("node_modules")) {
+                    installed.append(relative).append(" exists (a package manager ran here); ");
+                } else if (path.getFileName().toString().equals("package.json")
+                        && read(path).contains("\"dependencies\"")) {
+                    installed.append(relative).append(" declares dependencies; ");
+                }
+            }
         }
+        Assertions.assertEquals("", installed.toString(),
+                "scripts/ must stay dependency-free: the vanilla renderer runs on Bun alone, and a jsx6 "
+                        + "page is built in a home of its own (DEC-027's amendment). Remove the dependency, "
+                        + "or move the page's package out of scripts/");
         String pkg = read("scripts/package.json");
-        Assertions.assertFalse(pkg.contains("\"dependencies\""),
-                "and no dependency may be declared for it");
         Assertions.assertTrue(pkg.contains("entity-html"),
                 "and the package scripts must expose the renderer");
     }
@@ -185,6 +200,14 @@ class HtmlRenderBoundaryTest {
                 "AGENTS.md must point at DEC-027: it is the file an agent reads first");
         Assertions.assertTrue(agents.contains("vanilla JavaScript") || agents.contains("framework-free"),
                 "and it must carry the vanilla-JavaScript rule, not just the pointer");
+        // DEC-027's 2026-10-01 amendment split the rule by what a page is: a page with no or minimal UI
+        // stays vanilla, an interactive or advanced page is built with jsx6, and relations or diagrams
+        // use jsx6/nodditor. Before the split this test was satisfied by the vanilla half alone, which
+        // would leave the *other* half of the rule stated nowhere an agent reads first — the same decay
+        // this class exists to prevent, one level up.
+        Assertions.assertTrue(agents.contains("jsx6"),
+                "and the other half of the split: an interactive page is a jsx6 page (DEC-027's "
+                        + "amendment), so AGENTS.md must say so rather than only the vanilla half");
 
         String index = read("doc-hipster-entity/architecture/decisions/README.md");
         Assertions.assertTrue(index.contains("[DEC-027](DEC-027.md)"),
@@ -194,6 +217,9 @@ class HtmlRenderBoundaryTest {
         Assertions.assertTrue(adr.contains("Status: Accepted"), "the ADR must be accepted");
         Assertions.assertTrue(adr.contains("vanilla JavaScript"),
                 "and must state the framework-free rule");
+        Assertions.assertTrue(adr.contains("jsx6") && adr.contains("nodditor"),
+                "and the amendment that classifies pages: the vanilla rule's subject is the minimal "
+                        + "page, interactive pages are jsx6, and diagrams use jsx6/nodditor");
         Assertions.assertTrue(adr.contains("MUST be verified"),
                 "and the link-verification rule");
     }

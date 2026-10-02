@@ -177,10 +177,15 @@ code or documentation for this repository:
   metadata — never by a Java generator.** A generator owns the
   model and the committed source; a report renderer owns
   presentation. Reports (the entity reference page and anything
-  like it) are JavaScript under `scripts/`, run with `bun run`,
+  like it) are JavaScript, run with `bun run`,
   reading the `<Marker>.metadata.json` a pass wrote: adding a
   fact to a report means adding it to that JSON, never teaching
-  the Java generator to emit HTML. Every source file that metadata
+  the Java generator to emit HTML. A **vanilla** renderer lives under
+  `scripts/`, which stays **dependency-free** — no `node_modules` anywhere under
+  it and no `"dependencies"` in any package under it, asserted by
+  `HtmlRenderBoundaryTest` — while a **`jsx6`** page is built and therefore gets a
+  home of its own that may declare a dependency (DEC-027's 2026-10-02 note).
+  Every source file that metadata
   describes is named by the module's **class index**
   (`.jcodebuddy/index/classes.json`) — one row per type the module
   compiles, **keyed by the type's fully qualified name**, carrying
