@@ -192,12 +192,19 @@ code or documentation for this repository:
   id, because an FQN is the one reference a stock IDE's rename
   refactor updates in a text file (DEC-029). A field carries all its
   locations, and neither the record nor the
-  report ever contains a file's text. The page is **one
-  self-contained file with framework-free vanilla JavaScript** —
-  no React / Svelte / Solid / Vue / Preact / Lit, no bundler, no
-  `node_modules`, no CDN, no `<script src>`, no network at view
-  time — so it stays greppable, diffable and openable in the
-  JetBrains JCEF webview. Link targets are paths relative to one
+  report ever contains a file's text. A report's **implementation depends on what the page is**
+  (DEC-027 § 3 and its 2026-10-01 amendment): a page with **no UI or minimal UI** — a
+  rendering plus show/hide of a few blocks, links and anchors — is **one self-contained file
+  with framework-free vanilla JavaScript**, no React / Svelte / Solid / Vue / Preact / Lit, no
+  bundler, no `node_modules`, no CDN, no `<script src>`, no network at view time, so it stays
+  greppable, diffable and openable in the JetBrains JCEF webview; an **interactive or advanced
+  page** — navigation across a project's structure, per-item review or accept workflows, state
+  beyond a document, anything expected to be improved further as UI — is built with **`jsx6`**,
+  and anything showing **relations or a diagram** with **`jsx6`/`nodditor`** (see § 2's jsx6
+  bullet). The classifiable pages today: the entity reference page and the merge summary stay
+  vanilla; the per-conflict review render (`plans/unified-plan.md` 4.2, and 4.3's action
+  display) is a `jsx6` page; the hipster-ioc dependency graph (3.8) is `jsx6` + `nodditor`.
+  Link targets are paths relative to one
   link base (never absolute), resolved by the page from its own
   `location`, and **every link is verified** (the file exists and
   the line contains the member) before it is written; an
@@ -548,15 +555,23 @@ canonical statement of a boundary that has no other home.
   guidance, exactly as jsx6's own `AGENTS.md` does not restate its sub-documents. That file is a router:
   for *using* the stack it points at `docs/stack/README.md` (setup, signals, the JSX/DOM contract, and the
   rules that fail silently), and its gate is `bun run check` inside the checkout. Default location
-  `<repo>/.jsx6/` (gitignored, and not `target/` — the gate's `mvn clean` would delete a checkout there);
-  `JCODEBUDDY_JSX6_DIR` overrides it. **Nothing about JCodeBuddy's UI may be written against a
+  `<repo>/.jsx6/` — a temporary folder that is **not** `target/`, because the recorded gate runs
+  `clean test` and would delete a checkout there on every run; `JCODEBUDDY_JSX6_DIR` overrides it.
+  **Nothing about JCodeBuddy's UI may be written against a
   remembered version of jsx6** — the checkout you actually read is what counts, and it is updated on
-  demand rather than pinned. Scheduled as step 7.9 in [`plans/unified-plan.md`](plans/unified-plan.md).
-  **Conflict to resolve, not to ignore:** the generated report pages are pinned to *one self-contained
-  file with framework-free vanilla JavaScript, no bundler, no `node_modules`* (§ 1, DEC-027/029). A page
-  that is UI falls under this bullet, so step 7.9 must either narrow this rule to application UI or
-  amend DEC-027/029 for report pages — it is a decision, and it is recorded there rather than settled
-  here.
+  demand rather than pinned. Scheduled as steps 7.9–7.10 in [`plans/unified-plan.md`](plans/unified-plan.md).
+  **Where this rule meets DEC-027 — resolved 2026-10-01, and it is a split, not an override.** A report
+  page with **no UI or minimal UI** (a rendering plus show/hide of a few blocks, links, anchors) keeps the
+  vanilla-JS rule: one self-contained file, no bundler, no `node_modules`, no CDN, no network at view
+  time. An **interactive or advanced page** — navigation across a project's structure, per-item review or
+  accept workflows, state beyond a document, anything expected to be improved further as UI — **must** be
+  built with `jsx6`, and anything showing **relations or a diagram** with **`jsx6`/`nodditor`**. Which
+  page is which, and why the no-dependency clause does not bind the `jsx6` ones, is DEC-027's
+  2026-10-01 amendment; the pages classified so far are listed in § 1's report bullet.
+  **When `jsx6` or `nodditor` cannot do something a page needs, report it — never work around it
+  silently and never reach for another library on the spot.** A minor gap is an improvement to be made in
+  `jsx6`/`nodditor`; a critical gap is a decision about an additional library for that specific output,
+  taken with the evidence and recorded as its own decision.
 
 
 ## 3. Notes for whoever reads next

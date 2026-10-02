@@ -56,8 +56,10 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 6. **Generated `.java` stays under `src/main/java`**; `.jcodebuddy/` holds derived output and `conf/`
    is the only tracked subtree (DEC-026).
 7. **Reports are rendered by Bun from the generator's JSON metadata**, never by a Java generator
-   (DEC-027/028/029): one self-contained, framework-free HTML file, every link verified before it is
-   written.
+   (DEC-027/028/029): every link verified before it is written. What the page is *built with* depends on
+   what it is, per DEC-027's 2026-10-01 amendment — a page with **no UI or minimal UI** is one
+   self-contained file of framework-free vanilla JavaScript, an **interactive or advanced page** is a
+   **`jsx6`** page, and anything showing **relations or a diagram** uses **`jsx6`/`nodditor`** (rule 9).
 8. **Generators come in two kinds, and the kind is declared.** A **file-scoped** generator reads only the
    file it is handed (`CodeContext.getFilePath()`) and its output is a function of that file: it may be
    offered to every file, one at a time, in any order, from a saved buffer with no tree around it. A
@@ -90,10 +92,24 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
    [`AGENTS.md` § 2](../AGENTS.md) (the jsx6 bullet) — clone <https://github.com/hrgdavor/jsx6> into a
    temporary folder with git so it can be updated on demand to the latest, then read `AGENTS.md` from the
    jsx6 root and use jsx6 for UI. This plan does not restate jsx6's guidance; the checkout you actually
-   read is what counts, and it is a **moving dependency** rather than a pinned version. Enforcement: step
-   7.9, which settles the one open question this rule collides with — the generated report pages are
-   pinned to framework-free vanilla JavaScript with no bundler and no `node_modules` (§ 1, DEC-027/029), so
-   either the rule narrows to application UI or that pair of decisions is amended.
+   read is what counts, and it is a **moving dependency** rather than a pinned version. The temporary
+   folder is **not `target/`** — the recorded gate runs `clean test`, which would delete a checkout there
+   on every run — and defaults to `<repo>/.jsx6/` (`JCODEBUDDY_JSX6_DIR` overrides). Enforcement: steps
+   7.9–7.10.
+
+   **How this meets rule 7 — a split, decided 2026-10-01 (DEC-027's amendment).** A page with **no UI or
+   minimal UI** keeps the vanilla-JS rule; an **interactive or advanced page** — project-structure
+   navigation, per-item review or accept workflows, state beyond a document, anything expected to be
+   improved further as UI — **must** be `jsx6`; **relations and diagrams** use `jsx6`/`nodditor`. The
+   no-bundler/no-`node_modules` clause does not bind the `jsx6` pages; **no network at view time** still
+   does. The boundary is *further improvement*, not size: a page nobody intends to grow is the minimal
+   case, and a page expected to acquire navigation or review state is an application from the start.
+
+   **A capability either library lacks is reported, never worked around.** Minor gap → an improvement to
+   be made in `jsx6` or `nodditor`, and the finding is worth more there than a workaround here; critical
+   gap → the library cannot serve that specific output, so it is a decision about an additional library,
+   taken with the evidence and recorded as its own decision rather than assumed. That is step 7.10's
+   deliverable, not a note.
 
 ---
 
@@ -790,6 +806,10 @@ parent.
 The graph exists as JSON (`contexts.json`, DEC-026's location) and there is no page. DEC-027/029 say the
 page is a Bun renderer over that JSON, but the JSON's *shape* is the generator's model — it changed within
 step 3.2 and it can change again with any of 3.4–3.7, so a renderer built now would be rewritten with it.
+**Its kind is settled even while its shape is not**: this is the page DEC-027's 2026-10-01 amendment exists
+for — project structure shown for navigation, relations shown as a picture — so it is a **`jsx6`** page and
+its diagram uses **`jsx6`/`nodditor`**, not a self-contained vanilla file. Read jsx6's own `AGENTS.md` from
+the checkout (rule § 2.9, steps 7.9–7.10) before starting.
 
 **Waits on:** the graph model being settled (it is DEC-036 § 10's shape, and it follows the generated
 shape).
@@ -927,8 +947,12 @@ sticky decisions replayed.
 **Do:** render exactly that per conflict — base / branch 1 / branch 2 beside the resolved code, with the
 resolver's explanation and fix paths — as a Bun renderer over the JSON
 [`MergeReportWriter`](../merge-java/scripts/merge-report/render.js) already writes, following DEC-027/029
-(one self-contained framework-free HTML file, every link verified before it is written, output under the
-module's `.jcodebuddy/`). Read-only first: reviewing what the tool did must not require trusting it.
+(every link verified before it is written, output under the module's `.jcodebuddy/`). **This is a `jsx6`
+page, not a vanilla one**: DEC-027's 2026-10-01 amendment classifies it as interactive/advanced — three
+branches beside a resolution, an explanation, fix paths, navigation between conflicts — and 4.3 turns it
+into an action display that writes decisions back, which is state. The merge *summary* page stays vanilla.
+Read jsx6's own `AGENTS.md` from the checkout (rule § 2.9, steps 7.9–7.10) before writing it. Read-only
+first: reviewing what the tool did must not require trusting it.
 
 **Gate:** the renderer's own test (`merge-java/scripts/*.test.js` is the existing pattern) plus
 `MODULE` for `merge-java` green.
@@ -1004,8 +1028,10 @@ residual with nothing of its own to say.
 
 > **Every UI step in this phase builds on `jsx6`** (rule § 2.9, [`AGENTS.md` § 2](../AGENTS.md)): no UI is
 > written against a remembered version of the library, and the checkout's own `AGENTS.md` is the guidance
-> to follow. Step 7.9 sets that checkout up and settles whether the generated report pages are in scope.
-> A webview step that finds the checkout missing should set it up rather than reach for another library.
+> to follow. **Diagrams and relations use `jsx6`/`nodditor`** (DEC-027's 2026-10-01 amendment). Step 7.9
+> sets the checkout up and step 7.10 records what the libraries can and cannot do — a capability they lack
+> is **reported** there rather than worked around in a page. A webview step that finds the checkout missing
+> should set it up rather than reach for another library.
 
 ### 5.1 — Phase 6: headless parity as a build gate
 **Who:** agent · **Size:** M
@@ -1309,28 +1335,58 @@ UI author is supposed to read jsx6's own `AGENTS.md` before writing JSX.
    (`webview/kit`, `webview/webview-jetbrains`, `webview/webview-vscode`, `webview/webview-eclipse` if
    present, `webview/jwa-sidecar`) versus the **generated report pages** (the entity index and the merge
    review render).
-4. **Take the one decision this collides with, and write it into the record it belongs to.** The report
-   pages are pinned by § 1 and DEC-027/029 to **one self-contained file, framework-free vanilla
-   JavaScript, no bundler, no `node_modules`, no CDN**. A page a person looks at is UI, so either:
-   - **narrow the rule** — jsx6 governs interactive application UI (the webview clients), and the generated
-     report pages keep the vanilla-JS property because it is what makes them openable from a file path and
-     greppable in the repository; or
-   - **widen the rule and amend DEC-027/029** — reports are UI too, which costs the self-contained
-     property and needs a build step in the report pipeline, so that amendment has to say what replaces it
-     (a committed bundle? a vendored runtime? and how "no `node_modules`" survives).
-   Do not leave this implicit: pick one, amend the record the losing option came from, and say in the
-   record why.
+4. **The scope question is already decided — record it, do not re-open it.** DEC-027's 2026-10-01
+   amendment splits the rule: a page with **no UI or minimal UI** stays vanilla, an **interactive or
+   advanced page** is `jsx6`, **relations and diagrams** are `jsx6`/`nodditor` (the entity reference page
+   and the merge summary stay vanilla; the per-conflict review render in step 4.2 and the dependency graph
+   in 3.8 are `jsx6` pages, the latter with nodditor). Read that amendment and the pages it classifies
+   before touching a renderer; a page that changes class is a change to that amendment, not a quiet drift.
 5. **Point the UI work at it.** Phase 5's banner already sends a webview step here; make sure
-   `webview/PLAN-webview-suite.md` and any UI-facing README name the checkout + jsx6's `AGENTS.md` rather
-   than repeating either.
+   `webview/PLAN-webview-suite.md`, `webview/kit/doc/page-authoring.md` (which carries a *no bundler* line
+   of its own) and any UI-facing README name the checkout + jsx6's `AGENTS.md` rather than repeating
+   either, and reconcile that page-authoring contract with what the checkout says a `jsx6` page needs — the
+   view-time no-network property stays, the build shape is whatever the checkout documents.
+6. **Do not put a `jsx6` page's build under `scripts/`.** `HtmlRenderBoundaryTest` enforces the vanilla
+   side of DEC-027 from the Java build: `scripts/package.json` must declare **no `"dependencies"`**, and
+   neither `scripts/node_modules` nor `scripts/entity-html/node_modules` may exist. That guard is right and
+   stays; it means a `jsx6` page's build (and wherever a dependency is declared) gets its own home — a
+   package beside the page's renderer, or the module that owns the page — rather than an entry added to
+   `scripts/`. Say which home in the record, because the next agent will otherwise try the obvious thing
+   and break the gate.
 
 **Gate:** the checkout reproduces from the documented two commands on a clean machine; `<dir>/AGENTS.md`
-was read and the consumption facts above are recorded with the commit read; the surfaces are listed; the
-DEC-027/029 question is **decided and amended where it belongs** (not left as a note); `LINKS` green.
+was read and the consumption facts above are recorded with the commit read; the surfaces are listed with
+their class (vanilla / `jsx6` / `jsx6`+nodditor) and the page-authoring contract is reconciled; `LINKS`
+green.
 
 **Done when:** a future UI task can start from the written instruction — checkout, read jsx6's
-`AGENTS.md`, know which surfaces are in scope — without re-deriving any of it, and no UI is written
-against a remembered version of the library.
+`AGENTS.md`, know which surfaces are in scope and which class each page is — without re-deriving any of it,
+and no UI is written against a remembered version of the library.
+
+### 7.10 — What `jsx6` and `nodditor` can and cannot do for our pages
+**Who:** agent · **Size:** M
+
+Rule § 2.9 requires this the moment a page needs something the libraries do not have: **report it**, and
+say which of the two answers it gets — a minor improvement that belongs in `jsx6`/`nodditor`, or a critical
+gap that forces a decision about an additional library for that specific output. Nothing about the libraries
+can be assumed from their names: this step is the assessment, and it needs 7.9's checkout and the page list
+that 7.9 records (DEC-027's amendment: what each page must show).
+
+**Do:** for each page class the repository actually has or has scheduled — the minimal vanilla page, the
+interactive review page (4.2/4.3), the project-structure/navigation page (3.8), and the diagram/relations
+layer (3.8, nodditor) — take the capability list from the page's own requirements and check it against what
+the checkout documents and implements (read the code, not only the READMEs, and cite the commit read). Then
+write the outcome down: **sufficient**, or a gap with a recommendation. A gap is *minor* when the library
+can plausibly absorb it and the finding belongs upstream; it is *critical* when the specific output cannot
+be produced with them at all, which is a decision about an additional library for that output — taken with
+the evidence, and recorded as its own decision rather than assumed in a page.
+
+**Gate:** a written assessment covering each page class, naming the jsx6/nodditor commit read, with every
+gap classified minor/critical and the critical ones routed to a decision (not to a workaround).
+`LINKS` green.
+
+**Done when:** the answer to "can we build this page with jsx6/nodditor?" is written down with evidence,
+and a missing capability has an owner (the library, or a decision) instead of a silent workaround in a page.
 
 ---
 
@@ -1503,6 +1559,7 @@ start)
 | 7.7 | Manual-mode CLI for DEC-W008 (`metadata parse`) | agent | S | `[ ]` |
 | 7.8 | Two kinds of generator: file-scoped and project-scoped | agent | M | `[ ]` |
 | 7.9 | Set up the `jsx6` checkout every UI is built from (rule § 2.9) | agent | S–M | `[ ]` |
+| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps) | agent | M | `[ ]` |
 | 8.1 | JetBrains maintainer questions + IDE observations | human | — | `[ ]` |
 | 8.2 | Eclipse observations, then Q2 | human | — | `[ ]` |
 | 8.3 | Agent IDE hooks | human decides | — | `[ ]` |

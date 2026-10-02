@@ -62,9 +62,12 @@ not mirror this reactor's module graph. The "never a transitive dependency" half
 - **`hr.hrg.dialog` (dia-log)** for structured JSON logging, where a module needs it.
 - **`jsx6`** for any UI, from a local checkout updated on demand rather than a pinned version — the
   instruction and its download directions are in the root [`AGENTS.md`](../AGENTS.md) § 2 (the jsx6
-  bullet), and [`plans/unified-plan.md`](../plans/unified-plan.md) step 7.9 sets the checkout up and
-  decides whether the generated report pages are in scope. **The checkout's own `AGENTS.md` is the
-  guidance to follow** for using it; do not write UI against a remembered version of the library.
+  bullet), and [`plans/unified-plan.md`](../plans/unified-plan.md) steps 7.9–7.10 set the checkout up and
+  record what the libraries can and cannot do. **The checkout's own `AGENTS.md` is the guidance to follow**
+  for using it; do not write UI against a remembered version of the library. Which pages are `jsx6` and
+  which stay vanilla is DEC-027's 2026-10-01 amendment (minimal page → vanilla; interactive/advanced page →
+  `jsx6`; relations and diagrams → `jsx6`/`nodditor`); a capability `jsx6`/`nodditor` lacks is **reported**
+  there rather than worked around in a page.
 
 **JCodeBuddy-only.** A driver project consumes JCodeBuddy as an artifact and is under no obligation to
 mirror these choices. (If a project *does* generate Java source through JCodeBuddy, the splice rule still

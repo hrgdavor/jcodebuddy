@@ -278,7 +278,17 @@ navigator always has — **or when anything is generated.**
 "Self-contained" means *no network at view time*: no CDN, no bundler, no `node_modules`. A local
 `<script src="assets/nav-client.js">` is not a network reference and is allowed in both shapes; what is
 forbidden is an `https://` asset, because an embedded webview may open the page with no server and no
-guaranteed network behind it. Shape B wires four tags per page — `site.css`, `syntax-theme.css`,
+guaranteed network behind it.
+
+> **An interactive or advanced page is a `jsx6` page — read its checkout's `AGENTS.md` first.** Any UI
+> built here uses `jsx6` (root [`AGENTS.md`](../../../AGENTS.md) § 2, and DEC-027's 2026-10-01 amendment for
+> the report-page split: a page with no or minimal UI stays vanilla, an interactive or advanced page is
+> `jsx6`, relations and diagrams are `jsx6`/`nodditor`). The **no network at view time** rule above still
+> binds a `jsx6` page; the *build* shape — how the library reaches the page — is recorded by
+> [`plans/unified-plan.md`](../../../plans/unified-plan.md) step 7.9 from the checkout, not guessed here.
+> A page that needs something `jsx6`/`nodditor` cannot do is **reported**, never worked around silently.
+
+Shape B wires four tags per page — `site.css`, `syntax-theme.css`,
 `nav-client.js` with its two attributes, and (when the page highlights code) `microlighter.js` before
 `highlight-runner.js`.
 
@@ -437,8 +447,9 @@ editable.
 | Reference | [`../examples/self-contained/index.html`](../examples/self-contained/index.html) | [`../examples/with-assets/assets/microlighter.js`](../examples/with-assets/assets/microlighter.js) |
 
 Upstream ships ES modules (`import { highlightAll } from 'microlighter'`) and loads each grammar with
-`await import('./grammars/x.js')`. **A webview page may have no module loader and no bundler**, so both
-examples use the same adaptation — four changes, listed in the vendor file's header:
+`await import('./grammars/x.js')`. **A webview page may have no module loader and no bundler** (a `jsx6`
+page is the exception — it is built, and the build shape comes from the library, see the note above), so
+both examples use the same adaptation — four changes, listed in the vendor file's header:
 
 1. the inlined grammar registry replaces the dynamic `import()`;
 2. `import`/`export` became one IIFE on `window.microlighter`, and `highlightAll()` stays asynchronous past

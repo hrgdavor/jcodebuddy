@@ -202,7 +202,11 @@ Markdown file of the repository, which covers the links *out* of this folder.
 | Several pages share a shell and client | no | yes |
 | A generator regenerates one page without touching the rest | no | yes |
 
-Both are offline: no CDN, no bundler, no `node_modules` at view time. Both keep absolute paths out of the
+Both are **offline at view time**: no CDN, no network. A vanilla document page (the two shapes below) also
+carries no bundler and no `node_modules`; an **interactive or advanced page is a `jsx6` page** and is
+*built*, which is a different case with the same view-time rule — see
+[`kit/doc/page-authoring.md`](kit/doc/page-authoring.md) and DEC-027's 2026-10-01 amendment. Both keep
+absolute paths out of the
 artifact. Both highlight JavaScript, Java, JSON, HTML and Markdown with
 [microlighter](https://github.com/davatron5000/microlighter) — inlined in the self-contained page, shared as an
 asset in the other.

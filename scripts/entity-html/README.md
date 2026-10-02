@@ -168,7 +168,11 @@ not carry and asserts the warning.
 
 - One file. Inline CSS, one inline script, **vanilla JavaScript** — no React / Svelte / Solid / Vue /
   Preact / Lit, no bundler, no `node_modules`, no CDN, no `<script src>`, no image, no network at view
-  time (DEC-027 § 3, asserted by `bun test`).
+  time (DEC-027 § 3, asserted by `bun test`). **This page is DEC-027's *minimal* case and stays vanilla**:
+  a table, the filter box, the toggles and verified links are exactly what the amended rule keeps
+  framework-free. A page that is *interactive or advanced* — project-structure navigation, per-item review
+  or accept workflows, state beyond a document — is a `jsx6` page, and relations or diagrams use
+  `jsx6`/`nodditor`; see DEC-027's 2026-10-01 amendment for the criterion and the pages classified so far.
 - Filter box (`/`), collapse/expand, and click-to-open on every entity name, aspect card, column
   header and field cell.
 - Link targets are `data-open` / `data-line` / `data-member` / `data-role` / `data-where` attributes
@@ -202,7 +206,7 @@ missing, unparsable or of an unknown `format`; a document that carries the DEC-0
 `fileIndex` still renders through the legacy `files.json`; a document with `fileIndex`/`artifacts`/
 `fields` stripped (the pre-DEC-028 shape) still renders from the source, with no error-severity
 divergence; the page is one self-contained file with framework-free vanilla JS that parses
-standalone; no absolute path and no non-loopback URL appears; the page's own link-base resolution
+standalone (the *minimal* case of DEC-027's amended rule — see § "The page"); no absolute path and no non-loopback URL appears; the page's own link-base resolution
 lands on the link base; two runs are byte-identical; the class index plus the three documents stay
 inside the size budget, which exists to catch a *shape* regression rather than to police a byte; and
 the model groups views under their marker with inherited fields resolved to the declaring interface. It writes into
