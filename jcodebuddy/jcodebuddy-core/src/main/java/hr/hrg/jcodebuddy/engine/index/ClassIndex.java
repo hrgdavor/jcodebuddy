@@ -448,6 +448,30 @@ public final class ClassIndex {
         return fqn == null ? null : byFqn.get(fqn);
     }
 
+    /**
+     * What this index can say about {@code fqn} — a fact, or that it cannot answer.
+     *
+     * <p>This is the shape a consumer should ask in, and {@link #row(String)} is the shape it should not:
+     * {@code null} cannot distinguish "this index has no such type" from "this type is not something this
+     * index covers" (a JDK type, another module's type, a type the pass has not reached), and a consumer that
+     * reads it as the first produces a confident wrong answer. The cause in a {@link TypeAnswer.NotIndexed}
+     * therefore names what the index does cover rather than saying the type does not exist.</p>
+     *
+     * <p>It is deliberately the <em>only</em> answered lookup so far. Members and relations are not row fields
+     * yet (3.0b and 3.0h), and the rule that makes this contract worth having is that asking for them must
+     * also answer "cannot", never "none".</p>
+     */
+    public TypeAnswer answer(String fqn) {
+        ClassRecord row = row(fqn);
+        if (row != null) {
+            return TypeAnswer.found(row);
+        }
+        String module = moduleName() == null ? "this index" : "the index of module '" + moduleName() + "'";
+        return TypeAnswer.notIndexed(fqn,
+                "not a type in " + module + "; it may be a JDK type, a type of another module, or a type this"
+                        + " module's sources do not declare — the engine is not saying it does not exist");
+    }
+
     /** Every row of the file at {@code moduleRelativePath}, in declaration order. */
     public List<ClassRecord> byPath(String moduleRelativePath) {
         List<String> fqns = byPath.get(moduleRelativePath);

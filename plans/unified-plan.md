@@ -683,11 +683,36 @@ build green for every module outside the gate before the visibility widening, an
 `scripts/extract-engine.js` and `scripts/apply-engine-inversions.js` stay: each inversion is written there
 with the reason it has the shape it has.
 
-**What 3.0f still owes**: **3.0f-3** (the engine answers with one model — kind, modifiers, members,
-declaration file, checksum, relations — and a *missing* answer stays distinguishable from an absent one), and
-the prose that still says these classes live in the tooling (the two watch decisions' "the tooling module is
-still where source bytes are turned into a `SourceMetadata` tree", and `DEC-009`'s "All three live in
-`hipster-entity-tooling`").
+**3.0f-3 landed 2026-10-02 — the model's answer is a value, not a `null`.** The index had one way to answer
+about a type, `ClassIndex.row(fqn)`, whose `null` means both *"this index has no such type"* and *"this type is
+not something this index covers"* — a JDK type, another module's type, a type the pass has not reached. The
+second case is the common one, and reading it as the first is what the prototype did in step 3.2. So:
+
+- **`TypeAnswer`** (`engine.index`, a sealed interface): `Found(ClassRecord)` — a fact a consumer may act on —
+  or `NotIndexed(fqn, cause)`, where the cause is **part of the value** and is phrased as what the index covers
+  ("not a type in the index of module 'x'; it may be a JDK type, another module's type, or a type this module's
+  sources do not declare — the engine is not saying it does not exist"), never as an absence.
+- **`ClassIndex.answer(fqn)`** is the seam consumers should ask by; `row(fqn)` stays for the index's own use and
+  is now documented as the shape *not* to ask in.
+- **Members and relations are deliberately absent** from the model (3.0b, 3.0h), and the contract's point is
+  that asking for them must also answer *cannot* rather than *none* — the same mistake in a new place. The
+  type's javadoc says so, so the two steps that fill it know what to preserve.
+- Evidence: `TypeAnswerTest` (4 tests: an indexed FQN answers with its row and a description naming file and
+  line; a JDK FQN answers "cannot answer … not saying it does not exist"; `row()` still returns a bare `null`,
+  pinned *as* the reason to prefer `answer`; and `type()` on a non-answer throws rather than handing back a
+  null). Core: 53 tests, `BUILD SUCCESS`.
+
+**The two stale-prose amendments 3.0f owed are done**: `DEC-009`'s "All three live in `hipster-entity-tooling`"
+and `DEC-W008`'s "the tooling module is still where source bytes are turned into a `SourceMetadata` tree" both
+now carry a dated note saying the tree is turned in the engine and the tooling consumes it.
+
+**3.0f-4 is satisfied by the gate**: `ExampleRegenerationTest` regenerates the committed example
+byte-identically, and the tooling's 65 test sources are green (`-pl :jcodebuddy-core,:hipster-entity-tooling -am test`,
+`BUILD SUCCESS`). So **3.0f is complete** — 3.0f-1 the classification, 3.0f-2 the move and its six inversions,
+3.0f-3 the answer contract, 3.0f-4 the pass unchanged. What it did *not* do, and what comes next: the model
+still carries no members and no relations (3.0b), and no consumer has been rewired onto `answer()` yet — the
+two places that should be are where the entity pass and `MetadataLocations` read the index, and they are
+3.0b's or 3.0j's work rather than a silent follow-up here.
 
 **3.0f-3's shape is set by rule 10 and DEC-037's "what a consumer owns" (clarified 2026-10-02)**: the model is
 **general and rich** — the facts a *class* of consumers needs, not only what the entity pass wants today — and
@@ -2032,7 +2057,7 @@ start)
 | 3.0c | The cache: what is cached, and what invalidates it | agent | M | `[ ]` |
 | 3.0d | One implementation of `TypeResolver` over the index | agent | M | `[ ]` |
 | 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |
-| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[ ]` |
+| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
 | 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[ ]` |
 | 3.0h | Search: the queries every consumer asks | agent | M | `[ ]` |
 | 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[ ]` |
