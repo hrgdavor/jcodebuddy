@@ -794,6 +794,12 @@ and `project-automation` are still at the root.
   and the modules go inside, which is the `webview/` shape. Evidence: a targeted build of
   `hipster-ioc-api,hipster-ioc-tooling,hipster-ioc-test` — `BUILD SUCCESS`, tooling's tests included (3.8 s) —
   and links green (the only docs change is `hipster-ioc/doc/ROADMAP.md`'s two module links).
+- **Group 5, `webview/`** (5 directories, DEC-039's second amendment): `intellij-jwa`, `intellij-jswa`,
+  `vscode-jwa`, `vscode-jswa` and `jswa-core` are **earlier attempts at the sidecar functionality** the suite
+  provides today. None is a reactor module (Kotlin/Gradle plugins, VS Code extensions, a TypeScript library),
+  so only their location changed; the three with a README now say at the top that they are an earlier attempt
+  and not to build on them. Their duplication is audited by **3.0p** and resolved by **3.0q** below. Links
+  green.
 - **The `watch/` collision was real**: a module named `watch` already occupied that path (a small
   file-copying watcher app, no dependents). It was renamed into the family — directory
   `watch/java-watch-app`, artifactId `java-watch-app` — rather than left as a module sitting on its group
@@ -811,6 +817,51 @@ and `project-automation` are still at the root.
   why the doubling repair is in it and in the commit history rather than hidden.
 
 **Gate:** ✅ both gates green, the 18-module build green, links green (256 files, 1555 links).
+
+### 3.0p — Audit the five earlier sidecar attempts against today's webview
+**Who:** agent · **Size:** M
+
+`webview/intellij-jwa`, `webview/intellij-jswa`, `webview/vscode-jwa`, `webview/vscode-jswa` and
+`webview/jswa-core` are **earlier attempts at the sidecar functionality** the current suite provides
+(`webview/jwa-sidecar`, `webview/core/webviewd`, `webview/kit`, and the IDE hosts). They were moved under
+`webview/` and three of them now say so at the top of their README, but **nothing has compared them**: an
+earlier attempt can hold a capability the current one lacks — an IDE API it drove, a transport, a protocol
+detail, a UI affordance, a known-bad interaction it documented — and it can equally be weight nobody should
+carry.
+
+**Do:** for each of the five, inventory what it actually does (entry points, what it talks to, what it
+implements, whether it still builds) and compare it against the current implementation **capability by
+capability**, naming the current counterpart or recording that there is none. Give every capability one of
+three verdicts — *duplicated* (with the counterpart named), *unique and worth keeping* (with where it
+belongs), or *dead* (superseded, with what replaced it) — and give every directory one of two: *has material
+to merge* or *delete*. Read-only: this step merges nothing and deletes nothing, and it cites paths rather
+than describing them.
+
+**Gate:** the audit is written down with a verdict per capability and per directory, and `LINKS` green. No
+build gate — this step reads.
+
+**Done when:** 3.0q has a list it can act on: what to merge into which current implementation, and what to
+delete with a reason.
+
+### 3.0q — Merge what 3.0p found worth keeping, delete the rest
+**Who:** agent · **Size:** M–L, decided by 3.0p
+
+The second half of the direction: *"steps to merge them in new if there are functionalities worth
+merging."* An earlier attempt that is not merged and not deleted is the worst of both — it compiles
+sometimes, misleads a reader, and is nobody's responsibility.
+
+**Do:** for each capability 3.0p marked *unique and worth keeping*, merge it into the current
+implementation it belongs to (`webview/jwa-sidecar`, `webviewd`, `kit`, or the host that needs it) as an
+ordinary change with a test, in its own commit; for each directory that is superseded, **delete it** —
+git history is the archive, and a directory kept "just in case" is read by nobody. Record which
+directory went, what replaced it, and which capability moved where, so the deletion is a fact rather than a
+gap.
+
+**Gate:** per merge, that module's own build and tests green; per deletion, no reference to it remains (a
+grep is the check) and `LINKS` green; the record names what was merged and what was removed.
+
+**Done when:** nothing under `webview/` is both an earlier attempt and unexamined — what survived is
+merged, what did not is gone with a reason.
 
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
@@ -1854,7 +1905,9 @@ start)
 | 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038) | agent | S | `[ ]` |
 | 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038) | agent | M | `[ ]` |
 | 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038) | agent | L | `[ ]` |
-| 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation`, the IDE/client family and the doc trees wait on "others to be decided" |
+| 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
+| 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent | M | `[ ]` |
+| 3.0q | Merge what 3.0p found worth keeping, delete the rest | agent | M–L | `[ ]` (content decided by 3.0p) |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |

@@ -62,13 +62,13 @@ endpoint binds `127.0.0.1` only, and it is rate limited to 20 jumps per 20 secon
 ## IDE Integration
 
 ### IntelliJ IDEA
-1. Open the [intellij-jwa](intellij-jwa) module.
+1. Open the [intellij-jwa](webview/intellij-jwa) module.
 2. Build the plugin: `./gradlew buildPlugin`.
 3. Install from disk from `build/distributions/`.
 
 ### VS Code
-1. Open [vscode-jwa](vscode-jwa).
-2. Follow the setup and configuration instructions in [vscode-jwa/README.md](vscode-jwa/README.md).
+1. Open [vscode-jwa](webview/vscode-jwa).
+2. Follow the setup and configuration instructions in [webview/vscode-jwa/README.md](webview/vscode-jwa/README.md).
 3. `npm install` and `F5`.
 
 ## ⚖️ License

@@ -45,8 +45,8 @@ every Maven/Gradle command below must pin 25), Maven via **mvnd 1.0.0-m4**, Inte
 >
 > **Correction made in the relocation commit, 2026-09-25.** The risk table's claim that "the POM `relativePath`
 > is the only path that changes" when `jwa-sidecar` moves was **wrong** — four more references pointed at the old
-> root path and were fixed in the same commit: `intellij-jwa/build.gradle.kts` (`from("../jwa-sidecar/…")`),
-> `intellij-jwa`'s `JwaLspServerDescriptor` development-mode probe, `vscode-jwa/extension.js`'s development-mode
+> root path and were fixed in the same commit: `webview/intellij-jwa/build.gradle.kts` (`from("../jwa-sidecar/…")`),
+> `intellij-jwa`'s `JwaLspServerDescriptor` development-mode probe, `webview/vscode-jwa/extension.js`'s development-mode
 > fallback, and `MigrationCompletenessTest`'s module list (which skips a module whose directory is missing, so it
 > would have silently stopped sweeping the sidecar's sources instead of failing). Three of the four are *dev-mode*
 > paths, which is why no gate caught them: they are only reached from a checkout, never from a bundle.
