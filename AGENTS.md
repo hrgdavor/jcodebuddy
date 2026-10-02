@@ -181,11 +181,10 @@ code or documentation for this repository:
   reading the `<Marker>.metadata.json` a pass wrote: adding a
   fact to a report means adding it to that JSON, never teaching
   the Java generator to emit HTML. A **vanilla** renderer lives under
-  `scripts/`, which stays **dependency-free** — no `node_modules` anywhere under
-  it and no `"dependencies"` in any package under it, asserted by
-  `HtmlRenderBoundaryTest` — while a **`jsx6`** page is built and therefore gets a
-  home of its own that may declare a dependency (DEC-027's 2026-10-02 note).
-  Every source file that metadata
+  `scripts/`, which stays **dependency-free** (no `node_modules` under it, no
+  `"dependencies"` in any package under it), while a **`jsx6`** page is built and
+  therefore gets a home of its own that may declare a dependency (DEC-027's
+  2026-10-02 note). Every source file that metadata
   describes is named by the module's **class index**
   (`.jcodebuddy/index/classes.json`) — one row per type the module
   compiles, **keyed by the type's fully qualified name**, carrying
@@ -204,9 +203,11 @@ code or documentation for this repository:
   bundler, no `node_modules`, no CDN, no `<script src>`, no network at view time, so it stays
   greppable, diffable and openable in the JetBrains JCEF webview; an **interactive or advanced
   page** — navigation across a project's structure, per-item review or accept workflows, state
-  beyond a document, anything expected to be improved further as UI — is built with **`jsx6`**,
-  and anything showing **relations or a diagram** with **`jsx6`/`nodditor`** (see § 2's jsx6
-  bullet). The classifiable pages today: the entity reference page and the merge summary stay
+  beyond a document, anything expected to be improved further as UI — is built with **`jsx6`** and
+  **never** React / Svelte / Solid / Vue / Preact / Lit or another framework of that kind, and
+  anything showing **relations or a diagram** with **`jsx6`/`nodditor`** (see § 2's jsx6 bullet).
+  **This is an instruction to the agent, not a check the build enforces**: how complex a page is,
+  is a judgement (DEC-027's amendment, and step 7.10 of [`plans/unified-plan.md`](plans/unified-plan.md)). The classifiable pages today: the entity reference page and the merge summary stay
   vanilla; the per-conflict review render (`plans/unified-plan.md` 4.2, and 4.3's action
   display) is a `jsx6` page; the hipster-ioc dependency graph (3.8) is `jsx6` + `nodditor`.
   Link targets are paths relative to one
@@ -570,7 +571,9 @@ canonical statement of a boundary that has no other home.
   vanilla-JS rule: one self-contained file, no bundler, no `node_modules`, no CDN, no network at view
   time. An **interactive or advanced page** — navigation across a project's structure, per-item review or
   accept workflows, state beyond a document, anything expected to be improved further as UI — **must** be
-  built with `jsx6`, and anything showing **relations or a diagram** with **`jsx6`/`nodditor`**. Which
+  built with `jsx6` and **never** React / Svelte / Solid / Vue / Preact / Lit or another framework of that
+  kind, and anything showing **relations or a diagram** with **`jsx6`/`nodditor`**. This is an
+  **instruction, not a build-failing check** — a page's complexity is a judgement. Which
   page is which, and why the no-dependency clause does not bind the `jsx6` ones, is DEC-027's
   2026-10-01 amendment; the pages classified so far are listed in § 1's report bullet.
   **When `jsx6` or `nodditor` cannot do something a page needs, report it — never work around it

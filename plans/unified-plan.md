@@ -1348,32 +1348,36 @@ UI author is supposed to read jsx6's own `AGENTS.md` before writing JSX.
    of its own) and any UI-facing README name the checkout + jsx6's `AGENTS.md` rather than repeating
    either, and reconcile that page-authoring contract with what the checkout says a `jsx6` page needs — the
    view-time no-network property stays, the build shape is whatever the checkout documents.
-6. **Do not put a `jsx6` page's build under `scripts/`.** `HtmlRenderBoundaryTest` enforces the vanilla
-   side of DEC-027 from the Java build: `scripts/package.json` must declare **no `"dependencies"`**, and
-   neither `scripts/node_modules` nor `scripts/entity-html/node_modules` may exist. That guard is right and
-   stays; it means a `jsx6` page's build (and wherever a dependency is declared) gets its own home — a
-   package beside the page's renderer, or the module that owns the page — rather than an entry added to
-   `scripts/`. Say which home in the record, because the next agent will otherwise try the obvious thing
-   and break the gate.
+6. **Do not put a `jsx6` page's build under `scripts/`, and do not look for a guard that enforces the
+   library choice — there is none, by decision (2026-10-02).** `scripts/` is the vanilla renderers' home and
+   stays dependency-free; a `jsx6` page's build (and wherever a dependency is declared) gets its own home —
+   a package beside the page's renderer, or the module that owns the page — rather than an entry added to
+   `scripts/`. Say which home in the record, because the next agent will otherwise try the obvious thing.
+
+   **The choice itself is an instruction, not a check.** *Simple page → vanilla JavaScript; more complex
+   page → `jsx6`, never React / Svelte / Solid / Vue / Preact / Lit or another framework of that kind* —
+   stated in `AGENTS.md` § 1–§ 2 and DEC-027's amendment, and deliberately not enforced by the build: how
+   complex a page is, is a judgement, and a strict guard over a judgement is the kind of check this
+   repository does not want here (contrast step 7.8, where a generator's *kind* is a mechanical fact and
+   therefore worth a type and a test). `HtmlRenderBoundaryTest` is untouched by this rule and keeps only
+   what it always had about the page it was written for — the entity reference is framework-free and its
+   renderer's subtree is dependency-free, which is that *minimal* page's own contract. DEC-036 § 10's "a
+   JavaScript renderer under `scripts/`" is amended to match, since the graph page is a `jsx6` page.
 
    **Read the guard's actual scope before deciding it needs an exception — it does not.** Its framework
    check runs over an explicit five-file list (`RENDERER_CODE`, the `scripts/entity-html/*.js` sources), so
    a `jsx6` page elsewhere is simply not its subject; no exception mechanism is wanted, and adding one
-   would weaken the one check that keeps the minimal page honest. **Decided 2026-10-02: `scripts/` stays
-   dependency-free and a `jsx6` page gets a home of its own** (a package beside that page's renderer, never
-   an entry under `scripts/`). The guard now walks the whole `scripts/` subtree — no `node_modules`
-   anywhere under it, no `"dependencies"` in any package under it — because the old check named two paths
-   and would have let the obvious mistake through; DEC-036 § 10's "a JavaScript renderer under `scripts/`"
-   is amended to match, since the graph page is a `jsx6` page. The page *class* stays prose for now
-   (2026-10-02, and see 7.10): a declaration mechanism is worth its cost once a second `jsx6` page exists,
-   while the vanilla half stays asserted. Also already strengthened: the guard asserts **both** halves of
-   the split — `AGENTS.md` must state the `jsx6` half, and DEC-027 must carry the amendment that classifies
-   pages — where the vanilla half alone used to satisfy it.
+   would weaken the one check that keeps the minimal page honest. **Recorded deviation:** an earlier cut of
+   this change hardened that test for the new rule — it walked the `scripts/` subtree for dependencies, and
+   asserted that `AGENTS.md` and DEC-027 carry both halves of the split. Both were **reverted (2026-10-02)**
+   when the decision became *instruction, not guard*: the assertions were a strict check over a judgement
+   call, which is what the maintainer did not want. The test file is back to exactly what it was before, so
+   nothing in the gate fails over which library a page uses.
 
 **Gate:** the checkout reproduces from the documented two commands on a clean machine; `<dir>/AGENTS.md`
-was read and the consumption facts above are recorded with the commit read; the surfaces are listed with
-their class (vanilla / `jsx6` / `jsx6`+nodditor) and the page-authoring contract is reconciled; `LINKS`
-green.
+was read and the consumption facts above are recorded with the commit read; the surfaces are listed **as a
+record** with their class (vanilla / `jsx6` / `jsx6`+nodditor), and the page-authoring contract is
+reconciled. `LINKS` green.
 
 **Done when:** a future UI task can start from the written instruction — checkout, read jsx6's
 `AGENTS.md`, know which surfaces are in scope and which class each page is — without re-deriving any of it,
@@ -1401,12 +1405,15 @@ the evidence, and recorded as its own decision rather than assumed in a page.
 gap classified minor/critical and the critical ones routed to a decision (not to a workaround).
 `LINKS` green.
 
-**Not in this step, by decision (2026-10-02): the page *class* stays prose.** A declaration mechanism plus
-a guard — the shape step 7.8 gives the generator kinds — is worth its cost once a **second** `jsx6` page
-exists; until then DEC-027's amendment and this plan are the statement of which page is what, and the
-vanilla half (the page already in the tree) stays asserted by `HtmlRenderBoundaryTest`. Revisit when the
-second `jsx6` page lands, or when a page changes class — that is a change to DEC-027's amendment, never a
-quiet drift.
+**Not in this step, by decision (2026-10-02): the page *class* is an instruction and is never enforced by a
+guard.** How complex a page is, is a judgement, and a strict check over a judgement is exactly what the
+maintainer does not want here — so the statement of which page is what lives in DEC-027's amendment,
+`AGENTS.md` § 1–§ 2 and this plan, and **no test fails because an agent chose vanilla where `jsx6` would
+have been better or the other way round**. The contrast with step 7.8 is deliberate: a generator's *kind*
+is a mechanical fact (what it reads), so it earns a type and a test; a page's complexity is not. What
+`HtmlRenderBoundaryTest` keeps is what it always had and only about the page it was written for — the
+entity reference is framework-free, its renderer's subtree dependency-free, and its links verified. A page
+changing class is a change to DEC-027's amendment, never a quiet drift.
 
 **Done when:** the answer to "can we build this page with jsx6/nodditor?" is written down with evidence,
 and a missing capability has an owner (the library, or a decision) instead of a silent workaround in a page.

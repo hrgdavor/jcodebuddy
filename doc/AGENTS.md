@@ -66,8 +66,9 @@ not mirror this reactor's module graph. The "never a transitive dependency" half
   record what the libraries can and cannot do. **The checkout's own `AGENTS.md` is the guidance to follow**
   for using it; do not write UI against a remembered version of the library. Which pages are `jsx6` and
   which stay vanilla is DEC-027's 2026-10-01 amendment (minimal page → vanilla; interactive/advanced page →
-  `jsx6`; relations and diagrams → `jsx6`/`nodditor`); a capability `jsx6`/`nodditor` lacks is **reported**
-  there rather than worked around in a page.
+  `jsx6`, never React/Svelte/Solid/Vue/Preact/Lit; relations and diagrams → `jsx6`/`nodditor`) — an
+  **instruction, not a check the build enforces**, because a page's complexity is a judgement; a capability
+  `jsx6`/`nodditor` lacks is **reported** there rather than worked around in a page.
 
 **JCodeBuddy-only.** A driver project consumes JCodeBuddy as an artifact and is under no obligation to
 mirror these choices. (If a project *does* generate Java source through JCodeBuddy, the splice rule still
