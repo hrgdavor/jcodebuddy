@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.agent.tools;
 
-import hr.hrg.jcodebuddy.codegen.CodeContextImpl;
 import hr.hrg.watch2.agent.core.ContextualAnalyzer;
 import hr.hrg.watch2.agent.tools.ActionTool.FileChange;
 import hr.hrg.watch2.agent.tools.ActionTool.ToolContext;
@@ -164,56 +163,6 @@ class ToolSeamTest {
 
         var names = registry.getAllTools().stream().map(ActionTool::getName).toList();
         assertEquals(List.of("builder", "hello", "getters"), names);
-    }
-
-    // ---- ActionToolAdapter ---------------------------------------------------------------
-
-    /**
-     * The adapter is handed to code that keys generators by {@code name()}; a mismatch with the
-     * wrapped tool's name would make the audit trail attribute changes to the wrong tool.
-     */
-    @Test
-    void theAdapterPresentsTheWrappedToolsName() {
-        var adapter = new ActionToolAdapter(new StubTool("record_builder", true, List.of()));
-        assertEquals("record_builder", adapter.name());
-    }
-
-    /**
-     * The adapter's real job is the context conversion; every field of the {@code CodeContext} must
-     * arrive in the {@code SimpleToolContext} the ActionTool sees, or tools read the wrong file.
-     */
-    @Test
-    void isApplicableAsksTheWrappedToolAndPassesAllFourCodeContextFieldsThrough() {
-        var tool = new StubTool("hello", true, List.of());
-        var adapter = new ActionToolAdapter(tool);
-        var file = repo.resolve("D.java");
-        var context = new CodeContextImpl(repo, file, 7, "\t");
-
-        assertTrue(adapter.isApplicable(context));
-        var seen = assertInstanceOf(SimpleToolContext.class, tool.lastContext);
-        assertEquals(repo, seen.getRootPath());
-        assertEquals(file, seen.getFilePath());
-        assertEquals(7, seen.getLine());
-        assertEquals("\t", seen.getIndent());
-    }
-
-    /**
-     * A non-applicable tool produces an empty change list, and applicability is checked by the
-     * caller, not the adapter: measured, {@code generate} runs {@code execute} and hands the list
-     * back verbatim even when the wrapped tool would answer {@code false} to {@code isApplicable}.
-     */
-    @Test
-    void generateHandsBackTheToolsChangesVerbatimEvenWhenTheToolSaysItIsNotApplicable() {
-        var changes = List.of(new FileChange(repo.resolve("E.java"), "x", ActionTool.ChangeType.CHANGE));
-        var tool = new StubTool("hello", false, changes);
-        var adapter = new ActionToolAdapter(tool);
-        var context = new CodeContextImpl(repo, repo.resolve("E.java"), 1);
-
-        assertFalse(adapter.isApplicable(context));
-        List<FileChange> generated = adapter.generate(context);
-        assertEquals(changes, generated);
-        assertEquals(1, generated.size());
-        assertEquals(ActionTool.ChangeType.CHANGE, generated.get(0).type());
     }
 
     // ---- HelloTool -----------------------------------------------------------------------

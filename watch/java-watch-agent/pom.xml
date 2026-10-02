@@ -41,10 +41,6 @@
             `ActionToolAdapter` implements `CodeGenerator`, and the types it needs are now a library of
             their own. See AGENTS.md § 1 and `jcodebuddy/jcodebuddy-codegen-api/pom.xml`.
         -->
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>jcodebuddy-codegen-api</artifactId>
-        </dependency>
 
         <!-- `javaparser-core` was removed here on 2026-09-22 (Phase 6 of the rewrite-migration plan).
              This module imported it transitively before that, which is why its five JavaParser files

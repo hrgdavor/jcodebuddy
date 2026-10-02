@@ -888,7 +888,7 @@ the `SourceMetadata` edge (the reason codegen-api depends on `hipster-entity-too
 SPI cannot be implemented next to the index it reads) disappears with the move.
 
 **Do:** move the SPI into the engine, delete the module, and update every consumer's POM and imports —
-`project-automation` ([`ActionToolAdapter`](../watch/java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/ActionToolAdapter.java)
+`project-automation` (``ActionToolAdapter`` (removed in step 3.0s: the watcher keeps its own `ActionTool` port)
 and the generator implementations), `java-watch-agent`, `hipster-ioc-tooling`. Update
 [`module-map.md`](../doc/architecture/module-map.md) (which states the five-type leaf property) and the places
 that cite codegen-api as the precedent for promoting a shared type out of `project-automation`
@@ -1144,6 +1144,28 @@ list this step works through:
 | `java-watch-agent` | depends on `jwa-builder-api` and `jwa-builder` | find what uses them — the JWA builder is absorbed into `jcodebuddy/` (DEC-038), so a use in the watcher is either a bridge to move out or a leftover to delete, and the record says which |
 | `java-watch-agent` | Jackson: the dependency, plus imports in `AuditManager`, `CommandServer`, `WatchAgent` | the watcher writes its own audit JSON; either hand-rolled writing (it is a small, fixed document) or a JSON library the watcher chooses for itself — what it may not do is inherit this workspace's Jackson |
 | `java-watch-run-sample` | depends on Jackson | a sample module: either its JSON use is removed or it depends on a library it declares itself, with the same rule |
+
+**Progress 2026-10-03 — the SPI is gone from the watcher, 17 violations down to 13.** `ActionToolAdapter` was
+**deleted, not moved**, and that is the honest reading the check made possible: nothing in `java-watch-agent`'s
+main code used it — its only user was its own test — so relocating dead code into `project-automation` would
+have preserved a bridge to nothing. The three adapter cases went with it and the seam tests the watcher
+genuinely owns (`ActionTool`, `SimpleToolContext`) stay: 15 tests green, `java-watch-agent` `BUILD SUCCESS`.
+The `jcodebuddy-codegen-api` dependency went with the class. **This is what unblocks 3.0i**: with the watcher no
+longer implementing the SPI, dissolving the five types into the engine gives `java-watch*` nothing.
+
+**What remains (13, and the order to take them in):**
+
+- `java-watch-agent` → `jwa-builder-api` and `jwa-builder` (2 dependency violations, plus
+  `RecordBuilderGenerator` importing `BuilderTransformationEngine` and `TestDiscovery`/`TestStateSync`
+  importing `GenerateBuilder`). These are *code actions* — "read a Java type out of source and complete it" —
+  which is dev-time codegen, i.e. `project-automation`'s subject, and it already depends on `jwa-builder`; the
+  slice is to move those generator classes (and their callers/registration) there and drop both dependencies.
+- Jackson in the agent's own core: the dependency plus imports in `AuditManager` (7 uses), `WatchAgent` (2) and
+  `CommandServer` (2). The watcher writes and reads its own small fixed documents, so this is hand-rolled
+  writing (or a library the watcher chooses for itself) — never this workspace's Jackson.
+- `java-watch-run-sample`: the dependency plus `DataProcessor`/`PersonData`/`SampleMain`, whose Jackson demo is
+  the *point* of that module but cannot stay under `watch/`. Either the demo becomes self-contained or the
+  sample module leaves the `watch/` group; the step's record should say which and why.
 
 **Gate:** `bun scripts/check-watch-standalone.js` exits 0, plus each touched watch module's own build and tests
 green, and `java-watch-agent` still passing whatever it tests about the seam it used to expose as
