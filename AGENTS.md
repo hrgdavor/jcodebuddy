@@ -528,8 +528,8 @@ canonical statement of a boundary that has no other home.
   its own ending (133 tracked documents are checked out CRLF, 128 LF, two mixed). A file that fails the check is
   left untouched and named. Same rule, with the checking a sweep needs and a single document does not.
 
-  Four things it must not do, and the reason the sweep checks rather than trusts — **all four were found by
-  running it over this repository on 2026-10-03, and all four are fixed in the tool's 1.1.0**:
+  Five things it must not do, and the reason the sweep checks rather than trusts — **four were found by running
+  it over this repository on 2026-10-03 and fixed in the tool's 1.1.0, the fifth in 1.2.0**:
 
   - **Rewrite a `|`-bearing line inside a fenced code block.** It did: a flow diagram's `|` shaft came back as
     `|  |`, a directory tree's pointer shafts were re-padded out of alignment under their `^` markers, and a Java
@@ -545,6 +545,12 @@ canonical statement of a boundary that has no other home.
     one, say — used to add a column to the whole table, which is not what a renderer does with the excess. The
     header and delimiter rows declare the columns now, as GFM does, and the excess cells stay in their row,
     unpadded and never dropped.
+  - **Treat an indented code block as a table.** A run of lines four spaces or more past whatever list item
+    contains them, beginning after a blank line, is CommonMark's indented code block, so a sample that *shows* a
+    table is a code sample rather than a table. The measurement is what keeps a nested table a table: `- x` puts
+    the item's content at column 2, so four spaces under it is the item's own indentation 2 and is still
+    formatted, while six is a code block inside the item. A line indented four spaces with **no** blank line
+    before it is a paragraph continuation rather than code, and is read as a table row like any other.
 
   So the rule is not "run it and trust it": after any run, **every changed line must be a table line**. The tool
   keeps that promise on its own now — but the check is what proved it did not, and it costs one command to keep.
