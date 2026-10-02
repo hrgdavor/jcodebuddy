@@ -585,11 +585,11 @@ describe('the default invocation', () => {
   test('finds the module, its metadata and its source root without arguments', () => {
     const resolved = resolveOptions({});
     expect(relative(REPO_ROOT, resolved.metadata).split(sep).join('/'))
-      .toBe('hipster-entity-example/.jcodebuddy/metadata/entity');
+      .toBe('hipster-entity/hipster-entity-example/.jcodebuddy/metadata/entity');
     expect(relative(REPO_ROOT, resolved.sourceRoot).split(sep).join('/'))
-      .toBe('hipster-entity-example/src/main/java');
+      .toBe('hipster-entity/hipster-entity-example/src/main/java');
     expect(relative(REPO_ROOT, resolved.linkBase).split(sep).join('/')).toBe('hipster-entity-example');
     expect(relative(REPO_ROOT, resolved.out).split(sep).join('/'))
-      .toBe('hipster-entity-example/.jcodebuddy/metadata/entity/index.html');
+      .toBe('hipster-entity/hipster-entity-example/.jcodebuddy/metadata/entity/index.html');
   });
 });

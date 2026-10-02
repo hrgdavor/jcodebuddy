@@ -88,7 +88,7 @@ describe('classifyJavaText', () => {
     const text = 'import com.github.javaparser.JavaParser;\n';
     const facts = classifyJavaText(
       text,
-      'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/A.java',
+      'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/A.java',
     );
     expect(facts.queue).toBe(true);
     expect(facts.scope).toBe('test');
@@ -103,7 +103,7 @@ describe('scopeOf / moduleOf', () => {
   });
 
   test('reads the owning module', () => {
-    expect(moduleOf('hipster-entity-tooling/src/main/java/A.java')).toBe('hipster-entity-tooling');
+    expect(moduleOf('hipster-entity/hipster-entity-tooling/src/main/java/A.java')).toBe('hipster-entity-tooling');
     expect(moduleOf('A.java')).toBe('(root)');
   });
 });
@@ -465,7 +465,7 @@ describe('documentation', () => {
     expect(docKindOf('doc-hipster-entity/architecture/decisions/DEC-020.md')).toBe('decision');
     expect(docKindOf('doc-hipster-entity/brainstorm/gen-freezing.md')).toBe('decision');
     expect(docKindOf('AGENTS.md')).toBe('live');
-    expect(docKindOf('hipster-entity-tooling/README.md')).toBe('live');
+    expect(docKindOf('hipster-entity/hipster-entity-tooling/README.md')).toBe('live');
   });
 
   test('does not count OpenRewrite\'s own identically-named class as a removed mention', () => {

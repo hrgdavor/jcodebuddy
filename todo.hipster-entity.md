@@ -7,8 +7,8 @@
 - [ ] `View1Builder.merge(View2 other)` — merge fields with identical name and type
   - Proxy version of such merge
 
-  **Open, and nothing has started it:** no `merge(` method exists in `hipster-entity-core/src/main/java`
-  or `hipster-entity-example/src/main/java`. The related mapper work that *did* land is
+  **Open, and nothing has started it:** no `merge(` method exists in `hipster-entity/hipster-entity-core/src/main/java`
+  or `hipster-entity/hipster-entity-example/src/main/java`. The related mapper work that *did* land is
   `ViewMapperGenerator` (a statically dispatched `static <Target> map(<Source>)`), which is a
   different shape — source→target conversion, not a builder-to-builder merge. Scheduled as step 7.3 of
   [`plans/unified-plan.md`](plans/unified-plan.md).

@@ -12,7 +12,7 @@
 > `--adapters` flag, the default pass emits none of it, no property or profile enables it
 > implicitly, the example project does not enable it, and its emitted API may change or be
 > withdrawn. **Any future SQL support must keep that shape: opt-in, never a default.** See
-> `hipster-entity-tooling/README.md` for the flag and the opt-in rule.
+> `hipster-entity/hipster-entity-tooling/README.md` for the flag and the opt-in rule.
 
 ## Goal
 
@@ -305,9 +305,9 @@ metadata that is generated rather than guessed.
 - [The Ordinal Array Contract](ordinal-array-contract.md) — the contract this adapter implements.
 - [Implementing field-name-to-ordinal dispatch](../../architecture/field-lookup-guide.md) — why the
   generic adapter uses `meta.forName` and never a per-call `HashMap` (DEC-016).
-- [`FieldDef`](../../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldDef.java) —
+- [`FieldDef`](../../../hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldDef.java) —
   `fieldKind()`, `column()`, `relation()`, `expression()`, `retired()`.
-- [`FieldSource`](../../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldSource.java) —
+- [`FieldSource`](../../../hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldSource.java) —
   the annotation whose `column()` label `FieldDef.column()` resolves.
 - [Core Concepts](../core-concepts.md) — `COLUMN`, `DERIVED`, and `JOINED` field sources.
 - [DEC-023 — R1: field enums are append-only ordinal ledgers](../../architecture/decisions/DEC-023.md) —

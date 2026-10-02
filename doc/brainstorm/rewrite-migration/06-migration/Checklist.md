@@ -71,7 +71,7 @@ A port cannot be verified against a build that was already broken. Record the Ja
 
 The plan names paths that do not exist and omits files that do, so following it literally migrates the wrong set.
 
-*Evidence:* Listed: `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` and `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` — neither exists; the real file is jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java. Also listed `hipster-entity-tooling/.../validation/JavaParserTool.java` under test with an extra `validation/EnumCompactionCliTest.java`; the real JavaParserTool is main-source and there is exactly one EnumCompactionCliTest. Omitted entirely: the six files whose JavaParser use is fully qualified and therefore invisible to the plan’s own scan — ViewBuilderGenerator.java and meta/InterfaceInfo.java in main, plus AddonAndInheritanceTest, CompactionRoundTripTest, SourceReaderTest and validation/EnumCompactionCliTest in test. `project-automation` is listed as "all files using JavaParser", but its `hr.hrg.rewrite` package uses none.
+*Evidence:* Listed: `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` and `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` — neither exists; the real file is jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java. Also listed `hipster-entity/hipster-entity-tooling/.../validation/JavaParserTool.java` under test with an extra `validation/EnumCompactionCliTest.java`; the real JavaParserTool is main-source and there is exactly one EnumCompactionCliTest. Omitted entirely: the six files whose JavaParser use is fully qualified and therefore invisible to the plan’s own scan — ViewBuilderGenerator.java and meta/InterfaceInfo.java in main, plus AddonAndInheritanceTest, CompactionRoundTripTest, SourceReaderTest and validation/EnumCompactionCliTest in test. `project-automation` is listed as "all files using JavaParser", but its `hr.hrg.rewrite` package uses none.
 
 ## Dependency set
 
@@ -103,44 +103,44 @@ Ordered by priority, then by risk. See `## Per-file detail` for the notes.
 
 | Status | Priority | Risk | Imports | File |
 | --- | --- | --- | --- | --- |
-| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` |
-| `[x]` complete | high | high | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` |
+| `[x]` complete | high | high | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java` |
 | `[x]` complete | high | high | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java` |
 | `[x]` complete | high | high | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` |
-| `[x]` complete | high | medium | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java` |
+| `[x]` complete | high | medium | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java` |
 | `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java` |
 | `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/AccessorGenerator.java` |
 | `[x]` complete | high | medium | 0 | `java-watch-agent/src/main/java/hr/hrg/watch2/agent/tools/BuilderGenerator.java` |
 | `[x]` complete | high | medium | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/SourceSplicer.java` |
 | `[x]` complete | high | medium | 0 | `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
-| `[x]` complete | high | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java` |
-| `[x]` complete | high | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java` |
-| `[x]` complete | high | low | 0 | `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java` |
+| `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java` |
+| `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java` |
+| `[x]` complete | high | low | 0 | `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java` |
 | `[x]` complete | high | low | 0 | `jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java` |
-| `[x]` complete | medium | medium | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` |
+| `[x]` complete | medium | medium | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` |
 | `[x]` complete | medium | medium | 0 | `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java` |
-| `[x]` complete | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
-| `[x]` complete | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
-| `[x]` complete | medium | low | 0 | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java` |
+| `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java` |
+| `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java` |
+| `[x]` complete | medium | low | 0 | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java` |
 
 ## Per-file detail
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 409
 
@@ -172,13 +172,13 @@ The riskiest file in the phase and the one to leave until last, after the read a
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 3621
 
@@ -212,13 +212,13 @@ Split the port rather than attempting it whole: the annotation-reading half is m
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 1080
 
@@ -245,13 +245,13 @@ The module’s broadest single surface. Two specifics: `NodeList.nodeList(...)` 
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 684
 
@@ -277,13 +277,13 @@ Turns a declaration into the `SourceLocation` records that DEC-028/029 address a
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 367
 
@@ -309,7 +309,7 @@ Port this first: 33 of the 34 queue files reach the AST through it, so a mistake
 
 **Steps**:
 
-1. Add `rewrite-core` / `rewrite-java` / `rewrite-java-25` to hipster-entity-tooling/pom.xml, parent-managed, mirroring merge-java.
+1. Add `rewrite-core` / `rewrite-java` / `rewrite-java-25` to hipster-entity/hipster-entity-tooling/pom.xml, parent-managed, mirroring merge-java.
 2. Replace the static `JavaParser` field with a `JavaParser.fromJavaVersion()...build()` instance; keep one shared instance per parse set and reset between sets declaring the same FQNs.
 3. Keep `Read` and its `readable()` / `ofUnparseable()` factories unchanged in shape — callers depend on the distinction, not on the parser.
 4. Map `parse(source)` to `parseInputs(...)` over a `Parser.Input`; take the first `SourceFile`, require `instanceof J.CompilationUnit`, and collect `ParseExceptionResult` markers as the unparseable reason.
@@ -318,13 +318,13 @@ Port this first: 33 of the 34 queue files reach the AST through it, so a mistake
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 518
 
@@ -347,13 +347,13 @@ The one file where dropping `PrettyPrinterConfiguration` changes the artifact: i
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: high · **Detected**: comment-only · **Lines**: 342
 
@@ -377,10 +377,10 @@ Enum constants are `J.EnumValue` entries inside the class body’s statement lis
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java
 ```
 
 ### `jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java`
@@ -443,7 +443,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncreme
 bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 206
 
@@ -462,13 +462,13 @@ Reads a declaration to decide the generation level. `RecordDeclaration` has no L
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 991
 
@@ -487,13 +487,13 @@ DEC-029 owner: one row per compiled type, keyed by FQN, carrying the file path, 
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 174
 
@@ -512,13 +512,13 @@ Feeds DEC-029’s class index: the per-type kind and modifiers written into `.jc
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 653
 
@@ -542,13 +542,13 @@ Added by the first porting pass to restore a guard OpenRewrite does not provide,
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 162
 
@@ -567,13 +567,13 @@ Added when the two view emitters were ported: it is the shared splice that inser
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 194
 
@@ -592,13 +592,13 @@ Supports DEC-021’s `{@link …}` first header line. Two fully-qualified `Recor
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 84
 
@@ -617,13 +617,13 @@ The other rule that renames across the board: interfaces become `J.ClassDeclarat
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 148
 
@@ -642,13 +642,13 @@ Interface + supertype check: `ClassOrInterfaceType` splits into `J.Identifier` (
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 615
 
@@ -670,13 +670,13 @@ Ported. Reads constraint annotations off methods and renders their arguments as 
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 316
 
@@ -697,13 +697,13 @@ Reads `@View` attributes: annotation arguments, array initialisers, class litera
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: medium · **Detected**: comment-only · **Lines**: 214
 
@@ -723,10 +723,10 @@ The one generator whose output is *added to an existing file*, so it is the clea
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java
 ```
 
 ### `java-watch-agent/src/main/java/hr/hrg/watch2/agent/core/ContextualAnalyzer.java`
@@ -856,7 +856,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-sidecar -am -Dmaven.compiler.useIncreme
 bun run scripts/rewrite-migration/migrate-file.js --after jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 1133
 
@@ -881,13 +881,13 @@ Added by the first porting pass, and the reason the rest of it was tractable. Ev
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 74
 
@@ -906,13 +906,13 @@ The rule interface itself — one `CompilationUnit` parameter. Changing this sig
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java
 ```
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java`
 
 **Status**: `[x]` complete · **Priority**: high · **Risk**: low · **Detected**: comment-only · **Lines**: 59
 
@@ -933,10 +933,10 @@ Ported and renamed in the first pass — it was `JavaParserTool`, which is no lo
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java
 ```
 
 ### `jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java`
@@ -964,7 +964,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncreme
 bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java
 ```
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java`
 
 **Status**: `[x]` complete · **Priority**: medium · **Risk**: medium · **Detected**: comment-only · **Lines**: 182
 
@@ -983,10 +983,10 @@ The round-trip gate for enum compaction, and the test that should catch a consta
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
 ```
 
 ### `jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java`
@@ -1016,7 +1016,7 @@ cmd /c "scripts\mvn-jdk25.cmd -o -pl jwa-builder -am -Dmaven.compiler.useIncreme
 bun run scripts/rewrite-migration/migrate-file.js --after jwa-builder/src/test/java/hr/hrg/watch2/builder/RecordBuilderProcessorTest.java
 ```
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java`
 
 **Status**: `[x]` complete · **Priority**: medium · **Risk**: low · **Detected**: comment-only · **Lines**: 347
 
@@ -1035,13 +1035,13 @@ Fully-qualified `CompilationUnit` / `EnumConstantDeclaration` uses with no impor
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java
 ```
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java`
 
 **Status**: `[x]` complete · **Priority**: medium · **Risk**: low · **Detected**: comment-only · **Lines**: 152
 
@@ -1060,13 +1060,13 @@ Test-side port; follows the main-source annotation mapping verbatim.
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java
 ```
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java`
 
 **Status**: `[x]` complete · **Priority**: medium · **Risk**: low · **Detected**: comment-only · **Lines**: 113
 
@@ -1085,10 +1085,10 @@ Added with the `ViewInterfaceGenerator` port. That class had no direct coverage 
 **Port procedure**:
 
 ```sh
-bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java
+bun run scripts/rewrite-migration/migrate-file.js --baseline hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java
 # ... edit ...
 cmd /c "scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am -Dmaven.compiler.useIncrementalCompilation=false clean test"
-bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java
+bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java
 ```
 
 ## Exempt (9)
@@ -1096,37 +1096,37 @@ bun run scripts/rewrite-migration/migrate-file.js --after hipster-entity-tooling
 Files that legitimately keep a JavaParser reference. Each states why, and what
 removes the exemption — an allowlist entry without an exit condition is a hole.
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JdkImportSupport.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JdkImportSupport.java`
 
 **Reason**: One prose mention, explaining why a general solution is out of scope: "The general solution is JavaParser's symbol solver". It names the library as the thing *not* being used, so it carries no dependency.
 
 **Deferred to**: Remove the sentence when JavaParser leaves the tree: the symbol solver it declines to use will no longer exist to decline.
 
-### `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/FieldConstraint.java`
+### `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/FieldConstraint.java`
 
 **Reason**: One prose mention in a doc comment ("read with JavaParser exactly as …"), describing how the constraint annotations are interpreted. It does not name a JavaParser type.
 
 **Deferred to**: Reword to name the LST instead, in whichever edit next touches that comment.
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java`
 
 **Reason**: Mentions JavaParser only in prose, now including the retirement note for `javaParserIsPinnedOnceInTheRootPom` — the test that policed the dependency boundary and was deleted with the dependency. The remaining assertions are about Jakarta Validation and Jackson, which are untouched by this migration.
 
 **Deferred to**: Never — a comment naming the dependency it policed is correct.
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DivergenceKindTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DivergenceKindTest.java`
 
 **Reason**: One prose mention explaining a platform-dependent expectation: "The emitter prints through JavaParser, which uses the platform line separator". It names the printer as the cause of a Windows-vs-Linux difference.
 
 **Deferred to**: Reword when the emitter prints through the LST: the property under test (the platform line separator) stays, only its cause changes.
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ParseGuardTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ParseGuardTest.java`
 
 **Reason**: One prose mention in a comment recording why the guard exists: "JavaParser returns a PARTIAL unit for this, which is how the …". It documents the JavaParser behaviour the fail-safe was written against.
 
 **Deferred to**: Stays while the guard exists: the comment is the record of the failure mode (a partial unit mistaken for a readable file) that the port must not reintroduce. Update the wording when the parser changes, not the test.
 
-### `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java`
+### `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java`
 
 **Reason**: Re-expressed when the dependency went (2026-09-22, end of Phase 6): the language-level assertion against `ParserConfiguration.LanguageLevel.JAVA_25` is gone, and what remains is the property it guarded — a clean file reads and a file whose enum hides a syntax error does not (`aCleanFileReadsAndARecoveredSyntaxErrorDoesNot`). The file still mentions the library by name, in the javadoc that records what was removed and why, so the scan still reports it.
 
@@ -1175,8 +1175,8 @@ the wrong set. The differences:
 | --- | --- |
 | `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/HttpBridgeStartupActivity.java` | does not exist |
 | `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` | the real file is `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |
-| `hipster-entity-tooling/src/test/java/.../validation/JavaParserTool.java` | the real `JavaParserTool` is main-source, at `.../tooling/validation/JavaParserTool.java` |
-| `validation/EnumCompactionCliTest.java` listed twice | one file: `hipster-entity-tooling/src/test/java/.../validation/EnumCompactionCliTest.java` |
+| `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/JavaParserTool.java` | the real `JavaParserTool` is main-source, at `.../tooling/validation/JavaParserTool.java` |
+| `validation/EnumCompactionCliTest.java` listed twice | one file: `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/EnumCompactionCliTest.java` |
 | `project-automation` — "all files using JavaParser" | the `hr.hrg.rewrite` package uses no JavaParser and does not compile; it needs Phase-0 repair, not a port |
 | (not listed) | seven files use JavaParser **fully qualified with no import**: `ViewBuilderGenerator.java` (main), `meta/InterfaceInfo.java` (main),
 | | `AddonAndInheritanceTest.java`, `CompactionRoundTripTest.java`, `SourceReaderTest.java`, `EnumCompactionCliTest.java`, and the `test` half of `DependencyBoundaryTest.java` |

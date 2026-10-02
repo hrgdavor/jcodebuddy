@@ -210,6 +210,6 @@ standalone (the *minimal* case of DEC-027's amended rule — see § "The page");
 lands on the link base; two runs are byte-identical; the class index plus the three documents stay
 inside the size budget, which exists to catch a *shape* regression rather than to police a byte; and
 the model groups views under their marker with inherited fields resolved to the declaring interface. It writes into
-`hipster-entity-example/.jcodebuddy/agent-state/entity-html-test/` (DEC-026 scratch) and removes it
+`hipster-entity/hipster-entity-example/.jcodebuddy/agent-state/entity-html-test/` (DEC-026 scratch) and removes it
 afterwards — the output must live inside the module, because a path on another Windows drive cannot
 be expressed relative to the link base.

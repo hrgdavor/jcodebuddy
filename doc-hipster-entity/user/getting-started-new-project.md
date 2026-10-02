@@ -561,7 +561,7 @@ it is tombstoned in place (`@Deprecated`, `FieldDef.retired()` →
 `true`), and writers skip it. The full rule, the marker, the
 `allowReorder` escape hatch and the checker CLI are documented in
 [DEC-023](../architecture/decisions/DEC-023.md) and in
-[`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md).
+[`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md).
 
 ## 10. Next steps
 
@@ -573,9 +573,9 @@ it is tombstoned in place (`@Deprecated`, `FieldDef.retired()` →
   `ResultSet` into a view.
 - [Jackson Setup](patterns/jackson-setup.md) — the JSON configuration and
   the change-set shape.
-- [`hipster-entity-core/README.md`](../../hipster-entity-core/README.md) —
+- [`hipster-entity/hipster-entity-core/README.md`](../../hipster-entity/hipster-entity-core/README.md) —
   the runtime classes the generated code uses.
-- [`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md) —
+- [`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md) —
   the generator, its CLI, the naming contract, and the R1 order contract.
 - [DEC-023 — R1](../architecture/decisions/DEC-023.md) — the append-only
   field-enum rule.

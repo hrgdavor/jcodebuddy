@@ -35,6 +35,18 @@ export const GATE_MODULES = [
  */
 export const INCREMENTAL_OFF = '-Dmaven.compiler.useIncrementalCompilation=false';
 
+/**
+ * The `-pl` selector list for a module-name list.
+ *
+ * The modules moved into group folders (`hipster-entity/hipster-entity-api`, `jcodebuddy/jcodebuddy-core`),
+ * so a bare directory name no longer resolves from the root. `-pl` accepts `[groupId]:artifactId`, which is
+ * location-independent — and it keeps `GATE_MODULES` the recorded list of *names* that `GateContractTest`
+ * asserts, rather than turning a list of modules into a list of paths that every move invalidates.
+ */
+export function moduleSelectors(modules) {
+  return modules.split(',').map((name) => `:${name}`).join(',');
+}
+
 /** The recorded default goal list: the gate is `clean test`, and `clean` is not optional. */
 export const DEFAULT_GOALS = ['clean', 'test'];
 
@@ -80,5 +92,9 @@ export function buildGateArgs(argv, options = {}) {
     return { args: [], shortcut, error: bad };
   }
   const goals = rest.length === 0 ? defaultGoals : rest;
-  return { args: ['-o', '-pl', modules, '-am', INCREMENTAL_OFF, ...goals], shortcut, error: null };
+  return {
+    args: ['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, ...goals],
+    shortcut,
+    error: null,
+  };
 }

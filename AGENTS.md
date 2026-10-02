@@ -494,7 +494,7 @@ canonical statement of a boundary that has no other home.
   *tracked*, not to be ignored. **Generated `.java` does not go there** — it
   stays under `src/main/java` per rule §1. See
   [`doc-hipster-entity/architecture/decisions/DEC-026.md`](doc-hipster-entity/architecture/decisions/DEC-026.md)
-  and [`hipster-entity-example/.jcodebuddy/README.md`](hipster-entity-example/.jcodebuddy/README.md).
+  and [`hipster-entity/hipster-entity-example/.jcodebuddy/README.md`](hipster-entity/hipster-entity-example/.jcodebuddy/README.md).
 - **Host state is not configuration — never file a port, a pid or a token as config.**
   A webview host's local state (the port this checkout is on, the pin, the
   token a caller must present, a page's undo journal) goes in the served

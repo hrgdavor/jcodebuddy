@@ -218,7 +218,7 @@ Before submitting or generating deserializer or field-mapping code, verify:
 
 - [DEC-016 — Field-name-to-ordinal dispatch decision](../architecture/decisions/DEC-016.md)
 - [DEC-015 — Generated field metadata method lookup strategy](../architecture/decisions/DEC-015.md)
-- [`ViewMeta.forName` Javadoc](../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/ViewMeta.java)
-- [`FieldNameMapper` interface](../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldNameMapper.java)
-- [`EntityJacksonViewDeserializer`](../../hipster-entity-jackson/src/main/java/hr/hrg/hipster/entity/jackson/EntityJacksonViewDeserializer.java) — canonical generic implementation
-- [`PersonSummaryBoilerplateDeserializer`](../../hipster-entity-test/src/test/java/hr/hrg/hipster/entity/jackson/PersonSummaryBoilerplateDeserializer.java) — canonical boilerplate implementation
+- [`ViewMeta.forName` Javadoc](../../hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/ViewMeta.java)
+- [`FieldNameMapper` interface](../../hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldNameMapper.java)
+- [`EntityJacksonViewDeserializer`](../../hipster-entity/hipster-entity-jackson/src/main/java/hr/hrg/hipster/entity/jackson/EntityJacksonViewDeserializer.java) — canonical generic implementation
+- [`PersonSummaryBoilerplateDeserializer`](../../hipster-entity/hipster-entity-test/src/test/java/hr/hrg/hipster/entity/jackson/PersonSummaryBoilerplateDeserializer.java) — canonical boilerplate implementation

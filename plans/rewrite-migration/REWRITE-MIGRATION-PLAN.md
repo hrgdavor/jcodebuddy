@@ -317,7 +317,7 @@ public class AstPrinter {
 
 #### 5.2.1 View Interface Generator
 
-**Original file**: `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java`
+**Original file**: `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java`
 
 **New location**: Same file, but rewritten using OpenRewrite
 
@@ -331,7 +331,7 @@ public class AstPrinter {
 
 #### 5.2.2 Field Boilerplate Generator
 
-**Original file**: `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java`
+**Original file**: `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java`
 
 **Migration considerations**:
 

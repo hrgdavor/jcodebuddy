@@ -665,7 +665,7 @@ SPI cannot be implemented next to the index it reads) disappears with the move.
 and the generator implementations), `java-watch-agent`, `hipster-ioc-tooling`. Update
 [`module-map.md`](../doc/architecture/module-map.md) (which states the five-type leaf property) and the places
 that cite codegen-api as the precedent for promoting a shared type out of `project-automation`
-([`ProjectAutomationIsolationTest`](../hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ProjectAutomationIsolationTest.java)
+([`ProjectAutomationIsolationTest`](../hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ProjectAutomationIsolationTest.java)
 names it in a message). **`project-automation` stays private** — the SPI moving to the engine must not become
 a reason for anyone to depend on a project's assistant.
 
@@ -783,8 +783,8 @@ one `SourceSplicer` remains in the tree, and a grep proves it; the record and th
 
 DEC-029's class index is real and tested: `classes.json`, one row per type, keyed by FQN, with the file's
 path, its content checksum, the checksum instant, size, and the type's kind and modifiers
-([`ClassRecord`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassRecord.java),
-[`TypeFacts`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java)).
+([`ClassRecord`](../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassRecord.java),
+[`TypeFacts`](../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java)).
 It records **no relations**: nothing in a row says what a type extends or implements, and there is no
 reverse index, so "what implements `CtxModule`" cannot be asked of it at all.
 

@@ -160,7 +160,7 @@ function readText(path) {
 function inventedTypeRefs(root, stagingDir) {
   const found = [];
   const javaFiles = findJavaUnder(join(root, stagingDir));
-  const toolingDir = join(root, 'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling');
+  const toolingDir = join(root, 'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling');
 
   for (const file of javaFiles) {
     const text = readText(file);

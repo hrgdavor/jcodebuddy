@@ -108,7 +108,7 @@ analysis and inlined. In such cases a builder (level `BUILDER`) is
 sufficient, and forcing a record adds unnecessary allocation and
 coupling.
 
-[../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java](../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java#region:DOCS)
+[../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java](../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java#region:DOCS)
 ```java
 @View(gen = hr.hrg.hipster.entity.api.GenLevel.META)
 interface Person{
@@ -119,7 +119,7 @@ interface Person{
 
 Start point V2 (record)
 
-[../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java](../../hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java#region:DOCS)
+[../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java](../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java#region:DOCS)
 ```java
 record Person(
     String name,
@@ -151,7 +151,7 @@ This generated metadata enum intentionally breaks standard naming
 conventions so that each constant's name and case exactly match the
 entity's field names. The constant name **is** the field name — see the
 naming contract in
-[`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md).
+[`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md).
 
 ## `RECORD` — interface + record
 
@@ -286,19 +286,19 @@ patch and snapshot. Therefore:
 The rule is scoped by the `entityFieldEnum:true` marker in the
 [DEC-021](decisions/DEC-021.md) class-file header. In this repository the
 checker is
-[`hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker`](../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java),
+[`hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker`](../../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java),
 driven by
-[`EntityFieldEnumOrderRule`](../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityFieldEnumOrderRule.java)
+[`EntityFieldEnumOrderRule`](../../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityFieldEnumOrderRule.java)
 and
-[`EnumConstantOrderCli`](../../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderCli.java);
+[`EnumConstantOrderCli`](../../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderCli.java);
 the runnable invocation is documented in
-[`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md).
+[`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md).
 
 ## Reference
 
 - [Entity API docs](../README.md)
 - [Naming conventions](naming-conventions.md)
-- [`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md) —
+- [`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md) —
   the naming contract and the R1 order contract
 - [DEC-017 identifiable mixin](decisions/DEC-017.md)
 - [DEC-021 generator class-file header](decisions/DEC-021.md)

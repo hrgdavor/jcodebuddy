@@ -96,7 +96,7 @@ All generated code complies with:
 
 ## Next Steps
 
-Phase 3 is complete. Phase 4's rules live in `hipster-entity-tooling/.../validation/` and in
+Phase 3 is complete. Phase 4's rules live in `hipster-entity/hipster-entity-tooling/.../validation/` and in
 `java-watch-agent`'s tools; Phase 6, the migration itself, is complete. Phase 5 (the automation engine,
 `project-automation/.../automation/`) and Phase 7 (testing and validation) are the phases after that — see
 `plans/rewrite-migration/PLAN-SUMMARY.md` § *Phase status*.

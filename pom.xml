@@ -74,12 +74,12 @@
               the injected bridge, packaged as a dropins bundle. -->
         <module>webview/eclipse/webview-eclipse</module>
         <module>java-watch-agent</module>
-        <module>hipster-entity-api</module>
-        <module>hipster-entity-core</module>
-        <module>hipster-entity-example</module>
-        <module>hipster-entity-jackson</module>
-        <module>hipster-entity-test</module>
-        <module>hipster-entity-tooling</module>
+        <module>hipster-entity/hipster-entity-api</module>
+        <module>hipster-entity/hipster-entity-core</module>
+        <module>hipster-entity/hipster-entity-example</module>
+        <module>hipster-entity/hipster-entity-jackson</module>
+        <module>hipster-entity/hipster-entity-test</module>
+        <module>hipster-entity/hipster-entity-tooling</module>
         <!-- The generator SPI: what a code generator is, the context it is handed, and how it resolves
              a type. A leaf library, and the reason it exists is a rule rather than a feature — a tool
              that generates code must not have to depend on anybody's `project-automation` to do it.

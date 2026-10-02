@@ -72,9 +72,9 @@ public class UrlNormalizationTest {
 
     @Test
     public void resolvesRelativePathsAgainstTheProject() {
-        String resolved = BASE + "/hipster-entity-example/index.html";
+        String resolved = BASE + "/hipster-entity/hipster-entity-example/index.html";
         UrlNormalizer.Normalized result =
-                UrlNormalizer.normalize("hipster-entity-example/index.html", BASE, only(resolved));
+                UrlNormalizer.normalize("hipster-entity/hipster-entity-example/index.html", BASE, only(resolved));
 
         assertEquals("file:///" + resolved, result.url());
         assertEquals(resolved, result.localPath());

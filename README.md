@@ -100,7 +100,7 @@ they are consumers of JCodeBuddy rather than parts of it. Consequences for anyon
 **JCodeBuddy is a side tool, not a build step.** This project uses no annotation processing and
 no compile hooks: `mvn compile`, `package` and `test` only compile the committed generated source
 that already sits under `src/main/java`, because no execution in
-`hipster-entity-example/pom.xml` carries a `<phase>`. The pass that actually rewrites that source is
+`hipster-entity/hipster-entity-example/pom.xml` carries a `<phase>`. The pass that actually rewrites that source is
 `bun scripts/gen.js` — run by hand, or in `watch` mode — which compiles the tooling in the reactor,
 exports the reactor classpath with `dependency:build-classpath` (the "no `mvn install` needed"
 mechanism) and runs the generator with `java -cp`. It selects the same JDK 25 the Maven launcher uses,
@@ -152,7 +152,7 @@ One consequence worth knowing: an unquoted `-Dtest=X` on the shortcut used to re
 fix in the message.
 
 Entity-specific generators, the R1 field-enum order contract and its checker CLI are documented in
-[`hipster-entity-tooling/README.md`](hipster-entity-tooling/README.md); the architecture decisions
+[`hipster-entity/hipster-entity-tooling/README.md`](hipster-entity/hipster-entity-tooling/README.md); the architecture decisions
 behind them are under [`doc-hipster-entity/architecture/decisions/`](doc-hipster-entity/architecture/decisions/).
 
 ### The gate is local — there is no CI
@@ -164,11 +164,11 @@ before a commit that touches entities, because neither can be part of the build:
 ```text
 # the entity rules: naming conventions, marker shape, the R1 ledger
 #   exit 0 clean, 1 a violation, 2 a usage error
-java -cp hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
-     validate hipster-entity-example/src/main/java --strict
+java -cp hipster-entity/hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+     validate hipster-entity/hipster-entity-example/src/main/java --strict
 
 # the R1 append-only field-enum contract against a baseline revision
-java -cp hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
+java -cp hipster-entity/hipster-entity-tooling/target/classes hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
      enum-order --repo . --baseline origin/main --strict
 ```
 

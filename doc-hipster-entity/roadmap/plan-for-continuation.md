@@ -14,7 +14,7 @@
 >   in this repository is
 >   [`project-automation/`](../../project-automation/), and the
 >   entity code generator lives in
->   [`hipster-entity-tooling/`](../../hipster-entity-tooling/).
+>   [`hipster-entity/hipster-entity-tooling/`](../../hipster-entity/hipster-entity-tooling/).
 > - It contains a literal tooling artifact at the end of the file
 >   (`</new_content>}</new_content>}`), which is not part of any plan.
 > - Its ADR list stops at the decisions known in July 2026. It knows
@@ -118,7 +118,7 @@ The `jcodebuddy` submodule will be a standalone Maven module that provides flexi
 [ ] Test ordering-guard scenarios (ordinal vs enum constant alignment)
 
 **Files to create:**
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/proxy/*Test.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/proxy/*Test.java`
 - Unit tests for method-to-field mapping correctness
 
 ### 1.2 Hardening Update Arrays
@@ -127,7 +127,7 @@ The `jcodebuddy` submodule will be a standalone Maven module that provides flexi
 [ ] Add edge case tests (empty updates, bulk set operations)
 
 **Files to create:**
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/array/*Test.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/array/*Test.java`
 
 ### 1.3 Build & Verify Existing Demo
 [ ] Run Maven build on current state to verify all modules compile
@@ -149,7 +149,7 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 [ ] Demonstrate proxy dispatch to record-style accessor methods
 
 **Files to create:**
-- `hipster-entity-example/src/main/java/hr/hrg/.../person/record/*Record.java`
+- `hipster-entity/hipster-entity-example/src/main/java/hr/hrg/.../person/record/*Record.java`
 - Demo README explaining the flow
 
 ### 2.2 Field Enum Order vs Record Component Alignment
@@ -158,7 +158,7 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 [ ] Test record factory mapping from ordered fields to components
 
 **Files to create:**
-- `hipster-entity-example/src/main/java/hr/hrg/.../person/field/*Field.java`
+- `hipster-entity/hipster-entity-example/src/main/java/hr/hrg/.../person/field/*Field.java`
 - Integration tests for alignment validation
 
 ### 2.3 Document Proxy Patterns in Examples
@@ -167,7 +167,7 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 [ ] Show change tracking snapshot capture and patch application
 
 **Files to create:**
-- `hipster-entity-example/demo/*Examples.java`
+- `hipster-entity/hipster-entity-example/demo/*Examples.java`
 - Updated README.md in example module
 
 ---
@@ -182,7 +182,7 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 [ ] Document adapter contract (streaming, bulk, batch modes)
 
 **Files to create:**
-- `hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/projection/*Projection.java`
+- `hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/projection/*Projection.java`
 - `doc/architecture/decisions/DEC-003.md` complete implementation guide
 
 ### 3.2 DEC-006: Build-Time Type Divergence Validation
@@ -193,7 +193,7 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 [ ] Document error messages and remediation guidance
 
 **Files to create:**
-- `hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/validation/*Validation.java`
+- `hipster-entity/hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/validation/*Validation.java`
 - Sample annotation for marking divergent fields
 - ADR document for validation UX decisions
 
@@ -205,7 +205,7 @@ mvn clean install -pl hipster-entity-api,hipster-entity-core,hipster-entity-exam
 [ ] Create merge mode enumeration (overwrite, append, coalesce, etc.)
 
 **Files to create:**
-- `hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/markers/*Touched.java`
+- `hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/markers/*Touched.java`
 - Merge policy documentation in user docs
 - Unit tests for merge behavior edge cases
 
@@ -332,7 +332,7 @@ java-hipster-entity/
 │       ├── CodeGenerator.java   # Core interface
 │       ├── context/             # Build state and source manipulation API
 │       └── generators/           # Example generators using config+code mix
-├── hipster-entity-api/          # Contracts and annotations only
+├── hipster-entity/hipster-entity-api/          # Contracts and annotations only
 │   ├── src/main/java/hr/hrg/hipster/entity/core/
 │   │   ├── array/
 │   │   │   ├── EntityReadArray.java
@@ -342,15 +342,15 @@ java-hipster-entity/
 │   │   │   └── ArrayBackedViewProxyFactory.java  (DEC-015, DEC-016)
 │   │   └── validation/          # New for DEC-006
 │   └── src/test/java/...
-├── hipster-entity-example/       # Demo module
+├── hipster-entity/hipster-entity-example/       # Demo module
 │   ├── src/main/java/hr/hrg/entity/
 │   │   └── person/             # Example entity views
 │   │       ├── PersonEntity.java  (extends EntityBase + Identifiable)
 │   │       ├── PersonSummary.java
 │   │       ├── PersonDetails.java
 │   │       └── field/           # New: Field enums for DEC-004?
-├── hipster-entity-jackson/      # JSON integration
-├── hipster-entity-tooling/     # CLI/build tooling
+├── hipster-entity/hipster-entity-jackson/      # JSON integration
+├── hipster-entity/hipster-entity-tooling/     # CLI/build tooling
 ├── doc/
 │   ├── architecture/decisions/  # ADRs (18 total, 10 accepted)
 │   ├── roadmap/                 # Phase-by-phase tracking

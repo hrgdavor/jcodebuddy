@@ -1,7 +1,7 @@
 # Plan: JMH benchmark for `EEnumSet` — agent service-overlap use case
 
 **Status (2026-10-01):** implemented. The benchmark, shared fixtures, and parity test live in
-`hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/`; the parity gate is green, and the
+`hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/`; the parity gate is green, and the
 decision-grade JMH results are recorded in
 `doc-hipster-entity/architecture/enumset-implementation-and-jmh.md`.
 
@@ -147,14 +147,14 @@ machines and runs:
 
 ### 4.1 New files
 
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapJmhBenchmark.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapJmhBenchmark.java`
   — next to the existing `EEnumSetJmhBenchmark` and `EEnumSetTrackingJmhBenchmark` (same package,
   so package-private constructors such as `EEnumSetBuilder64(E[], long, int)` are reachable if
   needed). Enum fixtures (`Service64`/`Service96`/`Service256`) live in the benchmark file itself or
   a sibling test fixture file; they are **ordinary committed source** — no generation hidden
   behind a processor (AGENTS.md §1). If hand-writing 256 enum constants is too verbose, a small
   Bun script may emit them, but the output is committed and regenerable.
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapParityTest.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapParityTest.java`
 
 ### 4.2 The runner gap (verified against the current tree)
 
@@ -162,7 +162,7 @@ machines and runs:
 (`-pl hipster-entity-test` in both the bootstrap `install` and the `clean test-compile` steps).
 It declares `coreDir` (line 8) but never uses it. Consequences:
 
-1. The two existing EEnumSet benchmarks in `hipster-entity-core/src/test` are **not compiled or
+1. The two existing EEnumSet benchmarks in `hipster-entity/hipster-entity-core/src/test` are **not compiled or
    run** by the current runner, even though
    [`doc-hipster-entity/architecture/enumset-implementation-and-jmh.md`](../doc-hipster-entity/architecture/enumset-implementation-and-jmh.md)
    documents `bun run scripts/run-jmh.js --include ".*EEnumSetJmhBenchmark.*"` as the command.
@@ -170,7 +170,7 @@ It declares `coreDir` (line 8) but never uses it. Consequences:
    gets no `-proc:full`. The root POM sets `maven.compiler.release=25`, and on JDK 23+
    classpath-discovered annotation processors do not run unless explicitly requested — so under
    the required JDK 25 no JMH `*_jmhTest` harness classes are generated for the test module.
-   (`hipster-entity-core/pom.xml` and `hipster-entity-tooling/pom.xml` both carry a `jmh` profile
+   (`hipster-entity/hipster-entity-core/pom.xml` and `hipster-entity/hipster-entity-tooling/pom.xml` both carry a `jmh` profile
    with `-proc:full` precisely for this reason.)
 
 Therefore the plan **includes a small, mechanical extension of `scripts/run-jmh.js`** so the new
@@ -180,10 +180,10 @@ benchmark is runnable through the standard entry point:
    `hipster-entity-api`) to the `-pl` lists, with `-Pjmh` so the core JMH profile activates
    (`jmh-generator-annprocess` + `-proc:full`). Confirm the exact `-pl` list against the reactor
    at implementation time.
-2. **Classpath:** add `hipster-entity-core/target/test-classes` and
-   `hipster-entity-core/target/classes` to the classpath entries (the core jars must be
+2. **Classpath:** add `hipster-entity/hipster-entity-core/target/test-classes` and
+   `hipster-entity/hipster-entity-core/target/classes` to the classpath entries (the core jars must be
    installed in the local repo — the extended bootstrap install covers that).
-3. **Generated sources:** add `hipster-entity-core/target/generated-test-sources/test-annotations`
+3. **Generated sources:** add `hipster-entity/hipster-entity-core/target/generated-test-sources/test-annotations`
    to the `collectJavaFiles` collection (the helper already exists; the script already collects
    from the jackson and test module directories).
 4. **Stay Bun JavaScript** (AGENTS.md §2): extend the existing script; do not add a shell script
@@ -338,8 +338,8 @@ evidence went.
 ## 8. Deliverables
 
 1. `plans/enumset-overlap-jmh-plan.md` — this document.
-2. `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapJmhBenchmark.java`
-3. `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapParityTest.java`
+2. `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapJmhBenchmark.java`
+3. `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapParityTest.java`
 4. `scripts/run-jmh.js` — additive extension for `hipster-entity-core` (§4.2).
 5. Post-run update of
    [`doc-hipster-entity/architecture/enumset-implementation-and-jmh.md`](../doc-hipster-entity/architecture/enumset-implementation-and-jmh.md)

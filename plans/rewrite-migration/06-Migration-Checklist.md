@@ -86,7 +86,7 @@ Run verification script:
 
 ### High Priority
 
-#### hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/
+#### hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/
 
 - `ViewInterfaceGenerator.java`
 - `ViewBuilderGenerator.java`
@@ -127,7 +127,7 @@ Run verification script:
 
 ### Medium Priority
 
-#### hipster-entity-tooling/src/test/java/
+#### hipster-entity/hipster-entity-tooling/src/test/java/
 
 - `ViewAnnotationReaderTest.java`
 - `SourceReaderTest.java`

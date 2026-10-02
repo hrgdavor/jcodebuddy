@@ -315,13 +315,13 @@ producing the same artifact by different routes. That is the point: one contract
 - [Implementing field-name-to-ordinal dispatch](../../architecture/field-lookup-guide.md) — the full
   DEC-016 guide.
 - [Core Concepts](../core-concepts.md) — views, field metadata, and field sources.
-- [`FieldDef`](../../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldDef.java) —
+- [`FieldDef`](../../../hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/FieldDef.java) —
   `javaType()`, `name()`, `ordinal()`, `fieldKind()`, `column()`, `relation()`, `expression()`,
   `retired()`.
-- [`ViewMeta`](../../../hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/ViewMeta.java) —
+- [`ViewMeta`](../../../hipster-entity/hipster-entity-api/src/main/java/hr/hrg/hipster/entity/api/ViewMeta.java) —
   `fieldCount()`, `fieldValues()`, `fieldNameAt(int)`, `fieldTypeAt(int)`, `forName()`,
   `create(Object[])`.
-- [`EntityUpdateTrackingArray`](../../../hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/EntityUpdateTrackingArray.java) —
+- [`EntityUpdateTrackingArray`](../../../hipster-entity/hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/EntityUpdateTrackingArray.java) —
   the array path, including the ordinal-0 rule.
 - [DEC-016 — field-name-to-ordinal dispatch](../../architecture/decisions/DEC-016.md).
 - [DEC-023 — R1: field enums are append-only ordinal ledgers](../../architecture/decisions/DEC-023.md) —

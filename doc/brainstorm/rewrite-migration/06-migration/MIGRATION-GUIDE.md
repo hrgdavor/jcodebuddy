@@ -234,7 +234,7 @@ list does not fail to compile; it renumbers stored data. The gate for these two
 files is the compaction round-trip test, not a compile:
 
 ```
-hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
+hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java
 ```
 
 ### 4.3 One field declaration can be several variables

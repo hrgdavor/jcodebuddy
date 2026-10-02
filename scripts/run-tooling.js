@@ -19,7 +19,7 @@ Options:
   -h, --help           Show this help message
 
 Example:
-  bun ${process.argv[1]} hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java hipster-entity-tooling/target/person-summary-tooling-output
+  bun ${process.argv[1]} hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java hipster-entity/hipster-entity-tooling/target/person-summary-tooling-output
 
 If the jar is missing, the script will build the tooling module automatically.
 `);

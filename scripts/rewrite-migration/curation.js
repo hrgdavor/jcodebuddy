@@ -55,7 +55,7 @@ export const RISKS = ['high', 'medium', 'low'];
  * @type {Record<string, QueueEntry>}
  */
 export const QUEUE = {
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceSplicer.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['(none — generates text)'],
@@ -69,7 +69,7 @@ export const QUEUE = {
       'class: brace matching is textual, which is acceptable because the caller only ever hands it ' +
       'source that has already parsed cleanly.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGeneratorTest.java': {
     priority: 'medium',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J'],
@@ -108,7 +108,7 @@ export const QUEUE = {
       'front end. Same recipe as the tooling module’s JavaSyntaxCheck; the matching rule and the trap ' +
       'that cost three attempts are in MIGRATION-CAVEATS.md § 4.1.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TreeQueries.java': {
     priority: 'high',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.JavaIsoVisitor', 'org.openrewrite.java.tree.J', 'org.openrewrite.java.tree.TypeTree'],
@@ -123,7 +123,7 @@ export const QUEUE = {
       'interface\'s `extends` clause is held in `getImplements()`, not `getExtends()`; and a supertype ' +
       'is an Identifier when bare but a ParameterizedType when generic.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheck.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['javax.tools.JavaCompiler', 'com.sun.source.util.JavacTask'],
@@ -141,7 +141,7 @@ export const QUEUE = {
   },
 
   // ------------------------------------------------------------ foundation ---
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -162,14 +162,14 @@ export const QUEUE = {
       '`rewrite-java-25` artifact, and the property to re-assert in a test is ' +
       '"a record, a switch expression and a sealed type all parse".',
     steps: [
-      'Add `rewrite-core` / `rewrite-java` / `rewrite-java-25` to hipster-entity-tooling/pom.xml, parent-managed, mirroring merge-java.',
+      'Add `rewrite-core` / `rewrite-java` / `rewrite-java-25` to hipster-entity/hipster-entity-tooling/pom.xml, parent-managed, mirroring merge-java.',
       'Replace the static `JavaParser` field with a `JavaParser.fromJavaVersion()...build()` instance; keep one shared instance per parse set and reset between sets declaring the same FQNs.',
       'Keep `Read` and its `readable()` / `ofUnparseable()` factories unchanged in shape — callers depend on the distinction, not on the parser.',
       'Map `parse(source)` to `parseInputs(...)` over a `Parser.Input`; take the first `SourceFile`, require `instanceof J.CompilationUnit`, and collect `ParseExceptionResult` markers as the unparseable reason.',
       'Re-point the JAVA_25 regression test at "these three language features parse" and confirm it fails when the parser artifact is wrong.',
     ],
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/CooperativeCodegen.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -198,7 +198,7 @@ export const QUEUE = {
     ],
     blocks: 'every generator that emits a cooperative block',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/GenLevelResolver.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration'],
@@ -209,7 +209,7 @@ export const QUEUE = {
       'decides which builder levels are emitted, so a wrong kind test changes ' +
       'generated output rather than failing loudly.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/TypeLiterals.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration', 'org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.java.tree.J.Identifier'],
@@ -219,7 +219,7 @@ export const QUEUE = {
       'file), so port by FQN search, not by import list. The `{@link}` target is ' +
       'refactor-sensitive and must stay generated from the type’s own name.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J', 'org.openrewrite.java.tree.J.Modifier'],
@@ -237,7 +237,7 @@ export const QUEUE = {
       'answers a nested type’s query with its parent’s line (see ' +
       'MIGRATION-CAVEATS.md § 4.1 for the case that cost three attempts).',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassIndex.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J', 'org.openrewrite.SourceFile'],
@@ -252,7 +252,7 @@ export const QUEUE = {
       'JavaParser unit, and it delegates to the same `List<TypeFacts>` overload so ' +
       'there is one index-building implementation rather than two that can drift.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/MetadataLocations.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -272,7 +272,7 @@ export const QUEUE = {
   },
 
   // ------------------------------------------------------------- generators ---
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityMetadataGenerator.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -296,7 +296,7 @@ export const QUEUE = {
       'Only then port the remaining artifacts, one diff at a time.',
     ],
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -314,7 +314,7 @@ export const QUEUE = {
       'emitted, since OpenRewrite normalises literals and a changed escape is a ' +
       'changed generated file rather than a changed tree.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ValidationGenerator.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.java.tree.J.Annotation', 'org.openrewrite.java.tree.J.Assignment'],
@@ -327,7 +327,7 @@ export const QUEUE = {
       'list. That discrimination is the trap: a single `J.Empty` means `@NotNull()` (no text), and ' +
       'treating it as a value yields garbage in the emitted constraint.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewInterfaceGenerator.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration', 'org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.java.tree.J.NewClass'],
@@ -338,7 +338,7 @@ export const QUEUE = {
       '`ThisExpr`/`ObjectCreationExpr`/`ReturnStmt`/`BlockStmt` construction of the ' +
       'entry-point method becomes immutable node construction.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewBuilderGenerator.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewBuilderGenerator.java': {
     priority: 'high',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J.MethodDeclaration', 'org.openrewrite.SourceFile'],
@@ -348,7 +348,7 @@ export const QUEUE = {
       'driven by the import list would miss this file entirely. That is the case ' +
       'the scanner’s `qualified-only` classification exists to catch.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReader.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.Annotation', 'org.openrewrite.java.tree.J.Assignment', 'org.openrewrite.java.tree.Expression'],
@@ -361,7 +361,7 @@ export const QUEUE = {
   },
 
   // ----------------------------------------------------------- validators ----
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRulesValidator.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRulesValidator.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.SourceFile', 'org.openrewrite.ParseExceptionResult', 'org.openrewrite.java.tree.J'],
@@ -370,7 +370,7 @@ export const QUEUE = {
       'is the seam where `ParseResult` becomes the `ParseExceptionResult` marker ' +
       'check. Port it with `SourceReader` so the rules receive one unit type.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/MarkerEntityRule.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration', 'org.openrewrite.java.tree.J.MethodDeclaration'],
@@ -380,7 +380,7 @@ export const QUEUE = {
       '`getNameAsString()`. Together with `EntityRulesValidator` it is the template ' +
       'for the remaining rules — port these two first, then the rest are copies.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewInterfaceRule.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration', 'org.openrewrite.java.tree.TypeTree'],
@@ -389,7 +389,7 @@ export const QUEUE = {
       '`J.Identifier` (bare) or `J.ParameterizedType` (generic), so a supertype ' +
       'comparison must handle both spellings of the same type.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewAnnotationRule.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/ViewAnnotationRule.java': {
     priority: 'high',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.tree.J.Annotation', 'org.openrewrite.java.tree.J.ClassDeclaration'],
@@ -398,25 +398,25 @@ export const QUEUE = {
       'plus annotation arguments. Apply the single-argument `value` normalisation ' +
       'noted in ValidationGenerator.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/AuditableRule.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/AuditableRule.java': {
     priority: 'high',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration'],
     note: 'Smallest rule (24 lines): one interface + one method lookup. Port it first as the pattern check.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityRule.java': {
     priority: 'high',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J.CompilationUnit'],
     note: 'The rule interface itself — one `CompilationUnit` parameter. Changing this signature changes every rule, so port it at the same time as the first rule, not before.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityFieldEnumOrderRule.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EntityFieldEnumOrderRule.java': {
     priority: 'high',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J.CompilationUnit'],
     note: 'Order check over fields; follows the MarkerEntityRule template.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumConstantOrderChecker.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -430,7 +430,7 @@ export const QUEUE = {
       'an off-by-one in the constant list silently renumbers persisted data — port ' +
       'this with the compaction round-trip test as the gate, not a compile check.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java': {
     priority: 'high',
     risk: 'high',
     riskReason:
@@ -444,7 +444,7 @@ export const QUEUE = {
       '`J.Case`, which covers both `case X:` and the arrow form — confirm label ' +
       'extraction on both, since the CLI matches arms by literal.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/SourceQuery.java': {
     priority: 'high',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration', 'org.openrewrite.SourceFile'],
@@ -575,13 +575,13 @@ export const QUEUE = {
   },
 
   // ------------------------------------------------------------------ tests ---
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ViewAnnotationReaderTest.java': {
     priority: 'medium',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.java.tree.J.Annotation'],
     note: 'Test-side port; follows the main-source annotation mapping verbatim.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/index/TypeFactsTest.java': {
     priority: 'medium',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J'],
@@ -593,7 +593,7 @@ export const QUEUE = {
       'finishing the position matching (MIGRATION-CAVEATS.md § 4.1) is a deliberate change to this ' +
       'expectation rather than a silent behaviour shift.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/AddonAndInheritanceTest.java': {
     priority: 'medium',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J.EnumValue'],
@@ -601,7 +601,7 @@ export const QUEUE = {
       'Fully-qualified `CompilationUnit` / `EnumConstantDeclaration` uses with no ' +
       'imports, including a `cu.findAll(...)` call that becomes a visitor walk.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java': {
     priority: 'medium',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.java.tree.J.EnumValue'],
@@ -610,7 +610,7 @@ export const QUEUE = {
       'constant-order port error. Keep it passing at every step of the ' +
       'EnumCompactionCli port rather than porting it afterwards.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java': {
     priority: 'medium',
     risk: 'medium',
     openrewrite: ['org.openrewrite.java.JavaParser', 'org.openrewrite.java.tree.J.EnumValue'],
@@ -618,7 +618,7 @@ export const QUEUE = {
   },
 
   // ------------------------------------------------------------------- low ----
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/InterfaceInfo.java': {
     priority: 'low',
     risk: 'low',
     openrewrite: ['org.openrewrite.java.tree.J.ClassDeclaration'],
@@ -672,7 +672,7 @@ export const ALLOWLIST = {
       'The package itself is blocked on prerequisites P0-1..P0-3 (it does not compile), ' +
       'which is Phase-0 repair work and not a Phase 6 migration.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java': {
     status: 'exempt',
     reason:
       'References JavaParser by bare name only — in prose, and in ' +
@@ -689,7 +689,7 @@ export const ALLOWLIST = {
       'single-source. Until then, deleting the test would remove the guard that ' +
       'keeps the version pinned while the migration is in flight.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java': {
     status: 'exempt',
     reason:
       'Re-expressed when the dependency went (2026-09-22, end of Phase 6): the ' +
@@ -704,7 +704,7 @@ export const ALLOWLIST = {
       '*guard* it used to be was re-expressed rather than deleted, so nothing here is ' +
       'waiting on a port.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DependencyBoundaryTest.java': {
     status: 'exempt',
     reason:
       'Mentions JavaParser only in prose, now including the retirement note for ' +
@@ -713,7 +713,7 @@ export const ALLOWLIST = {
       'about Jakarta Validation and Jackson, which are untouched by this migration.',
     deferredTo: 'Never — a comment naming the dependency it policed is correct.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JdkImportSupport.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/JdkImportSupport.java': {
     status: 'exempt',
     reason:
       'One prose mention, explaining why a general solution is out of scope: ' +
@@ -723,7 +723,7 @@ export const ALLOWLIST = {
       'Remove the sentence when JavaParser leaves the tree: the symbol solver it ' +
       'declines to use will no longer exist to decline.',
   },
-  'hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/FieldConstraint.java': {
+  'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/meta/FieldConstraint.java': {
     status: 'exempt',
     reason:
       'One prose mention in a doc comment ("read with JavaParser exactly as …"), ' +
@@ -732,7 +732,7 @@ export const ALLOWLIST = {
     deferredTo:
       'Reword to name the LST instead, in whichever edit next touches that comment.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DivergenceKindTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/DivergenceKindTest.java': {
     status: 'exempt',
     reason:
       'One prose mention explaining a platform-dependent expectation: "The emitter ' +
@@ -742,7 +742,7 @@ export const ALLOWLIST = {
       'Reword when the emitter prints through the LST: the property under test (the ' +
       'platform line separator) stays, only its cause changes.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ParseGuardTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ParseGuardTest.java': {
     status: 'exempt',
     reason:
       'One prose mention in a comment recording why the guard exists: "JavaParser ' +
@@ -756,7 +756,7 @@ export const ALLOWLIST = {
   // Phase 7 wrote these two files from scratch. Neither ever parsed with the retired
   // library; each names it once, in the javadoc that says which old behaviour the test
   // exists to prevent. They are exempt for the same reason `ParseGuardTest` is.
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java': {
     status: 'exempt',
     reason:
       'Written after the port, by the testing phase, and built entirely on OpenRewrite. ' +
@@ -769,7 +769,7 @@ export const ALLOWLIST = {
       'When the position-lookup contract stops being shared with anything that remembers ' +
       'the old parser, the wording can drop the names and the assertions stay.',
   },
-  'hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ReadPathJmhBenchmark.java': {
+  'hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ReadPathJmhBenchmark.java': {
     status: 'exempt',
     reason:
       'The Phase 7 read-path benchmark. One prose mention, in the comment explaining why ' +
@@ -937,7 +937,7 @@ export const PREREQUISITES = [
       'and `webview/webview-jetbrains/src/main/java/hr/hrg/jetbrains/webview/JwaTextDocumentService.java` — ' +
       'neither exists; the real file is ' +
       'jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java. ' +
-      'Also listed `hipster-entity-tooling/.../validation/JavaParserTool.java` under ' +
+      'Also listed `hipster-entity/hipster-entity-tooling/.../validation/JavaParserTool.java` under ' +
       'test with an extra `validation/EnumCompactionCliTest.java`; the real ' +
       'JavaParserTool is main-source and there is exactly one EnumCompactionCliTest. ' +
       'Omitted entirely: the six files whose JavaParser use is fully qualified and ' +

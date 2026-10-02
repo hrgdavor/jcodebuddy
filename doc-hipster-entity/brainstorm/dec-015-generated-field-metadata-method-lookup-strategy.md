@@ -144,7 +144,7 @@ Also track:
 
 JMH benchmark implementation:
 
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/MethodLookupJmhBenchmark.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/MethodLookupJmhBenchmark.java`
 
 Covered variants:
 

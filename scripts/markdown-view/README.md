@@ -16,7 +16,7 @@ Output: one self-contained HTML file per Markdown file plus `index.html`, in
 `<module>/.jcodebuddy/agent-state/markdown-view/` by default (derived, git-ignored, safe to delete).
 
 ```
-hipster-entity-example/.jcodebuddy/agent-state/markdown-view/
+hipster-entity/hipster-entity-example/.jcodebuddy/agent-state/markdown-view/
   index.html                 <- start here: one card per document
   README.html
   codebuddy.html
@@ -92,7 +92,7 @@ without a path at all.
 tool then links only explicit paths, and says how many types it found, which is `0`:
 
 ```
-Rendered 13 document(s), 165 link(s) (class index: 42 type(s)) -> hipster-entity-example/.jcodebuddy/agent-state/markdown-view
+Rendered 13 document(s), 165 link(s) (class index: 42 type(s)) -> hipster-entity/hipster-entity-example/.jcodebuddy/agent-state/markdown-view
 ```
 
 ### `index.js` — the CLI

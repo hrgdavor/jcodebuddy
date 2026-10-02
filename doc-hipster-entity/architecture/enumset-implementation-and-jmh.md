@@ -95,14 +95,14 @@ Benchmark focus:
 
 Relevant benchmark classes:
 
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetJmhBenchmark.java`
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetTrackingJmhBenchmark.java`
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapJmhBenchmark.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetJmhBenchmark.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetTrackingJmhBenchmark.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapJmhBenchmark.java`
 
 Fixtures and parity tests for the overlap benchmarks:
 
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapFixtures.java`
-- `hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapParityTest.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapFixtures.java`
+- `hipster-entity/hipster-entity-core/src/test/java/hr/hrg/hipster/entity/core/EEnumSetOverlapParityTest.java`
 
 Runner:
 

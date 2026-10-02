@@ -50,9 +50,9 @@ The goal: **make benefits easy to spot on first read, and let users explore deep
 | `doc/brainstorm/`                  | 13 exploratory proposals, annotation typing options, metadata generator design                                                         | Lib-dev       |
 | `doc/roadmap/`                     | Milestones, decision traceability, phase tracker                                                                                       | Maintainers   |
 | `doc/user/`                        | Placeholder README + field-lookup-guide (actually implementation-focused)                                                              | Placeholder   |
-| `hipster-entity-api/README.md`     | API contracts, proxy behavior, interface patterns                                                                                      | Mixed         |
-| `hipster-entity-jackson/README.md` | 400 lines of JMH benchmarks + root-cause perf analysis                                                                                 | Lib-dev       |
-| `hipster-entity-example/doc/`      | Payment method polymorphic example                                                                                                     | Mixed         |
+| `hipster-entity/hipster-entity-api/README.md`     | API contracts, proxy behavior, interface patterns                                                                                      | Mixed         |
+| `hipster-entity/hipster-entity-jackson/README.md` | 400 lines of JMH benchmarks + root-cause perf analysis                                                                                 | Lib-dev       |
+| `hipster-entity/hipster-entity-example/doc/`      | Payment method polymorphic example                                                                                                     | Mixed         |
 
 ### Key gaps
 
@@ -155,7 +155,7 @@ Proposed flow:  One-liner pitch → Key benefits list → Quick example
 - Materialization levels as an adoption ladder (overview only, link to full guide)
 - Explicit non-goals for this page: no ADR references, no proxy internals, no naming convention rules
 
-**Source material:** `doc/architecture/README.md` (rewritten for users), `hipster-entity-api/README.md` (pattern sections), DEC-001 and DEC-017 (conclusions only).
+**Source material:** `doc/architecture/README.md` (rewritten for users), `hipster-entity/hipster-entity-api/README.md` (pattern sections), DEC-001 and DEC-017 (conclusions only).
 
 ### 4. `doc/user/materialization-guide.md` — Adoption Levels
 
@@ -186,8 +186,8 @@ Each pattern doc follows a consistent template:
 | Pattern file           | Source material                                                       |
 | ---------------------- | --------------------------------------------------------------------- |
 | `crud-views.md`        | `architecture/README.md` CRUD layering section                        |
-| `polymorphic-views.md` | `hipster-entity-example/doc/README.md` payment method example         |
-| `jackson-setup.md`     | `hipster-entity-jackson/README.md` integration parts (not benchmarks) |
+| `polymorphic-views.md` | `hipster-entity/hipster-entity-example/doc/README.md` payment method example         |
+| `jackson-setup.md`     | `hipster-entity/hipster-entity-jackson/README.md` integration parts (not benchmarks) |
 | `builder-usage.md`     | DEC-008, DEC-012 conclusions (user-facing subset)                     |
 
 ### 6. `doc/user/faq.md` — Quick Answers

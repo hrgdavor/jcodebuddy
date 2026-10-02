@@ -171,13 +171,13 @@ Production usage:
 ```bash
 cd hipster-entity-tooling
 java -cp target/classes;target/dependency/* hr.hrg.hipster.entity.tooling.EntityMetadataGenerator \
-  ../hipster-entity-example/src/main/java d:/out/metadata
+  ../hipster-entity/hipster-entity-example/src/main/java d:/out/metadata
 ```
 
 Or call from Java:
 
 ```java
-EntityMetadataGenerator.generate(Paths.get("../hipster-entity-example/src/main/java"), Paths.get("build/metadata"));
+EntityMetadataGenerator.generate(Paths.get("../hipster-entity/hipster-entity-example/src/main/java"), Paths.get("build/metadata"));
 ```
 
 ## Testing

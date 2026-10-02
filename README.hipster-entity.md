@@ -31,7 +31,7 @@ A small Bun script is available to build and execute the tooling jar from the re
 Examples:
 
 - `bun ./scripts/run-tooling.js build --mvn "D:\\programs\\mvnd\\bin\\mvnd"`
-- `bun ./scripts/run-tooling.js run --mvn "D:\\programs\\mvnd\\bin\\mvnd" hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java hipster-entity-tooling/target/person-summary-tooling-output`
+- `bun ./scripts/run-tooling.js run --mvn "D:\\programs\\mvnd\\bin\\mvnd" hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java hipster-entity/hipster-entity-tooling/target/person-summary-tooling-output`
 
 Common options:
 

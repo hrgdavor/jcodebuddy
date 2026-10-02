@@ -298,12 +298,12 @@ function renderChecklist(model, generatedAt) {
       'the real file is `jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java` |',
   );
   push(
-    '| `hipster-entity-tooling/src/test/java/.../validation/JavaParserTool.java` | ' +
+    '| `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/JavaParserTool.java` | ' +
       'the real `JavaParserTool` is main-source, at `.../tooling/validation/JavaParserTool.java` |',
   );
   push(
     '| `validation/EnumCompactionCliTest.java` listed twice | ' +
-      'one file: `hipster-entity-tooling/src/test/java/.../validation/EnumCompactionCliTest.java` |',
+      'one file: `hipster-entity/hipster-entity-tooling/src/test/java/.../validation/EnumCompactionCliTest.java` |',
   );
   push(
     '| `project-automation` — "all files using JavaParser" | ' +

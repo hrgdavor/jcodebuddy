@@ -29,7 +29,7 @@ A host that wants a project's automations gets them **on its classpath when it i
 ### Route A — copy an example (works today)
 
 This repository's own automation is the working example: `project-automation/` (the automation code) and
-`hipster-entity-example/` (a converted module that applies it, with its `.jcodebuddy/` tree). Copy the shape, not
+`hipster-entity/hipster-entity-example/` (a converted module that applies it, with its `.jcodebuddy/` tree). Copy the shape, not
 the entity-specific content:
 
 1. **Copy the module skeleton**: the automation module's `pom.xml`, its `src/main/java` package layout, and — if
@@ -38,7 +38,7 @@ the entity-specific content:
    a `dependencyManagement` entry in the parent: a version-less internal dependency resolves under Maven 4 and
    fails under Maven 3, which is exactly how this repository's own gate broke for a while.
 2. **Copy the `.jcodebuddy/` skeleton** into the module that will apply the automation, and read
-   [`hipster-entity-example/.jcodebuddy/README.md`](../../hipster-entity-example/.jcodebuddy/README.md) for what
+   [`hipster-entity/hipster-entity-example/.jcodebuddy/README.md`](../../hipster-entity/hipster-entity-example/.jcodebuddy/README.md) for what
    each subdirectory is for (DEC-026). Do not copy a `.jcodebuddy/` into a module that does not apply automation:
    the directory *means* "this module applies `project-automation`".
 3. **Rename the markers and the generator** to your domain, then delete the generated blocks you do not want.

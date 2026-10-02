@@ -290,7 +290,7 @@ The plan documents live in `plans/rewrite-migration/`; the sketches they were wr
 ### Phase 5/6 Files (the code the migration actually runs)
 
 - `project-automation/src/main/java/hr/hrg/jcodebuddy/automation/` - the automation layer
-- `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/` - the ported generators, validators
+- `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/` - the ported generators, validators
   and the OpenRewrite hub (`TreeQueries`, `JavaSyntaxCheck`, `SourceReader`, `EntityMetadataGenerator`)
 - `scripts/rewrite-migration/` - the phase gate, checklist generator and migration report
 

@@ -54,7 +54,7 @@ exactly one place (`WebViewService.register`), with `PendingLoadTest` pinning th
 
 `webview/webview-jetbrains` is the module the rest of JCodeBuddy depends on for **one specific job**: it is how a
 developer reads a generated HTML report from inside the IDE. `scripts/entity-html` renders
-`.jcodebuddy/metadata/entity/index.html`, and `hipster-entity-example/codebuddy.md` §3.10 tells the reader
+`.jcodebuddy/metadata/entity/index.html`, and `hipster-entity/hipster-entity-example/codebuddy.md` §3.10 tells the reader
 to right-click that file and choose **Open in WebView Explorer**. Link clicks in that page then have to
 reach the exact source line, through `window.openFile(path, line, column)` (DEC-027 §7).
 
@@ -97,7 +97,7 @@ tool-window registration).
 | `window.openFile(path, line, column)` injected into every loaded page | `scripts/entity-html/render.js` line 473 | DEC-027 §7 |
 | `GET http://127.0.0.1:<port>/open?filePath=…&line=…&column=1` | `render.js` line 479, hidden-iframe fallback | `scripts/entity-html/README.md` `--bridge-port` (default `18881`) |
 | VM options `-Dwebview.explorer.port`, `-Dwebview.explorer.allowedOrigins` | `README.md` §"VM options" | `HttpBridgeService.loadAllowedOrigins/startServerIfNeeded` |
-| Tool window id `WebView Explorer`, action text "Open in WebView Explorer", `Ctrl+Alt+Shift+W` | `codebuddy.md` §3.10, `hipster-entity-example/README.md` | `plugin.xml` |
+| Tool window id `WebView Explorer`, action text "Open in WebView Explorer", `Ctrl+Alt+Shift+W` | `codebuddy.md` §3.10, `hipster-entity/hipster-entity-example/README.md` | `plugin.xml` |
 | "Open in WebView Explorer" appears for `.html` files in Project view, editor, editor tab popups | same | `OpenFileInWebViewAction` |
 
 ### 2.3 Defects and drift found while reading the code
@@ -400,7 +400,7 @@ Each step should build green on its own.
 
 1. `.\gradlew.bat clean buildPlugin verifyPlugin test` succeeds on JDK 25, and `verifyPlugin` reports no
    compatibility problems against the recommended IDEs.
-2. In `runIde`, opening `hipster-entity-example/.jcodebuddy/metadata/entity/index.html` through
+2. In `runIde`, opening `hipster-entity/hipster-entity-example/.jcodebuddy/metadata/entity/index.html` through
    **Open in WebView Explorer** renders the page, and clicking a field link lands the caret on the
    exact line the page's `data-line` names — with no HTTP bridge configured (the injected
    `window.openFile` path). The page's status pill reads *IDE bridge: ready*.
@@ -432,7 +432,7 @@ Each step should build green on its own.
 * [Plugin Configuration File](https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html) — `<depends optional config-file>`, additional configuration files, `since-build`/`until-build` guidance, `patchPluginXml`-provided elements
 * [Embedded Browser (JCEF)](https://plugins.jetbrains.com/docs/intellij/embedded-browser-jcef.html) — `JBCefApp.isSupported()`, `JBCefBrowser.createBuilder()`, `JBCefJSQuery` + `inject`/`Response`, `JBCefScrollbarsHelper`, `JBCefDisposable`, DevTools
 * [Structuring IntelliJ Plugins with Optional Content Modules](https://blog.jetbrains.com/platform/2026/06/structuring-intellij-plugins-with-optional-content-modules/) — the pattern behind §4.2
-* Local contracts: `doc-hipster-entity/architecture/decisions/DEC-027.md` §7, `scripts/entity-html/README.md`, `scripts/entity-html/render.js`, `hipster-entity-example/codebuddy.md` §3.10
+* Local contracts: `doc-hipster-entity/architecture/decisions/DEC-027.md` §7, `scripts/entity-html/README.md`, `scripts/entity-html/render.js`, `hipster-entity/hipster-entity-example/codebuddy.md` §3.10
 
 ---
 

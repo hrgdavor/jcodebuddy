@@ -291,7 +291,7 @@ scripts/rewrite-migration/verify-migration.js` reports **`RESULT: PASS.`** with 
 
 | Deliverable | Path | Measured |
 | --- | --- | --- |
-| Position queries (`TreeQueries`) | `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java` | 40 tests |
+| Position queries (`TreeQueries`) | `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java` | 40 tests |
 | Validity and positions (`JavaSyntaxCheck`) | `.../JavaSyntaxCheckTest.java` | 22 tests |
 | Read-path entry points (`SourceReader`) | `.../SourceReaderTest.java`, nested `OtherEntryPoints` | +4 tests (16 in the class) |
 | Large and annotation-heavy sources | `.../LargeSourceEdgeCaseTest.java` | 4 tests |
@@ -443,13 +443,13 @@ not supplied rather than inventing a verdict.
 ## Quick Reference
 
 Test files delivered:
-- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java`
-- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheckTest.java`
-- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/LargeSourceEdgeCaseTest.java`
-- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/MigrationCompletenessTest.java`
-- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java` (extended)
-- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ReadPathJmhBenchmark.java`
-- `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/PositionQueryJmhBenchmark.java`
+- `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/TreeQueriesTest.java`
+- `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/JavaSyntaxCheckTest.java`
+- `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/LargeSourceEdgeCaseTest.java`
+- `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/MigrationCompletenessTest.java`
+- `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/SourceReaderTest.java` (extended)
+- `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/ReadPathJmhBenchmark.java`
+- `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/PositionQueryJmhBenchmark.java`
 - `project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java`
 - `java-watch-agent/src/test/java/hr/hrg/watch2/agent/tools/ToolSeamTest.java`
 

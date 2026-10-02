@@ -49,9 +49,9 @@ as open with no note that the split is deliberately deferred (plan.dsflash § 4.
 - [x] **Generator class-file header + refactor-sensitivity rules landed** — DEC-021
   (`{@link}` + JSON5 config header, `entityFieldEnum`/`allowReorder`/`enabled` knobs) and DEC-022
   (naming contract, uniform divergence format) are implemented and documented.
-- [x] **Module READMEs and the new-project guide landed** — `hipster-entity-core/README.md`,
-  `hipster-entity-tooling/README.md` (naming-contract table + R1 order contract),
-  `hipster-entity-test/README.md`, and
+- [x] **Module READMEs and the new-project guide landed** — `hipster-entity/hipster-entity-core/README.md`,
+  `hipster-entity/hipster-entity-tooling/README.md` (naming-contract table + R1 order contract),
+  `hipster-entity/hipster-entity-test/README.md`, and
   [user/getting-started-new-project.md](../user/getting-started-new-project.md).
 - [x] **Deep (nested) change tracking landed on the array path** — `changesDeep()` pulls into nested
   tracked views (`ChangePath`), a `List` of tracked views reports add/remove/reorder as `ListDelta`

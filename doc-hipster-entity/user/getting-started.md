@@ -41,7 +41,7 @@ Guarantee in the root [`README.md`](../../README.md) and
 [DEC-W003](../../doc/architecture/decisions-watch/DEC-W003.md): it
 must not become a transitive dependency of a runtime module. The
 tooling module's own README is
-[`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md).
+[`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md).
 
 ## 2. Define a simple entity interface
 
@@ -157,7 +157,7 @@ who already has a jar.)
   underscore-suffix convention (`PersonSummary` → `PersonSummary_`).
 
 The same entry point also hosts the R1 order checker as a subcommand
-(see [`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md)
+(see [`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md)
 and [DEC-023](../architecture/decisions/DEC-023.md)):
 
 ```text
@@ -205,7 +205,7 @@ PersonSummary summary = meta.create(values);
 - [Getting started in a new project](getting-started-new-project.md) —
   the full add-dependency → write-interface → generate → build →
   serialize walkthrough.
-- [`hipster-entity-tooling/README.md`](../../hipster-entity-tooling/README.md) —
+- [`hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md) —
   the generator's outputs, its CLI, the naming contract, and the R1
   order contract.
 - [Core Concepts](core-concepts.md)

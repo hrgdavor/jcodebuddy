@@ -112,7 +112,7 @@ documents the same wall.
 
 There is no `ParserConfiguration` and no language-level call. The level **is** the
 parser artifact on the classpath (`rewrite-java-25`, pinned in
-`hipster-entity-tooling/pom.xml`), which is the same release the root POM's
+`hipster-entity/hipster-entity-tooling/pom.xml`), which is the same release the root POM's
 `maven.compiler.release` sets. Two regressions ride on that:
 
 - a parser below the project's level cannot read the generator's own output
@@ -335,7 +335,7 @@ guard is cheap once a file has been inspected. The full method-level numbers
 
 ## See also
 
-- [`hipster-entity-tooling/README.md`](../hipster-entity-tooling/README.md) —
+- [`hipster-entity/hipster-entity-tooling/README.md`](../hipster-entity/hipster-entity-tooling/README.md) —
   the module that owns all of the above, plus how to run its gate and `jmh`
   profile.
 - [`doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md`](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) —

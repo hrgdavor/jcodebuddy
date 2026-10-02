@@ -15,7 +15,7 @@
 
 **Delivered — in `hipster-entity-tooling`, not in `project-automation`.** Every validation rule the plan
 names exists today as a ported class under
-`hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/`, and the module's gate is
+`hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/`, and the module's gate is
 green (361 tests, including the ledger and rule tests). The scaffolding this document used to describe was
 removed, not migrated.
 
@@ -23,15 +23,15 @@ removed, not migrated.
 
 | Name in the plan | Reality today |
 | --- | --- |
-| `EntityRulesValidator` | `hipster-entity-tooling/.../validation/EntityRulesValidator.java` — ported |
-| `EntityRule` | `hipster-entity-tooling/.../validation/EntityRule.java` — the rule interface, ported |
-| `AuditableRule` | `hipster-entity-tooling/.../validation/AuditableRule.java` — ported |
-| `MarkerEntityRule` | `hipster-entity-tooling/.../validation/MarkerEntityRule.java` — ported |
-| `ViewInterfaceRule` | `hipster-entity-tooling/.../validation/ViewInterfaceRule.java` — ported |
-| `ViewAnnotationRule` | `hipster-entity-tooling/.../validation/ViewAnnotationRule.java` — ported |
-| `EnumConstantOrderChecker` | `hipster-entity-tooling/.../validation/EnumConstantOrderChecker.java` — ported |
-| `EnumCompactionCli` | `hipster-entity-tooling/.../validation/EnumCompactionCli.java` — ported (compaction) |
-| `JavaParserTool` | Renamed to `hipster-entity-tooling/.../validation/SourceQuery.java` during the port |
+| `EntityRulesValidator` | `hipster-entity/hipster-entity-tooling/.../validation/EntityRulesValidator.java` — ported |
+| `EntityRule` | `hipster-entity/hipster-entity-tooling/.../validation/EntityRule.java` — the rule interface, ported |
+| `AuditableRule` | `hipster-entity/hipster-entity-tooling/.../validation/AuditableRule.java` — ported |
+| `MarkerEntityRule` | `hipster-entity/hipster-entity-tooling/.../validation/MarkerEntityRule.java` — ported |
+| `ViewInterfaceRule` | `hipster-entity/hipster-entity-tooling/.../validation/ViewInterfaceRule.java` — ported |
+| `ViewAnnotationRule` | `hipster-entity/hipster-entity-tooling/.../validation/ViewAnnotationRule.java` — ported |
+| `EnumConstantOrderChecker` | `hipster-entity/hipster-entity-tooling/.../validation/EnumConstantOrderChecker.java` — ported |
+| `EnumCompactionCli` | `hipster-entity/hipster-entity-tooling/.../validation/EnumCompactionCli.java` — ported (compaction) |
+| `JavaParserTool` | Renamed to `hipster-entity/hipster-entity-tooling/.../validation/SourceQuery.java` during the port |
 | `ContextualAnalyzer` | `java-watch-agent/.../agent/core/ContextualAnalyzer.java` — ported (it is an agent tool, not a rule) |
 | `AccessorGenerator`, `BuilderGenerator`, `ConstructorGenerator` | `java-watch-agent/.../agent/tools/` — ported; they now delegate to `jwa-builder`'s `ClassMemberProcessor` |
 | `ValidationResult`, `AnalysisResult` | Exist only as sketches in `doc/brainstorm/rewrite-migration/05-automation/`; nothing compiles them, and the ported rules return their own types (`EntityRulesValidator.ValidationIssue`, `DivergenceReporter` entries) |

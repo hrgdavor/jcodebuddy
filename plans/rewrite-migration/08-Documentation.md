@@ -190,13 +190,13 @@ the build fails when a document contradicts the tree.
 | 1 | `doc_knowledge/code.graph.md` | 17 | 7 | The guide `AGENTS.md` points at |
 | 1 | `java-watch-agent/record builder.md` | 23 | 21 | A module guide, end to end, for an API that no longer exists |
 | 2 | root `README.md` | 2 | - | Repository entry point |
-| 2 | `hipster-entity-tooling/README.md` | 6 | - | The module that was ported; must document the new API |
+| 2 | `hipster-entity/hipster-entity-tooling/README.md` | 6 | - | The module that was ported; must document the new API |
 | 2 | `merge-java/VERSION_MAINTENANCE.md` | 7 | - | Live maintenance instructions |
 | 2 | `docs/RecordBuilderGenerator.md` | 1 | 2 | The surviving builder guide; D3 may point the retired one here |
 | 2 | `scripts/rewrite-migration/README.md` | 10 | - | Documents the gate; gains D5's check |
 | 3 | `doc-hipster-entity/.../DEC-020.md` | 2 | 1 | Note, do not rewrite |
 | 3 | `doc/architecture/decisions-watch/DEC-W007.md` | 10 | - | Note, do not rewrite |
-| 3 | `jwa-sidecar/modules.md`, `hipster-entity-example/codebuddy.md`, `README.java_watch_2.md`, `doc/architecture/module-map.md`, `merge-java/{README,IMPROVEMENTS_DELIVERED,IMPLEMENTATION_PLAN,IMPROVEMENT_PROPOSAL,CHANGELOG}.md`, `doc-hipster-entity` decisions and brainstorms, `DEC-W003/W005/W006/W008`, `doc/continuation-plan-legacy.md` | 1-4 each | - | Sweep, one pass |
+| 3 | `jwa-sidecar/modules.md`, `hipster-entity/hipster-entity-example/codebuddy.md`, `README.java_watch_2.md`, `doc/architecture/module-map.md`, `merge-java/{README,IMPROVEMENTS_DELIVERED,IMPLEMENTATION_PLAN,IMPROVEMENT_PROPOSAL,CHANGELOG}.md`, `doc-hipster-entity` decisions and brainstorms, `DEC-W003/W005/W006/W008`, `doc/continuation-plan-legacy.md` | 1-4 each | - | Sweep, one pass |
 | record | `doc/brainstorm/rewrite-migration/06-migration/*`, `07-testing/*`, `plans/rewrite-migration/*` | >300 (302 in `06-migration/` alone) | - | Allowlist with reasons; never rewritten |
 
 **Handed over by Phase 7**: the read-path contract and its measured quirks (`SourceReader`'s two
@@ -231,7 +231,7 @@ Files to change first:
 - `AGENTS.md` § 2 (the AST rule and its pointer)
 - `doc_knowledge/code.graph.md` (rewrite or retire)
 - `README.md`, `README.java_watch_2.md` (entry points)
-- `hipster-entity-tooling/README.md`, `merge-java/README.md`, `jwa-sidecar/README.md` (module APIs)
+- `hipster-entity/hipster-entity-tooling/README.md`, `merge-java/README.md`, `jwa-sidecar/README.md` (module APIs)
 - `java-watch-agent/record builder.md`, `docs/RecordBuilderGenerator.md` (builder guides)
 
 Files to add:
@@ -280,7 +280,7 @@ and the two places the phase departed from this plan.
 - **Entry points and module APIs** — `README.md`, `README.java_watch_2.md`, `hipster-entity-tooling`
   (a new *Reading, querying and writing source* table, and *Reading source outside Maven* corrected from
   the `javaparser-core` pin to the `rewrite-java-25` artifact), `jwa-sidecar/README.md` +
-  `modules.md`, `hipster-entity-core/README.md`, `hipster-entity-example/codebuddy.md`,
+  `modules.md`, `hipster-entity/hipster-entity-core/README.md`, `hipster-entity/hipster-entity-example/codebuddy.md`,
   `scripts/rewrite-migration/README.md` (the migration marked complete, the gate documented, and
   `docs-honest` described), and `doc/architecture/module-map.md` + `DEC-W003` (dependency lists that
   still claimed `javaparser-core`).

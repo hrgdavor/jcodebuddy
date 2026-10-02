@@ -50,10 +50,10 @@ committed example regenerates byte-identically, so no generated artifact changed
 
 | file | lines | what it does with a tree | imports |
 | --- | --- | --- | --- |
-| `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` | 1007 | **builds** a whole `CompilationUnit` (`addEnum`, `addEntry`, `addMember`, `setJavadocComment`, `parseExpression`, `parseBodyDeclaration`) and prints it through `PrettyPrinterConfiguration`, then applies two textual fix-ups | 35 JavaParser |
-| `hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` | 403 | **mutates** a parsed enum — drops `forName` switch arms and removes constants — and prints it | 12 JavaParser |
-| `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` | — | drives the mutation and asserts on its output | via `EnumCompactionCli` |
-| `hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java` | — | ditto | via `EnumCompactionCli` |
+| `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/FieldBoilerplateGenerator.java` | 1007 | **builds** a whole `CompilationUnit` (`addEnum`, `addEntry`, `addMember`, `setJavadocComment`, `parseExpression`, `parseBodyDeclaration`) and prints it through `PrettyPrinterConfiguration`, then applies two textual fix-ups | 35 JavaParser |
+| `hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCli.java` | 403 | **mutates** a parsed enum — drops `forName` switch arms and removes constants — and prints it | 12 JavaParser |
+| `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/CompactionRoundTripTest.java` | — | drives the mutation and asserts on its output | via `EnumCompactionCli` |
+| `hipster-entity/hipster-entity-tooling/src/test/java/hr/hrg/hipster/entity/tooling/validation/EnumCompactionCliTest.java` | — | ditto | via `EnumCompactionCli` |
 
 Everything else in the module is ported and green. These four are the whole remainder, and they are
 the whole reason `hipster-entity-tooling` still declares `javaparser-core` — the one remaining
@@ -88,7 +88,7 @@ Generate the enum's text and write it, the way the rest of the module already em
 
 - **Why it fits:** the emitters already do this, so there is one mechanism in the module rather than
   two; the output can be made byte-identical to today's, because today's bytes are *in the
-  repository* (`hipster-entity-example/src/main/java/.../PersonSummary_.java` and its siblings) and
+  repository* (`hipster-entity/hipster-entity-example/src/main/java/.../PersonSummary_.java` and its siblings) and
   `ExampleRegenerationTest` checks every one of them.
 - **Cost:** the enum's six member shapes have to be written by hand (`javaType()`/`propertyType()`
   field, the constructor, the `javaType()`/`propertyMethods` group, `forName` with its `name-slot`

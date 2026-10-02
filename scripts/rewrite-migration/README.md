@@ -113,7 +113,7 @@ Two more render Phase 7's and Phase 8's evidence:
 
 ```sh
 bun run scripts/rewrite-migration/scan-remaining-javafiles.js
-bun run scripts/rewrite-migration/migrate-file.js hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java
+bun run scripts/rewrite-migration/migrate-file.js hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java
 bun run scripts/rewrite-migration/verify-migration.js
 bun run scripts/rewrite-migration/generate-migration-report.js --out /tmp/report.md
 ```

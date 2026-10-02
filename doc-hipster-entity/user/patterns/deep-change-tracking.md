@@ -277,7 +277,7 @@ when a whole field was reassigned. The two documents are complements, not versio
   name→ordinal map is built anywhere in this path.
 - [The Ordinal Array Contract](ordinal-array-contract.md) — the positional storage this walks over.
 - [Jackson Setup](jackson-setup.md) — the shallow change-set shape next to the deep patch.
-- [`ChangePath`](../../../hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ChangePath.java),
-  [`ListDelta`](../../../hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ListDelta.java),
-  [`ListChangeTracker`](../../../hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ListChangeTracker.java),
-  [`ViewChangeTracking`](../../../hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ViewChangeTracking.java).
+- [`ChangePath`](../../../hipster-entity/hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ChangePath.java),
+  [`ListDelta`](../../../hipster-entity/hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ListDelta.java),
+  [`ListChangeTracker`](../../../hipster-entity/hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ListChangeTracker.java),
+  [`ViewChangeTracking`](../../../hipster-entity/hipster-entity-core/src/main/java/hr/hrg/hipster/entity/core/ViewChangeTracking.java).

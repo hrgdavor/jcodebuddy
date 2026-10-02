@@ -8,7 +8,7 @@
  * this script shells through the same launcher, asks Maven for the module's *test* classpath, and then
  * starts JMH with the same `java` the launcher resolved (`JCODEBUDDY_RESOLVED_JDK`).
  *
- * `scripts/run-jmh.js` is the existing JMH runner for hipster-entity-core/-test; it is left alone. This
+ * `scripts/run-jmh.js` is the existing JMH runner for hipster-entity/hipster-entity-core/-test; it is left alone. This
  * one is narrow on purpose - it runs the migration's read-path benchmarks and nothing else, and it is the
  * input `generate-test-report.js` folds into TEST-REPORT.md.
  *
