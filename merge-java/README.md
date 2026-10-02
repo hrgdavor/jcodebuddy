@@ -151,6 +151,14 @@ developer or an agent is actually in mid-merge:
 java -cp … com.codebuddy.merge.MergeFileTool src/main/java/com/example/demo/OrderService.java --apply
 ```
 
+Give it the project's compile classpath with `--classpath <entries>` (path-separated,
+repeatable, jars or class directories) so a conflict about the project's **own types** can
+be decided rather than escalated; the entries are added to the JVM classpath, which is what
+carries the platform. The single-file variants — this tool, `reverify`, and `MergeUtil` in
+memory — all resolve with a classpath and none of them uses
+`TypeChangeConflictResolver`'s degraded, no-context mode, which exists for a library caller
+without a classpath to give.
+
 Every `<<<<<<< … >>>>>>>` block is parsed, classified and resolved through the
 ordinary pipeline (history replay and verification gate included), and written
 back only when the answer provably covers the whole block. Dry run by default;

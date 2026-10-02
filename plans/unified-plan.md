@@ -574,6 +574,22 @@ JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `Dive
 - `TypeContext`'s and `ConflictResolver`'s javadoc and `merge-java/README.md` were updated with it, and
   `merge-java/CHANGELOG.md` carries the correction as an **appended** entry — that file's own rule
   forbids editing the one written an hour earlier.
+- **Follow-up delivered with it: `MergeFileTool --classpath`.** The single-file tool could not be told
+  the project's classpath, so a conflict about the project's own types could only escalate. It can now
+  (`--classpath <entries>`, path-separated, repeatable, jars or class directories, each checked to
+  exist), added **to** the JVM classpath rather than replacing it — measured, not assumed: a parser given
+  only the extra entries resolves neither the project's types nor `java.util`, so a replacing flag would
+  make "resolve my types" mean "stop resolving everything else" (`TypeContext.withRuntimeClasspathAnd`,
+  pinned by `ProjectClasspathResolutionTest`). The single-file variants and their classpath rule are
+  tabulated in `docs/CONFLICT_FILE_TOOL.md`; none of them uses the degraded no-context mode, which stays
+  what it was described as — a capability for a library caller and for future use.
+- **A pre-existing veto came out of that work, and is now step 4.5.** With the classpath the type change
+  *is* decided — the report shows `[TYPE_CHANGE/AUTO] 'Widget' is a widening of 'Gadget'` — and the block
+  is still left, because detection emits the residual `STRUCTURAL_CHANGE` alongside the recognised
+  conflict (deliberately: a residual that replaced the recognised ones once lost a mechanical import
+  addition) and the tool's application rule requires exactly one resolution to claim the block. The
+  classpath changes what the resolution says, which is what the fixture and the review render carry, not
+  whether this tool writes the block. Pinned by a test so it cannot change unnoticed.
 - **Two defects the table was hiding, both now pinned by tests.** (1) The boxed chain read the primitive
   lattice across the wrapper classes, so `widens("Long", "Integer")` was **true** — but javac rejects
   `Long x = anInteger`, and the two are siblings under `Number`; auto-adopting the `Long` declaration
@@ -641,6 +657,44 @@ to the same verification gate and the same human decision. The boundary in
 without an explicit human accept.
 
 **Done when:** the proposal path exists and cannot bypass the gate.
+
+### 4.5 — The residual structural conflict should not veto a block it only partly overlaps
+**Who:** agent · **Size:** S–M
+
+Found while adding `--classpath` (step 4.1's follow-up). Detection emits the residual
+`STRUCTURAL_CHANGE` **alongside** the recognised conflicts — deliberately, because a residual that
+*replaced* them once lost a mechanical import addition — and `MergeFileTool` applies a block only when
+**exactly one** resolution claims it. So a block whose real change is one resolvable thing (a widened
+declaration, an added import) can be left `LEFT_MANUAL` by a residual that describes the same lines
+without adding anything. Measured, on a two-line block whose only change is a widening that *was*
+decided:
+
+```
+block 1 (lines 4-8): LEFT_MANUAL TYPE_CHANGE - [TYPE_CHANGE/AUTO] 'Widget' is a widening of 'Gadget', …
+  [STRUCTURAL_CHANGE/MANUAL] StructuralChange could not resolve STRUCTURAL_CHANGE automatically;
+  a reviewer must choose. Multiple conflicts claim this block and at least one is manual.
+```
+
+That is a property of the decision rule, not of the classpath: the resolution is right and the block
+still waits for a human.
+
+**Do:** decide what "claims" should mean. The candidates, in the order I would weigh them:
+(a) a resolution claims a block when its region **overlaps** the block's changed lines, and a residual
+that is fully *subsumed* by a recognised resolution's region is dropped from the block's decision — the
+residual is still emitted and still reported, it just stops vetoing;
+(b) keep the veto but let the report say which conflict caused it, so a human is not left guessing;
+(c) leave it and document it (what this plan did for now — see the limitation in
+[`CONFLICT_FILE_TOOL.md`](../merge-java/docs/CONFLICT_FILE_TOOL.md)).
+
+Note what must **not** change: a residual that describes lines *no* other conflict explains must keep
+vetoing, or the module loses the exact case the alongside-emission exists for.
+
+**Gate:** `MODULE` for `merge-java` green, with tests for both halves — a subsumed residual no longer
+vetoes (the type-change block applies, and the applied code compiles), and a residual covering lines no
+recognised conflict explains still does.
+
+**Done when:** `LEFT_MANUAL` for a decided conflict is explained by something other than a structural
+residual with nothing of its own to say.
 
 ---
 
@@ -1043,6 +1097,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 4.2 | merge-java Phase 13 step 1 — review render | agent | M | `[ ]` |
 | 4.3 | merge-java Phase 13 step 2 — action display + sticky decisions | agent | M | `[ ]` |
 | 4.4 | merge-java Phase 13 step 3 — LLM proposer behind the gate | agent | M | `[ ]` |
+| 4.5 | Residual structural conflict should not veto a partly-overlapping block | agent | S–M | `[ ]` |
 | 5.1 | webview Phase 6 — headless parity as a build gate | agent | M | `[ ]` |
 | 5.2 | Record the webview Q3/Q5 answers (Q2 by delivery) | agent + maintainer | S | `[ ]` |
 | 5.3 | ACP go/no-go spike | human | S | `[ ]` |

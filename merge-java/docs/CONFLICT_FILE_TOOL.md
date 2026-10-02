@@ -6,6 +6,29 @@ cover: **one file on disk that already carries git conflict markers**. `MergeUti
 developer (or an agent) mid-merge starts from a single `<<<<<<<`-scarred file and
 a path.
 
+## The single-file variants, and how they differ from the batch ones
+
+The module has two families, and they are deliberately separate rather than two
+spellings of one thing:
+
+| Entry point | Starts from | Writes | Classpath |
+| --- | --- | --- | --- |
+| `MergeFileTool.forFile(path)` | one marked-up file on disk | the file, when asked; a fixture workspace for what remains | `classpath(...)` / `--classpath`, else the JVM's own |
+| `MergeFileTool.reverify(caseDir, resolver)` | a prepared fixture case | nothing (it reports) | the case's own reconstruction |
+| `MergeUtil.create(typeContext)` | three strings in memory | nothing | **required**: the caller passes one |
+| `MergeWorkflow` / `MergeBatch` | a repository, a branch, a path set | per its options | built per run from the repository root |
+
+The **single-file** family is the one this page is about: it exists because a merge
+in progress is one file at a time, and it is kept separate from the batch family
+because its inputs (marker text, one path, no repository guarantee) and its outputs
+(a fixture workspace) have nothing in common with a branch-wide run.
+
+**Every one of them resolves with a classpath, and none of them uses the degraded
+no-context mode.** That mode belongs to `TypeChangeConflictResolver` for a library
+caller who has no classpath to give; a tool that can be told the classpath is never
+in that position, so `--classpath` is the knob rather than a fallback. See
+[The classpath, and what it changes](#the-classpath-and-what-it-changes).
+
 The tool does two things with such a file:
 
 1. **Fixes what the existing resolvers can fix.** Every conflict block is parsed
@@ -53,6 +76,38 @@ java -cp … com.codebuddy.merge.MergeFileTool <file> [--apply] [--apply-recorde
 | `--no-fixtures` | do not prepare the temporary fixture workspace |
 | `--fixtures <dir>` | where workspaces are created (default: `${java.io.tmpdir}/merge-java-fixtures`) |
 | `--branch <name>` | the branch whose decision history is consulted (default: the repository's current branch) |
+| `--classpath <entries>` | the project's compile classpath, so a conflict about its own types can be **decided instead of escalated**. Entries are separated by the platform's path separator and may repeat; each must exist. They are **added to** the JVM classpath, which is what carries the platform |
+
+## The classpath, and what it changes
+
+The single-file path always resolves types with a classpath — `--classpath`, or the JVM's
+own. It never uses `TypeChangeConflictResolver`'s degraded, no-context mode: that exists
+for a library caller who has no classpath to give, and it is not a state a tool that can
+be told the classpath should be in.
+
+`--classpath` is **additive**, and that is measured rather than assumed
+([`ProjectClasspathResolutionTest`](../src/test/java/com/codebuddy/merge/ProjectClasspathResolutionTest.java)):
+a parser given *only* the extra entries resolves neither the project's types nor
+`java.util`, because the JVM classpath is what carries the platform. A replacing flag
+would make "resolve my types" mean "stop resolving everything else".
+
+Entries may be **jars or directories of compiled classes**; both forms are pinned by that
+test, so `target/classes` works and so does the jar a build produces. An entry that does
+not exist is a usage error (exit 2) rather than a silently ignored one: a misspelled entry
+attributions nothing, and the resulting "could not be resolved" would look like a
+limitation of the tool instead of a typo.
+
+What it changes, concretely — the same conflict, with and without:
+
+```
+[TYPE_CHANGE/AUTO] 'com.example.Widget' is a widening of 'com.example.Gadget', …
+[TYPE_CHANGE/REVIEW] Declared types differ ('com.example.Gadget' vs 'com.example.Widget')
+                     without a widening relationship, …
+```
+
+Off the classpath both declarations resolve to `Unknown` and the resolver says so in a
+**warning** on the resolution (`UNRESOLVED_WARNING`), which is the difference between "not
+a widening" and "not checkable here".
 
 Exit status is `0` when no conflict block remains, `1` while the file still
 carries conflicts, and `2` on a usage or input error - CI-shaped on purpose.
@@ -202,6 +257,17 @@ last one:
   shape, not a bug report.
 - **The tool never stages or commits.** It writes the file when asked and
   nothing else; git operations remain the caller's (or the human's) decision.
+- **A resolved type change is still left by this tool.** Detection emits the residual
+  `STRUCTURAL_CHANGE` **alongside** the recognised conflict — by design, because a
+  residual that replaced the recognised conflicts once lost a mechanical import addition
+  — and a structural conflict is never auto-applied. So a block whose only real change is
+  a widening ends up `LEFT_MANUAL` *even when the widening was decided*: the report and
+  the prepared fixture carry `[TYPE_CHANGE/AUTO] 'Widget' is a widening of 'Gadget'`, and
+  the block still waits for a human. That is a property of the decision rule ("exactly one
+  resolution claims the block"), not of the classpath, and it is asserted in
+  [`MergeFileToolTest`](../src/test/java/com/codebuddy/merge/MergeFileToolTest.java)
+  so it cannot change unnoticed. Removing the residual from a block it only partly
+  overlaps is the open question, not whether it should be emitted at all.
 - **History replay needs a branch.** Outside a repository and without
   `--branch`, the history is per-run and in-memory - replay then has nothing to
   replay, by design rather than by guesswork.

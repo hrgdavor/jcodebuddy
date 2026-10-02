@@ -10,6 +10,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -625,6 +627,130 @@ class MergeFileToolTest {
         IllegalStateException failure = assertThrows(IllegalStateException.class,
             () -> MergeFileTool.reverify(caseDir, new StructuralChangeConflictResolver()));
         assertTrue(failure.getMessage().contains("usable conflict type"), failure.getMessage());
+    }
+
+    // ---------------------------------------------------------------- classpath
+
+    /**
+     * A conflict about the project's own types: {@code Gadget} extends {@code Widget}, so
+     * adopting the {@code Widget} declaration is a widening only a <em>compiled</em> view
+     * of the project can see.
+     */
+    private static final String PROJECT_TYPE_CONFLICT_FILE = """
+            package com.example.demo;
+
+            public class OrderService {
+            <<<<<<< ours
+                com.example.Gadget value = null;
+            =======
+                com.example.Widget value = null;
+            >>>>>>> theirs
+
+                public String describe() {
+                    return String.valueOf(value);
+                }
+            }
+            """;
+
+    /** The same shape on JDK types, which resolves whether or not a project classpath is given. */
+    private static final String JDK_TYPE_CONFLICT_FILE = """
+            package com.example.demo;
+
+            public class IndexService {
+            <<<<<<< ours
+                java.util.HashMap<String, String> index = new java.util.HashMap<>();
+            =======
+                java.util.Map<String, String> index = new java.util.HashMap<>();
+            >>>>>>> theirs
+            }
+            """;
+
+    /** Compiles two project types into a directory, and returns that directory. */
+    private Path compiledProjectTypes() throws IOException {
+        Path sources = Files.createDirectories(tempDir.resolve("project/src/com/example"));
+        Path classes = Files.createDirectories(tempDir.resolve("project/classes"));
+        Files.writeString(sources.resolve("Widget.java"),
+            "package com.example;\n\npublic class Widget {\n}\n");
+        Files.writeString(sources.resolve("Gadget.java"),
+            "package com.example;\n\npublic class Gadget extends Widget {\n}\n");
+
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        assertNotNull(compiler, "the test runs on a JDK");
+        int status = compiler.run(null, null, null,
+            "-d", classes.toString(),
+            sources.resolve("Widget.java").toString(),
+            sources.resolve("Gadget.java").toString());
+        assertEquals(0, status, "the fixture project types must compile");
+        return classes;
+    }
+
+    @Test
+    @DisplayName("a project classpath decides the project's own types instead of escalating them")
+    void classpathDecidesProjectTypes() throws IOException {
+        Path classes = compiledProjectTypes();
+        Path without = write("Without.java", PROJECT_TYPE_CONFLICT_FILE);
+        Path with = write("With.java", PROJECT_TYPE_CONFLICT_FILE);
+
+        Result escalated = toolFor(without).applyFixes(true).run();
+        Result decided = toolFor(with).classpath(List.of(classes)).applyFixes(true).run();
+
+        String escalatedReport = escalated.outcomes().get(0).explanation();
+        String decidedReport = decided.outcomes().get(0).explanation();
+
+        assertTrue(decidedReport.contains("is a widening of"),
+            "with the classpath, Widget is a widening of Gadget: " + decidedReport);
+        assertTrue(decidedReport.contains("[TYPE_CHANGE/AUTO]"), decidedReport);
+        assertFalse(escalatedReport.contains("is a widening of"),
+            "without it both declarations are Unknown, so nothing is decided: " + escalatedReport);
+        assertTrue(escalatedReport.contains("[TYPE_CHANGE/REVIEW]"), escalatedReport);
+
+        // Both runs leave the block, and that is not about types: detection emits the
+        // residual STRUCTURAL_CHANGE alongside the recognised conflict (by design - a
+        // residual that replaced the recognised conflicts once lost a mechanical import
+        // addition), and a structural conflict is never auto-applied. So the classpath
+        // changes what the *resolution* says, which is what the fixture and the review
+        // render carry, not whether this tool writes the block by itself.
+        assertEquals(1, escalated.exitCode());
+        assertEquals(1, decided.exitCode(),
+            "the residual structural conflict claims the block regardless of the classpath");
+        assertTrue(read(with).contains("<<<<<<<"));
+    }
+
+    @Test
+    @DisplayName("an explicit classpath still resolves JDK types")
+    void explicitClasspathKeepsThePlatform() throws IOException {
+        Path classes = compiledProjectTypes();
+        Path file = write("IndexService.java", JDK_TYPE_CONFLICT_FILE);
+
+        Result result = toolFor(file).classpath(List.of(classes)).applyFixes(true).run();
+
+        assertTrue(result.outcomes().get(0).explanation().contains("is a widening of"),
+            "the platform is not a classpath entry: an explicit project classpath must not "
+                + "hide java.util, or asking for more resolution would lose some: "
+                + result.outcomes().get(0).explanation());
+    }
+
+    @Test
+    @DisplayName("the CLI takes --classpath, and refuses an entry that does not exist")
+    void cliTakesClasspath() throws IOException {
+        Path classes = compiledProjectTypes();
+        Path file = write("CliWith.java", PROJECT_TYPE_CONFLICT_FILE);
+
+        int status = MergeFileTool.runMain(new String[] {file.toString(),
+            "--no-fixtures", "--classpath", classes.toString()});
+
+        assertEquals(1, status,
+            "the flag is accepted: the run reaches the block and leaves it, rather than a "
+                + "usage error");
+        assertTrue(read(file).contains("<<<<<<<"), "and the default run writes nothing");
+
+        // A misspelled entry contributes nothing to attribution, so without this check the
+        // conflict would escalate and look like a limitation of the tool rather than a typo.
+        int missing = MergeFileTool.runMain(new String[] {file.toString(),
+            "--classpath", tempDir.resolve("does-not-exist").toString()});
+        assertEquals(2, missing);
+        assertEquals(2, MergeFileTool.runMain(new String[] {"--classpath"}),
+            "and a flag with no value is a usage error");
     }
 
     // ---------------------------------------------------------------------- CLI

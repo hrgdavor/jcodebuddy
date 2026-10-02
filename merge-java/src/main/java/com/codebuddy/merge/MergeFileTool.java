@@ -257,6 +257,7 @@ public final class MergeFileTool {
         private Path historyPath;
         private Boolean inMemoryOnly;
         private TypeContext typeContext;
+        private List<Path> classpath = List.of();
         private MergeConflictResolver resolver;
         private ConflictDetectionService detector;
 
@@ -350,6 +351,31 @@ public final class MergeFileTool {
         }
 
         /**
+         * The compile classpath of the project the file belongs to, which is what lets a
+         * conflict about the project's own types be decided instead of escalated.
+         *
+         * <p><strong>Added to</strong> the JVM's own classpath rather than replacing it
+         * ({@link TypeContext#withRuntimeClasspathAnd}), because the platform lives there:
+         * a parser given only these entries resolves {@code java.util} no better than it
+         * resolves the project, so a replacing flag would make "resolve my types" mean
+         * "stop resolving everything else".
+         *
+         * <p>The single-file path always resolves with a classpath — this one, or the
+         * runtime default. It never uses {@code TypeChangeConflictResolver}'s degraded,
+         * no-context mode: that exists for a library caller who has no classpath to give,
+         * and it is not a state a tool that can be told the classpath should be in.
+         *
+         * <p>Ignored when an explicit {@link #typeContext(TypeContext)} is set, since that
+         * carries its own.
+         *
+         * @param entries classpath entries — directories of compiled classes or jars
+         */
+        public Builder classpath(List<Path> entries) {
+            this.classpath = entries == null ? List.of() : List.copyOf(entries);
+            return this;
+        }
+
+        /**
          * Replace the orchestrator wholesale, for callers that need custom
          * resolvers. When set, {@link #branchName}, {@link #historyPath},
          * {@link #inMemoryOnly} and {@link #typeContext} no longer affect
@@ -397,7 +423,9 @@ public final class MergeFileTool {
 
         TypeContext typeContext = builder.typeContext != null
             ? builder.typeContext
-            : TypeContext.withRuntimeClasspath(guessSourceRoot(file));
+            : builder.classpath.isEmpty()
+                ? TypeContext.withRuntimeClasspath(guessSourceRoot(file))
+                : TypeContext.withRuntimeClasspathAnd(guessSourceRoot(file), builder.classpath);
         ConflictDetectionService detector = builder.detector != null
             ? builder.detector
             : new ConflictDetectionService();
@@ -1000,7 +1028,7 @@ public final class MergeFileTool {
                 }
                 case "--apply", "--apply-recorded", "--no-fixtures" ->
                     options.add(new String[] {arg});
-                case "--fixtures", "--branch" -> {
+                case "--fixtures", "--branch", "--classpath" -> {
                     if (i + 1 >= args.length) {
                         System.err.println(arg + " needs a value argument");
                         return 2;
@@ -1029,6 +1057,7 @@ public final class MergeFileTool {
         }
 
         Builder builder = forFile(file);
+        List<Path> classpath = new ArrayList<>();
         for (String[] option : options) {
             switch (option[0]) {
                 case "--apply" -> builder.applyFixes(true);
@@ -1036,9 +1065,29 @@ public final class MergeFileTool {
                 case "--no-fixtures" -> builder.prepareFixtures(false);
                 case "--fixtures" -> builder.fixtureRoot(Path.of(option[1]));
                 case "--branch" -> builder.branchName(option[1]);
+                case "--classpath" -> {
+                    // Checked here rather than left to the resolver: a misspelled entry
+                    // contributes nothing to attribution, so the conflict would escalate
+                    // with "could not be resolved" and look like a limitation of the tool
+                    // instead of a typo. A classpath the caller asked for is a classpath
+                    // that must exist.
+                    for (String entry : option[1].split(java.util.regex.Pattern.quote(
+                        java.io.File.pathSeparator))) {
+                        if (entry.isBlank()) {
+                            continue;
+                        }
+                        Path path = Path.of(entry.trim());
+                        if (!Files.exists(path)) {
+                            System.err.println("classpath entry does not exist: " + path);
+                            return 2;
+                        }
+                        classpath.add(path);
+                    }
+                }
                 default -> throw new IllegalStateException("unhandled option " + option[0]);
             }
         }
+        builder.classpath(classpath);
 
         try {
             Result result = builder.run();
@@ -1056,6 +1105,7 @@ public final class MergeFileTool {
         out.println("""
             usage: MergeFileTool <file> [--apply] [--apply-recorded] [--no-fixtures]
                                  [--fixtures <dir>] [--branch <name>]
+                                 [--classpath <entries>]
 
               <file>              a file carrying git conflict markers
               --apply             write the automatically resolved blocks back to the file
@@ -1068,8 +1118,18 @@ public final class MergeFileTool {
                                   (default: %s)
               --branch <name>     the branch whose decision history is consulted
                                   (default: the repository's current branch)
+              --classpath <entries>
+                                  the project's compile classpath, so a conflict about
+                                  its own types can be resolved instead of escalated.
+                                  Entries are separated by '%s' and may repeat; each must
+                                  exist. They are ADDED to the JVM classpath, which is
+                                  what carries the platform: without this the resolver
+                                  sees only the JVM classpath, which decides JDK types
+                                  and escalates the project's own - with a warning
+                                  saying so.
 
             exit status: 0 when no conflict block remains, 1 while the file still
-            carries conflicts, 2 on a usage or input error.""".formatted(DEFAULT_FIXTURE_ROOT));
+            carries conflicts, 2 on a usage or input error.""".formatted(
+                DEFAULT_FIXTURE_ROOT, java.io.File.pathSeparator));
     }
 }

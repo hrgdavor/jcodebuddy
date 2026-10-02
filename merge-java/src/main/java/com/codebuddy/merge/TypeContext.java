@@ -5,8 +5,10 @@ package com.codebuddy.merge;
 import org.openrewrite.java.JavaParser;
 
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What a resolver needs in order to resolve <em>types</em> rather than compare
@@ -83,6 +85,31 @@ public record TypeContext(Path sourceRoot, List<Path> classpath) {
      */
     public static TypeContext withRuntimeClasspath(Path sourceRoot) {
         return new TypeContext(sourceRoot, JavaParser.runtimeClasspath());
+    }
+
+    /**
+     * A context whose classpath is the JVM's own <strong>plus</strong> the given entries.
+     *
+     * <p>Additive rather than replacing, and that is measured rather than assumed: a
+     * parser given only the extra entries resolves <em>neither</em> the project's types
+     * <em>nor</em> {@code java.util} — the JVM classpath is what carries the platform —
+     * so a caller who asked to resolve more would silently resolve less. The JVM's own
+     * entries come first, so the platform and the tool's own dependencies win over a
+     * duplicate in the caller's list.
+     *
+     * <p>This is the shape a command-line classpath flag wants: {@code --classpath}
+     * means "here are the project's compiled classes", not "forget everything you knew".
+     *
+     * @param sourceRoot   where the conflicting sources are rooted
+     * @param extraEntries the caller's entries — directories of compiled classes or jars
+     */
+    public static TypeContext withRuntimeClasspathAnd(Path sourceRoot, List<Path> extraEntries) {
+        if (extraEntries == null || extraEntries.isEmpty()) {
+            return withRuntimeClasspath(sourceRoot);
+        }
+        Set<Path> entries = new LinkedHashSet<>(JavaParser.runtimeClasspath());
+        entries.addAll(extraEntries);
+        return new TypeContext(sourceRoot, List.copyOf(entries));
     }
 
     /**
