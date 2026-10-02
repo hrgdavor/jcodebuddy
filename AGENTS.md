@@ -477,6 +477,26 @@ canonical statement of a boundary that has no other home.
     stale environment variable has spent the user's time on the
     wrong artifact. One command that prints the versions is worth
     more than a dozen hypotheses.
+  - **On Windows a redirect is not a byte pipe, and UTF-16 is where that shows.** `>`, `Out-File` and
+    `Set-Content` **re-encode** what they write — under Windows PowerShell as UTF-16LE with a BOM — so
+    `git show HEAD:file.js > file.js` produces a file with a NUL byte after every character. Everything
+    downstream then misnames the cause: `node` reports `SyntaxError: Invalid or unexpected token` on line 1 of
+    a file that is perfectly valid, a `git diff` shows the whole file rewritten, and `git commit -F -` fed from
+    a here-string answers *"Aborting commit due to empty commit message"*. Those are three faces of the same
+    encoding mistake — not a problem with the file, the diff or git. What to do instead:
+    - **Read and write file bytes with .NET, not through a redirect**:
+      `[System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))` and
+      `[System.IO.File]::ReadAllText($path)`. A redirect also rewrites line endings and appends a final
+      newline, which is its own diff. Better still, do the work in a Bun script — what this rule asks for
+      anyway — where `node:fs` is UTF-8 and neither trap exists.
+    - **A console that prints mojibake is a display artifact, not a corrupt file.** A UTF-8 em dash shown as
+      `â€”` means the console re-encoded the bytes in order to show them; the bytes on disk are fine. Confirm
+      with a UTF-8 read *before* believing a file is mangled, and **never repair it by rewriting the bytes** —
+      that is how a correct file becomes a broken one.
+    - **When a command's *options* are missing, print the shell version.** `Get-Content -AsByteStream` exists
+      only in PowerShell 6+; under Windows PowerShell it is `-Encoding Byte`, and
+      `Get-Content : A parameter cannot be found` is the shell reporting its version rather than a statement
+      about the file. `$PSVersionTable.PSVersion` settles it in one command.
   - **The wrappers that predated this rule have been converted.** `scripts/mvn-jdk25.cmd`,
     `scripts/mvn-jdk25.sh`, `scripts/gen.cmd`, `scripts/run-demo.cmd` and `scripts/entity-html.cmd`
     are now `scripts/mvn-jdk25.js`, `scripts/gen.js`, `scripts/run-demo.js` and the existing
