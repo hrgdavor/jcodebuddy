@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling.meta;
+package hr.hrg.jcodebuddy.engine.meta;
 
 import java.util.Objects;
 

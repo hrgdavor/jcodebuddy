@@ -1,7 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import hr.hrg.hipster.entity.tooling.SourceReader;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 
 import java.nio.file.Path;
@@ -34,7 +34,7 @@ import java.util.Map;
  * must know:</p>
  * <ul>
  *   <li><strong>There is no {@code findAll}.</strong> A rule that needs nodes asks
- *       {@link hr.hrg.hipster.entity.tooling.TreeQueries}, which exists so a dozen rules do not each
+ *       {@link hr.hrg.jcodebuddy.engine.source.TreeQueries}, which exists so a dozen rules do not each
  *       carry the same visitor boilerplate.</li>
  *   <li><strong>One class covers five kinds.</strong> {@link J.ClassDeclaration} is classes,
  *       interfaces, records, enums <em>and</em> annotations; the kind is a

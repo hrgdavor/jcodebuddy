@@ -4,11 +4,11 @@ import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
 
 import org.openrewrite.java.tree.J;
 
-import hr.hrg.hipster.entity.tooling.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.hipster.entity.tooling.meta.ArtifactMeta;
 import hr.hrg.hipster.entity.tooling.meta.InterfaceInfo;
 import hr.hrg.hipster.entity.tooling.meta.Property;
-import hr.hrg.hipster.entity.tooling.meta.SourceLocation;
+import hr.hrg.jcodebuddy.engine.meta.SourceLocation;
 import hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta;
 
 import java.io.IOException;
@@ -22,6 +22,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * The artifact-side half of a view's detail: which files belong to it, what each one declares, and
@@ -64,7 +66,7 @@ import java.util.Set;
  * well is what lets the <em>same</em> field appear twice in one file for two artifacts — an outer
  * interface and its nested {@code Write} both legitimately declare it.</p>
  *
- * <p>Public only so {@link hr.hrg.hipster.entity.tooling.index.TypeFacts} can reuse {@link #kindOf} — the
+ * <p>Public only so {@link hr.hrg.jcodebuddy.engine.index.TypeFacts} can reuse {@link #kindOf} — the
  * class index records a row's {@code kind} and must not grow a second kind resolver. Every other member
  * stays package-private, and the {@link Detail} record it produces is the pass's own currency.</p>
  *
@@ -571,17 +573,10 @@ public final class MetadataLocations {
      * record and enum in the tree. The vocabulary below is DEC-029's contract and must not change.</p>
      */
     public static String kindOf(J.ClassDeclaration declaration) {
-        if (declaration == null) {
-            return "class";
-        }
-        return switch (declaration.getKind()) {
-            case Enum -> "enum";
-            case Record -> "record";
-            case Annotation -> "annotation";
-            case Interface -> "interface";
-            case Class -> "class";
-            default -> "class";
-        };
+        // One implementation, in the engine: the kind is an index row's field (DEC-029), so the resolver
+        // lives with the index. This method stays because the entity model and its rules call it — and its
+        // old javadoc already said it was public "only so TypeFacts can reuse it" (plan step 3.0f-2).
+        return hr.hrg.jcodebuddy.engine.index.TypeKinds.kindOf(declaration);
     }
 
     private static String key(String artifact, String file) {

@@ -1,6 +1,6 @@
 package hr.hrg.jcodebuddy.automation.entity;
 
-import hr.hrg.hipster.entity.tooling.JcodebuddyDirectory;
+import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
 import hr.hrg.watch2.core.ChangeSet;
 
 import org.junit.jupiter.api.Assertions;

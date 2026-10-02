@@ -2,7 +2,7 @@ package hr.hrg.jcodebuddy.codegen;
 
 import java.nio.file.Path;
 
-import hr.hrg.hipster.entity.tooling.meta.SourceMetadata;
+import hr.hrg.jcodebuddy.engine.meta.SourceMetadata;
 
 /**
  * A {@link CodeContext} as a value, for tests and for a caller that has no framework around it.

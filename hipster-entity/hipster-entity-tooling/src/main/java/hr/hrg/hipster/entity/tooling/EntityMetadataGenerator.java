@@ -5,7 +5,7 @@ import org.openrewrite.java.tree.J;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import hr.hrg.hipster.entity.tooling.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.hipster.entity.tooling.meta.EntityFieldMeta;
 import hr.hrg.hipster.entity.tooling.meta.EntityMeta;
 import hr.hrg.hipster.entity.tooling.meta.FieldConstraint;
@@ -34,6 +34,9 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 public class EntityMetadataGenerator {
     /**
@@ -43,7 +46,7 @@ public class EntityMetadataGenerator {
      * in its own package): two spellings of "how JSON is read" is how the table and the documents would
      * drift apart on the first value that needs unescaping.</p>
      */
-    public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    public static final ObjectMapper OBJECT_MAPPER = hr.hrg.jcodebuddy.engine.MetadataJson.mapper();
 
     // ── identity, and the flag surface a runner depends on ───────────────────
 
@@ -56,7 +59,7 @@ public class EntityMetadataGenerator {
      * tooling consumers, indexes, caches — and the main output, generated source, belongs in the
      * normal source tree.
      */
-    public static final String JCODEBUDDY_DIR = ".jcodebuddy";
+    public static final String JCODEBUDDY_DIR = hr.hrg.jcodebuddy.engine.JcodebuddyDirectory.DIR;
 
     /** Every CLI flag this build understands; {@code --version} prints it. */
     public static final List<String> SUPPORTED_FLAGS = List.of(
@@ -2204,12 +2207,12 @@ public class EntityMetadataGenerator {
         // The interface half of "where is this field". The accessor's own line is read from the NAME
         // token, never from the declaration's start: an accessor carrying `@FieldSource` (or any other
         // annotation) begins on the annotation's line, which is exactly the conflation F-46 records.
-        List<hr.hrg.hipster.entity.tooling.meta.SourceLocation> locations = new ArrayList<>();
+        List<hr.hrg.jcodebuddy.engine.meta.SourceLocation> locations = new ArrayList<>();
         if (sourcePath != null) {
-            locations.add(new hr.hrg.hipster.entity.tooling.meta.SourceLocation(
+            locations.add(new hr.hrg.jcodebuddy.engine.meta.SourceLocation(
                     declaringName, "accessor", sourcePath, lineNumber));
             if (annotationLine > 0) {
-                locations.add(new hr.hrg.hipster.entity.tooling.meta.SourceLocation(
+                locations.add(new hr.hrg.jcodebuddy.engine.meta.SourceLocation(
                         declaringName, "annotation", sourcePath, annotationLine));
             }
         }
@@ -3164,12 +3167,7 @@ public class EntityMetadataGenerator {
         if (value == null) {
             return null;
         }
-        return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        return hr.hrg.jcodebuddy.engine.MetadataJson.escape(value);
     }
 
     /**

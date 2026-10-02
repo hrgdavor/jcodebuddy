@@ -1,6 +1,6 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 
 import java.nio.file.Path;
@@ -53,8 +53,8 @@ public class EntityFieldEnumOrderRule implements EntityRule {
      */
     public static void validateSource(Path file, String source,
                                       List<EntityRulesValidator.ValidationIssue> issues) {
-        hr.hrg.hipster.entity.tooling.SourceReader.Read read =
-                hr.hrg.hipster.entity.tooling.SourceReader.readText(source);
+        hr.hrg.jcodebuddy.engine.source.SourceReader.Read read =
+                hr.hrg.jcodebuddy.engine.source.SourceReader.readText(source);
         if (!read.readable()) {
             // The caller has already reported an unreadable file; a second diagnostic here
             // would duplicate it. Nothing can be said about a ledger that was not read.

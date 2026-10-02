@@ -17,6 +17,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import hr.hrg.jcodebuddy.engine.source.JavaSyntaxCheck;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * What one read costs, in absolute numbers.

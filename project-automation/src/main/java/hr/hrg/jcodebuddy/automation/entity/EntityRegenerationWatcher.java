@@ -2,7 +2,7 @@ package hr.hrg.jcodebuddy.automation.entity;
 
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
-import hr.hrg.hipster.entity.tooling.JcodebuddyDirectory;
+import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
 import hr.hrg.watch2.core.BatchedFileWatcher;
 import hr.hrg.watch2.core.ChangeSet;
 import hr.hrg.watch2.core.FileFilter;

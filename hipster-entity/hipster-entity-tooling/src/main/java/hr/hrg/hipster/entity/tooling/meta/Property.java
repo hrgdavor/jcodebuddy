@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling.meta;
 
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.meta.SourceLocation;
 
 /**
  * One field of a view, as the generator resolves it.

@@ -16,6 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * Bean Validation generation (plan.dsflash § 12.3/7.9–7.12).

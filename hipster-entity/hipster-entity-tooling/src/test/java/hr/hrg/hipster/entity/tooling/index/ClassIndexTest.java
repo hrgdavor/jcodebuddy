@@ -1,7 +1,7 @@
 package hr.hrg.hipster.entity.tooling.index;
 
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
-import hr.hrg.hipster.entity.tooling.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -18,6 +18,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.ContentHash;
 
 /**
  * The class index's writer, its reader and its change report (DEC-029).

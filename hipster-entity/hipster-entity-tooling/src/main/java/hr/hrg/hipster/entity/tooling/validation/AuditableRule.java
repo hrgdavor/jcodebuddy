@@ -1,6 +1,6 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 
 import java.nio.file.Path;

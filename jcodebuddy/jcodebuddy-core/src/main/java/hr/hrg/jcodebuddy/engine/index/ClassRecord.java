@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling.index;
+package hr.hrg.jcodebuddy.engine.index;
 
 import java.util.List;
 

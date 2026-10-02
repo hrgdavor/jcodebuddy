@@ -15,13 +15,14 @@
 
     <name>JCodeBuddy Core</name>
     <description>
-        Generated-code markers and the parser that finds generated regions in a file, for any tool that
-        needs to know which parts of a source file a generator owns. No dependencies, so a linter, a
-        migration tool, an IDE inspection or an agent can use it without pulling in a generator.
+        The metadata engine: the one source representation and the parse path over it, the metadata model,
+        the class index with its content identity, and the queries a consumer asks of them — one engine for
+        codegen, analysis, reporting and the watch loop (DEC-037). It also carries the generated-code marker
+        vocabulary and its parser (DEC-035).
     </description>
 
     <!--
-        WHY THIS MODULE EXISTS, AND WHY IT HAS NO DEPENDENCIES.
+        WHY THIS MODULE EXISTS, AND WHAT IT CARRIES NOW.
 
         Generated code is committed source and it is cooperative: a member from an earlier revision
         survives regeneration, so a file can be partly generated and partly hand-written, and the boundary
@@ -30,20 +31,48 @@
         needs that boundary and has no access to a generator's internals. DEC-035 fixes the marker
         vocabulary; this module is the parser that reads it.
 
-        It is a separate module from `hipster-entity-tooling`, where the emitters live, for one reason:
-        what a consumer gets. `hipster-entity-tooling` carries the OpenRewrite LST, Jackson and the entity
-        generator's whole model, and a tool that only wants to know where generated code stops should not
-        have to resolve any of that. This module is a leaf: no dependencies, no generator types, nothing to
-        configure. A consumer reads source text and gets line spans back.
+        Since 2026-10-02 (DEC-037, plan step 3.0f) this module is also the home of the metadata engine, and
+        that is why it now declares OpenRewrite and Jackson: parsing goes through DEC-030's one
+        representation, and the metadata documents are JSON. The engine is here because a consumer that
+        needs fresh metadata — a generator, an analysis, a report, an LSP sidecar — must read ONE model
+        rather than each growing a path of its own.
 
-        That also makes the direction of the dependency the honest one. The generator depends on the
-        vocabulary (it emits markers this parser understands); the parser must never depend on the
-        generator, or it could not be used by a project that does not use this one.
+        This module is therefore no longer a leaf, and the reason it used to be one has not gone away: a
+        tool that only wants to know where generated code stops should not resolve a parser. Step 3.0l
+        extracts the marker vocabulary and its parser into a small leaf of their own, which is what restores
+        that property; until it lands, this module carries both.
+
+        The direction of the dependency is still the honest one, and step 3.0f-2 was spent proving it: the
+        engine names no consumer. Where it needed what a consumer had (a kind resolver, a diagnostic
+        channel, a member shape, a JSON helper, the `.jcodebuddy` name), the engine defines the port or owns
+        the vocabulary, and the consumer implements or delegates.
     -->
 
     <dependencies>
-        <!-- The one dependency, and only for tests: the parser itself is pure JDK, which is what lets a
-             consumer add this module without resolving a generator, a JSON library or a parser library. -->
+        <!-- The one source representation (DEC-030): read, query and write Java through the LST, never a
+             second parser. `rewrite-java-25` is the JDK 25 dialect the gate compiles at. -->
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.openrewrite</groupId>
+            <artifactId>rewrite-java-25</artifactId>
+            <version>${openrewrite.version}</version>
+        </dependency>
+
+        <!-- The metadata documents are JSON (`.jcodebuddy/index/classes.json`, DEC-029). Jackson 3 is what
+             this reactor manages (`tools.jackson.core`, `${jackson.version}`), not the `com.fasterxml` line. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Test-only, and the parser itself stayed pure JDK where it could. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

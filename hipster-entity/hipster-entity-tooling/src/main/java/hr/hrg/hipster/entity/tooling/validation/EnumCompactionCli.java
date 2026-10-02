@@ -2,8 +2,8 @@ package hr.hrg.hipster.entity.tooling.validation;
 
 import org.openrewrite.java.tree.J;
 
-import hr.hrg.hipster.entity.tooling.SourceReader;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 import java.io.IOException;
 import java.nio.file.Files;

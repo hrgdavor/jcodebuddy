@@ -8,6 +8,7 @@ import hr.hrg.hipster.entity.tooling.meta.ViewAttributes;
 
 import java.util.ArrayList;
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * The single reader for the {@code @View} annotation (plan.dsflash § 4.5/G9, § 4.7/DR-9).

@@ -7,6 +7,7 @@ import hr.hrg.hipster.entity.api.GenLevel;
 
 import java.util.ArrayList;
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * The single owner of the {@link GenLevel#DEFAULT} resolution rule

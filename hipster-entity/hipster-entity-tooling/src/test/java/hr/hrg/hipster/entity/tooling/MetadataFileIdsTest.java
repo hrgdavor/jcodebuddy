@@ -377,6 +377,6 @@ class MetadataFileIdsTest {
 
     /** The table's own version, read from the production class rather than copied into the test. */
     private static final class ClassIndexAccess {
-        static final int FORMAT = hr.hrg.hipster.entity.tooling.index.ClassIndex.FORMAT;
+        static final int FORMAT = hr.hrg.jcodebuddy.engine.index.ClassIndex.FORMAT;
     }
 }

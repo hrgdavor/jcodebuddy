@@ -323,7 +323,7 @@ fallbacks when the page is opened outside the IDE.
 ### 4.1 Input — hand-written, never overwritten
 
 The view interfaces and their markers, read through OpenRewrite's LST
-([`SourceReader`](../../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java)):
+([`SourceReader`](../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/SourceReader.java)):
 
 ```
 src/main/java/hr/hrg/hipster/entityexample/person/entity/       Person, PersonSummary, PersonDetails, PersonDto,

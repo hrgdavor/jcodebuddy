@@ -12,6 +12,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
+import hr.hrg.jcodebuddy.engine.source.JavaSyntaxCheck;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * Every committed source file in the reactor, put through the read path the migration installed.

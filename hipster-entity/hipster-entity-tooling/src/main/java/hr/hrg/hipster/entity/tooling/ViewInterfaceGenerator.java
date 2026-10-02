@@ -8,6 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.SourceSplicer;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * Emits the two builder entry points as {@code default} methods on the <strong>view interface
@@ -170,7 +173,12 @@ public final class ViewInterfaceGenerator {
         // it refused the construct — and adding a `default` modifier is exactly such a case
         // ("Not supported keywordDEFAULT"), so in practice the common path reformatted the whole
         // hand-written file. Splicing before the closing brace leaves every other byte untouched.
-        String out = SourceSplicer.withMembers(text, viewName, missing, indentOf(text, viewName));
+        // The splice path takes the engine's member shape, so the emitter converts at this one call site and
+        // its own public API (and its tests) stay as they were (plan step 3.0f-2).
+        List<hr.hrg.jcodebuddy.engine.source.EntryPoint> engineMembers = missing.stream()
+                .map(entry -> new hr.hrg.jcodebuddy.engine.source.EntryPoint(entry.methodName(), entry.builderType()))
+                .toList();
+        String out = SourceSplicer.withMembers(text, viewName, engineMembers, indentOf(text, viewName));
         Files.writeString(viewFile, out);
         return new Result(viewFile, missing.stream().map(EntryPoint::methodName).toList(), false);
     }

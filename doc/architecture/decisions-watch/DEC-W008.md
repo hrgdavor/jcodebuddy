@@ -170,7 +170,7 @@ Persisting `CacheEntry` records by hash to `.cache/<hash>.fury` and maintaining 
 
 **The `parse` contract is about *where* parsing lives; its parenthetical about *how* is updated by this note.**
 
-§ "Implementation boundaries" says `hipster-entity-tooling` "(which provides JavaParser-based parsing)" is the expected implementation of `parse`, and § "Implementation order" names "`hipster-entity-tooling` JavaParser integration". The location is unchanged — the tooling module is still where source bytes are turned into a `SourceMetadata` tree — but the parsing it performs is OpenRewrite's, through [`SourceReader`](../../../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/SourceReader.java) (`readText(String)`) and `TreeQueries`, not `com.github.javaparser`.
+§ "Implementation boundaries" says `hipster-entity-tooling` "(which provides JavaParser-based parsing)" is the expected implementation of `parse`, and § "Implementation order" names "`hipster-entity-tooling` JavaParser integration". The location is unchanged — the tooling module is still where source bytes are turned into a `SourceMetadata` tree — but the parsing it performs is OpenRewrite's, through [`SourceReader`](../../../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/source/SourceReader.java) (`readText(String)`) and `TreeQueries`, not `com.github.javaparser`.
 
 The contract itself is untouched: `parse(relativePath, sourceBytes)` is a pure function with no cache interaction, and the `SourceMetadata` it returns is still file-scoped only, with correlation data kept outside the entry under its own dependency hash.
 

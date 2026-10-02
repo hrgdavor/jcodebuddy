@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling;
+package hr.hrg.jcodebuddy.engine.source;
 
 import org.openrewrite.ExecutionContext;
 import org.openrewrite.InMemoryExecutionContext;
@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import hr.hrg.jcodebuddy.engine.DiagnosticSink;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -322,7 +323,7 @@ public final class SourceReader {
      * @return the wrapper unit, never {@code null}
      * @throws IllegalArgumentException if the fragment does not parse
      */
-    static J.CompilationUnit readFragmentUnit(String fragment) {
+    public static J.CompilationUnit readFragmentUnit(String fragment) {
         // The wrapper must itself be print-idempotent (it is ordinary Java), so the
         // relaxed context is not needed for correctness here — only for the fact that
         // a *caller* may pass a fragment whose formatting the printer would normalise.
@@ -354,7 +355,7 @@ public final class SourceReader {
      * <p>The message names what was <em>not</em> done, because that is the consequence a reader has to
      * act on: a pass over an unreadable file must not look like a pass over a fresh one.</p>
      */
-    static void reportUnparseable(DivergenceReporter divergences, String kind, String location,
+    public static void reportUnparseable(DiagnosticSink divergences, String kind, String location,
                                   String cause, String notDone) {
         if (divergences == null) {
             return;

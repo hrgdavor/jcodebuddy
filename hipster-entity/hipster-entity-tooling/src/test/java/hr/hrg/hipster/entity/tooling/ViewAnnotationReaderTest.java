@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * The shape matrix of plan.dsflash § 4.5/G9 / § 4.7/DR-9 for {@link ViewAnnotationReader}.

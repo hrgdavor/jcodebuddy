@@ -616,7 +616,7 @@ package-level guess in the measurement above was wrong (`meta/` is *not* all eng
 | **Consumer — generator behaviour** | `CooperativeCodegen`, `DivergenceReporter`, `GenLevelResolver`, `GeneratorPreflight`, `TypeLiterals`, `JcodebuddyDirectory`, `ViewAnnotationReader` | DEC-020 preservation, DEC-022 diagnostics, entity gen-levels, preflight, literal spelling, output plumbing, the `@View` reader |
 | **Consumer — rules** | all 12 of `validation/` | the entity conventions and their CLIs |
 
-**3.0f-2 was attempted on 2026-10-02 and reverted, because the compiler corrected the classification.** The
+**3.0f-2 landed on 2026-10-02** (its first attempt was reverted, and the compiler is why). The
 twelve files were moved, the packages rewritten and every reference re-pointed (`scripts/extract-engine.js`,
 kept and now correct); `jcodebuddy-core` then failed to compile with **five of the moved files reaching back
 into classes that stay**. That is not a build accident — it is the dependency direction DEC-037 forbids, and
@@ -643,6 +643,40 @@ The tree was left green (the attempt reverted) rather than either dragging consu
 committing a build that does not compile; `scripts/extract-engine.js` stays, with its two heuristic bugs fixed
 (it now adds an import only for a file that **shared the class's old package**, skips a class the file declares
 itself, and ignores comment lines).
+
+**Outcome — all six executed as recommended, and two of them were not the shape the recommendation guessed.**
+The move landed with `jcodebuddy-core` holding the engine (**12 files**: the five index files including their
+new `TypeKinds`, the four `source/` helpers, `meta/SourceMetadata`, `meta/SourceLocation`, and
+`JcodebuddyDirectory`), and the six fixes were:
+
+| Decision as recommended | What it actually was |
+| --- | --- |
+| `InterfaceInfo` back to the consumers | as recommended — the compiler had already decided it |
+| `JcodebuddyDirectory` into the engine | as recommended, and its `DIR` constant is **defined** in the engine now instead of read from the pass |
+| `EntityMetadataGenerator` inverted | **not a filter**: the index used three shared *utilities* (`escapeJson`, `OBJECT_MAPPER`, `JCODEBUDDY_DIR`), so they became the engine's `MetadataJson` (one escaping rule, one mapper) and `JcodebuddyDirectory.DIR`, with the pass's own members delegating — one definition each |
+| `DivergenceReporter` inverted behind a sink | as recommended: the engine defines `DiagnosticSink` (one method, DEC-022's six parameters), the reporter implements it and keeps owning the format |
+| `TypeFacts`'s `MetadataLocations` use | **moved, not inverted**: `kindOf` became the engine's `TypeKinds`, because `MetadataLocations`' own javadoc said the method was public "only so `TypeFacts` can reuse it". The entity model delegates, so there is still one resolver |
+| `SourceSplicer`'s member | **judgement call 1 stands**: the member was *data* (`EntryPoint`, two strings), not emission logic, so it moved into the engine and the emitter converts at its one call site — the emitter's API and its 11 test references did not move |
+
+Two further consequences, recorded because they are the split's real cost: **(a)** helpers that were
+package-private because they shared a package with their only callers became the engine's public surface
+(`SourceSplicer`, `JavaSyntaxCheck` and its nested types — including two compact canonical constructors that
+had to follow their records — `SourceReader.readFragmentUnit`/`reportUnparseable`,
+`ClassIndex.moduleRelative`/`README_TEXT`, `Wyhash64`); **(b)** the engine's POM gains OpenRewrite and
+Jackson 3 (`tools.jackson.core`), and `jcodebuddy-codegen-api` now depends on the **engine** instead of
+`hipster-entity-tooling` — which is the cycle DEC-037's third fact described, gone.
+
+Evidence: the recorded gate `BUILD SUCCESS` (`jcodebuddy-core` + the six `hipster-entity` modules, tooling
+5:31 — its committed example regenerates byte-identically, which is 3.0f-4's evidence as well), a 20-module
+build green for every module outside the gate before the visibility widening, and `LINKS` green.
+`scripts/extract-engine.js` and `scripts/apply-engine-inversions.js` stay: each inversion is written there
+with the reason it has the shape it has.
+
+**What 3.0f still owes**: **3.0f-3** (the engine answers with one model — kind, modifiers, members,
+declaration file, checksum, relations — and a *missing* answer stays distinguishable from an absent one), and
+the prose that still says these classes live in the tooling (the two watch decisions' "the tooling module is
+still where source bytes are turned into a `SourceMetadata` tree", and `DEC-009`'s "All three live in
+`hipster-entity-tooling`").
 
 **Judgement calls, recorded rather than buried.** *(1) `SourceSplicer` goes to the engine.* DEC-030 names
 the splice as the write half of the one representation, and DEC-037 lists parsing but not writing — so this
@@ -955,8 +989,8 @@ merged, what did not is gone with a reason.
 
 DEC-029's class index is real and tested: `classes.json`, one row per type, keyed by FQN, with the file's
 path, its content checksum, the checksum instant, size, and the type's kind and modifiers
-([`ClassRecord`](../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassRecord.java),
-[`TypeFacts`](../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java)).
+([`ClassRecord`](../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/index/ClassRecord.java),
+[`TypeFacts`](../jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/index/TypeFacts.java)).
 It records **no relations**: nothing in a row says what a type extends or implements, and there is no
 reverse index, so "what implements `CtxModule`" cannot be asked of it at all.
 

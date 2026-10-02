@@ -1,7 +1,7 @@
 package hr.hrg.hipster.entity.tooling.index;
 
-import hr.hrg.hipster.entity.tooling.SourceReader;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 
 import org.junit.jupiter.api.Assertions;
@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.index.TypeFacts;
 
 /**
  * The basic facts a class index row records about one type (DEC-029).

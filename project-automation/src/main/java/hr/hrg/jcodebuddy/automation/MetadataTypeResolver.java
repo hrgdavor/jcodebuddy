@@ -1,6 +1,6 @@
 package hr.hrg.jcodebuddy.automation;
 
-import hr.hrg.hipster.entity.tooling.meta.SourceMetadata;
+import hr.hrg.jcodebuddy.engine.meta.SourceMetadata;
 import hr.hrg.jcodebuddy.codegen.TypeResolver;
 
 /**

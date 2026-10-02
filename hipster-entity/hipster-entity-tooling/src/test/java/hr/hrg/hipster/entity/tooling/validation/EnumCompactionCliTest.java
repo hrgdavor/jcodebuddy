@@ -254,9 +254,9 @@ class EnumCompactionCliTest {
 
     /** The constant names in declaration order, read back out of the source through the LST. */
     private static List<String> constantNames(String source) throws Exception {
-        var unit = hr.hrg.hipster.entity.tooling.SourceReader.readSourceText(source);
+        var unit = hr.hrg.jcodebuddy.engine.source.SourceReader.readSourceText(source);
         Assertions.assertNotNull(unit, "the enum must parse");
-        var declaration = hr.hrg.hipster.entity.tooling.TreeQueries.enums(unit).get(0);
+        var declaration = hr.hrg.jcodebuddy.engine.source.TreeQueries.enums(unit).get(0);
         List<String> names = new java.util.ArrayList<>();
         for (var statement : declaration.getBody().getStatements()) {
             if (statement instanceof org.openrewrite.java.tree.J.EnumValueSet values) {

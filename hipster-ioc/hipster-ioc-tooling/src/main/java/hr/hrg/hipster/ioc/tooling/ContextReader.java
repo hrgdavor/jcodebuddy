@@ -1,8 +1,8 @@
 package hr.hrg.hipster.ioc.tooling;
 
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
-import hr.hrg.hipster.entity.tooling.SourceReader;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.Expression;
 import org.openrewrite.java.tree.J;
 

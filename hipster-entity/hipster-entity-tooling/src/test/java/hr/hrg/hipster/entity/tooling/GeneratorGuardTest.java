@@ -201,16 +201,16 @@ class GeneratorGuardTest {
                 try (var entries = Files.list(indexDir)) {
                     for (Path entry : entries.toList()) {
                         String name = entry.getFileName().toString();
-                        boolean allowed = name.equals(hr.hrg.hipster.entity.tooling.index.ClassIndex.FILE_NAME)
-                                || name.equals(hr.hrg.hipster.entity.tooling.index.ClassIndex.MTIME_FILE_NAME)
-                                || name.equals(hr.hrg.hipster.entity.tooling.index.ClassIndex.README_NAME);
+                        boolean allowed = name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.FILE_NAME)
+                                || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.MTIME_FILE_NAME)
+                                || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.README_NAME);
                         if (!allowed) {
                             problems.add(repoRoot.relativize(entry).toString().replace('\\', '/'));
                         }
                     }
                 }
                 String text = Files.readString(
-                        indexDir.resolve(hr.hrg.hipster.entity.tooling.index.ClassIndex.FILE_NAME));
+                        indexDir.resolve(hr.hrg.jcodebuddy.engine.index.ClassIndex.FILE_NAME));
                 for (String contentish : List.of("sourcesContent", "\"content\":", "package ")) {
                     if (text.contains(contentish)) {
                         problems.add(repoRoot.relativize(indexDir).toString().replace('\\', '/')

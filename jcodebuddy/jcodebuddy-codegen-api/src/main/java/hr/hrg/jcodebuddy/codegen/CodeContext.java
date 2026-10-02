@@ -2,7 +2,7 @@ package hr.hrg.jcodebuddy.codegen;
 
 import java.nio.file.Path;
 
-import hr.hrg.hipster.entity.tooling.meta.SourceMetadata;
+import hr.hrg.jcodebuddy.engine.meta.SourceMetadata;
 
 /**
  * Where a generator is being asked to work, and what it is allowed to know about the place.

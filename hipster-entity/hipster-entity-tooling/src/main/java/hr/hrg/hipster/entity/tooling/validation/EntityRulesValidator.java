@@ -1,6 +1,6 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
-import hr.hrg.hipster.entity.tooling.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
 import org.openrewrite.java.tree.J;
 
 import java.io.IOException;
@@ -18,7 +18,7 @@ import java.util.Map;
  *
  * <p>It parses the whole source set first and then offers the units to every rule, so a tree-wide rule
  * can ask a question that spans files — see {@link EntityRule#validateAll}. The parse goes through
- * {@link hr.hrg.hipster.entity.tooling.SourceReader}, which owns the one configured parser: a bare
+ * {@link hr.hrg.jcodebuddy.engine.source.SourceReader}, which owns the one configured parser: a bare
  * parser reads below the project's language level and cannot see switch expressions, records or
  * sealed types, which is most of what this repository generates (notes § 2.5). The rule this
  * validator inherits is {@link SourceReader}'s: "the parse returned something" is never "the file is

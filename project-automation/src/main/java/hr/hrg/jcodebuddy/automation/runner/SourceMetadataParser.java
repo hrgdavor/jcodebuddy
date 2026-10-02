@@ -1,9 +1,9 @@
 package hr.hrg.jcodebuddy.automation.runner;
 
 import hr.hrg.hipster.entity.tooling.MetadataLocations;
-import hr.hrg.hipster.entity.tooling.SourceReader;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
-import hr.hrg.hipster.entity.tooling.index.ContentHash;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
+import hr.hrg.jcodebuddy.engine.index.ContentHash;
 import hr.hrg.watch2.server.metadata.MetadataProvider;
 import org.openrewrite.java.tree.J;
 

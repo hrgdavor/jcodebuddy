@@ -39,7 +39,13 @@ const MOVES = [
     ['SourceSplicer.java', 'source', 'SourceSplicer'],
     ['meta/SourceMetadata.java', 'meta', 'SourceMetadata'],
     ['meta/SourceLocation.java', 'meta', 'SourceLocation'],
-    ['meta/InterfaceInfo.java', 'meta', 'InterfaceInfo'],
+    // `meta/InterfaceInfo` was classified engine and the compiler refused it: it holds `Property` and
+    // `ViewAttributes`, so it is the entity model's view of an interface and stays a consumer (3.0f-2).
+    //
+    // `JcodebuddyDirectory` came the other way: it is where the engine's own index lives, so the marker rule
+    // belongs to the engine, and the one constant it needed from the consumer (`JCODEBUDDY_DIR`) is defined
+    // here now instead. It lands at the engine's root package, which is why its sub-package is empty.
+    ['JcodebuddyDirectory.java', '', 'JcodebuddyDirectory'],
 ];
 
 const OLD_PKG_ROOT = 'hr.hrg.hipster.entity.tooling';
@@ -48,8 +54,9 @@ const OLD_SRC = 'hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hips
 const NEW_SRC = 'jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine';
 const SKIP_DIRS = new Set(['.git', 'target', 'node_modules', '.kilo', '.jsx6', 'build', 'out', 'dist']);
 
-const oldFqn = (sub, name) => `${OLD_PKG_ROOT}.${sub}.${name}`;
-const newFqn = (sub, name) => `${NEW_PKG_ROOT}.${sub}.${name}`;
+/** The engine's root package has no sub-package, so the two helpers have to tolerate an empty one. */
+const oldFqn = (sub, name) => (sub ? `${OLD_PKG_ROOT}.${sub}.${name}` : `${OLD_PKG_ROOT}.${name}`);
+const newFqn = (sub, name) => (sub ? `${NEW_PKG_ROOT}.${sub}.${name}` : `${NEW_PKG_ROOT}.${name}`);
 
 const javaFiles = (dir, found = []) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -82,23 +89,31 @@ if (!dryRun) {
     }
 }
 
-// 2 + 3. the moved files' own package declarations, and every fully qualified reference anywhere.
+// 2. the moved files' own package declarations.
+//
+// The *old* package comes from the file's old relative path, not from its new sub-package: the four
+// `source/` helpers used to live in the tooling's root package, so looking for `...tooling.source;` found
+// nothing and left them declaring the module they had just left. The move is the thing that knows both
+// sides, so the rewrite happens per move.
 let packageLines = 0;
+for (const [rel, sub, name] of MOVES) {
+    const file = join(root, NEW_SRC, sub, name + '.java');
+    if (!existsSync(file)) continue;
+    const before = readFileSync(file, 'utf8');
+    const oldPackage = rel.includes('/') ? `${OLD_PKG_ROOT}.${rel.split('/')[0]}` : OLD_PKG_ROOT;
+    const expected = sub ? `package ${NEW_PKG_ROOT}.${sub};` : `package ${NEW_PKG_ROOT};`;
+    const after = before.replace(new RegExp(`^package ${oldPackage.replace(/\./g, '\\.')};`, 'm'), expected);
+    if (after !== before) {
+        packageLines++;
+        if (!dryRun) writeFileSync(file, after);
+    }
+}
+
+// 3. every fully qualified reference anywhere.
 let references = 0;
 for (const file of javaFiles(root)) {
     const before = readFileSync(file, 'utf8');
     let after = before;
-
-    const relativeToNew = relative(join(root, NEW_SRC), file).split(sep).join('/');
-    if (!relativeToNew.startsWith('..')) {
-        const sub = relativeToNew.includes('/') ? relativeToNew.split('/')[0] : null;
-        if (sub) {
-            const expected = `package ${NEW_PKG_ROOT}.${sub};`;
-            after = after.replace(new RegExp(`^package ${OLD_PKG_ROOT.replace(/\./g, '\\.')}\\.${sub};`, 'm'), expected);
-            if (after !== before && !before.includes(expected)) packageLines++;
-        }
-    }
-
     for (const [, sub, name] of MOVES) {
         const from = oldFqn(sub, name);
         if (after.includes(from)) {
@@ -107,7 +122,6 @@ for (const file of javaFiles(root)) {
             after = after.split(from).join(newFqn(sub, name));
         }
     }
-
     if (after !== before && !dryRun) writeFileSync(file, after);
 }
 

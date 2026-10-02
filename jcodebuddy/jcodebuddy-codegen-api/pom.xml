@@ -43,11 +43,17 @@
     -->
 
     <dependencies>
-        <!-- `SourceMetadata` is the one outside type the context carries, and it already lives here
-             because it describes *source*, which is the tooling's subject rather than a generator's. -->
+        <!-- `SourceMetadata` is the one outside type the context carries, and since 2026-10-02 it lives in
+             the engine (`jcodebuddy-core`), which owns the representation — so this module depends on the
+             engine rather than on `hipster-entity-tooling`.
+
+             That is not a detail: the SPI used to sit in a module that already depended on the tooling module
+             while the class index it resolves types from lived there too, so an implementation next to its own
+             data was a cycle (DEC-037's third fact). The engine removes the cycle by construction, and step
+             3.0i finishes the job by dissolving this module into it. -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>hipster-entity-tooling</artifactId>
+            <artifactId>jcodebuddy-core</artifactId>
         </dependency>
     </dependencies>
 </project>

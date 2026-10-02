@@ -1,12 +1,12 @@
-package hr.hrg.hipster.entity.tooling.index;
+package hr.hrg.jcodebuddy.engine.index;
 
 import tools.jackson.databind.JsonNode;
 
-import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
-import hr.hrg.hipster.entity.tooling.JcodebuddyDirectory;
-import hr.hrg.hipster.entity.tooling.SourceReader;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
+import hr.hrg.jcodebuddy.engine.MetadataJson;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -114,7 +114,7 @@ public final class ClassIndex {
      * <p>Tracked and human-owned: the pass creates this file when it is absent and never overwrites it,
      * so a human's edit survives every later pass (DEC-020's rule applied to this directory).</p>
      */
-    static final String README_TEXT = """
+    public static final String README_TEXT = """
             # The module index
 
             The module's **class index**, written by the `hipster-entity-generator` pass. Derived output,
@@ -295,7 +295,7 @@ public final class ClassIndex {
     }
 
     /** {@code file} relative to {@code base}, with forward slashes; never absolute. */
-    static String moduleRelative(Path base, Path file) {
+    public static String moduleRelative(Path base, Path file) {
         try {
             return base.toAbsolutePath().normalize().relativize(file.toAbsolutePath().normalize())
                     .toString().replace('\\', '/');
@@ -372,7 +372,7 @@ public final class ClassIndex {
      *
      * <p>Phase 6: the unit is an LST, and the source it came from is required alongside it. The
      * declaration's line number is the one fact the LST cannot supply — a node carries no line — so it
-     * is resolved against the text (see {@link hr.hrg.hipster.entity.tooling.TreeQueries#lineOf}). The
+     * is resolved against the text (see {@link hr.hrg.jcodebuddy.engine.source.TreeQueries#lineOf}). The
      * FQN and the enclosing chain need no symbol solver: {@code TreeQueries.typesWithEnclosing}
      * captures the ancestry from the traversal cursor, which is what replaces JavaParser's
      * {@code getParentNode()} walk.</p>
@@ -677,8 +677,8 @@ public final class ClassIndex {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         sb.append("  \"format\": ").append(FORMAT).append(",\n");
-        sb.append("  \"module\": \"").append(EntityMetadataGenerator.escapeJson(moduleName)).append("\",\n");
-        sb.append("  \"sourceRoot\": \"").append(EntityMetadataGenerator.escapeJson(sourceRoot)).append("\",\n");
+        sb.append("  \"module\": \"").append(MetadataJson.escape(moduleName)).append("\",\n");
+        sb.append("  \"sourceRoot\": \"").append(MetadataJson.escape(sourceRoot)).append("\",\n");
         sb.append("  \"hash\": { \"algo\": \"").append(ContentHash.ALGO)
                 .append("\", \"normalize\": \"").append(ContentHash.NORMALIZE)
                 .append("\", \"of\": \"content\" },\n");
@@ -718,7 +718,7 @@ public final class ClassIndex {
             sb.append("\n");
             int index = 0;
             for (Map.Entry<String, Long> entry : mtimes.entrySet()) {
-                sb.append("    \"").append(EntityMetadataGenerator.escapeJson(entry.getKey()))
+                sb.append("    \"").append(MetadataJson.escape(entry.getKey()))
                         .append("\": ").append(entry.getValue());
                 sb.append(index < mtimes.size() - 1 ? ",\n" : "\n");
                 index++;
@@ -783,21 +783,21 @@ public final class ClassIndex {
         // left out when they carry no information: `enclosing: null` and `generated: 0` are the common
         // case for a top-level hand-written type (by far the majority of rows), and writing them would
         // add a line per row to a table whose whole purpose is to be read.
-        sb.append("    \"").append(EntityMetadataGenerator.escapeJson(row.fqn())).append("\": { \"path\": \"")
-                .append(EntityMetadataGenerator.escapeJson(row.path())).append("\", \"kind\": \"")
-                .append(EntityMetadataGenerator.escapeJson(row.kind())).append("\", \"modifiers\": [");
+        sb.append("    \"").append(MetadataJson.escape(row.fqn())).append("\": { \"path\": \"")
+                .append(MetadataJson.escape(row.path())).append("\", \"kind\": \"")
+                .append(MetadataJson.escape(row.kind())).append("\", \"modifiers\": [");
         for (int i = 0; i < row.modifiers().size(); i++) {
             if (i > 0) {
                 sb.append(", ");
             }
-            sb.append("\"").append(EntityMetadataGenerator.escapeJson(row.modifiers().get(i))).append("\"");
+            sb.append("\"").append(MetadataJson.escape(row.modifiers().get(i))).append("\"");
         }
         sb.append("], \"line\": ").append(row.line()).append(", \"depth\": ").append(row.depth());
         if (row.generated()) {
             sb.append(", \"generated\": 1");
         }
         if (row.enclosing() != null) {
-            sb.append(", \"enclosing\": \"").append(EntityMetadataGenerator.escapeJson(row.enclosing())).append("\"");
+            sb.append(", \"enclosing\": \"").append(MetadataJson.escape(row.enclosing())).append("\"");
         }
         sb.append(", \"size\": ").append(row.size())
                 .append(", \"checksum\": \"").append(row.checksum()).append("\", \"hashCalculatedAt\": \"")
@@ -891,7 +891,7 @@ public final class ClassIndex {
             return paths;
         }
         try {
-            JsonNode root = EntityMetadataGenerator.OBJECT_MAPPER.readTree(
+            JsonNode root = MetadataJson.mapper().readTree(
                     Files.readString(filesJson, StandardCharsets.UTF_8));
             for (Map.Entry<String, JsonNode> entry : root.path("files").properties()) {
                 paths.put(entry.getKey(), entry.getValue().asText());
@@ -906,7 +906,7 @@ public final class ClassIndex {
                                     List<String> problems) {
         JsonNode root;
         try {
-            root = EntityMetadataGenerator.OBJECT_MAPPER.readTree(text);
+            root = MetadataJson.mapper().readTree(text);
         } catch (RuntimeException notJson) {
             if (problems != null) {
                 problems.add("the class index is not valid JSON: " + notJson.getMessage());
@@ -958,7 +958,7 @@ public final class ClassIndex {
             return;
         }
         try {
-            JsonNode root = EntityMetadataGenerator.OBJECT_MAPPER.readTree(
+            JsonNode root = MetadataJson.mapper().readTree(
                     Files.readString(mtimeFile, StandardCharsets.UTF_8));
             for (Map.Entry<String, JsonNode> entry : root.path("mtimes").properties()) {
                 mtimes.put(entry.getKey(), entry.getValue().asLong(-1L));
@@ -980,7 +980,7 @@ public final class ClassIndex {
 
         /** The default table path of a module root. */
         public static Path defaultIndexFile(Path moduleRoot) {
-            return moduleRoot.resolve(EntityMetadataGenerator.JCODEBUDDY_DIR)
+            return moduleRoot.resolve(JcodebuddyDirectory.DIR)
                     .resolve(INDEX_DIR_NAME).resolve(FILE_NAME);
         }
     }

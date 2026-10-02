@@ -2,6 +2,7 @@ package hr.hrg.hipster.entity.tooling;
 
 import java.util.List;
 import java.util.Set;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * The one place a source type name becomes the literal a generated file needs

@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * The Phase 7 exit gate's compaction half (plan.dsflash § 12.4, § 12.5): <em>"the R1 checker passes

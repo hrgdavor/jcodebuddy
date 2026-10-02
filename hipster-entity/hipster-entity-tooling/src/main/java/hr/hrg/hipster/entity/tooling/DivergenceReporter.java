@@ -44,7 +44,7 @@ import java.util.regex.Pattern;
  *       to skim (plan.dsflash § 8.7/3.20's known remaining gap).</li>
  * </ul>
  */
-public final class DivergenceReporter {
+public final class DivergenceReporter implements hr.hrg.jcodebuddy.engine.DiagnosticSink {
 
     /** The recognized kinds. Anything else is still reported; this list is documentation plus tests. */
     public static final List<String> KINDS = List.of(

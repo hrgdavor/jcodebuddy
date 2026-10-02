@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling;
+package hr.hrg.jcodebuddy.engine.source;
 
 import java.util.List;
 
@@ -33,7 +33,7 @@ import java.util.List;
  * be spliced at the right place because the <em>closing</em> brace is found by depth, which such a
  * brace balances.</p>
  */
-final class SourceSplicer {
+public final class SourceSplicer {
 
     private SourceSplicer() {
     }
@@ -47,7 +47,7 @@ final class SourceSplicer {
      * @param indent   one indentation step
      * @return the rewritten text, or {@code source} unchanged when the type or its body is not found
      */
-    static String withMembers(String source, String typeName, List<ViewInterfaceGenerator.EntryPoint> members,
+    public static String withMembers(String source, String typeName, List<EntryPoint> members,
                               String indent) {
         if (source == null || typeName == null || members == null || members.isEmpty()) {
             return source;
@@ -76,7 +76,7 @@ final class SourceSplicer {
         if (!out.toString().endsWith(nl)) {
             out.append(nl);
         }
-        for (ViewInterfaceGenerator.EntryPoint member : members) {
+        for (EntryPoint member : members) {
             out.append(memberIndent).append(render(member)).append(nl);
         }
         out.append(typeIndent).append(source, bodyClose, source.length());
@@ -91,7 +91,7 @@ final class SourceSplicer {
      * new builder over {@code this}. The body is one statement by design — the generator's job is to
      * make the entry point exist, and the builder owns what happens next.</p>
      */
-    private static String render(ViewInterfaceGenerator.EntryPoint member) {
+    private static String render(EntryPoint member) {
         return "public default " + member.builderType() + " " + member.methodName()
                 + "() { return new " + member.builderType() + "(this); }";
     }

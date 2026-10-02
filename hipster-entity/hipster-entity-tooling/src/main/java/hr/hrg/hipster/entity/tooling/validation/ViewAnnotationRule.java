@@ -1,7 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
 import hr.hrg.hipster.entity.tooling.GenLevelResolver;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import hr.hrg.hipster.entity.tooling.ViewAnnotationReader;
 import org.openrewrite.java.tree.J;
 

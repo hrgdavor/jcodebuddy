@@ -7,6 +7,9 @@ import org.openrewrite.java.tree.J;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import hr.hrg.jcodebuddy.engine.source.JavaSyntaxCheck;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * The shared read: {@link SourceReader} must reject a partial parse, and its parser must be able to

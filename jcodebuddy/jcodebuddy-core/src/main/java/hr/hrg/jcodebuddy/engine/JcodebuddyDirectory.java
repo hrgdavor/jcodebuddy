@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling;
+package hr.hrg.jcodebuddy.engine;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -46,7 +46,7 @@ public final class JcodebuddyDirectory {
     }
 
     /** The directory name, which is also the marker's name: DEC-026 § 1. */
-    public static final String DIR = EntityMetadataGenerator.JCODEBUDDY_DIR;
+    public static final String DIR = ".jcodebuddy";
 
     /**
      * Subtrees a <b>tool</b> writes, at a level that is a project rather than a module.

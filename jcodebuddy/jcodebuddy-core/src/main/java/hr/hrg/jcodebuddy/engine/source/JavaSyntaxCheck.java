@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling;
+package hr.hrg.jcodebuddy.engine.source;
 
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.ClassTree;
@@ -75,7 +75,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * "cannot find symbol" as "the file is unreadable" would reject most of the tree. What F-34 needs is
  * narrower and exact: <em>is this text parseable Java?</em></p>
  */
-final class JavaSyntaxCheck {
+public final class JavaSyntaxCheck {
 
     /**
      * Error codes that are about types and resolution rather than syntax.
@@ -132,15 +132,15 @@ final class JavaSyntaxCheck {
      * @param declarationLine the declaration's start line, annotations included
      * @param nameLine        the line the declared name sits on
      */
-    record TypePosition(String simpleName, List<String> enclosingNames, int declarationLine, int nameLine) {
+    public record TypePosition(String simpleName, List<String> enclosingNames, int declarationLine, int nameLine) {
 
-        TypePosition {
+        public TypePosition {
             enclosingNames = List.copyOf(enclosingNames);
         }
     }
 
     /** One method's position: which type declares it, and the line its name sits on. */
-    record MethodPosition(String declaringType, String simpleName, int parameterCount, int nameLine) {
+    public record MethodPosition(String declaringType, String simpleName, int parameterCount, int nameLine) {
     }
 
     /**
@@ -157,7 +157,7 @@ final class JavaSyntaxCheck {
      * @param role     {@code enum-constant}, {@code record-component} or {@code field}
      * @param nameLine the line the declared name sits on
      */
-    record MemberPosition(String owner, String simpleName, String role, int nameLine) {
+    public record MemberPosition(String owner, String simpleName, String role, int nameLine) {
     }
 
     /**
@@ -171,7 +171,7 @@ final class JavaSyntaxCheck {
      * @param startOffset the arm's first character (the {@code case} or {@code default} keyword)
      * @param endOffset   one past its last character
      */
-    record CaseSpan(int startOffset, int endOffset) {
+    public record CaseSpan(int startOffset, int endOffset) {
     }
 
     /** One annotation's position: the type or member it is written on, and its own line.
@@ -184,7 +184,7 @@ final class JavaSyntaxCheck {
      * @param owner         the member the annotation is written on, or the type's own name for a
      *                      type-level annotation
      */
-    record AnnotationPosition(String declaringType, String owner, String simpleName, int line) {
+    public record AnnotationPosition(String declaringType, String owner, String simpleName, int line) {
     }
 
     /**
@@ -206,7 +206,7 @@ final class JavaSyntaxCheck {
      * @param startOffset    the declaration's first character
      * @param endOffset      one past its last character
      */
-    record MemberSpan(String owner, String kind, String name, int parameterCount,
+    public record MemberSpan(String owner, String kind, String name, int parameterCount,
                       int startOffset, int endOffset) {
     }
 
@@ -223,12 +223,12 @@ final class JavaSyntaxCheck {
      * @param caseLines          the start line of every switch arm in the file, in source order
      * @param caseSpans          the character span of every switch arm, in source order
      */
-    record FileCheck(boolean syntacticallyValid, List<TypePosition> types,
+    public record FileCheck(boolean syntacticallyValid, List<TypePosition> types,
                      List<MethodPosition> methods, List<MemberPosition> members,
                      List<MemberSpan> spans, List<AnnotationPosition> annotations,
                      List<Integer> caseLines, List<CaseSpan> caseSpans) {
 
-        FileCheck {
+        public FileCheck {
             types = List.copyOf(types);
             methods = List.copyOf(methods);
             members = List.copyOf(members);
@@ -251,7 +251,7 @@ final class JavaSyntaxCheck {
      * unrecognised error all report invalid, so a caller preserves the file rather than regenerating
      * over it.</p>
      */
-    static FileCheck inspect(String source) {
+    public static FileCheck inspect(String source) {
         if (source == null || source.isBlank() || COMPILER == null) {
             return FileCheck.invalid();
         }
@@ -268,12 +268,12 @@ final class JavaSyntaxCheck {
     }
 
     /** Whether {@code source} is syntactically well-formed Java. */
-    static boolean isSyntacticallyValid(String source) {
+    public static boolean isSyntacticallyValid(String source) {
         return inspect(source).syntacticallyValid();
     }
 
     /** Every type declaration in {@code source} with the line its name sits on, in source order. */
-    static List<TypePosition> typeNameLines(String source) {
+    public static List<TypePosition> typeNameLines(String source) {
         return inspect(source).types();
     }
 

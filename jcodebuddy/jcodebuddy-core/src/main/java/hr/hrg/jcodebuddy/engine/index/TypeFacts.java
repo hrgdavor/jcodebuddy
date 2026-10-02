@@ -1,7 +1,6 @@
-package hr.hrg.hipster.entity.tooling.index;
+package hr.hrg.jcodebuddy.engine.index;
 
-import hr.hrg.hipster.entity.tooling.MetadataLocations;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 
 import java.util.ArrayList;
@@ -92,7 +91,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
             enclosingChain.add(enclosing.getSimpleName());
         }
         return of(packageOf(declaration, source), declaration.getSimpleName(), enclosingChain,
-                MetadataLocations.kindOf(declaration), modifiersOf(declaration),
+                TypeKinds.kindOf(declaration), modifiersOf(declaration),
                 // The enclosing chain is the line lookup's key half: `Shape` and `Shape.Circle` differ
                 // only by it, and a lookup missing it answers the outer declaration with the inner
                 // declaration's line.

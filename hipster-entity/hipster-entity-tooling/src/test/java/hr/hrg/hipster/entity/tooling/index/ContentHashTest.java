@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import hr.hrg.jcodebuddy.engine.index.ContentHash;
+import hr.hrg.jcodebuddy.engine.index.Wyhash64;
 
 /**
  * The content hash, pinned to <strong>library-produced goldens</strong> (DEC-029 § "the content hash").

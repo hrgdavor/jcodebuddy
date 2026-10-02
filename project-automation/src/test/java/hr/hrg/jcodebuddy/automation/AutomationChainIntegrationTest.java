@@ -1,7 +1,7 @@
 package hr.hrg.jcodebuddy.automation;
 
-import hr.hrg.hipster.entity.tooling.SourceReader;
-import hr.hrg.hipster.entity.tooling.TreeQueries;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import hr.hrg.jcodebuddy.automation.entity.EntityRegenerationWatcher;
 import hr.hrg.watch2.core.ChangeSet;
 import org.junit.jupiter.api.Assertions;

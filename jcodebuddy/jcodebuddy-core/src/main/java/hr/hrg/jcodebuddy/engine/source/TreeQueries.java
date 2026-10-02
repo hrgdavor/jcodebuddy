@@ -1,4 +1,4 @@
-package hr.hrg.hipster.entity.tooling;
+package hr.hrg.jcodebuddy.engine.source;
 
 import org.jspecify.annotations.Nullable;
 import org.openrewrite.ExecutionContext;

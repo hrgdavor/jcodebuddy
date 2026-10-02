@@ -11,6 +11,9 @@ import org.openrewrite.java.tree.TypeTree;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import hr.hrg.jcodebuddy.engine.source.JavaSyntaxCheck;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * Direct unit tests for {@link TreeQueries} — the migration's replacement for JavaParser's
@@ -901,10 +904,10 @@ class TreeQueriesTest {
                 "outermost first, exactly the spelling JavaSyntaxCheck reports and TypeFacts joins");
         Assertions.assertEquals(4, TreeQueries.lineOfChained(deep.declaration(), names(deep.enclosing()),
                 source), "a chain in the wrong order is not a miss but a confidently wrong line");
-        Assertions.assertEquals(4, hr.hrg.hipster.entity.tooling.index.TypeFacts
+        Assertions.assertEquals(4, hr.hrg.jcodebuddy.engine.index.TypeFacts
                 .of(deep.declaration(), deep.enclosing(), source).line(),
                 "and the class index DEC-029 writes takes its line from that same chain");
-        Assertions.assertEquals("p.Shape.Nested.Deep", hr.hrg.hipster.entity.tooling.index.TypeFacts
+        Assertions.assertEquals("p.Shape.Nested.Deep", hr.hrg.jcodebuddy.engine.index.TypeFacts
                 .of(deep.declaration(), deep.enclosing(), source).fqn());
     }
 

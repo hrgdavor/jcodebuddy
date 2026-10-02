@@ -8,6 +8,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * Addon semantics and cross-package inheritance (plan.dsflash § 4.5/G6, § 4.7/DR-1).

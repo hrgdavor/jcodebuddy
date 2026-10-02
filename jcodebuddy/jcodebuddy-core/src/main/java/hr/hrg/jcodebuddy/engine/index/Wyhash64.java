@@ -19,7 +19,7 @@
 // The library's ByteBuffer entry points and its streaming form are deliberately NOT vendored: nothing
 // in this repository hashes a ByteBuffer, and an unused code path in a vendored copy is code that no
 // test covers.
-package hr.hrg.hipster.entity.tooling.index;
+package hr.hrg.jcodebuddy.engine.index;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -30,7 +30,7 @@ import java.nio.ByteOrder;
  *
  * <p>Vendored from {@code hr.hrg.wyhash:wyhash:1.0.0}; see the file header for why.</p>
  */
-final class Wyhash64 {
+public final class Wyhash64 {
 
     private static final long[] DEFAULT_SECRET = {
             0xa0761d6478bd642fL, 0xe7037ed1a0b428dbL, 0x8ebc6af09c88c6e3L, 0x589965cc75374cc3L
@@ -44,11 +44,11 @@ final class Wyhash64 {
     private Wyhash64() {
     }
 
-    static long hash(long seed, byte[] data) {
+    public static long hash(long seed, byte[] data) {
         return hash(seed, data, 0, data.length);
     }
 
-    static long hash(long seed, byte[] data, int off, int len) {
+    public static long hash(long seed, byte[] data, int off, int len) {
         long s = initSeed(seed);
         long secret1 = DEFAULT_SECRET[1];
         long secret2 = DEFAULT_SECRET[2];

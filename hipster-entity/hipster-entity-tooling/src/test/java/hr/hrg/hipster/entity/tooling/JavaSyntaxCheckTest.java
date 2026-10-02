@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import hr.hrg.jcodebuddy.engine.source.JavaSyntaxCheck;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * Direct unit tests for {@link JavaSyntaxCheck} - the javac half of the migration, which answers the two

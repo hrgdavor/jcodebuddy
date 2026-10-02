@@ -6,6 +6,8 @@ import org.openrewrite.java.tree.J;
 
 import java.util.List;
 import java.util.Map;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
 /**
  * Scale as an edge case: source big enough that an offset, a traversal order or a scan inside a
