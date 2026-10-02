@@ -350,7 +350,8 @@ public final class ClassIndex {
         typeLessFiles.remove(moduleRelativePath);
         for (TypeFacts type : types) {
             put(new ClassRecord(type.fqn(), moduleRelativePath, type.kind(), type.modifiers(),
-                    type.enclosing(), type.line(), type.depth(), generated, "", null, -1L, type.relations()));
+                    type.enclosing(), type.line(), type.depth(), generated, "", null, -1L, type.relations(),
+                    type.annotations()));
         }
     }
 
@@ -859,6 +860,24 @@ public final class ClassIndex {
                     .append("\", \"kind\": \"").append(relation.kind().json()).append("\" }");
         }
         sb.append("]");
+        // Always emitted, like relations and for the same reason: a table without the field is one written
+        // before annotations were recorded, and "not recorded" must not read as "carries none".
+        sb.append(", \"annotations\": [");
+        for (int i = 0; i < row.annotations().size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            TypeAnnotation annotation = row.annotations().get(i);
+            sb.append("{ \"name\": \"").append(MetadataJson.escape(annotation.name())).append("\", \"args\": [");
+            for (int a = 0; a < annotation.arguments().size(); a++) {
+                if (a > 0) {
+                    sb.append(", ");
+                }
+                sb.append("\"").append(MetadataJson.escape(annotation.arguments().get(a))).append("\"");
+            }
+            sb.append("] }");
+        }
+        sb.append("]");
         if (row.generated()) {
             sb.append(", \"generated\": 1");
         }
@@ -1022,12 +1041,21 @@ public final class ClassIndex {
                 }
                 relations.add(new TypeRelation(relation.path("name").asText(""), kind));
             }
+            List<TypeAnnotation> annotations = new ArrayList<>();
+            for (JsonNode annotation : node.path("annotations")) {
+                List<String> arguments = new ArrayList<>();
+                for (JsonNode argument : annotation.path("args")) {
+                    arguments.add(argument.asText(""));
+                }
+                annotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
+            }
             index.put(new ClassRecord(entry.getKey(), node.path("path").asText(""),
                     node.path("kind").asText(""), modifiers,
                     node.hasNonNull("enclosing") ? node.path("enclosing").asText() : null,
                     node.path("line").asInt(-1), node.path("depth").asInt(0),
                     node.path("generated").asInt(0) == 1, node.path("checksum").asText(""),
-                    node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations));
+                    node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations,
+                    annotations));
         }
         index.readMtimes(index.indexFile.resolveSibling(MTIME_FILE_NAME), problems);
         return index;

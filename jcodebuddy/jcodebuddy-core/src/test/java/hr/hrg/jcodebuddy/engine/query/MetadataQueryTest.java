@@ -39,7 +39,11 @@ class MetadataQueryTest {
         // Written the way developers write it: a simple name, in another module.
         app.addTypes("c/d/AppModule.java", List.of(new TypeFacts("c.d.AppModule", "class",
                 List.of("public"), null, 3, 0, List.of(TypeRelation.implementsType("CtxModule"),
-                        TypeRelation.implementsType("java.io.Serializable")))), false);
+                        TypeRelation.implementsType("java.io.Serializable")),
+                // The annotation type lives nowhere in these modules, which is the normal case for one from a
+                // dependency or the JDK: the query must still answer it by name.
+                List.of(new hr.hrg.jcodebuddy.engine.index.TypeAnnotation("Component",
+                        List.of("name = \"app\""))))), false);
         return MetadataQuery.over(List.of(web, app));
     }
 
@@ -135,18 +139,29 @@ class MetadataQueryTest {
     }
 
     @Test
-    void memberAndAnnotationQueriesReportTheirGapInsteadOfAnEmptyList(@TempDir Path tree) {
+    void annotationsAreAnsweredFromTheIndexAndMembersStillReportTheirGap(@TempDir Path tree) {
         MetadataQuery query = twoModules(tree);
 
-        MetadataQuery.NotCovered members = query.membersOf("c.d.AppModule");
-        MetadataQuery.NotCovered annotations = query.annotationsOf("c.d.AppModule");
+        MetadataQuery.AnnotatedAnswer annotated = query.annotatedWith("Component");
+        Assertions.assertEquals(List.of("c.d.AppModule"),
+                annotated.annotated().stream().map(ClassRecord::fqn).toList(),
+                "the annotation is recorded as written and found by name, without parsing a file");
+        Assertions.assertTrue(annotated.isAnswered(), "and the question is answerable by name");
+        Assertions.assertFalse(annotated.annotation().isFound(),
+                "even though the annotation type itself is not declared in these modules — a dependency"
+                        + " annotation is the normal case and must not be a refusal");
 
+        MetadataQuery.AnnotationAnswer onOneType = query.annotationsOf("c.d.AppModule");
+        Assertions.assertTrue(onOneType.isAnswered());
+        Assertions.assertEquals(List.of(new hr.hrg.jcodebuddy.engine.index.TypeAnnotation("Component",
+                        List.of("name = \"app\""))),
+                onOneType.annotations(), "and a caller can read the arguments a consumer will project from");
+
+        MetadataQuery.NotCovered members = query.membersOf("c.d.AppModule");
         Assertions.assertTrue(members.reason().contains("not its members"), members.toString());
         Assertions.assertTrue(members.readThisInstead().contains("SourceReader"),
-                "the gap names what can answer it today: " + members);
+                "the remaining gap names what can answer it today: " + members);
         Assertions.assertTrue(members.readThisInstead().contains("3.0r"),
                 "and where the index change is scheduled: " + members);
-        Assertions.assertTrue(annotations.toString().startsWith("not covered: annotations on c.d.AppModule"),
-                annotations.toString());
     }
 }

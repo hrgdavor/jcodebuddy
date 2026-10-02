@@ -1090,15 +1090,25 @@ grep is the check) and `LINKS` green; the record names what was merged and what 
 **Done when:** nothing under `webview/` is both an earlier attempt and unexamined — what survived is
 merged, what did not is gone with a reason.
 
-### 3.0r — The index grows members and annotations
+**Added 2026-10-02, asked for directly: annotation info in the core model.** `ClassRecord`/`TypeFacts` now carry
+`List<TypeAnnotation>` — the annotation's name as written plus its arguments as source text, unevaluated — the
+writer always emits the field, `DEC-029` gained the field row and a dated amendment, and
+`MetadataQuery.annotationsOf`/`annotatedWith` answer for real. So the **annotation half of 3.0h's gap is closed
+and 3.0r is members only**. Eight tests: four in `TypeAnnotationsTest` (extraction from real source with
+arguments; `@View()`'s single `J.Empty` read as an empty parameter list rather than one empty argument; a round
+trip with the field always emitted, including `"annotations": []`; and a table written before the field reading
+as not-recorded) plus the rewritten `MetadataQueryTest` case (an annotation declared nowhere in these modules
+still answers by name — a dependency annotation is the normal case, not a refusal; and `membersOf` still reports
+its gap). Core **77 tests `BUILD SUCCESS`**.
+### 3.0r — The index grows members
 **Who:** agent · **Size:** M
 
-3.0h listed six query families and could answer four. Members and annotations are the two it could not,
+3.0h listed six query families and could answer five. Members are the one it could not,
 because a class index row records a declaration's kind, modifiers, file, checksum and relations — and nothing
 about what the declaration contains or what annotates it. `MetadataQuery.membersOf`/`annotationsOf` report that
 gap rather than answering "none", which is honest but not useful.
 
-**Do:** add members and annotations to the row and to the writer, the way 3.0b added relations: a name and a
+**Do:** add members to the row and to the writer, the way 3.0b added relations: a name and a
 kind per member (field/method/nested type, with the signature's shape and never its body), and the annotation
 type names per declaration — all as written, resolved at query time by the same rules 3.0h established. It is a
 **DEC-029 format change**, so it carries its own amendment: the same always-emitted rule as relations (an absent
@@ -1107,7 +1117,7 @@ fields cannot be tolerated by the reader — which is what the `relations` field
 
 **Gate:** own evidence: a round trip per new field; a member query and an annotation query answering from the
 index alone; a declaration with none of either reading as a fact rather than as "not recorded"; and
-`MetadataQueryTest`'s two `NotCovered` tests replaced by real assertions, so the gap cannot silently reopen.
+`MetadataQueryTest`'s `NotCovered` case replaced by a real assertion, so the gap cannot silently reopen.
 
 **Done when:** `membersOf` and `annotationsOf` answer from the model, and no consumer has to parse a file to ask
 what a type contains or what annotates it.
@@ -2183,7 +2193,7 @@ start)
 | 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |
 | 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
 | 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
-| 3.0h | Search: the queries every consumer asks | agent | M | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members+annotations (now 3.0r); 6 tests |
+| 3.0h | Search: the queries every consumer asks | agent | M | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
 | 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[ ]` |
 | 3.0j | Move the remaining consumers onto the engine | agent | L | `[ ]` |
 | 3.0k | Grow the recorded gate to cover the engine's contract | agent | S | `[ ]` |

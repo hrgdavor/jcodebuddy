@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.engine.query;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.TypeAnnotation;
 import hr.hrg.jcodebuddy.engine.index.TypeAnswer;
 import hr.hrg.jcodebuddy.engine.index.TypeRelation;
 
@@ -40,13 +41,17 @@ import java.util.TreeSet;
  * ({@link RelationAnswer#unresolvedNames()}) instead of picking one — picking one would be the confident wrong
  * answer this engine keeps having to unlearn.</p>
  *
- * <h3>What is not covered, and says so</h3>
+ * <h3>Annotations are answerable; members are not, yet</h3>
  *
- * <p>{@link #membersOf(String)} and {@link #annotationsOf(String)} are on the plan's list for this step and are
- * <strong>not answerable from the model</strong>: a row carries no members and no annotations. They return
- * {@link NotCovered} — a reported gap naming what would be needed and what to read instead — rather than an empty
- * list, which would read as "this type has no such member". Growing the index that far is a format change to
- * DEC-029 and is scheduled as its own step.</p>
+ * <p>{@link #annotationsOf(String)} and {@link #annotatedWith(String)} answer from the model, because a row
+ * carries the annotations written on a declaration — asked for directly on 2026-10-02, since annotation info is
+ * the general fact a consumer projects its own meaning from. The names are the ones the source wrote, resolved
+ * by the same rules as relations.</p>
+ *
+ * <p>{@link #membersOf(String)} still cannot be answered: a row records a declaration's kind, modifiers, file,
+ * relations and annotations, but not what it contains. It returns {@link NotCovered} rather than an empty list,
+ * which would read as "this type has no such member"; growing the index that far is a DEC-029 format change and
+ * is scheduled as step 3.0r.</p>
  */
 public final class MetadataQuery {
 
@@ -234,22 +239,82 @@ public final class MetadataQuery {
     }
 
     /**
+     * The annotations written on {@code fqn}, as the source wrote them, with their arguments (asked for
+     * 2026-10-02).
+     *
+     * <p>An empty list with a found subject is a fact: the declaration carries no annotation. With a subject
+     * that was not found there is nothing to report and {@link AnnotationAnswer#isAnswered()} is false, so a
+     * caller cannot read "not in these modules" as "no annotations".</p>
+     */
+    public AnnotationAnswer annotationsOf(String fqn) {
+        TypeAnswer subject = answer(fqn);
+        return new AnnotationAnswer(subject, subject.isFound() ? subject.type().annotations() : List.of(),
+                coverage);
+    }
+
+    /**
+     * The types annotated with {@code annotationName} — the question a consumer asks to find every
+     * {@code @View}, every {@code @Component}, every {@code @Deprecated}.
+     *
+     * <p>The question is answerable <strong>by name</strong> whether or not the annotation itself is declared in
+     * these modules — a JDK annotation ({@code java.lang.Deprecated}) or one from a dependency is the normal
+     * case, and refusing to answer because the annotation has no row here would be the wrong refusal. So
+     * {@link AnnotatedAnswer#annotation()} reports whether the annotation type <em>is</em> declared in these
+     * modules (useful, not required), while the matches come from the names the rows recorded. Matching accepts
+     * the name as written, a qualified name asking about a qualified annotation, a simple name asking about
+     * either, and the resolved form (3.0h's rules). Annotation names that resolve to nothing in these modules
+     * are listed in {@link AnnotatedAnswer#unresolvedNames()} so the answer's coverage is visible.</p>
+     */
+    public AnnotatedAnswer annotatedWith(String annotationName) {
+        List<ClassRecord> annotated = new ArrayList<>();
+        Set<String> unresolved = new TreeSet<>();
+        for (ClassRecord row : byFqn.values()) {
+            boolean matches = false;
+            for (TypeAnnotation annotation : row.annotations()) {
+                if (annotationMatches(annotation, annotationName, row.fqn())) {
+                    matches = true;
+                } else if (resolve(annotation.name(), row.fqn()) == null) {
+                    unresolved.add(annotation.name());
+                }
+            }
+            if (matches) {
+                annotated.add(row);
+            }
+        }
+        return new AnnotatedAnswer(answer(annotationName), annotated, List.copyOf(unresolved), coverage);
+    }
+
+    /**
+     * Whether a written annotation answers a question about {@code asked}.
+     *
+     * <p>Four ways, and the first two are the ones that matter in practice: the exact text the source wrote; the
+     * simple name, which is how an annotation on the classpath is normally written and asked about; and then the
+     * resolved form, so {@code @View} in package {@code a.b} answers a question about {@code a.b.View}.</p>
+     */
+    private boolean annotationMatches(TypeAnnotation annotation, String asked, String declaringFqn) {
+        if (asked == null) {
+            return false;
+        }
+        if (annotation.name().equals(asked)) {
+            return true;
+        }
+        if (asked.indexOf('.') < 0 && annotation.simpleName().equals(asked)) {
+            return true;
+        }
+        String resolved = resolve(annotation.name(), declaringFqn);
+        return resolved != null && resolved.equals(asked);
+    }
+
+    /**
      * Members of {@code fqn} — <strong>not covered</strong>: a row carries no members (plan step 3.0h's record,
-     * and the index change is scheduled as its own step).
+     * and the index change is scheduled as 3.0r).
      */
     public NotCovered membersOf(String fqn) {
         return new NotCovered("members of " + fqn,
-                "a class index row records a declaration's kind, modifiers, file and relations, not its members",
+                "a class index row records a declaration's kind, modifiers, file, relations and annotations, not"
+                        + " its members",
                 "parse the declaring file through the engine's source path (SourceReader + TreeQueries), or grow"
                         + " the index — a DEC-029 format change, scheduled as step 3.0r");
-    }
-
-    /** Annotations on {@code fqn} — <strong>not covered</strong>, for the same reason as {@link #membersOf}. */
-    public NotCovered annotationsOf(String fqn) {
-        return new NotCovered("annotations on " + fqn,
-                "a class index row records no annotations, and reading them from the tree for every query is the"
-                        + " parsing work this query surface exists to avoid",
-                "parse the declaring file through the engine's source path, or grow the index (step 3.0r)");
     }
 
     /** Which modules these answers are scoped to, for a diagnostic that must not overclaim. */
@@ -335,5 +400,66 @@ public final class MetadataQuery {
     static String simpleName(String fqn) {
         int dot = fqn == null ? -1 : fqn.lastIndexOf('.');
         return dot < 0 ? fqn : fqn.substring(dot + 1);
+    }
+
+    /**
+     * The answer to an annotation question about one type.
+     *
+     * @param subject     whether the type is declared in these modules. When it is not, {@link #annotations()}
+     *                    being empty means <em>cannot answer</em>, not "it carries none"
+     * @param annotations the annotations as written, in declaration order; empty with a found subject is a fact
+     * @param coverage    which modules were searched, for a diagnostic
+     */
+    public record AnnotationAnswer(TypeAnswer subject, List<TypeAnnotation> annotations, String coverage) {
+
+        public AnnotationAnswer {
+            annotations = annotations == null ? List.of() : List.copyOf(annotations);
+        }
+
+        /** Whether the question could be answered at all. */
+        public boolean isAnswered() {
+            return subject.isFound();
+        }
+
+        /** One line for a log or a diagnostic. */
+        public String describe() {
+            return subject.fqn() + ": " + (isAnswered()
+                    ? annotations.size() + " annotation(s) " + annotations.stream().map(TypeAnnotation::name).toList()
+                    : "cannot answer — " + subject.describe()) + " [" + coverage + "]";
+        }
+    }
+
+    /**
+     * The answer to "which types are annotated with X".
+     *
+     * @param annotation      whether the annotation <em>type</em> is itself declared in these modules. Reported
+     *                        because it is useful, and deliberately not a precondition: a JDK or dependency
+     *                        annotation is the normal case and must still be answerable
+     * @param annotated       the types carrying it, in a stable order
+     * @param unresolvedNames annotation names met on the way that resolve to nothing in these modules
+     * @param coverage        which modules were searched, for a diagnostic
+     */
+    public record AnnotatedAnswer(TypeAnswer annotation, List<ClassRecord> annotated, List<String> unresolvedNames,
+                                  String coverage) {
+
+        public AnnotatedAnswer {
+            annotated = annotated == null ? List.of() : List.copyOf(annotated);
+            unresolvedNames = unresolvedNames == null ? List.of() : List.copyOf(unresolvedNames);
+        }
+
+        /** Always true: the question is answered by scanning the names the rows recorded, whether or not the
+         * annotation type has a row here. */
+        public boolean isAnswered() {
+            return true;
+        }
+
+        /** One line for a log or a diagnostic. */
+        public String describe() {
+            return annotation.fqn() + ": " + annotated.size() + " annotated type(s)"
+                    + (annotation.isFound() ? "" : " (the annotation type itself is not declared in these modules)")
+                    + (unresolvedNames.isEmpty() ? "" : ", " + unresolvedNames.size() + " annotation name(s)"
+                            + " unresolved " + unresolvedNames)
+                    + " [" + coverage + "]";
+        }
     }
 }

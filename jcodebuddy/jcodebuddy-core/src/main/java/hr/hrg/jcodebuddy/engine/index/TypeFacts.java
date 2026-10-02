@@ -29,9 +29,11 @@ import java.util.Set;
  * @param relations the type's supertypes, {@code extends} clause first and then {@code implements}, as
  *                  {@link TypeRelation}s — the names as written, since a row is a fact about one declaration
  *                  and resolving a name needs the whole index (DEC-029's relation half, plan step 3.0b)
+ * @param annotations the annotations on the declaration, as written, with their arguments as written — the
+ *                  declaration's own text, never an interpretation of it ({@link TypeAnnotation})
  */
 public record TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
-                        List<TypeRelation> relations) {
+                        List<TypeRelation> relations, List<TypeAnnotation> annotations) {
 
     /**
      * The modifier vocabulary the index records.
@@ -48,6 +50,20 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     public TypeFacts {
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
         relations = relations == null ? List.of() : List.copyOf(relations);
+        annotations = annotations == null ? List.of() : List.copyOf(annotations);
+    }
+
+    /**
+     * The facts of a type whose annotations the caller did not read.
+     *
+     * <p>A delegating constructor rather than a second shape: an empty list is how "none read" and "carries
+     * none" are both spelled, so a caller that knows nothing about annotations does not need to know this
+     * record grew a field — and a caller that wants the distinction asks the parse path, not this
+     * constructor.</p>
+     */
+    public TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
+                     List<TypeRelation> relations) {
+        this(fqn, kind, modifiers, enclosing, line, depth, relations, List.of());
     }
 
     /**
@@ -63,12 +79,19 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      */
     public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
                                String kind, List<String> modifiers, int line) {
-        return of(packageName, simpleName, enclosingNames, kind, modifiers, line, List.of());
+        return of(packageName, simpleName, enclosingNames, kind, modifiers, line, List.of(), List.of());
     }
 
     /** {@link #of(String, String, List, String, List, int)} with the type's relations (plan step 3.0b). */
     public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
                                String kind, List<String> modifiers, int line, List<TypeRelation> relations) {
+        return of(packageName, simpleName, enclosingNames, kind, modifiers, line, relations, List.of());
+    }
+
+    /** {@link #of(String, String, List, String, List, int)} with relations and annotations. */
+    public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
+                               String kind, List<String> modifiers, int line, List<TypeRelation> relations,
+                               List<TypeAnnotation> annotations) {
         List<String> chain = new ArrayList<>(enclosingNames);
         chain.add(simpleName);
         String prefix = packageName == null || packageName.isEmpty() ? "" : packageName + ".";
@@ -81,7 +104,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                         : prefix + String.join(".", enclosingNames),
                 line,
                 enclosingNames == null ? 0 : enclosingNames.size(),
-                relations);
+                relations,
+                annotations);
     }
 
     /**
@@ -108,7 +132,43 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 // only by it, and a lookup missing it answers the outer declaration with the inner
                 // declaration's line.
                 TreeQueries.lineOfChained(declaration, enclosingChain, source),
-                relationsOf(declaration, TypeKinds.kindOf(declaration)));
+                relationsOf(declaration, TypeKinds.kindOf(declaration)),
+                annotationsOf(declaration));
+    }
+
+    /**
+     * The annotations on a declaration, as written, in declaration order (asked for 2026-10-02).
+     *
+     * <p>Names come from {@link TreeQueries#annotationName}, which is the same reading the entity tooling's own
+     * annotation queries use, so there is one answer to "what is this annotation called" rather than two.
+     * Arguments come from {@link TreeQueries#expressionText} and are deliberately <em>not</em> evaluated: the
+     * engine records what the source says, and a consumer that needs a value has the type to read it with.
+     * A single {@code J.Empty} is what an annotation with an empty parameter list parses to (DEC-030's trap for
+     * methods, and the same shape here), so it is skipped rather than recorded as one empty argument.</p>
+     */
+    public static List<TypeAnnotation> annotationsOf(J.ClassDeclaration declaration) {
+        if (declaration == null) {
+            return List.of();
+        }
+        List<J.Annotation> annotations = declaration.getLeadingAnnotations();
+        if (annotations == null || annotations.isEmpty()) {
+            return List.of();
+        }
+        List<TypeAnnotation> written = new ArrayList<>(annotations.size());
+        for (J.Annotation annotation : annotations) {
+            List<String> arguments = new ArrayList<>();
+            List<org.openrewrite.java.tree.Expression> writtenArguments = annotation.getArguments();
+            if (writtenArguments != null) {
+                for (org.openrewrite.java.tree.Expression argument : writtenArguments) {
+                    if (argument instanceof J.Empty) {
+                        continue;
+                    }
+                    arguments.add(TreeQueries.expressionText(argument));
+                }
+            }
+            written.add(new TypeAnnotation(TreeQueries.annotationName(annotation), arguments));
+        }
+        return List.copyOf(written);
     }
 
     /**

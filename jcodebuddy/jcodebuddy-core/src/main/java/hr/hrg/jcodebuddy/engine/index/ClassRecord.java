@@ -32,14 +32,18 @@ import java.util.List;
  *                         empty: that is <em>not recorded</em> rather than "none", which is why the writer now
  *                         always emits the field (an empty array) and the distinction stops mattering for new
  *                         tables
+ * @param annotations      the annotations on the declaration, as written with their arguments as written, empty
+ *                         for a declaration that carries none — always emitted, for the same not-recorded
+ *                         reason as {@code relations} ({@link TypeAnnotation})
  */
 public record ClassRecord(String fqn, String path, String kind, List<String> modifiers, String enclosing,
                           int line, int depth, boolean generated, String checksum, String hashCalculatedAt,
-                          long size, List<TypeRelation> relations) {
+                          long size, List<TypeRelation> relations, List<TypeAnnotation> annotations) {
 
     public ClassRecord {
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
         relations = relations == null ? List.of() : List.copyOf(relations);
+        annotations = annotations == null ? List.of() : List.copyOf(annotations);
     }
 
     /**
@@ -52,7 +56,7 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
      */
     public ClassRecord withFileFacts(String checksum, String hashCalculatedAt, long size) {
         return new ClassRecord(fqn, path, kind, modifiers, enclosing, line, depth, generated, checksum,
-                hashCalculatedAt, size, relations);
+                hashCalculatedAt, size, relations, annotations);
     }
 
     /** Whether the type's own facts (not the file's content) differ from {@code other}. */
@@ -66,6 +70,9 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
                 && depth == other.depth
                 // A relation change is a type-fact change: a type that starts implementing an interface must
                 // not look unchanged to a pass that only compares the file's content (plan step 3.0b).
-                && relations.equals(other.relations);
+                && relations.equals(other.relations)
+                // An annotation change is a type-fact change for the same reason a relation change is: adding
+                // @Deprecated to a type whose bytes are otherwise identical must not look unchanged.
+                && annotations.equals(other.annotations);
     }
 }
