@@ -10,6 +10,17 @@ The decision it implements is [DEC-036](../doc-hipster-entity/architecture/decis
 > [the plan's Phase 3 banner](../plans/unified-plan.md) (steps 3.4–3.11), each naming the decision it
 > waits on. What this prototype does **not** do: cross-context wiring from `dependencies()`, `init*`
 > methods, region markers, and the `@Circular` two-phase form.
+>
+> **And it is the wrong shape in one respect, which the plan already schedules.** hipster-ioc is a
+> **project-wide** generator — it needs the project's type relations (who extends whom, who implements
+> what), which no single file contains — and **extracting metadata is not its job**: it consumes the
+> project's metadata to produce IoC code, while the metadata layer (the class index, the checksum cache,
+> the arena-backed index) reads and indexes sources. This prototype instead implements the *file-scoped*
+> `CodeGenerator` SPI and reads the sibling module interface itself. That is a category error kept as a
+> shortcut, and it is removed rather than re-labelled by
+> [the plan's step 3.0e](../plans/unified-plan.md), which lands on top of the metadata contract in steps
+> 3.0a–3.0d. Until then, `bun scripts/ioc-gen.js` is the supported entry point — do not offer this
+> generator to an isolated file.
 
 ## What it does
 

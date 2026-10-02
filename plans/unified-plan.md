@@ -58,24 +58,33 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 7. **Reports are rendered by Bun from the generator's JSON metadata**, never by a Java generator
    (DEC-027/028/029): one self-contained, framework-free HTML file, every link verified before it is
    written.
-8. **Generators come in two tiers, and the tier is declared.** A **standalone** generator reads only the
+8. **Generators come in two kinds, and the kind is declared.** A **file-scoped** generator reads only the
    file it is handed (`CodeContext.getFilePath()`) and its output is a function of that file: it may be
    offered to every file, one at a time, in any order, from a saved buffer with no tree around it. A
-   **neighbour-reading** generator needs at least one *other* file — a sibling, a package, the source root
-   — or writes something that describes the tree (a graph, an index, a report). Those are a second tier:
-   declared as such, run with the root in their own pass, and **never offered per-file** by a caller that
-   believes it is asking about one file.
+   **project-scoped** generator needs the project's *type relations* — who extends whom, who implements
+   what, what is assignable — which no single file contains, so its input is the project's **metadata**
+   (the type index, 3.0a–3.0d) and never a lone `CodeContext`: it is run as its own pass and **never
+   offered per-file** by a caller that believes it is asking about one file.
 
-   The line is not "how much does it read" but **"can a missing neighbour change the answer"** — and the
-   failure mode is specific: a generator that reads only its own file when it needed a neighbour does not
-   fail, it *infers an absence*. The hipster-ioc generator did exactly that in step 3.2: it looked for the
-   module interface inside the context's own compilation unit, found nothing, and reported no factories —
-   an empty-wiring implementation rather than an error, because a file it never read looked like a file
-   with nothing in it. So a neighbour that cannot be read is **reported, never inferred as absent**, and
-   the current tree shows both shapes: the entity generator takes a source root and a package list and
-   writes Java plus metadata JSON (tier 2 by construction, with no per-file entry point to misuse), while
-   `IocContextGenerator` implements the per-file SPI and reads a sibling file and writes a tree-level
-   graph (tier 2 wearing tier 1's interface). Enforcement: step 7.8.
+   Two clarifications that using this rule forced, because the earlier phrasing of it was wrong:
+
+   - **The kinds are not two shades of one thing.** A generator that needs relations is not a file
+     generator with a bigger appetite; it is a different kind of program. hipster-ioc cannot work on single
+     files at all — which is why its prototype's `CodeGenerator` implementation is a category error that
+     step 3.0e removes rather than re-labels;
+   - **a generator's kind is what it reads; a pass's kind is what it writes.** The IoC generator returns
+     text and `IocGeneration` writes the graph, so "needs another file *or* writes a tree artifact" would
+     have called one generator two kinds depending on which half you looked at.
+
+   The failure mode the rule exists for is specific: a generator that reads only its own file when it
+   needed the project does not fail, it *infers an absence*. The hipster-ioc generator did exactly that in
+   step 3.2 — it looked for the module interface inside the context's own compilation unit, found nothing,
+   and reported no factories, producing an empty-wiring implementation rather than an error, because a file
+   it never read looked like a file with nothing in it. So **metadata that cannot be resolved is reported,
+   never inferred as absent**. The tree shows both kinds: the entity generator takes a source root and a
+   package list and writes Java plus metadata JSON (project-scoped by construction, no per-file entry point
+   to misuse), while `IocContextGenerator` wears the file-scoped SPI and reads whatever sits beside the
+   context. Enforcement: steps 3.0a–3.0e and 7.8.
 
 ---
 
@@ -88,7 +97,7 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 | [`doc-hipster-entity/architecture/decisions/DEC-021.md`](../doc-hipster-entity/architecture/decisions/DEC-021.md) § 6 | step 1.1 — `enabled: false` | note removed when the step lands |
 | [`doc-hipster-entity/architecture/decisions/DEC-W008.md`](../doc/architecture/decisions-watch/DEC-W008.md), the `.kilo` metadata-server plan | steps 1.2–1.4 | closed into steps |
 | the `.kilo` metadata-arena plan | steps 2.1–2.2 | closed into steps |
-| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) | steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | the prototype is delivered; Phase 3's banner says what "prototyping" means and why the rest waits |
+| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) | steps 3.0a–3.0e (the metadata contract it must consume, and moving onto it); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | the prototype is delivered; Phase 3's banner says what "prototyping" means, why the rest waits, and that hipster-ioc is project-wide and does not extract metadata |
 | [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md) | steps 4.1–4.4 | Phase 9 residue + Phase 13 closed |
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md) | steps 5.1–5.3 | Phase 6 and Q3/Q5 closed |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md) | steps 5.4, 8.2 | Phase 5 + observations closed |
@@ -410,33 +419,163 @@ decision — including "either backend will do, and here is why that is the answ
 
 ---
 
-## 7. Phase 3 — hipster-ioc: **PROTOTYPING** — define the shape of the generated code
+## 7. Phase 3 — hipster-ioc: **PROTOTYPING** — a project-wide generator that consumes metadata
 
-> **This phase is not a delivery, and its steps are not a contract.** hipster-ioc is still in
-> **prototyping**: the point of the work here is to *find the shape* of the generated code, and that shape
-> is not settled. [DEC-036](../doc-hipster-entity/architecture/decisions/DEC-036.md) is `Trial`, the
-> generator emits one shape today, and some of the decisions it records are clauses nothing implements yet.
+> **hipster-ioc cannot work on single files.** It is a **project-wide** generator: what it needs is the
+> project's *type relations* — who extends whom, who implements what, which types are assignable — and no
+> single file contains that. Reading a file and following what it happens to reference is not a smaller
+> version of the job; it is a different job that produces confident wrong answers when the reference points
+> outside the file, which is exactly what the prototype did on its first implementation (it looked for the
+> module interface in the context's own compilation unit, found nothing, and emitted wiring with no
+> factories rather than an error — step 3.2).
 >
-> So this phase follows different rules from every other one in this file:
+> **Extracting metadata is not hipster-ioc's job.** hipster-ioc *consumes* metadata to produce IoC code.
+> Extraction, caching and indexing belong to the metadata side, which already has most of the pieces:
+> [`metadata-server`](../metadata-server)'s providers and RPC/MCP surfaces, the **class index**
+> (`hipster-entity-tooling`'s `ClassIndex`/`ClassRecord`, DEC-029) with per-file checksums
+> (`ContentHash`), and [`metadata-arena`](../metadata-arena) for index storage. What is missing is the
+> **contract between them** — steps 3.0a–3.0d below, which come *before* any consumer work.
 >
-> - a step here is **shape-defining** when it changes what the generator emits. Its output is a prototype —
->   expected to be rewritten — and the committed generated file in `hipster-ioc-test` is a sample, not a
->   contract;
-> - a step whose content **depends on the shape being settled** is marked **`[TBD]`**: deliberately
->   unscheduled, with the decision it waits on named, rather than written as though the shape were known.
->   A `[TBD]` step that quietly becomes "implement whatever the generator emits today" is the failure this
->   phase can have, because it would freeze the prototype by accident — the shape would be decided by
->   nobody, in code, with no record saying so;
-> - **the way out is a decision, not a date.** When the shape stops changing, DEC-036 moves from `Trial`
->   to `Accepted` (or is superseded), and the steps below become ordinary steps with real gates. Until
->   then a `[TBD]` row is a *known* item, not a forgotten one — an empty cell would be the latter.
+> > **This phase is not a delivery, and its steps are not a contract.** hipster-ioc is still in
+> > **prototyping**: the point of the work here is to *find the shape* of the generated code, and that shape
+> > is not settled. [DEC-036](../doc-hipster-entity/architecture/decisions/DEC-036.md) is `Trial`, the
+> > generator emits one shape today, and some of the decisions it records are clauses nothing implements
+> > yet. The prototype's own `CodeGenerator` implementation — a **per-file SPI** — is a category error kept
+> > only as a shortcut; step 3.0e is what removes it.
+> >
+> > So this phase follows different rules from every other one in this file:
+> >
+> > - a step here is **shape-defining** when it changes what the generator emits. Its output is a prototype —
+> >   expected to be rewritten — and the committed generated file in `hipster-ioc-test` is a sample, not a
+> >   contract;
+> > - a step whose content **depends on the shape being settled** is marked **`[TBD]`**: deliberately
+> >   unscheduled, with the decision it waits on named, rather than written as though the shape were known.
+> >   A `[TBD]` step that quietly becomes "implement whatever the generator emits today" is the failure this
+> >   phase can have, because it would freeze the prototype by accident — the shape would be decided by
+> >   nobody, in code, with no record saying so;
+> > - **the way out is a decision, not a date.** When the shape stops changing, DEC-036 moves from `Trial`
+> >   to `Accepted` (or is superseded), and the steps below become ordinary steps with real gates. Until
+> >   then a `[TBD]` row is a *known* item, not a forgotten one — an empty cell would be the latter.
 >
-> Shape-defining work done so far: steps 3.1–3.3, delivered as the **prototype** (`DEC-036`, the generator,
-> the runner, the committed example). Shape-dependent work: steps 3.4–3.11, all `[TBD]`.
+> **Order in this phase:** 3.0a–3.0d define the metadata contract the consumer needs (scheduled — they are
+> decisions about a shared layer, not about hipster-ioc's output); 3.0e moves the prototype onto it
+> (shape-defining work); 3.1–3.3 are the prototype already delivered; 3.4–3.11 are `[TBD]`, and each one's
+> "waits on" now names the metadata piece it needs where that is the real blocker.
 >
-> Related and **not** shape-dependent, so still scheduled: step 7.8 (the generator tiers are a property of
-> what a generator *reads*, not of what it emits, so classifying the prototype's tier does not freeze its
-> shape).
+> The step numbers `3.0a`–`3.0e` say *before 3.1* deliberately: this plan renumbers nothing, and these
+> steps must land before the consumer ones to be worth anything.
+
+### 3.0a — The metadata contract generators consume (ADR first)
+**Who:** agent · **Size:** M
+
+The generator-facing seam already exists and is **empty**: `jcodebuddy-codegen-api`'s
+[`TypeResolver`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeResolver.java)
+(`resolve(fqn)`) and
+[`TypeDefinition`](../jcodebuddy-codegen-api/src/main/java/hr/hrg/jcodebuddy/codegen/TypeDefinition.java)
+(qualified name, simple name, fields, field types). A grep for `implements TypeResolver` finds only
+`EmptyTypeResolver` — the interface says the right thing ("a metadata pass resolves types from the sources
+it has read, a watch agent from the editor's model, a test from a map") and nothing implements it. And
+`TypeDefinition` carries **no relations**, so it cannot answer the question hipster-ioc actually has: is
+`Gadget` assignable to `Widget`, and what implements `Widget`.
+
+**Do:** write the decision first (this plan's own rule: an ADR before the code that depends on it) covering
+at least: which questions a generator may ask the project model — resolve a type; its kind and modifiers;
+its supertypes/interfaces; its subtypes/implementors; assignability — and in which direction the indexes
+are stored; what a generator is *not* given (no file handles, no class loader: `TypeDefinition`'s
+"snapshot, not a handle" property is the one to keep); whether the seam is `TypeResolver` extended, a richer
+`TypeDefinition`, or a separate query interface beside it; and how a *missing* answer is reported (the
+prototype's lesson: an unresolvable type must be a diagnostic, never an inferred absence — see
+`TypeChangeConflictResolver`'s `UNRESOLVED_WARNING` for the shape of that rule already in the tree).
+
+**Gate:** the ADR is registered in
+[`decisions/README.md`](../doc-hipster-entity/architecture/decisions/README.md); the contract covers the
+entity generator's existing needs as well as hipster-ioc's (so it is not a single consumer's private
+shape); and every question above has an answer rather than a "later".
+
+**Done when:** `TypeResolver` has a documented implementation contract and `TypeDefinition` (or its
+successor) can express a relation, not only a field list.
+
+### 3.0b — Class relations in the class index
+**Who:** agent · **Size:** M
+
+DEC-029's class index is real and tested: `classes.json`, one row per type, keyed by FQN, with the file's
+path, its content checksum, the checksum instant, size, and the type's kind and modifiers
+([`ClassRecord`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/ClassRecord.java),
+[`TypeFacts`](../hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/index/TypeFacts.java)).
+It records **no relations**: nothing in a row says what a type extends or implements, and there is no
+reverse index, so "what implements `CtxModule`" cannot be asked of it at all.
+
+**Do:** add the relations to the index and to its writer: supertypes and implemented interfaces per type
+(as resolved names, not as source text), and the **reverse** direction the consumers need (implementors,
+subtypes) — with the storage decision from 3.0a in hand, and reusing the existing writer, format versioning
+and validation rather than a second file. Keep the row's "one type, one row" property and keep relations
+*derived* output: the index is regenerated, never hand-edited (DEC-026).
+
+**Gate:** `GATE` green (the index lives in `hipster-entity-tooling`, so the recorded gate covers it), with
+tests that a relation round-trips, that a relation to a type outside the module's sources is recorded as
+the name it is (not dropped), and that an unresolvable supertype is visible as such rather than absent.
+
+**Done when:** a consumer can answer "is A a subtype of B" and "who implements I" from the index alone,
+without parsing a file.
+
+### 3.0c — The cache: what is cached, and what invalidates it
+**Who:** agent · **Size:** M
+
+The checksum machinery exists (`ContentHash`/`Wyhash64`, the watch cache behind
+`WatchMetadataProvider`, the step 1.3 work) and it answers "has *this file* changed". The relations from
+3.0b introduce a second question the current cache cannot answer: a row for `A` depends on the file
+declaring `A` **and on the types it names** — edit `B` so that `A extends B` stops resolving, and `A`'s row
+is stale even though `A.java` was not touched.
+
+**Do:** define what is cached (per-file facts, relations, the reverse index — and which of them are stored
+or recomputed), the invalidation rules (checksum of the declaring file; a dependency edge for each named
+relation; what happens on a rename, a delete and a new file), where the cache lives (`.jcodebuddy/`,
+DEC-026) and in what format, and whether the arena-backed index (`LongToLongsIndex`, mmap) is the storage
+for the relation half — which is what step 2.3's backend decision is meant to settle. Say explicitly what a
+*partial* cache means: a stale index must be detectable, because a generator that reads a stale relation
+and emits code is the failure this whole layer exists to prevent.
+
+**Gate:** `GATE` green, with tests for the three transitions that matter: a file edit invalidates its own
+row; an edit that changes a relation invalidates the *dependent* rows; and a deleted file removes its row
+and the rows that named it (or marks them unresolved, whichever the decision says).
+
+**Done when:** "is this index safe to generate from?" has a mechanical answer.
+
+### 3.0d — One implementation of `TypeResolver` over the index
+**Who:** agent · **Size:** M
+
+The seam from 3.0a needs at least one real implementation before any consumer can be written against it,
+and the honest one is the metadata pass: index first, sources only when the index cannot answer.
+
+**Do:** implement the contract from 3.0a over the index from 3.0b with the cache from 3.0c — including
+`knownPackages()`, which exists on `TypeResolver` today and is exactly what a generator needs to choose a
+name that will resolve. A missing type must answer `null` (the interface's present contract) and the caller
+must fail loudly; do not soften that into an empty definition.
+
+**Gate:** `MODULE` for the module hosting it green — and *one generator test that runs against the resolver
+without being handed a file at all*, which is the property the whole phase is about.
+
+**Done when:** a generator can be written as a function of the project model plus its own inputs, with no
+file parsing of its own.
+
+### 3.0e — Move hipster-ioc onto the metadata contract
+**Who:** agent · **Size:** M · *(shape-defining)*
+
+The prototype implements the per-file `CodeGenerator` SPI and reads the sibling module interface itself.
+Both go: hipster-ioc becomes a project-wide generator handed the metadata (3.0a–3.0d) and a context to
+emit code for, and its passes stop pretending to be file passes.
+
+**Do:** replace the sibling lookup in `ContextReader` with metadata queries (the module interface, the
+factories and the relations all come from the index); remove `IocContextGenerator`'s `CodeGenerator`
+implementation rather than re-classifying it (a project-wide generator is not a per-file generator with a
+label); keep `bun scripts/ioc-gen.js` as the entry point; update `hipster-ioc-tooling/README.md`, DEC-036
+§ 11 and the ROADMAP's status block to say what the generator consumes and what it no longer does.
+
+**Gate:** `MODULE` for `hipster-ioc-tooling,hipster-ioc-test` green; the committed example still
+regenerates byte-identically; and a test proves the generator never reads a source file itself (the read
+seam is the metadata layer's).
+
+**Done when:** hipster-ioc parses nothing, and the per-file SPI has no project-wide implementer.
 
 ### 3.1 — The hipster-ioc ADR
 **Who:** agent · **Size:** S
@@ -575,7 +714,8 @@ is expressible through the API today. Both cycle cases are refused with a diagno
 for the unmarked case.
 
 **Waits on:** how a lazily-resolved dependency is spelled in a context interface (`Supplier<Bean>`? a new
-marker? a setter convention?).
+marker? a setter convention?) **and** the metadata contract from 3.0a — whether a type is even known to be
+part of a cycle is a question about the relations index, not about one file.
 **Schedulable when:** that spelling is in DEC-036 and an `@Circular` cycle generates running code.
 
 ### 3.5 — `init*` methods in creation order
@@ -609,7 +749,9 @@ DEC-036 § 6 has `ChildContext<P>` generate parent plumbing and — "when a decl
 recorded in the graph and never used to build anything.
 
 **Waits on:** how a context names and receives another context (constructor parameter? a generated
-factory? a `ChildContext` chain?), which is the same question as 3.4 for a different edge.
+factory? a `ChildContext` chain?), which is the same question as 3.4 for a different edge — plus the
+metadata queries from 3.0a–3.0d, because "is this dependency a `ChildContext`" is a relation, and the
+prototype answers it by reading whichever files happen to sit beside the context.
 **Schedulable when:** the shape of context-to-context creation is decided, including who constructs the
 parent.
 
@@ -631,8 +773,10 @@ Today the generator runs from `bun scripts/ioc-gen.js` over a source root. DEC-0
 by the dev-time pass and by a CLI"; the pass and watch halves do not exist. Step 7.8 (the generator tiers)
 is the precondition that *is* scheduled, because the tier is a property of what the generator reads.
 
-**Waits on:** the generator's interface being stable — which is 7.8 plus the shape decision, since a
-watch-mode pass regenerates on save and would otherwise rewrite a prototype's output repeatedly.
+**Waits on:** the generator's interface being stable — which is 3.0d/3.0e (it consumes metadata rather
+than files, so the pass hands it the project model) plus step 7.8 for the file-scoped kinds, plus the shape
+decision, since a watch-mode pass regenerates on save and would otherwise rewrite a prototype's output
+repeatedly.
 **Schedulable when:** 7.8 has landed and the emitted shape is settled.
 
 ### 3.10 — Retire `hipster-ioc-test`'s hand-written context
@@ -643,7 +787,9 @@ watch-mode pass regenerates on save and would otherwise rewrite a prototype's ou
 that a developer stops hand-writing the wiring. Doing it now would freeze the shape for a real consumer,
 which is the opposite of prototyping.
 
-**Waits on:** the shape being accepted (this is the step that would *make* it load-bearing).
+**Waits on:** the shape being accepted (this is the step that would *make* it load-bearing) **and** 3.0a–3.0e
+being real — a hand-written context retired in favour of a generator that still reads files by hand swaps
+one hand-maintained thing for another.
 **Schedulable when:** DEC-036 is `Accepted`, and the migration is the acceptance test for it.
 
 ### 3.11 — Editor-agnostic graph navigation, and the embedded host
@@ -1054,39 +1200,54 @@ round-trips as the same JSON the RPC returns, and `GATE` stays green.
 **Done when:** DEC-W008's manual-mode paragraph is true and its status note drops the CLI from its
 "not implemented" list.
 
-### 7.8 — Make the two generator tiers a type, not a convention
+### 7.8 — Two kinds of generator: file-scoped and project-scoped
 **Who:** agent · **Size:** M
 
 Rule § 2.8 states the distinction; nothing in the tree expresses it. One SPI — `CodeGenerator<T>` with
-`isApplicable(CodeContext)` and `generate(CodeContext)` — describes a **standalone** generator, and its
+`isApplicable(CodeContext)` and `generate(CodeContext)` — describes a **file-scoped** generator, and its
 javadoc says so ("a generator is therefore safe to offer to every file — the cost of asking is the
-predicate"), but nothing stops a neighbour-reading generator from implementing it and being offered
-exactly that way. Two facts about the current tree:
+predicate"). The kinds are not two shades of the same thing, and the correction that made this step clearer
+is worth stating: **a generator that needs the project's type relations is not a file generator with a
+bigger appetite — it is a different kind of program.** hipster-ioc is the example: it cannot work on single
+files at all, because "who extends whom" is not in any file, and its input is the project's **metadata**
+(steps 3.0a–3.0e), not source text it parses itself.
 
-- `IocContextGenerator` implements the per-file SPI and is **not** standalone: it resolves a supertype to
-  the sibling `<Supertype>.java` next to the context, and it writes
-  `<module>/.jcodebuddy/metadata/hipster-ioc/contexts.json` — an artifact describing the whole tree. A
-  caller holding a list of `CodeGenerator`s has no way to know that, and the generator's own
+Three facts about the current tree:
+
+- `IocContextGenerator` implements the file-scoped SPI and is **not** a file generator: it reads the
+  sibling `<Supertype>.java` beside the context, and the pass writes a whole-tree artifact
+  (`contexts.json`). A caller holding a list of `CodeGenerator`s cannot know that, and the generator's own
   `isApplicable` (a substring test on the file's text) is deliberately cheap precisely *because* the SPI
-  promises the file is all that matters.
-- `EntityMetadataGenerator` is tier 2 by construction and therefore safe: its entry points take a source
-  root and a package list and write generated Java plus `.jcodebuddy/metadata/entity/…`, so there is no
-  per-file door to walk through. The tier distinction is what keeps that true as more generators appear.
+  promises the file is all that matters. Steps 3.0e removes that implementation rather than re-labelling
+  it — a project-wide generator should not be wearing a per-file interface at all.
+- `ActionToolAdapter` is a **wrapper** whose kind is its delegate's: it forwards `isApplicable`/`generate`
+  to an `ActionTool`. All five wrapped tools read only `context.getFilePath()`, so they are file-scoped
+  today — but a kind that cannot be delegated cannot describe the one implementer that already exists as a
+  wrapper.
+- `EntityMetadataGenerator` is project-scoped by construction and therefore safe: its entry points take a
+  source root and a package list and write generated Java plus `.jcodebuddy/metadata/entity/…`, so there is
+  no per-file door to walk through.
 
-**Do:** put the distinction in `jcodebuddy-codegen-api` as a type rather than a comment — a second
-interface for the neighbour-reading tier, carrying what it needs beyond one file (the inputs it will read,
-or the requirement that it be run with a root) — declare `IocContextGenerator` as that tier, and make the
-caller side refuse to hand a tier-2 generator a single-file context (the entity pass's own dispatch is the
-caller to check, plus anything that iterates a resolver/generator list). State the tier on each
-generator's README, and amend DEC-036 § 11 with the classification, with the "a neighbour that cannot be
-read is reported, never inferred as absent" rule, and with the step 3.2 evidence for it.
+**Do:** put the distinction in `jcodebuddy-codegen-api` as a type rather than a comment. A project-scoped
+generator's contract is **metadata in, code out** — it is handed the project model (3.0d's resolver) and
+what to generate for, and it never receives a single-file `CodeContext` as its input. Concretely: a second
+interface for the project-scoped kind, the delegable case handled (`ActionToolAdapter` forwards its
+delegate's kind rather than declaring one), and the caller side refusing to offer a project-scoped
+generator per file. Say which kind each generator is on its README, and amend DEC-036 § 11 with the
+classification and with the rule this whole thread has been circling: **a type the metadata cannot resolve
+is reported, never inferred as absent** — the step 3.2 evidence is the reason.
 
-**Gate:** `MODULE` for `jcodebuddy-codegen-api,hipster-ioc-tooling` green, with tests that a
-neighbour-reading generator is not offered per-file and is run with a root, and that a declared neighbour
-which is missing produces a diagnostic instead of an empty answer.
+Also refine rule § 2.8 in this step, because using it exposed a conflation: **a generator's kind is what it
+reads; a pass's kind is what it writes.** The IoC generator returns text (no side effects) while
+`IocGeneration` writes the graph, and a rule that says "needs another file *or* writes a tree artifact"
+would call the same generator two kinds depending on which half you looked at.
 
-**Done when:** a caller holding a generator list can tell the tiers apart without reading the generator's
-source, and no generator that reads another file implements only the per-file tier.
+**Gate:** `MODULE` for `jcodebuddy-codegen-api,java-watch-agent` green, with tests that a project-scoped
+generator is not offered per file, that a wrapper's kind follows its delegate, and that an unresolvable
+type produces a diagnostic instead of an empty answer.
+
+**Done when:** a caller holding a generator list can tell the kinds apart without reading the generator's
+source, and no project-wide generator implements the file-scoped interface.
 
 ---
 
@@ -1220,6 +1381,11 @@ start)
 | 2.1 | metadata-arena unit tests | agent | M | `[x]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[ ]` |
+| 3.0a | The metadata contract generators consume (ADR first) | agent | M | `[ ]` — prerequisite of every consumer step |
+| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index | agent | M | `[ ]` |
+| 3.0c | The cache: what is cached, and what invalidates it | agent | M | `[ ]` |
+| 3.0d | One implementation of `TypeResolver` over the index | agent | M | `[ ]` |
+| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |
@@ -1252,7 +1418,7 @@ start)
 | 7.5 | Agent OpenRewrite tool prototype | agent | M | `[ ]` |
 | 7.6 | Decide the three `todo.java_watch2.md` remainders | agent + maintainer | S | `[ ]` |
 | 7.7 | Manual-mode CLI for DEC-W008 (`metadata parse`) | agent | S | `[ ]` |
-| 7.8 | Two generator tiers as a type, not a convention (rule § 2.8) | agent | M | `[ ]` |
+| 7.8 | Two kinds of generator: file-scoped and project-scoped | agent | M | `[ ]` |
 | 8.1 | JetBrains maintainer questions + IDE observations | human | — | `[ ]` |
 | 8.2 | Eclipse observations, then Q2 | human | — | `[ ]` |
 | 8.3 | Agent IDE hooks | human decides | — | `[ ]` |

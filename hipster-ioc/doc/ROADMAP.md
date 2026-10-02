@@ -22,6 +22,17 @@
 > there means deliberately unscheduled, not forgotten: the bullets in this roadmap that need a settled
 > shape (the graph presentation, the host, the navigation) are among them.
 >
+> **What this module is, and what it is not — settled, and not a matter of prototyping.** hipster-ioc is a
+> **project-wide** generator: it needs the project's type relations (who extends whom, who implements
+> what, what is assignable) to decide how beans are wired, and no single file contains them — so it cannot
+> work file by file, and it does not. **Extracting metadata is not its job:** it *consumes* the project's
+> metadata to produce IoC code, while the metadata layer (the class index with its checksums, the cache,
+> the arena-backed index) reads and indexes sources. The seam for that already exists in
+> `jcodebuddy-codegen-api` — `TypeResolver`/`TypeDefinition` — and is empty: `TypeDefinition` carries a
+> type's fields and **no relations**, and nothing but `EmptyTypeResolver` implements `TypeResolver`. The
+> plan schedules the contract for it as steps **3.0a–3.0d**, and moving this generator onto it as
+> **3.0e**. The prototype's file-scoped `CodeGenerator` implementation is a shortcut that 3.0e removes.
+>
 > **What the prototype does not do, stated rather than discovered:** no cross-context wiring (a context's
 > `dependencies()` are recorded in the graph and never used to build anything), no `init*` methods, no
 > region markers, and no `@Circular` two-phase form — a cycle is refused with a diagnostic rather than
