@@ -46,7 +46,7 @@ const CLASSPATH_FILE = join(MODULE, 'target', 'ioc-classpath.txt');
 function usage() {
   console.log(`ioc-gen.js — generate hipster-ioc context implementations (DEC-036)
 
-  bun scripts/ioc-gen.js                        generate for hipster-ioc-test/src/test/java
+  bun scripts/ioc-gen.js                        generate for hipster-ioc/hipster-ioc-test/src/test/java
   bun scripts/ioc-gen.js --root <dir>           generate for another source root
   bun scripts/ioc-gen.js --indent "  "          one indentation step for generated code
   bun scripts/ioc-gen.js --quiet                print only the divergences

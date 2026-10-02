@@ -6,9 +6,9 @@
 
 hipster-ioc is now a first-class module of the [jcodebuddy](https://github.com/your-org/jcodebuddy) project. It lives under the `hipster-ioc/` directory with the following module structure:
 
-- `hipster-ioc-api/` — annotations, interfaces, and marker types
-- `hipster-ioc-tooling/` — code generator, dependency graph computation, and metadata projections
-- `hipster-ioc-test/` — integration tests
+- `hipster-ioc/hipster-ioc-api/` — annotations, interfaces, and marker types
+- `hipster-ioc/hipster-ioc-tooling/` — code generator, dependency graph computation, and metadata projections
+- `hipster-ioc/hipster-ioc-test/` — integration tests
 
 Makes dependency injection contexts almost as simple as regular beans. Less bloat, more fun, and more speed (build, start, runtime).
 

@@ -1,13 +1,13 @@
 # hipster-ioc-tooling
 
-The context generator for [hipster-ioc](../hipster-ioc/README.md), and the dependency graph it computes.
-The decision it implements is [DEC-036](../doc-hipster-entity/architecture/decisions/DEC-036.md).
+The context generator for [hipster-ioc](../../hipster-ioc/README.md), and the dependency graph it computes.
+The decision it implements is [DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md).
 
 > **Status: prototype — the generated shape is not settled.** hipster-ioc is in its prototyping phase, and
 > the point of this generator is to *find* that shape: DEC-036 is `Trial`, the output is expected to be
 > rewritten, and the committed sample in `hipster-ioc-test` is a sample rather than a contract. The work
 > that depends on the shape being decided is deliberately unscheduled and listed as `[TBD]` in
-> [the plan's Phase 3 banner](../plans/unified-plan.md) (steps 3.4–3.11), each naming the decision it
+> [the plan's Phase 3 banner](../../plans/unified-plan.md) (steps 3.4–3.11), each naming the decision it
 > waits on. What this prototype does **not** do: cross-context wiring from `dependencies()`, `init*`
 > methods, region markers, and the `@Circular` two-phase form.
 >
@@ -18,8 +18,8 @@ The decision it implements is [DEC-036](../doc-hipster-entity/architecture/decis
 > the arena-backed index) reads and indexes sources. This prototype instead implements the *file-scoped*
 > `CodeGenerator` SPI and reads the sibling module interface itself. That is a category error kept as a
 > shortcut, and it is removed rather than re-labelled by
-> [the plan's step 3.0e](../plans/unified-plan.md), which lands on top of the one metadata engine
-> [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) puts in `jcodebuddy-core` (steps
+> [the plan's step 3.0e](../../plans/unified-plan.md), which lands on top of the one metadata engine
+> [DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md) puts in `jcodebuddy-core` (steps
 > 3.0a–3.0k, of which this generator is one consumer). Until then, `bun scripts/ioc-gen.js` is the supported entry point — do not offer this
 > generator to an isolated file.
 
@@ -28,7 +28,7 @@ The decision it implements is [DEC-036](../doc-hipster-entity/architecture/decis
 Reads a `@HipsterContext` interface and writes `<Context>Impl` beside it, in the same package:
 
 ```
-hipster-ioc-test/src/test/java/hr/hrg/hipster/ioc/test/
+hipster-ioc/hipster-ioc-test/src/test/java/hr/hrg/hipster/ioc/test/
 ├── CtxMain.java          the context interface — the user's source of truth
 ├── CtxMainModule.java    package-private, holds `default ObjectMapper buildMapper()`
 └── CtxMainImpl.java      generated: fields, creation in dependency order, accessors
@@ -46,7 +46,7 @@ preserved verbatim), and honours `enabled:false` in its header as a whole-file f
 ## Running it
 
 ```bash
-bun scripts/ioc-gen.js                      # hipster-ioc-test/src/test/java
+bun scripts/ioc-gen.js                      # hipster-ioc/hipster-ioc-test/src/test/java
 bun scripts/ioc-gen.js --root <dir>         # another source root
 bun scripts/ioc-gen.js --indent "  "        # four spaces by default
 bun scripts/ioc-gen.js --quiet              # print only the divergences
@@ -97,8 +97,8 @@ generator (DEC-027/029).
   `<Supertype>.java`. It also writes `<module>/.jcodebuddy/metadata/hipster-ioc/contexts.json`, which
   describes the whole tree. Run it through `bun scripts/ioc-gen.js`, which walks a source root. The tier
   distinction is being made explicit in
-  [the plan's step 7.8](../plans/unified-plan.md) and recorded in
-  [DEC-036 § 11](../doc-hipster-entity/architecture/decisions/DEC-036.md); until then, a caller holding a
+  [the plan's step 7.8](../../plans/unified-plan.md) and recorded in
+  [DEC-036 § 11](../../doc-hipster-entity/architecture/decisions/DEC-036.md); until then, a caller holding a
   list of generators must not hand this one an isolated file — and if a sibling module interface cannot be
   read, that is a missing neighbour to report, never an absence to infer.
 - It does **not** depend on `project-automation`; another module must never depend on a project's private

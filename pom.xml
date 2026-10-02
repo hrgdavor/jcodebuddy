@@ -87,9 +87,9 @@
         <module>jcodebuddy/jcodebuddy-core</module>
         <module>jcodebuddy/jcodebuddy-codegen-api</module>
         <module>project-automation</module>
-        <module>hipster-ioc-api</module>
-        <module>hipster-ioc-tooling</module>
-        <module>hipster-ioc-test</module>
+        <module>hipster-ioc/hipster-ioc-api</module>
+        <module>hipster-ioc/hipster-ioc-tooling</module>
+        <module>hipster-ioc/hipster-ioc-test</module>
         <module>jcodebuddy/metadata-server</module>
         <module>jcodebuddy/metadata-mcp-server</module>
         <module>jcodebuddy/metadata-arena</module>

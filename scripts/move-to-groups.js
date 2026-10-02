@@ -57,6 +57,11 @@ const MOVES = [
   { group: 'jcodebuddy', from: 'metadata-server', to: 'jcodebuddy/metadata-server' },
   { group: 'jcodebuddy', from: 'metadata-mcp-server', to: 'jcodebuddy/metadata-mcp-server' },
   { group: 'jcodebuddy', from: 'metadata-arena', to: 'jcodebuddy/metadata-arena' },
+  // `hipster-ioc/` is the group *and* the documentation directory it has always been, exactly like `webview/`:
+  // its module directories go inside it and the docs stay at its root.
+  { group: 'hipster-ioc', from: 'hipster-ioc-api', to: 'hipster-ioc/hipster-ioc-api' },
+  { group: 'hipster-ioc', from: 'hipster-ioc-tooling', to: 'hipster-ioc/hipster-ioc-tooling' },
+  { group: 'hipster-ioc', from: 'hipster-ioc-test', to: 'hipster-ioc/hipster-ioc-test' },
 ];
 
 const TEXT_EXTENSIONS = ['.md', '.java', '.js', '.mjs', '.cjs', '.ts', '.json', '.xml', '.txt', '.properties', '.yml', '.yaml'];

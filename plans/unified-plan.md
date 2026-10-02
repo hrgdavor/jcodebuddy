@@ -789,6 +789,11 @@ and `project-automation` are still at the root.
   `project-automation` (92 tests), `java-watch-agent`, `metadata-server`, `metadata-mcp-server`,
   `metadata-arena`, `jwa-builder*` and `jcodebuddy-codegen-api` — because `GATE_MODULES` covers only
   `jcodebuddy-core` and the six `hipster-entity` modules until 3.0k. Links green.
+- **Group 4, `hipster-ioc/`** (3 modules, added by the amendment to DEC-039 the same day): the group folder
+  **is** the topic folder that already existed — `hipster-ioc/doc/`, its README and roadmap stay at the root
+  and the modules go inside, which is the `webview/` shape. Evidence: a targeted build of
+  `hipster-ioc-api,hipster-ioc-tooling,hipster-ioc-test` — `BUILD SUCCESS`, tooling's tests included (3.8 s) —
+  and links green (the only docs change is `hipster-ioc/doc/ROADMAP.md`'s two module links).
 - **The `watch/` collision was real**: a module named `watch` already occupied that path (a small
   file-copying watcher app, no dependents). It was renamed into the family — directory
   `watch/java-watch-app`, artifactId `java-watch-app` — rather than left as a module sitting on its group
@@ -898,7 +903,7 @@ emit code for, and its passes stop pretending to be file passes.
 **Do:** replace the sibling lookup in `ContextReader` with metadata queries (the module interface, the
 factories and the relations all come from the index); remove `IocContextGenerator`'s `CodeGenerator`
 implementation rather than re-classifying it (a project-wide generator is not a per-file generator with a
-label); keep `bun scripts/ioc-gen.js` as the entry point; update `hipster-ioc-tooling/README.md`, DEC-036
+label); keep `bun scripts/ioc-gen.js` as the entry point; update `hipster-ioc/hipster-ioc-tooling/README.md`, DEC-036
 § 11 and the ROADMAP's status block to say what the generator consumes and what it no longer does.
 
 **Gate:** `MODULE` for `hipster-ioc-tooling,hipster-ioc-test` green; the committed example still
@@ -996,12 +1001,12 @@ JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `Dive
   reactor dependencies, exports the classpath with `dependency:build-classpath -am` — so it runs *this
   checkout's* classes rather than whatever jar is in `~/.m2` — and forwards the generator's arguments. Its
   header records why it is not `mvn exec:java`, the same measured reasons `scripts/gen.js` gives.
-- **The committed example**: `hipster-ioc-test/src/test/java/…/CtxMainImpl.java` — the real `CtxMain`, its
+- **The committed example**: `hipster-ioc/hipster-ioc-test/src/test/java/…/CtxMainImpl.java` — the real `CtxMain`, its
   package-private `CtxMainModule` sibling, and `this.mapper = buildMapper();`. `hipster-ioc-test` **compiles**
   with it, which is DEC-036's headline acceptance criterion, met on the module the decision names rather than
   only on a fixture tree. Found while doing it: the generated file inherited the marker annotation's own
   import, which it never uses — the reader now drops it.
-- **`hipster-ioc-tooling/README.md`** is the module's front door: what it does, the generated layout, how to
+- **`hipster-ioc/hipster-ioc-tooling/README.md`** is the module's front door: what it does, the generated layout, how to
   run it, the five refusals and why refusing is the answer, the graph's location, the **naming-contract table
   DEC-036 § 12 asked for**, and the boundaries (§ 1.1, DEC-030, DEC-026).
 - **The ROADMAP now distinguishes what landed from what did not**: the generator and the graph are real; the
@@ -1023,7 +1028,7 @@ JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `Dive
   Markdown. Which check owns which mistake is worth knowing: `GATE` green did not mean the docs resolved.
 - The graph's destination needed a **module-level** ignore. The root `.gitignore`'s `.jcodebuddy/metadata/`
   contains a slash, so it is anchored to the repository root and does **not** match
-  `hipster-ioc-test/.jcodebuddy/metadata/` — the graph showed up as untracked until the module got its own
+  `hipster-ioc/hipster-ioc-test/.jcodebuddy/metadata/` — the graph showed up as untracked until the module got its own
   `.jcodebuddy/.gitignore` in the shape `hipster-entity-example`'s states.
 
 ---
@@ -1849,7 +1854,7 @@ start)
 | 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038) | agent | S | `[ ]` |
 | 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038) | agent | M | `[ ]` |
 | 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038) | agent | L | `[ ]` |
-| 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/` (DEC-039) | agent | M | `[x]` — `hipster-ioc*`, `merge-java` and `project-automation` wait on "others to be decided" |
+| 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation`, the IDE/client family and the doc trees wait on "others to be decided" |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |

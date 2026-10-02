@@ -3,12 +3,12 @@
 > **Status 2026-10-01 — Phase 2's first half is a PROTOTYPE, and the rest is TBD.**
 >
 > What exists: Phase 1's catalog is [`ioc-problems-catalog.md`](ioc-problems-catalog.md), and the
-> usage simulation is hand-written today — [`hipster-ioc-test/`](../../hipster-ioc-test) holds
+> usage simulation is hand-written today — [`hipster-ioc/hipster-ioc-test/`](../hipster-ioc-test) holds
 > `CtxMain`/`CtxMainModule` plus the composable-entity playground, over the five API types in
-> [`hipster-ioc-api/`](../../hipster-ioc-api) (`HipsterContext`, `ChildContext`, `Circular`,
+> [`hipster-ioc/hipster-ioc-api/`](../hipster-ioc-api) (`HipsterContext`, `ChildContext`, `Circular`,
 > `DynamicResource`, `StableValuePolyfill`).
 >
-> **Phase 2's first half is real but still prototyping:** [`hipster-ioc-tooling/`](../../hipster-ioc-tooling/README.md)
+> **Phase 2's first half is real but still prototyping:** [`hipster-ioc/hipster-ioc-tooling/`](../../hipster-ioc/hipster-ioc-tooling/README.md)
 > is no longer an empty jar — it generates `CtxMainImpl` from `CtxMain` (committed Java, DEC-035's header,
 > creation order derived from the `buildMapper()` factory, accessors that return fields), and the committed
 > example in `hipster-ioc-test` compiles. It also computes the dependency graph as JSON under the module's
