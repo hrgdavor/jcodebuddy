@@ -1,6 +1,6 @@
 # Roadmap / Todo
 
-> **Status 2026-10-01 — this is a backlog, not a plan, and Phase 2 is not implemented.**
+> **Status 2026-10-01 — Phase 2's first half is a PROTOTYPE, and the rest is TBD.**
 >
 > What exists: Phase 1's catalog is [`ioc-problems-catalog.md`](ioc-problems-catalog.md), and the
 > usage simulation is hand-written today — [`hipster-ioc-test/`](../../hipster-ioc-test) holds
@@ -8,33 +8,33 @@
 > [`hipster-ioc-api/`](../../hipster-ioc-api) (`HipsterContext`, `ChildContext`, `Circular`,
 > `DynamicResource`, `StableValuePolyfill`).
 >
-> **Phase 2 has since started, and its first half is real (2026-10-01):**
-> [`hipster-ioc-tooling/`](../../hipster-ioc-tooling/README.md) is no longer an empty jar. It generates
-> `CtxMainImpl` from `CtxMain` — committed Java, DEC-035's header, creation order derived from the
-> `buildMapper()` factory, accessors that return fields — and the committed example in `hipster-ioc-test`
-> compiles. It also computes the dependency graph, as JSON under the module's
-> `.jcodebuddy/metadata/hipster-ioc/contexts.json`, and runs through
-> `bun scripts/ioc-gen.js`. The shape is fixed by
-> [DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md) (`Trial`).
+> **Phase 2's first half is real but still prototyping:** [`hipster-ioc-tooling/`](../../hipster-ioc-tooling/README.md)
+> is no longer an empty jar — it generates `CtxMainImpl` from `CtxMain` (committed Java, DEC-035's header,
+> creation order derived from the `buildMapper()` factory, accessors that return fields), and the committed
+> example in `hipster-ioc-test` compiles. It also computes the dependency graph as JSON under the module's
+> `.jcodebuddy/metadata/hipster-ioc/contexts.json`, and runs through `bun scripts/ioc-gen.js`.
+> [DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md) is `Trial`: it **proposes** the
+> generated shape, and that shape is expected to change.
 >
-> **What is still not built, and is not claimed:** the browsable presentation of the graph — the report page
-> rendered by Bun from that JSON (DEC-027/029), the "editor-agnostic context navigation" bullet below, and
-> the embedded light HTTP server. None of those exist. Nor does the `@Circular` two-phase form: a cycle is
-> refused with a diagnostic rather than wired (DEC-036 § 5).
+> **Everything that depends on the shape therefore waits**, and the plan is where that is tracked: Phase 3's
+> banner in [`plans/unified-plan.md`](../../plans/unified-plan.md) marks this module as prototyping and
+> lists the shape-dependent work as `[TBD]` — steps 3.4–3.11, each naming the decision it waits on. "TBD"
+> there means deliberately unscheduled, not forgotten: the bullets in this roadmap that need a settled
+> shape (the graph presentation, the host, the navigation) are among them.
 >
-> What does **not** exist: Phase 2's whole backlog — dependency metadata, the embedded light HTTP
-> server, the editor-agnostic graph navigation, and the "secondary backlog" list. A grep for
-> `HipsterIocGenerator`, `GeneratedContext` or a dependency-graph service finds nothing, and the
-> module that would carry them, [`hipster-ioc-tooling/`](../../hipster-ioc-tooling) ("Code generator
-> and dependency graph computation for hipster-ioc"), is a reactor module with a POM, three declared
-> dependencies and **no `src/` at all** — it compiles to an empty jar.
+> **What the prototype does not do, stated rather than discovered:** no cross-context wiring (a context's
+> `dependencies()` are recorded in the graph and never used to build anything), no `init*` methods, no
+> region markers, and no `@Circular` two-phase form — a cycle is refused with a diagnostic rather than
+> wired (DEC-036 § 5). The browsable page rendered by Bun (DEC-027/029) and the embedded light HTTP server
+> do not exist; the module's README says which entry points do.
 >
-> Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md). The record those
-> steps needed is **[DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md)** — the `.kilo`
-> plan for this work asked for `DEC-W008`, a number the metadata no-cache decision had already taken. It
-> fixes the generated shape (`<Context>Impl`, committed Java, DEC-035's header, creation order derived from
-> the dependencies, region markers only above the design document's thresholds, the graph as JSON under
-> `.jcodebuddy/metadata/`) and carries status `Trial` until the maintainer accepts it.
+> Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), with the
+> shape-dependent remainder as steps 3.4–3.11 (`[TBD]`). The record those steps needed is
+> **[DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md)** — the `.kilo` plan for this
+> work asked for `DEC-W008`, a number the metadata no-cache decision had already taken. Read it as a
+> **proposal** (`Trial`), not as a contract: it is what the prototype implements, and the plan's Phase 3
+> banner says which parts are still expected to change. `region markers only above the thresholds` is in
+> the record as intent and is **not** implemented — see the list above.
 
 ## Phase 1: Define the Problem Space & Refine Boilerplate
 To be able to define good, readable boilerplate, we first need to explicitly catalog the "problems" that existing IOC frameworks (like Dagger, Spring, Guice) attempt to solve.

@@ -3,6 +3,14 @@
 The context generator for [hipster-ioc](../hipster-ioc/README.md), and the dependency graph it computes.
 The decision it implements is [DEC-036](../doc-hipster-entity/architecture/decisions/DEC-036.md).
 
+> **Status: prototype — the generated shape is not settled.** hipster-ioc is in its prototyping phase, and
+> the point of this generator is to *find* that shape: DEC-036 is `Trial`, the output is expected to be
+> rewritten, and the committed sample in `hipster-ioc-test` is a sample rather than a contract. The work
+> that depends on the shape being decided is deliberately unscheduled and listed as `[TBD]` in
+> [the plan's Phase 3 banner](../plans/unified-plan.md) (steps 3.4–3.11), each naming the decision it
+> waits on. What this prototype does **not** do: cross-context wiring from `dependencies()`, `init*`
+> methods, region markers, and the `@Circular` two-phase form.
+
 ## What it does
 
 Reads a `@HipsterContext` interface and writes `<Context>Impl` beside it, in the same package:

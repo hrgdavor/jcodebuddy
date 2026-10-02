@@ -88,7 +88,7 @@ checkout with no human) or `human` (needs a person, a running IDE, or an externa
 | [`doc-hipster-entity/architecture/decisions/DEC-021.md`](../doc-hipster-entity/architecture/decisions/DEC-021.md) § 6 | step 1.1 — `enabled: false` | note removed when the step lands |
 | [`doc-hipster-entity/architecture/decisions/DEC-W008.md`](../doc/architecture/decisions-watch/DEC-W008.md), the `.kilo` metadata-server plan | steps 1.2–1.4 | closed into steps |
 | the `.kilo` metadata-arena plan | steps 2.1–2.2 | closed into steps |
-| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) | steps 3.1–3.3 | closed into steps |
+| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md) | steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | the prototype is delivered; Phase 3's banner says what "prototyping" means and why the rest waits |
 | [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md) | steps 4.1–4.4 | Phase 9 residue + Phase 13 closed |
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md) | steps 5.1–5.3 | Phase 6 and Q3/Q5 closed |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md) | steps 5.4, 8.2 | Phase 5 + observations closed |
@@ -410,7 +410,33 @@ decision — including "either backend will do, and here is why that is the answ
 
 ---
 
-## 7. Phase 3 — hipster-ioc: fill the empty module
+## 7. Phase 3 — hipster-ioc: **PROTOTYPING** — define the shape of the generated code
+
+> **This phase is not a delivery, and its steps are not a contract.** hipster-ioc is still in
+> **prototyping**: the point of the work here is to *find the shape* of the generated code, and that shape
+> is not settled. [DEC-036](../doc-hipster-entity/architecture/decisions/DEC-036.md) is `Trial`, the
+> generator emits one shape today, and some of the decisions it records are clauses nothing implements yet.
+>
+> So this phase follows different rules from every other one in this file:
+>
+> - a step here is **shape-defining** when it changes what the generator emits. Its output is a prototype —
+>   expected to be rewritten — and the committed generated file in `hipster-ioc-test` is a sample, not a
+>   contract;
+> - a step whose content **depends on the shape being settled** is marked **`[TBD]`**: deliberately
+>   unscheduled, with the decision it waits on named, rather than written as though the shape were known.
+>   A `[TBD]` step that quietly becomes "implement whatever the generator emits today" is the failure this
+>   phase can have, because it would freeze the prototype by accident — the shape would be decided by
+>   nobody, in code, with no record saying so;
+> - **the way out is a decision, not a date.** When the shape stops changing, DEC-036 moves from `Trial`
+>   to `Accepted` (or is superseded), and the steps below become ordinary steps with real gates. Until
+>   then a `[TBD]` row is a *known* item, not a forgotten one — an empty cell would be the latter.
+>
+> Shape-defining work done so far: steps 3.1–3.3, delivered as the **prototype** (`DEC-036`, the generator,
+> the runner, the committed example). Shape-dependent work: steps 3.4–3.11, all `[TBD]`.
+>
+> Related and **not** shape-dependent, so still scheduled: step 7.8 (the generator tiers are a property of
+> what a generator *reads*, not of what it emits, so classifying the prototype's tier does not freeze its
+> shape).
 
 ### 3.1 — The hipster-ioc ADR
 **Who:** agent · **Size:** S
@@ -530,6 +556,107 @@ JDK; the entity tooling's divergence tests (`ExampleDivergenceReportTest`, `Dive
   contains a slash, so it is anchored to the repository root and does **not** match
   `hipster-ioc-test/.jcodebuddy/metadata/` — the graph showed up as untracked until the module got its own
   `.jcodebuddy/.gitignore` in the shape `hipster-entity-example`'s states.
+
+---
+
+Every step below is real work somebody will have to do, and none of it can be written as a normal step
+yet: each one's *content* is a function of a shape still moving, so its gate would have to be invented and
+then rewritten. They are listed with the decision each waits on, so that "not scheduled" is visible and
+specific rather than looking like an oversight. Nobody should start one before its "schedulable when" line
+is true — and if one is started anyway, the first thing it must do is write that decision down.
+
+### 3.4 — The `@Circular` two-phase form
+**Who:** agent · **Size:** unknown until the shape is decided
+
+DEC-036 § 5 was amended when the generator was built: closing a cycle needs the dependency resolved
+*after* construction (a `Supplier`-style parameter, or a setter the generator may call), and neither shape
+is expressible through the API today. Both cycle cases are refused with a diagnostic in the meantime —
+`circular_dependency_unmarked` and `circular_dependency_marked_unsupported` — which is safe and permanent
+for the unmarked case.
+
+**Waits on:** how a lazily-resolved dependency is spelled in a context interface (`Supplier<Bean>`? a new
+marker? a setter convention?).
+**Schedulable when:** that spelling is in DEC-036 and an `@Circular` cycle generates running code.
+
+### 3.5 — `init*` methods in creation order
+**Who:** agent · **Size:** S once the shape is known
+
+DEC-036 § 3 says the creation order "drives the `init*` methods", and nothing emits any: the prototype
+generates fields, a constructor and accessors. Whether `init*` means one method per bean, one method per
+context, or a hook the user overrides is a shape decision, not an implementation detail — the wrong answer
+puts generated code into the user's edit path.
+
+**Waits on:** the shape of the initialisation seam, and whether it belongs in the context class at all.
+**Schedulable when:** DEC-036 names the seam and the order contract it has to satisfy.
+
+### 3.6 — Region markers above the thresholds
+**Who:** agent · **Size:** S
+
+DEC-036 § 9 requires region markers only above thresholds (fields > 5, exposed beans > 3, factory methods
+> 3) so a large context can be read and partially hand-edited. The prototype emits none, because the
+thresholds only matter once the *layout* is settled — a marker pair around a layout that then changes is
+churn in every generated file.
+
+**Waits on:** the generated layout (field grouping, where the constructor sits).
+**Schedulable when:** the layout stops changing and DEC-035's `region begin/end` ids are named.
+
+### 3.7 — Cross-context `dependencies()` and `ChildContext` parent assignment
+**Who:** agent · **Size:** M
+
+DEC-036 § 6 has `ChildContext<P>` generate parent plumbing and — "when a declared dependency is a
+`ChildContext`" — the parent assignment where the child is created. The prototype generates the plumbing
+(field, `getParent`, `setParent`) and no cross-context creation at all: a context's `dependencies()` are
+recorded in the graph and never used to build anything.
+
+**Waits on:** how a context names and receives another context (constructor parameter? a generated
+factory? a `ChildContext` chain?), which is the same question as 3.4 for a different edge.
+**Schedulable when:** the shape of context-to-context creation is decided, including who constructs the
+parent.
+
+### 3.8 — The dependency-graph report page
+**Who:** agent · **Size:** M
+
+The graph exists as JSON (`contexts.json`, DEC-026's location) and there is no page. DEC-027/029 say the
+page is a Bun renderer over that JSON, but the JSON's *shape* is the generator's model — it changed within
+step 3.2 and it can change again with any of 3.4–3.7, so a renderer built now would be rewritten with it.
+
+**Waits on:** the graph model being settled (it is DEC-036 § 10's shape, and it follows the generated
+shape).
+**Schedulable when:** no step above would add or rename a graph key.
+
+### 3.9 — Driving the generator from the dev-time pass and watch mode
+**Who:** agent · **Size:** M
+
+Today the generator runs from `bun scripts/ioc-gen.js` over a source root. DEC-036 § 11 says it is "driven
+by the dev-time pass and by a CLI"; the pass and watch halves do not exist. Step 7.8 (the generator tiers)
+is the precondition that *is* scheduled, because the tier is a property of what the generator reads.
+
+**Waits on:** the generator's interface being stable — which is 7.8 plus the shape decision, since a
+watch-mode pass regenerates on save and would otherwise rewrite a prototype's output repeatedly.
+**Schedulable when:** 7.8 has landed and the emitted shape is settled.
+
+### 3.10 — Retire `hipster-ioc-test`'s hand-written context
+**Who:** agent · **Size:** S–M
+
+`hipster-ioc-test` still carries the hand-written `CtxMain`/`CtxMainModule` that the generated
+`CtxMainImpl` was produced from — the whole point of the generator, per the `.kilo` integration plan, is
+that a developer stops hand-writing the wiring. Doing it now would freeze the shape for a real consumer,
+which is the opposite of prototyping.
+
+**Waits on:** the shape being accepted (this is the step that would *make* it load-bearing).
+**Schedulable when:** DEC-036 is `Accepted`, and the migration is the acceptance test for it.
+
+### 3.11 — Editor-agnostic graph navigation, and the embedded host
+**Who:** human decides · **Size:** unknown
+
+The [ROADMAP](../hipster-ioc/doc/ROADMAP.md) lists "editor-agnostic context navigation" and an embedded
+light HTTP server for the graph. Both were named as **not built** when this phase started, and neither has
+a shape: the navigation depends on 3.8's page, and the host may not be wanted at all once that page can be
+opened from the repository.
+
+**Waits on:** 3.8, and a person deciding whether a host is worth having.
+**Schedulable when:** it is either wanted (as a step with a gate) or dropped with a reason — `[-]`, which
+is a real answer, not a deferral.
 
 ---
 
@@ -1077,7 +1204,10 @@ npm run check:examples            # EXAMPLES
 
 ## Progress
 
-Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (say why)
+Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (say why) · `[TBD]` **waits on
+a decision that is not made** — deliberately unscheduled, with the decision named (see Phase 3's banner;
+it is not the same as `[~]`, which waits on something outside the plan, nor as `[ ]`, which is ready to
+start)
 
 | Step | What | Who | Size | State |
 | --- | --- | --- | --- | --- |
@@ -1090,9 +1220,17 @@ Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (sa
 | 2.1 | metadata-arena unit tests | agent | M | `[x]` |
 | 2.2 | metadata-arena JMH benchmarks (or close as not needed) | agent | S–M | `[x]` |
 | 2.3 | Decision-grade arena run + the backend decision | agent | S | `[ ]` |
-| 3.1 | The hipster-ioc ADR | agent | S | `[x]` |
-| 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` |
-| 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` |
+| 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
+| 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
+| 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |
+| 3.4 | The `@Circular` two-phase form | agent | ? | `[TBD]` — waits on how a lazily-resolved dependency is spelled |
+| 3.5 | `init*` methods in creation order | agent | S | `[TBD]` — waits on the initialisation seam |
+| 3.6 | Region markers above the thresholds | agent | S | `[TBD]` — waits on the generated layout |
+| 3.7 | Cross-context `dependencies()` / `ChildContext` creation | agent | M | `[TBD]` — waits on context-to-context creation |
+| 3.8 | The dependency-graph report page | agent | M | `[TBD]` — waits on the graph model being settled |
+| 3.9 | Drive the generator from the dev-time pass and watch mode | agent | M | `[TBD]` — waits on 7.8 and the shape |
+| 3.10 | Retire `hipster-ioc-test`'s hand-written context | agent | S–M | `[TBD]` — waits on DEC-036 being `Accepted` |
+| 3.11 | Editor-agnostic graph navigation + embedded host | human | ? | `[TBD]` — waits on 3.8, or gets dropped with a reason |
 | 4.1 | Replace `WIDENING_CHAINS` with supertype resolution | agent | S–M | `[x]` |
 | 4.2 | merge-java Phase 13 step 1 — review render | agent | M | `[ ]` |
 | 4.3 | merge-java Phase 13 step 2 — action display + sticky decisions | agent | M | `[ ]` |
