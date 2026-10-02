@@ -566,6 +566,15 @@ The generator-facing seam is **empty and too small**: `jcodebuddy-codegen-api`'s
 hipster-ioc actually has. That is a symptom: the model a consumer needs is spread across the tooling module
 and two watch modules, and the SPI lives in a fifth.
 
+**Measured before starting (2026-10-02), so this step's real shape is visible:** `hipster-entity-tooling` is
+**51 main sources** — 22 in the module's own package (the generators, the LST helpers, the divergence
+reporter: the ones that need sorting into *engine* vs *consumer*), 12 in `meta/` (the representation and the
+parse path: engine), 12 in `validation/` (the entity rules validators: consumer-side), 5 in `index/` (the
+class index: engine) — plus **65 test sources**, and `jcodebuddy-codegen-api` is **5**, `jcodebuddy-core`
+is **3 main + 3 test**. So most of this step is a **classification** ("is this the model, or is this a
+generator reading it?"), and the move itself is small next to deciding what belongs where. Do not move a
+package wholesale: `validation/` and the emitters stay consumers.
+
 **Do:** make `jcodebuddy-core` the engine's home and give it the model — one type with its kind, modifiers,
 members, declaration file and checksum; relations expressed rather than implied; a *missing* answer reported,
 never an inferred absence (the lesson from step 3.2 and `TypeChangeConflictResolver`'s `UNRESOLVED_WARNING`);
