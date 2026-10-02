@@ -846,6 +846,39 @@ unindexed one.
 
 **Done when:** a consumer can ask a relation question and get one answer, from one place.
 
+**Landed 2026-10-02 as `hr.hrg.jcodebuddy.engine.query.MetadataQuery`, over a *set* of module indexes.**
+
+- **Four of the six query families are answered from the model**: by FQN (`answer`, returning 3.0f-3's
+  `TypeAnswer`), by kind, by modifier, by package, by path, and by relation in both directions
+  (`extendersOf`, `implementorsOf`, `subtypesOf`, `supertypesOf`). Every answer carries `coverage()` — the
+  modules searched — so "not found" reads as "not declared in these modules" and never as "does not exist";
+  the two tests the gate asked for are `oneQuestionIsAnsweredAcrossModuleBoundaries` (the relation crosses a
+  module boundary, which no per-module index can answer) and
+  `aDeclaredTypeWithNoImplementorsIsAFactAndAnUnknownNameIsNot`.
+- **3.0b's recorded gap is closed**: relation names are resolved against the indexed world — FQN first, then
+  each package prefix of the declaring type (`a.b.Outer.Inner` included), then a simple name that exactly one
+  indexed type has. Two candidates is not a tie to break but a question the engine cannot answer, and it is
+  **reported** in `RelationAnswer.unresolvedNames()` instead of guessed. A relation naming something outside
+  the modules (`java.io.Serializable`) is reported there too, so an answer's gaps are visible.
+- **A correction the test forced, recorded because it is the useful part**: my first ambiguity fixture put the
+  implementing class in the same package as one of the two `Person`s — where the *declaring package* settles
+  the name exactly, so nothing was ambiguous and the engine was right to answer. A genuine ambiguity needs a
+  package where neither candidate lives; the fixture now has `e.f.Orphan implements Person` for that, and
+  keeps `c.d.Employee` and a full-FQN `g.h.Exact` to show exact resolution still winning.
+- **Two families are not answerable from the model**, because a row carries no members and no annotations:
+  `membersOf` and `annotationsOf` return **`NotCovered`** — question, reason and what to read instead — rather
+  than an empty list, which would read as "this type has no such member". That gap is a DEC-029 format change
+  and is scheduled as **3.0r** below, which is what the step's own Do asked for when it listed those two
+  queries.
+- **Evidence:** `MetadataQueryTest`, 6 tests (cross-module answer and coverage; declared-but-unimplemented vs
+  declared-nowhere; an outside relation reported unresolved; ambiguity refused and reported; the kind, modifier,
+  path and package queries over the whole project; and the two gaps reporting themselves). Core **73 tests
+  `BUILD SUCCESS`**. Additive apart from one small addition to `TypeAnswer` (`fqn()`), which the answer types
+  needed to report a question they could not answer.
+- **What it does not do:** it does not grow the model (3.0r), does not cache query results (the index is the
+  cache and `Freshness` says when it is stale), and does not search source *text* — a text search is a different
+  question from "what is declared".
+
 ### 3.0i — Dissolve `jcodebuddy-codegen-api` into the engine
 **Who:** agent · **Size:** M
 
@@ -1056,6 +1089,28 @@ grep is the check) and `LINKS` green; the record names what was merged and what 
 
 **Done when:** nothing under `webview/` is both an earlier attempt and unexamined — what survived is
 merged, what did not is gone with a reason.
+
+### 3.0r — The index grows members and annotations
+**Who:** agent · **Size:** M
+
+3.0h listed six query families and could answer four. Members and annotations are the two it could not,
+because a class index row records a declaration's kind, modifiers, file, checksum and relations — and nothing
+about what the declaration contains or what annotates it. `MetadataQuery.membersOf`/`annotationsOf` report that
+gap rather than answering "none", which is honest but not useful.
+
+**Do:** add members and annotations to the row and to the writer, the way 3.0b added relations: a name and a
+kind per member (field/method/nested type, with the signature's shape and never its body), and the annotation
+type names per declaration — all as written, resolved at query time by the same rules 3.0h established. It is a
+**DEC-029 format change**, so it carries its own amendment: the same always-emitted rule as relations (an absent
+field is "not recorded", never "none"), the same refusal of an unknown kind, and a version bump only if the new
+fields cannot be tolerated by the reader — which is what the `relations` field proved for an additive change.
+
+**Gate:** own evidence: a round trip per new field; a member query and an annotation query answering from the
+index alone; a declaration with none of either reading as a fact rather than as "not recorded"; and
+`MetadataQueryTest`'s two `NotCovered` tests replaced by real assertions, so the gap cannot silently reopen.
+
+**Done when:** `membersOf` and `annotationsOf` answer from the model, and no consumer has to parse a file to ask
+what a type contains or what annotates it.
 
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
@@ -2128,7 +2183,7 @@ start)
 | 3.0e | Move hipster-ioc onto the metadata contract (parses nothing) | agent | M | `[ ]` (shape-defining) |
 | 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037) | agent | L | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
 | 3.0g | Freshness: the watch loop, its events and its invalidation | agent | L | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
-| 3.0h | Search: the queries every consumer asks | agent | M | `[ ]` |
+| 3.0h | Search: the queries every consumer asks | agent | M | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members+annotations (now 3.0r); 6 tests |
 | 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine | agent | M | `[ ]` |
 | 3.0j | Move the remaining consumers onto the engine | agent | L | `[ ]` |
 | 3.0k | Grow the recorded gate to cover the engine's contract | agent | S | `[ ]` |
@@ -2137,7 +2192,8 @@ start)
 | 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038) | agent | L | `[ ]` |
 | 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
 | 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent | M | `[ ]` |
-| 3.0q | Merge what 3.0p found worth keeping, delete the rest | agent | M–L | `[ ]` (content decided by 3.0p) |
+| 3.0q | Merge what 3.0p found worth keeping, delete the rest | agent | M–L | ` [ ] ` (content decided by 3.0p) |
+| 3.0r | The index grows members and annotations (DEC-029 format change) | agent | M | ` [ ] ` — what 3.0h's Do asked for and its model could not answer |
 | 3.1 | The hipster-ioc ADR | agent | S | `[x]` (prototype: DEC-036 is `Trial`) |
 | 3.2 | `CodeGenerator<GeneratedContext>` + dependency graph | agent | L | `[x]` (prototype: the emitted shape is provisional) |
 | 3.3 | Make the hipster-ioc generator runnable and documented | agent | M | `[x]` (prototype) |

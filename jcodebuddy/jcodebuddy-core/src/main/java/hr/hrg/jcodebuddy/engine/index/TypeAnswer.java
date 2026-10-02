@@ -59,6 +59,15 @@ public sealed interface TypeAnswer permits TypeAnswer.Found, TypeAnswer.NotIndex
         return this instanceof Found;
     }
 
+    /** The name that was asked about, whether or not the engine could answer — the one field both cases carry,
+     * so a caller can report a question it could not get an answer to. */
+    default String fqn() {
+        return switch (this) {
+            case Found found -> found.type().fqn();
+            case NotIndexed missing -> missing.fqn();
+        };
+    }
+
     /** The row, for a caller that has already established {@link #isFound()}. */
     default ClassRecord type() {
         if (this instanceof Found found) {
