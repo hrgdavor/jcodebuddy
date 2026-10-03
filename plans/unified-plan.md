@@ -38,6 +38,35 @@ green. Tick the box in [§ Progress](#progress) in the same commit that finishes
 **Sizes** are rough: **S** ≤ half a day, **M** 1–2 days, **L** 3+ days. **Who** is `agent` (doable in a
 checkout with no human) or `human` (needs a person, a running IDE, or an external tool).
 
+### This run's charter — the maintainer's answers, 2026-10-03
+
+Asked before a longer autonomous run, all ten answered, and they govern every step below until superseded:
+
+1. **Scope: the engine + hipster-ioc line only** — 3.0t's remaining facts, 3.0u, 3.0e part two, 3.0j,
+   3.0k, 3.0n, 3.0p/3.0q, 3.4–3.7, 3.9, 3.10, then the phase-9 cleanup. The UI, editor and phase-6/7 feature
+   steps stay recorded as remaining.
+2. **No UI work this run** — the jsx6/`nodditor` steps (3.8, 4.2, 3.11, 7.9, 7.10) are skipped because no
+   `.jsx6/` checkout exists; they are not blocked, they are deferred.
+3. **Steps are taken up to a deferred decision, not through it** — 4.5, 5.2, 5.4, 6.1, 6.3, 7.6 and 3.0c's
+   transitivity question are the maintainer's, so work proceeds in order and stops to ask when it reaches one.
+4. **The generated ioc shape may change** (already recorded at 3.0e), and `hipster-ioc-test`'s hand-written
+   context may be retired once the regenerated contexts pass — 3.10's premise.
+5. **`proto/business-logic` is the driver project** for end-to-end checks; nothing under `proto/` is ever
+   committed, and `git add -f` is forbidden there (root `AGENTS.md`).
+6. **Network is available** for build steps (Maven without `-o`, `pnpm install`, a Gradle download).
+7. **JetBrains is installed** here; VS Code and Eclipse are not, so an editor-facing step is verified in
+   JetBrains and **new steps may be added** for the other editors rather than blocking on them.
+8. **The LLM/ACP steps get an interface and a fake proposer** (4.4, 5.3) — the wiring and the safety rule
+   land deterministically; a real provider is a swap, not a rewrite.
+9. **Deletions are allowed** as each step says (3.0q's sidecar attempts, 9.2's superseded plans, 9.3's
+   scratch, 9.4's open-list sections), one commit naming everything that went.
+10. **Autonomy: a persisted goal with a large round cap**, so the run continues across rounds and reports at
+    each step boundary.
+
+**What this charter does not change:** the rules above it — one step per commit, the gate green before the
+next step starts, an ADR before the code that depends on it, and the maintainer's earlier answers recorded in
+the steps they belong to.
+
 ---
 
 ## 2. Rules a step must respect (they are not restated per step)
@@ -1417,7 +1446,7 @@ family in one go, because moving half of it is what the compiler rejected here.
    is either a new small `jcodebuddy-*` library that the app may depend on, or the `record_builder` tool is
    dropped from the agent. Recorded as a decision to take, not a move to make.
 
-**What remains (13, and the order to take them in):**
+**What remained (13, and the order they were taken in — all closed 2026-10-03; the check below exits 0):**
 
 - `java-watch-agent` → `jwa-builder-api` and `jwa-builder` (2 dependency violations, plus
   `RecordBuilderGenerator` importing `BuilderTransformationEngine` and `TestDiscovery`/`TestStateSync`
@@ -2004,6 +2033,12 @@ which is the opposite of prototyping.
 being real — a hand-written context retired in favour of a generator that still reads files by hand swaps
 one hand-maintained thing for another.
 **Schedulable when:** DEC-036 is `Accepted`, and the migration is the acceptance test for it.
+
+> **The maintainer's answer, 2026-10-03 (this run's charter, item 4): the retirement is allowed.** The generated
+> shape may change, and the hand-written `CtxMain`/`CtxMainModule` go once the regenerated contexts pass — which is
+> the only way this step can be the acceptance test DEC-036 is waiting for rather than a second hand-maintained
+> context. Both conditions the step lists are now met: DEC-036 is `Trial`→`Accepted` as 3.0e's rewrite lands, and
+> 3.0a–3.0e are real (the engine answers, the generator stops reading files).
 
 ### 3.11 — Editor-agnostic graph navigation, and the embedded host
 **Who:** human decides · **Size:** unknown
