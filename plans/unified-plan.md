@@ -1813,6 +1813,23 @@ layers, closes the base set, requires the hash on every entry, and makes the cla
 entries. The engine already produces the facts (`TypeFacts` + the import lines, one parse per file); what is
 missing is that they are a stored unit and that nothing parses a file whose entry is current.
 
+**3.0u-a landed 2026-10-03 — the entry, and the criterion that matters most.** `FileMetadata` is a file's base set
+(path, checksum, size, generated, its types as table rows, its imports) with a deterministic JSON document, no
+source text, and a `describes(checksum)` answering the only reuse question there is. The table's own row writer and
+reader are now shared with it (`ClassIndex.appendRow`/`readRow` are package-private), because a second row shape
+for the cache would mean two writers, two readers and a class of bug where they drift; the cost — one file's entry
+repeating its path, checksum and size on each row — is the cheaper mistake, and the entry's header stays the single
+authority for reuse. **DEC-041's first acceptance criterion is met and asserted**: an entry for file `A` is
+byte-identical whether file `B` exists, is edited, or is deleted, which is the check that fails the moment a
+cross-file fact enters the base layer. Three more are met in the small: no source text, a stale entry refused by
+its hash, and the document deterministic across four rebuilds of the same file.
+
+**3.0u-b remains:** the store (one entry file per source under the module's derived `.jcodebuddy/cache/`, with hit
+and miss counters), `ClassIndex` consuming entries so a warm rebuild **parses nothing** and produces a
+byte-identical table, and the two remaining criteria as tests — one edit recomputes exactly one entry, and deleting
+the whole cache changes no answer, only the time. Split rather than rushed, and the plan's own rule says how:
+*"Split a step if it does not fit one commit. Renumber nothing: add 4.2a, 4.2b and say why."*
+
 **Work, in order:**
 
 1. A `FileMetadata` entry model: the file's path, `checksum`, `size`, `generated`, its `TypeFacts` and its import

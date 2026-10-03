@@ -477,6 +477,24 @@ public final class ClassIndex {
         }
     }
 
+    /**
+     * Every fact one file's parse yields, in source order — the base set of DEC-041 D2, before a table is
+     * involved.
+     *
+     * <p>The same one-javac-parse extraction {@link #addTypes} uses, exposed because a base entry needs the facts
+     * <em>without</em> a module index to put them in: a per-file cache entry is written from a parse, and the
+     * module table is then built from the entries (DEC-041 D4/D8). Exposing this rather than duplicating it is
+     * what keeps one extraction path.</p>
+     */
+    public static List<TypeFacts> factsOf(J.CompilationUnit unit, String source) {
+        if (unit == null) {
+            return List.of();
+        }
+        List<TypeFacts> types = new ArrayList<>();
+        collectTypes(unit, source, types);
+        return List.copyOf(types);
+    }
+
     // ── the reader's API ────────────────────────────────────────────────────────────────────────────
 
     /** The row {@code fqn} names, or {@code null} when this module has no such type. */
@@ -779,7 +797,7 @@ public final class ClassIndex {
             sb.append("\n");
             int index = 0;
             for (ClassRecord row : byFqn.values()) {
-                appendRow(sb, row);
+                appendRow(sb, row, "    ");
                 sb.append(index < byFqn.size() - 1 ? ",\n" : "\n");
                 index++;
             }
@@ -913,12 +931,21 @@ public final class ClassIndex {
         return moduleRoot;
     }
 
-    private static void appendRow(StringBuilder sb, ClassRecord row) {
+    /**
+     * One row, as the table writes it: an indented {@code "fqn": { … } } property, with no trailing comma and no
+     * newline.
+     *
+     * <p>Package-private and reused by a base entry ({@link FileMetadata}), because the alternative is a second
+     * row shape for the per-file cache: two writers, two readers, and a class of bug where they disagree about
+     * what a row is. One shape costs three repeated file facts inside one file's entry — which is the cheaper
+     * mistake, and the entry's own checksum stays the single authority for whether it may be reused (DEC-041).</p>
+     */
+    static void appendRow(StringBuilder sb, ClassRecord row, String indent) {
         // Key order is fixed and chosen so the fields that repeat a fact already visible in the row are
         // left out when they carry no information: `enclosing: null` and `generated: 0` are the common
         // case for a top-level hand-written type (by far the majority of rows), and writing them would
         // add a line per row to a table whose whole purpose is to be read.
-        sb.append("    \"").append(MetadataJson.escape(row.fqn())).append("\": { \"path\": \"")
+        sb.append(indent).append("\"").append(MetadataJson.escape(row.fqn())).append("\": { \"path\": \"")
                 .append(MetadataJson.escape(row.path())).append("\", \"kind\": \"")
                 .append(MetadataJson.escape(row.kind())).append("\", \"modifiers\": [");
         for (int i = 0; i < row.modifiers().size(); i++) {
@@ -1194,6 +1221,110 @@ public final class ClassIndex {
         return paths;
     }
 
+    /**
+     * One row from a table's node, or {@code null} when this contract has no case for something in it.
+     *
+     * <p>Package-private and shared with {@link FileMetadata}: a base entry writes its rows with
+     * {@link #appendRow} and reads them back with this, so a cache entry and the class table cannot disagree
+     * about what a row is — the alternative is a second row shape, which means two writers, two readers and a
+     * class of bug where they drift. A {@code null} answer means the caller must refuse its whole artifact: the
+     * rule an unknown member or relation kind has always had, because "I do not know this kind" and "there is no
+     * such member" must not read alike (DEC-040 D4).</p>
+     */
+    static ClassRecord readRow(String fqn, JsonNode node, List<String> problems) {
+        List<String> modifiers = new ArrayList<>();
+        for (JsonNode modifier : node.path("modifiers")) {
+            modifiers.add(modifier.asText());
+        }
+        List<TypeRelation> relations = new ArrayList<>();
+        for (JsonNode relation : node.path("relations")) {
+            TypeRelation.Kind kind = TypeRelation.Kind.fromJson(relation.path("kind").asText(null));
+            if (kind == null) {
+                // Refuse rather than guess, exactly as an unknown format version is refused: a relation kind this
+                // contract has no case for would silently become an absence of a relation.
+                if (problems != null) {
+                    problems.add("the class index cannot describe " + fqn + ": its relations carry the unknown"
+                            + " kind '" + relation.path("kind").asText("") + "'");
+                }
+                return null;
+            }
+            relations.add(new TypeRelation(relation.path("name").asText(""), kind,
+                    // A table written before relation spans existed has no `span`: no range is what it actually
+                    // recorded, which is a fact rather than a guess (DEC-040 D4).
+                    readSpan(relation.path("span"))));
+        }
+        List<TypeAnnotation> annotations = new ArrayList<>();
+        for (JsonNode annotation : node.path("annotations")) {
+            List<String> arguments = new ArrayList<>();
+            for (JsonNode argument : annotation.path("args")) {
+                arguments.add(argument.asText(""));
+            }
+            annotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
+                    readSpan(annotation.path("span"))));
+        }
+        List<MemberRecord> members = new ArrayList<>();
+        for (JsonNode member : node.path("members")) {
+            MemberRecord.Kind kind = MemberRecord.Kind.fromJson(member.path("kind").asText(null));
+            if (kind == null) {
+                // Refuse rather than guess, exactly as an unknown relation kind is refused: a member kind this
+                // contract has no case for would silently become an absent member.
+                if (problems != null) {
+                    problems.add("the class index cannot describe " + fqn + ": its members carry the unknown kind"
+                            + " '" + member.path("kind").asText("") + "'");
+                }
+                return null;
+            }
+            members.add(new MemberRecord(member.path("name").asText(""), kind,
+                    member.path("type").asText(""), readParameters(member),
+                    readStrings(member.path("modifiers")), readAnnotations(member.path("annotations")),
+                    // A table written before the initialiser question, the throws clause or the body question
+                    // existed has no such field: false and empty are what it actually recorded, which is a fact
+                    // rather than a guess (DEC-040 D4).
+                    member.path("hasInitializer").asBoolean(false),
+                    readStrings(member.path("throws")),
+                    member.path("hasBody").asBoolean(false),
+                    // A table written before positions existed has no `line`/`span`: an unknown line and no span
+                    // is what it actually recorded (DEC-040 D4).
+                    member.path("line").asInt(hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE),
+                    readSpan(member.path("span"))));
+        }
+        return new ClassRecord(fqn, node.path("path").asText(""),
+                node.path("kind").asText(""), modifiers,
+                node.hasNonNull("enclosing") ? node.path("enclosing").asText() : null,
+                node.path("line").asInt(-1), node.path("depth").asInt(0),
+                node.path("generated").asInt(0) == 1, node.path("checksum").asText(""),
+                node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations,
+                annotations, members,
+                // A table written before the declaration range existed has no `span`: no range is what it
+                // recorded, which is a fact rather than a guess (DEC-040 D4). The same reading for `permits`: a
+                // table without the field recorded no permitted-subtype list.
+                readSpan(node.path("span")), readStrings(node.path("permits")));
+    }
+
+    /** A member's parameters, each with its own annotations — one reader, so a parameter reads one way. */
+    private static List<MemberParameter> readParameters(JsonNode member) {
+        List<MemberParameter> parameters = new ArrayList<>();
+        for (JsonNode parameter : member.path("parameters")) {
+            parameters.add(new MemberParameter(parameter.path("type").asText(""),
+                    parameter.path("name").asText(""), readAnnotations(parameter.path("annotations"))));
+        }
+        return parameters;
+    }
+
+    /** Written annotations — a name, its arguments as text, and the range it is written at. */
+    private static List<TypeAnnotation> readAnnotations(JsonNode node) {
+        List<TypeAnnotation> annotations = new ArrayList<>();
+        for (JsonNode annotation : node) {
+            List<String> arguments = new ArrayList<>();
+            for (JsonNode argument : annotation.path("args")) {
+                arguments.add(argument.asText(""));
+            }
+            annotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
+                    readSpan(annotation.path("span"))));
+        }
+        return annotations;
+    }
+
     private static ClassIndex parse(String text, Path reportDir, Path moduleRoot, Path sourceRoot,
                                     List<String> problems) {
         JsonNode root;
@@ -1228,110 +1359,15 @@ public final class ClassIndex {
                 root.path("module").asText(""), root.path("sourceRoot").asText(""),
                 false, Clock.systemUTC());
         for (Map.Entry<String, JsonNode> entry : root.path("classes").properties()) {
-            JsonNode node = entry.getValue();
-            List<String> modifiers = new ArrayList<>();
-            for (JsonNode modifier : node.path("modifiers")) {
-                modifiers.add(modifier.asText());
+            ClassRecord row = readRow(entry.getKey(), entry.getValue(), problems);
+            if (row == null) {
+                // A row this contract cannot describe makes the whole table unusable, as it always has: an
+                // unknown kind must not read as an absent member or relation.
+                return null;
             }
-            List<TypeRelation> relations = new ArrayList<>();
-            for (JsonNode relation : node.path("relations")) {
-                TypeRelation.Kind kind = TypeRelation.Kind.fromJson(relation.path("kind").asText(null));
-                if (kind == null) {
-                    // Refuse rather than guess, exactly as an unknown format version is refused: a relation
-                    // kind this contract has no case for would silently become an absence of a relation.
-                    if (problems != null) {
-                        problems.add("the class index cannot describe " + entry.getKey()
-                                + ": its relations carry the unknown kind '"
-                                + relation.path("kind").asText("") + "'");
-                    }
-                    return null;
-                }
-                relations.add(new TypeRelation(relation.path("name").asText(""), kind,
-                        // A table written before relation spans existed has no `span`: no range is what it
-                        // actually recorded, which is a fact rather than a guess (DEC-040 D4).
-                        relation.hasNonNull("span")
-                                ? new hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan(
-                                        relation.path("span").path("start").asInt(-1),
-                                        relation.path("span").path("end").asInt(-1))
-                                : null));
-            }
-            List<TypeAnnotation> annotations = new ArrayList<>();
-            for (JsonNode annotation : node.path("annotations")) {
-                List<String> arguments = new ArrayList<>();
-                for (JsonNode argument : annotation.path("args")) {
-                    arguments.add(argument.asText(""));
-                }
-                annotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
-                        readSpan(annotation.path("span"))));
-            }
-            List<MemberRecord> members = new ArrayList<>();
-            for (JsonNode member : node.path("members")) {
-                MemberRecord.Kind kind = MemberRecord.Kind.fromJson(member.path("kind").asText(null));
-                if (kind == null) {
-                    // Refuse rather than guess, exactly as an unknown relation kind is refused: a member kind
-                    // this contract has no case for would silently become an absent member.
-                    if (problems != null) {
-                        problems.add("the class index cannot describe " + entry.getKey()
-                                + ": its members carry the unknown kind '" + member.path("kind").asText("") + "'");
-                    }
-                    return null;
-                }
-                List<MemberParameter> parameters = new ArrayList<>();
-                for (JsonNode parameter : member.path("parameters")) {
-                    List<TypeAnnotation> parameterAnnotations = new ArrayList<>();
-                    for (JsonNode annotation : parameter.path("annotations")) {
-                        List<String> arguments = new ArrayList<>();
-                        for (JsonNode argument : annotation.path("args")) {
-                            arguments.add(argument.asText(""));
-                        }
-                        parameterAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
-                                readSpan(annotation.path("span"))));
-                    }
-                    parameters.add(new MemberParameter(parameter.path("type").asText(""),
-                            parameter.path("name").asText(""), parameterAnnotations));
-                }
-                List<String> memberModifiers = new ArrayList<>();
-                for (JsonNode modifier : member.path("modifiers")) {
-                    memberModifiers.add(modifier.asText(""));
-                }
-                List<TypeAnnotation> memberAnnotations = new ArrayList<>();
-                for (JsonNode annotation : member.path("annotations")) {
-                    List<String> arguments = new ArrayList<>();
-                    for (JsonNode argument : annotation.path("args")) {
-                        arguments.add(argument.asText(""));
-                    }
-                    memberAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
-                            readSpan(annotation.path("span"))));
-                }
-                List<String> memberThrows = new ArrayList<>();
-                for (JsonNode thrown : member.path("throws")) {
-                    memberThrows.add(thrown.asText(""));
-                }
-                members.add(new MemberRecord(member.path("name").asText(""), kind,
-                        member.path("type").asText(""), parameters, memberModifiers, memberAnnotations,
-                        // A table written before the initialiser question, the throws clause or the body question
-                        // existed has no such field: false and empty are what it actually recorded, which is a
-                        // fact rather than a guess (DEC-040 D4).
-                        member.path("hasInitializer").asBoolean(false),
-                        memberThrows,
-                        member.path("hasBody").asBoolean(false),
-                        // A table written before positions existed has no `line`/`span`: an unknown line and no
-                        // span is what it actually recorded, which is a fact rather than a guess (DEC-040 D4).
-                        member.path("line").asInt(hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE),
-                        readSpan(member.path("span"))));
-            }
-            index.put(new ClassRecord(entry.getKey(), node.path("path").asText(""),
-                    node.path("kind").asText(""), modifiers,
-                    node.hasNonNull("enclosing") ? node.path("enclosing").asText() : null,
-                    node.path("line").asInt(-1), node.path("depth").asInt(0),
-                    node.path("generated").asInt(0) == 1, node.path("checksum").asText(""),
-                    node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations,
-                    annotations, members,
-                    // A table written before the declaration range existed has no `span`: no range is what it
-                    // recorded, which is a fact rather than a guess (DEC-040 D4). The same reading for `permits`:
-                    // a table without the field recorded no permitted-subtype list.
-                    readSpan(node.path("span")), readStrings(node.path("permits"))));
+            index.put(row);
         }
+
         index.readMtimes(index.indexFile.resolveSibling(MTIME_FILE_NAME), problems);
         index.readImports(index.indexFile.resolveSibling(IMPORTS_FILE_NAME), problems);
         return index;
