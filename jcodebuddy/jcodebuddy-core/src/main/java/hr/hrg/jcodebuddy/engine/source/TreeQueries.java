@@ -1065,6 +1065,38 @@ public final class TreeQueries {
     }
 
     /**
+     * The import lines a compilation unit writes, in order, as source reads them.
+     *
+     * <p>Rebuilt from the LST rather than sliced from the text, because the LST is this repository's one source
+     * representation (DEC-030): {@code import a.b.C;}, {@code import static a.b.C.method;} and
+     * {@code import a.b.*;} all come back in the form a generator can re-emit, which is what a consumer needs
+     * them for — a generated class has to name the types the declaration it implements names (DEC-040 D1).</p>
+     *
+     * <p>A file's imports are a <strong>file</strong> fact, not a type fact, so they live in the
+     * {@code imports.json} sidecar beside the class index rather than on every row of the file that declares
+     * several types.</p>
+     */
+    public static List<String> importLines(J.CompilationUnit unit) {
+        if (unit == null || unit.getImports() == null) {
+            return List.of();
+        }
+        List<String> lines = new ArrayList<>(unit.getImports().size());
+        for (J.Import imported : unit.getImports()) {
+            // `getQualid()` is the name as written — `java.util.List`, `java.util.Collections.emptyList` for a
+            // static member, `java.io.*` for a wildcard. Measured against the parser, because the obvious field is
+            // wrong twice over: `getTypeName()` stops at the class for a static import (its member is lost), and
+            // `getAlias()` is null for all three shapes — it is not the static member, whatever its name suggests.
+            String written = expressionText(imported.getQualid());
+            lines.add(new StringBuilder("import ")
+                    .append(imported.isStatic() ? "static " : "")
+                    .append(written)
+                    .append(';')
+                    .toString());
+        }
+        return List.copyOf(lines);
+    }
+
+    /**
      * The offset a member's slice really starts at: the declaration's own start, or the start of the
      * comment immediately above it.
      *

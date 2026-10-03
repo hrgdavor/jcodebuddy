@@ -1502,8 +1502,13 @@ around ranges, and D6 added — a row must be able to point at the code.
 1. a sealed type's `permits` (a generator that must not emit a subclass);
 2. a callable's `throws` (a generator emitting a call that must declare it);
 3. enum constants (the entity work that reads them today);
-4. a field's initialiser and has-a-body;
-5. the **imports sidecar** (`imports.json` beside `mtimes.json`) — the other thing 3.0e part two needs.
+4. a field's initialiser and has-a-body.
+
+The **imports sidecar landed 2026-10-03** (`imports.json` beside `mtimes.json`) — 3.0e part two's last
+prerequisite: a file's import lines, in order, as written, with `null` for *not recorded* and an empty list for
+*writes none*. The lines come from the LST's `getQualid()`, and finding that took a probe: `getTypeName()` stops at
+the class for a static import (losing its member) and `getAlias()` is null for every shape, so the two obvious
+fields are both wrong.
 
 **Positions landed 2026-10-03, for all four facts.** A **member** carries `line` (javac's line for its name, `-1`
 when it cannot be located) and `span`; a **relation**, a **type** and an **annotation** carry their ranges; and

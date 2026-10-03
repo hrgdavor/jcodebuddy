@@ -78,12 +78,12 @@ class IndexLayoutTest {
         Path indexDir = tree.resolve(".jcodebuddy/index");
         Assertions.assertTrue(Files.isDirectory(indexDir), "the pass writes the index beside metadata/: "
                 + indexDir);
-        Assertions.assertEquals(new TreeSet<>(List.of("classes.json", "mtimes.json", "README.md")),
+        Assertions.assertEquals(new TreeSet<>(List.of("classes.json", "mtimes.json", "imports.json", "README.md")),
                 entriesOf(indexDir),
-                "the index directory holds the class index, the working-tree mtime sidecar and its README; "
-                        + "the DEC-028 files.json is gone (one table states a path once), and the reserved "
-                        + "work (the dependency edges, the artifact pointer) is deliberately NOT built in "
-                        + "this change");
+                "the index directory holds the class index, the two sidecars (the working-tree mtime and the "
+                        + "file's import lines — DEC-040 D1) and its README; the DEC-028 files.json is gone (one "
+                        + "table states a path once), and the reserved work (the dependency edges, the artifact "
+                        + "pointer) is deliberately NOT built in this change");
 
         String readme = Files.readString(indexDir.resolve("README.md"));
         Assertions.assertTrue(readme.contains("classes.json"),
@@ -137,7 +137,9 @@ class IndexLayoutTest {
         runPass(tree, reportDir);
 
         Path indexDir = reportDir.resolve("index");
-        Assertions.assertEquals(new TreeSet<>(List.of("classes.json", "mtimes.json")), entriesOf(indexDir),
-                "a report directory that is not a module holds JSON metadata only");
+        Assertions.assertEquals(new TreeSet<>(List.of("classes.json", "mtimes.json", "imports.json")),
+                entriesOf(indexDir),
+                "a report directory that is not a module holds JSON metadata only — the table and its two "
+                        + "sidecars, and no README, because a fallback report directory is not a DEC-026 subfolder");
     }
 }

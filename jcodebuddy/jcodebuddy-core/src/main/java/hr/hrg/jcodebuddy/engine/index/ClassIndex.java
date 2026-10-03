@@ -98,6 +98,16 @@ public final class ClassIndex {
      */
     public static final String MTIME_FILE_NAME = "mtimes.json";
 
+    /**
+     * The import lines of each declaring file, as written, in {@code imports.json} beside the table.
+     *
+     * <p>Absent for a file whose imports were never recorded, and an empty array for a file that writes none: the
+     * two are different facts, and a consumer that must name a type has to be able to tell them apart
+     * (DEC-040 D4).</p>
+     */
+    public static final String IMPORTS_FILE_NAME = "imports.json";
+
+
     /** The directory name, a sibling of {@code metadata/} under a module's {@code .jcodebuddy/}. */
     public static final String INDEX_DIR_NAME = "index";
 
@@ -183,6 +193,19 @@ public final class ClassIndex {
             filesystem as a cheap pre-filter before hashing anything; nothing may treat it as a
             correctness input, and a missing or unreadable sidecar simply costs a full hash.
 
+            ## `imports.json` — the file's import lines
+
+            Declaring file to the import lines written in it, in order, as source reads them
+            (`import java.util.List;`, `import static java.util.Collections.emptyList;`, `import java.io.*;`).
+            A **file** fact like the checksum, which is why it is a sidecar rather than a field repeated on
+            every row of a file that declares several types — and it is here rather than left to the reader
+            because a consumer that emits source naming the types a declaration names must not have to parse
+            the file again (DEC-030, DEC-040 D1).
+
+            A path with **no entry** means the imports were not recorded; an entry with an **empty array**
+            means the file writes none. The two are different answers, and DEC-040 D4 is the rule that keeps
+            them apart.
+
             ## Reserved, not implemented
             The directory is a *directory of tables* so these can be added without changing any consumer's
             contract:
@@ -235,6 +258,10 @@ public final class ClassIndex {
      * saw it", which is what a pre-filter needs and is stable across passes that changed nothing.</p>
      */
     private final Map<String, Long> mtimes = new TreeMap<>();
+
+    /** The import lines of each declaring file, as written — the {@link #IMPORTS_FILE_NAME} sidecar. */
+    private final Map<String, List<String>> imports = new TreeMap<>();
+
 
     /** Paths this pass read or wrote that declared no type at all — reported, never given a row. */
     private final TreeSet<String> typeLessFiles = new TreeSet<>();
@@ -384,6 +411,10 @@ public final class ClassIndex {
         List<TypeFacts> types = new ArrayList<>();
         collectTypes(unit, source, types);
         addTypes(moduleRelativePath, types, generated);
+        // Recorded here, where the parse is: a file's imports are a fact about the file, and a consumer that
+        // must name a type (a generator emitting an implementation) reads them from the sidecar rather than
+        // parsing the file again (DEC-040 D1).
+        imports.put(moduleRelativePath, TreeQueries.importLines(unit));
     }
 
     /**
@@ -757,6 +788,39 @@ public final class ClassIndex {
         sb.append("}\n");
         Files.writeString(indexFile, sb.toString(), StandardCharsets.UTF_8);
         writeMtimes();
+        writeImports();
+    }
+
+    /**
+     * Writes the {@code imports.json} sidecar: declaring file to the import lines written in it, in key order.
+     *
+     * <p>A <strong>file</strong> fact, like the checksum (§ 4) and the mtime ({@link #MTIME_FILE_NAME}) — which is
+     * why it is a sidecar rather than a field on every row of the file. It is here because a consumer that emits
+     * source naming the types a declaration names has to know how they were named, and reading the file for that
+     * is the second parse DEC-030 forbids (DEC-040 D1). A path with no entry means <em>not recorded</em>; an
+     * entry with an empty array means the file writes no imports.</p>
+     */
+    private void writeImports() throws IOException {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("  \"format\": ").append(FORMAT).append(",\n");
+        sb.append("  \"of\": \"").append(FILE_NAME).append("\",\n");
+        sb.append("  \"imports\": {");
+        if (imports.isEmpty()) {
+            sb.append("}\n");
+        } else {
+            sb.append("\n");
+            int index = 0;
+            for (Map.Entry<String, List<String>> entry : imports.entrySet()) {
+                sb.append("    \"").append(MetadataJson.escape(entry.getKey())).append("\": ");
+                appendStrings(sb, entry.getValue());
+                sb.append(index < imports.size() - 1 ? ",\n" : "\n");
+                index++;
+            }
+            sb.append("  }\n");
+        }
+        sb.append("}\n");
+        Files.writeString(indexDir.resolve(IMPORTS_FILE_NAME), sb.toString(), StandardCharsets.UTF_8);
     }
 
     /**
@@ -830,6 +894,18 @@ public final class ClassIndex {
     /** The sidecar's value for {@code fqn}, or {@code null} when this table has none. */
     public Long mtimeOf(String fqn) {
         return mtimes.get(fqn);
+    }
+
+    /**
+     * The import lines written in {@code moduleRelativePath}, in order — or {@code null} when they were not
+     * recorded.
+     *
+     * <p>{@code null} and an empty list are different answers and a caller must be able to tell them apart: the
+     * first says "this table does not carry the file's imports", the second says "this file writes none". That
+     * distinction is DEC-040 D4 at the sidecar, and it is why this method is not a defaulted getter.</p>
+     */
+    public List<String> importsOf(String moduleRelativePath) {
+        return imports.get(moduleRelativePath);
     }
 
     /** The module root every row's path is relative to — the root the pass resolved. */
@@ -1219,7 +1295,33 @@ public final class ClassIndex {
                     readSpan(node.path("span"))));
         }
         index.readMtimes(index.indexFile.resolveSibling(MTIME_FILE_NAME), problems);
+        index.readImports(index.indexFile.resolveSibling(IMPORTS_FILE_NAME), problems);
         return index;
+    }
+
+    /** Reads the {@code imports.json} sidecar beside {@code file}, when there is one. */
+    private void readImports(Path importsFile, List<String> problems) {
+        if (!Files.isRegularFile(importsFile)) {
+            return;
+        }
+        try {
+            JsonNode root = MetadataJson.mapper().readTree(
+                    Files.readString(importsFile, StandardCharsets.UTF_8));
+            for (Map.Entry<String, JsonNode> entry : root.path("imports").properties()) {
+                List<String> lines = new ArrayList<>();
+                for (JsonNode line : entry.getValue()) {
+                    lines.add(line.asText(""));
+                }
+                imports.put(entry.getKey(), List.copyOf(lines));
+            }
+        } catch (IOException | RuntimeException unreadable) {
+            // Never a correctness input: a consumer that needs the imports can read the file it names, which is
+            // what it would do without the sidecar at all. Reported so a corrupt file is not a silent mystery.
+            if (problems != null) {
+                problems.add("the imports sidecar at " + importsFile + " could not be read ("
+                        + unreadable.getMessage() + ")");
+            }
+        }
     }
 
     /** Reads the {@code mtimes.json} sidecar beside {@code file}, when there is one. */
