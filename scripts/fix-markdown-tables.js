@@ -56,11 +56,12 @@
  *
  * A MISSING TOOL IS NOT A SHOW-STOPPER, which is what AGENTS.md § 2 asks: this is one developer's tool on one
  * developer's machine, so its absence is far more likely to be a non-issue than a problem to solve. The script
- * therefore prints one line saying no table was checked, points at the one command that would fix it, and exits
- * 2 — deliberately not 0, because a check that never ran must not read as "the tree is aligned" to whatever
- * called it. It does not install anything, does not reach for another formatter, and does not stop any other
- * work: the documents are valid Markdown either way, and hand-aligning is what produced the scar this
- * repository already carries.
+ * therefore prints what did *not* happen, points at the one command that would fix it, and **exits 0** — a note
+ * rather than a failure, by decision. One consequence is deliberate and worth stating plainly: with exit 0 the
+ * *code* no longer separates "ran and found nothing" from "never ran", so the **message is the signal**. A run
+ * whose output says the tool was missing checked nothing, and must not be read as a verified tree. It installs
+ * nothing, reaches for no other formatter, and stops no other work: the documents are valid Markdown either
+ * way, and hand-aligning is what produced the scar this repository already carries.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -109,8 +110,9 @@ if (command === null || command === undefined) {
         + 'The tool takes one argument, the path to a .md file, and edits it in place; AGENTS.md Section 2 is '
         + 'what asks for it. Install it and put it on PATH, or point this script at a build with '
         + 'JCODEBUDDY_MD_FIX_TABLES.\n'
-        + 'Exiting 2 rather than 0 only so that a check which never ran is not mistaken for an aligned tree.');
-    process.exit(2);
+        + 'Exiting 0, because a missing tool is a note and not a failure. Nothing was verified, though — this '
+        + 'message is the signal, not the exit code.');
+    process.exit(0);
 }
 
 const splitLines = (text) => text.split(/\r\n|\n|\r/);

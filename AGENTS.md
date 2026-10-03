@@ -531,8 +531,9 @@ canonical statement of a boundary that has no other home.
   row, every row's cells must be unchanged, fenced lines must be untouched, and each line must come back with
   its own ending (133 tracked documents are checked out CRLF, 128 LF, two mixed). A file that fails the check is
   left untouched and named. Same rule, with the checking a sweep needs and a single document does not — and if
-  the tool is missing it prints that and exits 2, which is the same "say so and carry on" rule with a non-zero
-  code, so a check that never ran is never mistaken for an aligned tree.
+  the tool is missing it says so and **exits 0**: a note, not a failure, so a missing tool never fails a run.
+  That puts the weight on its **output** rather than its exit code: a run whose output says the tool was missing
+  checked nothing, and must not be read as "the tree is aligned".
 
   Five things it must not do, and the reason the sweep checks rather than trusts — **four were found by running
   it over this repository on 2026-10-03 and fixed in the tool's 1.1.0, the fifth in 1.2.0**:
