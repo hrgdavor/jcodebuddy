@@ -437,8 +437,12 @@ public final class ClassIndex {
      * which is what the old recursion did, and the order is source order.</p>
      */
     private static void collectTypes(J.CompilationUnit unit, String source, List<TypeFacts> into) {
+        // One javac parse for the whole file: every type's and member's line and span comes from it, so asking
+        // per declaration would parse the same text once per declaration (DEC-040 D6).
+        hr.hrg.jcodebuddy.engine.source.SourcePositions positions =
+                hr.hrg.jcodebuddy.engine.source.SourcePositions.of(source);
         for (TreeQueries.EnclosedType enclosed : TreeQueries.typesWithEnclosing(unit)) {
-            into.add(TypeFacts.of(enclosed.declaration(), enclosed.enclosing(), source));
+            into.add(TypeFacts.of(enclosed.declaration(), enclosed.enclosing(), source, positions));
         }
     }
 
@@ -896,6 +900,16 @@ public final class ClassIndex {
             appendStrings(sb, member.modifiers());
             sb.append(", \"annotations\": ");
             appendAnnotations(sb, member.annotations());
+            // Always emitted: a consumer has to be able to POINT at a member (DEC-040 D6), so an unknown line is
+            // written as -1 and a span that was never recorded as null — a fact a reader can tell from a
+            // position, rather than a field that is simply absent (D4).
+            sb.append(", \"line\": ").append(member.line()).append(", \"span\": ");
+            if (member.span() == null) {
+                sb.append("null");
+            } else {
+                sb.append("{ \"start\": ").append(member.span().start())
+                        .append(", \"end\": ").append(member.span().end()).append(" }");
+            }
             sb.append(" }");
         }
         sb.append("]");
@@ -1138,7 +1152,15 @@ public final class ClassIndex {
                     memberAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
                 }
                 members.add(new MemberRecord(member.path("name").asText(""), kind,
-                        member.path("type").asText(""), parameters, memberModifiers, memberAnnotations));
+                        member.path("type").asText(""), parameters, memberModifiers, memberAnnotations,
+                        // A table written before positions existed has no `line`/`span`: an unknown line and no
+                        // span is what it actually recorded, which is a fact rather than a guess (DEC-040 D4).
+                        member.path("line").asInt(hr.hrg.jcodebuddy.engine.source.SourcePositions.UNKNOWN_LINE),
+                        member.hasNonNull("span")
+                                ? new hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan(
+                                        member.path("span").path("start").asInt(-1),
+                                        member.path("span").path("end").asInt(-1))
+                                : null));
             }
             index.put(new ClassRecord(entry.getKey(), node.path("path").asText(""),
                     node.path("kind").asText(""), modifiers,

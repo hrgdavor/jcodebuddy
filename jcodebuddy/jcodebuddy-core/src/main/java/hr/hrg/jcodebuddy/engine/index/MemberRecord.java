@@ -2,6 +2,8 @@ package hr.hrg.jcodebuddy.engine.index;
 
 import java.util.List;
 
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
+
 /**
  * One member of a type declaration, as a class index row records it (DEC-029's member field, plan step 3.0r).
  *
@@ -36,9 +38,18 @@ import java.util.List;
  *                       separates a factory from an accessor (see the note on that set)
  * @param annotations    the annotations on the member, as written with their arguments as written
  *                       ({@link TypeAnnotation}), in declaration order; empty when it carries none
+ * @param line           the line the member's <em>name</em> sits on, 1-based, or
+ *                       {@link hr.hrg.jcodebuddy.engine.source.SourcePositions#UNKNOWN_LINE} when it could not be
+ *                       located — carried because a consumer has to be able to <em>point</em> at the member, and
+ *                       a navigation diagram, a review page or an IDE jump needs a line rather than a
+ *                       description (DEC-040 D6)
+ * @param span           the member's character span in the declaring file, or {@code null} when javac's walk
+ *                       recorded none — this is what recovers the member's written form, generic arguments and
+ *                       all, because the table points at the source instead of copying it (DEC-040 D2)
  */
 public record MemberRecord(String name, Kind kind, String type, List<MemberParameter> parameters,
-                           List<String> modifiers, List<TypeAnnotation> annotations) {
+                           List<String> modifiers, List<TypeAnnotation> annotations, int line,
+                           TreeQueries.SourceSpan span) {
 
     /**
      * The member kinds this table has a contract for.
@@ -64,6 +75,17 @@ public record MemberRecord(String name, Kind kind, String type, List<MemberParam
             return json;
         }
 
+        /**
+         * The spelling a javac position lookup uses for this kind.
+         *
+         * <p>The two vocabularies agree on {@code field}, {@code method} and {@code constructor} and differ on
+         * exactly one: a nested type is a {@code type} to javac, because that is what it declared. Kept here so
+         * the mapping has one home rather than one call site per extraction.</p>
+         */
+        public String positionKind() {
+            return this == NESTED ? "type" : json;
+        }
+
         /** The kind {@code json} names, or {@code null} when this contract has no case for it. */
         public static Kind fromJson(String json) {
             for (Kind kind : values()) {
@@ -82,7 +104,22 @@ public record MemberRecord(String name, Kind kind, String type, List<MemberParam
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
     }
 
-    /** A field, the commonest member, with no annotations. */
+    /**
+     * A member whose position the caller did not read — the two position fields are "unknown", which is a fact
+     * a reader can tell from a line (DEC-040 D4).
+     */
+    public MemberRecord(String name, Kind kind, String type, List<MemberParameter> parameters,
+                        List<String> modifiers, List<TypeAnnotation> annotations) {
+        this(name, kind, type, parameters, modifiers, annotations,
+                hr.hrg.jcodebuddy.engine.source.SourcePositions.UNKNOWN_LINE, null);
+    }
+
+    /** The member's arity, which is what tells two overloads of one name apart in a position lookup. */
+    public int parameterCount() {
+        return parameters.size();
+    }
+
+    /** A field, the commonest member, with no annotations and no position. */
     public static MemberRecord field(String name, String type, List<String> modifiers) {
         return new MemberRecord(name, Kind.FIELD, type, List.of(), modifiers, List.of());
     }

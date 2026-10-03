@@ -1,5 +1,6 @@
 package hr.hrg.jcodebuddy.engine.index;
 
+import hr.hrg.jcodebuddy.engine.MetadataJson;
 import hr.hrg.jcodebuddy.engine.source.SourceReader;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -139,9 +140,11 @@ class TypeMembersTest {
         String written = Files.readString(index.indexFile(), StandardCharsets.UTF_8);
         Assertions.assertTrue(written.contains("\"members\": [{ \"name\": \"id\", \"kind\": \"field\","
                         + " \"type\": \"int\", \"parameters\": [], \"modifiers\": [\"public\"],"
-                        + " \"annotations\": [] }]"),
+                        + " \"annotations\": [], \"line\": -1, \"span\": null }]"),
                 "the writer emits the member's name, kind, type, parameters, modifiers and annotations, exactly"
-                        + " as the record holds them (the keyword filter is the extractor's, not the writer's): "
+                        + " as the record holds them (the keyword filter is the extractor's, not the writer's) —"
+                        + " and its position fields, unknown here because this row was built from facts rather"
+                        + " than read from a source (DEC-040 D6, and D4: unknown is not absent): "
                         + written.substring(written.indexOf("WithMembers")));
         Assertions.assertTrue(written.contains("\"members\": []"),
                 "and an empty array for a type that declares none, so a table written before this field stays"
@@ -210,10 +213,12 @@ class TypeMembersTest {
         index.write();
 
         Path file = index.indexFile();
-        String written = Files.readString(file, StandardCharsets.UTF_8);
-        Files.writeString(file, written.replace(", \"members\": [{ \"name\": \"id\", \"kind\": \"field\","
-                + " \"type\": \"int\", \"parameters\": [], \"modifiers\": [], \"annotations\": [] }]", ""),
-                StandardCharsets.UTF_8);
+        // Drop the key through the JSON mapper rather than by matching the serialisation byte for byte: this
+        // fixture broke twice by doing that, once per field the format grew, and a test that has to be edited
+        // every time the writer changes is testing the writer's spelling rather than the reader's contract.
+        tools.jackson.databind.JsonNode root = MetadataJson.mapper().readTree(Files.readString(file));
+        ((tools.jackson.databind.node.ObjectNode) root.path("classes").path("a.b.WithMembers")).remove("members");
+        Files.writeString(file, MetadataJson.mapper().writeValueAsString(root), StandardCharsets.UTF_8);
 
         ClassIndex read = ClassIndex.read(file, tree.resolve("report"), tree.resolve("module"),
                 tree.resolve("module/src/main/java"));

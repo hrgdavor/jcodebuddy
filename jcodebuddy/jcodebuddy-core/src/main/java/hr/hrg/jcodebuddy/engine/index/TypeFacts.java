@@ -1,5 +1,6 @@
 package hr.hrg.jcodebuddy.engine.index;
 
+import hr.hrg.jcodebuddy.engine.source.SourcePositions;
 import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.Statement;
@@ -155,6 +156,18 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      */
     public static TypeFacts of(J.ClassDeclaration declaration, List<J.ClassDeclaration> enclosingTypes,
                                String source) {
+        return of(declaration, enclosingTypes, source, SourcePositions.of(source));
+    }
+
+    /**
+     * {@link #of(J.ClassDeclaration, List, String)} with the file's positions already parsed.
+     *
+     * <p>A pass reads one file and then asks about every type in it, so building {@link SourcePositions} once
+     * and passing it in is the difference between one javac parse per file and one per declaration — and the
+     * members' lines and spans (DEC-040 D6) come from exactly that parse.</p>
+     */
+    public static TypeFacts of(J.ClassDeclaration declaration, List<J.ClassDeclaration> enclosingTypes,
+                               String source, SourcePositions positions) {
         List<String> enclosingChain = new ArrayList<>();
         for (J.ClassDeclaration enclosing : enclosingTypes) {
             enclosingChain.add(enclosing.getSimpleName());
@@ -167,7 +180,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 TreeQueries.lineOfChained(declaration, enclosingChain, source),
                 relationsOf(declaration, TypeKinds.kindOf(declaration)),
                 annotationsOf(declaration),
-                membersOf(declaration));
+                membersOf(declaration, positions));
     }
 
     /**
@@ -232,27 +245,48 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * {@link MemberRecord.Kind#METHOD} whose type is {@code String} and which has no parameters.</p>
      */
     public static List<MemberRecord> membersOf(J.ClassDeclaration declaration) {
+        return membersOf(declaration, SourcePositions.of(null));
+    }
+
+    /**
+     * {@link #membersOf(J.ClassDeclaration)} with the file's positions already parsed (DEC-040 D6).
+     *
+     * <p>A member carries the line its name sits on and its character span, so a consumer can <em>point</em> at
+     * it — and both come from the one javac parse the caller hands in. A member the walk cannot locate records
+     * an unknown line and no span, which is a fact a reader can tell from a line rather than a guess (D4).</p>
+     */
+    public static List<MemberRecord> membersOf(J.ClassDeclaration declaration, SourcePositions positions) {
         if (declaration == null || declaration.getBody() == null) {
             return List.of();
         }
+        String owner = declaration.getSimpleName();
         List<MemberRecord> members = new ArrayList<>();
         for (Statement statement : declaration.getBody().getStatements()) {
             if (statement instanceof J.VariableDeclarations field) {
-                members.addAll(fieldsOf(field));
+                members.addAll(fieldsOf(field, owner, positions));
             } else if (statement instanceof J.MethodDeclaration method) {
                 boolean constructor = method.isConstructor();
-                members.add(new MemberRecord(method.getSimpleName(),
-                        constructor ? MemberRecord.Kind.CONSTRUCTOR : MemberRecord.Kind.METHOD,
+                MemberRecord.Kind kind = constructor ? MemberRecord.Kind.CONSTRUCTOR : MemberRecord.Kind.METHOD;
+                List<MemberParameter> parameters = parametersOf(method);
+                members.add(new MemberRecord(method.getSimpleName(), kind,
                         // A constructor declares no return type and its name is the type's, so recording a
                         // type would be recording something the source does not say.
                         constructor ? "" : TreeQueries.typeText(method.getReturnTypeExpression()),
-                        parametersOf(method),
+                        parameters,
                         modifiersOf(method.getModifiers()),
-                        annotationsOf(method.getLeadingAnnotations())));
+                        annotationsOf(method.getLeadingAnnotations()),
+                        positions.memberLine(owner, kind.positionKind(), method.getSimpleName(),
+                                parameters.size()),
+                        positions.memberSpan(owner, kind.positionKind(), method.getSimpleName(),
+                                parameters.size())));
             } else if (statement instanceof J.ClassDeclaration nested) {
                 members.add(new MemberRecord(nested.getSimpleName(), MemberRecord.Kind.NESTED,
                         nested.getSimpleName(), List.of(), modifiersOf(nested.getModifiers()),
-                        annotationsOf(nested.getLeadingAnnotations())));
+                        annotationsOf(nested.getLeadingAnnotations()),
+                        positions.memberLine(owner, MemberRecord.Kind.NESTED.positionKind(),
+                                nested.getSimpleName(), 0),
+                        positions.memberSpan(owner, MemberRecord.Kind.NESTED.positionKind(),
+                                nested.getSimpleName(), 0)));
             }
         }
         return List.copyOf(members);
@@ -262,15 +296,28 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * One field declaration's members: {@code private int a, b;} declares <em>two</em>, and each is its own
      * member, because the question a consumer asks is "is there a field called {@code b}" rather than "what does
      * this statement declare".
+     *
+     * <p>Both carry the line javac records for their own name, and both carry the <strong>declaration's</strong>
+     * span: javac records one span per declaration, keyed by the first declarator's name, and a span that
+     * covered only one of two names would be a range that does not hold what it claims to. A range covering the
+     * whole statement is the honest one, and it is what a consumer slicing the source would expect.</p>
      */
-    private static List<MemberRecord> fieldsOf(J.VariableDeclarations field) {
+    private static List<MemberRecord> fieldsOf(J.VariableDeclarations field, String owner,
+                                               SourcePositions positions) {
         String type = TreeQueries.typeText(field.getTypeExpression());
         List<String> modifiers = modifiersOf(field.getModifiers());
         List<TypeAnnotation> annotations = annotationsOf(field.getLeadingAnnotations());
+        String declarationName = field.getVariables().isEmpty() ? ""
+                : field.getVariables().get(0).getSimpleName();
+        TreeQueries.SourceSpan span = positions.memberSpan(owner, MemberRecord.Kind.FIELD.positionKind(),
+                declarationName, 0);
         List<MemberRecord> members = new ArrayList<>(field.getVariables().size());
         for (J.VariableDeclarations.NamedVariable variable : field.getVariables()) {
             members.add(new MemberRecord(variable.getSimpleName(), MemberRecord.Kind.FIELD, type, List.of(),
-                    modifiers, annotations));
+                    modifiers, annotations,
+                    positions.memberLine(owner, MemberRecord.Kind.FIELD.positionKind(),
+                            variable.getSimpleName(), 0),
+                    span));
         }
         return members;
     }

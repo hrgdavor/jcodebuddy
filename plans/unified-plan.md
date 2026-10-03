@@ -1499,14 +1499,25 @@ around ranges, and D6 added — a row must be able to point at the code.
 
 **What remains, in the order of who is waiting:**
 
-1. **Positions (D6)** — a member's **line** and its range, a relation's range, and the type row's own range:
-   the interactivity requirement, and the prerequisite for 3.0e's parent plumbing (the `P` of
-   `ChildContext<P>` comes from a slice at the relation's range, not from stored text).
+1. **Ranges on the other three facts** — a **relation** (its written form, which is what 3.0e's parent plumbing
+   slices for the `P` of `ChildContext<P>`), a **type** (its declaration), and an **annotation**. Members landed
+   first because they are the interactivity requirement the direction names outright; the same javac work extends
+   `JavaSyntaxCheck`'s member spans to supertypes, type declarations and annotations.
 2. a sealed type's `permits` (a generator that must not emit a subclass);
 3. a callable's `throws` (a generator emitting a call that must declare it);
 4. enum constants (the entity work that reads them today);
 5. a field's initialiser and has-a-body;
 6. the **imports sidecar** (`imports.json` beside `mtimes.json`) — the other thing 3.0e part two needs.
+
+**Positions landed 2026-10-03 (members).** A member carries `line` (javac's line for its name, `-1` when it
+cannot be located) and `span` (its character range), and `SourceSlice` turns a range into the source's own words
+with the row's checksum as the guard — the property a stored copy cannot have. Three things are worth keeping from
+the work: positions come from **one javac parse per file** (`SourcePositions` wraps a single
+`JavaSyntaxCheck.inspect` and is threaded through the pass, because a per-member ask parsed the same text once per
+member); **javac spells a constructor's name `<init>` in its method positions while its span walk records the
+declared name**, so a constructor is identified by owner and arity rather than by name; and **offsets index the
+file as read while the checksum is of the file normalised**, which is why the slice reads the bytes as they are
+and normalises only to verify.
 
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
