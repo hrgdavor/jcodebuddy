@@ -15,11 +15,17 @@
  *
  * `jcodebuddy-core` is named rather than left to arrive transitively through `hipster-entity-tooling`'s
  * dependency on it. It would be built either way, but a module reached only as a dependency is one whose
- * tests nobody chose to run — and this module holds the generated-code parser, which is the vocabulary
- * every other consumer of generated code reads. Being in the gate is a decision, so it is written down.
+ * tests nobody chose to run — and this module is the engine every consumer reads. Being in the gate is a
+ * decision, so it is written down.
+ *
+ * `jcodebuddy-generated` is named for the same reason, and it is the sharpest case of it: it holds the
+ * generated-code vocabulary and its parser (DEC-035), the one thing in this reactor that a tool outside the
+ * reactor reads without wanting anything else. Step 3.0l made it a leaf so that stays true; the gate keeps
+ * its tests running now that it is no longer a package inside a module that is already in the set.
  */
 export const GATE_MODULES = [
   'jcodebuddy-core',
+  'jcodebuddy-generated',
   'hipster-entity-api',
   'hipster-entity-core',
   'hipster-entity-tooling',

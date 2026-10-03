@@ -17,30 +17,26 @@
     <description>
         The metadata engine: the one source representation and the parse path over it, the metadata model,
         the class index with its content identity, and the queries a consumer asks of them — one engine for
-        codegen, analysis, reporting and the watch loop (DEC-037). It also carries the generated-code marker
-        vocabulary and its parser (DEC-035).
+        codegen, analysis, reporting and the watch loop (DEC-037).
     </description>
 
     <!--
         WHY THIS MODULE EXISTS, AND WHAT IT CARRIES NOW.
 
-        Generated code is committed source and it is cooperative: a member from an earlier revision
-        survives regeneration, so a file can be partly generated and partly hand-written, and the boundary
-        used to be knowable only to the generator — because the recogniser WAS the generator. Every other
-        consumer (an external static parser, an AI agent reading the source, a reviewer reading a diff)
-        needs that boundary and has no access to a generator's internals. DEC-035 fixes the marker
-        vocabulary; this module is the parser that reads it.
+        This module is the engine: it reads sources through DEC-030's one representation, holds the metadata
+        model, the class index (DEC-029) with its relations, the queries over them, and the freshness
+        contract (DEC-037). Everything else in the reactor is a consumer or a transport, and a consumer that
+        needs fresh metadata reads this one model rather than growing a path of its own.
 
-        Since 2026-10-02 (DEC-037, plan step 3.0f) this module is also the home of the metadata engine, and
-        that is why it now declares OpenRewrite and Jackson: parsing goes through DEC-030's one
-        representation, and the metadata documents are JSON. The engine is here because a consumer that
-        needs fresh metadata — a generator, an analysis, a report, an LSP sidecar — must read ONE model
-        rather than each growing a path of its own.
+        It was also the home of the generated-code marker vocabulary and its parser until step 3.0l moved
+        them to `jcodebuddy-generated`, and that is why the move mattered. DEC-035's readers are linters,
+        migration tools, IDE inspections and AI agents — not generators — and they should not resolve
+        OpenRewrite and Jackson to learn where generated code stops. The leaf is a leaf so that stays true,
+        and this module is free to be the engine without lending its dependencies to them.
 
-        This module is therefore no longer a leaf, and the reason it used to be one has not gone away: a
-        tool that only wants to know where generated code stops should not resolve a parser. Step 3.0l
-        extracts the marker vocabulary and its parser into a small leaf of their own, which is what restores
-        that property; until it lands, this module carries both.
+        Since 2026-10-02 (DEC-037, plan step 3.0f) this module holds the engine, and that is why it declares
+        OpenRewrite and Jackson: parsing goes through DEC-030's one representation, and the metadata
+        documents are JSON.
 
         The direction of the dependency is still the honest one, and step 3.0f-2 was spent proving it: the
         engine names no consumer. Where it needed what a consumer had (a kind resolver, a diagnostic

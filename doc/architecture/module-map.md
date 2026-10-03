@@ -22,6 +22,7 @@ jcodebuddy-parent (POM)
 │
 ├── jcodebuddy/                the JCodeBuddy libraries, the engine and the tools
 │   ├── jcodebuddy-core        the engine: one parse path, the model, the index, the queries, freshness
+│   ├── jcodebuddy-generated   the marker vocabulary and its parser — a leaf (DEC-035, step 3.0l)
 │   ├── jcodebuddy-agent       the code-action server (was `java-watch-agent`; it left `watch/` at 3.0s)
 │   ├── jcodebuddy-watch-tools
 │   ├── jwa-builder
@@ -50,12 +51,13 @@ jcodebuddy-parent (POM)
 ### Layer 1: Framework Libraries
 The following modules have **no dependency** on any other JCodeBuddy module:
 
-| Module               | Role                                       |
-| -------------------- | ------------------------------------------ |
-| `hipster-entity-api` | Shared entity interfaces and annotations   |
-| `java-watch-core`    | File monitoring, hashing, change detection |
-| `jwa-builder-api`    | Lightweight annotations for JWA Builder    |
-| `webview-core`       | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
+| Module                 | Role                                       |
+| ---------------------- | ------------------------------------------ |
+| `hipster-entity-api`   | Shared entity interfaces and annotations   |
+| `java-watch-core`      | File monitoring, hashing, change detection |
+| `jwa-builder-api`      | Lightweight annotations for JWA Builder    |
+| `jcodebuddy-generated` | DEC-035's marker vocabulary and the parser that reads it: three types, no compile dependency at all, so a tool that only wants to know where generated code stops resolves neither OpenRewrite nor Jackson (step 3.0l) |
+| `webview-core`         | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
 
 `project-automation` used to be listed here and does not belong: it depends on Layer 2 modules, so it was
 never a Layer 1 library, and it is now not a library at all. It is one project's private dev-time
@@ -74,9 +76,10 @@ These modules depend on Layer 1:
 | `jcodebuddy-core`        | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25` — DEC-030's one representation) and Jackson (`tools.jackson.core:jackson-databind`, the metadata JSON); JUnit in test scope |
 
 `jcodebuddy-core` was a leaf with no dependencies at all until step 3.0f gave it the engine, which is what
-DEC-037 decision 1 is about. **Step 3.0l extracts the generated-code marker vocabulary and its parser into a
-leaf of their own**, so a tool that only wants to know where generated code stops does not resolve a parser;
-until that lands, `jcodebuddy-core` carries both.
+DEC-037 decision 1 is about. **Step 3.0l extracted the generated-code marker vocabulary and its parser into
+`jcodebuddy-generated`, a leaf of their own** — done 2026-10-03 — so a tool that only wants to know where
+generated code stops resolves neither a Java parser nor a JSON library, while the engine is free to carry
+both.
 
 ### Layer 3: Applications & Runtimes
 These modules depend on Layer 1 and/or Layer 2, or are applications built from them:
@@ -138,27 +141,39 @@ change — which is what did not happen for `java-watch-agent`'s rename, three s
   Until step 3.0i, `jcodebuddy-codegen-api` also depended on this module — for `SourceMetadata` alone, which
   was the one-type dependency that made the SPI impossible to implement next to the index it reads.
 
-### `jcodebuddy-core` — The Engine, and the Generated-Code Markers
+### `jcodebuddy-core` — The Engine
 
-> **Where this is going ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md), `Accepted`
-> 2026-10-02):** the module **is** the home of the one metadata engine — parsing, the metadata model, the
-> indexes with their relations, search, and the freshness contract — and it gained OpenRewrite and Jackson
-> with it (steps 3.0f–3.0h, and the generator SPI's own module dissolved into it at 3.0i). The leaf property
-> below is therefore no longer true of this module as a whole: **step 3.0l extracts the marker vocabulary and
-> its parser into a leaf of their own**, which is what restores it for a tool that only reads
-> generated-region spans. The bullets below describe the marker half, which is still here.
+> **Where this came from ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md), `Accepted`
+> 2026-10-02):** the module holds the one metadata engine — parsing, the metadata model, the indexes with
+> their relations, search, and the freshness contract — and it gained OpenRewrite and Jackson with it (steps
+> 3.0f–3.0h, and the generator SPI's own module dissolved into it at 3.0i). It also held the generated-code
+> marker vocabulary until step 3.0l moved that out, which is what restored the leaf property for the one
+> reader that needs no engine at all.
 
-- Holds `GeneratedCodeMarkers` (the marker vocabulary: how a generator spells one, and how a parser
-  recognises one), `GeneratedCodeParser` (the parser that turns markers into line spans) and
-  `GeneratedBlock` (a span).
-- That half exists so that a tool which is **not** the generator can find the generated regions of a file —
-  DEC-035's vocabulary, DEC-020's cooperative preservation. The consumer is an external linter, a
-  migration tool, an IDE inspection or an AI agent, and the point is that none of them can depend on a
-  generator's internals.
-- **The marker half has no dependencies at all**, and that is why it belongs in the leaf 3.0l creates: a tool
-  that only wants to know where generated code stops should not resolve OpenRewrite, Jackson or the engine's
-  model — which is what this module now carries for everything else. The dependency direction is the honest
-  one: the generator depends on the vocabulary it emits, and the parser never depends on the generator.
+- Holds the engine: `engine/source` (the one parse path, through DEC-030's representation), `engine/meta`
+  (the file-scoped model), `engine/index` (the class index of DEC-029, with relations), `engine/query` (the
+  queries a consumer asks, and the generator-facing `TypeResolver` seam) and `engine/fresh` (the freshness
+  contract that keeps an answer honest about its age). Plus `DiagnosticSink`, `JcodebuddyDirectory` and
+  `MetadataJson`, which are the ports and the vocabulary the engine owns so that it never names a consumer.
+- It exists because codegen, analysis, reporting, the watch loop and an LSP sidecar all need **fresh
+  metadata**, and each used to grow a path of its own — a second index is the failure this module removes.
+  See [`DEC-037`](../../doc-hipster-entity/architecture/decisions/DEC-037.md) and the note below.
+- **It is a leaf no longer, deliberately**: a consumer of the engine resolves OpenRewrite and Jackson, which
+  is the price of one model, one index and one freshness contract. The exception was carved out on purpose —
+  a tool that only wants to know where generated code stops reads `jcodebuddy-generated` and nothing else.
+
+### `jcodebuddy-generated` — The Marker Vocabulary, and a Leaf (since step 3.0l)
+- Holds `GeneratedCodeMarkers` (how a generator spells a marker, and how a parser recognises one),
+  `GeneratedCodeParser` (the parser that turns markers into line spans) and `GeneratedBlock` (a span) —
+  three types, all importing nothing but `java.util`.
+- It exists so that a tool which is **not** the generator can find the generated regions of a file —
+  DEC-035's vocabulary, DEC-020's cooperative preservation. The consumer is an external linter, a migration
+  tool, an IDE inspection or an AI agent, and the point is that none of them can depend on a generator's
+  internals, nor resolve a Java parser or a JSON library to answer "where does it stop".
+- **It has no compile dependency at all**, which is the reason it is a module rather than three classes in
+  the engine. DEC-038 decision 1 is that split; step 3.0l executed it. The dependency direction is the
+  honest one: a generator depends on the vocabulary it emits, the parser depends on nothing, and a parser
+  that depended on a generator could not read a file produced by a different one.
 
 ### The generator SPI — `hr.hrg.jcodebuddy.engine.codegen`, in the engine (since step 3.0i)
 - Holds `CodeGenerator`, `CodeContext`, `CodeContextImpl`; the engine's query seam holds `TypeResolver` and

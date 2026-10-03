@@ -85,6 +85,9 @@
              resolves a type. The reason it is a library rather than a project's own is a rule, not a
              feature — a tool that generates code must not depend on anybody's `project-automation`. -->
         <module>jcodebuddy/jcodebuddy-core</module>
+        <!-- The marker vocabulary and its parser, as a leaf: DEC-035's readers are not generators, and
+             the engine they used to sit in carries OpenRewrite and Jackson (step 3.0l). -->
+        <module>jcodebuddy/jcodebuddy-generated</module>
         <module>jcodebuddy/jcodebuddy-watch-tools</module>
         <module>project-automation</module>
         <module>hipster-ioc/hipster-ioc-api</module>
@@ -367,6 +370,11 @@
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>jcodebuddy-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-generated</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!--

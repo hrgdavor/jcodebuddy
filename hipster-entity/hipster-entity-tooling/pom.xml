@@ -22,7 +22,16 @@
              its own, so that a consumer which only needs to know where generated code stops does not have
              to resolve OpenRewrite, Jackson and this module's whole model. The direction matters: the
              generator depends on the vocabulary it emits, and the parser never depends on the generator,
-             which is what lets a project that does not use this generator's parser still use its files. -->
+             which is what lets a project that does not use this generator's parser still use its files.
+             This comment described `jcodebuddy-core` until step 3.0l extracted the leaf — the dependency it
+             was written for is the one directly below it now. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-generated</artifactId>
+        </dependency>
+        <!-- The engine: the one parse path, the metadata model, the class index with its relations, and the
+             queries over them (DEC-037). This module is a consumer of all of it, and since step 3.0f the
+             representation and the parse path are the engine's rather than this module's own. -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>jcodebuddy-core</artifactId>

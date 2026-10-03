@@ -41,15 +41,25 @@
         </dependency>
 
         <!--
-            The engine: `GeneratedCodeMarkers` (the one place DEC-035's file marker is spelled) and, since
-            2026-10-03, the generator SPI. `IocContextGenerator` is a `CodeGenerator` from that SPI, so
-            the dev-time pass can offer it to every file without knowing what it is for, and this module
-            implements it without depending on a project's private assistant (AGENTS.md § 1/§ 1.1). Step
-            3.0i merged the SPI's own module into the engine itself.
+            The engine: the metadata model and, since 2026-10-03, the generator SPI. `IocContextGenerator`
+            is a `CodeGenerator` from that SPI, so the dev-time pass can offer it to every file without
+            knowing what it is for, and this module implements it without depending on a project's private
+            assistant (AGENTS.md § 1/§ 1.1). Step 3.0i merged the SPI's own module into the engine itself;
+            step 3.0l moved the marker vocabulary — the other thing this comment used to name — out to the
+            leaf below.
         -->
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>jcodebuddy-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- DEC-035's file marker, which `ContextSource` writes into the generated class header. A leaf
+             with no dependencies of its own, so emitting a marker does not mean resolving the engine's
+             parser for it. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-generated</artifactId>
             <version>${project.version}</version>
         </dependency>
 

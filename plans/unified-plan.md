@@ -985,6 +985,22 @@ existing RPC tests unchanged).
 **Done when:** no consumer has a metadata path of its own — one model, one index, one freshness contract, many
 readers.
 
+**Measured 2026-10-03, before starting, so the next pass does not hunt for paths that are not there.** Of the
+five consumer groups this step names, two hold **no private metadata path today**:
+
+- **reporting** — the Bun renderers read `.jcodebuddy/index/classes.json`, which *is* the engine's index
+  artifact (DEC-029), and build a projection of it. That is exactly what DEC-037's "what a consumer owns" note
+  permits, so there is nothing to re-point.
+- **the LSP sidecar** (`webview/jwa-sidecar`) — the only `.jcodebuddy` it touches is
+  `.jcodebuddy/webview/host.json`, the port it publishes for itself. It has no metadata path to delete; when it
+  needs metadata it will read the engine, which is what "the future LSP sidecar" means.
+
+So the work here is the other three, and it is not equal in size: `metadata-server` owns the model (a third
+metadata shape in `MetadataProvider.CacheEntry`, and a provider whose `listClasses()` returns an empty list
+because a checksum cache has never known a class name), `project-automation`'s `MetadataTypeResolver` is the
+one `TypeResolver` implementation — which makes it **3.0d's** subject before it is this step's — and the watch
+tools' own parse stack is **3.0n's** (the duplicate splice path). None of the three is a rename.
+
 ### 3.0k — Grow the recorded gate to cover the engine's contract
 **Who:** agent · **Size:** S
 
@@ -1021,6 +1037,28 @@ recorded list updated in the same change; `LINKS` green.
 
 **Done when:** the engine's module can grow dependencies without giving them to the tools that only parse
 markers.
+
+**Done 2026-10-03.** The three types and their three tests are `jcodebuddy-generated`, which declares JUnit in
+test scope and **no compile dependency at all** — the package imports `java.util` and nothing else, which is
+what makes this a module split rather than a library extraction. The package stayed
+`hr.hrg.jcodebuddy.generated`, so the whole change is a new POM, a reactor entry, a managed dependency, two
+dependent POMs and one gate line: **no consumer edited an import**, and nothing outside the package referenced
+the types.
+
+**The gate line is the part worth keeping.** The leaf was already inside the gate's module set — as a package
+of `jcodebuddy-core`, which is named there — so the moment it became a module of its own it would have left the
+gate's *tests* while still being built, which is precisely the "reached only as a dependency" case the comment
+above `GATE_MODULES` warns about. Naming it is 3.0k's principle applied to the first module that could use it.
+
+**One thing the script refused to guess at, and the hand edit that did it.** `hipster-entity-tooling`'s POM
+already carried a comment describing *this leaf* — written when the leaf was only planned — sitting above its
+`jcodebuddy-core` dependency. The comment was right and the artifactId under it was wrong, so the leaf took the
+comment and the engine got one of its own; `hipster-ioc-tooling`'s comment named `GeneratedCodeMarkers` as a
+reason for depending on the engine, and that reason moved with it. A block-insertion script cannot make that
+judgement, so it named the two files and left them to the edit.
+
+**Evidence:** `bun scripts/mvn-jdk25.js` → **BUILD SUCCESS** with the leaf in the set and `jcodebuddy-core`
+still green; `GateContractTest` green with the recorded list updated in the same change; `LINKS` green.
 
 ### 3.0m — `metadata-server` becomes `jcodebuddy-meta`
 **Who:** agent · **Size:** M
@@ -2394,9 +2432,9 @@ start)
 | 3.0g | Freshness: the watch loop, its events and its invalidation                            | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
 | 3.0h | Search: the queries every consumer asks                                               | agent              | M    | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
 | 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine                                     | agent              | M    | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
-| 3.0j | Move the remaining consumers onto the engine                                          | agent              | L    | `[ ]`                                                                                       |
+| 3.0j | Move the remaining consumers onto the engine                                          | agent              | L    | `[ ]` — measured first: the renderers and the sidecar have no private path, so it is `metadata-server` + 3.0d + 3.0n |
 | 3.0k | Grow the recorded gate to cover the engine's contract                                 | agent              | S    | `[ ]`                                                                                       |
-| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                            | agent              | S    | `[ ]`                                                                                       |
+| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                            | agent              | S    | `[x]` — `jcodebuddy-generated`: three types, no compile dependency, package unchanged (no import churn); named in `GATE_MODULES` so its 49 tests keep running |
 | 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                 | agent              | M    | `[ ]`                                                                                       |
 | 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038)                | agent              | L    | `[ ]`                                                                                       |
 | 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |

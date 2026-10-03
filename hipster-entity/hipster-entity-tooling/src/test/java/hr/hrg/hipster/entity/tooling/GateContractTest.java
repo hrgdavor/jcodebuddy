@@ -33,8 +33,9 @@ import java.util.stream.Stream;
 class GateContractTest {
 
     private static final List<String> GATE_MODULES = List.of(
-            "jcodebuddy-core", "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling",
-            "hipster-entity-jackson", "hipster-entity-test", "hipster-entity-example");
+            "jcodebuddy-core", "jcodebuddy-generated", "hipster-entity-api", "hipster-entity-core",
+            "hipster-entity-tooling", "hipster-entity-jackson", "hipster-entity-test",
+            "hipster-entity-example");
 
     /**
      * {@code -Dmaven.compiler.useIncrementalCompilation=false} is the other half of F-47's fix. {@code clean}
@@ -76,7 +77,7 @@ class GateContractTest {
     @Test
     void theGateDeclaresTheRecordedModuleSet() throws Exception {
         Assertions.assertEquals(GATE_MODULES, declaredModules(gateModule()),
-                "the -pl set is the recorded six modules in order (plan.dsflash 0.3)");
+                "the -pl set is the recorded modules in order (plan.dsflash 0.3)");
     }
 
     /**

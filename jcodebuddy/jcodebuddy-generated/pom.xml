@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jcodebuddy-generated</artifactId>
+    <packaging>jar</packaging>
+
+    <name>JCodeBuddy Generated</name>
+    <description>
+        The generated-code marker vocabulary and its parser: how a generator spells a marker, and how a tool
+        that is not the generator finds the regions it wrote (DEC-035).
+    </description>
+
+    <!--
+        WHY THIS MODULE EXISTS, AND WHY IT IS A LEAF.
+
+        Generated code is cooperative (DEC-020): a file can be partly generated and partly hand-written, and
+        the boundary used to be knowable only to the generator, because the recogniser WAS the generator.
+        Every other reader — an external linter, a migration tool, an IDE inspection, an AI agent reading a
+        diff — needs that boundary and has no access to a generator's internals. DEC-035 fixes the vocabulary;
+        this module is the parser that reads it.
+
+        The three types import nothing but `java.util`, and they used to live in `jcodebuddy-core`. That
+        module became the metadata engine (DEC-037) and took OpenRewrite and Jackson with it, which is the
+        point of the engine and also the reason the vocabulary cannot stay there: a tool that only wants to
+        know where generated code stops must not resolve a Java parser or a JSON library. Being a leaf here is
+        therefore a property, not a preference, and DEC-038 decision 1 is what separated the two.
+
+        Nothing in this module may grow a dependency without that sentence being rewritten first. If a marker
+        rule needs the engine's model, the rule belongs in the engine, and the leaf keeps answering only
+        "where does it stop".
+    -->
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
