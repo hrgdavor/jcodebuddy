@@ -41,6 +41,15 @@ class IndexFormatContractTest {
     /** {@code fqn} is the row's key, so it is written as a JSON property name rather than as a field. */
     private static final Set<String> ROW_FIELDS_WRITTEN_AS_A_KEY = Set.of("fqn");
 
+    /**
+     * Components whose JSON key is not their name.
+     *
+     * <p>Listed rather than inferred, and it is the point of the test that adding one is a decision: the format
+     * spells an annotation's arguments {@code args} (it predates this record's component name), and a reader
+     * cannot discover that mapping by walking the record.</p>
+     */
+    private static final java.util.Map<String, String> JSON_KEY_OF_COMPONENT = java.util.Map.of("arguments", "args");
+
     private static ClassIndex indexOf(Path tree) {
         return ClassIndex.forPass(tree.resolve("report"), tree.resolve("module"),
                 tree.resolve("module/src/main/java"));
@@ -101,6 +110,13 @@ class IndexFormatContractTest {
                         + " (DEC-040 D4)");
             }
         }
+        for (RecordComponent component : TypeAnnotation.class.getRecordComponents()) {
+            String key = JSON_KEY_OF_COMPONENT.getOrDefault(component.getName(), component.getName());
+            if (!written.contains("\"" + key + "\"")) {
+                problems.add("TypeAnnotation." + component.getName() + " is not emitted for an annotation (as `"
+                        + key + "`) — DEC-040 D4");
+            }
+        }
         Assertions.assertTrue(problems.isEmpty(), String.join("\n  ", problems));
     }
 
@@ -118,7 +134,8 @@ class IndexFormatContractTest {
                 : List.of(new MemberRecord("only", MemberRecord.Kind.FIELD, "", List.of(), List.of(), List.of()));
         ClassIndex index = indexOf(tree);
         index.addTypes("a/b/Empty.java", List.of(new TypeFacts("a.b.Empty", "class", List.of(), null, 3, 0,
-                List.of(TypeRelation.extendsType("Base")), List.of(), members)), false);
+                List.of(TypeRelation.extendsType("Base")), List.of(new TypeAnnotation("View", List.of("x"))),
+                members, null)), false);
         index.write();
         return Files.readString(index.indexFile(), StandardCharsets.UTF_8);
     }

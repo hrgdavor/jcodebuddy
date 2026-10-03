@@ -351,7 +351,7 @@ public final class ClassIndex {
         for (TypeFacts type : types) {
             put(new ClassRecord(type.fqn(), moduleRelativePath, type.kind(), type.modifiers(),
                     type.enclosing(), type.line(), type.depth(), generated, "", null, -1L, type.relations(),
-                    type.annotations(), type.members()));
+                    type.annotations(), type.members(), type.span()));
         }
     }
 
@@ -852,6 +852,10 @@ public final class ClassIndex {
             sb.append("\"").append(MetadataJson.escape(row.modifiers().get(i))).append("\"");
         }
         sb.append("], \"line\": ").append(row.line()).append(", \"depth\": ").append(row.depth());
+        // The declaration's own range, so a consumer can point at the type and not only at its members
+        // (DEC-040 D6). Always emitted, `null` when the walk recorded none (D4).
+        sb.append(", \"span\": ");
+        appendSpan(sb, row.span());
         // Always emitted, even when empty: a table without the field is one written before 3.0b, and "no
         // relations recorded" must not read the same as "this type has no supertypes" (3.0b's whole point).
         sb.append(", \"relations\": [");
@@ -937,6 +941,20 @@ public final class ClassIndex {
         sb.append("{ \"start\": ").append(span.start()).append(", \"end\": ").append(span.end()).append(" }");
     }
 
+    /**
+     * One span from a table node, or {@code null} when the node is absent, null, or not a range.
+     *
+     * <p>One reader for every range in the format (a member's, a relation's, a type's, an annotation's), so the
+     * "not recorded" reading has one home rather than four that can drift.</p>
+     */
+    private static hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan readSpan(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        return new hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan(
+                node.path("start").asInt(-1), node.path("end").asInt(-1));
+    }
+
     /** A JSON array of strings, one line, in the order given. */
     private static void appendStrings(StringBuilder sb, List<String> values) {
         sb.append("[");
@@ -962,6 +980,10 @@ public final class ClassIndex {
             TypeAnnotation annotation = annotations.get(i);
             sb.append("{ \"name\": \"").append(MetadataJson.escape(annotation.name())).append("\", \"args\": ");
             appendStrings(sb, annotation.arguments());
+            // The annotation's own range, so its written form — arguments and all — is recoverable from the
+            // source rather than copied (DEC-040 D2/D6).
+            sb.append(", \"span\": ");
+            appendSpan(sb, annotation.span());
             sb.append(" }");
         }
         sb.append("]");
@@ -1132,7 +1154,8 @@ public final class ClassIndex {
                 for (JsonNode argument : annotation.path("args")) {
                     arguments.add(argument.asText(""));
                 }
-                annotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
+                annotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
+                        readSpan(annotation.path("span"))));
             }
             List<MemberRecord> members = new ArrayList<>();
             for (JsonNode member : node.path("members")) {
@@ -1154,7 +1177,8 @@ public final class ClassIndex {
                         for (JsonNode argument : annotation.path("args")) {
                             arguments.add(argument.asText(""));
                         }
-                        parameterAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
+                        parameterAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
+                                readSpan(annotation.path("span"))));
                     }
                     parameters.add(new MemberParameter(parameter.path("type").asText(""),
                             parameter.path("name").asText(""), parameterAnnotations));
@@ -1169,7 +1193,8 @@ public final class ClassIndex {
                     for (JsonNode argument : annotation.path("args")) {
                         arguments.add(argument.asText(""));
                     }
-                    memberAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
+                    memberAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
+                            readSpan(annotation.path("span"))));
                 }
                 members.add(new MemberRecord(member.path("name").asText(""), kind,
                         member.path("type").asText(""), parameters, memberModifiers, memberAnnotations,
@@ -1188,7 +1213,10 @@ public final class ClassIndex {
                     node.path("line").asInt(-1), node.path("depth").asInt(0),
                     node.path("generated").asInt(0) == 1, node.path("checksum").asText(""),
                     node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations,
-                    annotations, members));
+                    annotations, members,
+                    // A table written before the declaration range existed has no `span`: no range is what it
+                    // recorded, which is a fact rather than a guess (DEC-040 D4).
+                    readSpan(node.path("span"))));
         }
         index.readMtimes(index.indexFile.resolveSibling(MTIME_FILE_NAME), problems);
         return index;

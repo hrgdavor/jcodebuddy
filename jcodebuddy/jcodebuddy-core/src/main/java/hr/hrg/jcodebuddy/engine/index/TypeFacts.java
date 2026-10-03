@@ -36,10 +36,12 @@ import java.util.Set;
  * @param members   what the declaration contains — its fields, methods, constructors and nested types, as
  *                  {@link MemberRecord}s, in source order (plan step 3.0r). Read from the declaration that was
  *                  already parsed for everything else here, never by a second parse.
+ * @param span      the declaration's character range in its file, or {@code null} when the walk recorded none —
+ *                  annotations and modifiers included, because that is what a reader clicks (DEC-040 D6)
  */
 public record TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
                         List<TypeRelation> relations, List<TypeAnnotation> annotations,
-                        List<MemberRecord> members) {
+                        List<MemberRecord> members, TreeQueries.SourceSpan span) {
 
     /**
      * The modifier vocabulary the index records, for a type declaration and for a member alike.
@@ -64,6 +66,20 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         relations = relations == null ? List.of() : List.copyOf(relations);
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
         members = members == null ? List.of() : List.copyOf(members);
+    }
+
+    /**
+     * The facts of a type whose annotations, members and position the caller did not read.
+     *
+     * <p>A delegating constructor rather than a second shape: an empty list is how "none read" and "carries
+     * none" are both spelled, so a caller that knows nothing about annotations does not need to know this
+     * record grew a field — and a caller that wants the distinction asks the parse path, not this
+     * constructor.</p>
+     */
+    public TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
+                     List<TypeRelation> relations, List<TypeAnnotation> annotations,
+                     List<MemberRecord> members) {
+        this(fqn, kind, modifiers, enclosing, line, depth, relations, annotations, members, null);
     }
 
     /**
@@ -125,6 +141,15 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
                                String kind, List<String> modifiers, int line, List<TypeRelation> relations,
                                List<TypeAnnotation> annotations, List<MemberRecord> members) {
+        return of(packageName, simpleName, enclosingNames, kind, modifiers, line, relations, annotations,
+                members, null);
+    }
+
+    /** {@link #of(String, String, List, String, List, int)} with everything this record carries. */
+    public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
+                               String kind, List<String> modifiers, int line, List<TypeRelation> relations,
+                               List<TypeAnnotation> annotations, List<MemberRecord> members,
+                               TreeQueries.SourceSpan span) {
         List<String> chain = new ArrayList<>(enclosingNames);
         chain.add(simpleName);
         String prefix = packageName == null || packageName.isEmpty() ? "" : packageName + ".";
@@ -139,7 +164,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 enclosingNames == null ? 0 : enclosingNames.size(),
                 relations,
                 annotations,
-                members);
+                members,
+                span);
     }
 
     /**
@@ -179,8 +205,11 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 // declaration's line.
                 TreeQueries.lineOfChained(declaration, enclosingChain, source),
                 relationsOf(declaration, TypeKinds.kindOf(declaration), positions, declaration.getSimpleName()),
-                annotationsOf(declaration),
-                membersOf(declaration, positions));
+                annotationsOf(declaration.getLeadingAnnotations(), positions, declaration.getSimpleName(),
+                        declaration.getSimpleName()),
+                membersOf(declaration, positions),
+                // The declaration's own range, so a consumer can point at the type itself (DEC-040 D6).
+                positions.typeSpan(declaration.getSimpleName(), enclosingChain));
     }
 
     /**
@@ -194,7 +223,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * methods, and the same shape here), so it is skipped rather than recorded as one empty argument.</p>
      */
     public static List<TypeAnnotation> annotationsOf(J.ClassDeclaration declaration) {
-        return declaration == null ? List.of() : annotationsOf(declaration.getLeadingAnnotations());
+        return declaration == null ? List.of()
+                : annotationsOf(declaration.getLeadingAnnotations(), null, null, null);
     }
 
     /**
@@ -205,6 +235,20 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * rather than recorded as one empty argument.</p>
      */
     public static List<TypeAnnotation> annotationsOf(List<J.Annotation> annotations) {
+        return annotationsOf(annotations, null, null, null);
+    }
+
+    /**
+     * {@link #annotationsOf(List)} with the file's positions, so each annotation carries the range it is written
+     * at (DEC-040 D2/D6).
+     *
+     * <p>The lookup is keyed by the type the annotation is written inside, the member it is written on — or that
+     * type's own name for a type-level annotation, which is the convention javac's walk records — and the
+     * annotation's simple name. A parameter's annotations are <strong>not</strong> located by that walk, so they
+     * carry no range: a stated gap rather than a guessed one.</p>
+     */
+    public static List<TypeAnnotation> annotationsOf(List<J.Annotation> annotations, JavacPositions positions,
+                                                     String declaringType, String owner) {
         if (annotations == null || annotations.isEmpty()) {
             return List.of();
         }
@@ -220,9 +264,19 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                     arguments.add(TreeQueries.expressionText(argument));
                 }
             }
-            written.add(new TypeAnnotation(TreeQueries.annotationName(annotation), arguments));
+            String name = TreeQueries.annotationName(annotation);
+            TreeQueries.SourceSpan span = positions == null || declaringType == null || owner == null
+                    ? null
+                    : positions.annotationSpan(declaringType, owner, simpleNameOf(name));
+            written.add(new TypeAnnotation(name, arguments, span));
         }
         return List.copyOf(written);
+    }
+
+    /** {@code jakarta.inject.Inject} to {@code Inject} — the spelling an annotation position is keyed by. */
+    private static String simpleNameOf(String annotationName) {
+        int dot = annotationName.lastIndexOf('.');
+        return dot < 0 ? annotationName : annotationName.substring(dot + 1);
     }
 
     /**
@@ -274,7 +328,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                         constructor ? "" : TreeQueries.typeText(method.getReturnTypeExpression()),
                         parameters,
                         modifiersOf(method.getModifiers()),
-                        annotationsOf(method.getLeadingAnnotations()),
+                        annotationsOf(method.getLeadingAnnotations(), positions, owner, method.getSimpleName()),
                         positions.memberLine(owner, kind.positionKind(), method.getSimpleName(),
                                 parameters.size()),
                         positions.memberSpan(owner, kind.positionKind(), method.getSimpleName(),
@@ -282,7 +336,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
             } else if (statement instanceof J.ClassDeclaration nested) {
                 members.add(new MemberRecord(nested.getSimpleName(), MemberRecord.Kind.NESTED,
                         nested.getSimpleName(), List.of(), modifiersOf(nested.getModifiers()),
-                        annotationsOf(nested.getLeadingAnnotations()),
+                        annotationsOf(nested.getLeadingAnnotations(), positions, owner, nested.getSimpleName()),
                         positions.memberLine(owner, MemberRecord.Kind.NESTED.positionKind(),
                                 nested.getSimpleName(), 0),
                         positions.memberSpan(owner, MemberRecord.Kind.NESTED.positionKind(),
@@ -306,9 +360,10 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                                                JavacPositions positions) {
         String type = TreeQueries.typeText(field.getTypeExpression());
         List<String> modifiers = modifiersOf(field.getModifiers());
-        List<TypeAnnotation> annotations = annotationsOf(field.getLeadingAnnotations());
         String declarationName = field.getVariables().isEmpty() ? ""
                 : field.getVariables().get(0).getSimpleName();
+        List<TypeAnnotation> annotations = annotationsOf(field.getLeadingAnnotations(), positions, owner,
+                declarationName);
         TreeQueries.SourceSpan span = positions.memberSpan(owner, MemberRecord.Kind.FIELD.positionKind(),
                 declarationName, 0);
         List<MemberRecord> members = new ArrayList<>(field.getVariables().size());

@@ -29,6 +29,7 @@ public final class JavacPositions {
     private final List<JavaSyntaxCheck.MemberPosition> members;
     private final List<JavaSyntaxCheck.MemberSpan> spans;
     private final List<JavaSyntaxCheck.RelationSpan> relations;
+    private final List<JavaSyntaxCheck.AnnotationPosition> annotations;
     private final List<JavaSyntaxCheck.TypePosition> types;
     private final String source;
 
@@ -37,6 +38,7 @@ public final class JavacPositions {
         this.members = check.members();
         this.spans = check.spans();
         this.relations = check.relations();
+        this.annotations = check.annotations();
         this.types = check.types();
         this.source = source;
     }
@@ -61,6 +63,39 @@ public final class JavacPositions {
             }
         }
         return UNKNOWN_LINE;
+    }
+
+    /**
+     * The span of one type declaration, or {@code null} when javac's walk did not record it.
+     *
+     * <p>Annotations and modifiers included: this is the declaration a reader clicks, and a range that started at
+     * the name would leave the thing they selected outside it.</p>
+     */
+    public TreeQueries.SourceSpan typeSpan(String simpleName, List<String> enclosingNames) {
+        for (JavaSyntaxCheck.TypePosition type : types) {
+            if (type.simpleName().equals(simpleName) && type.enclosingNames().equals(enclosingNames)) {
+                return new TreeQueries.SourceSpan(type.startOffset(), type.endOffset());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The span of one annotation as written, or {@code null} when javac's walk did not record it.
+     *
+     * <p>Keyed by the type it is written inside, the member it is written on (or that type's own name for a
+     * type-level annotation) and the annotation's simple name. Two annotations of the same simple name on one
+     * owner are indistinguishable in this key and the first is answered — a limitation of the walk rather than of
+     * the key, and one no source in this repository reaches.</p>
+     */
+    public TreeQueries.SourceSpan annotationSpan(String declaringType, String owner, String simpleName) {
+        for (JavaSyntaxCheck.AnnotationPosition annotation : annotations) {
+            if (annotation.declaringType().equals(declaringType) && annotation.owner().equals(owner)
+                    && annotation.simpleName().equals(simpleName)) {
+                return new TreeQueries.SourceSpan(annotation.startOffset(), annotation.endOffset());
+            }
+        }
+        return null;
     }
 
     /**

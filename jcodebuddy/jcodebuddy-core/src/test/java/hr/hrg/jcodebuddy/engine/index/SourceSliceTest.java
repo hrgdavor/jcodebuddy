@@ -173,6 +173,35 @@ class SourceSliceTest {
     }
 
     @Test
+    void aTypesDeclarationAndItsAnnotationRangesSliceToTheirSource(@TempDir Path tree) throws IOException {
+        String source = "package a.b;\n\n@Deprecated\npublic class Annotated {\n    int id;\n}\n";
+        writeSource(tree, "a/b/Annotated.java", source);
+        J.CompilationUnit unit = SourceReader.readSourceText(source);
+        Assertions.assertNotNull(unit, "the fixture must parse");
+        ClassIndex index = indexOf(tree);
+        index.addTypes("a/b/Annotated.java", unit, source, false);
+        index.write();
+        ClassIndex read = ClassIndex.read(index.indexFile(), tree.resolve("report"), tree.resolve("module"),
+                tree.resolve("module/src/main/java"));
+        Assertions.assertNotNull(read);
+        ClassRecord row = read.row("a.b.Annotated");
+
+        Assertions.assertNotNull(row.span(), "the type carries its own declaration range (DEC-040 D6)");
+        SourceSlice.Slice declaration = SourceSlice.read(read, row, row.span());
+        Assertions.assertTrue(declaration.usable(), declaration.problem());
+        Assertions.assertTrue(declaration.text().startsWith("@Deprecated"),
+                "annotations included, because that is what a reader clicks: " + declaration.text());
+        Assertions.assertTrue(declaration.text().contains("class Annotated"),
+                "and the declaration runs to its closing brace: " + declaration.text());
+
+        TypeAnnotation annotation = row.annotations().get(0);
+        Assertions.assertNotNull(annotation.span(), "an annotation carries its own range too");
+        SourceSlice.Slice annotationText = SourceSlice.read(read, row, annotation.span());
+        Assertions.assertEquals("@Deprecated", annotationText.text(),
+                "which is how the annotation as written — arguments and all — is recovered rather than stored");
+    }
+
+    @Test
     void aMemberThatCannotBeLocatedRecordsUnknownRatherThanAGuess(@TempDir Path tree) throws IOException {
         // A row built from facts has no positions: -1 and null, which a reader can tell from a line (D4).
         ClassIndex index = indexOf(tree);

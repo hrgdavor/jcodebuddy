@@ -64,10 +64,14 @@ class TypeAnnotationsTest {
         ClassIndex index = indexOf(tree);
         index.addTypes("a/b/PersonSummary.java", unit, source, false);
 
-        Assertions.assertEquals(List.of(TypeAnnotation.of("View")),
-                index.row("a.b.PersonSummary").annotations(),
+        TypeAnnotation view = index.row("a.b.PersonSummary").annotations().get(0);
+        Assertions.assertEquals("View", view.name());
+        Assertions.assertTrue(view.arguments().isEmpty(),
                 "() parses to a single J.Empty, which is an empty parameter list rather than one empty argument"
                         + " (DEC-030's trap for methods, the same shape here)");
+        Assertions.assertNotNull(view.span(),
+                "and the annotation carries the range it is written at, so its source text is recoverable"
+                        + " without being stored (DEC-040 D2/D6)");
     }
 
     @Test
@@ -83,8 +87,11 @@ class TypeAnnotationsTest {
         index.write();
 
         String written = Files.readString(index.indexFile(), StandardCharsets.UTF_8);
-        Assertions.assertTrue(written.contains("\"annotations\": [{ \"name\": \"View\", \"args\": [\"name = \\\"x\\\"\"] }]"),
-                "the writer emits names and arguments: " + written.substring(written.indexOf("Annotated")));
+        Assertions.assertTrue(written.contains(
+                        "\"annotations\": [{ \"name\": \"View\", \"args\": [\"name = \\\"x\\\"\"], \"span\": null }]"),
+                "the writer emits names, arguments and the annotation's range (`null` here, because this row was"
+                        + " built from facts rather than read from a source): "
+                        + written.substring(written.indexOf("Annotated")));
         Assertions.assertTrue(written.contains("\"annotations\": []"),
                 "and emits an empty array for a type that carries none, so an older table without the field stays"
                         + " distinguishable as 'not recorded'");
@@ -92,8 +99,10 @@ class TypeAnnotationsTest {
         ClassIndex read = ClassIndex.read(index.indexFile(), tree.resolve("report"), tree.resolve("module"),
                 tree.resolve("module/src/main/java"));
         Assertions.assertNotNull(read);
-        Assertions.assertEquals(List.of(new TypeAnnotation("View", List.of("name = \"x\""))),
-                read.row("a.b.Annotated").annotations());
+        Assertions.assertEquals(List.of("View"),
+                read.row("a.b.Annotated").annotations().stream().map(TypeAnnotation::name).toList());
+        Assertions.assertEquals(List.of("name = \"x\""),
+                read.row("a.b.Annotated").annotations().get(0).arguments());
         Assertions.assertTrue(read.row("a.b.Plain").annotations().isEmpty(), "a fact, not a gap");
     }
 
@@ -107,8 +116,13 @@ class TypeAnnotationsTest {
         index.write();
 
         Path file = index.indexFile();
-        String written = Files.readString(file, StandardCharsets.UTF_8);
-        Files.writeString(file, written.replace(", \"annotations\": [{ \"name\": \"View\", \"args\": [] }]", ""),
+        // Dropped through the JSON mapper, not by matching the serialisation: this fixture's string surgery has
+        // now broken once per field the annotation record grew, which is a test of the writer's spelling rather
+        // than of the reader's contract.
+        tools.jackson.databind.JsonNode root = hr.hrg.jcodebuddy.engine.MetadataJson.mapper()
+                .readTree(Files.readString(file, StandardCharsets.UTF_8));
+        ((tools.jackson.databind.node.ObjectNode) root.path("classes").path("a.b.Annotated")).remove("annotations");
+        Files.writeString(file, hr.hrg.jcodebuddy.engine.MetadataJson.mapper().writeValueAsString(root),
                 StandardCharsets.UTF_8);
 
         ClassIndex read = ClassIndex.read(file, tree.resolve("report"), tree.resolve("module"),

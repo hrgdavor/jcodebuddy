@@ -2,6 +2,8 @@ package hr.hrg.jcodebuddy.engine.index;
 
 import java.util.List;
 
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
+
 /**
  * One row of the module class index — one type declaration (DEC-029).
  *
@@ -38,11 +40,14 @@ import java.util.List;
  * @param members          what the declaration contains: its fields, methods, constructors and nested types, as
  *                         {@link MemberRecord}s, empty for a declaration that declares none — always emitted, for
  *                         the same not-recorded reason as {@code relations} (plan step 3.0r)
+ * @param span             the declaration's character range in its file, or {@code null} when none was recorded
+ *                         — annotations and modifiers included, because that is what a reader clicks; a consumer
+ *                         needs to be able to *point* at the type (DEC-040 D6)
  */
 public record ClassRecord(String fqn, String path, String kind, List<String> modifiers, String enclosing,
                           int line, int depth, boolean generated, String checksum, String hashCalculatedAt,
                           long size, List<TypeRelation> relations, List<TypeAnnotation> annotations,
-                          List<MemberRecord> members) {
+                          List<MemberRecord> members, TreeQueries.SourceSpan span) {
 
     public ClassRecord {
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
@@ -61,7 +66,18 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
      */
     public ClassRecord withFileFacts(String checksum, String hashCalculatedAt, long size) {
         return new ClassRecord(fqn, path, kind, modifiers, enclosing, line, depth, generated, checksum,
-                hashCalculatedAt, size, relations, annotations, members);
+                hashCalculatedAt, size, relations, annotations, members, span);
+    }
+
+    /**
+     * A row whose declaration range the caller did not read — no range is a fact, not an empty one (DEC-040 D4).
+     */
+    public ClassRecord(String fqn, String path, String kind, List<String> modifiers, String enclosing,
+                       int line, int depth, boolean generated, String checksum, String hashCalculatedAt,
+                       long size, List<TypeRelation> relations, List<TypeAnnotation> annotations,
+                       List<MemberRecord> members) {
+        this(fqn, path, kind, modifiers, enclosing, line, depth, generated, checksum, hashCalculatedAt, size,
+                relations, annotations, members, null);
     }
 
     /** Whether the type's own facts (not the file's content) differ from {@code other}. */
@@ -82,6 +98,9 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
                 // And so is a member change, for the third time and the same reason: adding a field to a type
                 // whose bytes changed cannot be distinguished from one whose bytes did not, so the members are
                 // what carries the fact (plan step 3.0r).
-                && members.equals(other.members);
+                && members.equals(other.members)
+                // And a position change is a type-fact change too, for the fourth time and the same reason: a
+                // member or a supertype moved, and a consumer that points at the file must see that it did.
+                && java.util.Objects.equals(span, other.span);
     }
 }

@@ -2,6 +2,8 @@ package hr.hrg.jcodebuddy.engine.index;
 
 import java.util.List;
 
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
+
 /**
  * One annotation on a declaration: the annotation type's name as written, and its arguments as written
  * (DEC-029's annotation field, asked for by the maintainer on 2026-10-02: core metadata carries annotation
@@ -27,17 +29,25 @@ import java.util.List;
  *
  * @param name      the annotation type's name as written in the declaration, without a leading {@code @}
  * @param arguments the arguments as source text, in declaration order; empty when none were written
+ * @param span      the annotation's character range in the declaring file, or {@code null} when the walk
+ *                  recorded none — the range is how the annotation <em>as written</em> is recovered from the
+ *                  source, so the table need not copy it (DEC-040 D2/D6)
  */
-public record TypeAnnotation(String name, List<String> arguments) {
+public record TypeAnnotation(String name, List<String> arguments, TreeQueries.SourceSpan span) {
 
     public TypeAnnotation {
         name = name == null ? "" : name;
         arguments = arguments == null ? List.of() : List.copyOf(arguments);
     }
 
+    /** An annotation whose position the caller did not read — no range is a fact, not an empty one. */
+    public TypeAnnotation(String name, List<String> arguments) {
+        this(name, arguments, null);
+    }
+
     /** An annotation written without arguments. */
     public static TypeAnnotation of(String name) {
-        return new TypeAnnotation(name, List.of());
+        return new TypeAnnotation(name, List.of(), null);
     }
 
     /** The last segment of {@link #name()}, which is how an annotation is usually written and asked about. */

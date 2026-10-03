@@ -131,8 +131,12 @@ public final class JavaSyntaxCheck {
      *
      * @param declarationLine the declaration's start line, annotations included
      * @param nameLine        the line the declared name sits on
+     * @param startOffset     the declaration's first character — annotations and modifiers included, because that
+     *                        is where a reader lands when the declaration is the thing they clicked
+     * @param endOffset       one past its last character
      */
-    public record TypePosition(String simpleName, List<String> enclosingNames, int declarationLine, int nameLine) {
+    public record TypePosition(String simpleName, List<String> enclosingNames, int declarationLine, int nameLine,
+                               int startOffset, int endOffset) {
 
         public TypePosition {
             enclosingNames = List.copyOf(enclosingNames);
@@ -174,7 +178,7 @@ public final class JavaSyntaxCheck {
     public record CaseSpan(int startOffset, int endOffset) {
     }
 
-    /** One annotation's position: the type or member it is written on, and its own line.
+    /** One annotation's position: the type or member it is written on, its own line, and its character span.
      *
      * @param declaringType the <strong>innermost</strong> enclosing type's simple name — the type
      *                      itself for an annotation on a type, its declaring type for one on a member.
@@ -183,8 +187,12 @@ public final class JavaSyntaxCheck {
      *                      and their annotations sit on different lines.
      * @param owner         the member the annotation is written on, or the type's own name for a
      *                      type-level annotation
+     * @param startOffset   the annotation's first character (its {@code @})
+     * @param endOffset     one past its last character — the span is how the annotation as written,
+     *                      arguments and all, is recovered from the file rather than copied (DEC-040 D2)
      */
-    public record AnnotationPosition(String declaringType, String owner, String simpleName, int line) {
+    public record AnnotationPosition(String declaringType, String owner, String simpleName, int line,
+                                     int startOffset, int endOffset) {
     }
 
     /**
@@ -341,7 +349,8 @@ public final class JavaSyntaxCheck {
                     if (!simpleName.isEmpty()) {
                         types.add(new TypePosition(simpleName, List.copyOf(enclosing),
                                 line(positions.getStartPosition(unit, tree), lineMap),
-                                lineOfName(tree, simpleName, source, unit, positions, lineMap)));
+                                lineOfName(tree, simpleName, source, unit, positions, lineMap),
+                                startOffset(unit, positions, tree), endOffset(unit, positions, tree)));
                         collectAnnotations(tree.getModifiers().getAnnotations(), simpleName, simpleName,
                                 source, unit, positions, lineMap, annotations);
                         collectRelations(tree, simpleName, unit, positions, relations);
@@ -632,7 +641,8 @@ public final class JavaSyntaxCheck {
             int dot = name.lastIndexOf('.');
             into.add(new AnnotationPosition(declaringType, owner,
                     dot >= 0 ? name.substring(dot + 1) : name,
-                    line(positions.getStartPosition(unit, annotation), lineMap)));
+                    line(positions.getStartPosition(unit, annotation), lineMap),
+                    startOffset(unit, positions, annotation), endOffset(unit, positions, annotation)));
         }
     }
 
