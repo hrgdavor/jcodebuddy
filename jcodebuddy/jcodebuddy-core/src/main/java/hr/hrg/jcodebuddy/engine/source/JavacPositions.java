@@ -20,7 +20,7 @@ import java.util.List;
  * code or in a navigation page looks like it worked, which is exactly the failure DEC-028's verification exists
  * to prevent.</p>
  */
-public final class SourcePositions {
+public final class JavacPositions {
 
     /** The line a lookup answers with when the declaration cannot be located — never a guess. */
     public static final int UNKNOWN_LINE = -1;
@@ -28,13 +28,15 @@ public final class SourcePositions {
     private final List<JavaSyntaxCheck.MethodPosition> methods;
     private final List<JavaSyntaxCheck.MemberPosition> members;
     private final List<JavaSyntaxCheck.MemberSpan> spans;
+    private final List<JavaSyntaxCheck.RelationSpan> relations;
     private final List<JavaSyntaxCheck.TypePosition> types;
     private final String source;
 
-    private SourcePositions(JavaSyntaxCheck.FileCheck check, String source) {
+    private JavacPositions(JavaSyntaxCheck.FileCheck check, String source) {
         this.methods = check.methods();
         this.members = check.members();
         this.spans = check.spans();
+        this.relations = check.relations();
         this.types = check.types();
         this.source = source;
     }
@@ -46,8 +48,8 @@ public final class SourcePositions {
      * throwing: the caller's own read path already reports an unreadable file (F-34's rule), and a position
      * lookup is not the place to decide a file is broken.</p>
      */
-    public static SourcePositions of(String source) {
-        return new SourcePositions(JavaSyntaxCheck.inspect(source == null ? "" : source),
+    public static JavacPositions of(String source) {
+        return new JavacPositions(JavaSyntaxCheck.inspect(source == null ? "" : source),
                 source == null ? "" : source);
     }
 
@@ -132,6 +134,28 @@ public final class SourcePositions {
             }
         }
         return List.copyOf(found);
+    }
+
+    /**
+     * The span of one supertype as written, or {@code null} when javac's walk did not record it.
+     *
+     * <p>This is how a relation's written form is reached: the row keeps the bare name for matching, and this
+     * range points at the declaration's own text — so {@code ChildContext<AppContext>} is read from the file
+     * rather than stored beside it (DEC-040 D2).</p>
+     *
+     * @param owner   the innermost enclosing type's simple name
+     * @param kind    {@code extends} or {@code implements} — for an interface or an annotation type everything is
+     *                {@code extends}, because javac holds that clause in {@code getImplementsClause()}
+     * @param ordinal which entry of that clause, 0-based, in source order
+     */
+    public TreeQueries.SourceSpan relationSpan(String owner, String kind, int ordinal) {
+        for (JavaSyntaxCheck.RelationSpan relation : relations) {
+            if (relation.owner().equals(owner) && relation.kind().equals(kind)
+                    && relation.ordinal() == ordinal) {
+                return new TreeQueries.SourceSpan(relation.startOffset(), relation.endOffset());
+            }
+        }
+        return null;
     }
 
     /** The text this holder's positions index. */

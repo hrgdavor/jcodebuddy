@@ -2,6 +2,8 @@ package hr.hrg.jcodebuddy.engine.index;
 
 import java.util.Locale;
 
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
+
 /**
  * One relation from a declaring type to a supertype: the name as it is written, and which clause it came from
  * (DEC-029's relation half, plan step 3.0b).
@@ -32,8 +34,11 @@ import java.util.Locale;
  *
  * @param name the supertype's name for matching — the written form without its type arguments
  * @param kind whether the name came from an {@code extends} or an {@code implements} clause
+ * @param span the supertype's character range in the declaring file, or {@code null} when the walk recorded
+ *             none — this is how the written form ({@code ChildContext<AppContext>}, type arguments included) is
+ *             recovered from the source instead of being copied into the table (DEC-040 D2, plan step 3.0t)
  */
-public record TypeRelation(String name, Kind kind) {
+public record TypeRelation(String name, Kind kind, TreeQueries.SourceSpan span) {
 
     /** Which clause the name came from. */
     public enum Kind {
@@ -70,13 +75,18 @@ public record TypeRelation(String name, Kind kind) {
         kind = kind == null ? Kind.EXTENDS : kind;
     }
 
+    /** A relation whose position the caller did not read — the span is unknown rather than invented. */
+    public TypeRelation(String name, Kind kind) {
+        this(name, kind, null);
+    }
+
     /**
      * An {@code extends} relation, from the text as it is written in the source.
      *
      * <p>The bare name is derived here rather than passed, because the text is what the extraction actually
      * has: a caller cannot record a relation whose name disagrees with the declaration's spelling. The text
-     * itself is <strong>not stored</strong> — the row points at the file and its checksum, and a consumer that
-     * needs the written form (type arguments included) slices the source at the relation's range.</p>
+     * itself is <strong>not stored</strong> — {@code span} points at it, so a consumer that needs the written
+     * form slices the file and the row's checksum says whether that slice is still current.</p>
      */
     public static TypeRelation extendsType(String writtenText) {
         return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.EXTENDS);
@@ -85,5 +95,15 @@ public record TypeRelation(String name, Kind kind) {
     /** An {@code implements} relation, from the text as written — see {@link #extendsType(String)}. */
     public static TypeRelation implementsType(String writtenText) {
         return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.IMPLEMENTS);
+    }
+
+    /** {@link #extendsType(String)} with the range the written form sits at. */
+    public static TypeRelation extendsType(String writtenText, TreeQueries.SourceSpan span) {
+        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.EXTENDS, span);
+    }
+
+    /** {@link #implementsType(String)} with the range the written form sits at. */
+    public static TypeRelation implementsType(String writtenText, TreeQueries.SourceSpan span) {
+        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.IMPLEMENTS, span);
     }
 }

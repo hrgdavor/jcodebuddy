@@ -97,10 +97,13 @@ class TypeRelationsTest {
         ClassIndex index = emptyIndex(tree);
         index.addTypes("a/b/PersonSummary.java", unit, source, false);
 
-        Assertions.assertEquals(List.of(TypeRelation.extendsType("a.b.Person")),
-                index.row("a.b.PersonSummary").relations(),
+        Assertions.assertEquals(List.of("EXTENDS:a.b.Person"),
+                index.row("a.b.PersonSummary").relations().stream().map(TypeRelationsTest::describe).toList(),
                 "the LST holds an interface's extends clause in getImplements(), so a reader of getExtends()"
                         + " alone finds no supertype at all; the kind must come from the declaration");
+        Assertions.assertNotNull(index.row("a.b.PersonSummary").relations().get(0).span(),
+                "and the relation carries the RANGE of its written form, which is how the arguments are"
+                        + " recovered without the table storing them (DEC-040 D2)");
     }
 
     @Test
@@ -112,10 +115,11 @@ class TypeRelationsTest {
         ClassIndex index = emptyIndex(tree);
         index.addTypes("a/b/Employee.java", unit, source, false);
 
-        Assertions.assertEquals(List.of(TypeRelation.extendsType("Person"),
-                        TypeRelation.implementsType("java.io.Serializable")),
-                index.row("a.b.Employee").relations(),
+        Assertions.assertEquals(List.of("EXTENDS:Person", "IMPLEMENTS:java.io.Serializable"),
+                index.row("a.b.Employee").relations().stream().map(TypeRelationsTest::describe).toList(),
                 "extends comes first and keeps its kind, so a relation diagram cannot draw the two edges alike");
+        Assertions.assertTrue(index.row("a.b.Employee").relations().stream().allMatch(r -> r.span() != null),
+                "and each relation carries its own range, so a consumer can point at the clause it came from");
     }
 
     @Test
@@ -148,13 +152,19 @@ class TypeRelationsTest {
                 null, 3, 0, List.of(TypeRelation.implementsType("CtxModule")))), false);
         index.write();
 
-        // A pre-3.0b table: the same table, with the field the writer now always emits taken back out.
+        // A pre-3.0b table: the same table, with the field the writer now always emits taken back out. Dropped
+        // through the JSON mapper rather than by matching the serialisation byte for byte, because that broke
+        // once already — when the relation grew a `span` — and a test that must be edited every time the writer
+        // changes is testing the writer's spelling rather than the reader's contract.
         Path file = index.indexFile();
         String written = Files.readString(file, StandardCharsets.UTF_8);
-        String relation = ", \"relations\": [{ \"name\": \"CtxModule\", \"kind\": \"implements\" }]";
-        Assertions.assertTrue(written.contains(relation),
+        Assertions.assertTrue(written.contains("\"relations\": [{ \"name\": \"CtxModule\","),
                 "the writer always emits the field, so an older table is distinguishable from an empty one");
-        Files.writeString(file, written.replace(relation, ""), StandardCharsets.UTF_8);
+        tools.jackson.databind.JsonNode root = hr.hrg.jcodebuddy.engine.MetadataJson.mapper()
+                .readTree(written);
+        ((tools.jackson.databind.node.ObjectNode) root.path("classes").path("a.b.Employee")).remove("relations");
+        Files.writeString(file, hr.hrg.jcodebuddy.engine.MetadataJson.mapper().writeValueAsString(root),
+                StandardCharsets.UTF_8);
 
         ClassIndex read = reread(index, tree);
 
@@ -162,5 +172,10 @@ class TypeRelationsTest {
         Assertions.assertTrue(read.row("a.b.Employee").relations().isEmpty(),
                 "it reads as empty because it was not recorded \u2014 which the writer's always-present field is"
                         + " what makes distinguishable for tables written from now on");
+    }
+
+    /** {@code IMPLEMENTS:java.io.Serializable} — what a relation test is about, without the span in the way. */
+    private static String describe(TypeRelation relation) {
+        return relation.kind() + ":" + relation.name();
     }
 }

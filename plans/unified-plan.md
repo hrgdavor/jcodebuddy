@@ -1499,10 +1499,9 @@ around ranges, and D6 added — a row must be able to point at the code.
 
 **What remains, in the order of who is waiting:**
 
-1. **Ranges on the other three facts** — a **relation** (its written form, which is what 3.0e's parent plumbing
-   slices for the `P` of `ChildContext<P>`), a **type** (its declaration), and an **annotation**. Members landed
-   first because they are the interactivity requirement the direction names outright; the same javac work extends
-   `JavaSyntaxCheck`'s member spans to supertypes, type declarations and annotations.
+1. **Ranges on the last two facts** — a **type** (its own declaration) and an **annotation**. Members and
+   relations landed 2026-10-03; the same javac work extends `JavaSyntaxCheck`'s spans to a type declaration and to
+   an annotation, whose position record carries a line only today.
 2. a sealed type's `permits` (a generator that must not emit a subclass);
 3. a callable's `throws` (a generator emitting a call that must declare it);
 4. enum constants (the entity work that reads them today);

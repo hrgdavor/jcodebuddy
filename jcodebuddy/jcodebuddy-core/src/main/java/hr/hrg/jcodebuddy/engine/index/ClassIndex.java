@@ -439,8 +439,8 @@ public final class ClassIndex {
     private static void collectTypes(J.CompilationUnit unit, String source, List<TypeFacts> into) {
         // One javac parse for the whole file: every type's and member's line and span comes from it, so asking
         // per declaration would parse the same text once per declaration (DEC-040 D6).
-        hr.hrg.jcodebuddy.engine.source.SourcePositions positions =
-                hr.hrg.jcodebuddy.engine.source.SourcePositions.of(source);
+        hr.hrg.jcodebuddy.engine.source.JavacPositions positions =
+                hr.hrg.jcodebuddy.engine.source.JavacPositions.of(source);
         for (TreeQueries.EnclosedType enclosed : TreeQueries.typesWithEnclosing(unit)) {
             into.add(TypeFacts.of(enclosed.declaration(), enclosed.enclosing(), source, positions));
         }
@@ -860,10 +860,13 @@ public final class ClassIndex {
                 sb.append(", ");
             }
             TypeRelation relation = row.relations().get(i);
-            // A name and a clause, never the source text: the row's path and checksum make the file the one
-            // place the written form lives, so a table cannot disagree with the source it describes (DEC-040).
+            // A name, a clause and a RANGE, never the source text: the span is how the written form — type
+            // arguments included — is recovered from the file, and the row's checksum says whether that slice is
+            // still current (DEC-040 D2/D6).
             sb.append("{ \"name\": \"").append(MetadataJson.escape(relation.name()))
-                    .append("\", \"kind\": \"").append(relation.kind().json()).append("\" }");
+                    .append("\", \"kind\": \"").append(relation.kind().json()).append("\", \"span\": ");
+            appendSpan(sb, relation.span());
+            sb.append(" }");
         }
         sb.append("]");
         // Always emitted, like relations and for the same reason: a table without the field is one written
@@ -904,12 +907,7 @@ public final class ClassIndex {
             // written as -1 and a span that was never recorded as null — a fact a reader can tell from a
             // position, rather than a field that is simply absent (D4).
             sb.append(", \"line\": ").append(member.line()).append(", \"span\": ");
-            if (member.span() == null) {
-                sb.append("null");
-            } else {
-                sb.append("{ \"start\": ").append(member.span().start())
-                        .append(", \"end\": ").append(member.span().end()).append(" }");
-            }
+            appendSpan(sb, member.span());
             sb.append(" }");
         }
         sb.append("]");
@@ -922,6 +920,21 @@ public final class ClassIndex {
         sb.append(", \"size\": ").append(row.size())
                 .append(", \"checksum\": \"").append(row.checksum()).append("\", \"hashCalculatedAt\": \"")
                 .append(row.hashCalculatedAt()).append("\" }");
+    }
+
+    /**
+     * One position on one line: {@code { "start": …, "end": … }}, or {@code null} when the walk recorded none.
+     *
+     * <p>Shared by a member's and a relation's span so the format has one spelling of a range, and so an
+     * unrecorded range is written as an explicit {@code null} rather than omitted — a reader must be able to tell
+     * "no range was recorded" from "this row predates ranges" (DEC-040 D4).</p>
+     */
+    private static void appendSpan(StringBuilder sb, hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan span) {
+        if (span == null) {
+            sb.append("null");
+            return;
+        }
+        sb.append("{ \"start\": ").append(span.start()).append(", \"end\": ").append(span.end()).append(" }");
     }
 
     /** A JSON array of strings, one line, in the order given. */
@@ -1104,7 +1117,14 @@ public final class ClassIndex {
                     }
                     return null;
                 }
-                relations.add(new TypeRelation(relation.path("name").asText(""), kind));
+                relations.add(new TypeRelation(relation.path("name").asText(""), kind,
+                        // A table written before relation spans existed has no `span`: no range is what it
+                        // actually recorded, which is a fact rather than a guess (DEC-040 D4).
+                        relation.hasNonNull("span")
+                                ? new hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan(
+                                        relation.path("span").path("start").asInt(-1),
+                                        relation.path("span").path("end").asInt(-1))
+                                : null));
             }
             List<TypeAnnotation> annotations = new ArrayList<>();
             for (JsonNode annotation : node.path("annotations")) {
@@ -1155,7 +1175,7 @@ public final class ClassIndex {
                         member.path("type").asText(""), parameters, memberModifiers, memberAnnotations,
                         // A table written before positions existed has no `line`/`span`: an unknown line and no
                         // span is what it actually recorded, which is a fact rather than a guess (DEC-040 D4).
-                        member.path("line").asInt(hr.hrg.jcodebuddy.engine.source.SourcePositions.UNKNOWN_LINE),
+                        member.path("line").asInt(hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE),
                         member.hasNonNull("span")
                                 ? new hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan(
                                         member.path("span").path("start").asInt(-1),

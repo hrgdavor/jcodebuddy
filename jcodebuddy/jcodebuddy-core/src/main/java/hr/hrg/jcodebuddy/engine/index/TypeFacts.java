@@ -1,6 +1,6 @@
 package hr.hrg.jcodebuddy.engine.index;
 
-import hr.hrg.jcodebuddy.engine.source.SourcePositions;
+import hr.hrg.jcodebuddy.engine.source.JavacPositions;
 import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 import org.openrewrite.java.tree.Statement;
@@ -156,18 +156,18 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      */
     public static TypeFacts of(J.ClassDeclaration declaration, List<J.ClassDeclaration> enclosingTypes,
                                String source) {
-        return of(declaration, enclosingTypes, source, SourcePositions.of(source));
+        return of(declaration, enclosingTypes, source, JavacPositions.of(source));
     }
 
     /**
      * {@link #of(J.ClassDeclaration, List, String)} with the file's positions already parsed.
      *
-     * <p>A pass reads one file and then asks about every type in it, so building {@link SourcePositions} once
+     * <p>A pass reads one file and then asks about every type in it, so building {@link JavacPositions} once
      * and passing it in is the difference between one javac parse per file and one per declaration — and the
      * members' lines and spans (DEC-040 D6) come from exactly that parse.</p>
      */
     public static TypeFacts of(J.ClassDeclaration declaration, List<J.ClassDeclaration> enclosingTypes,
-                               String source, SourcePositions positions) {
+                               String source, JavacPositions positions) {
         List<String> enclosingChain = new ArrayList<>();
         for (J.ClassDeclaration enclosing : enclosingTypes) {
             enclosingChain.add(enclosing.getSimpleName());
@@ -178,7 +178,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 // only by it, and a lookup missing it answers the outer declaration with the inner
                 // declaration's line.
                 TreeQueries.lineOfChained(declaration, enclosingChain, source),
-                relationsOf(declaration, TypeKinds.kindOf(declaration)),
+                relationsOf(declaration, TypeKinds.kindOf(declaration), positions, declaration.getSimpleName()),
                 annotationsOf(declaration),
                 membersOf(declaration, positions));
     }
@@ -245,7 +245,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * {@link MemberRecord.Kind#METHOD} whose type is {@code String} and which has no parameters.</p>
      */
     public static List<MemberRecord> membersOf(J.ClassDeclaration declaration) {
-        return membersOf(declaration, SourcePositions.of(null));
+        return membersOf(declaration, JavacPositions.of(null));
     }
 
     /**
@@ -255,7 +255,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * it — and both come from the one javac parse the caller hands in. A member the walk cannot locate records
      * an unknown line and no span, which is a fact a reader can tell from a line rather than a guess (D4).</p>
      */
-    public static List<MemberRecord> membersOf(J.ClassDeclaration declaration, SourcePositions positions) {
+    public static List<MemberRecord> membersOf(J.ClassDeclaration declaration, JavacPositions positions) {
         if (declaration == null || declaration.getBody() == null) {
             return List.of();
         }
@@ -303,7 +303,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * whole statement is the honest one, and it is what a consumer slicing the source would expect.</p>
      */
     private static List<MemberRecord> fieldsOf(J.VariableDeclarations field, String owner,
-                                               SourcePositions positions) {
+                                               JavacPositions positions) {
         String type = TreeQueries.typeText(field.getTypeExpression());
         List<String> modifiers = modifiersOf(field.getModifiers());
         List<TypeAnnotation> annotations = annotationsOf(field.getLeadingAnnotations());
@@ -383,6 +383,21 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * {@code EntityBase}, not {@code EntityBase<Long>} (see {@link TypeRelation}).</p>
      */
     public static List<TypeRelation> relationsOf(J.ClassDeclaration declaration, String kind) {
+        return relationsOf(declaration, kind, null, null);
+    }
+
+    /**
+     * {@link #relationsOf(J.ClassDeclaration, String)} with the file's positions, so each relation carries the
+     * range its written form sits at (DEC-040 D2/D6).
+     *
+     * <p>The range is looked up by <strong>clause and ordinal</strong>, never by the written text: javac's printer
+     * and the LST's normalise generic commas differently — which is why {@code TreeQueries.typeText} exists — so
+     * the text is not a safe key even though both walks go in source order. Ordinals count within a clause, and an
+     * interface's or an annotation's whole supertype list counts as {@code extends} on both sides
+     * (DEC-030's trap).</p>
+     */
+    public static List<TypeRelation> relationsOf(J.ClassDeclaration declaration, String kind,
+                                                 JavacPositions positions, String owner) {
         if (declaration == null) {
             return List.of();
         }
@@ -390,15 +405,22 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         boolean extendsClause = declaration.getExtends() != null;
         List<String> names = TreeQueries.supertypeTexts(declaration);
         List<TypeRelation> relations = new ArrayList<>(names.size());
+        int extendsOrdinal = 0;
+        int implementsOrdinal = 0;
         for (int i = 0; i < names.size(); i++) {
             // Only the first name can come from an `extends` clause, and only when there is one; everything
             // after it came from `implements`, except on an interface, where the whole list is `extends`.
             boolean fromExtends = interfaceLike || (extendsClause && i == 0);
             // The name is DERIVED from the written form rather than typed in (DEC-040 D2), and the written form
-            // itself is not stored: this row points at the file and its checksum, so `ChildContext<AppContext>`
-            // is recovered by slicing the source at the relation's range rather than duplicated here.
-            relations.add(new TypeRelation(withoutTypeArguments(names.get(i)),
-                    fromExtends ? TypeRelation.Kind.EXTENDS : TypeRelation.Kind.IMPLEMENTS));
+            // itself is not stored: `span` points at it, so `ChildContext<AppContext>` is recovered by slicing
+            // the source rather than duplicated here.
+            TypeRelation.Kind relationKind = fromExtends
+                    ? TypeRelation.Kind.EXTENDS : TypeRelation.Kind.IMPLEMENTS;
+            int ordinal = fromExtends ? extendsOrdinal++ : implementsOrdinal++;
+            TreeQueries.SourceSpan span = positions == null || owner == null
+                    ? null
+                    : positions.relationSpan(owner, relationKind.json(), ordinal);
+            relations.add(new TypeRelation(withoutTypeArguments(names.get(i)), relationKind, span));
         }
         return List.copyOf(relations);
     }

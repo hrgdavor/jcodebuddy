@@ -105,4 +105,12 @@ public final class SourceSlice {
     public static Slice read(ClassIndex index, ClassRecord row, MemberRecord member) {
         return read(index, row, member == null ? null : member.span());
     }
+
+    /**
+     * One supertype as it is written, verified — {@code ChildContext<AppContext>} for a relation whose row
+     * recorded only the bare name {@code ChildContext} (DEC-040 D2).
+     */
+    public static Slice read(ClassIndex index, ClassRecord row, TypeRelation relation) {
+        return read(index, row, relation == null ? null : relation.span());
+    }
 }

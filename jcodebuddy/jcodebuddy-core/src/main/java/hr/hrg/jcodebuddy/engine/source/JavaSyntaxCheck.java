@@ -211,6 +211,29 @@ public final class JavaSyntaxCheck {
     }
 
     /**
+     * One supertype's character span: where the {@code extends} or {@code implements} entry is written (DEC-040
+     * D2/D6, plan step 3.0t).
+     *
+     * <p>A relation's <em>written form</em> is what a consumer needs and what a table must not store: the row
+     * records the bare name for matching, and this range is how the written form — {@code ChildContext<AppContext>},
+     * type arguments included — is recovered from the file. It is what makes a fact the compiler erases
+     * reachable without a second copy of the source going stale.</p>
+     *
+     * @param owner       the innermost enclosing type's simple name, as every other position lookup is keyed
+     * @param kind        {@code extends} or {@code implements} — with an <strong>interface's or annotation's
+     *                    {@code extends} list recorded as {@code extends}</strong>, because javac holds it in
+     *                    {@code getImplementsClause()} with a null {@code getExtendsClause()}: the same trap
+     *                    DEC-030 records for the LST, and recording it as {@code implements} would draw an edge
+     *                    the declaration cannot have
+     * @param ordinal     which entry of that clause, 0-based and in source order — it is what tells two
+     *                    supertypes apart when the names would be ambiguous
+     * @param startOffset the entry's first character
+     * @param endOffset   one past its last character
+     */
+    public record RelationSpan(String owner, String kind, int ordinal, int startOffset, int endOffset) {
+    }
+
+    /**
      * Everything one javac parse of a source text can answer.
      *
      * @param syntacticallyValid whether the text is well-formed Java (syntax errors only; type errors
@@ -226,7 +249,7 @@ public final class JavaSyntaxCheck {
     public record FileCheck(boolean syntacticallyValid, List<TypePosition> types,
                      List<MethodPosition> methods, List<MemberPosition> members,
                      List<MemberSpan> spans, List<AnnotationPosition> annotations,
-                     List<Integer> caseLines, List<CaseSpan> caseSpans) {
+                     List<RelationSpan> relations, List<Integer> caseLines, List<CaseSpan> caseSpans) {
 
         public FileCheck {
             types = List.copyOf(types);
@@ -234,12 +257,13 @@ public final class JavaSyntaxCheck {
             members = List.copyOf(members);
             spans = List.copyOf(spans);
             annotations = List.copyOf(annotations);
+            relations = List.copyOf(relations);
             caseLines = List.copyOf(caseLines);
             caseSpans = List.copyOf(caseSpans);
         }
 
         static FileCheck invalid() {
-            return new FileCheck(false, List.of(), List.of(), List.of(), List.of(), List.of(),
+            return new FileCheck(false, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                     List.of(), List.of());
         }
     }
@@ -286,6 +310,7 @@ public final class JavaSyntaxCheck {
         List<AnnotationPosition> annotations = new ArrayList<>();
         List<Integer> caseLines = new ArrayList<>();
         List<CaseSpan> caseSpans = new ArrayList<>();
+        List<RelationSpan> relations = new ArrayList<>();
         try (StandardJavaFileManager manager =
                      COMPILER.getStandardFileManager(diagnostics, Locale.ROOT, null)) {
             // The manager is the resource to close: it holds the open file handles for the in-memory
@@ -319,6 +344,7 @@ public final class JavaSyntaxCheck {
                                 lineOfName(tree, simpleName, source, unit, positions, lineMap)));
                         collectAnnotations(tree.getModifiers().getAnnotations(), simpleName, simpleName,
                                 source, unit, positions, lineMap, annotations);
+                        collectRelations(tree, simpleName, unit, positions, relations);
                         // Anonymous classes contribute no name to the chain, and must not: the LST has
                         // no `J.ClassDeclaration` for one — its body hangs off `J.NewClass` — so a named
                         // type nested inside an anonymous class would otherwise carry a chain the LST
@@ -363,10 +389,11 @@ public final class JavaSyntaxCheck {
                 continue;
             }
             if (!isTypeError(diagnostic.getCode())) {
-                return new FileCheck(false, types, methods, members, spans, annotations, caseLines, caseSpans);
+                return new FileCheck(false, types, methods, members, spans, annotations, relations, caseLines,
+                        caseSpans);
             }
         }
-        return new FileCheck(true, types, methods, members, spans, annotations, caseLines, caseSpans);
+        return new FileCheck(true, types, methods, members, spans, annotations, relations, caseLines, caseSpans);
     }
 
     /**
@@ -526,6 +553,43 @@ public final class JavaSyntaxCheck {
     private static String ownerSimpleName(String owner) {
         int dot = owner.lastIndexOf('.');
         return dot < 0 ? owner : owner.substring(dot + 1);
+    }
+
+    /**
+     * Every supertype's span, in source order: {@code extends} first, then {@code implements} — and for an
+     * interface or an annotation type the whole list is {@code extends}, because javac holds an interface's
+     * {@code extends} clause in {@code getImplementsClause()} and leaves {@code getExtendsClause()} null. That is
+     * the trap DEC-030 records for the LST, met again here in a different API, and getting it wrong would record
+     * an {@code implements} edge from a declaration that cannot have one.
+     *
+     * <p>The ordinal is what a lookup keys on: the LST walk and this one both go in source order, and the
+     * written text is not a safe key — javac's {@code toString()} and the LST's printer normalise generic commas
+     * differently, which is the reason {@code TreeQueries.typeText} exists at all.</p>
+     */
+    private static void collectRelations(ClassTree tree, String owner,
+                                         com.sun.source.tree.CompilationUnitTree unit,
+                                         com.sun.source.util.SourcePositions positions,
+                                         List<RelationSpan> into) {
+        boolean interfaceLike = tree.getKind() == com.sun.source.tree.Tree.Kind.INTERFACE
+                || tree.getKind() == com.sun.source.tree.Tree.Kind.ANNOTATION_TYPE;
+        if (!interfaceLike && tree.getExtendsClause() != null) {
+            addRelation(owner, "extends", 0, tree.getExtendsClause(), unit, positions, into);
+        }
+        List<? extends Tree> implementsClause = tree.getImplementsClause();
+        if (implementsClause == null) {
+            return;
+        }
+        int ordinal = 0;
+        for (Tree written : implementsClause) {
+            addRelation(owner, interfaceLike ? "extends" : "implements", ordinal++, written, unit, positions, into);
+        }
+    }
+
+    private static void addRelation(String owner, String kind, int ordinal, Tree written,
+                                    com.sun.source.tree.CompilationUnitTree unit,
+                                    com.sun.source.util.SourcePositions positions, List<RelationSpan> into) {
+        into.add(new RelationSpan(owner, kind, ordinal,
+                startOffset(unit, positions, written), endOffset(unit, positions, written)));
     }
 
     private static void addSpan(List<MemberSpan> spans, String owner, String kind, String name,

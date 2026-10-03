@@ -18,7 +18,7 @@ import java.util.List;
  *
  * <p>Two things are pinned here, and they are two halves of one rule. A member carries the line its name sits on
  * and its character span, so a navigation diagram, a review page or an IDE jump can point at it —
- * {@code SourcePositions}' line and span, taken from the one javac parse of the file. And the span is what makes
+ * {@code JavacPositions}' line and span, taken from the one javac parse of the file. And the span is what makes
  * the source's own text reachable without storing it: {@link SourceSlice} reads the declaring file, verifies it
  * against the row's own checksum, and returns the slice — or says why it will not.</p>
  */
@@ -136,6 +136,43 @@ class SourceSliceTest {
     }
 
     @Test
+    void aRelationsWrittenFormIsRecoveredBySlicingItsRange(@TempDir Path tree) throws IOException {
+        // DEC-040's acceptance criterion, in the one shape that made the rule: the model records the bare name
+        // `ChildContext`, and the ARGUMENT — the fact the compiler erases — comes back from the file.
+        String source = "package a.b;\n\n"
+                + "public interface ChildCtx extends ChildContext<AppContext>, java.io.Serializable {\n"
+                + "}\n";
+        writeSource(tree, "a/b/ChildCtx.java", source);
+        J.CompilationUnit unit = SourceReader.readSourceText(source);
+        Assertions.assertNotNull(unit, "the fixture must parse");
+        ClassIndex index = indexOf(tree);
+        index.addTypes("a/b/ChildCtx.java", unit, source, false);
+        index.write();
+        ClassIndex read = ClassIndex.read(index.indexFile(), tree.resolve("report"), tree.resolve("module"),
+                tree.resolve("module/src/main/java"));
+        Assertions.assertNotNull(read);
+
+        ClassRecord row = read.row("a.b.ChildCtx");
+        Assertions.assertEquals(List.of("ChildContext", "java.io.Serializable"),
+                row.relations().stream().map(TypeRelation::name).toList(),
+                "the names a match wants, with type arguments removed");
+        Assertions.assertEquals(List.of("EXTENDS", "EXTENDS"),
+                row.relations().stream().map(relation -> relation.kind().name()).toList(),
+                "and an interface's whole supertype list is `extends` — the trap DEC-030 records, met again in"
+                        + " javac's own API");
+
+        SourceSlice.Slice genericParent = SourceSlice.read(read, row, row.relations().get(0));
+        Assertions.assertTrue(genericParent.usable(), genericParent.problem());
+        Assertions.assertEquals("ChildContext<AppContext>", genericParent.text(),
+                "the written form, argument and all, read from the file at the relation's range — not stored in"
+                        + " the table (DEC-040 D2)");
+
+        SourceSlice.Slice second = SourceSlice.read(read, row, row.relations().get(1));
+        Assertions.assertEquals("java.io.Serializable", second.text(),
+                "and the second relation's range points at the second supertype, so the ordinals kept them apart");
+    }
+
+    @Test
     void aMemberThatCannotBeLocatedRecordsUnknownRatherThanAGuess(@TempDir Path tree) throws IOException {
         // A row built from facts has no positions: -1 and null, which a reader can tell from a line (D4).
         ClassIndex index = indexOf(tree);
@@ -144,7 +181,7 @@ class SourceSliceTest {
                 List.of(), List.of(), List.of(MemberRecord.field("id", "int", List.of())))), false);
 
         MemberRecord member = index.row("a.b.Fact").members().get(0);
-        Assertions.assertEquals(hr.hrg.jcodebuddy.engine.source.SourcePositions.UNKNOWN_LINE, member.line());
+        Assertions.assertEquals(hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE, member.line());
         Assertions.assertNull(member.span());
         SourceSlice.Slice slice = SourceSlice.read(index, index.row("a.b.Fact"), member);
         Assertions.assertFalse(slice.usable());

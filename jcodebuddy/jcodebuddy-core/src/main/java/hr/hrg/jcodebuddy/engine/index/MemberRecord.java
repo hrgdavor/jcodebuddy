@@ -39,7 +39,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * @param annotations    the annotations on the member, as written with their arguments as written
  *                       ({@link TypeAnnotation}), in declaration order; empty when it carries none
  * @param line           the line the member's <em>name</em> sits on, 1-based, or
- *                       {@link hr.hrg.jcodebuddy.engine.source.SourcePositions#UNKNOWN_LINE} when it could not be
+ *                       {@link hr.hrg.jcodebuddy.engine.source.JavacPositions#UNKNOWN_LINE} when it could not be
  *                       located — carried because a consumer has to be able to <em>point</em> at the member, and
  *                       a navigation diagram, a review page or an IDE jump needs a line rather than a
  *                       description (DEC-040 D6)
@@ -111,7 +111,7 @@ public record MemberRecord(String name, Kind kind, String type, List<MemberParam
     public MemberRecord(String name, Kind kind, String type, List<MemberParameter> parameters,
                         List<String> modifiers, List<TypeAnnotation> annotations) {
         this(name, kind, type, parameters, modifiers, annotations,
-                hr.hrg.jcodebuddy.engine.source.SourcePositions.UNKNOWN_LINE, null);
+                hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE, null);
     }
 
     /** The member's arity, which is what tells two overloads of one name apart in a position lookup. */
