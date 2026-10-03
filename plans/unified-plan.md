@@ -1437,6 +1437,39 @@ green, and `java-watch-agent` still passing whatever it tests about the seam it 
 
 **Done when:** the watcher knows a directory changed and decides nothing about Java, and 3.0i can dissolve the
 SPI into the engine without giving `java-watch*` anything.
+
+### 3.0t — The model keeps what a consumer could ask (DEC-040)
+**Who:** agent · **Size:** M
+
+[DEC-040](../doc-hipster-entity/architecture/decisions/DEC-040.md) is a fidelity rule, and the tree owes it
+several facts. It was widened by the maintainer on 2026-10-03 from "what the compiler erases" to "**anything a
+consumer could ask**", so the list below is a contract rather than an erasure-only minimum. Every item is a
+**DEC-029 format change** under the always-emitted rule, and each one has a consumer waiting for it:
+
+| fact                                                                                              | why it is owed                                                                                 | who waits for it                                                                  |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| the **text as written** on a relation — `ChildContext<AppContext>` beside the name `ChildContext` | type arguments are what erasure removes, and the name alone is lossy (D2)                      | 3.0e's parent plumbing                                                            |
+| a **sealed** type's `permits` list                                                                | a class-file attribute with no dependable reflective equivalent                                | a generator that must not emit a subclass of a sealed type                        |
+| a callable's **`throws` clause**                                                                  | partial at runtime, absent from most models                                                    | a generator emitting a call that must declare it (or must not)                    |
+| **enum constants**, in declaration order, with their arguments                                    | a consumer projecting an enum needs them, and they are not fields in the same sense at runtime | entity generation (the enum-order and ledger work reads them today)               |
+| a field's **initialiser**, as written                                                             | a class file keeps it as bytecode, which is not "as written"                                   | nobody yet — which is why it is last in the list, not why it is absent            |
+| whether a callable **has a body**                                                                 | `abstract` is written on a class method but not on an interface one, so "no body" is not derivable from modifiers alone | 3.0e's factory-versus-accessor discrimination, half-answered already by `default` |
+| the file's **import lines**                                                                       | D1: the generated class names the types the interface names, and no consumer should read the file for that | 3.0e part two                                                         |
+| **loose matching for generics**                                                                   | the model records `List<String>`; a caller asks about `List`                                   | every query                                                                       |
+
+**Do:** extend the row (the relation's written text; `permits`; the file's imports in a **sidecar beside
+`mtimes.json`**, because imports are a *file* fact like the checksum rather than a type fact), extend a member
+(a `throws` list, enum constants as a member kind carrying their arguments as written, a field's initialiser, and
+whether it has a body), extract each through `TreeQueries`, and give the query surface the loose generic match
+the acceptance criteria name.
+
+**Gate:** `MODULE` for `jcodebuddy-core` plus the recorded gate; and the contract test DEC-040 asks for —
+**one** test that walks the format's own field list and asserts each field is emitted for an empty row and reads
+as *not recorded* when absent, so a new field cannot be added without deciding that question. That test is the
+mechanical form of D4, and it is the reason this step exists as a step rather than as a series of small ones.
+
+**Done when:** every fact D1 lists round-trips, and a consumer can ask for it without reading a file.
+
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
 
@@ -2613,6 +2646,7 @@ start)
 | 3.0q | Merge what 3.0p found worth keeping, delete the rest                                  | agent              | M–L  | ` [ ] ` (content decided by 3.0p)                                                           |
 | 3.0r | The index grows members and annotations (DEC-029 format change)                       | agent              | M    | `[x]` — `members` always emitted, closed kind vocabulary, member types/modifiers/annotations; `NotCovered` deleted, so the last unanswerable question is answered |
 | 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace     | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
+| 3.0t | The model keeps what a consumer could ask (DEC-040)                                   | agent              | M    | `[ ]` — widened from erasure to "anything a consumer could ask": the relation's written text, `permits`, `throws`, enum constants, initialisers, has-a-body, an imports sidecar and loose generic matching |
 | 3.1  | The hipster-ioc ADR                                                                   | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
 | 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                  | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |
 | 3.3  | Make the hipster-ioc generator runnable and documented                                | agent              | M    | `[x]` (prototype)                                                                           |
