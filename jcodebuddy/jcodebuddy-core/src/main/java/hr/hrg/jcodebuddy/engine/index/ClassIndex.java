@@ -351,7 +351,7 @@ public final class ClassIndex {
         for (TypeFacts type : types) {
             put(new ClassRecord(type.fqn(), moduleRelativePath, type.kind(), type.modifiers(),
                     type.enclosing(), type.line(), type.depth(), generated, "", null, -1L, type.relations(),
-                    type.annotations()));
+                    type.annotations(), type.members()));
         }
     }
 
@@ -862,20 +862,29 @@ public final class ClassIndex {
         sb.append("]");
         // Always emitted, like relations and for the same reason: a table without the field is one written
         // before annotations were recorded, and "not recorded" must not read as "carries none".
-        sb.append(", \"annotations\": [");
-        for (int i = 0; i < row.annotations().size(); i++) {
+        sb.append(", \"annotations\": ");
+        appendAnnotations(sb, row.annotations());
+        // Always emitted for the third time, and for the third time the same reason: a table without the field
+        // was written before members were recorded, and "not recorded" must not read as "declares none"
+        // (plan step 3.0r).
+        sb.append(", \"members\": [");
+        for (int i = 0; i < row.members().size(); i++) {
             if (i > 0) {
                 sb.append(", ");
             }
-            TypeAnnotation annotation = row.annotations().get(i);
-            sb.append("{ \"name\": \"").append(MetadataJson.escape(annotation.name())).append("\", \"args\": [");
-            for (int a = 0; a < annotation.arguments().size(); a++) {
-                if (a > 0) {
-                    sb.append(", ");
-                }
-                sb.append("\"").append(MetadataJson.escape(annotation.arguments().get(a))).append("\"");
-            }
-            sb.append("] }");
+            MemberRecord member = row.members().get(i);
+            sb.append("{ \"name\": \"").append(MetadataJson.escape(member.name()))
+                    .append("\", \"kind\": \"").append(member.kind().json())
+                    // Emitted even when empty: a constructor has no type and a field has no parameters, and a
+                    // reader that had to tell "empty" from "absent" would be guessing at the member's kind.
+                    .append("\", \"type\": \"").append(MetadataJson.escape(member.type()))
+                    .append("\", \"parameters\": ");
+            appendStrings(sb, member.parameterTypes());
+            sb.append(", \"modifiers\": ");
+            appendStrings(sb, member.modifiers());
+            sb.append(", \"annotations\": ");
+            appendAnnotations(sb, member.annotations());
+            sb.append(" }");
         }
         sb.append("]");
         if (row.generated()) {
@@ -887,6 +896,36 @@ public final class ClassIndex {
         sb.append(", \"size\": ").append(row.size())
                 .append(", \"checksum\": \"").append(row.checksum()).append("\", \"hashCalculatedAt\": \"")
                 .append(row.hashCalculatedAt()).append("\" }");
+    }
+
+    /** A JSON array of strings, one line, in the order given. */
+    private static void appendStrings(StringBuilder sb, List<String> values) {
+        sb.append("[");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append("\"").append(MetadataJson.escape(values.get(i))).append("\"");
+        }
+        sb.append("]");
+    }
+
+    /**
+     * A JSON array of {@code { "name": …, "args": […] }} objects, shared by a declaration's annotations and a
+     * member's: one spelling of an annotation in this format, so the two can never drift.
+     */
+    private static void appendAnnotations(StringBuilder sb, List<TypeAnnotation> annotations) {
+        sb.append("[");
+        for (int i = 0; i < annotations.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            TypeAnnotation annotation = annotations.get(i);
+            sb.append("{ \"name\": \"").append(MetadataJson.escape(annotation.name())).append("\", \"args\": ");
+            appendStrings(sb, annotation.arguments());
+            sb.append(" }");
+        }
+        sb.append("]");
     }
 
     /**
@@ -1049,13 +1088,44 @@ public final class ClassIndex {
                 }
                 annotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
             }
+            List<MemberRecord> members = new ArrayList<>();
+            for (JsonNode member : node.path("members")) {
+                MemberRecord.Kind kind = MemberRecord.Kind.fromJson(member.path("kind").asText(null));
+                if (kind == null) {
+                    // Refuse rather than guess, exactly as an unknown relation kind is refused: a member kind
+                    // this contract has no case for would silently become an absent member.
+                    if (problems != null) {
+                        problems.add("the class index cannot describe " + entry.getKey()
+                                + ": its members carry the unknown kind '" + member.path("kind").asText("") + "'");
+                    }
+                    return null;
+                }
+                List<String> parameters = new ArrayList<>();
+                for (JsonNode parameter : member.path("parameters")) {
+                    parameters.add(parameter.asText(""));
+                }
+                List<String> memberModifiers = new ArrayList<>();
+                for (JsonNode modifier : member.path("modifiers")) {
+                    memberModifiers.add(modifier.asText(""));
+                }
+                List<TypeAnnotation> memberAnnotations = new ArrayList<>();
+                for (JsonNode annotation : member.path("annotations")) {
+                    List<String> arguments = new ArrayList<>();
+                    for (JsonNode argument : annotation.path("args")) {
+                        arguments.add(argument.asText(""));
+                    }
+                    memberAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
+                }
+                members.add(new MemberRecord(member.path("name").asText(""), kind,
+                        member.path("type").asText(""), parameters, memberModifiers, memberAnnotations));
+            }
             index.put(new ClassRecord(entry.getKey(), node.path("path").asText(""),
                     node.path("kind").asText(""), modifiers,
                     node.hasNonNull("enclosing") ? node.path("enclosing").asText() : null,
                     node.path("line").asInt(-1), node.path("depth").asInt(0),
                     node.path("generated").asInt(0) == 1, node.path("checksum").asText(""),
                     node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations,
-                    annotations));
+                    annotations, members));
         }
         index.readMtimes(index.indexFile.resolveSibling(MTIME_FILE_NAME), problems);
         return index;

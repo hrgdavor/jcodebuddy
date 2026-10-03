@@ -35,15 +35,20 @@ import java.util.List;
  * @param annotations      the annotations on the declaration, as written with their arguments as written, empty
  *                         for a declaration that carries none — always emitted, for the same not-recorded
  *                         reason as {@code relations} ({@link TypeAnnotation})
+ * @param members          what the declaration contains: its fields, methods, constructors and nested types, as
+ *                         {@link MemberRecord}s, empty for a declaration that declares none — always emitted, for
+ *                         the same not-recorded reason as {@code relations} (plan step 3.0r)
  */
 public record ClassRecord(String fqn, String path, String kind, List<String> modifiers, String enclosing,
                           int line, int depth, boolean generated, String checksum, String hashCalculatedAt,
-                          long size, List<TypeRelation> relations, List<TypeAnnotation> annotations) {
+                          long size, List<TypeRelation> relations, List<TypeAnnotation> annotations,
+                          List<MemberRecord> members) {
 
     public ClassRecord {
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
         relations = relations == null ? List.of() : List.copyOf(relations);
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
+        members = members == null ? List.of() : List.copyOf(members);
     }
 
     /**
@@ -56,7 +61,7 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
      */
     public ClassRecord withFileFacts(String checksum, String hashCalculatedAt, long size) {
         return new ClassRecord(fqn, path, kind, modifiers, enclosing, line, depth, generated, checksum,
-                hashCalculatedAt, size, relations, annotations);
+                hashCalculatedAt, size, relations, annotations, members);
     }
 
     /** Whether the type's own facts (not the file's content) differ from {@code other}. */
@@ -73,6 +78,10 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
                 && relations.equals(other.relations)
                 // An annotation change is a type-fact change for the same reason a relation change is: adding
                 // @Deprecated to a type whose bytes are otherwise identical must not look unchanged.
-                && annotations.equals(other.annotations);
+                && annotations.equals(other.annotations)
+                // And so is a member change, for the third time and the same reason: adding a field to a type
+                // whose bytes changed cannot be distinguished from one whose bytes did not, so the members are
+                // what carries the fact (plan step 3.0r).
+                && members.equals(other.members);
     }
 }

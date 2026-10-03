@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.engine.index;
 
 import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
+import org.openrewrite.java.tree.Statement;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,9 +32,13 @@ import java.util.Set;
  *                  and resolving a name needs the whole index (DEC-029's relation half, plan step 3.0b)
  * @param annotations the annotations on the declaration, as written, with their arguments as written — the
  *                  declaration's own text, never an interpretation of it ({@link TypeAnnotation})
+ * @param members   what the declaration contains — its fields, methods, constructors and nested types, as
+ *                  {@link MemberRecord}s, in source order (plan step 3.0r). Read from the declaration that was
+ *                  already parsed for everything else here, never by a second parse.
  */
 public record TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
-                        List<TypeRelation> relations, List<TypeAnnotation> annotations) {
+                        List<TypeRelation> relations, List<TypeAnnotation> annotations,
+                        List<MemberRecord> members) {
 
     /**
      * The modifier vocabulary the index records.
@@ -51,6 +56,20 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
         relations = relations == null ? List.of() : List.copyOf(relations);
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
+        members = members == null ? List.of() : List.copyOf(members);
+    }
+
+    /**
+     * The facts of a type whose annotations and members the caller did not read.
+     *
+     * <p>A delegating constructor rather than a second shape: an empty list is how "none read" and "carries
+     * none" are both spelled, so a caller that knows nothing about annotations does not need to know this
+     * record grew a field — and a caller that wants the distinction asks the parse path, not this
+     * constructor.</p>
+     */
+    public TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
+                     List<TypeRelation> relations, List<TypeAnnotation> annotations) {
+        this(fqn, kind, modifiers, enclosing, line, depth, relations, annotations, List.of());
     }
 
     /**
@@ -63,7 +82,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      */
     public TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
                      List<TypeRelation> relations) {
-        this(fqn, kind, modifiers, enclosing, line, depth, relations, List.of());
+        this(fqn, kind, modifiers, enclosing, line, depth, relations, List.of(), List.of());
     }
 
     /**
@@ -92,6 +111,13 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
                                String kind, List<String> modifiers, int line, List<TypeRelation> relations,
                                List<TypeAnnotation> annotations) {
+        return of(packageName, simpleName, enclosingNames, kind, modifiers, line, relations, annotations, List.of());
+    }
+
+    /** {@link #of(String, String, List, String, List, int)} with relations, annotations and members. */
+    public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
+                               String kind, List<String> modifiers, int line, List<TypeRelation> relations,
+                               List<TypeAnnotation> annotations, List<MemberRecord> members) {
         List<String> chain = new ArrayList<>(enclosingNames);
         chain.add(simpleName);
         String prefix = packageName == null || packageName.isEmpty() ? "" : packageName + ".";
@@ -105,7 +131,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 line,
                 enclosingNames == null ? 0 : enclosingNames.size(),
                 relations,
-                annotations);
+                annotations,
+                members);
     }
 
     /**
@@ -133,7 +160,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 // declaration's line.
                 TreeQueries.lineOfChained(declaration, enclosingChain, source),
                 relationsOf(declaration, TypeKinds.kindOf(declaration)),
-                annotationsOf(declaration));
+                annotationsOf(declaration),
+                membersOf(declaration));
     }
 
     /**
@@ -147,10 +175,17 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * methods, and the same shape here), so it is skipped rather than recorded as one empty argument.</p>
      */
     public static List<TypeAnnotation> annotationsOf(J.ClassDeclaration declaration) {
-        if (declaration == null) {
-            return List.of();
-        }
-        List<J.Annotation> annotations = declaration.getLeadingAnnotations();
+        return declaration == null ? List.of() : annotationsOf(declaration.getLeadingAnnotations());
+    }
+
+    /**
+     * The annotations on any declaration or member, as written (plan step 3.0r's member half).
+     *
+     * <p>The same reading as {@link #annotationsOf(J.ClassDeclaration)}, so a member's annotations cannot be
+     * recorded differently from a type's: names unwrapped, arguments as text, a single {@code J.Empty} skipped
+     * rather than recorded as one empty argument.</p>
+     */
+    public static List<TypeAnnotation> annotationsOf(List<J.Annotation> annotations) {
         if (annotations == null || annotations.isEmpty()) {
             return List.of();
         }
@@ -169,6 +204,96 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
             written.add(new TypeAnnotation(TreeQueries.annotationName(annotation), arguments));
         }
         return List.copyOf(written);
+    }
+
+    /**
+     * What the declaration contains, in source order: its fields, methods, constructors and nested types (plan
+     * step 3.0r, DEC-029's member field).
+     *
+     * <p>Three limits are deliberate, and each is a fact this table has no contract for — so a consumer that
+     * needs one asks the parse path rather than reading an absence here as a "no":</p>
+     *
+     * <ul>
+     *   <li><strong>No bodies and no initialisers.</strong> The index answers "what shape does this declaration
+     *       have"; a body would be the file's content in a second place, stale as soon as either copy moves.</li>
+     *   <li><strong>No enum constants.</strong> An enum's constants are {@code J.EnumValue} statements rather
+     *       than variables, and nothing in this table's contract describes them yet.</li>
+     *   <li><strong>No parameter annotations.</strong> Parameter <em>types</em> are recorded; a parameter's own
+     *       annotations are a third level of detail nothing asks for.</li>
+     * </ul>
+     *
+     * <p>An annotation type's members read as the methods Java makes them: {@code String name();} is a
+     * {@link MemberRecord.Kind#METHOD} whose type is {@code String} and which has no parameters.</p>
+     */
+    public static List<MemberRecord> membersOf(J.ClassDeclaration declaration) {
+        if (declaration == null || declaration.getBody() == null) {
+            return List.of();
+        }
+        List<MemberRecord> members = new ArrayList<>();
+        for (Statement statement : declaration.getBody().getStatements()) {
+            if (statement instanceof J.VariableDeclarations field) {
+                members.addAll(fieldsOf(field));
+            } else if (statement instanceof J.MethodDeclaration method) {
+                boolean constructor = method.isConstructor();
+                members.add(new MemberRecord(method.getSimpleName(),
+                        constructor ? MemberRecord.Kind.CONSTRUCTOR : MemberRecord.Kind.METHOD,
+                        // A constructor declares no return type and its name is the type's, so recording a
+                        // type would be recording something the source does not say.
+                        constructor ? "" : TreeQueries.typeText(method.getReturnTypeExpression()),
+                        parameterTypesOf(method),
+                        modifiersOf(method.getModifiers()),
+                        annotationsOf(method.getLeadingAnnotations())));
+            } else if (statement instanceof J.ClassDeclaration nested) {
+                members.add(new MemberRecord(nested.getSimpleName(), MemberRecord.Kind.NESTED,
+                        nested.getSimpleName(), List.of(), modifiersOf(nested.getModifiers()),
+                        annotationsOf(nested.getLeadingAnnotations())));
+            }
+        }
+        return List.copyOf(members);
+    }
+
+    /**
+     * One field declaration's members: {@code private int a, b;} declares <em>two</em>, and each is its own
+     * member, because the question a consumer asks is "is there a field called {@code b}" rather than "what does
+     * this statement declare".
+     */
+    private static List<MemberRecord> fieldsOf(J.VariableDeclarations field) {
+        String type = TreeQueries.typeText(field.getTypeExpression());
+        List<String> modifiers = modifiersOf(field.getModifiers());
+        List<TypeAnnotation> annotations = annotationsOf(field.getLeadingAnnotations());
+        List<MemberRecord> members = new ArrayList<>(field.getVariables().size());
+        for (J.VariableDeclarations.NamedVariable variable : field.getVariables()) {
+            members.add(new MemberRecord(variable.getSimpleName(), MemberRecord.Kind.FIELD, type, List.of(),
+                    modifiers, annotations));
+        }
+        return members;
+    }
+
+    /**
+     * A callable's parameter types as written, in order.
+     *
+     * <p>The LST spells "no parameters" as a single {@link J.Empty} rather than an empty list (DEC-030's trap
+     * for methods), so it is skipped here instead of being recorded as one parameter with an empty type.</p>
+     */
+    private static List<String> parameterTypesOf(J.MethodDeclaration method) {
+        List<Statement> parameters = method.getParameters();
+        if (parameters == null || parameters.isEmpty()) {
+            return List.of();
+        }
+        List<String> types = new ArrayList<>(parameters.size());
+        for (Statement parameter : parameters) {
+            if (parameter instanceof J.Empty) {
+                continue;
+            }
+            if (parameter instanceof J.VariableDeclarations declarations) {
+                types.add(TreeQueries.typeText(declarations.getTypeExpression()));
+            } else {
+                // A shape this contract does not model — recorded as written rather than dropped, because
+                // dropping it would understate the arity and make a signature look unique when it is not.
+                types.add(TreeQueries.typeText(parameter));
+            }
+        }
+        return List.copyOf(types);
     }
 
     /**
@@ -276,15 +401,29 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
      * way this table's contract spells it.</p>
      */
     private static List<String> modifiersOf(J.ClassDeclaration declaration) {
-        List<String> keywords = new ArrayList<>();
-        for (J.Modifier modifier : declaration.getModifiers()) {
+        return modifiersOf(declaration.getModifiers());
+    }
+
+    /**
+     * Any declaration's or member's keywords, filtered to {@link #KEYWORDS} and sorted (plan step 3.0r's member
+     * half goes through here, so a member's modifiers cannot be spelled differently from a type's).
+     *
+     * <p>The filter is the contract, not a convenience: a keyword outside {@link #KEYWORDS} is a fact this
+     * table has no case for, and recording it would grow the format by accident.</p>
+     */
+    public static List<String> modifiersOf(List<J.Modifier> modifiers) {
+        if (modifiers == null || modifiers.isEmpty()) {
+            return List.of();
+        }
+        List<String> keywords = new ArrayList<>(modifiers.size());
+        for (J.Modifier modifier : modifiers) {
             String keyword = keywordOf(modifier);
             if (KEYWORDS.contains(keyword)) {
                 keywords.add(keyword);
             }
         }
         Collections.sort(keywords);
-        return keywords;
+        return List.copyOf(keywords);
     }
 
     /**

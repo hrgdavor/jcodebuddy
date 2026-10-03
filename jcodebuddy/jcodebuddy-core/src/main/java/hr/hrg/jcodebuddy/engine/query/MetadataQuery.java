@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.engine.query;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.MemberRecord;
 import hr.hrg.jcodebuddy.engine.index.TypeAnnotation;
 import hr.hrg.jcodebuddy.engine.index.TypeAnswer;
 import hr.hrg.jcodebuddy.engine.index.TypeRelation;
@@ -41,17 +42,19 @@ import java.util.TreeSet;
  * ({@link RelationAnswer#unresolvedNames()}) instead of picking one — picking one would be the confident wrong
  * answer this engine keeps having to unlearn.</p>
  *
- * <h3>Annotations are answerable; members are not, yet</h3>
+ * <h3>Annotations and members are both answerable</h3>
  *
  * <p>{@link #annotationsOf(String)} and {@link #annotatedWith(String)} answer from the model, because a row
  * carries the annotations written on a declaration — asked for directly on 2026-10-02, since annotation info is
  * the general fact a consumer projects its own meaning from. The names are the ones the source wrote, resolved
  * by the same rules as relations.</p>
  *
- * <p>{@link #membersOf(String)} still cannot be answered: a row records a declaration's kind, modifiers, file,
- * relations and annotations, but not what it contains. It returns {@link NotCovered} rather than an empty list,
- * which would read as "this type has no such member"; growing the index that far is a DEC-029 format change and
- * is scheduled as step 3.0r.</p>
+ * <p>{@link #membersOf(String)} answers from the model too, since step 3.0r: a row carries the declaration's
+ * fields, methods, constructors and nested types with the types they were written with, so "does this type have
+ * a field {@code id}, and what type is it" no longer needs a file. Before that step this method returned a
+ * "not covered" answer rather than an empty list, which is what stopped an unanswered question from reading as
+ * "declares nothing" — the same distinction {@link MemberAnswer#isAnswered()} still draws, now that the answer
+ * is usually a fact.</p>
  */
 public final class MetadataQuery {
 
@@ -89,25 +92,10 @@ public final class MetadataQuery {
         }
     }
 
-    /**
-     * A question the engine's model cannot answer yet.
-     *
-     * <p>Returned instead of an empty list, because an empty list is indistinguishable from "there are none" and
-     * that is exactly the collapse this engine has removed twice already (3.0f-3's answer contract, 3.0b's
-     * always-written relations).</p>
-     *
-     * @param question          what was asked
-     * @param reason            why the model cannot answer it
-     * @param readThisInstead   the path that can answer it today
-     */
-    public record NotCovered(String question, String reason, String readThisInstead) {
-
-        @Override
-        public String toString() {
-            return "not covered: " + question + " — " + reason + " (" + readThisInstead + ")";
-        }
-    }
-
+    // The vocabulary for an unanswerable question lived here (`NotCovered`) until step 3.0r added members to a
+    // row, which was the last family the index could not answer. It is deleted rather than kept as dead code:
+    // what must not come back is the collapse it prevented — an empty list answering for a question that was
+    // never answered. A future gap needs a shape of its own, written when it exists.
     private final List<ClassIndex> modules;
     private final Map<String, ClassRecord> byFqn = new LinkedHashMap<>();
     private final Map<String, List<String>> bySimpleName = new LinkedHashMap<>();
@@ -306,15 +294,37 @@ public final class MetadataQuery {
     }
 
     /**
-     * Members of {@code fqn} — <strong>not covered</strong>: a row carries no members (plan step 3.0h's record,
-     * and the index change is scheduled as 3.0r).
+     * The members of {@code fqn}, in source order.
+     *
+     * <p>An empty list with a found subject is a fact — the declaration declares no member of that kind — and a
+     * subject that was not found makes {@link MemberAnswer#isAnswered()} false, so "not in these modules" cannot
+     * be read as "declares nothing". That distinction is the whole reason this answer has a subject at all: the
+     * question a generator asks it ("does this type have a field {@code id}") produces code that does not
+     * compile when the wrong one is answered.</p>
      */
-    public NotCovered membersOf(String fqn) {
-        return new NotCovered("members of " + fqn,
-                "a class index row records a declaration's kind, modifiers, file, relations and annotations, not"
-                        + " its members",
-                "parse the declaring file through the engine's source path (SourceReader + TreeQueries), or grow"
-                        + " the index — a DEC-029 format change, scheduled as step 3.0r");
+    public MemberAnswer membersOf(String fqn) {
+        return membersOf(fqn, null);
+    }
+
+    /**
+     * {@link #membersOf(String)} narrowed to one kind, or to every kind when {@code kind} is {@code null}.
+     *
+     * <p>Names and types are the spellings the source used, like every other name in this model — resolving
+     * {@code List} to {@code java.util.List} needs the file's imports, which a row does not carry (3.0h's
+     * rules, and the same limit relations have).</p>
+     */
+    public MemberAnswer membersOf(String fqn, MemberRecord.Kind kind) {
+        TypeAnswer subject = answer(fqn);
+        if (!subject.isFound()) {
+            return new MemberAnswer(subject, List.of(), coverage);
+        }
+        List<MemberRecord> members = new ArrayList<>();
+        for (MemberRecord member : subject.type().members()) {
+            if (kind == null || member.kind() == kind) {
+                members.add(member);
+            }
+        }
+        return new MemberAnswer(subject, List.copyOf(members), coverage);
     }
 
     /** Which modules these answers are scoped to, for a diagnostic that must not overclaim. */
@@ -425,6 +435,33 @@ public final class MetadataQuery {
         public String describe() {
             return subject.fqn() + ": " + (isAnswered()
                     ? annotations.size() + " annotation(s) " + annotations.stream().map(TypeAnnotation::name).toList()
+                    : "cannot answer — " + subject.describe()) + " [" + coverage + "]";
+        }
+    }
+
+    /**
+     * The answer to a member question about one type.
+     *
+     * @param subject  whether the type is declared in these modules. When it is not, {@link #members()} being
+     *                 empty means <em>cannot answer</em>, not "it declares no such member"
+     * @param members  the members, in source order; empty with a found subject is a fact
+     * @param coverage which modules were searched, for a diagnostic
+     */
+    public record MemberAnswer(TypeAnswer subject, List<MemberRecord> members, String coverage) {
+
+        public MemberAnswer {
+            members = members == null ? List.of() : List.copyOf(members);
+        }
+
+        /** Whether the question could be answered at all. */
+        public boolean isAnswered() {
+            return subject.isFound();
+        }
+
+        /** One line for a log or a diagnostic. */
+        public String describe() {
+            return subject.fqn() + ": " + (isAnswered()
+                    ? members.size() + " member(s) " + members.stream().map(MemberRecord::signature).toList()
                     : "cannot answer — " + subject.describe()) + " [" + coverage + "]";
         }
     }

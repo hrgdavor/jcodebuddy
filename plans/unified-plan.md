@@ -1251,6 +1251,35 @@ index alone; a declaration with none of either reading as a fact rather than as 
 **Done when:** `membersOf` and `annotationsOf` answer from the model, and no consumer has to parse a file to ask
 what a type contains or what annotates it.
 
+**Done 2026-10-03.** `ClassRecord` and `TypeFacts` carry `members`, the writer always emits the field, the reader
+refuses an unknown member kind, `MetadataQuery.membersOf(fqn)` and `membersOf(fqn, kind)` answer from the model,
+and the `NotCovered` vocabulary is **deleted** — members were the last family the index could not answer, and the
+plan's own gate asked for that case to be replaced rather than kept.
+
+**Where the richer row was chosen over the plan's minimum, and why.** The plan says "a name and a kind per
+member". The maintainer's answer on 2026-10-03 was to record **return types, modifiers and per-member
+annotations** as well, and the deciding argument is step 3.0d: `TypeDefinition` carries a type's fields *and
+their types*, so a member row without a field's type would leave the resolver unable to answer and force it back
+to parsing the file — the second parse this whole sequence exists to delete. The extra fields ride the same
+always-emitted rule and the same closed vocabulary as the rest of the row.
+
+**Four limits, recorded rather than discovered later** (all in DEC-029's amendment): no bodies or initialisers;
+**no enum constants** (they are `J.EnumValue` statements, not variables — a consumer that needs them asks the
+parse path); no parameter annotations; and no name resolution, so a member's type is the spelling the source
+used. Each is a stated gap, because the failure mode here is a consumer reading an absence as a "no".
+
+**Two test expectations were wrong before the code was**, and both are worth the sentence: the writer was
+asserted to filter modifiers, when it faithfully writes what the record holds (the keyword filter belongs to the
+extractor, and the test now says so); and a field-kind query was asserted to return one type when the fixture
+declares two fields. Neither was a code defect — but a test that passes for the wrong reason is the thing this
+repository keeps finding later.
+
+**Evidence:** `-pl :jcodebuddy-core clean test` → **BUILD SUCCESS, 34 tests** (was 28; `TypeMembersTest` adds six:
+extraction of fields/methods/constructors/nested with types, modifiers and annotations; a parameterless method
+as *no* parameters rather than one `J.Empty`; a multi-variable declaration as two members; the round trip with
+the field always emitted; an older table reading as not-recorded; and an unknown kind making the reader refuse
+the table). The recorded gate follows in the same change.
+
 ### 3.0s — `java-watch*` is standalone: no Jackson, no OpenRewrite, nothing else from this workspace
 **Who:** agent · **Size:** M
 
@@ -2469,7 +2498,7 @@ start)
 | 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
 | 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent              | M    | `[ ]`                                                                                       |
 | 3.0q | Merge what 3.0p found worth keeping, delete the rest                                  | agent              | M–L  | ` [ ] ` (content decided by 3.0p)                                                           |
-| 3.0r | The index grows members and annotations (DEC-029 format change)                       | agent              | M    | ` [ ] ` — what 3.0h's Do asked for and its model could not answer                           |
+| 3.0r | The index grows members and annotations (DEC-029 format change)                       | agent              | M    | `[x]` — `members` always emitted, closed kind vocabulary, member types/modifiers/annotations; `NotCovered` deleted, so the last unanswerable question is answered |
 | 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace     | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
 | 3.1  | The hipster-ioc ADR                                                                   | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
 | 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                  | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |

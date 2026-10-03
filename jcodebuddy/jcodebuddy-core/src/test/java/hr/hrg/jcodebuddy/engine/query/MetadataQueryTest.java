@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.engine.query;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.MemberRecord;
 import hr.hrg.jcodebuddy.engine.index.TypeFacts;
 import hr.hrg.jcodebuddy.engine.index.TypeRelation;
 import org.junit.jupiter.api.Assertions;
@@ -43,7 +44,13 @@ class MetadataQueryTest {
                 // The annotation type lives nowhere in these modules, which is the normal case for one from a
                 // dependency or the JDK: the query must still answer it by name.
                 List.of(new hr.hrg.jcodebuddy.engine.index.TypeAnnotation("Component",
-                        List.of("name = \"app\""))))), false);
+                        List.of("name = \"app\""))),
+                // Step 3.0r's member field, on the same row: the query answers "what does this type declare"
+                // from the index alone (the members test asserts the extraction).
+                List.of(MemberRecord.field("ctx", "CtxModule", List.of("private", "final")),
+                        MemberRecord.field("count", "int", List.of("private")),
+                        new MemberRecord("AppModule", MemberRecord.Kind.CONSTRUCTOR, "", List.of(),
+                                List.of("public"), List.of())))), false);
         return MetadataQuery.over(List.of(web, app));
     }
 
@@ -139,7 +146,7 @@ class MetadataQueryTest {
     }
 
     @Test
-    void annotationsAreAnsweredFromTheIndexAndMembersStillReportTheirGap(@TempDir Path tree) {
+    void annotationsAndMembersAreAnsweredFromTheIndex(@TempDir Path tree) {
         MetadataQuery query = twoModules(tree);
 
         MetadataQuery.AnnotatedAnswer annotated = query.annotatedWith("Component");
@@ -157,11 +164,22 @@ class MetadataQueryTest {
                         List.of("name = \"app\""))),
                 onOneType.annotations(), "and a caller can read the arguments a consumer will project from");
 
-        MetadataQuery.NotCovered members = query.membersOf("c.d.AppModule");
-        Assertions.assertTrue(members.reason().contains("not its members"), members.toString());
-        Assertions.assertTrue(members.readThisInstead().contains("SourceReader"),
-                "the remaining gap names what can answer it today: " + members);
-        Assertions.assertTrue(members.readThisInstead().contains("3.0r"),
-                "and where the index change is scheduled: " + members);
+        // Step 3.0r replaced the "not covered" answer that used to be here. The gap cannot reopen silently now:
+        // there is no such vocabulary left, and this asserts the members are answered from the model.
+        MetadataQuery.MemberAnswer members = query.membersOf("c.d.AppModule");
+        Assertions.assertTrue(members.isAnswered(), "the type is declared, so its members are answerable");
+        Assertions.assertEquals(List.of("ctx", "count", "AppModule"),
+                members.members().stream().map(MemberRecord::signature).toList(),
+                "fields and the constructor, in source order, from the index alone: " + members.describe());
+        Assertions.assertEquals(List.of("CtxModule", "int"),
+                query.membersOf("c.d.AppModule", MemberRecord.Kind.FIELD).members().stream()
+                        .map(MemberRecord::type).toList(),
+                "and each field's type is the spelling the source used, which is what a generator given a"
+                        + " TypeDefinition needs (step 3.0d)");
+
+        MetadataQuery.MemberAnswer unknown = query.membersOf("c.d.Ghost");
+        Assertions.assertFalse(unknown.isAnswered(),
+                "a type declared nowhere is still a question without an answer rather than an empty member list");
+        Assertions.assertTrue(unknown.describe().contains("cannot answer"), unknown.describe());
     }
 }
