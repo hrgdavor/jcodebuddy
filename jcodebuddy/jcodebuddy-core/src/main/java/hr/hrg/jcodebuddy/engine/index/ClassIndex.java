@@ -461,6 +461,30 @@ public final class ClassIndex {
     }
 
     /**
+     * Takes one file's base entry into this table — its rows and its import lines — without reading the file.
+     *
+     * <p>This is DEC-041's D8 in code: the class table is a <strong>projection</strong> of the base entries, so a
+     * pass whose entries are all current builds its table by absorbing them and parses nothing. Absorbing is not a
+     * second way to add facts and it cannot invent one: it takes {@link FileMetadata} — the strict file-local
+     * subset — so a value in the table that the entries do not imply would have to be written here, in this
+     * method, in the open.</p>
+     *
+     * <p>The file facts a row carries (its checksum, size, timestamp) are still resolved from disk by the pass
+     * before it writes ({@link #stampFileFacts}); absorbing brings the <em>type</em> facts and the imports, which
+     * are the expensive part. Hashing a file is cheap next to parsing it, and it keeps one authority for what the
+     * table says about the file's bytes.</p>
+     */
+    public void absorb(FileMetadata entry) {
+        requireModuleRelative(entry.path());
+        for (ClassRecord row : entry.types()) {
+            put(row);
+        }
+        // A base entry always records its imports, so absorbing one always answers "none" for a file that writes
+        // none rather than leaving it "not recorded" — the entry is the fact, not a guess (DEC-040 D4).
+        imports.put(entry.path(), List.copyOf(entry.imports()));
+    }
+
+    /**
      * One file's declaration facts, member types included — the row set of one file.
      *
      * <p>Replaces the recursive {@code getMembers()} walk with the cursor-captured tree, so the

@@ -999,6 +999,13 @@ deleted a module; it changed no behaviour.
 ### 3.0j — Move the remaining consumers onto the engine
 **Who:** agent · **Size:** L
 
+> **One addition from 3.0u (2026-10-03): the passes adopt the base cache here.** The engine's per-file cache exists
+> and is proven — a warm rebuild parses nothing and produces a byte-identical table — but no pass calls it yet, and
+> a cache nobody calls is a cache that lies about being used. So this step also re-points the dev-time passes at
+> `MetadataCache.entryFor`/`store` (or `consume`), which is where reading a file stops being unconditional. The
+> engine side of DEC-041 is done; the *adoption* is a consumer change and belongs in the step that touches
+> consumers.
+
 `metadata-server` (transport and providers), the dev-time passes (`project-automation`), the watch tools
 (`java-watch-agent`), reporting (the Bun renderers that read the engine's JSON) and the future LSP sidecar are
 all readers of the same facts; none of them may keep a path of its own.
@@ -1824,11 +1831,18 @@ byte-identical whether file `B` exists, is edited, or is deleted, which is the c
 cross-file fact enters the base layer. Three more are met in the small: no source text, a stale entry refused by
 its hash, and the document deterministic across four rebuilds of the same file.
 
-**3.0u-b remains:** the store (one entry file per source under the module's derived `.jcodebuddy/cache/`, with hit
-and miss counters), `ClassIndex` consuming entries so a warm rebuild **parses nothing** and produces a
-byte-identical table, and the two remaining criteria as tests — one edit recomputes exactly one entry, and deleting
-the whole cache changes no answer, only the time. Split rather than rushed, and the plan's own rule says how:
-*"Split a step if it does not fit one commit. Renumber nothing: add 4.2a, 4.2b and say why."*
+**3.0u-b landed 2026-10-03 — the store and the consumption, so the criteria became measurements.** `MetadataCache`
+keeps one entry per source file under `.jcodebuddy/cache/`, names it by the file's own relative path so a human can
+find it, decides reuse with the content hash alone, and counts hits, misses and entries written so "a warm rebuild
+parses nothing" is something a test *reports* rather than something a comment claims. `ClassIndex.absorb` takes an
+entry's rows and imports without reading the file — DEC-041 D8 in code, the table as a projection of the entries.
+All five acceptance criteria now have tests: **3 hits / 0 misses** and a byte-identical table on a warm pass;
+**exactly one** entry rewritten per edit; an **identical table** after deleting the whole cache; a stale entry
+refused by its hash; and an entry that never moves because a neighbour did.
+
+**One boundary, stated rather than implied:** the *engine* can do all of this and proves it; the passes adopt the
+cache in **3.0j**, which is where a consumer stops reading files it does not have to. A cache nobody calls is still
+a cache, and this plan should not read as though the pass were already using it.
 
 **Work, in order:**
 

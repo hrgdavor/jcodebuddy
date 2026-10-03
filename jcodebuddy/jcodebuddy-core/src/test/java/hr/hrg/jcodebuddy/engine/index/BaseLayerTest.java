@@ -69,6 +69,137 @@ class BaseLayerTest {
     }
 
     @Test
+    void aWarmRebuildParsesNothingAndProducesAnIdenticalTable(@TempDir Path tree) throws IOException {
+        // DEC-041's second criterion, and the one that makes the layer worth having: the second pass over an
+        // unchanged tree must parse nothing, and its table must be byte-identical to the first one's — otherwise a
+        // project that commits its metadata gets diff noise from a pass that changed nothing.
+        Path module = tree.resolve("module");
+        Files.createDirectories(module);
+        write(module, "src/a/b/First.java", "package a.b;\n\nimport java.util.List;\n\n"
+                + "public class First {\n    List<String> names;\n}\n");
+        write(module, "src/a/b/Second.java", "package a.b;\n\npublic interface Second {\n    String name();\n}\n");
+        write(module, "src/a/b/Third.java", "package a.b;\n\npublic enum Third { ONE(1), TWO; Third(int i) {}"
+                + " Third() {} }\n");
+
+        Path report = tree.resolve("report");
+        MetadataCache cache = MetadataCache.beside(report);
+        List<String> problems = new java.util.ArrayList<>();
+        String[] files = {"src/a/b/First.java", "src/a/b/Second.java", "src/a/b/Third.java"};
+
+        ClassIndex cold = ClassIndex.forPass(report, module, module.resolve("src"));
+        for (String file : files) {
+            Assertions.assertFalse(cache.consume(cold, file, module.resolve(file), false, problems),
+                    "the first pass has no entry to reuse");
+        }
+        Assertions.assertEquals(0, cache.hits());
+        Assertions.assertEquals(3, cache.misses(), "three files, three parses");
+        Assertions.assertEquals(3, cache.entriesWritten(), "and three entries stored");
+        cold.write();
+        String coldTable = Files.readString(cold.indexFile(), StandardCharsets.UTF_8);
+
+        // The warm pass: a fresh index, the written table as its predecessor (which is where timestamps are
+        // carried forward from), and the same cache.
+        ClassIndex previous = ClassIndex.read(cold.indexFile(), report, module, module.resolve("src"));
+        Assertions.assertNotNull(previous);
+        cache.resetCounters();
+        ClassIndex warm = ClassIndex.forPass(report, module, module.resolve("src")).merge(previous);
+        for (String file : files) {
+            Assertions.assertTrue(cache.consume(warm, file, module.resolve(file), false, problems),
+                    "the second pass reuses the entry: it did not read " + file);
+        }
+        Assertions.assertEquals(3, cache.hits(), "three parses avoided, which is the number this step is about");
+        Assertions.assertEquals(0, cache.misses());
+        Assertions.assertEquals(0, cache.entriesWritten(), "and nothing was rewritten, because nothing changed");
+        warm.write();
+
+        Assertions.assertEquals(coldTable, Files.readString(warm.indexFile(), StandardCharsets.UTF_8),
+                "the warm table is byte-identical to the cold one — every key, fact, checksum and timestamp: "
+                        + problems);
+        Assertions.assertTrue(coldTable.contains("\"imports\"") || coldTable.contains("a.b.First"),
+                "and it is a real table, not an empty one: " + coldTable.substring(0, Math.min(200,
+                        coldTable.length())));
+    }
+
+    @Test
+    void oneEditRecomputesExactlyOneEntry(@TempDir Path tree) throws IOException {
+        Path module = tree.resolve("module");
+        Files.createDirectories(module);
+        write(module, "src/a/b/One.java", "package a.b;\n\npublic class One {\n    int id;\n}\n");
+        write(module, "src/a/b/Two.java", "package a.b;\n\npublic class Two {\n    int id;\n}\n");
+        Path report = tree.resolve("report");
+        MetadataCache cache = MetadataCache.beside(report);
+        List<String> problems = new java.util.ArrayList<>();
+        String[] files = {"src/a/b/One.java", "src/a/b/Two.java"};
+
+        ClassIndex first = ClassIndex.forPass(report, module, module.resolve("src"));
+        for (String file : files) {
+            cache.consume(first, file, module.resolve(file), false, problems);
+        }
+        String oneFirst = Files.readString(cache.entryFile(files[0]), StandardCharsets.UTF_8);
+        String twoFirst = Files.readString(cache.entryFile(files[1]), StandardCharsets.UTF_8);
+
+        write(module, "src/a/b/Two.java", "package a.b;\n\npublic class Two {\n    int id;\n    String name;\n}\n");
+        cache.resetCounters();
+        ClassIndex second = ClassIndex.forPass(report, module, module.resolve("src"));
+        for (String file : files) {
+            cache.consume(second, file, module.resolve(file), false, problems);
+        }
+
+        Assertions.assertEquals(1, cache.hits(), "the untouched file's entry was reused");
+        Assertions.assertEquals(1, cache.misses(), "and the edited one was parsed");
+        Assertions.assertEquals(1, cache.entriesWritten(), "one edit, one entry written");
+        Assertions.assertEquals(oneFirst, Files.readString(cache.entryFile(files[0]), StandardCharsets.UTF_8),
+                "the untouched file's entry bytes are unchanged — the sibling's edit did not reach it, which is "
+                        + "DEC-041's first criterion holding across a real pass");
+        Assertions.assertNotEquals(twoFirst, Files.readString(cache.entryFile(files[1]), StandardCharsets.UTF_8),
+                "while the edited file's entry did change");
+    }
+
+    @Test
+    void deletingTheWholeCacheChangesNoAnswerOnlyTheTime(@TempDir Path tree) throws IOException {
+        // DEC-041's last criterion. The cache is allowed to be an optimisation and nothing else.
+        Path module = tree.resolve("module");
+        Files.createDirectories(module);
+        write(module, "src/a/b/Kept.java", "package a.b;\n\nimport java.util.Map;\n\n"
+                + "public class Kept {\n    Map<String, Integer> counts;\n}\n");
+        Path report = tree.resolve("report");
+        List<String> problems = new java.util.ArrayList<>();
+
+        MetadataCache warmCache = MetadataCache.beside(report);
+        ClassIndex warm = ClassIndex.forPass(report, module, module.resolve("src"));
+        Assertions.assertFalse(warmCache.consume(warm, "src/a/b/Kept.java", module.resolve("src/a/b/Kept.java"),
+                false, problems));
+        warm.write();
+        String withCache = Files.readString(warm.indexFile(), StandardCharsets.UTF_8);
+
+        // Delete the cache and rebuild from nothing, with the previous table available exactly as before.
+        deleteRecursively(report.resolve(MetadataCache.CACHE_DIR_NAME));
+        Assertions.assertFalse(Files.exists(report.resolve(MetadataCache.CACHE_DIR_NAME)),
+                "the cache directory is gone");
+        ClassIndex previous = ClassIndex.read(warm.indexFile(), report, module, module.resolve("src"));
+        MetadataCache coldCache = MetadataCache.beside(report);
+        ClassIndex cold = ClassIndex.forPass(report, module, module.resolve("src")).merge(previous);
+        Assertions.assertFalse(coldCache.consume(cold, "src/a/b/Kept.java", module.resolve("src/a/b/Kept.java"),
+                false, problems), "no cache, so the file is parsed");
+        Assertions.assertEquals(1, coldCache.misses());
+        cold.write();
+
+        Assertions.assertEquals(withCache, Files.readString(cold.indexFile(), StandardCharsets.UTF_8),
+                "the table is identical: the cache changed how long the pass took, not what it said");
+    }
+
+    private static void deleteRecursively(Path dir) throws IOException {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (var walk = Files.walk(dir)) {
+            for (Path path : walk.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
+        }
+    }
+
+    @Test
     void anEntryIsIndependentOfEveryOtherFile(@TempDir Path tree) throws IOException {
         // The acceptance criterion DEC-041 D6 makes measurable. A is indexable on its own; B is a neighbour that
         // changes in three ways, and none of them may move A's bytes.
