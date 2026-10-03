@@ -38,10 +38,11 @@ import java.util.Set;
  *                  already parsed for everything else here, never by a second parse.
  * @param span      the declaration's character range in its file, or {@code null} when the walk recorded none —
  *                  annotations and modifiers included, because that is what a reader clicks (DEC-040 D6)
+ * @param permits   a sealed type's permitted subtypes as written, in order; empty otherwise (DEC-040 D1)
  */
 public record TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
                         List<TypeRelation> relations, List<TypeAnnotation> annotations,
-                        List<MemberRecord> members, TreeQueries.SourceSpan span) {
+                        List<MemberRecord> members, TreeQueries.SourceSpan span, List<String> permits) {
 
     /**
      * The modifier vocabulary the index records, for a type declaration and for a member alike.
@@ -66,10 +67,11 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         relations = relations == null ? List.of() : List.copyOf(relations);
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
         members = members == null ? List.of() : List.copyOf(members);
+        permits = permits == null ? List.of() : List.copyOf(permits);
     }
 
     /**
-     * The facts of a type whose annotations, members and position the caller did not read.
+     * The facts of a type whose annotations, members, position and permitted subtypes the caller did not read.
      *
      * <p>A delegating constructor rather than a second shape: an empty list is how "none read" and "carries
      * none" are both spelled, so a caller that knows nothing about annotations does not need to know this
@@ -79,7 +81,14 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     public TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
                      List<TypeRelation> relations, List<TypeAnnotation> annotations,
                      List<MemberRecord> members) {
-        this(fqn, kind, modifiers, enclosing, line, depth, relations, annotations, members, null);
+        this(fqn, kind, modifiers, enclosing, line, depth, relations, annotations, members, null, List.of());
+    }
+
+    /** The facts of a type with a declaration range but no permitted-subtype list read. */
+    public TypeFacts(String fqn, String kind, List<String> modifiers, String enclosing, int line, int depth,
+                     List<TypeRelation> relations, List<TypeAnnotation> annotations,
+                     List<MemberRecord> members, TreeQueries.SourceSpan span) {
+        this(fqn, kind, modifiers, enclosing, line, depth, relations, annotations, members, span, List.of());
     }
 
     /**
@@ -145,11 +154,20 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 members, null);
     }
 
-    /** {@link #of(String, String, List, String, List, int)} with everything this record carries. */
+    /** {@link #of(String, String, List, String, List, int)} with a declaration range but no permits read. */
     public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
                                String kind, List<String> modifiers, int line, List<TypeRelation> relations,
                                List<TypeAnnotation> annotations, List<MemberRecord> members,
                                TreeQueries.SourceSpan span) {
+        return of(packageName, simpleName, enclosingNames, kind, modifiers, line, relations, annotations,
+                members, span, List.of());
+    }
+
+    /** {@link #of(String, String, List, String, List, int)} with everything this record carries. */
+    public static TypeFacts of(String packageName, String simpleName, List<String> enclosingNames,
+                               String kind, List<String> modifiers, int line, List<TypeRelation> relations,
+                               List<TypeAnnotation> annotations, List<MemberRecord> members,
+                               TreeQueries.SourceSpan span, List<String> permits) {
         List<String> chain = new ArrayList<>(enclosingNames);
         chain.add(simpleName);
         String prefix = packageName == null || packageName.isEmpty() ? "" : packageName + ".";
@@ -165,7 +183,8 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 relations,
                 annotations,
                 members,
-                span);
+                span,
+                permits);
     }
 
     /**
@@ -209,7 +228,29 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                         declaration.getSimpleName()),
                 membersOf(declaration, positions),
                 // The declaration's own range, so a consumer can point at the type itself (DEC-040 D6).
-                positions.typeSpan(declaration.getSimpleName(), enclosingChain));
+                positions.typeSpan(declaration.getSimpleName(), enclosingChain),
+                // A sealed type's permitted subtypes, as written (DEC-040 D1). Read from the declaration rather
+                // than from the class file, because `permits` is a compile-time fact whose reflective
+                // equivalent depends on the version and the library doing the asking.
+                permitsOf(declaration));
+    }
+
+    /**
+     * A sealed type's permitted subtypes, as written and in order; empty for a type that is not sealed.
+     *
+     * <p>The type text is the LST's spelling ({@link TreeQueries#typeText}), so a nested permitted subtype
+     * written {@code Outer.Inner} comes back as it was written rather than resolved — resolution is search's
+     * work (3.0h), and DEC-040 D3 keeps the written form in the model either way.</p>
+     */
+    public static List<String> permitsOf(J.ClassDeclaration declaration) {
+        if (declaration == null || declaration.getPermits() == null || declaration.getPermits().isEmpty()) {
+            return List.of();
+        }
+        List<String> permitted = new ArrayList<>(declaration.getPermits().size());
+        for (org.openrewrite.java.tree.TypeTree permittedType : declaration.getPermits()) {
+            permitted.add(TreeQueries.typeText(permittedType));
+        }
+        return List.copyOf(permitted);
     }
 
     /**
@@ -280,17 +321,18 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     }
 
     /**
-     * What the declaration contains, in source order: its fields, methods, constructors and nested types (plan
-     * step 3.0r, DEC-029's member field).
+     * What the declaration contains, in source order: its fields, methods, constructors, enum constants and
+     * nested types (plan step 3.0r, DEC-029's member field; enum constants added by DEC-040 D1).
      *
-     * <p>Three limits are deliberate, and each is a fact this table has no contract for — so a consumer that
+     * <p>Two limits remain deliberate, and each is a fact this table has no contract for — so a consumer that
      * needs one asks the parse path rather than reading an absence here as a "no":</p>
      *
      * <ul>
-     *   <li><strong>No bodies and no initialisers.</strong> The index answers "what shape does this declaration
-     *       have"; a body would be the file's content in a second place, stale as soon as either copy moves.</li>
-     *   <li><strong>No enum constants.</strong> An enum's constants are {@code J.EnumValue} statements rather
-     *       than variables, and nothing in this table's contract describes them yet.</li>
+     *   <li><strong>No bodies.</strong> Whether a callable <em>has</em> one is recorded ({@code hasBody}), because
+     *       a generator that must override rather than call needs to know; what is <em>in</em> it would be the
+     *       file's content in a second place, stale as soon as either copy moves. The same line separates a
+     *       field's initialiser — recorded as written, one expression — from a method body, which is
+     *       statements.</li>
      *   <li><strong>No parameter annotations.</strong> Parameter <em>types</em> are recorded; a parameter's own
      *       annotations are a third level of detail nothing asks for.</li>
      * </ul>
@@ -316,7 +358,15 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         String owner = declaration.getSimpleName();
         List<MemberRecord> members = new ArrayList<>();
         for (Statement statement : declaration.getBody().getStatements()) {
-            if (statement instanceof J.VariableDeclarations field) {
+            if (statement instanceof J.EnumValueSet constants) {
+                // An enum's constants arrive as ONE statement holding the comma-separated group, not as one
+                // statement per constant (`J.EnumValueSet implements Statement`; `J.EnumValue` does not — which is
+                // why the obvious `instanceof J.EnumValue` does not compile). Read through the group so the
+                // declaration order is the order a consumer sees.
+                for (J.EnumValue constant : constants.getEnums()) {
+                    members.add(enumConstantOf(constant, owner, positions));
+                }
+            } else if (statement instanceof J.VariableDeclarations field) {
                 members.addAll(fieldsOf(field, owner, positions));
             } else if (statement instanceof J.MethodDeclaration method) {
                 boolean constructor = method.isConstructor();
@@ -329,6 +379,12 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                         parameters,
                         modifiersOf(method.getModifiers()),
                         annotationsOf(method.getLeadingAnnotations(), positions, owner, method.getSimpleName()),
+                        // An enum constant's arguments are the one kind-specific list that is not a callable's,
+                        // so a method records none (DEC-040 D1).
+                        false,
+                        // A callable has a body or it does not (DEC-040 D1).
+                        throwsOf(method),
+                        method.getBody() != null,
                         positions.memberLine(owner, kind.positionKind(), method.getSimpleName(),
                                 parameters.size()),
                         positions.memberSpan(owner, kind.positionKind(), method.getSimpleName(),
@@ -337,6 +393,9 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                 members.add(new MemberRecord(nested.getSimpleName(), MemberRecord.Kind.NESTED,
                         nested.getSimpleName(), List.of(), modifiersOf(nested.getModifiers()),
                         annotationsOf(nested.getLeadingAnnotations(), positions, owner, nested.getSimpleName()),
+                        // A nested type is none of the kind-specific facts: it takes no arguments, has no
+                        // initialiser and throws nothing (DEC-040 D1 keeps each in the kind that owns it).
+                        false, List.of(), false,
                         positions.memberLine(owner, MemberRecord.Kind.NESTED.positionKind(),
                                 nested.getSimpleName(), 0),
                         positions.memberSpan(owner, MemberRecord.Kind.NESTED.positionKind(),
@@ -370,11 +429,63 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         for (J.VariableDeclarations.NamedVariable variable : field.getVariables()) {
             members.add(new MemberRecord(variable.getSimpleName(), MemberRecord.Kind.FIELD, type, List.of(),
                     modifiers, annotations,
+                    // Whether there is an initialiser, not what it says: the expression is inside the member's
+                    // span and recovered by slicing it, because an arbitrary expression has no faithful text form
+                    // this table can hold (DEC-040 D2). Per DECLARATOR, so `int a = 0, b;` is one field with and
+                    // one without.
+                    variable.getInitializer() != null,
+                    // A field throws nothing and has no body; those are a callable's facts.
+                    List.of(),
+                    false,
                     positions.memberLine(owner, MemberRecord.Kind.FIELD.positionKind(),
                             variable.getSimpleName(), 0),
                     span));
         }
         return members;
+    }
+
+    /**
+     * One enum constant: its name, its own annotations, and its position.
+     *
+     * <p>An enum constant is not a field of the enum: it is a value the enum declares, and its constructor
+     * arguments are the call that makes it (DEC-040 D1). The arguments are <strong>not stored</strong>: they sit
+     * inside the constant's own span, and a consumer that needs them slices the declaring file there — the same
+     * rule a field's initialiser follows, and the correction that came out of storing one as text and getting a
+     * debug dump back (DEC-040 D2).</p>
+     *
+     * <p>No modifiers: Java gives a constant {@code public static final} whether or not anybody writes it, and
+     * recording keywords the source does not say is exactly what this model refuses to do elsewhere.</p>
+     */
+    private static MemberRecord enumConstantOf(J.EnumValue constant, String owner, JavacPositions positions) {
+        String name = constant.getName() == null ? "" : constant.getName().getSimpleName();
+        return new MemberRecord(name, MemberRecord.Kind.ENUM_CONSTANT, "", List.of(), List.of(),
+                annotationsOf(constant.getAnnotations(), positions, owner, name),
+                // A constant's arguments are recovered from its span rather than stored, and it has neither a
+                // callable's facts nor a field's initialiser flag.
+                false, List.of(), false,
+                positions.memberLine(owner, MemberRecord.Kind.ENUM_CONSTANT.positionKind(), name, 0),
+                positions.memberSpan(owner, MemberRecord.Kind.ENUM_CONSTANT.positionKind(), name, 0));
+    }
+
+    /**
+     * A callable's {@code throws} clause as written, in order; empty when it declares none.
+     *
+     * <p>Recorded because a generator that emits a call must be able to declare what the call throws (DEC-040
+     * D1), and because the clause is part of a method's API in a way the compiler keeps only in the class file's
+     * attribute — a fact the source states plainly and a runtime reader has to be told.</p>
+     */
+    public static List<String> throwsOf(J.MethodDeclaration method) {
+        if (method == null || method.getThrows() == null || method.getThrows().isEmpty()) {
+            return List.of();
+        }
+        List<String> thrown = new ArrayList<>(method.getThrows().size());
+        for (org.openrewrite.java.tree.NameTree named : method.getThrows()) {
+            if (named instanceof J.Empty) {
+                continue;
+            }
+            thrown.add(TreeQueries.typeText(named));
+        }
+        return List.copyOf(thrown);
     }
 
     /**

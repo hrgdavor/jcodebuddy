@@ -378,7 +378,7 @@ public final class ClassIndex {
         for (TypeFacts type : types) {
             put(new ClassRecord(type.fqn(), moduleRelativePath, type.kind(), type.modifiers(),
                     type.enclosing(), type.line(), type.depth(), generated, "", null, -1L, type.relations(),
-                    type.annotations(), type.members(), type.span()));
+                    type.annotations(), type.members(), type.span(), type.permits()));
         }
     }
 
@@ -928,6 +928,11 @@ public final class ClassIndex {
             sb.append("\"").append(MetadataJson.escape(row.modifiers().get(i))).append("\"");
         }
         sb.append("], \"line\": ").append(row.line()).append(", \"depth\": ").append(row.depth());
+        // A sealed type's permitted subtypes, as written (DEC-040 D1). Always emitted, an empty array for a type
+        // that is not sealed, so "not sealed" and "not recorded" stay distinguishable the way every other
+        // always-emitted field keeps them.
+        sb.append(", \"permits\": ");
+        appendStrings(sb, row.permits());
         // The declaration's own range, so a consumer can point at the type and not only at its members
         // (DEC-040 D6). Always emitted, `null` when the walk recorded none (D4).
         sb.append(", \"span\": ");
@@ -983,6 +988,14 @@ public final class ClassIndex {
             appendStrings(sb, member.modifiers());
             sb.append(", \"annotations\": ");
             appendAnnotations(sb, member.annotations());
+            // The kind-specific facts DEC-040 D1 added, each always emitted so a reader never has to tell
+            // "empty" from "absent": whether a field declares an initialiser (its text is inside the member's
+            // span, recovered by slicing — an arbitrary expression has no faithful text form, DEC-040 D2), a
+            // callable's throws clause and whether it has a body.
+            sb.append(", \"hasInitializer\": ").append(member.hasInitializer());
+            sb.append(", \"throws\": ");
+            appendStrings(sb, member.throwsClause());
+            sb.append(", \"hasBody\": ").append(member.hasBody());
             // Always emitted: a consumer has to be able to POINT at a member (DEC-040 D6), so an unknown line is
             // written as -1 and a span that was never recorded as null — a fact a reader can tell from a
             // position, rather than a field that is simply absent (D4).
@@ -1015,6 +1028,24 @@ public final class ClassIndex {
             return;
         }
         sb.append("{ \"start\": ").append(span.start()).append(", \"end\": ").append(span.end()).append(" }");
+    }
+
+    /**
+     * A JSON array of strings read back into a list, empty when the node is absent or not an array.
+     *
+     * <p>One reader for the three places the format writes a list of written facts (a permitted subtype, an enum
+     * constant's arguments, a callable's throws clause), so the "not recorded" reading has one home rather than
+     * three that can drift — the lesson DEC-040's guard records.</p>
+     */
+    private static List<String> readStrings(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull() || !node.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>(node.size());
+        for (JsonNode value : node) {
+            values.add(value.asText(""));
+        }
+        return List.copyOf(values);
     }
 
     /**
@@ -1272,16 +1303,22 @@ public final class ClassIndex {
                     memberAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments,
                             readSpan(annotation.path("span"))));
                 }
+                List<String> memberThrows = new ArrayList<>();
+                for (JsonNode thrown : member.path("throws")) {
+                    memberThrows.add(thrown.asText(""));
+                }
                 members.add(new MemberRecord(member.path("name").asText(""), kind,
                         member.path("type").asText(""), parameters, memberModifiers, memberAnnotations,
+                        // A table written before the initialiser question, the throws clause or the body question
+                        // existed has no such field: false and empty are what it actually recorded, which is a
+                        // fact rather than a guess (DEC-040 D4).
+                        member.path("hasInitializer").asBoolean(false),
+                        memberThrows,
+                        member.path("hasBody").asBoolean(false),
                         // A table written before positions existed has no `line`/`span`: an unknown line and no
                         // span is what it actually recorded, which is a fact rather than a guess (DEC-040 D4).
                         member.path("line").asInt(hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE),
-                        member.hasNonNull("span")
-                                ? new hr.hrg.jcodebuddy.engine.source.TreeQueries.SourceSpan(
-                                        member.path("span").path("start").asInt(-1),
-                                        member.path("span").path("end").asInt(-1))
-                                : null));
+                        readSpan(member.path("span"))));
             }
             index.put(new ClassRecord(entry.getKey(), node.path("path").asText(""),
                     node.path("kind").asText(""), modifiers,
@@ -1291,8 +1328,9 @@ public final class ClassIndex {
                     node.path("hashCalculatedAt").asText(null), node.path("size").asLong(-1L), relations,
                     annotations, members,
                     // A table written before the declaration range existed has no `span`: no range is what it
-                    // recorded, which is a fact rather than a guess (DEC-040 D4).
-                    readSpan(node.path("span"))));
+                    // recorded, which is a fact rather than a guess (DEC-040 D4). The same reading for `permits`:
+                    // a table without the field recorded no permitted-subtype list.
+                    readSpan(node.path("span")), readStrings(node.path("permits"))));
         }
         index.readMtimes(index.indexFile.resolveSibling(MTIME_FILE_NAME), problems);
         index.readImports(index.indexFile.resolveSibling(IMPORTS_FILE_NAME), problems);

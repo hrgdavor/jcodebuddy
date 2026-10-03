@@ -199,6 +199,32 @@ class MetadataFileIdsTest {
     }
 
     /**
+     * Byte-for-byte equality, with the first difference and its neighbourhood in the failure message.
+     *
+     * <p>{@code assertArrayEquals} reports an index and two decimal digits, which is enough to prove a mismatch
+     * and not enough to diagnose one: the first failure here read "differ at index [48430], expected: &lt;54&gt;
+     * but was: &lt;49&gt;" and told a reader nothing about which field had moved. The context window is what turns
+     * that into "this row's checksum changed", which is the only thing the message needs to say.</p>
+     */
+    private static void assertSameBytes(byte[] expected, byte[] actual, String message) {
+        if (java.util.Arrays.equals(expected, actual)) {
+            return;
+        }
+        int at = 0;
+        while (at < expected.length && at < actual.length && expected[at] == actual[at]) {
+            at++;
+        }
+        int from = Math.max(0, at - 160);
+        String before = new String(expected, from, Math.min(320, expected.length - from),
+                java.nio.charset.StandardCharsets.UTF_8);
+        String after = new String(actual, from, Math.min(320, actual.length - from),
+                java.nio.charset.StandardCharsets.UTF_8);
+        Assertions.fail(message + "\n  first difference at byte " + at + " of " + expected.length
+                + " (expected) vs " + actual.length + " (actual)\n  expected …" + before + "…\n  actual   …"
+                + after + "…");
+    }
+
+    /**
      * Two passes over the same tree produce identical table bytes, and the table carries nothing that
      * depends on where the tree sits or on the order files were visited.
      *
@@ -216,7 +242,7 @@ class MetadataFileIdsTest {
         byte[] before = Files.readAllBytes(first.indexFile());
 
         runPass(first.root());
-        Assertions.assertArrayEquals(before, Files.readAllBytes(first.indexFile()),
+        assertSameBytes(before, Files.readAllBytes(first.indexFile()),
                 "a second pass over an unchanged tree must be byte-identical — including every "
                         + "hashCalculatedAt, which is carried forward from the previous table — or a project "
                         + "that commits its metadata gets diff noise from a pass that changed nothing");

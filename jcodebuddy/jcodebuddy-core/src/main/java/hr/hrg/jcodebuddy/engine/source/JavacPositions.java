@@ -90,7 +90,7 @@ public final class JavacPositions {
      */
     public TreeQueries.SourceSpan annotationSpan(String declaringType, String owner, String simpleName) {
         for (JavaSyntaxCheck.AnnotationPosition annotation : annotations) {
-            if (annotation.declaringType().equals(declaringType) && annotation.owner().equals(owner)
+            if (ownerMatches(annotation.declaringType(), declaringType) && ownerMatches(annotation.owner(), owner)
                     && annotation.simpleName().equals(simpleName)) {
                 return new TreeQueries.SourceSpan(annotation.startOffset(), annotation.endOffset());
             }
@@ -109,7 +109,7 @@ public final class JavacPositions {
     public int memberLine(String owner, String kind, String name, int parameterCount) {
         if ("method".equals(kind) || "constructor".equals(kind)) {
             for (JavaSyntaxCheck.MethodPosition method : methods) {
-                if (!method.declaringType().equals(owner) || method.parameterCount() != parameterCount) {
+                if (!ownerMatches(method.declaringType(), owner) || method.parameterCount() != parameterCount) {
                     continue;
                 }
                 if ("constructor".equals(kind)) {
@@ -128,7 +128,7 @@ public final class JavacPositions {
         // A field, an enum constant or a record component: javac models all three as one member shape, and the
         // role is what tells them apart — so a lookup matches on the name and the owner, and takes the first.
         for (JavaSyntaxCheck.MemberPosition member : members) {
-            if (member.simpleName().equals(name) && member.owner().equals(owner)) {
+            if (member.simpleName().equals(name) && ownerMatches(member.owner(), owner)) {
                 return member.nameLine();
             }
         }
@@ -151,8 +151,9 @@ public final class JavacPositions {
      * same bytes, and a caller that verifies must hash the LF-normalised form the row's checksum is of.</p>
      */
     public TreeQueries.SourceSpan memberSpan(String owner, String kind, String name, int parameterCount) {
+        String simpleOwner = ownerSimpleName(owner);
         for (JavaSyntaxCheck.MemberSpan span : spans) {
-            if (span.owner().equals(owner) && span.kind().equals(kind) && span.name().equals(name)
+            if (ownerMatches(span.owner(), simpleOwner) && span.kind().equals(kind) && span.name().equals(name)
                     && span.parameterCount() == parameterCount) {
                 return new TreeQueries.SourceSpan(span.startOffset(), span.endOffset());
             }
@@ -160,11 +161,36 @@ public final class JavacPositions {
         return null;
     }
 
+    /**
+     * Whether a record's owner is the one a caller asked about, in <em>either</em> key form.
+     *
+     * <p>Two consumers, two forms, one record: javac's walk writes the dotted chain ({@code Outer.Inner}, which
+     * the entity tooling addresses a nested member by) while the engine's model keys by the simple name the LST
+     * gives it. Matching either form here is what lets one record serve both — and it is the fix for a real bug:
+     * the record was written dotted while the engine looked up simple, so a member of a nested type silently
+     * reported an unknown line and no span. An exact match wins; the simple-name fallback is what makes the
+     * engine's lookups work, and a caller that knows the chain still gets the unambiguous answer.</p>
+     */
+    private static boolean ownerMatches(String recorded, String asked) {
+        return recorded.equals(asked) || ownerSimpleName(recorded).equals(ownerSimpleName(asked));
+    }
+
+    /**
+     * The innermost name of a dotted owner chain, so a lookup keyed either way finds the same record.
+     */
+    private static String ownerSimpleName(String owner) {
+        if (owner == null) {
+            return "";
+        }
+        int dot = owner.lastIndexOf('.');
+        return dot < 0 ? owner : owner.substring(dot + 1);
+    }
+
     /** Every member span recorded for one owner, for a caller that wants them all in source order. */
     public List<TreeQueries.SourceSpan> spansOf(String owner) {
         List<TreeQueries.SourceSpan> found = new ArrayList<>();
         for (JavaSyntaxCheck.MemberSpan span : spans) {
-            if (span.owner().equals(owner)) {
+            if (ownerMatches(span.owner(), owner)) {
                 found.add(new TreeQueries.SourceSpan(span.startOffset(), span.endOffset()));
             }
         }
@@ -185,7 +211,7 @@ public final class JavacPositions {
      */
     public TreeQueries.SourceSpan relationSpan(String owner, String kind, int ordinal) {
         for (JavaSyntaxCheck.RelationSpan relation : relations) {
-            if (relation.owner().equals(owner) && relation.kind().equals(kind)
+            if (ownerMatches(relation.owner(), owner) && relation.kind().equals(kind)
                     && relation.ordinal() == ordinal) {
                 return new TreeQueries.SourceSpan(relation.startOffset(), relation.endOffset());
             }

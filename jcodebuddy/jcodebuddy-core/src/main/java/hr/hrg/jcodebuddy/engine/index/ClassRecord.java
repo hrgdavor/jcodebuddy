@@ -43,17 +43,22 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * @param span             the declaration's character range in its file, or {@code null} when none was recorded
  *                         — annotations and modifiers included, because that is what a reader clicks; a consumer
  *                         needs to be able to *point* at the type (DEC-040 D6)
+ * @param permits          a <strong>sealed</strong> type's permitted subtypes, as written and in order; empty for
+ *                         a type that is not sealed. Recorded because it is a fact the compiler keeps only as a
+ *                         class-file attribute and the reflection API exposes unevenly, so a generator that must
+ *                         not emit a subclass of a sealed type has to read it from the source (DEC-040 D1)
  */
 public record ClassRecord(String fqn, String path, String kind, List<String> modifiers, String enclosing,
                           int line, int depth, boolean generated, String checksum, String hashCalculatedAt,
                           long size, List<TypeRelation> relations, List<TypeAnnotation> annotations,
-                          List<MemberRecord> members, TreeQueries.SourceSpan span) {
+                          List<MemberRecord> members, TreeQueries.SourceSpan span, List<String> permits) {
 
     public ClassRecord {
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
         relations = relations == null ? List.of() : List.copyOf(relations);
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
         members = members == null ? List.of() : List.copyOf(members);
+        permits = permits == null ? List.of() : List.copyOf(permits);
     }
 
     /**
@@ -66,7 +71,7 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
      */
     public ClassRecord withFileFacts(String checksum, String hashCalculatedAt, long size) {
         return new ClassRecord(fqn, path, kind, modifiers, enclosing, line, depth, generated, checksum,
-                hashCalculatedAt, size, relations, annotations, members, span);
+                hashCalculatedAt, size, relations, annotations, members, span, permits);
     }
 
     /**
@@ -77,7 +82,16 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
                        long size, List<TypeRelation> relations, List<TypeAnnotation> annotations,
                        List<MemberRecord> members) {
         this(fqn, path, kind, modifiers, enclosing, line, depth, generated, checksum, hashCalculatedAt, size,
-                relations, annotations, members, null);
+                relations, annotations, members, null, List.of());
+    }
+
+    /** A row with a declaration range but no permitted-subtype list, for a caller that read one and not both. */
+    public ClassRecord(String fqn, String path, String kind, List<String> modifiers, String enclosing,
+                       int line, int depth, boolean generated, String checksum, String hashCalculatedAt,
+                       long size, List<TypeRelation> relations, List<TypeAnnotation> annotations,
+                       List<MemberRecord> members, TreeQueries.SourceSpan span) {
+        this(fqn, path, kind, modifiers, enclosing, line, depth, generated, checksum, hashCalculatedAt, size,
+                relations, annotations, members, span, List.of());
     }
 
     /** Whether the type's own facts (not the file's content) differ from {@code other}. */
@@ -101,6 +115,9 @@ public record ClassRecord(String fqn, String path, String kind, List<String> mod
                 && members.equals(other.members)
                 // And a position change is a type-fact change too, for the fourth time and the same reason: a
                 // member or a supertype moved, and a consumer that points at the file must see that it did.
-                && java.util.Objects.equals(span, other.span);
+                && java.util.Objects.equals(span, other.span)
+                // Fifth, and for a reason of its own: sealing a type changes who may extend it, which is a fact
+                // about the type rather than about any file's bytes.
+                && permits.equals(other.permits);
     }
 }

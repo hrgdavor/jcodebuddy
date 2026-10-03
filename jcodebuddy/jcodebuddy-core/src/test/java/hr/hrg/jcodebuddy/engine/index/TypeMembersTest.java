@@ -138,14 +138,26 @@ class TypeMembersTest {
         index.write();
 
         String written = Files.readString(index.indexFile(), StandardCharsets.UTF_8);
-        Assertions.assertTrue(written.contains("\"members\": [{ \"name\": \"id\", \"kind\": \"field\","
-                        + " \"type\": \"int\", \"parameters\": [], \"modifiers\": [\"public\"],"
-                        + " \"annotations\": [], \"line\": -1, \"span\": null }]"),
-                "the writer emits the member's name, kind, type, parameters, modifiers and annotations, exactly"
-                        + " as the record holds them (the keyword filter is the extractor's, not the writer's) —"
-                        + " and its position fields, unknown here because this row was built from facts rather"
-                        + " than read from a source (DEC-040 D6, and D4: unknown is not absent): "
-                        + written.substring(written.indexOf("WithMembers")));
+        // Read through the JSON rather than matching the serialisation: this assertion has now broken once per
+        // field the member record grew, which means it was testing the writer's spelling rather than the reader's
+        // contract. What it is about is that each field the record holds is present with the value it holds.
+        tools.jackson.databind.JsonNode member = hr.hrg.jcodebuddy.engine.MetadataJson.mapper()
+                .readTree(written).path("classes").path("a.b.WithMembers").path("members").path(0);
+        Assertions.assertFalse(member.isMissingNode(), "the member is written at all: " + written);
+        Assertions.assertEquals("id", member.path("name").asText());
+        Assertions.assertEquals("field", member.path("kind").asText());
+        Assertions.assertEquals("int", member.path("type").asText());
+        Assertions.assertEquals(0, member.path("parameters").size());
+        Assertions.assertEquals(List.of("public"),
+                java.util.stream.StreamSupport.stream(member.path("modifiers").spliterator(), false)
+                        .map(tools.jackson.databind.JsonNode::asText).toList(),
+                "the writer emits the modifiers the record holds — the keyword filter is the extractor's");
+        Assertions.assertEquals(0, member.path("annotations").size());
+        Assertions.assertTrue(member.has("line") && member.path("line").asInt() == -1,
+                "and its position fields, unknown here because this row was built from facts rather than read "
+                        + "from a source (DEC-040 D6, and D4: unknown is not absent)");
+        Assertions.assertTrue(member.has("span") && member.path("span").isNull(),
+                "the span is written as an explicit null rather than omitted");
         Assertions.assertTrue(written.contains("\"members\": []"),
                 "and an empty array for a type that declares none, so a table written before this field stays"
                         + " distinguishable as 'not recorded'");

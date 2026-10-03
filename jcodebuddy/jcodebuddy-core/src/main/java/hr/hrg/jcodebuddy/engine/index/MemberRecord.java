@@ -20,13 +20,24 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  *   <li>{@link Kind#FIELD} — the declared type as written, type arguments included;</li>
  *   <li>{@link Kind#METHOD} — the return type as written ({@code void} for a method that returns nothing);</li>
  *   <li>{@link Kind#CONSTRUCTOR} — empty: a constructor declares no return type, and its name is the type's;</li>
+ *   <li>{@link Kind#ENUM_CONSTANT} — empty: a constant declares no type, and its name is its own;</li>
  *   <li>{@link Kind#NESTED} — the nested type's simple name; its own row is keyed by the full name.</li>
  * </ul>
  *
- * <p><strong>What this deliberately does not record:</strong> enum constants (an enum's constants are
- * {@code J.EnumValue} statements, not variables) and initialisers or bodies of any kind. Both are facts this
- * table has no contract for, and a consumer that needs them asks the parse path — an absence here is a stated
- * limit, not an empty answer.</p>
+ * <p><strong>Which facts apply to which kind</strong> — stated once here rather than inferred per consumer,
+ * because a member row is the widest thing this format writes and "empty" must not be read as "none":
+ * {@code parameters}, {@code throwsClause} and {@code hasBody} are a callable's; {@code type} is a field's, a
+ * method's or a nested type's; {@code hasInitializer} is a field's. Every field is still written for every
+ * member, so a consumer reads one shape.</p>
+ *
+ * <p><strong>And an arbitrary expression is a range question, not a text one</strong> (DEC-040 D2, corrected
+ * 2026-10-03 mid-step). A field's initialiser and an enum constant's arguments are the two facts whose written
+ * form is an <em>expression</em> — potentially a whole array or a method chain — so neither is stored as text:
+ * the constant's arguments and the field's initial value are inside the member's own {@link #span}, and a
+ * consumer that needs them slices the declaring file there. Two reasons, and the second is the one that found
+ * this: the rule the model follows is "point at the source", and the LST has no source printer for every
+ * expression — a first version stored an array initialiser's text and got a Lombok debug dump containing a
+ * fresh UUID per parse, which is non-determinism in a table that must be byte-identical across passes.</p>
  *
  * @param name           the member's name as written
  * @param kind           the member's kind — {@link Kind}, a closed vocabulary the reader refuses to extend
@@ -38,6 +49,16 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  *                       separates a factory from an accessor (see the note on that set)
  * @param annotations    the annotations on the member, as written with their arguments as written
  *                       ({@link TypeAnnotation}), in declaration order; empty when it carries none
+ * @param hasInitializer whether a <strong>field</strong> declares an initialiser (DEC-040 D1). The initialiser
+ *                       itself is not stored: it is inside {@link #span} and recovered by slicing. {@code false}
+ *                       for an enum constant, whose arguments are recovered the same way from its own span
+ * @param throwsClause   a <strong>callable's</strong> {@code throws} clause as written, in order; empty when it
+ *                       declares none or is not a callable (DEC-040 D1 — a generator that emits a call must
+ *                       declare what it throws). Kept as text because a thrown type is a <em>name</em>, not an
+ *                       arbitrary expression: it is small, structured, and printed as source by the LST
+ * @param hasBody        whether a <strong>callable</strong> has a body: {@code false} for an abstract or
+ *                       interface method, {@code true} for one that declares {@code {…}}. A generator reads it
+ *                       to know whether it may emit a call or must emit an override (DEC-040 D1)
  * @param line           the line the member's <em>name</em> sits on, 1-based, or
  *                       {@link hr.hrg.jcodebuddy.engine.source.JavacPositions#UNKNOWN_LINE} when it could not be
  *                       located — carried because a consumer has to be able to <em>point</em> at the member, and
@@ -45,11 +66,12 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  *                       description (DEC-040 D6)
  * @param span           the member's character span in the declaring file, or {@code null} when javac's walk
  *                       recorded none — this is what recovers the member's written form, generic arguments and
- *                       all, because the table points at the source instead of copying it (DEC-040 D2)
+ *                       initialisers and all, because the table points at the source instead of copying it
+ *                       (DEC-040 D2)
  */
 public record MemberRecord(String name, Kind kind, String type, List<MemberParameter> parameters,
-                           List<String> modifiers, List<TypeAnnotation> annotations, int line,
-                           TreeQueries.SourceSpan span) {
+                           List<String> modifiers, List<TypeAnnotation> annotations, boolean hasInitializer,
+                           List<String> throwsClause, boolean hasBody, int line, TreeQueries.SourceSpan span) {
 
     /**
      * The member kinds this table has a contract for.
@@ -62,6 +84,16 @@ public record MemberRecord(String name, Kind kind, String type, List<MemberParam
         FIELD("field"),
         METHOD("method"),
         CONSTRUCTOR("constructor"),
+        /**
+         * An enum constant, which is a member of the enum rather than a field of it.
+         *
+         * <p>Added 2026-10-03 (DEC-040 D1): the entity work reads enum constants as the values a view exposes,
+         * and before this the table recorded them nowhere — an omission a consumer could only work around by
+         * parsing the file. Its spelling matches javac's own vocabulary for the same fact
+         * ({@code enum-constant}), which is what keeps the position lookup keyed the same way as every other
+         * kind.</p>
+         */
+        ENUM_CONSTANT("enum-constant"),
         NESTED("nested");
 
         private final String json;
@@ -102,15 +134,24 @@ public record MemberRecord(String name, Kind kind, String type, List<MemberParam
         parameters = parameters == null ? List.of() : List.copyOf(parameters);
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
+        throwsClause = throwsClause == null ? List.of() : List.copyOf(throwsClause);
     }
 
     /**
-     * A member whose position the caller did not read — the two position fields are "unknown", which is a fact
-     * a reader can tell from a line (DEC-040 D4).
+     * A member carrying no kind-specific facts and no position — the shape every caller that only knows a name,
+     * a kind and a type wants, and the one the earlier steps' fixtures use.
      */
     public MemberRecord(String name, Kind kind, String type, List<MemberParameter> parameters,
                         List<String> modifiers, List<TypeAnnotation> annotations) {
-        this(name, kind, type, parameters, modifiers, annotations,
+        this(name, kind, type, parameters, modifiers, annotations, false, List.of(), false,
+                hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE, null);
+    }
+
+    /** A member with kind-specific facts but no position, for a caller that read the facts and not the file. */
+    public MemberRecord(String name, Kind kind, String type, List<MemberParameter> parameters,
+                        List<String> modifiers, List<TypeAnnotation> annotations, boolean hasInitializer,
+                        List<String> throwsClause, boolean hasBody) {
+        this(name, kind, type, parameters, modifiers, annotations, hasInitializer, throwsClause, hasBody,
                 hr.hrg.jcodebuddy.engine.source.JavacPositions.UNKNOWN_LINE, null);
     }
 

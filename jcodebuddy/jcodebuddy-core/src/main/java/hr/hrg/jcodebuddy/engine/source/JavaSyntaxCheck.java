@@ -431,6 +431,12 @@ public final class JavaSyntaxCheck {
                                        com.sun.source.tree.CompilationUnitTree unit,
                                        com.sun.source.util.SourcePositions positions, LineMap lineMap,
                                        List<MemberPosition> into, List<MemberSpan> spans) {
+        // The owner is recorded as the DOTTED chain the walk has (`Outer.Inner`), because the entity tooling
+        // addresses a nested type's members through that display name and its tests say so. The engine, on the
+        // other hand, keys by the simple name the LST gives it — so the consumer that reads these records
+        // (JavacPositions) matches either form rather than this writer choosing a side. That was a real bug for a
+        // while: the chain was stored raw while one constructor call site normalised locally, so a lookup by
+        // simple name silently missed every member of a nested type.
         boolean isEnum = tree.getKind() == Tree.Kind.ENUM;
         boolean isRecord = tree.getKind() == Tree.Kind.RECORD;
         boolean constantsEnded = false;

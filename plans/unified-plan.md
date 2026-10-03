@@ -1550,6 +1550,31 @@ positions while its span walk records the declared name**, so a constructor is i
 bytes as they are and normalises only to verify; and **an interface's `extends` lives in `getImplementsClause()`**
 in javac just as DEC-030 records for the LST, so the clause — not the API method — decides the relation's kind.
 
+**And the step is complete 2026-10-03: the D1 fact list has nothing left on it.** The second half landed the four
+facts described above — a sealed type's `permits`, a callable's `throws`, enum constants, a field's initialiser
+question and whether a callable has a body — pinned by `MemberFactsTest` as extraction *and* round trip. Four
+measurements contradicted the reasonable guess and are recorded rather than discovered twice:
+
+- **An enum's constants are one `J.EnumValueSet` statement, not one statement per constant.** `J.EnumValueSet`
+  implements `Statement` and `J.EnumValue` does not, so the obvious `instanceof J.EnumValue` over a body's
+  statements does not compile — the group is what carries declaration order.
+- **"None" is a single `J.Empty`** for a parameter list and a `throws` clause.
+- **An arbitrary expression has no faithful text form, so it is a range fact.** A field's initialiser was first
+  stored as text, and an array initialiser came back as the LST's debug dump — `J.NewArray(padding=…, id=…)`, with
+  a fresh UUID per parse, which made the index non-deterministic and failed the entity tooling's
+  `theIndexIsDeterministic`. The row records `hasInitializer` and points at the member's `span`; an enum
+  constant's arguments follow the same rule and are recovered by slicing. That is DEC-040 D2 deciding a format
+  question, and it is the second time the entity tooling's determinism test caught a model change this sequence
+  would otherwise have shipped.
+- **The format's JSON keys are per record, not per component**: an annotation's `arguments` is written `args`
+  while a member's is written `arguments`, so the contract test's key space is now `Record.component`.
+
+**And the same test found a pre-existing bug.** javac's member walk recorded the **dotted owner chain** while
+every lookup and javadoc uses the **simple name** — with one local `ownerSimpleName(...)` patch for constructors
+hiding the shared cause — so a member of a *nested* type silently carried line `-1` and a null span. The walk
+normalises once now and the lookup accepts either form.
+
+
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
 

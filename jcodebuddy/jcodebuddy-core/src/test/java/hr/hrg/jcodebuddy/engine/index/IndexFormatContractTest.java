@@ -42,13 +42,23 @@ class IndexFormatContractTest {
     private static final Set<String> ROW_FIELDS_WRITTEN_AS_A_KEY = Set.of("fqn");
 
     /**
-     * Components whose JSON key is not their name.
+     * Components whose JSON key is not their name, keyed by <strong>record and component</strong>.
      *
-     * <p>Listed rather than inferred, and it is the point of the test that adding one is a decision: the format
-     * spells an annotation's arguments {@code args} (it predates this record's component name), and a reader
-     * cannot discover that mapping by walking the record.</p>
+     * <p>Qualified rather than keyed by the component name alone, and that is a fix rather than a preference: the
+     * first version mapped {@code arguments} to {@code args} globally, which is right for
+     * {@link TypeAnnotation} (whose format predates this record's component name) and wrong for
+     * {@link MemberRecord}, whose field is written {@code arguments} — and the test failed with exactly that
+     * confusion. One map, and adding a case to it is a decision in a diff rather than a silent pass.</p>
      */
-    private static final java.util.Map<String, String> JSON_KEY_OF_COMPONENT = java.util.Map.of("arguments", "args");
+    private static final java.util.Map<String, String> JSON_KEY_OF_COMPONENT = java.util.Map.of(
+            "TypeAnnotation.arguments", "args",
+            // A member's throws clause is written as `throws`, the Java keyword rather than the component's name.
+            "MemberRecord.throwsClause", "throws");
+
+    /** The JSON key a record component is written as, defaulting to the component's own name. */
+    private static String jsonKeyOf(Class<?> record, String component) {
+        return JSON_KEY_OF_COMPONENT.getOrDefault(record.getSimpleName() + "." + component, component);
+    }
 
     private static ClassIndex indexOf(Path tree) {
         return ClassIndex.forPass(tree.resolve("report"), tree.resolve("module"),
@@ -93,9 +103,10 @@ class IndexFormatContractTest {
 
         List<String> problems = new ArrayList<>();
         for (RecordComponent component : MemberRecord.class.getRecordComponents()) {
-            if (!member.contains("\"" + component.getName() + "\"")) {
-                problems.add("MemberRecord." + component.getName() + " is not emitted for a member, so a table"
-                        + " without it reads as 'none' (DEC-040 D4)");
+            String key = jsonKeyOf(MemberRecord.class, component.getName());
+            if (!member.contains("\"" + key + "\"")) {
+                problems.add("MemberRecord." + component.getName() + " is not emitted for a member (as `" + key
+                        + "`), so a table without it reads as 'none' (DEC-040 D4)");
             }
         }
         for (RecordComponent component : MemberParameter.class.getRecordComponents()) {
@@ -111,7 +122,7 @@ class IndexFormatContractTest {
             }
         }
         for (RecordComponent component : TypeAnnotation.class.getRecordComponents()) {
-            String key = JSON_KEY_OF_COMPONENT.getOrDefault(component.getName(), component.getName());
+            String key = jsonKeyOf(TypeAnnotation.class, component.getName());
             if (!written.contains("\"" + key + "\"")) {
                 problems.add("TypeAnnotation." + component.getName() + " is not emitted for an annotation (as `"
                         + key + "`) — DEC-040 D4");
