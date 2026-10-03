@@ -987,6 +987,14 @@ existing RPC tests unchanged).
 **Done when:** no consumer has a metadata path of its own — one model, one index, one freshness contract, many
 readers.
 
+> **The maintainer's answers, 2026-10-03 — the three questions this step's first slice needs.** (1) The server
+> keeps its serving shapes: `MetadataProvider` / `CacheEntry` stay, and an engine-backed implementation goes
+> behind them. (2) `jcodebuddy-meta` **may depend on `jcodebuddy-core`**, and `parse` goes through the engine's
+> parse path — reversing DEC-W008's "this module has no source reader" amendment, because the reader now lives
+> in the engine. (3) `WatchMetadataProvider` keeps what only the watcher knows — the files the index has no row
+> for, their mtime, "what changed" — and delegates the class and type questions to the engine, which is what
+> stops `listClasses()` answering with an empty list.
+
 **Measured 2026-10-03, before starting, so the next pass does not hunt for paths that are not there.** Of the
 five consumer groups this step names, two hold **no private metadata path today**:
 
@@ -1112,6 +1120,13 @@ reliable detector for stale output, and a `test`-only verification is not eviden
 
 ### 3.0n — Absorb `jwa-builder*` and collapse the duplicate splice path
 **Who:** agent · **Size:** L
+
+> **The maintainer's answer, 2026-10-03: rename, and collapse the duplicate.** Asked where the modules land,
+> the answer was to rename them into the family — `jcodebuddy-builder-api` and `jcodebuddy-builder` as this
+> step proposes — **and** to collapse the duplicate splice path, rather than the smaller option of keeping the
+> `jwa-*` coordinates. So the proposed names below are decided, not suggested, and "one `SourceSplicer`
+> remains" is a requirement of the change rather than a nice consequence of it.
+
 [DEC-038](../doc-hipster-entity/architecture/decisions/DEC-038.md) decisions 4 and 5. `jwa-builder` and
 `jwa-builder-api` are already modules here, named for the agent they were first written for
 (`hr.hrg.watch2.builder[.api]`), and `jwa-builder` holds a **second** `SourceSplicer` (plus `LineLookup`)
@@ -1177,6 +1192,13 @@ and `project-automation` are still at the root.
 
 ### 3.0p — Audit the five earlier sidecar attempts against today's webview
 **Who:** agent · **Size:** M
+
+> **The maintainer's answer, 2026-10-03: all three editors are actually driven** — JetBrains, VS Code and
+> Eclipse. So "worth keeping" is not "pick the winner": the shape to audit against is **one shared host with a
+> thin client per editor**, and what the audit may delete is a client that duplicates another's job or an
+> attempt whose capability the shared host now provides. A capability that only one editor's client can reach
+> stays, and the audit says which editor it is for.
+
 
 `webview/intellij-jwa`, `webview/intellij-jswa`, `webview/vscode-jwa`, `webview/vscode-jswa` and
 `webview/jswa-core` are **earlier attempts at the sidecar functionality** the current suite provides
@@ -1581,6 +1603,13 @@ index resolving nothing). The recorded gate follows in the same change.
 
 ### 3.0e — Move hipster-ioc onto the metadata contract
 **Who:** agent · **Size:** M · *(shape-defining)*
+
+> **The maintainer's answer, 2026-10-03: the generated shape MAY change.** Asked whether the committed example
+> must regenerate byte-identically, the answer was to improve the shape where the model answers better,
+> regenerate the example and record the change. So the byte-identical rule below is the *fallback*, not the
+> requirement: what must hold is that the change is recorded and that the reason is the model rather than a
+> rewrite nobody asked for. The conservative reading stays available — a byte-identical run is the strongest
+> evidence that a model swap changed nothing — and the step should say which of the two it did and why.
 
 > **Under DEC-037 this is one consumer of 3.0j.** The generator becomes a reader of the engine like every
 > other consumer, which is the point of moving the engine first: hipster-ioc's own step should not have to
