@@ -16,24 +16,24 @@ import java.util.Locale;
  *       lookup compares that spelling. It follows that a simple name is matched as written — a consumer
  *       asking "who implements {@code a.b.CtxModule}" must ask in the same spelling the sources use, which is
  *       the gap search (3.0h) closes rather than something a row pretends to know.</li>
- *   <li><strong>Type arguments ARE part of the relation, and the bare name is derived from them.</strong>
- *       {@code extends ChildContext<AppContext>} records the text it was written with, because type arguments
- *       are exactly what the compiler erases — a model that dropped them would be no better positioned than
- *       runtime code ([DEC-040](../../../../../../doc-hipster-entity/architecture/decisions/DEC-040.md), D1 and
- *       D2). What a <em>match</em> wants is the bare name ({@code ChildContext}), so {@link #name()} is that
- *       form, derived from the text and never the reverse: the text is the guaranteed fact, and a name-only
- *       table (written before this field existed) reads as text == name rather than pretending to more.</li>
+ *   <li><strong>The relation carries a name and a range, never the source text.</strong> Metadata is a
+ *       <em>pointer into</em> the source, not a copy of it: a table that spelled
+ *       {@code extends ChildContext<AppContext>} out would be a second copy of a line, and a second copy is
+ *       what goes stale when the source moves on. The table already records the file and its checksum, so a
+ *       consumer that needs the written form slices the file at the relation's range and the checksum tells it
+ *       whether that slice is still the text the row was written from. The bare {@link #name()} is what a
+ *       <em>match</em> wants ({@code ChildContext}), and it is derived from the written form at extraction time
+ *       — never typed in by hand.</li>
  *   <li><strong>The clause is kept, because an interface's {@code extends} is not an {@code implements}.</strong>
  *       The LST holds an interface's {@code extends} clause in {@code getImplements()} — the trap DEC-030
  *       records — so this kind is what stops a relation diagram from drawing an {@code implements} edge from a
  *       declaration that cannot have one.</li>
  * </ul>
  *
- * @param name the supertype's name for matching — the text without its type arguments
+ * @param name the supertype's name for matching — the written form without its type arguments
  * @param kind whether the name came from an {@code extends} or an {@code implements} clause
- * @param text the supertype as the source wrote it, type arguments included — the fact this record exists for
  */
-public record TypeRelation(String name, Kind kind, String text) {
+public record TypeRelation(String name, Kind kind) {
 
     /** Which clause the name came from. */
     public enum Kind {
@@ -68,28 +68,22 @@ public record TypeRelation(String name, Kind kind, String text) {
     public TypeRelation {
         name = name == null ? "" : name;
         kind = kind == null ? Kind.EXTENDS : kind;
-        // A relation with no text is one a caller built from a name alone (and a table written before the
-        // field existed reads exactly that way): the name is then all the source is known to have said.
-        text = text == null || text.isEmpty() ? name : text;
-    }
-
-    /** The two-part form: a caller that has no separate text — the name is all the source said. */
-    public TypeRelation(String name, Kind kind) {
-        this(name, kind, name);
     }
 
     /**
-     * An {@code extends} relation, from the text as written.
+     * An {@code extends} relation, from the text as it is written in the source.
      *
-     * <p>The bare name is derived here rather than passed, which is DEC-040's D2 in one line: the text is the
-     * fact, the name is what a match wants, and a caller cannot accidentally store one without the other.</p>
+     * <p>The bare name is derived here rather than passed, because the text is what the extraction actually
+     * has: a caller cannot record a relation whose name disagrees with the declaration's spelling. The text
+     * itself is <strong>not stored</strong> — the row points at the file and its checksum, and a consumer that
+     * needs the written form (type arguments included) slices the source at the relation's range.</p>
      */
     public static TypeRelation extendsType(String writtenText) {
-        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.EXTENDS, writtenText);
+        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.EXTENDS);
     }
 
     /** An {@code implements} relation, from the text as written — see {@link #extendsType(String)}. */
     public static TypeRelation implementsType(String writtenText) {
-        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.IMPLEMENTS, writtenText);
+        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.IMPLEMENTS);
     }
 }

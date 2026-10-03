@@ -213,16 +213,16 @@ class ClassIndexTest {
 
     /** No row carries source content, in any spelling. */
     /**
-     * No row carries source content, in any spelling — now stated as the rule it always meant, rather than as a
-     * list of words to avoid.
+     * No row carries source content, in any spelling — and the rule got <em>two</em> checks after a decision
+     * tried to make an exception for itself.
      *
-     * <p>The original form forbade the literal {@code "text":} among other markers, as a proxy for "content".
-     * DEC-040 (2026-10-03) makes one kind of text a **fact the model must keep**: a relation's written form
-     * ({@code ChildContext<AppContext>}), a field's or a parameter's declared type. Those are *expressions*, not
-     * content — a name with its type arguments, no whitespace, no body — so the proxy had to give way to the
-     * rule it stood for. That rule is checked below in two ways, which is strictly stronger than the word list
-     * it replaces: the source-text markers are still refused, **and** no string value in the table may be longer
-     * than a written type can be, so content cannot arrive under a key nobody thought to forbid.</p>
+     * <p>DEC-040 first required a relation's written form ({@code ChildContext<AppContext>}) to be stored, which
+     * this invariant forbids under the key {@code "text":}. The key was left in the list and the model changed
+     * instead, and the reason is the answer: **metadata is a pointer into the source, not a copy of it.**
+     * A stored copy can disagree with the file it came from, while a range plus the row's checksum cannot — so
+     * the written form belongs to the source, and a consumer slices it there. The second check below is what
+     * makes that general rather than a word list: no string in the table may be longer than a written type, so
+     * content cannot arrive under a key nobody thought to forbid.</p>
      */
     @Test
     void noRowCarriesContent() throws Exception {
@@ -230,15 +230,15 @@ class ClassIndexTest {
         written(root, null);
         String text = tableText(root);
 
-        for (String contentish : List.of("sourcesContent", "\"content\":", "\"source\":",
+        for (String contentish : List.of("sourcesContent", "\"content\":", "\"text\":", "\"source\":",
                 "package a.b;", "interface Person", "record Record", "return name();")) {
             Assertions.assertFalse(text.contains(contentish),
                     "the table records a name, a hash and a size — never content; found " + contentish);
         }
 
-        // The general rule the word list was a proxy for: every string this table carries is a name, a path or
-        // a written type — none of them is a line of source. 120 characters is far above the longest honest
-        // value (a parameterised type) and far below a statement, a body or a file.
+        // The general rule the word list is a proxy for: every string this table carries is a name, a path or a
+        // written type — none of them is a line of source. 120 characters is far above the longest honest value
+        // (a parameterised type) and far below a statement, a body or a file.
         Matcher strings = Pattern.compile("\"([^\"]*)\"").matcher(text);
         int checked = 0;
         while (strings.find()) {

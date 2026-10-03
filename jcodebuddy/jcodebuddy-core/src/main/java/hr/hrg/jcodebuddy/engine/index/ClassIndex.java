@@ -856,12 +856,10 @@ public final class ClassIndex {
                 sb.append(", ");
             }
             TypeRelation relation = row.relations().get(i);
+            // A name and a clause, never the source text: the row's path and checksum make the file the one
+            // place the written form lives, so a table cannot disagree with the source it describes (DEC-040).
             sb.append("{ \"name\": \"").append(MetadataJson.escape(relation.name()))
-                    .append("\", \"kind\": \"").append(relation.kind().json())
-                    // The text as written, always emitted beside the name: the arguments are what the compiler
-                    // erases, and a reader must be able to tell a name-only relation (an older table) from one
-                    // that genuinely wrote no arguments (DEC-040 D1/D2).
-                    .append("\", \"text\": \"").append(MetadataJson.escape(relation.text())).append("\" }");
+                    .append("\", \"kind\": \"").append(relation.kind().json()).append("\" }");
         }
         sb.append("]");
         // Always emitted, like relations and for the same reason: a table without the field is one written
@@ -1092,10 +1090,7 @@ public final class ClassIndex {
                     }
                     return null;
                 }
-                relations.add(new TypeRelation(relation.path("name").asText(""), kind,
-                        // A table written before the text existed carries no `text`: the name is then all it
-                        // recorded, which is the honest lower bound rather than a claim about the source.
-                        relation.path("text").asText(relation.path("name").asText(""))));
+                relations.add(new TypeRelation(relation.path("name").asText(""), kind));
             }
             List<TypeAnnotation> annotations = new ArrayList<>();
             for (JsonNode annotation : node.path("annotations")) {

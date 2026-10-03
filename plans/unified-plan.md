@@ -1448,7 +1448,7 @@ consumer could ask**", so the list below is a contract rather than an erasure-on
 
 | fact                                                                                              | why it is owed                                                                                 | who waits for it                                                                  |
 | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| the **text as written** on a relation — `ChildContext<AppContext>` beside the name `ChildContext` | type arguments are what erasure removes, and the name alone is lossy (D2)                      | 3.0e's parent plumbing                                                            |
+| a **range** on a relation — so `ChildContext<AppContext>` is recovered by slicing the source      | type arguments are what erasure removes, and a stored copy is what goes stale; a range plus the row's checksum fails detectably (D2) | 3.0e's parent plumbing, and every interactive consumer (D6) |
 | a **sealed** type's `permits` list                                                                | a class-file attribute with no dependable reflective equivalent                                | a generator that must not emit a subclass of a sealed type                        |
 | a callable's **`throws` clause**                                                                  | partial at runtime, absent from most models                                                    | a generator emitting a call that must declare it (or must not)                    |
 | **enum constants**, in declaration order, with their arguments                                    | a consumer projecting an enum needs them, and they are not fields in the same sense at runtime | entity generation (the enum-order and ledger work reads them today)               |
@@ -1457,8 +1457,9 @@ consumer could ask**", so the list below is a contract rather than an erasure-on
 | the file's **import lines**                                                                       | D1: the generated class names the types the interface names, and no consumer should read the file for that | 3.0e part two                                                         |
 | **loose matching for generics**                                                                   | the model records `List<String>`; a caller asks about `List`                                   | every query                                                                       |
 
-**Do:** extend the row (the relation's written text; `permits`; the file's imports in a **sidecar beside
-`mtimes.json`**, because imports are a *file* fact like the checksum rather than a type fact), extend a member
+**Do:** extend the row (a **range** for each relation — never its text, because a table holds pointers at the
+source rather than copies of it — and `permits`; the file's imports in a **sidecar beside `mtimes.json`**,
+because imports are a *file* fact like the checksum rather than a type fact), extend a member
 (a `throws` list, enum constants as a member kind carrying their arguments as written, a field's initialiser, and
 whether it has a body), extract each through `TreeQueries`, and give the query surface the loose generic match
 the acceptance criteria name.
@@ -1470,12 +1471,10 @@ mechanical form of D4, and it is the reason this step exists as a step rather th
 
 **Done when:** every fact D1 lists round-trips, and a consumer can ask for it without reading a file.
 
-**Part one landed 2026-10-03** — the three items that had a consumer *today* and were cheap enough to land with
-them:
+**Part one landed 2026-10-03, with one of its three items corrected the same day.** What stands:
 
-- **The relation's written text** (`TypeRelation.text` beside `name`, always emitted; the factories take the
-  written text and derive the bare name, so a caller cannot store a lossy relation — DEC-040 D2). This is the fix
-  DEC-040 turned from a design choice into a defect, and it unblocks 3.0e's parent plumbing.
+- **The bare name is derived, never typed in** (`TypeRelation.extendsType`/`implementsType` take the form the
+  source wrote and strip the arguments), so a relation's name cannot disagree with the declaration's spelling.
 - **Loose matching for generics** (`MetadataQuery.membersTyped`, over one public rule,
   `MetadataQuery.typeMatches`: equal text, equal bare name, or a qualified question against an unqualified
   declaration). A bare `List` finds `List<String>`; an unrelated name still finds nothing, because loose about
@@ -1485,10 +1484,29 @@ them:
   with DEC-029 § 3's two documented omissions (`generated`, `enclosing`) listed explicitly so that a third has to
   be argued for in a diff. A field added without deciding that question now fails the build.
 
-**What remains, in the order of who is waiting:** a sealed type's `permits` (a generator that must not emit a
-subclass), a callable's `throws` (a generator emitting a call that must declare it), enum constants (the entity
-work that reads them today), a field's initialiser and has-a-body, and the **imports sidecar** — the one that
-3.0e part two needs, and the one with a new artifact (`imports.json` beside `mtimes.json`).
+**Corrected:** the first item was `TypeRelation.text` — the written form stored in the row, always emitted. The
+maintainer removed it the same day, and the reason is the rule the step should have applied:
+
+> it is not intended to bloat metadata with text, since metadata is reliant on being up-to-date with
+> source-code, it only should carry ranges. Generators like code navigation diagrams will need line number for
+> members to enable interactivity, so metadata must provide it
+
+So the model stores **pointers, not copies**: the written form is recovered by slicing the declaration file at
+the fact's range, and the row's own checksum makes that slice verifiable — a copy could disagree with the file
+silently, a range cannot. The `ClassIndexTest` invariant that forbids source content in a table (which had been
+narrowed to let the field through) is restored **and strengthened**. DEC-040 carries both halves: D2 rewritten
+around ranges, and D6 added — a row must be able to point at the code.
+
+**What remains, in the order of who is waiting:**
+
+1. **Positions (D6)** — a member's **line** and its range, a relation's range, and the type row's own range:
+   the interactivity requirement, and the prerequisite for 3.0e's parent plumbing (the `P` of
+   `ChildContext<P>` comes from a slice at the relation's range, not from stored text).
+2. a sealed type's `permits` (a generator that must not emit a subclass);
+3. a callable's `throws` (a generator emitting a call that must declare it);
+4. enum constants (the entity work that reads them today);
+5. a field's initialiser and has-a-body;
+6. the **imports sidecar** (`imports.json` beside `mtimes.json`) — the other thing 3.0e part two needs.
 
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
@@ -1705,9 +1723,10 @@ label); keep `bun scripts/ioc-gen.js` as the entry point; update `hipster-ioc/hi
 | the interface file's import lines        | nothing — `ClassRecord` carries `path`, `size`, `checksum`, `hashCalculatedAt`, the type facts, `relations`, `annotations` and `members`, and no imports | `ContextSource` re-emits the interface's imports *and its module interface's*, so the generated class names the same types. Two honest ways out: **record the file's imports** as a file-scoped fact (like the checksum, and always emitted for the same reason), or **emit fully-qualified names** in generated source instead of copying imports — a shape change, which the maintainer's answer above permits |
 
 Neither is a surprise about the engine's design; both are facts nobody had asked it for yet, and both are cheap
-where they belong — a relation field carrying the written text beside the name, and one file-scoped array. They
-are written down **before** the rewrite so that part two starts from a model that can answer, rather than from a
-generator that reads the two things its model cannot give it — which is the failure this whole sequence exists
+where they belong — a **range** on a relation (a pointer at the written form, never a copy of it), and one
+file-scoped array. They are written down **before** the rewrite so that part two starts from a model that can
+answer, rather than from a generator that reads the two things its model cannot give it — which is the failure
+this whole sequence exists
 to prevent.
 
 **Gate:** `MODULE` for `hipster-ioc-tooling,hipster-ioc-test` green; the committed example still

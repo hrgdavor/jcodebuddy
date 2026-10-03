@@ -277,12 +277,18 @@ metadata **MUST** carry what compilation removes, because a generator that has t
 recover a generic argument or a source-retention annotation has no choice but to
 parse the file again — the second parser this repository keeps deleting.
 
-- **Type arguments are facts**, as written: on a member's type (`List<String>`), on
-  a parameter's type, and on a relation. Erasure is exactly why they are recorded.
-- **The name and the text as written are two questions**, and both must be
-  answerable: matching wants `ChildContext`, fidelity wants `ChildContext<AppContext>`.
-  The written text is the guaranteed one; the bare name is derived from it.
-- **Resolution never replaces the text** (`List` → `java.util.List` is a second
+- **Type arguments are reachable, and the model points at them rather than copying them.** A member's type is
+  recorded as written (`List<String>`), on the member, on a parameter and on a relation — and where the written
+  form matters, the **range** of that source is what the table carries, so a consumer slices the file instead of
+  reading a second copy that can fall out of step. Erasure is why the arguments matter; staleness is why they are
+  not stored twice.
+- **The name and the written form are two questions**, and both must be answerable: matching wants
+  `ChildContext`, fidelity wants `ChildContext<AppContext>`. The name is recorded and **derived** from the form
+  the source wrote; the form itself is read from the file at the fact's range.
+- **A row points at the code.** A member carries its line and range, a relation its range — a navigation
+  diagram, a review page or an IDE jump needs to *point*, and metadata that cannot point is metadata they cannot
+  use (DEC-040 D6).
+- **Resolution never replaces the name or the range** (`List` → `java.util.List` is a second
   fact, and it needs the imports and the whole index).
 - **An omission is reported, never answered as "none"** — a gap and a "no" must be
   distinguishable to a consumer.

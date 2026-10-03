@@ -30,12 +30,17 @@ the maintainer's direction of 2026-10-03):
 
 Concretely, for anyone reading or extending this module:
 
-- **Type arguments are facts.** `List<String>` is recorded as written, on a member's type, on a parameter's
-  type and on a relation. Erasure removes them; that is why keeping them is the point.
-- **The name and the text as written are two questions, and both must be answerable.** Matching wants
-  `ChildContext`; fidelity wants `ChildContext<AppContext>`. Where a row carries both, the *written text* is the
-  guaranteed one and the bare name is derived from it.
-- **Resolution never replaces the text.** `List` → `java.util.List` is a second fact, not a better first one,
+- **Type arguments are reachable, not copied.** A member's type is recorded as written (`List<String>`), on a
+  member, a parameter and a relation — and the *range* of that source is what the table carries, so a consumer
+  slices the file for the written form instead of reading a second copy that can fall out of step. Erasure is why
+  the arguments matter; staleness is why they are not stored twice.
+- **A row points at the code.** A member carries its line and range, a relation its range: a navigation diagram,
+  a review page or an IDE jump needs to *point*, and metadata that cannot point is metadata they cannot use
+  (DEC-040 D6).
+- **The name and the written form are two questions, and both must be answerable.** Matching wants
+  `ChildContext`; fidelity wants `ChildContext<AppContext>`. The name is recorded and derived from the form the
+  source wrote; the form itself is read from the file at the fact's range.
+- **Resolution never replaces the name or the range.** `List` → `java.util.List` is a second fact, not a better first one,
   and resolution needs the imports and the whole index.
 - **An omission is reported, never answered as "none".** A gap and a "no" must be distinguishable to a
   consumer: this is DEC-029's always-emitted rule and DEC-035's marker rule, applied to the model as a whole.
