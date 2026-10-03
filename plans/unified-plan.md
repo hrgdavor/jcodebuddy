@@ -1748,6 +1748,41 @@ seam is the metadata layer's).
 
 **Done when:** hipster-ioc parses nothing, and the per-file SPI has no project-wide implementer.
 
+### 3.0u — The base layer: per-file metadata with its own hash (DEC-041)
+**Who:** agent · **Size:** M
+
+**The direction, kept as given:** *"metadata needs to define a strict subset where all of it is derived from file
+alone, so that result can be serialized in cache per Java source file, so rebuilding the full metadata cache and
+extended metadata per Java File can reuse it. That base set must include a hash so we know it is up-to date with
+source"* — recorded as [DEC-041](../doc-hipster-entity/architecture/decisions/DEC-041.md), which names the two
+layers, closes the base set, requires the hash on every entry, and makes the class index a **projection** of those
+entries. The engine already produces the facts (`TypeFacts` + the import lines, one parse per file); what is
+missing is that they are a stored unit and that nothing parses a file whose entry is current.
+
+**Work, in order:**
+
+1. A `FileMetadata` entry model: the file's path, `checksum`, `size`, `generated`, its `TypeFacts` and its import
+   lines — the base set DEC-041 D2 enumerates, and nothing else.
+2. Its writer and reader under the module's derived `.jcodebuddy/cache/` (DEC-026), one entry per Java source
+   file, versioned like the table, and a missing or corrupt entry recomputed rather than fatal (D7).
+3. `ClassIndex` consuming entries: a pass whose entries are all current **parses nothing** and produces its table
+   from them, byte-identical to a cold rebuild (D4, D8).
+4. The invariant test DEC-041 D6 makes measurable: **an entry for file `A` is byte-identical whether file `B`
+   exists, is edited, or is deleted** — the check that fails the moment a cross-file fact is added to the base set.
+5. The three remaining acceptance criteria as tests: one edit recomputes one entry and leaves the others
+   byte-identical; a stale entry is never used (mutate the file under it and the answer is the new content);
+   deleting the whole cache changes no answer, only the time.
+
+**Where it sits:** independent of 3.0e, and before it in value — 3.0e part two needs the facts, and this decides
+*where a fact lives*. Both land before 3.0j puts consumers onto the engine, because a consumer's own cache can
+then be per file with the hash as its invalidation key.
+
+**Gate:** `MODULE` for `jcodebuddy-core` green; the warm-rebuild test proving no parse; entry independence; and
+`md-fix-tables` + LINKS after the documents.
+
+**Done when:** a second pass over an unchanged tree parses nothing, one edit recomputes one file's worth of work,
+and no entry in the cache can change because of a file other than the one it is about.
+
 ### 3.1 — The hipster-ioc ADR
 **Who:** agent · **Size:** S
 

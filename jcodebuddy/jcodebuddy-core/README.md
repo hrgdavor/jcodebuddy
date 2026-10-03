@@ -47,9 +47,29 @@ Concretely, for anyone reading or extending this module:
 - **A consumer answers from the model, without parsing a file.** No file parse, no class loader, no classpath —
   that is what makes a generator a function of the model (steps 3.0d, 3.0e).
 
-**Known debt, measured rather than implied:** the `relations` field still drops type arguments
-(`TypeFacts.withoutTypeArguments`), so `X extends ChildContext<AppContext>` is recorded as `ChildContext`. Under
-DEC-040 that is a defect and it is the first prerequisite of step 3.0e's remaining half; the plan records it.
+**Resolved since it was written down:** the `relations` field drops type arguments deliberately (a row keeps the
+name a *match* wants, `TypeFacts.withoutTypeArguments`), and the written form is not lost with it — the relation
+carries the **range** of its written form, so `ChildContext<AppContext>` is recovered by slicing the declaring file
+at that range, verified against the row's own checksum (`SourceSlice`). A member carries its line and span, a type
+its declaration range and an annotation its own, so every fact a consumer may need to *show* can point at the code
+without the table holding a copy of it (DEC-040 D2 and D6, steps 3.0t).
+
+## Two layers: base and extended (DEC-041)
+
+The model has a named boundary at the file, and it is what makes per-file reuse possible:
+
+- **Base metadata** is every fact derivable from **one source file's bytes alone** — path, checksum, size, the
+  `generated` marker, type declarations, annotations and members as written, relations **unresolved**, and the
+  file's import lines. No other file, no index, no classpath, no clock.
+- **Extended metadata** is everything else — resolution, reverse indexes, cross-file answers, freshness verdicts,
+  reports — and it must be a **pure function** of the base set.
+
+DEC-041 requires each file's base set to be storable **with the hash it was computed from**, so a rebuild reuses
+unchanged files instead of re-parsing them, and so a watch edit recomputes one file's worth of work. The class
+index read above stays the addressing table consumers use, and becomes a **projection** of those entries. The
+strictness is the point: a base entry for file *A* must be byte-identical whether file *B* exists, is edited or is
+deleted — a per-file cache holding a cross-file fact is stale after an unrelated edit, and cannot say so.
+Implementation is plan step 3.0u.
 
 ## Tests and the gate
 
