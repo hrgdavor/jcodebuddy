@@ -878,9 +878,19 @@ public final class ClassIndex {
                     // Emitted even when empty: a constructor has no type and a field has no parameters, and a
                     // reader that had to tell "empty" from "absent" would be guessing at the member's kind.
                     .append("\", \"type\": \"").append(MetadataJson.escape(member.type()))
-                    .append("\", \"parameters\": ");
-            appendStrings(sb, member.parameterTypes());
-            sb.append(", \"modifiers\": ");
+                    .append("\", \"parameters\": [");
+            for (int p = 0; p < member.parameters().size(); p++) {
+                if (p > 0) {
+                    sb.append(", ");
+                }
+                MemberParameter parameter = member.parameters().get(p);
+                sb.append("{ \"type\": \"").append(MetadataJson.escape(parameter.type()))
+                        .append("\", \"name\": \"").append(MetadataJson.escape(parameter.name()))
+                        .append("\", \"annotations\": ");
+                appendAnnotations(sb, parameter.annotations());
+                sb.append(" }");
+            }
+            sb.append("], \"modifiers\": ");
             appendStrings(sb, member.modifiers());
             sb.append(", \"annotations\": ");
             appendAnnotations(sb, member.annotations());
@@ -1100,9 +1110,18 @@ public final class ClassIndex {
                     }
                     return null;
                 }
-                List<String> parameters = new ArrayList<>();
+                List<MemberParameter> parameters = new ArrayList<>();
                 for (JsonNode parameter : member.path("parameters")) {
-                    parameters.add(parameter.asText(""));
+                    List<TypeAnnotation> parameterAnnotations = new ArrayList<>();
+                    for (JsonNode annotation : parameter.path("annotations")) {
+                        List<String> arguments = new ArrayList<>();
+                        for (JsonNode argument : annotation.path("args")) {
+                            arguments.add(argument.asText(""));
+                        }
+                        parameterAnnotations.add(new TypeAnnotation(annotation.path("name").asText(""), arguments));
+                    }
+                    parameters.add(new MemberParameter(parameter.path("type").asText(""),
+                            parameter.path("name").asText(""), parameterAnnotations));
                 }
                 List<String> memberModifiers = new ArrayList<>();
                 for (JsonNode modifier : member.path("modifiers")) {

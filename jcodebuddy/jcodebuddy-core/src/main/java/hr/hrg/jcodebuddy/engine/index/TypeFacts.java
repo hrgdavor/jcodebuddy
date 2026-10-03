@@ -41,16 +41,22 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                         List<MemberRecord> members) {
 
     /**
-     * The modifier vocabulary the index records.
+     * The modifier vocabulary the index records, for a type declaration and for a member alike.
      *
-     * <p>Deliberately not "every keyword the parser reports": the index answers "what kind of type is
-     * this and who can see it", and a keyword outside this set (a type-use modifier, a JVM-only flag)
-     * would be a fact this table has no contract for. Adding one here is a format change and belongs in
-     * DEC-029.</p>
+     * <p>Deliberately not "every keyword the parser reports": the index answers "what kind of declaration is
+     * this and who can see it", and a keyword outside this set (a type-use modifier, a JVM-only flag) would be
+     * a fact this table has no contract for. Adding one here is a format change and belongs in DEC-029.</p>
+     *
+     * <p><strong>{@code default} is in the set for a measured reason (plan step 3.0e).</strong> Before it, an
+     * interface's {@code default String buildXxx()} and its {@code String name();} both recorded an empty
+     * modifier list, so the two were <em>indistinguishable in the index</em> — and that distinction is exactly
+     * what hipster-ioc's model is made of: an abstract accessor is a bean, a {@code default} method is the
+     * factory that builds one. It is a member-only keyword (no type declaration can carry it), which is why the
+     * set is documented as shared rather than as a type vocabulary.</p>
      */
     public static final Set<String> KEYWORDS = Set.of(
             "public", "protected", "private", "abstract", "static", "final",
-            "sealed", "non-sealed", "strictfp");
+            "sealed", "non-sealed", "strictfp", "default");
 
     public TypeFacts {
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
@@ -240,7 +246,7 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
                         // A constructor declares no return type and its name is the type's, so recording a
                         // type would be recording something the source does not say.
                         constructor ? "" : TreeQueries.typeText(method.getReturnTypeExpression()),
-                        parameterTypesOf(method),
+                        parametersOf(method),
                         modifiersOf(method.getModifiers()),
                         annotationsOf(method.getLeadingAnnotations())));
             } else if (statement instanceof J.ClassDeclaration nested) {
@@ -270,30 +276,44 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     }
 
     /**
-     * A callable's parameter types as written, in order.
+     * A callable's parameters as written, in order: each one's type, its name and its own annotations.
+     *
+     * <p>The name and the annotations are here because a consumer needs them and the index is where a consumer
+     * reads (plan step 3.0e): hipster-ioc's factory model is "which bean does {@code buildMapper} build, and
+     * which of its parameters are {@code @Circular}" — a question about a parameter, not about its type. With
+     * types alone that consumer had to parse the file again, which is the second parse this model exists to
+     * remove.</p>
      *
      * <p>The LST spells "no parameters" as a single {@link J.Empty} rather than an empty list (DEC-030's trap
      * for methods), so it is skipped here instead of being recorded as one parameter with an empty type.</p>
      */
-    private static List<String> parameterTypesOf(J.MethodDeclaration method) {
+    private static List<MemberParameter> parametersOf(J.MethodDeclaration method) {
         List<Statement> parameters = method.getParameters();
         if (parameters == null || parameters.isEmpty()) {
             return List.of();
         }
-        List<String> types = new ArrayList<>(parameters.size());
+        List<MemberParameter> written = new ArrayList<>(parameters.size());
         for (Statement parameter : parameters) {
             if (parameter instanceof J.Empty) {
                 continue;
             }
             if (parameter instanceof J.VariableDeclarations declarations) {
-                types.add(TreeQueries.typeText(declarations.getTypeExpression()));
-            } else {
-                // A shape this contract does not model — recorded as written rather than dropped, because
-                // dropping it would understate the arity and make a signature look unique when it is not.
-                types.add(TreeQueries.typeText(parameter));
+                List<TypeAnnotation> annotations = annotationsOf(declarations.getLeadingAnnotations());
+                String type = TreeQueries.typeText(declarations.getTypeExpression());
+                if (declarations.getVariables() != null) {
+                    for (J.VariableDeclarations.NamedVariable variable : declarations.getVariables()) {
+                        written.add(new MemberParameter(type, variable.getSimpleName(), annotations));
+                    }
+                    continue;
+                }
+                written.add(new MemberParameter(type, "", annotations));
+                continue;
             }
+            // A shape this contract does not model — recorded as written rather than dropped, because dropping
+            // it would understate the arity and make a signature look unique when it is not.
+            written.add(MemberParameter.of(TreeQueries.typeText(parameter), ""));
         }
-        return List.copyOf(types);
+        return List.copyOf(written);
     }
 
     /**

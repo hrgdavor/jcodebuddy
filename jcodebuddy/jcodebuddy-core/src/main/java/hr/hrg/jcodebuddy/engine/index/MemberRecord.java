@@ -29,13 +29,15 @@ import java.util.List;
  * @param name           the member's name as written
  * @param kind           the member's kind — {@link Kind}, a closed vocabulary the reader refuses to extend
  * @param type           the type this member declares, in the sense the list above defines
- * @param parameterTypes a method's or constructor's parameter types as written, in order; empty otherwise
+ * @param parameters     a method's or constructor's parameters, in order, each with its type as written, its
+ *                       name and its own annotations ({@link MemberParameter}); empty otherwise
  * @param modifiers      the member's Java modifier keywords, sorted and restricted to
- *                       {@link TypeFacts#KEYWORDS}, so a reordered modifier list is not a diff
+ *                       {@link TypeFacts#KEYWORDS} — which includes {@code default}, the keyword that
+ *                       separates a factory from an accessor (see the note on that set)
  * @param annotations    the annotations on the member, as written with their arguments as written
  *                       ({@link TypeAnnotation}), in declaration order; empty when it carries none
  */
-public record MemberRecord(String name, Kind kind, String type, List<String> parameterTypes,
+public record MemberRecord(String name, Kind kind, String type, List<MemberParameter> parameters,
                            List<String> modifiers, List<TypeAnnotation> annotations) {
 
     /**
@@ -75,7 +77,7 @@ public record MemberRecord(String name, Kind kind, String type, List<String> par
 
     public MemberRecord {
         type = type == null ? "" : type;
-        parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
+        parameters = parameters == null ? List.of() : List.copyOf(parameters);
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
         annotations = annotations == null ? List.of() : List.copyOf(annotations);
     }
@@ -86,6 +88,22 @@ public record MemberRecord(String name, Kind kind, String type, List<String> par
     }
 
     /**
+     * This member's parameter types alone, in order.
+     *
+     * <p>Derived rather than stored: a caller that wants the shape of a callable (a signature, an arity, a
+     * name that is unique by types) does not need the names or the annotations, and this model should not make
+     * it read four fields to ask one question. The row still carries the full parameter ({@link #parameters}),
+     * because a consumer that wires a bean needs the annotation that is on it.</p>
+     */
+    public List<String> parameterTypes() {
+        List<String> types = new java.util.ArrayList<>(parameters.size());
+        for (MemberParameter parameter : parameters) {
+            types.add(parameter.type());
+        }
+        return List.copyOf(types);
+    }
+
+    /**
      * How a generator names this member: its name, and for a callable its parameter types.
      *
      * <p>Present because the two questions a generator asks of a member list are "which fields are there" and
@@ -93,9 +111,9 @@ public record MemberRecord(String name, Kind kind, String type, List<String> par
      * return type: Java does not overload on it.</p>
      */
     public String signature() {
-        if (parameterTypes.isEmpty()) {
+        if (parameters.isEmpty()) {
             return name;
         }
-        return name + "(" + String.join(", ", parameterTypes) + ")";
+        return name + "(" + String.join(", ", parameterTypes()) + ")";
     }
 }

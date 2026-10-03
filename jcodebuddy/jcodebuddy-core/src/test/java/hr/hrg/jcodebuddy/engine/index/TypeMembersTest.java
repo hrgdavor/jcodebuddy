@@ -157,6 +157,51 @@ class TypeMembersTest {
     }
 
     @Test
+    void aFactoryParameterCarriesItsNameAndItsAnnotations(@TempDir Path tree) throws IOException {
+        String source = "package a.b;\n\n"
+                + "public interface CtxMainModule {\n"
+                + "    default ObjectMapper buildMapper(@Circular CtxMain ctx, String name) {\n"
+                + "        return null;\n"
+                + "    }\n"
+                + "    String accessor(String onlyType);\n"
+                + "}\n";
+        writeSource(tree, "a/b/CtxMainModule.java", source);
+        SourceReader.Read read = SourceReader.read(tree.resolve("module/a/b/CtxMainModule.java"));
+        Assertions.assertTrue(read.readable(), "the fixture must parse");
+
+        ClassIndex index = indexOf(tree);
+        index.addTypes("a/b/CtxMainModule.java", read.unit(), source, false);
+        List<MemberRecord> members = index.row("a.b.CtxMainModule").members();
+
+        MemberRecord factory = members.get(0);
+        Assertions.assertEquals(List.of("default"), factory.modifiers(),
+                "`default` is recorded, and that is what separates a factory from an accessor: before step"
+                        + " 3.0e both recorded an empty modifier list, so the index could not tell the two"
+                        + " apart — the distinction hipster-ioc's model is made of");
+        Assertions.assertEquals(List.of("CtxMain", "String"), factory.parameterTypes());
+        Assertions.assertEquals(List.of("ctx", "name"),
+                factory.parameters().stream().map(MemberParameter::name).toList(),
+                "parameter names are recorded: they are what a generator writes into the code it emits");
+        Assertions.assertTrue(factory.parameters().get(0).hasAnnotation("Circular"),
+                "@Circular is on the parameter, and it is what decides how that bean is wired");
+        Assertions.assertFalse(factory.parameters().get(1).hasAnnotation("Circular"),
+                "and a parameter without it says so rather than carrying an empty annotation");
+
+        Assertions.assertTrue(members.get(1).modifiers().isEmpty(),
+                "an interface accessor written without modifiers records none — the other half of the"
+                        + " discrimination");
+
+        index.write();
+        ClassIndex back = ClassIndex.read(index.indexFile(), tree.resolve("report"), tree.resolve("module"),
+                tree.resolve("module/src/main/java"));
+        Assertions.assertNotNull(back);
+        Assertions.assertTrue(back.row("a.b.CtxMainModule").members().get(0).parameters().get(0)
+                        .hasAnnotation("Circular"),
+                "and the parameter and its annotation survive the write and the read, which is the shape a"
+                        + " consumer actually receives");
+    }
+
+    @Test
     void aTableWrittenBeforeMembersExistedReadsAsNotRecorded(@TempDir Path tree) throws IOException {
         ClassIndex index = indexOf(tree);
         writeSource(tree, "a/b/WithMembers.java", "package a.b;\n\npublic class WithMembers {\n    int id;\n}\n");

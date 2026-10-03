@@ -4,6 +4,7 @@ import hr.hrg.jcodebuddy.engine.codegen.CodeContext;
 import hr.hrg.jcodebuddy.engine.codegen.CodeContextImpl;
 import hr.hrg.jcodebuddy.engine.codegen.CodeGenerator;
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.MemberParameter;
 import hr.hrg.jcodebuddy.engine.index.MemberRecord;
 import hr.hrg.jcodebuddy.engine.index.TypeFacts;
 import hr.hrg.jcodebuddy.engine.index.TypeRelation;
@@ -37,7 +38,8 @@ class IndexTypeResolverTest {
                 List.of(MemberRecord.field("id", "long", List.of("private", "final")),
                         MemberRecord.field("name", "String", List.of("private", "final")),
                         new MemberRecord("Person", MemberRecord.Kind.CONSTRUCTOR, "",
-                                List.of("long", "String"), List.of("public"), List.of())))), false);
+                                List.of(MemberParameter.of("long", "id"), MemberParameter.of("String", "name")),
+                                List.of("public"), List.of())))), false);
         index.addTypes("a/b/Outer.java", List.of(new TypeFacts("a.b.Outer", "class", List.of("public"), null,
                 3, 0, List.of(), List.of(), List.of(new MemberRecord("Inner", MemberRecord.Kind.NESTED,
                         "Inner", List.of(), List.of("static"), List.of())))), false);

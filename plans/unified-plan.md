@@ -1611,6 +1611,24 @@ index resolving nothing). The recorded gate follows in the same change.
 > rewrite nobody asked for. The conservative reading stays available — a byte-identical run is the strongest
 > evidence that a model swap changed nothing — and the step should say which of the two it did and why.
 
+**Measured 2026-10-03: this step's own Do was not yet possible, so it is two parts.** The Do says "replace the
+sibling lookup in `ContextReader` with metadata queries (the module interface, the factories and the relations
+all come from the index)". A probe of what a member row actually holds for an ioc shape — a
+`default ObjectMapper buildMapper(@Circular CtxMain ctx, String name)` beside a plain `String name();` — came
+back with three gaps:
+
+| what the model needs       | what the row held                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| factory vs accessor        | `modifiers=[]` for **both** — `default` was not in the vocabulary, so the two were indistinguishable |
+| parameter names            | absent, types only — and the emitted code writes the names                        |
+| `@Circular` on a parameter | absent — and it is what decides how a bean is wired                               |
+
+So **part one** is an engine change (DEC-029's 3.0e amendment: `default` joins the modifier vocabulary, and a
+parameter becomes `{ "type", "name", "annotations" }`), landed 2026-10-03 with the engine's 40 tests and the
+recorded gate. **Part two** is the rewrite this section describes. The split is recorded rather than hidden
+because the finding is the useful half: the plan had assumed an index that could answer factories, and nothing
+had checked.
+
 > **Under DEC-037 this is one consumer of 3.0j.** The generator becomes a reader of the engine like every
 > other consumer, which is the point of moving the engine first: hipster-ioc's own step should not have to
 > negotiate what the model is.
@@ -2566,7 +2584,7 @@ start)
 | 3.0b | Class relations (supertypes/interfaces + reverse) in the class index                  | agent              | M    | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
 | 3.0c | The cache: what is cached, and what invalidates it                                    | agent              | M    | `[x]` — closed as answered by 3.0g, which is where DEC-037 put it: one freshness contract instead of a cache per module, plus the mapping below |
 | 3.0d | One implementation of `TypeResolver` over the index                                   | agent              | M    | `[x]` — `IndexTypeResolver` projects a row (kind, fields with their types, relations) and answers `null` for an unknown name; the seam grew `kind` + `relations`, because a generator without them has to read the file |
-| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                          | agent              | M    | `[ ]` (shape-defining)                                                                      |
+| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                          | agent              | M    | `[ ]` (shape-defining) — **part one landed**: the index could not answer a factory (`default` vs abstract, parameter names, `@Circular`); the generator rewrite is what remains |
 | 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037)        | agent              | L    | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
 | 3.0g | Freshness: the watch loop, its events and its invalidation                            | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
 | 3.0h | Search: the queries every consumer asks                                               | agent              | M    | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
