@@ -1643,6 +1643,20 @@ implementation rather than re-classifying it (a project-wide generator is not a 
 label); keep `bun scripts/ioc-gen.js` as the entry point; update `hipster-ioc/hipster-ioc-tooling/README.md`, DEC-036
 § 11 and the ROADMAP's status block to say what the generator consumes and what it no longer does.
 
+**Part two needs two more model facts, and reading the generator is how they surfaced** (not a probe this time
+— both are statements the code and its records already make):
+
+| the model needs                          | what the engine has | why it is not enough                                                                 |
+| ---------------------------------------- | ------------------- | ------------------------------------------------------------------------------------ |
+| the `P` of a `ChildContext<P>` supertype | `TypeRelation.name`, and that record says *"the type argument is not part of the relation — it is source text, and this table's subject is names"* (`TypeFacts.withoutTypeArguments`) | `IocModel.Context.parentType` is what makes a child context emit its parent's accessors, so `<P>` is the fact rather than decoration: without it the generated child loses its parent |
+| the interface file's import lines        | nothing — `ClassRecord` carries `path`, `size`, `checksum`, `hashCalculatedAt`, the type facts, `relations`, `annotations` and `members`, and no imports | `ContextSource` re-emits the interface's imports *and its module interface's*, so the generated class names the same types. Two honest ways out: **record the file's imports** as a file-scoped fact (like the checksum, and always emitted for the same reason), or **emit fully-qualified names** in generated source instead of copying imports — a shape change, which the maintainer's answer above permits |
+
+Neither is a surprise about the engine's design; both are facts nobody had asked it for yet, and both are cheap
+where they belong — a relation field carrying the written text beside the name, and one file-scoped array. They
+are written down **before** the rewrite so that part two starts from a model that can answer, rather than from a
+generator that reads the two things its model cannot give it — which is the failure this whole sequence exists
+to prevent.
+
 **Gate:** `MODULE` for `hipster-ioc-tooling,hipster-ioc-test` green; the committed example still
 regenerates byte-identically; and a test proves the generator never reads a source file itself (the read
 seam is the metadata layer's).
