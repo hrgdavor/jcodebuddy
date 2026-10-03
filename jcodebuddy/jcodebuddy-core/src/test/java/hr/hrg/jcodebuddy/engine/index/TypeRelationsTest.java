@@ -151,10 +151,11 @@ class TypeRelationsTest {
         // A pre-3.0b table: the same table, with the field the writer now always emits taken back out.
         Path file = index.indexFile();
         String written = Files.readString(file, StandardCharsets.UTF_8);
-        Assertions.assertTrue(written.contains("\"relations\": [{ \"name\": \"CtxModule\", \"kind\": \"implements\" }]"),
+        String relation = ", \"relations\": [{ \"name\": \"CtxModule\", \"kind\": \"implements\","
+                + " \"text\": \"CtxModule\" }]";
+        Assertions.assertTrue(written.contains(relation),
                 "the writer always emits the field, so an older table is distinguishable from an empty one");
-        Files.writeString(file, written.replace(", \"relations\": [{ \"name\": \"CtxModule\", \"kind\": \"implements\" }]", ""),
-                StandardCharsets.UTF_8);
+        Files.writeString(file, written.replace(relation, ""), StandardCharsets.UTF_8);
 
         ClassIndex read = reread(index, tree);
 

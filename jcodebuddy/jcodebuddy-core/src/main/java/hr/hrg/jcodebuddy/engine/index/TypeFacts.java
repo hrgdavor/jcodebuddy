@@ -347,8 +347,11 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
             // Only the first name can come from an `extends` clause, and only when there is one; everything
             // after it came from `implements`, except on an interface, where the whole list is `extends`.
             boolean fromExtends = interfaceLike || (extendsClause && i == 0);
-            relations.add(new TypeRelation(withoutTypeArguments(names.get(i)),
-                    fromExtends ? TypeRelation.Kind.EXTENDS : TypeRelation.Kind.IMPLEMENTS));
+            // The text as written is recorded and the bare name is derived from it (DEC-040 D2): the arguments
+            // are what the compiler erases, and `ChildContext<AppContext>` is the fact a consumer needs.
+            String written = names.get(i);
+            relations.add(new TypeRelation(withoutTypeArguments(written),
+                    fromExtends ? TypeRelation.Kind.EXTENDS : TypeRelation.Kind.IMPLEMENTS, written));
         }
         return List.copyOf(relations);
     }

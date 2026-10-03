@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.engine.query;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.MemberParameter;
 import hr.hrg.jcodebuddy.engine.index.MemberRecord;
 import hr.hrg.jcodebuddy.engine.index.TypeFacts;
 import hr.hrg.jcodebuddy.engine.index.TypeRelation;
@@ -49,7 +50,11 @@ class MetadataQueryTest {
                 // from the index alone (the members test asserts the extraction).
                 List.of(MemberRecord.field("ctx", "CtxModule", List.of("private", "final")),
                         MemberRecord.field("count", "int", List.of("private")),
-                        new MemberRecord("AppModule", MemberRecord.Kind.CONSTRUCTOR, "", List.of(),
+                        // A parameterised declaration, which the model records as written (DEC-040) and which a
+                        // bare-name question must still find.
+                        MemberRecord.field("names", "List<String>", List.of("private")),
+                        new MemberRecord("AppModule", MemberRecord.Kind.CONSTRUCTOR, "", 
+                                List.of(MemberParameter.of("CtxModule", "ctx")),
                                 List.of("public"), List.of())))), false);
         return MetadataQuery.over(List.of(web, app));
     }
@@ -168,18 +173,43 @@ class MetadataQueryTest {
         // there is no such vocabulary left, and this asserts the members are answered from the model.
         MetadataQuery.MemberAnswer members = query.membersOf("c.d.AppModule");
         Assertions.assertTrue(members.isAnswered(), "the type is declared, so its members are answerable");
-        Assertions.assertEquals(List.of("ctx", "count", "AppModule"),
+        Assertions.assertEquals(List.of("ctx", "count", "names", "AppModule(CtxModule)"),
                 members.members().stream().map(MemberRecord::signature).toList(),
-                "fields and the constructor, in source order, from the index alone: " + members.describe());
-        Assertions.assertEquals(List.of("CtxModule", "int"),
+                "fields and the constructor, in source order, from the index alone — and a callable's signature"
+                        + " carries its parameter types, because Java overloads on them: " + members.describe());
+        Assertions.assertEquals(List.of("CtxModule", "int", "List<String>"),
                 query.membersOf("c.d.AppModule", MemberRecord.Kind.FIELD).members().stream()
                         .map(MemberRecord::type).toList(),
-                "and each field's type is the spelling the source used, which is what a generator given a"
-                        + " TypeDefinition needs (step 3.0d)");
+                "and each field's type is the spelling the source used — generic arguments included, which is"
+                        + " what a generator given a TypeDefinition needs (step 3.0d) and what DEC-040 requires"
+                        + " the model to keep");
 
         MetadataQuery.MemberAnswer unknown = query.membersOf("c.d.Ghost");
         Assertions.assertFalse(unknown.isAnswered(),
                 "a type declared nowhere is still a question without an answer rather than an empty member list");
         Assertions.assertTrue(unknown.describe().contains("cannot answer"), unknown.describe());
+    }
+
+    @Test
+    void aBareNameQuestionMatchesAParameterisedDeclaration(@TempDir Path tree) {
+        MetadataQuery query = twoModules(tree);
+
+        Assertions.assertEquals(List.of("names"),
+                query.membersTyped("List").stream().map(entry -> entry.member().name()).toList(),
+                "the model records `List<String>` because that is what the source says, and a caller asking"
+                        + " about `List` is asking about the type's name (DEC-040's acceptance criteria)");
+        Assertions.assertEquals(List.of("names"),
+                query.membersTyped("java.util.List").stream().map(entry -> entry.member().name()).toList(),
+                "and a qualified question finds the unqualified declaration by its last segment");
+        Assertions.assertEquals(List.of("c.d.AppModule"),
+                query.membersTyped("List").stream().map(MetadataQuery.MemberOnType::ownerFqn).toList(),
+                "the answer says which type declares the member, so a caller can act on it");
+        Assertions.assertEquals(List.of("ctx", "AppModule"),
+                query.membersTyped("CtxModule").stream().map(entry -> entry.member().name()).toList(),
+                "a field whose type is the name, and a constructor parameter of it, are both answers — 'who"
+                        + " names this type' has one answer for both");
+        Assertions.assertTrue(query.membersTyped("Set").isEmpty(),
+                "while an unrelated name still finds nothing: loose about arguments, not about names");
+        Assertions.assertTrue(query.membersTyped(" ").isEmpty(), "and an empty question is not a wildcard");
     }
 }

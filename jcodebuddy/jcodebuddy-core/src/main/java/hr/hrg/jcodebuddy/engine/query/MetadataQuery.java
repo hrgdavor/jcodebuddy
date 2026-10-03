@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.engine.query;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.MemberParameter;
 import hr.hrg.jcodebuddy.engine.index.MemberRecord;
 import hr.hrg.jcodebuddy.engine.index.TypeAnnotation;
 import hr.hrg.jcodebuddy.engine.index.TypeAnswer;
@@ -436,6 +437,91 @@ public final class MetadataQuery {
             return subject.fqn() + ": " + (isAnswered()
                     ? annotations.size() + " annotation(s) " + annotations.stream().map(TypeAnnotation::name).toList()
                     : "cannot answer — " + subject.describe()) + " [" + coverage + "]";
+        }
+    }
+
+    /**
+     * The members declared anywhere in the modules searched whose type answers {@code typeName}, with the type
+     * that declares each one.
+     *
+     * <p><strong>Matching is loose about type arguments, and the written text stays the fact</strong>
+     * (DEC-040's acceptance criteria). The model records {@code List<String>} because that is what the source
+     * says; a caller asking "who has a {@code List}" is asking about the type's name, and answering "nobody"
+     * because the declaration was parameterised would be the confident wrong answer this surface keeps out. So
+     * a written type matches when it equals the question, when their bare names are equal
+     * ({@code List<String>} vs {@code List}), or when a qualified question names it ({@code java.util.List} vs
+     * {@code List<String>}). A resolved form is still not invented: {@code List} does not answer a question
+     * about an unrelated {@code java.util.List} unless the spelling says so.</p>
+     *
+     * <p>A field and a method are both answered, because "who names this type" has one answer for both: a
+     * method's {@code type} is its return type, so the question is "who returns it".</p>
+     */
+    public List<MemberOnType> membersTyped(String typeName) {
+        List<MemberOnType> matches = new ArrayList<>();
+        if (typeName == null || typeName.isBlank()) {
+            return List.of();
+        }
+        for (ClassRecord row : byFqn.values()) {
+            for (MemberRecord member : row.members()) {
+                boolean matchesMember = typeMatches(member.type(), typeName);
+                if (!matchesMember) {
+                    for (MemberParameter parameter : member.parameters()) {
+                        if (typeMatches(parameter.type(), typeName)) {
+                            matchesMember = true;
+                            break;
+                        }
+                    }
+                }
+                if (matchesMember) {
+                    matches.add(new MemberOnType(row.fqn(), member));
+                }
+            }
+        }
+        return List.copyOf(matches);
+    }
+
+    /**
+     * Whether a type written in the source answers a question about {@code asked}, ignoring type arguments.
+     *
+     * <p>The rule, in one place so every query agrees: equal text, equal bare name, or a qualified question
+     * naming an unqualified declaration. It is deliberately <em>not</em> resolution — no imports, no index
+     * lookup, no guessing (DEC-040 D3).</p>
+     */
+    public static boolean typeMatches(String written, String asked) {
+        if (written == null || asked == null) {
+            return false;
+        }
+        String given = written.trim();
+        String question = asked.trim();
+        if (given.equals(question)) {
+            return true;
+        }
+        String givenBare = bareNameOf(given);
+        String questionBare = bareNameOf(question);
+        if (givenBare.equals(questionBare)) {
+            return true;
+        }
+        // A qualified question against an unqualified declaration: `java.util.List` vs `List<String>`, where
+        // the last segment is the whole of what a caller can fairly expect to match.
+        int lastDot = questionBare.lastIndexOf('.');
+        return lastDot > 0 && questionBare.substring(lastDot + 1).equals(lastSegmentOf(givenBare));
+    }
+
+    /** {@code Map<String,List<Long>>} → {@code Map}: balanced groups removed, exactly as the index does it. */
+    private static String bareNameOf(String typeText) {
+        return hr.hrg.jcodebuddy.engine.index.TypeFacts.withoutTypeArguments(typeText.trim());
+    }
+
+    private static String lastSegmentOf(String typeName) {
+        int lastDot = typeName.lastIndexOf('.');
+        return lastDot < 0 ? typeName : typeName.substring(lastDot + 1);
+    }
+
+    /** One member and the type that declares it — what {@link #membersTyped(String)} answers with. */
+    public record MemberOnType(String ownerFqn, MemberRecord member) {
+
+        public MemberOnType {
+            member = java.util.Objects.requireNonNull(member, "a member is required");
         }
     }
 

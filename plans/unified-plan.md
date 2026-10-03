@@ -1470,6 +1470,26 @@ mechanical form of D4, and it is the reason this step exists as a step rather th
 
 **Done when:** every fact D1 lists round-trips, and a consumer can ask for it without reading a file.
 
+**Part one landed 2026-10-03** — the three items that had a consumer *today* and were cheap enough to land with
+them:
+
+- **The relation's written text** (`TypeRelation.text` beside `name`, always emitted; the factories take the
+  written text and derive the bare name, so a caller cannot store a lossy relation — DEC-040 D2). This is the fix
+  DEC-040 turned from a design choice into a defect, and it unblocks 3.0e's parent plumbing.
+- **Loose matching for generics** (`MetadataQuery.membersTyped`, over one public rule,
+  `MetadataQuery.typeMatches`: equal text, equal bare name, or a qualified question against an unqualified
+  declaration). A bare `List` finds `List<String>`; an unrelated name still finds nothing, because loose about
+  arguments is not loose about names.
+- **The D4 contract test** (`IndexFormatContractTest`): it walks the **records** — `ClassRecord`,
+  `MemberRecord`, `MemberParameter`, `TypeRelation` — and asserts every component is emitted for an empty row,
+  with DEC-029 § 3's two documented omissions (`generated`, `enclosing`) listed explicitly so that a third has to
+  be argued for in a diff. A field added without deciding that question now fails the build.
+
+**What remains, in the order of who is waiting:** a sealed type's `permits` (a generator that must not emit a
+subclass), a callable's `throws` (a generator emitting a call that must declare it), enum constants (the entity
+work that reads them today), a field's initialiser and has-a-body, and the **imports sidecar** — the one that
+3.0e part two needs, and the one with a new artifact (`imports.json` beside `mtimes.json`).
+
 ### 3.0b — Class relations in the class index
 **Who:** agent · **Size:** M
 
@@ -2646,7 +2666,7 @@ start)
 | 3.0q | Merge what 3.0p found worth keeping, delete the rest                                  | agent              | M–L  | ` [ ] ` (content decided by 3.0p)                                                           |
 | 3.0r | The index grows members and annotations (DEC-029 format change)                       | agent              | M    | `[x]` — `members` always emitted, closed kind vocabulary, member types/modifiers/annotations; `NotCovered` deleted, so the last unanswerable question is answered |
 | 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace     | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
-| 3.0t | The model keeps what a consumer could ask (DEC-040)                                   | agent              | M    | `[ ]` — widened from erasure to "anything a consumer could ask": the relation's written text, `permits`, `throws`, enum constants, initialisers, has-a-body, an imports sidecar and loose generic matching |
+| 3.0t | The model keeps what a consumer could ask (DEC-040)                                   | agent              | M    | `[ ]` — **part one landed**: the relation's written text (D2's fix), loose generic matching, and the D4 contract test over the records; `permits`, `throws`, enum constants, initialisers, has-a-body and the imports sidecar remain |
 | 3.1  | The hipster-ioc ADR                                                                   | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
 | 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                  | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |
 | 3.3  | Make the hipster-ioc generator runnable and documented                                | agent              | M    | `[x]` (prototype)                                                                           |

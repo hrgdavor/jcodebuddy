@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -210,17 +212,43 @@ class ClassIndexTest {
     // ── the invariants ──────────────────────────────────────────────────────────────────────────────
 
     /** No row carries source content, in any spelling. */
+    /**
+     * No row carries source content, in any spelling — now stated as the rule it always meant, rather than as a
+     * list of words to avoid.
+     *
+     * <p>The original form forbade the literal {@code "text":} among other markers, as a proxy for "content".
+     * DEC-040 (2026-10-03) makes one kind of text a **fact the model must keep**: a relation's written form
+     * ({@code ChildContext<AppContext>}), a field's or a parameter's declared type. Those are *expressions*, not
+     * content — a name with its type arguments, no whitespace, no body — so the proxy had to give way to the
+     * rule it stood for. That rule is checked below in two ways, which is strictly stronger than the word list
+     * it replaces: the source-text markers are still refused, **and** no string value in the table may be longer
+     * than a written type can be, so content cannot arrive under a key nobody thought to forbid.</p>
+     */
     @Test
     void noRowCarriesContent() throws Exception {
         Path root = writeModule(Files.createTempDirectory("class-index-content"));
         written(root, null);
         String text = tableText(root);
 
-        for (String contentish : List.of("sourcesContent", "\"content\":", "\"text\":", "\"source\":",
-                "package a.b;", "interface Person", "record Record")) {
+        for (String contentish : List.of("sourcesContent", "\"content\":", "\"source\":",
+                "package a.b;", "interface Person", "record Record", "return name();")) {
             Assertions.assertFalse(text.contains(contentish),
                     "the table records a name, a hash and a size — never content; found " + contentish);
         }
+
+        // The general rule the word list was a proxy for: every string this table carries is a name, a path or
+        // a written type — none of them is a line of source. 120 characters is far above the longest honest
+        // value (a parameterised type) and far below a statement, a body or a file.
+        Matcher strings = Pattern.compile("\"([^\"]*)\"").matcher(text);
+        int checked = 0;
+        while (strings.find()) {
+            String value = strings.group(1);
+            checked++;
+            Assertions.assertTrue(value.length() <= 120,
+                    "a string in the table is " + value.length() + " characters, which is content rather than a"
+                            + " fact: " + value.substring(0, Math.min(140, value.length())));
+        }
+        Assertions.assertTrue(checked > 20, "the check must actually have looked at the table: " + checked);
     }
 
     /** Two passes over an unchanged tree are byte-identical; one edited byte moves exactly one row. */

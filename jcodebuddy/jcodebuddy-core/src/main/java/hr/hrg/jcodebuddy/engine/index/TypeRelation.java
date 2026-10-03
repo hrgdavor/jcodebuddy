@@ -16,20 +16,24 @@ import java.util.Locale;
  *       lookup compares that spelling. It follows that a simple name is matched as written — a consumer
  *       asking "who implements {@code a.b.CtxModule}" must ask in the same spelling the sources use, which is
  *       the gap search (3.0h) closes rather than something a row pretends to know.</li>
- *   <li><strong>Type arguments are not part of the relation.</strong> {@code extends Identifiable<Long>} is a
- *       relation to {@code Identifiable}; the argument is source text, and
- *       {@link hr.hrg.jcodebuddy.engine.source.TreeQueries#supertypeTexts} is the read for a caller that needs
- *       it. Keeping it here would put source text in a table whose whole point is names.</li>
+ *   <li><strong>Type arguments ARE part of the relation, and the bare name is derived from them.</strong>
+ *       {@code extends ChildContext<AppContext>} records the text it was written with, because type arguments
+ *       are exactly what the compiler erases — a model that dropped them would be no better positioned than
+ *       runtime code ([DEC-040](../../../../../../doc-hipster-entity/architecture/decisions/DEC-040.md), D1 and
+ *       D2). What a <em>match</em> wants is the bare name ({@code ChildContext}), so {@link #name()} is that
+ *       form, derived from the text and never the reverse: the text is the guaranteed fact, and a name-only
+ *       table (written before this field existed) reads as text == name rather than pretending to more.</li>
  *   <li><strong>The clause is kept, because an interface's {@code extends} is not an {@code implements}.</strong>
  *       The LST holds an interface's {@code extends} clause in {@code getImplements()} — the trap DEC-030
  *       records — so this kind is what stops a relation diagram from drawing an {@code implements} edge from a
  *       declaration that cannot have one.</li>
  * </ul>
  *
- * @param name the supertype's name as written in the declaration, without type arguments
+ * @param name the supertype's name for matching — the text without its type arguments
  * @param kind whether the name came from an {@code extends} or an {@code implements} clause
+ * @param text the supertype as the source wrote it, type arguments included — the fact this record exists for
  */
-public record TypeRelation(String name, Kind kind) {
+public record TypeRelation(String name, Kind kind, String text) {
 
     /** Which clause the name came from. */
     public enum Kind {
@@ -64,15 +68,28 @@ public record TypeRelation(String name, Kind kind) {
     public TypeRelation {
         name = name == null ? "" : name;
         kind = kind == null ? Kind.EXTENDS : kind;
+        // A relation with no text is one a caller built from a name alone (and a table written before the
+        // field existed reads exactly that way): the name is then all the source is known to have said.
+        text = text == null || text.isEmpty() ? name : text;
     }
 
-    /** An {@code extends} relation. */
-    public static TypeRelation extendsType(String name) {
-        return new TypeRelation(name, Kind.EXTENDS);
+    /** The two-part form: a caller that has no separate text — the name is all the source said. */
+    public TypeRelation(String name, Kind kind) {
+        this(name, kind, name);
     }
 
-    /** An {@code implements} relation. */
-    public static TypeRelation implementsType(String name) {
-        return new TypeRelation(name, Kind.IMPLEMENTS);
+    /**
+     * An {@code extends} relation, from the text as written.
+     *
+     * <p>The bare name is derived here rather than passed, which is DEC-040's D2 in one line: the text is the
+     * fact, the name is what a match wants, and a caller cannot accidentally store one without the other.</p>
+     */
+    public static TypeRelation extendsType(String writtenText) {
+        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.EXTENDS, writtenText);
+    }
+
+    /** An {@code implements} relation, from the text as written — see {@link #extendsType(String)}. */
+    public static TypeRelation implementsType(String writtenText) {
+        return new TypeRelation(TypeFacts.withoutTypeArguments(writtenText), Kind.IMPLEMENTS, writtenText);
     }
 }
