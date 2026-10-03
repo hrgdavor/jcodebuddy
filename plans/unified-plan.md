@@ -528,8 +528,9 @@ answer — is written into DEC-W009's implementation note.
 > fresh and fires events are **one library in `jcodebuddy-core`**, and every other module is a consumer or a
 > transport — `jcodebuddy-codegen-api` dissolves into it. So 3.0f–3.0k precede nothing in this phase but are
 > the reason 3.0b–3.0e are worth doing once, in the right place: build the engine, then move consumers onto it
-> rather than each consumer growing its own path. DEC-037 is `Proposed` until its three open points are
-> settled by 3.0a.
+> rather than each consumer growing its own path. DEC-037 is `Accepted` (2026-10-02; 3.0a settled its three open
+> points, and DEC-038 records the two answers it needed) — this sentence said `Proposed` until 2026-10-03, which
+> was the plan contradicting the record next to it.
 >
 > The step numbers `3.0a`–`3.0k` say *before 3.1* deliberately: this plan renumbers nothing, and these
 > steps must land before the consumer ones to be worth anything.
@@ -1505,6 +1506,25 @@ and the rows that named it (or marks them unresolved, whichever the decision say
 
 **Done when:** "is this index safe to generate from?" has a mechanical answer.
 
+**Closed 2026-10-03, as answered by 3.0g — with the mapping written down rather than assumed.** This step's
+four questions went to the freshness contract, and each has an answer there:
+
+| this step asked                                | where it is answered                                                                          |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| what is cached, and where                      | the class index itself (`engine.index`, DEC-029/DEC-026) plus the engine's freshness rows — 3.0g, `engine.fresh` |
+| which invalidation rule applies to a file edit | the file's checksum against its row (`ContentHash`, DEC-029 § 4): an edit makes the row stale |
+| a rename, a delete, a new file                 | the host reports the change and the engine answers `SAFE` / `STALE` / `UNKNOWN` for the row it holds; a deleted file's row is stale, and a new file has no row (an answer, not a silence) |
+| what a *partial* cache means                   | `Freshness`'s whole point: a stale index is **detectable** before a generator reads it — the failure this step exists to prevent |
+
+The one question that is **not** answered by a checksum — "editing `B` makes `A`'s row stale because `A` extends
+`B`" — is a relation-edge invalidation, and 3.0g's contract deliberately does not guess it: it marks a row stale
+from the file that declares it and reports `UNKNOWN` for what it cannot know, rather than claiming a freshness
+it has not verified. Whether the engine should follow relation edges to widen that answer is a real question
+with a real cost (it makes invalidation transitive, and a generator would then be waiting on a graph walk), and
+nothing needs it yet: the relations are carried in the row (3.0b) so the query can answer "what implements X"
+from the table, and a caller that must be certain asks the freshness contract first. Recorded here as the
+**open half** of this step rather than closed with it.
+
 ### 3.0d — One implementation of `TypeResolver` over the index
 **Who:** agent · **Size:** M
 
@@ -1526,6 +1546,38 @@ without being handed a file at all*, which is the property the whole phase is ab
 
 **Done when:** a generator can be written as a function of the project model plus its own inputs, with no
 file parsing of its own.
+
+**Done 2026-10-03.** `IndexTypeResolver` (`engine.query`) is the implementation: a projection of a row, reading
+**the model and nothing else** — no file opened, no source parsed, no classpath consulted. It runs on 3.0r's
+members, which is why the order above was 3.0r → 3.0d: the resolver could not have answered honestly before the
+index carried a field's type, and the fallback the plan allowed ("sources only when the index cannot answer")
+would have been a parse this step then had to keep.
+
+**The seam grew two fields, and both are the gate's own argument.** `TypeDefinition` now carries `kind` and
+`relations` beside its fields. Its javadoc already sanctioned the relations ("growing this seam over the index
+— relations included — is plan step 3.0d"); `kind` came from the same test: a generator that cannot tell a
+`record` from a `class`, or cannot see what a type implements, has to open the file to find out — the parse
+this seam exists to make unnecessary. Both are snapshots of one type, and nothing in the record can reach
+further, which is the property its javadoc protects.
+
+**What it refuses, stated rather than discovered.** An unknown name answers `null` and never an empty
+definition (the interface's contract, and the reason the test asserts a generator *throws* rather than emits a
+fieldless constructor). A JDK type has no row here unless the modules searched index it, so `java.lang.String`
+answers `null` too — reported as it is, because inventing a definition for anything with a dot in it is the
+confident wrong answer this boundary exists to prevent. And a name is not resolved to an FQN: a row records the
+spelling the source used (3.0h's rule), so the resolver answers for a name that *is* an FQN in the index.
+
+**The nested-type package trap, found by writing the test.** `knownPackages()` cannot be "the FQN without its
+last segment": `a.b.Outer.Inner` would then report `a.b.Outer` as a package, and offer it to a generator as a
+place to put a class. The index already knows better — a member type's row names its enclosing type — so the
+package is the enclosing type's package, however many segments follow. A table whose enclosing chain is broken
+or cyclic answers with no package rather than a guess or a stack overflow.
+
+**Evidence:** `-pl :jcodebuddy-core clean test` → **BUILD SUCCESS, 39 tests** (was 34;
+`IndexTypeResolverTest` adds five: the generator test the gate names — a copy-constructor generator run from a
+context whose directory does not exist, asserted not to exist; the unknown name answering `null` with the
+generator refusing loudly; the kind and relations carried; `knownPackages()` for a member type; and an empty
+index resolving nothing). The recorded gate follows in the same change.
 
 ### 3.0e — Move hipster-ioc onto the metadata contract
 **Who:** agent · **Size:** M · *(shape-defining)*
@@ -2483,8 +2535,8 @@ start)
 | 2.3  | Decision-grade arena run + the backend decision                                       | agent              | S    | `[x]`                                                                                       |
 | 3.0a | Settle the engine decision's open points (DEC-037, ADR first)                         | agent + maintainer | S–M  | `[x]` — DEC-037 `Accepted`, DEC-038 created                                                 |
 | 3.0b | Class relations (supertypes/interfaces + reverse) in the class index                  | agent              | M    | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
-| 3.0c | The cache: what is cached, and what invalidates it                                    | agent              | M    | `[ ]`                                                                                       |
-| 3.0d | One implementation of `TypeResolver` over the index                                   | agent              | M    | `[ ]`                                                                                       |
+| 3.0c | The cache: what is cached, and what invalidates it                                    | agent              | M    | `[x]` — closed as answered by 3.0g, which is where DEC-037 put it: one freshness contract instead of a cache per module, plus the mapping below |
+| 3.0d | One implementation of `TypeResolver` over the index                                   | agent              | M    | `[x]` — `IndexTypeResolver` projects a row (kind, fields with their types, relations) and answers `null` for an unknown name; the seam grew `kind` + `relations`, because a generator without them has to read the file |
 | 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                          | agent              | M    | `[ ]` (shape-defining)                                                                      |
 | 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037)        | agent              | L    | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
 | 3.0g | Freshness: the watch loop, its events and its invalidation                            | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
