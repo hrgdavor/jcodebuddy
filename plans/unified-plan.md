@@ -488,7 +488,8 @@ answer — is written into DEC-W009's implementation note.
 > **Extracting metadata is not hipster-ioc's job.** hipster-ioc *consumes* metadata to produce IoC code.
 > Extraction, caching and indexing belong to the metadata side, and since 2026-10-02 that side is **one
 > engine in `jcodebuddy-core`** ([DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md)) rather
-> than the four modules that hold the pieces today: [`metadata-server`](../jcodebuddy/metadata-server)'s providers and
+> than the four modules that hold the pieces today: [`jcodebuddy-meta`](../jcodebuddy/jcodebuddy-meta) (the
+> module 3.0m renamed from `metadata-server`)'s providers and
 > RPC/MCP surfaces, the **class index** (`hipster-entity-tooling`'s `ClassIndex`/`ClassRecord`, DEC-029) with
 > per-file checksums (`ContentHash`), [`metadata-arena`](../jcodebuddy/metadata-arena) for index storage, and
 > `java-watch-core` for the watch loop. What is missing is the **engine and its contract** — steps 3.0a–3.0k
@@ -1079,6 +1080,34 @@ and its tests pass, no `import hr.hrg.watch2.server.metadata` remains anywhere, 
 green under the new coordinates.
 
 **Done when:** the family's names say what the modules are, and nothing has changed but names.
+
+**Done 2026-10-03.** `jcodebuddy-meta` and `jcodebuddy-meta-mcp`, package `hr.hrg.jcodebuddy.meta.*`. The
+rename is the directory, the two `artifactId`s, the two `<name>`s and the package — **no class, no method and
+no wire shape moved**, so DEC-W006–W009 still describe the module exactly, and re-pointing the providers at
+the engine remains 3.0j's work.
+
+**The plan's Do named two consumers that do not exist.** It lists `webview/jwa-sidecar` and
+`java-watch-agent` among the ones to update "POMs and imports"; neither imports the package nor declares the
+dependency — they consume metadata over the protocol, not over the Java package. The real consumers are
+`project-automation` (6 files) and `jcodebuddy-meta-mcp`. Recorded in DEC-038's 3.0m note as well, because a
+rename is exactly when a wrong consumer list wastes an afternoon.
+
+**A third thing the rename measured, and it is about this repository's own rules rather than the module.**
+`MigrationCompletenessTest` — the sweep built at 3.0s to stop a rename from silently dropping sources — failed
+on the first full run with *"these names are not reactor modules, so the sweep silently skipped their sources:
+[metadata-server]"*. It was right: the sweep's module list is a list of **artifactIds**, and the rename
+invalidated one of them. Fixed in the same change, so the check did its job rather than needing to be
+remembered.
+
+**And one about evidence hygiene.** The first `test` run after the move reported every test class twice — once
+under the old package, once under the new — because `target/test-classes` still held the previous revision's
+`.class` files. A `clean` run reports 15 and 8. That is F-47's trap appearing by itself: a rename is a
+reliable detector for stale output, and a `test`-only verification is not evidence of a moved module.
+
+**Evidence:** `-pl :jcodebuddy-meta,:jcodebuddy-meta-mcp clean test` → **BUILD SUCCESS**, 23 tests (15 + 8);
+`-pl :project-automation -am test` → **BUILD SUCCESS** (the consumer chain, including the sweep above);
+`no Java source or POM names hr.hrg.watch2.server.metadata any more`, asserted by the migration script;
+`LINKS` green.
 
 ### 3.0n — Absorb `jwa-builder*` and collapse the duplicate splice path
 **Who:** agent · **Size:** L
@@ -2435,7 +2464,7 @@ start)
 | 3.0j | Move the remaining consumers onto the engine                                          | agent              | L    | `[ ]` — measured first: the renderers and the sidecar have no private path, so it is `metadata-server` + 3.0d + 3.0n |
 | 3.0k | Grow the recorded gate to cover the engine's contract                                 | agent              | S    | `[ ]`                                                                                       |
 | 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                            | agent              | S    | `[x]` — `jcodebuddy-generated`: three types, no compile dependency, package unchanged (no import churn); named in `GATE_MODULES` so its 49 tests keep running |
-| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                 | agent              | M    | `[ ]`                                                                                       |
+| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                 | agent              | M    | `[x]` — also the package (`hr.hrg.jcodebuddy.meta.*`) and the MCP sibling; no class, method or wire shape moved; the sweep's module list caught the stale name |
 | 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038)                | agent              | L    | `[ ]`                                                                                       |
 | 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
 | 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent              | M    | `[ ]`                                                                                       |

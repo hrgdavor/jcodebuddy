@@ -27,7 +27,7 @@ mvn -o -pl project-automation -am test \
 **11 tests, and this command is the verification** — do not use
 `mvn -o -pl project-automation -am test` without `-Dtest=`, because that
 reactor run fails for a reason that has nothing to do with this module:
-`metadata-server`'s `MetadataServerTest.httpForyRoundTrip` gets an HTTP 500
+`jcodebuddy-meta`'s `MetadataServerTest.httpForyRoundTrip` gets an HTTP 500
 from `http://localhost:18510/api/fory`. That module belongs to the
 metadata/HTTP subsystem and is outside the six-module entity gate, so the
 failure is pre-existing and unowned here (notes F-48). The consequence

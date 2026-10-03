@@ -119,7 +119,7 @@ arena beyond the 2 GiB a `ByteBuffer` can address.
 
 ## Position in JCodeBuddy
 
-`metadata-arena` is a foundational library within the JCodeBuddy project. It is currently a standalone module under active development, intended to serve as the storage layer for the `metadata-server` and `metadata-mcp-server` modules. Unlike the higher-level metadata modules (which handle JSON-RPC transport and MCP tool integration), `metadata-arena` focuses purely on memory management and compact index structures.
+`metadata-arena` is a foundational library within the JCodeBuddy project. It is currently a standalone module under active development, intended to serve as the storage layer for the `jcodebuddy-meta` and `jcodebuddy-meta-mcp` modules (they were `metadata-server` and `metadata-mcp-server` before step 3.0m). Unlike the higher-level metadata modules (which handle JSON-RPC transport and MCP tool integration), `metadata-arena` focuses purely on memory management and compact index structures.
 
 ## Building
 

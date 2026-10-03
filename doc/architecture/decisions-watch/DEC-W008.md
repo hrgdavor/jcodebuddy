@@ -7,6 +7,11 @@
 - Supersedes: -
 - Superseded by: -
 
+> **RENAMED 2026-10-03 (plan step 3.0m).** The module this record calls `metadata-server` is now
+> **`jcodebuddy-meta`** — directory, artifactId, `<name>` and package (`hr.hrg.jcodebuddy.meta.*`) — and its
+> MCP sibling is `jcodebuddy-meta-mcp`. Nothing about the behaviour below changed: the serving shapes and the
+> transports are this record's. The body keeps the name the module had when it was written.
+
 > **IMPLEMENTATION STATUS (2026-10-01) — the P0 half is implemented; four points of the text below were
 > wrong and are corrected here.**
 >

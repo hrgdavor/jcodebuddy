@@ -93,8 +93,8 @@
         <module>hipster-ioc/hipster-ioc-api</module>
         <module>hipster-ioc/hipster-ioc-tooling</module>
         <module>hipster-ioc/hipster-ioc-test</module>
-        <module>jcodebuddy/metadata-server</module>
-        <module>jcodebuddy/metadata-mcp-server</module>
+        <module>jcodebuddy/jcodebuddy-meta</module>
+        <module>jcodebuddy/jcodebuddy-meta-mcp</module>
         <module>jcodebuddy/metadata-arena</module>
         <module>merge-java</module>
     </modules>
@@ -399,17 +399,17 @@
                 <artifactId>hipster-ioc-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <!-- Referenced versionless by project-automation and metadata-mcp-server.
+            <!-- Referenced versionless by project-automation and jcodebuddy-meta-mcp (both were `metadata-*` before step 3.0m).
                  Without these entries Maven 3.9 fails POM validation before compiling
                  anything; Maven 4 resolves versionless reactor dependencies itself. -->
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
-                <artifactId>metadata-server</artifactId>
+                <artifactId>jcodebuddy-meta</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
-                <artifactId>metadata-mcp-server</artifactId>
+                <artifactId>jcodebuddy-meta-mcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -70,7 +70,7 @@ nothing else. A pass is started by a person or a script — § 3 is how.
 - `--mapper Src:Tgt` — no view-to-view mapper is requested;
 - the `validate`, `enum-order` and `enum-compact` subcommands — available, run by hand (see [`../hipster-entity/hipster-entity-tooling/README.md`](../../hipster-entity/hipster-entity-tooling/README.md)), not part of this module's build;
 - an IDE **sidecar / LSP** — optional user-friendliness on top of watch mode, not required for any part of this module's generation, and not wired up here;
-- `project-automation`'s `MetadataAnalysisRunner` / metadata server / MCP server — a different subsystem (`metadata-server`, `metadata-mcp-server`), unrelated to entity generation;
+- `project-automation`'s `MetadataAnalysisRunner` / metadata server / MCP server — a different subsystem (`jcodebuddy-meta`, `jcodebuddy-meta-mcp`; they were `metadata-server` and `metadata-mcp-server` before step 3.0m), unrelated to entity generation;
 - `hipster-ioc` tooling — a different generator family.
 
 The hand-written consumers worth looking at, which exercise the generated API:

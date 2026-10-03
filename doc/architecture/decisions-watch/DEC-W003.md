@@ -4,6 +4,8 @@
 - Date: 2026-07-24
 - Updated: 2026-09-26 — corrected to the tree, and extended with the *publishing* half of the rule.
 - Updated: 2026-10-03 — the SPI's module dissolved into the engine (step 3.0i); see the amendment.
+- Updated: 2026-10-03 — `metadata-server` and `metadata-mcp-server` are renamed `jcodebuddy-meta` and
+  `jcodebuddy-meta-mcp` (step 3.0m). The body names them as they were when written.
 - Owners: project
 - Related docs: [Module map](../module-map.md), [AGENTS.md § 1.1](../../../AGENTS.md)
 - Supersedes: -

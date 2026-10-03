@@ -27,8 +27,8 @@ jcodebuddy-parent (POM)
 │   ├── jcodebuddy-watch-tools
 │   ├── jwa-builder
 │   ├── jwa-builder-api
-│   ├── metadata-server
-│   ├── metadata-mcp-server
+│   ├── jcodebuddy-meta        metadata serving: JSON-RPC and Fory over HTTP and Unix sockets (was `metadata-server`)
+│   ├── jcodebuddy-meta-mcp    the MCP tool surface over it (was `metadata-mcp-server`)
 │   └── metadata-arena
 │
 ├── hipster-ioc/               the IoC product; its own `doc/` stays at the group root
@@ -57,6 +57,7 @@ The following modules have **no dependency** on any other JCodeBuddy module:
 | `java-watch-core`      | File monitoring, hashing, change detection |
 | `jwa-builder-api`      | Lightweight annotations for JWA Builder    |
 | `jcodebuddy-generated` | DEC-035's marker vocabulary and the parser that reads it: three types, no compile dependency at all, so a tool that only wants to know where generated code stops resolves neither OpenRewrite nor Jackson (step 3.0l) |
+| `jcodebuddy-meta`      | DEC-W006–W009's metadata serving: cache access over JSON-RPC and Apache Fory, on HTTP and Unix sockets. Declares slf4j, Jackson and Fory, and **no workspace artifact** — step 3.0m renamed it from `metadata-server` without changing what it depends on |
 | `webview-core`         | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
 
 `project-automation` used to be listed here and does not belong: it depends on Layer 2 modules, so it was
@@ -93,6 +94,7 @@ These modules depend on Layer 1 and/or Layer 2, or are applications built from t
 | `jwa-sidecar`            | `java-watch-core`, `jwa-builder-api`, `jwa-builder`                                                |
 | `jcodebuddy-agent`       | `java-watch-core`, `jwa-builder-api`, `jwa-builder`, `jackson-databind`, `slf4j` (it was `java-watch-agent`, and it left `watch/` at step 3.0s) |
 | `jcodebuddy-watch-tools` | `jcodebuddy-agent`, `java-watch-core`, `jwa-builder`, `jwa-builder-api`, `slf4j`                   |
+| `jcodebuddy-meta-mcp`    | `jcodebuddy-meta` and the `mcp` library — the MCP tool surface over the metadata server (was `metadata-mcp-server`; step 3.0m) |
 | `hipster-ioc-tooling`    | `hipster-ioc-api`, `hipster-entity-tooling`, `java-watch-core`, `jcodebuddy-core`                  |
 | `merge-java`             | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
 | `webviewd`               | `webview-core` — the reference host of the webview contract, and the only one that needs no editor |

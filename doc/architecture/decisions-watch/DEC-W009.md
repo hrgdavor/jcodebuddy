@@ -7,6 +7,11 @@
 - Supersedes: -
 - Superseded by: -
 
+> **RENAMED 2026-10-03 (plan step 3.0m).** The module this record calls `metadata-server` is now
+> **`jcodebuddy-meta`** — directory, artifactId, `<name>` and package (`hr.hrg.jcodebuddy.meta.*`). Nothing
+> else changed, so the storage decision below still applies to it unchanged; the body keeps the name the
+> module had when it was written.
+
 ## Context
 
 The metadata cache (DEC-W006) stores per-file `CacheEntry` records keyed by wayhash. Each entry contains `SourceMetadata` derived exclusively from the file's own source bytes. However, consumers such as the RPC dispatcher, annotation collectors, and cross-module reference trackers need to efficiently answer questions that span multiple files:

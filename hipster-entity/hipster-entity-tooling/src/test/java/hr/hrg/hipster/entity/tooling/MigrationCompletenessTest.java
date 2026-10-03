@@ -56,7 +56,7 @@ class MigrationCompletenessTest {
             "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling", "hipster-entity-jackson",
             "hipster-entity-test", "hipster-entity-example", "project-automation", "merge-java",
             "jwa-builder", "jwa-builder-api", "jwa-sidecar", "webview-eclipse", "jcodebuddy-agent",
-            "java-watch-core", "metadata-arena", "metadata-server", "hipster-ioc-api");
+            "java-watch-core", "metadata-arena", "jcodebuddy-meta", "hipster-ioc-api");
 
     private static List<Path> committedSources() {
         Path root = CompileHarness.findRepoRoot();

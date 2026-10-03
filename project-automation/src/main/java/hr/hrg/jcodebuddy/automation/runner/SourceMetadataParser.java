@@ -4,7 +4,7 @@ import hr.hrg.hipster.entity.tooling.MetadataLocations;
 import hr.hrg.jcodebuddy.engine.source.SourceReader;
 import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import hr.hrg.jcodebuddy.engine.index.ContentHash;
-import hr.hrg.watch2.server.metadata.MetadataProvider;
+import hr.hrg.jcodebuddy.meta.MetadataProvider;
 import org.openrewrite.java.tree.J;
 
 import java.nio.charset.StandardCharsets;

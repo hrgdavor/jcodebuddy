@@ -1,6 +1,6 @@
 package hr.hrg.jcodebuddy.automation.runner;
 
-import hr.hrg.watch2.server.metadata.MetadataProvider;
+import hr.hrg.jcodebuddy.meta.MetadataProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

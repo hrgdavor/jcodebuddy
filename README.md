@@ -143,7 +143,7 @@ with the quoted forms in the message), because that is what a property split by 
 That is deliberate: the fragments used to be forwarded as malformed arguments, Maven then dropped the
 `-pl` list, and the "gate" silently became a build of the whole 29-module reactor — it was 23 modules when that
 incident was recorded — so a failure in an
-unrelated module (`java-watch-scp`, `metadata-server`) looked like a failure of the recorded gate.
+unrelated module (`java-watch-scp`, `metadata-server` — `jcodebuddy-meta` since step 3.0m) looked like a failure of the recorded gate.
 Quote **every** property you pass through the shortcut, including boolean ones
 (`"-DskipTests=true"`), or invoke Maven directly with the same `-pl` list.
 

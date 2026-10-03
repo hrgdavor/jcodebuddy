@@ -1,8 +1,8 @@
 package hr.hrg.jcodebuddy.automation.runner;
 
-import hr.hrg.watch2.server.metadata.MetadataProvider;
-import hr.hrg.watch2.server.metadata.MetadataServer;
-import hr.hrg.watch2.server.metadata.mcp.MetadataMcpServer;
+import hr.hrg.jcodebuddy.meta.MetadataProvider;
+import hr.hrg.jcodebuddy.meta.MetadataServer;
+import hr.hrg.jcodebuddy.meta.mcp.MetadataMcpServer;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
