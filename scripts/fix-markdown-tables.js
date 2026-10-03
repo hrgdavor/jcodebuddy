@@ -54,9 +54,13 @@
  *
  * Run `--check` after a sweep and it must report nothing; that is how idempotence is checked.
  *
- * The tool must be on `PATH`: it is a user-provided program, and a missing `md-fix-tables` is reported with the
- * fix to apply rather than as a stack trace — the same shape `scripts/lib/toolchain.js` uses for a JDK that is
- * not JDK 25.
+ * A MISSING TOOL IS NOT A SHOW-STOPPER, which is what AGENTS.md § 2 asks: this is one developer's tool on one
+ * developer's machine, so its absence is far more likely to be a non-issue than a problem to solve. The script
+ * therefore prints one line saying no table was checked, points at the one command that would fix it, and exits
+ * 2 — deliberately not 0, because a check that never ran must not read as "the tree is aligned" to whatever
+ * called it. It does not install anything, does not reach for another formatter, and does not stop any other
+ * work: the documents are valid Markdown either way, and hand-aligning is what produced the scar this
+ * repository already carries.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -97,13 +101,15 @@ const command = override.length > 0 ? override[0] : findTool();
 const commandArgs = override.slice(1);
 
 if (command === null || command === undefined) {
-    console.error('md-fix-tables is not on PATH.\n\n'
-        + 'It is the tool AGENTS.md Section 2 requires for Markdown tables: one argument, the path to a .md '
-        + 'file, edited in place.\n'
-        + 'Install it and put it on PATH for the user running the agent — hand-aligning is not the same thing, '
-        + 'and this repository has the scar: one row\'s escaped \\| had padding inserted inside the escape, '
-        + 'which silently added a column.\n'
-        + '(`JCODEBUDDY_MD_FIX_TABLES` overrides the command, for checking a specific build.)');
+    console.error('md-fix-tables is not on PATH, so no table was checked or re-aligned.\n\n'
+        + 'This is NOT a failure of your task. Say in your output that the tables were left unaligned because '
+        + 'the tool is missing, and carry on: the documents are still valid Markdown at any padding, and '
+        + 'hand-aligning is not the substitute — this repository has the scar, a row whose escaped \\| had '
+        + 'padding inserted inside the escape, which silently added a column.\n'
+        + 'The tool takes one argument, the path to a .md file, and edits it in place; AGENTS.md Section 2 is '
+        + 'what asks for it. Install it and put it on PATH, or point this script at a build with '
+        + 'JCODEBUDDY_MD_FIX_TABLES.\n'
+        + 'Exiting 2 rather than 0 only so that a check which never ran is not mistaken for an aligned tree.');
     process.exit(2);
 }
 

@@ -507,26 +507,32 @@ canonical statement of a boundary that has no other home.
     be runnable and reviewable by whoever reads the repository next,
     on whatever machine they have. A script that only runs in one
     shell on one OS is invisible wiring for the *workflow*.
-- **Markdown tables are normalised with `md-fix-tables`, which must be on `PATH`.** After writing or editing a
-  Markdown document, run the tool once for each file that changed:
+- **Markdown tables are normalised with `md-fix-tables` — run it where it is, and say so where it is not.**
+  After writing or editing a Markdown document, run the tool once for each file that changed:
 
   `md-fix-tables path/to/document.md`
 
   It takes **exactly one argument** — the path to a `.md` file — and **edits that file in place**. There is no
   dry run and nothing on stdout to read, so a document you care about goes through `git diff` like any other
   edit. What it does is pad every cell to its column's width, so a table is readable **in the Markdown source**
-  and not only when rendered — which is what a reviewer (human or agent) reading a diff actually sees. The
-  requirement is that whoever runs the agent has the tool installed and on `PATH`, and **a missing
-  `md-fix-tables` is reported rather than worked around**: hand-aligning is not the same thing, and this
-  repository has the scar to prove it — one row's escaped `\|` had padding inserted *inside* the escape, which
-  silently added a column to the table.
+  and not only when rendered — which is what a reviewer (human or agent) reading a diff actually sees.
+
+  **A missing `md-fix-tables` is not a show-stopper.** This is one developer's tool on one developer's machine,
+  so its absence is far more likely to be a non-issue than a problem to solve. **Do not stop the work, do not
+  install anything unasked, and do not reach for another formatter**: write the document, **say in your output
+  that the tables were left unaligned because the tool was missing**, and carry on. Two things remain true
+  while it is absent: the document is still correct — a Markdown table is valid at any padding — and
+  **hand-aligning is not the substitute**. This repository has the scar for that one: a row's escaped `\|` had
+  padding inserted *inside* the escape, which silently added a column to the table.
 
   **For anything more than a file or two, use the sweep: `bun scripts/fix-markdown-tables.js`** (add `--check`
   to see what it would do, and to prove a run is idempotent). It invokes the tool **once per tracked Markdown
   file** and then **proves the run was table formatting and nothing else**: every changed line must be a table
   row, every row's cells must be unchanged, fenced lines must be untouched, and each line must come back with
   its own ending (133 tracked documents are checked out CRLF, 128 LF, two mixed). A file that fails the check is
-  left untouched and named. Same rule, with the checking a sweep needs and a single document does not.
+  left untouched and named. Same rule, with the checking a sweep needs and a single document does not — and if
+  the tool is missing it prints that and exits 2, which is the same "say so and carry on" rule with a non-zero
+  code, so a check that never ran is never mistaken for an aligned tree.
 
   Five things it must not do, and the reason the sweep checks rather than trusts — **four were found by running
   it over this repository on 2026-10-03 and fixed in the tool's 1.1.0, the fifth in 1.2.0**:
