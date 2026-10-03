@@ -16,9 +16,10 @@ import java.util.List;
  *
  * <p>Since 2026-10-03 (step 3.0i, DEC-037 decision 2) this type lives in the engine, next to the model it
  * describes, because that is the only place an implementation can be written — the class index it must read
- * is the engine's. Nothing implements it but {@link #empty()} today: plan step 3.0d is that implementation,
- * and the engine's own query surface in the meantime is {@link MetadataQuery}, which is richer and is what a
- * consumer should ask first.
+ * is the engine's. {@link IndexTypeResolver} is that implementation (step 3.0d): a projection of the index, so
+ * a generator is handed its types rather than reading files for them. This interface stays an interface
+ * because the answer differs by environment — a watch agent answers from the editor's model, a test from a
+ * map — and because the engine's own answer is not always the one a caller wants.
  */
 public interface TypeResolver {
 
