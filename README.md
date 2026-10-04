@@ -63,15 +63,19 @@ The reactor requires **JDK 25** on *both* the Maven JVM and the forked test JVM 
 `maven.compiler.release=25`, and `.mvn/jvm.config` cannot select a JDK (it only passes JVM options to
 the Maven process). The committed launchers set `JAVA_HOME` for you:
 
-| Command                                       | What it does                                                                |
-| --------------------------------------------- | --------------------------------------------------------------------------- |
+| Command                                       | What it does                                                                                        |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `scripts/mvn-jdk25.js`                        | `mvn -o -pl <the recorded module set> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.js` below) |
-| `scripts/mvn-jdk25.js hipster-entity test`    | the same module set with an explicit goal (no implicit `clean`)             |
-| `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository                           |
-| `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned                            |
+| `scripts/mvn-jdk25.js hipster-entity test`    | the same module set with an explicit goal (no implicit `clean`)                                     |
+| `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository                                                   |
+| `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned                                                    |
+| `scripts/mvn-fast.js`                         | **the cached iteration build** — the same module set, `clean test`, with the Maven build cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default and `-T 1C`. **Not the gate**: see below |
+| `scripts/mvn-fast.js --tests SomeTest`        | the same, narrowed to one test class (adds `-Dtest=` and `-Dsurefire.failIfNoSpecifiedTests=false`) |
+| `scripts/mvn-fast.js --no-clean`              | iterate without letting Maven touch the tree                                                        |
+| `scripts/mvn-fast.js --off-cache`             | the fast path's flags without any cache reuse, when a result surprises you                          |
 | `scripts/gen.js`                              | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
-| `scripts/gen.js with-tests`                   | the same pass, then the entity test set                                     |
-| `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop) |
+| `scripts/gen.js with-tests`                   | the same pass, then the entity test set                                                             |
+| `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop)                         |
 | `scripts/run-demo.js`                         | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
 | `scripts/entity-html/index.js`                | render the HTML entity index from the JSON a pass wrote (DEC-027); `--module <dir>` for another module |
 
@@ -79,6 +83,29 @@ Every one of them is a **Bun** script — run them as `bun scripts/mvn-jdk25.js`
 shell files until 2026-09-26; `AGENTS.md` § 2 requires Bun JavaScript for anything an agent writes to run or check
 something, because a check that only runs in one shell on one OS is invisible wiring for the workflow. One
 implementation also cannot drift from itself, which is the other reason: see the note on `GateContractTest` below.
+
+### The gate, and the fast path — two commands, on purpose
+
+There are two build entry points, and the difference between them is deliberate rather than an oversight:
+
+- **`bun scripts/mvn-jdk25.js` is the gate.** `clean test`, `-Dmaven.compiler.useIncrementalCompilation=false`, and
+  the build cache **off**. Nothing it reports can have been reused from an earlier revision, which is the whole
+  point: F-47 is the scar where a build was satisfied by a previous revision's class files and reported SUCCESS.
+- **`bun scripts/mvn-fast.js` is for iterating.** The same module set, with the Maven build cache
+  (`.mvn/extensions.xml`, `org.apache.maven.extensions:maven-build-cache-extension`) **on**, incremental
+  compilation at Maven's default, and modules built in parallel. An unchanged module's compile *and test* phases are
+  restored instead of re-run — and test execution is where the time goes: a warm `-pl <mods> -am test` of the ioc
+  tooling measured 12:43 with the cache off, almost all of it tests.
+
+The two are kept honest by construction rather than by convention. The gate passes
+`-Dmaven.build.cache.enabled=false` on **every** invocation, and `GateContractTest` asserts that it does — the same
+way it asserts `clean` and the incremental switch — so "the recorded gate" and "the cache" cannot be confused by
+accident. And the cache's safety was verified rather than argued when it was added: turning a source file into a
+real change produced a **new checksum, a miss, and a failing test that failed the build**, which is the property
+that matters — a cache may not answer with a stale SUCCESS.
+
+**Use the fast path while working, the gate before a commit.** The cache lives in the user's Maven repository
+(`~/.m2/build-cache`), not in the workspace: it is a fact about one machine, and deleting it is always safe.
 
 ### `proto/` — the driver projects are not part of this build
 

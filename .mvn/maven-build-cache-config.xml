@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The build cache's configuration (org.apache.maven.extensions:maven-build-cache-extension, loaded by
+  `.mvn/extensions.xml`). Deliberately minimal: every knob left at its default is a behaviour nobody had to
+  reason about, and the defaults here are the ones the extension's own schema documents.
+
+  WHAT IS NOT CONFIGURED, AND WHY. In particular the `input/global/glob` that decides which files are hashed is
+  left alone. Widening it looks safer — this repository's modules also decide their output from `.js` and `.json`
+  inputs — but a glob the extension's matcher does not read the way I assume would match *nothing*, and a cache
+  that hashes nothing answers every build with the first revision it ever saw. That is the one failure this file
+  must not cause, so the default is kept and the behaviour is verified instead: turning a source file into a
+  change must produce a cache miss for its module and its dependents, and that is what the round's evidence
+  shows (see the plan's infrastructure record).
+
+  THE GATE IS NOT CACHED. A cache hit answering with an earlier revision's outputs is the same hazard `clean`
+  exists to prevent (F-47). `scripts/lib/gate.js` therefore passes `-Dmaven.build.cache.enabled=false` on every
+  invocation and `GateContractTest` asserts it, so "the recorded gate" and "the cache" cannot be confused for one
+  another by accident.
+-->
+<cache xmlns="http://maven.apache.org/BUILD-CACHE-CONFIG/1.0.0"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://maven.apache.org/BUILD-CACHE-CONFIG/1.0.0 https://maven.apache.org/xsd/build-cache-config-1.0.0.xsd">
+    <configuration>
+        <enabled>true</enabled>
+        <!-- XX is the default: fast, and a collision here is a wrong build, so the extension's own choice of a
+             non-cryptographic hash is kept rather than second-guessed. -->
+        <hashAlgorithm>XX</hashAlgorithm>
+    </configuration>
+</cache>

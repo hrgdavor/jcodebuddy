@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven's build cache (org.apache.maven.extensions:maven-build-cache-extension), loaded for every Maven
+  invocation in this repository.
+
+  WHY THIS IS SAFE NEXT TO THE GATE, AND WHY IT IS NOT ENOUGH ON ITS OWN. The recorded gate is `clean test`
+  with `-Dmaven.compiler.useIncrementalCompilation=false`, because F-47 found the gate satisfiable by a previous
+  revision's class files. A build cache is the same class of hazard: a cache hit could answer with outputs from
+  an earlier revision. So the gate is not merely "unlikely to hit" — `scripts/lib/gate.js` passes
+  `-Dmaven.build.cache.enabled=false` on every invocation and `GateContractTest` asserts that it does. The cache
+  exists for iteration, where reusing an unchanged module's outputs is the whole point.
+
+  The cache lives in the user's Maven repository (`~/.m2/build-cache`), not in the workspace: it is a fact about
+  one machine, it survives `mvn clean`, and deleting it is always safe.
+-->
+<extensions xmlns="http://maven.apache.org/EXTENSIONS/1.0.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/EXTENSIONS/1.0.0 https://maven.apache.org/xsd/core-extensions-1.0.0.xsd">
+    <extension>
+        <groupId>org.apache.maven.extensions</groupId>
+        <artifactId>maven-build-cache-extension</artifactId>
+        <version>1.2.0</version>
+    </extension>
+</extensions>

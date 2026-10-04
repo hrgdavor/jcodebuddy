@@ -67,6 +67,45 @@ Asked before a longer autonomous run, all ten answered, and they govern every st
 next step starts, an ADR before the code that depends on it, and the maintainer's earlier answers recorded in
 the steps they belong to.
 
+### Build caching — an infrastructure change asked for on 2026-10-03
+
+Not a numbered step: asked for directly, because the iteration builds had grown to 12–13 minutes each and the
+time was going into **test execution**, not compilation (measured: a warm `-pl <mods> -am test` of the ioc tooling
+took **12:43**, with the engine compiled already). What landed:
+
+1. **`.mvn/extensions.xml` + `.mvn/maven-build-cache-config.xml`** enable Maven's build cache
+   (`org.apache.maven.extensions:maven-build-cache-extension` 1.2.0, already in the local repository). A hit
+   restores a module's compile, test **and jar** phases — the second run of a small chain skipped
+   `compiler:compile`, `surefire:test` and `jar:jar` and finished in **1.07 s** against 3.27 s for the miss. The
+   config is deliberately minimal and does **not** widen the input globs: a glob the extension's matcher reads
+   differently than assumed would hash nothing and answer every build with the first revision it ever saw, so the
+   default is kept and the behaviour is verified instead.
+2. **`scripts/mvn-fast.js`** — the cached iteration build: the recorded module set, `clean package`, cache on,
+   incremental compilation at Maven's default, `--tests`, `--no-clean`, `--off-cache`, `--no-parallel`.
+3. **The gate stays uncached, on every invocation**: `scripts/lib/gate.js` passes
+   `-Dmaven.build.cache.enabled=false`, and `GateContractTest` asserts the constant and its two uses — the same
+   shape as `clean` and the incremental switch, and for the same reason (F-47: a build satisfied by a previous
+   revision's outputs once reported SUCCESS).
+4. **The cache was verified to be honest rather than argued to be**: a real source change produced a new checksum,
+   a **miss**, and a deliberately failing test that **failed the build**. A cache may not answer with a stale
+   SUCCESS, and that is the property that was tested.
+
+**Two failures worth recording, because each was a broken build before it was a sentence:**
+
+- **`package`, not `test`.** A cached module restored without a JAR cannot be depended on by the next module in the
+  reactor — `Could not find artifact hr.hrg.jcodebuddy:jcodebuddy-builder-api:jar:1.0-SNAPSHOT`. `package` runs the
+  tests anyway and produces the artifact.
+- **Never populate the cache from a phase that produces nothing.** A `mvn … validate` run (mine, while checking the
+  extension loaded) stored an entry per module with a near-empty output tree, and a later `package` build that hit
+  such an entry compiled a sibling against a module with no classes — reported as `symbol: variable SourceReader`
+  on sources that compile perfectly, which cost three runs to diagnose. The remedy is to delete
+  `~/.m2/build-cache` (it is a cache; deleting it is always safe) and to populate with `package`. Both lessons are
+  in the script's own header, where the next person meets them.
+
+**Not adopted:** `mvnd`. It is installed, but the `mvn` on `PATH` *is* mvnd 1.0.0-m4 and it already warns
+`Could not set the environment (java.lang.NoSuchFieldException: fs)` under JDK 25; the toolchain resolves the
+recorded Apache Maven 3.9.0 instead, which is what the gate uses.
+
 ---
 
 ## 2. Rules a step must respect (they are not restated per step)

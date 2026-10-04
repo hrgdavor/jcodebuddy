@@ -72,6 +72,16 @@ export const GATE_MODULES = [
 export const INCREMENTAL_OFF = '-Dmaven.compiler.useIncrementalCompilation=false';
 
 /**
+ * The build cache (`.mvn/extensions.xml`) is turned off for the gate, explicitly and on every invocation.
+ *
+ * A cache hit restores a previous revision's outputs, so it is the same *class* of hazard `clean` and
+ * {@link INCREMENTAL_OFF} exist to prevent, and "the cache is content-hashed, so a hit is sound" is an argument
+ * the gate must not have to win. Iterating is what `.mvn/` is for (`bun scripts/mvn-fast.js`); the recorded gate
+ * stays the thing that verifies a commit with no reuse at all.
+ */
+export const BUILD_CACHE_OFF = '-Dmaven.build.cache.enabled=false';
+
+/**
  * The `-pl` selector list for a module-name list.
  *
  * The modules moved into group folders (`hipster-entity/hipster-entity-api`, `jcodebuddy/jcodebuddy-core`),
@@ -115,11 +125,12 @@ export function buildGateArgs(argv, options = {}) {
 
   const shortcut = argv.length === 0 || argv[0] === 'hipster-entity';
   if (!shortcut) {
-    // Free-form: the caller's own arguments, with the JDK pinned and the incremental path disabled.
+    // Free-form: the caller's own arguments, with the JDK pinned, the incremental path disabled and the build
+    // cache off. Callers that want the cache are asking for the fast path, not the gate.
     const bad = splitProperty(argv);
     return bad
       ? { args: [], shortcut, error: bad }
-      : { args: [INCREMENTAL_OFF, ...argv], shortcut, error: null };
+      : { args: [INCREMENTAL_OFF, BUILD_CACHE_OFF, ...argv], shortcut, error: null };
   }
 
   const rest = argv[0] === 'hipster-entity' ? argv.slice(1) : argv;
@@ -129,7 +140,7 @@ export function buildGateArgs(argv, options = {}) {
   }
   const goals = rest.length === 0 ? defaultGoals : rest;
   return {
-    args: ['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, ...goals],
+    args: ['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, BUILD_CACHE_OFF, ...goals],
     shortcut,
     error: null,
   };

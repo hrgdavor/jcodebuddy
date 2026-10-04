@@ -46,6 +46,12 @@ class GateContractTest {
     private static final String INCREMENTAL_OFF =
             "-Dmaven.compiler.useIncrementalCompilation=false";
 
+    /**
+     * The switch that keeps the gate out of the build cache. `.mvn/extensions.xml` loads the cache for every
+     * Maven invocation in this repository, and iteration wants that; the gate does not.
+     */
+    private static final String BUILD_CACHE_OFF = "-Dmaven.build.cache.enabled=false";
+
     private static Path repoRoot() {
         return CompileHarness.findRepoRoot();
     }
@@ -104,8 +110,8 @@ class GateContractTest {
         // The modules live in group folders now (hipster-entity/…, jcodebuddy/…), so the shortcut selects them
         // by `:artifactId` — a bare directory name stopped resolving the day they moved. The recorded list is
         // still the list of NAMES (asserted above); only the selector is derived from it.
-        Assertions.assertTrue(gate.contains("['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, ...goals]"),
-                "the scoped invocation is `-o -pl <:artifactId,…> -am -Dmaven...clean test`");
+        Assertions.assertTrue(gate.contains("['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, BUILD_CACHE_OFF, ...goals]"),
+                "the scoped invocation is `-o -pl <:artifactId,…> -am -Dmaven... -Dmaven.build.cache... clean test`");
         Assertions.assertTrue(gate.contains("modules.split(',').map((name) => `:${name}`).join(',')"),
                 "and the selector form is `:artifactId`, because the module directories are no longer at the root");
     }
@@ -116,9 +122,30 @@ class GateContractTest {
         Assertions.assertTrue(gate.contains(INCREMENTAL_OFF),
                 "both the shortcut and the free-form path must disable incremental compilation, so F-47's broken "
                         + "source fails the gate without a manual clean");
-        long uses = gate.lines().filter(line -> line.contains("INCREMENTAL_OFF, ...")).count();
+        long uses = gate.lines().filter(line -> line.contains("INCREMENTAL_OFF, BUILD_CACHE_OFF, ...")).count();
         Assertions.assertEquals(2, uses,
                 "exactly the two invocations (free-form and shortcut) build their argument list around it");
+    }
+
+    /**
+     * The build cache exists for iteration (`.mvn/extensions.xml`, `bun scripts/mvn-fast.js`), and the gate turns
+     * it off on every invocation.
+     *
+     * <p>The reason is the same one `clean` and `INCREMENTAL_OFF` carry: a cache hit restores a previous
+     * revision's outputs. That a content-hash hit is *sound* is an argument about the cache, and the gate is the
+     * thing that must not have to win it — so this asserts the switch rather than trusting the reasoning.</p>
+     */
+    @Test
+    void theGateDisablesTheBuildCacheOnEveryInvocation() throws Exception {
+        String gate = gateModule();
+        Assertions.assertTrue(gate.contains(BUILD_CACHE_OFF),
+                "the recorded gate must not be answerable from the build cache");
+        long uses = gate.lines().filter(line -> line.contains("BUILD_CACHE_OFF, ...")).count();
+        Assertions.assertEquals(2, uses,
+                "exactly the two invocations (free-form and shortcut) carry the switch");
+        Assertions.assertTrue(Files.exists(repoRoot().resolve(".mvn/extensions.xml")),
+                "and the cache the switch disables is one this repository actually declares, so the assertion is "
+                        + "about a real mechanism rather than a hypothetical one");
     }
 
     /**

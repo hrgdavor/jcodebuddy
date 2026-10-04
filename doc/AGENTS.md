@@ -27,10 +27,19 @@ These come from the root file's § 2 and are restated here in the terms that mat
 
 The recorded gate is `bun scripts/mvn-jdk25.js` — the engine, the `hipster-entity` modules and the migrated
 consumers (the set is `GATE_MODULES` in `scripts/lib/gate.js`, and step 3.0k is where the consumers joined it),
-`clean test`, with `-Dmaven.compiler.useIncrementalCompilation=false`. `clean` is not optional: without it a build
-can be satisfied by a previous revision's class files, which is how a source that did not compile once reported
-`BUILD SUCCESS`. One definition of the gate lives in `scripts/lib/gate.js`, and `GateContractTest`
-asserts it.
+`clean test`, with `-Dmaven.compiler.useIncrementalCompilation=false` and the Maven build cache **off**
+(`-Dmaven.build.cache.enabled=false`). `clean` is not optional: without it a build can be satisfied by a previous
+revision's class files, which is how a source that did not compile once reported `BUILD SUCCESS`. One definition of
+the gate lives in `scripts/lib/gate.js`, and `GateContractTest` asserts it — including the cache switch, for the
+same reason as `clean`: a cache hit restores a previous revision's outputs.
+
+**Iterate with `bun scripts/mvn-fast.js`; verify with the gate.** The fast path is the same module set with the build
+cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default, and modules built in parallel. It
+exists because test execution dominates a warm run — measured at 12:43 for `-pl <mods> -am test` with the cache off —
+and because a cached module's compile, test and jar phases are restored instead of re-run. It is deliberately **not**
+the gate, and the two cannot be confused: the gate passes the switch that turns the cache off, and the contract test
+asserts that it does. Use `package` as its goal, not `test`: a cached module restored without a jar cannot be
+depended on by the next module in the reactor.
 
 **JCodeBuddy-only.** A driver project has its own build and its own commands; the gate is this
 repository's, and no command in the root README's table builds anything under `proto/`.
