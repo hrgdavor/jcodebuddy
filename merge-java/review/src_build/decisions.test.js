@@ -161,3 +161,82 @@ test('a decision made by hand survives "Apply all resolved"', () => {
   const keys = merged.map((entry) => decisionKey(entry.filePath, entry.resolution))
   assert.equal(new Set(keys).size, keys.length, 'one decision per conflict, never two')
 })
+
+test('a decision is keyed on the CONFLICT, not on a replayed resolution', () => {
+  // The replay that fooled the real run: the resolution holds the recorded decision's sides, while the conflict
+  // holds its own. Keying on the resolution named a signature the incoming conflict did not have, so two decision
+  // files existed for one block and the replay kept using the older one.
+  const conflict = {
+    type: 'COMMENT_ADD',
+    description: 'Both branches added comments',
+    signature: 'comment_add-1c2f',
+    sides: { base: 'base', branch1: 'branch one', branch2: 'branch two' },
+  }
+  const replayed = {
+    type: 'COMMENT_ADD',
+    kind: 'DEFERRED',
+    strategy: 'STICKY_REPLAY',
+    signature: 'comment_add-6e34',
+    resolvedCode: 'the recorded answer',
+    sides: { base: 'base', branch1: 'the recorded answer', branch2: 'the recorded answer' },
+  }
+
+  const decision = buildDecisions({
+    branchName: 'feature',
+    accepted: [
+      {
+        filePath: 'PaymentProcessor.java',
+        resolution: replayed,
+        conflict,
+        resolvedCode: 'branch one',
+        explanation: 'reviewer took branch one',
+      },
+    ],
+  }).decisions[0]
+
+  assert.equal(decision.signature, 'comment_add-1c2f', "the key the store holds decisions under is the conflict's")
+  assert.equal(decision.branch1, 'branch one', "and the sides the recorder hashes are the conflict's too")
+  assert.equal(decision.branch2, 'branch two')
+  assert.equal(decision.description, 'Both branches added comments')
+  assert.equal(decision.resolvedCode, 'branch one', "the accepted code is still the reviewer's choice")
+
+  // A replayed resolution and the raw conflict it answers are ONE decision, not two.
+  assert.equal(
+    decisionKey('PaymentProcessor.java', replayed, conflict),
+    decisionKey('PaymentProcessor.java', { signature: 'comment_add-1c2f' }, conflict),
+  )
+  // Without the conflict it falls back to the resolution - exactly the different key that caused the bug.
+  assert.notEqual(
+    decisionKey('PaymentProcessor.java', replayed, conflict),
+    decisionKey('PaymentProcessor.java', replayed),
+  )
+})
+
+test('acceptAllResolved pairs each resolution with its conflict', () => {
+  const accepted = acceptAllResolved([
+    {
+      filePath: 'A.java',
+      conflicts: [
+        { type: 'IMPORT_ADD', signature: 'import_add-aaaa', sides: { base: 'b', branch1: 'one', branch2: 'two' } },
+        {
+          type: 'STRUCTURAL_CHANGE',
+          signature: 'structural_change-bbbb',
+          sides: { base: 'b', branch1: 'x', branch2: 'y' },
+        },
+      ],
+      resolutions: [
+        { type: 'IMPORT_ADD', kind: 'AUTO', signature: 'import_add-aaaa', resolvedCode: 'import a;' },
+        {
+          type: 'STRUCTURAL_CHANGE',
+          kind: 'MANUAL',
+          signature: 'structural_change-bbbb',
+          resolvedCode: MANUAL_MARKER,
+        },
+      ],
+    },
+  ])
+
+  assert.equal(accepted.length, 1, 'only the resolution with an answer')
+  assert.equal(accepted[0].conflict.signature, 'import_add-aaaa', 'paired with the conflict it answers')
+  assert.equal(accepted[0].conflict.sides.branch1, 'one')
+})

@@ -101,6 +101,14 @@ public final class MergeReportWriter {
         json.append("      \"branchName\": ").append(quote(report.getBranchName())).append(",\n");
         json.append("      \"clean\": ").append(report.isClean()).append(",\n");
         json.append("      \"summary\": ").append(quote(report.summarize())).append(",\n");
+        // conflicts and resolutions are INDEX-PARALLEL: resolutions[i] answers conflicts[i], because the report's
+
+        // resolutions come from `resolveAll`, which maps one to one. The page relies on that pairing to key a
+
+        // decision on the CONFLICT: a resolution that replayed a recorded decision carries that decision's own
+
+        // sides, so keying on the resolution can name a signature the incoming conflict does not have.
+
         json.append("      \"conflicts\": ").append(conflictsJson(report)).append(",\n");
         json.append("      \"resolutions\": ").append(resolutionsJson(report)).append('\n');
         json.append("    }");
@@ -115,6 +123,10 @@ public final class MergeReportWriter {
             json.append("{\"type\": ").append(quote(conflict.getType().name()))
                 .append(", \"description\": ").append(quote(conflict.getDescription()))
                 .append(", \"region\": ").append(regionJson(conflict.getRegion()))
+                .append(", \"signature\": ")
+                    .append(quote(ConflictSignature.of(conflict).toFileName()))
+                .append(", \"sides\": ")
+                    .append(sidesJson(conflict.getBaseCode(), conflict.getBranch1Code(), conflict.getBranch2Code()))
                 .append(", \"handling\": ")
                 .append(quote(conflict.getType().handling().name()))
                 .append('}');
@@ -184,9 +196,18 @@ public final class MergeReportWriter {
      * are the resolver's own input, carried verbatim.</p>
      */
     private static String sidesJson(ConflictResolution resolution) {
-        return "{\"base\": " + quote(resolution.getBaseCode())
-            + ", \"branch1\": " + quote(resolution.getBranch1Code())
-            + ", \"branch2\": " + quote(resolution.getBranch2Code()) + "}";
+        return sidesJson(resolution.getBaseCode(), resolution.getBranch1Code(),
+            resolution.getBranch2Code());
+    }
+
+    /**
+     * The same three sides, from a {@link Conflict} - which is where the review page's decision KEY comes
+     * from, because a replayed resolution no longer holds the conflict's own sides.
+     */
+    private static String sidesJson(String base, String branch1, String branch2) {
+        return "{\"base\": " + quote(base)
+            + ", \"branch1\": " + quote(branch1)
+            + ", \"branch2\": " + quote(branch2) + "}";
     }
 
     private static String fixPathsJson(ConflictResolution resolution) {

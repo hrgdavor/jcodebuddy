@@ -2773,7 +2773,27 @@ and the page had no input for that case at all — `MergeReportWriter` was only 
 **Gate:** `MergeFileToolTest` (24 tests) proves the round trip — the report, then a decisions payload built
 from that report's own facts (the shape `src/decisions.js` exports), then the same CLI recording and applying it
 so the file changes. `bun test` in `merge-java/review` — **10 pass, 0 fail**. `mvn -f merge-java/pom.xml test` —
-**711 tests, BUILD SUCCESS**.**Who:** agent · **Size:** M
+**711 tests, BUILD SUCCESS**.
+
+**Then the concrete runs, which changed the design.** Driving the flow on a real mid-merge repository
+(`sample-repo.js import-add-both --merge`) found three things:
+
+- **A decision must be keyed on the CONFLICT, not the resolution.** A resolution that replayed a recorded decision
+  holds that decision's sides and signature, so a payload built from the report's RESOLUTION named a signature the
+  incoming conflict did not have — two decision files for one block, and the replay kept using the older one. The
+  report now carries each conflict's own `signature` and `sides`, the two arrays are documented as index-parallel
+  (they are: `resolveAll` maps one to one), and the page keys on the conflict, falling back to the resolution only
+  when a report predates the field.
+- **A block carrying several conflicts is never applied by the tool.** The sample's single block holds a
+  `COMMENT_ADD` and a `STRUCTURAL_CHANGE`; the tool refuses to compose several conflicts into one block answer
+  (`LEFT_MANUAL` / `LEFT_DEFERRED` / `LEFT_MULTIPLE_AUTOMATIC`), which is existing, deliberate behaviour. So the
+  page must be read per BLOCK, not per conflict: **grouping the cards by block, and saying which conflict in a
+  block still has no answer, is the next UI work** — today a reviewer can accept everything and still see the block
+  unchanged without being told why.
+- **A stale report reads exactly like a fresh one.** A second sample repository that merged cleanly left the first
+  repository's report on disk, and reading it showed two conflicts for a file that had none. The entry point
+  overwrites the report per file name, and the page prints the report path it used — keep both habits.
+**Who:** agent · **Size:** M
 
 The manual cases already carry machine-readable fix paths (named options, a recommendation, a
 justification, an impact). The review display becomes an action display: pick a fix path, edit the

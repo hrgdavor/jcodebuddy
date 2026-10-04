@@ -835,15 +835,19 @@ class MergeFileToolTest {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode document = mapper.readTree(read(report));
         JsonNode section = document.path("files").get(0);
+        // The page builds its payload from the CONFLICT's own key and sides, and pairs it with the resolution
+        // by index (the report's two arrays are index-parallel). A replayed resolution would otherwise name a
+        // signature the raw conflict does not have.
+        JsonNode conflict = section.path("conflicts").get(0);
         JsonNode resolution = section.path("resolutions").get(0);
-        JsonNode sides = resolution.path("sides");
-        String resolvedCode = sides.path("branch1").asString("");
+        JsonNode sides = conflict.path("sides");
+        String resolvedCode = resolution.path("sides").path("branch1").asString("");
 
         Map<String, Object> decision = new LinkedHashMap<>();
-        decision.put("signature", resolution.path("signature").asString(""));
-        decision.put("type", resolution.path("type").asString(""));
+        decision.put("signature", conflict.path("signature").asString(""));
+        decision.put("type", conflict.path("type").asString(""));
         decision.put("filePath", section.path("filePath").asString(""));
-        decision.put("description", "");
+        decision.put("description", conflict.path("description").asString(""));
         decision.put("base", sides.path("base").asString(""));
         decision.put("branch1", sides.path("branch1").asString(""));
         decision.put("branch2", sides.path("branch2").asString(""));

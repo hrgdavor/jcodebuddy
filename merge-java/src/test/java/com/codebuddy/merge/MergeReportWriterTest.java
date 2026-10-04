@@ -3,6 +3,8 @@
 package com.codebuddy.merge;
 
 import org.junit.jupiter.api.DisplayName;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -243,4 +245,29 @@ class MergeReportWriterTest {
         assertEquals(2, process.waitFor(), "misuse must fail with a usage status: " + output);
         assertTrue(output.contains("usage"), output);
     }
+    @Test
+    @DisplayName("names each conflict's own key and sides, index-parallel with its resolutions")
+    void namesTheConflictBesideItsResolution() throws Exception {
+        Path reportPath = tempDir.resolve("report.json");
+        MergeReportWriter.write(reportPath, batch());
+
+        JsonNode file = new ObjectMapper().readTree(Files.readString(reportPath, StandardCharsets.UTF_8))
+            .path("files").get(0);
+        JsonNode conflict = file.path("conflicts").get(0);
+
+        // The review page keys a decision on the CONFLICT's facts, because a resolution that replayed a recorded
+        // decision holds that decision's sides and signature instead of the conflict's own.
+        assertFalse(conflict.path("signature").asString("").isEmpty(),
+            "a conflict must carry its own key: " + conflict);
+        assertFalse(conflict.path("sides").path("branch1").asString("").isEmpty(),
+            "and its own sides: " + conflict);
+
+        // Index-parallel: resolutions[i] answers conflicts[i], which is how the page pairs them.
+        assertEquals(file.path("conflicts").size(), file.path("resolutions").size(),
+            "one resolution per conflict, in the same order");
+        assertEquals(conflict.path("signature").asString(""),
+            file.path("resolutions").get(0).path("signature").asString(""),
+            "with nothing replayed, the conflict's key and its resolution's agree");
+    }
+
 }

@@ -24,15 +24,19 @@ export function fileNameFor(branchName) {
  * @param resolution the resolution from the report (its `signature`, `type` and `sides` are used)
  * @param choice     `{ resolvedCode, explanation }` - what the reviewer accepted, including any edit they made
  */
-export function decisionFor(filePath, resolution, choice) {
-  const sides = resolution.sides ?? {}
+export function decisionFor(filePath, resolution, choice, conflict) {
+  // The CONFLICT's own facts win when the report carries them, and that is the whole point of them: a
+  // resolution that replayed a recorded decision holds THAT decision's sides and signature, so keying a
+  // decision on the resolution can name a signature the incoming conflict does not have. Observed on a real
+  // mid-merge repository: two decision files for one block, and the replay kept using the first.
+  const sides = conflict?.sides ?? resolution.sides ?? {}
   return {
-    signature: resolution.signature ?? '',
+    signature: conflict?.signature ?? resolution.signature ?? '',
     type: resolution.type,
     filePath,
     // A resolution carries no description of its own (the conflict does, and the report keeps the two lists
     // apart), so this is empty and the recorder defaults it. It is not part of the decision's key.
-    description: '',
+    description: conflict?.description ?? '',
     base: sides.base ?? '',
     branch1: sides.branch1 ?? '',
     branch2: sides.branch2 ?? '',
@@ -46,8 +50,9 @@ export function buildDecisions({ branchName, accepted }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     branchName: branchName || '',
-    decisions: (accepted ?? []).map(({ filePath, resolution, resolvedCode, explanation }) =>
-      decisionFor(filePath, resolution, { resolvedCode, explanation })),
+    decisions: (accepted ?? []).map(({ filePath, resolution, conflict, resolvedCode, explanation }) =>
+      decisionFor(filePath, resolution, { resolvedCode, explanation }, conflict),
+    ),
   }
 }
 
@@ -87,8 +92,14 @@ export function isResolved(resolution) {
 }
 
 /** One decision's identity: a file and a conflict's key, so accepting twice replaces rather than doubles. */
-export function decisionKey(filePath, resolution) {
-  return `${filePath ?? ''}::${resolution.signature ?? resolution.type ?? ''}`
+/**
+ * One decision's identity: a file and a conflict's key, so accepting twice replaces rather than doubles.
+ *
+ * <p>The conflict's signature wins over the resolution's, so a replayed resolution and the raw conflict it
+ * answers are the SAME decision - one entry, recorded under the key the conflict actually has.</p>
+ */
+export function decisionKey(filePath, resolution, conflict) {
+  return `${filePath ?? ''}::${conflict?.signature ?? resolution?.signature ?? resolution?.type ?? ''}`
 }
 
 /**
@@ -101,17 +112,20 @@ export function decisionKey(filePath, resolution) {
 export function acceptAllResolved(files) {
   const accepted = []
   for (const file of files ?? []) {
-    for (const resolution of file.resolutions ?? []) {
+    const conflicts = file.conflicts ?? []
+    // Index-parallel with resolutions, which is how a resolution is tied to the conflict it answers.
+    ;(file.resolutions ?? []).forEach((resolution, index) => {
       if (!isResolved(resolution)) {
-        continue
+        return
       }
       accepted.push({
         filePath: file.filePath,
         resolution,
+        conflict: conflicts[index],
         resolvedCode: resolution.resolvedCode ?? '',
         explanation: `accepted the ${resolution.kind} resolution as resolved`,
       })
-    }
+    })
   }
   return accepted
 }
@@ -124,9 +138,11 @@ export function acceptAllResolved(files) {
  * what gets applied to the file.</p>
  */
 export function mergeAccepted(existing, incoming) {
-  const decided = new Set((existing ?? []).map((entry) => decisionKey(entry.filePath, entry.resolution)))
+  const decided = new Set(
+    (existing ?? []).map((entry) => decisionKey(entry.filePath, entry.resolution, entry.conflict)),
+  )
   const added = (incoming ?? []).filter(
-    (entry) => !decided.has(decisionKey(entry.filePath, entry.resolution)),
+    (entry) => !decided.has(decisionKey(entry.filePath, entry.resolution, entry.conflict)),
   )
   return [...(existing ?? []), ...added]
 }

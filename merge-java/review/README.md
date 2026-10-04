@@ -73,6 +73,25 @@ platform separates them) if you already have them in a variable.
 Accepting twice for one conflict **replaces** rather than doubles, and "Apply all resolved" never overwrites a
 decision you made by hand for the same conflict — the hand-made one is the more specific statement.
 
+### What the engine will not apply, and why
+
+Two rules decide whether an accepted decision reaches your file, and both were established by running the flow
+on a real mid-merge repository rather than by reading code:
+
+1. **A block with more than one conflict is never applied by the tool, however many you decide.** One block can
+   carry several conflicts at once — the `import-add-both` sample produces a block holding both a `COMMENT_ADD`
+   and a `STRUCTURAL_CHANGE` — and the tool refuses to compose them into one answer, because composing them is a
+   judgement about the whole block rather than about either conflict. Decide all of them in the page and the
+   report will say so; that block is still yours to finish in the editor. This is why the page shows you each
+   conflict, and why a block that stays unresolved after accepting everything is not a bug in your decision.
+2. **A whole-block answer is what an editor writes; a fragment may not be enough.** When a resolution is applied
+   automatically (or replayed as a single-conflict recorded decision) its code replaces the block, so a one-line
+   fragment of a thirteen-line block is refused rather than half-written. Use the textarea: take a whole side, or
+   write the block you want.
+
+The reliable way to tell which case you are in: run the flow, then read the per-block line the tool prints.
+`LEFT_MANUAL` with "at least one is manual" means a conflict in that block still has no answer; a block that
+keeps its markers after you accepted everything is rule 1.
 ### What is written where
 
 The decisions are recorded into the branch's history (`.jcodebuddy/merge-history/<branch>/decisions/`), which

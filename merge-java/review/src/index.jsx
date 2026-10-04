@@ -54,7 +54,7 @@ function downloadDecisions(payload) {
  * accepted, and accept it. Nothing here is applied to the repository — an accepted decision is data until
  * `DecisionRecorder` records it, which is what keeps the page unable to change a branch on its own.
  */
-function Actions({ filePath, resolution }) {
+function Actions({ filePath, resolution, conflict }) {
   const options = fixPathOptions(resolution)
   const $choice = signal('keep')
   const $code = signal(resolution.resolvedCode || '')
@@ -62,8 +62,12 @@ function Actions({ filePath, resolution }) {
   const accept = () => {
     const chosen = $choice()
     const entry = {
+
       filePath,
+
       resolution,
+
+      conflict,
       resolvedCode: $code(),
       explanation:
         chosen === 'keep'
@@ -72,13 +76,13 @@ function Actions({ filePath, resolution }) {
     }
     // Replacing by key rather than appending: a reviewer who changes their mind about one conflict must not end
     // up recording two decisions for it.
-    const key = decisionKey(filePath, resolution)
+    const key = decisionKey(filePath, resolution, conflict)
     const others = $accepted().filter((existing) => decisionKey(existing.filePath, existing.resolution) !== key)
     $accepted([...others, entry])
   }
   const accepted = () =>
     $accepted().some(
-      (existing) => decisionKey(existing.filePath, existing.resolution) === decisionKey(filePath, resolution),
+      (existing) => decisionKey(existing.filePath, existing.resolution) === decisionKey(filePath, resolution, conflict),
     )
 
   return (
@@ -206,7 +210,7 @@ function FixPath({ fixPath }) {
   )
 }
 
-function Resolution({ resolution, filePath }) {
+function Resolution({ resolution, filePath, conflict }) {
   const region = resolution.region
   return (
     <div class={`card ${resolution.kind}`}>
@@ -238,7 +242,7 @@ function Resolution({ resolution, filePath }) {
           ))}
         </div>
       ) : null}
-      {isActionable(resolution) ? <Actions filePath={filePath} resolution={resolution} /> : null}
+      {isActionable(resolution) ? <Actions filePath={filePath} resolution={resolution} conflict={conflict} /> : null}
     </div>
   )
 }
@@ -251,8 +255,18 @@ function FileSection({ file }) {
         branch {file.branchName} · {file.clean ? 'clean' : 'conflicts'} · {file.summary}
       </div>
       {file.resolutions?.length ? (
-        file.resolutions.map((resolution) => (
-          <Resolution resolution={resolution} filePath={file.filePath} />
+        file.resolutions.map((resolution, index) => (
+
+          <Resolution
+
+            resolution={resolution}
+
+            filePath={file.filePath}
+
+            conflict={(file.conflicts ?? [])[index]}
+
+          />
+
         ))
       ) : (
         <div class="note">No resolutions recorded for this file.</div>
