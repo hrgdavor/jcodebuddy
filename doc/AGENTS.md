@@ -27,9 +27,12 @@ These come from the root file's § 2 and are restated here in the terms that mat
 
 The recorded gate is `bun scripts/mvn-jdk25.js` — the engine, the `hipster-entity` modules and the migrated
 consumers (the set is `GATE_MODULES` in `scripts/lib/gate.js`, and step 3.0k is where the consumers joined it),
-`clean test`, with `-Dmaven.compiler.useIncrementalCompilation=false`. `clean` is not optional: without it a build
+`clean package`, with `-Dmaven.compiler.useIncrementalCompilation=false`. `clean` is not optional: without it a build
 can be satisfied by a previous revision's class files, which is how a source that did not compile once reported
-`BUILD SUCCESS`. One definition of the gate lives in `scripts/lib/gate.js`, and `GateContractTest` asserts it — and
+`BUILD SUCCESS`. **`package` rather than `test` since the build cache landed**: the cache key does not include the
+goal list, so an entry saved by a `clean test` run — which produces no JAR — can answer a later build that needs one,
+and the dependent module then fails to compile against a sibling that exists and is class-less. One definition of the
+gate lives in `scripts/lib/gate.js`, and `GateContractTest` asserts it — and
 asserts, deliberately, that the gate does **not** switch the build cache off (the maintainer's decision of
 2026-10-03, with the reasoning at `BUILD_CACHE_NOTE` in that file).
 

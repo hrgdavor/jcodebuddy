@@ -34,8 +34,12 @@
 > committed example produced the same bytes except one line, because the last hand-written wiring
 > (`CtxMainModule.default buildMapper()`) was retired with it.
 >
-> **What the prototype does not do, stated rather than discovered:** no cross-context wiring — a context's
-> `dependencies()` are recorded in the graph and never used to build anything (step 3.7). Three items that used to
+> **What the prototype does not do, stated rather than discovered:** nothing that was on this list is still missing.
+> The last item — no cross-context wiring, where a context's `dependencies()` were recorded in the graph and used to
+> build nothing — was closed by **step 3.7 (2026-10-03)**: a declared dependency is a **constructor parameter** of the
+> generated implementation, its beans are resolvable through its own accessors (`buildReport(dataContext.rows())`),
+> a dependency that is a `ChildContext` is adopted with `setParent(this)`, and **the caller constructs it** — the
+> generator does not invent a factory for another context (DEC-036 § 6's amendment). Three items that used to
 > be on this list are implemented and are no longer qualifications on the generator: the **`@Circular` two-phase
 > form** (step 3.4 — a marked edge is written `@Circular Supplier<Bean>`, and the generated argument is a call to
 > the accessor of the bean it supplies, DEC-036 § 5), the **`init*` hooks** (step 3.5 — a

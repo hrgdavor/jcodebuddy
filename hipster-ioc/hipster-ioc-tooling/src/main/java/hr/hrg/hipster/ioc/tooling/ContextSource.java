@@ -63,6 +63,13 @@ public final class ContextSource {
         for (DependencyOrder.Deferred edge : deferred) {
             deferredTargets.put(edge.owner() + "." + edge.parameter(), edge.target());
         }
+        // A parameter that a declared dependency can answer is NOT also an extra: it is resolved as
+        // `dataContext.rows()`, and keeping it as a constructor parameter too would ask the caller for a value the
+        // context already has a source for — the same redundancy in the signature that the extra-parameter rule
+        // exists to avoid (DEC-036 § 6's amendment).
+        extraParameters = extraParameters.stream()
+                .filter(parameter -> dependencyBeanOf(context, parameter.typeText()) == null)
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
         // DEC-036 § 9: region markers around the three sections the design document names, and only when a
         // section exceeds its threshold — below that the language's own boundaries already delimit the code, and
         // a marker per small section is noise in every generated file forever.
@@ -98,11 +105,18 @@ public final class ContextSource {
         sb.append("public class ").append(context.implSimpleName())
                 .append(" implements ").append(context.simpleName()).append(" {\n\n");
 
+        // DEC-036 § 6's amendment: a context's declared dependencies are RECEIVED, never constructed here. They come
+        // first in the constructor because they are the context's outer wiring, and the parameters this context
+        // cannot satisfy at all (its extras) follow.
+        for (IocModel.ReferencedContext dependency : context.dependencies()) {
+            sb.append(i1).append("private final ").append(dependency.typeText()).append(' ')
+                    .append(dependency.fieldName()).append(";\n");
+        }
         for (IocModel.Parameter parameter : extraParameters) {
             sb.append(i1).append("private final ").append(parameter.typeText()).append(' ')
                     .append(parameter.name()).append(";\n");
         }
-        if (!extraParameters.isEmpty()) {
+        if (!extraParameters.isEmpty() || !context.dependencies().isEmpty()) {
             sb.append('\n');
         }
         if (fieldsRegion) {
@@ -122,14 +136,23 @@ public final class ContextSource {
         sb.append('\n');
 
         sb.append(i1).append("public ").append(context.implSimpleName()).append('(');
-        for (int i = 0; i < extraParameters.size(); i++) {
-            IocModel.Parameter parameter = extraParameters.get(i);
-            if (i > 0) {
-                sb.append(", ");
-            }
-            sb.append(parameter.typeText()).append(' ').append(parameter.name());
+        List<String> constructorParameters = new java.util.ArrayList<>();
+        for (IocModel.ReferencedContext dependency : context.dependencies()) {
+            constructorParameters.add(dependency.typeText() + " " + dependency.fieldName());
         }
-        sb.append(") {\n");
+        for (IocModel.Parameter parameter : extraParameters) {
+            constructorParameters.add(parameter.typeText() + " " + parameter.name());
+        }
+        sb.append(String.join(", ", constructorParameters)).append(") {\n");
+        for (IocModel.ReferencedContext dependency : context.dependencies()) {
+            sb.append(i2).append("this.").append(dependency.fieldName()).append(" = ")
+                    .append(dependency.fieldName()).append(";\n");
+            // Where the child is attached is where its parent is set (DEC-036 § 6): the assignment goes here, in
+            // the constructor, before any bean that might use the child is created.
+            if (dependency.childContext()) {
+                sb.append(i2).append(dependency.fieldName()).append(".setParent(this);\n");
+            }
+        }
         for (IocModel.Parameter parameter : extraParameters) {
             sb.append(i2).append("this.").append(parameter.name()).append(" = ").append(parameter.name())
                     .append(";\n");
@@ -195,6 +218,11 @@ public final class ContextSource {
      * resolved when it is <em>used</em> rather than when it is constructed. The lambda is not invoked during
      * construction, which is why the cycle closes; and because the target is named by its accessor, the edge is
      * navigable in a stock IDE like every other line of the generated file.</p>
+     *
+     * <p>A parameter whose type is a bean of a <em>declared dependency</em> is resolved from that context, by
+     * calling its accessor — {@code dataContext.user()} — which is the cross-context wiring DEC-036 § 6's
+     * amendment settles (step 3.7). This context's own beans win a tie: a name that this context builds is a
+     * closer answer than one it would have to ask another context for.</p>
      */
     private static String creationOf(IocModel.Context context, IocModel.Bean bean,
                                      Map<String, String> deferredTargets) {
@@ -218,8 +246,76 @@ public final class ContextSource {
                 continue;
             }
             IocModel.Bean match = byName.get(parameter.name());
-            sb.append(match != null ? match.name() : parameter.name());
+            if (match != null) {
+                sb.append(match.name());
+                continue;
+            }
+            IocModel.Bean own = byType(context.beans(), parameter.typeText());
+            if (own != null) {
+                sb.append(own.name());
+                continue;
+            }
+            IocModel.ReferencedContext dependency = dependencyBeanOf(context, parameter.typeText());
+            if (dependency != null) {
+                sb.append(dependency.fieldName()).append('.').append(dependencyBeanName(dependency, parameter.typeText()))
+                        .append("()");
+                continue;
+            }
+            sb.append(parameter.name());
         }
         return sb.append(')').toString();
+    }
+
+    /** The bean of this context whose type is written {@code typeText}, or {@code null}. */
+    private static IocModel.Bean byType(List<IocModel.Bean> beans, String typeText) {
+        for (IocModel.Bean bean : beans) {
+            if (sameType(bean.typeText(), typeText)) {
+                return bean;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether two type texts name the same type, compared without package qualifiers.
+     *
+     * <p>Necessary because the two sides are written by different readers: a factory parameter is source text
+     * ({@code List<String>}), while a bean's type comes from the index, which resolves it ({@code
+     * java.util.List<java.lang.String>}). Comparing the texts literally therefore matched nothing, and the parameter
+     * silently fell through to the extra-parameter rule — which produces code that does not compile, the worst of
+     * the available outcomes. The boundary is deliberate and recorded: two identically-named types in different
+     * packages would compare equal, and a context that declares both must disambiguate through an explicit factory
+     * parameter name.</p>
+     */
+    private static boolean sameType(String left, String right) {
+        return simpleTypeText(left).equals(simpleTypeText(right));
+    }
+
+    /** Type text with every package qualifier removed: {@code java.util.List<java.lang.String>} → {@code List<String>}. */
+    private static String simpleTypeText(String typeText) {
+        return typeText.trim().replaceAll("(?:[a-zA-Z_$][\\w$]*\\.)+", "");
+    }
+
+    /** The declared dependency that provides a bean of the parameter's type, or {@code null} when none does. */
+    private static IocModel.ReferencedContext dependencyBeanOf(IocModel.Context context, String typeText) {
+        IocModel.ReferencedContext found = null;
+        int matches = 0;
+        for (IocModel.ReferencedContext dependency : context.dependencies()) {
+            if (byType(dependency.beans(), typeText) != null) {
+                found = dependency;
+                matches++;
+            }
+        }
+        // Two dependencies offering the same type is ambiguous, and the honest answer is this context's own bean or
+        // an explicit factory — not whichever dependency happens to be declared first. Returning null leaves the
+        // parameter as the caller's (the extra-parameter rule), which is what the generator does for every
+        // parameter it cannot answer.
+        return matches == 1 ? found : null;
+    }
+
+    /** The accessor to call on a dependency for a parameter of this type. */
+    private static String dependencyBeanName(IocModel.ReferencedContext dependency, String typeText) {
+        IocModel.Bean bean = byType(dependency.beans(), typeText);
+        return bean == null ? typeText.trim() : bean.name();
     }
 }

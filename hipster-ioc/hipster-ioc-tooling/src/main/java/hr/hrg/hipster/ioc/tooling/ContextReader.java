@@ -100,13 +100,76 @@ public final class ContextReader {
                 ? Map.of() : factoriesOf(module, beans);
         Map<String, String> initHooks = module == null
                 ? Map.of() : initHooksOf(module, beans, divergences);
+        List<String> dependencyTypes = classValues(marker, "dependencies");
 
         return Optional.of(new IocModel.Context(packageOf(context.fqn()), simpleNameOfFqn(context.fqn()),
                 beans, factories, initHooks,
-                classValues(marker, "dependencies"),
+                referencedContexts(dependencyTypes, index, context, divergences),
+                dependencyTypes,
                 parentTypeOf(context, index, divergences),
                 hasImplementation(marker),
                 importLines(index, context, module, divergences)));
+    }
+
+    /**
+     * The {@code dependencies()} class values, resolved against the index (DEC-036 § 6's amendment).
+     *
+     * <p>A dependency becomes a constructor parameter of the generated context, and its beans become resolvable from
+     * it — so the reader has to know that dependency's beans and whether it is itself a {@code ChildContext}, both of
+     * which are facts about a row the index already holds. This is what makes the cross-context wiring possible
+     * without reading files beside the context: step 3.0e moved every one of these questions onto the model.</p>
+     *
+     * <p>A dependency the index does not hold is <strong>reported</strong> rather than skipped: the alternative is a
+     * generated constructor that quietly cannot satisfy one of its own factories, which is the failure this project
+     * keeps choosing against.</p>
+     */
+    private static List<IocModel.ReferencedContext> referencedContexts(List<String> dependencyTypes, ClassIndex index,
+                                                                     ClassRecord context,
+                                                                     DivergenceReporter divergences) {
+        List<IocModel.ReferencedContext> resolved = new ArrayList<>();
+        for (String typeText : dependencyTypes) {
+            String name = typeText.trim();
+            ClassRecord row = index.row(name);
+            if (row == null) {
+                row = index.row(packageOf(context.fqn()) + "." + simpleNameOf(name));
+            }
+            if (row == null) {
+                for (ClassRecord candidate : index.rows()) {
+                    if (candidate.fqn().endsWith("." + simpleNameOf(name))) {
+                        row = candidate;
+                        break;
+                    }
+                }
+            }
+            if (row == null) {
+                divergences.report("dependency_context_not_indexed", context.fqn() + " -> " + name,
+                        "the context names '" + name + "' in dependencies() and the index holds no such type, so "
+                                + "that context's beans cannot be resolved from it",
+                        name, "the dependency context in the same index",
+                        "index the dependency's own source root as well, or fix the class value");
+                continue;
+            }
+            resolved.add(new IocModel.ReferencedContext(typeText, simpleNameOfFqn(row.fqn()),
+                    beansOf(row), isChildContext(row)));
+        }
+        return resolved;
+    }
+
+    /**
+     * Whether a row implements the API's {@code ChildContext} marker.
+     *
+     * <p>Read from the relation's <em>name</em> rather than from its sliced text, and that is a deliberate
+     * difference from {@link #parentTypeOf}: this question is "is it a child context", which the name answers, while
+     * the parent accessors need the {@code <P>} the slice carries. Asking for the type argument here would report a
+     * misleading {@code parent_type_not_readable} against a *dependency's* file.</p>
+     */
+    private static boolean isChildContext(ClassRecord row) {
+        for (TypeRelation relation : row.relations()) {
+            if ("ChildContext".equals(simpleNameOf(relation.name()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The {@code @HipsterContext} annotation on a row, or {@code null} when it carries none. */

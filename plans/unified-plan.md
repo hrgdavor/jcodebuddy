@@ -2448,6 +2448,33 @@ prototype answers it by reading whichever files happen to sit beside the context
 **Schedulable when:** the shape of context-to-context creation is decided, including who constructs the
 parent.
 
+**Done 2026-10-03, and the shape was decided rather than inherited** (DEC-036 § 6's amendment records it in the
+decision, which is the order this repository builds in):
+
+1. **A dependency is received, not constructed.** Each entry of `@HipsterContext(dependencies = …)` is a
+   **constructor parameter** of the generated implementation, in declaration order and ahead of the parameters the
+   context cannot answer at all, kept in a `private final` field. **The caller constructs it** — the answer to "who
+   constructs the parent", chosen because the generator knows nothing about the other context's own dependencies and
+   a generated factory for one would be the invisible wiring DEC-019 rejects.
+2. **Its beans become resolvable.** A factory parameter whose type matches a bean of a declared dependency is
+   satisfied through that context's accessor — the generated line is `this.report = buildReport(dataContext.rows());`
+   — so a bean can be assembled from another context's bean. This context's own beans win a tie; a type **two**
+   dependencies could answer stays the caller's, because the generator does not choose silently; and a dependency the
+   index cannot resolve is reported (`dependency_context_not_indexed`) instead of being skipped, since the
+   alternative is generated code that does not compile.
+3. **`ChildContext` dependencies are adopted.** When the referenced context is itself a `ChildContext`, the
+   constructor emits `setParent(this)` right after taking it — clause 6's "assignment where the child is created",
+   for a child the generator did not create.
+4. **A real bug surfaced with it and is fixed:** a parameter is source text (`List<String>`) while a bean's type comes
+   from the index resolved (`java.util.List<java.lang.String>`), so comparing them literally matched nothing and the
+   parameter silently degraded into an extra constructor parameter — code that compiles only if the caller happens to
+   supply it. Types are now compared without package qualifiers, with that boundary recorded.
+
+**Evidence:** `IocContextGeneratorTest` grew from 17 to 19 tests, both new ones compiling **and running** the
+generated tree — one asserts the bean came from the passed-in context, the other that a received child's
+`getParent()` is the receiving context at runtime — and a parameter the dependency answers is no longer also asked of
+the caller. The recorded gate is green with the cache on (BUILD SUCCESS 1:06, 43 cached steps).
+
 ### 3.8 — The dependency-graph report page
 **Who:** agent · **Size:** M
 

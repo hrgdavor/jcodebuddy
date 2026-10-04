@@ -65,7 +65,7 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 
 | Command                                       | What it does                                                                                        |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `scripts/mvn-jdk25.js`                        | `mvn -o -pl <the recorded module set> -am -Dmaven.compiler.useIncrementalCompilation=false clean test` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.js` below) |
+| `scripts/mvn-jdk25.js`                        | `mvn -o -pl <the recorded module set> -am -Dmaven.compiler.useIncrementalCompilation=false clean package` — the recorded gate: compile and run the test set with JDK 25. It no longer **regenerates** anything; the generator is not part of the build (see `scripts/gen.js` below) |
 | `scripts/mvn-jdk25.js hipster-entity test`    | the same module set with an explicit goal (no implicit `clean`)                                     |
 | `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository                                                   |
 | `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned                                                    |
@@ -88,7 +88,7 @@ implementation also cannot drift from itself, which is the other reason: see the
 
 There are two build entry points, and the difference between them is deliberate rather than an oversight:
 
-- **`bun scripts/mvn-jdk25.js` is the gate.** `clean test`, `-Dmaven.compiler.useIncrementalCompilation=false`, and
+- **`bun scripts/mvn-jdk25.js` is the gate.** `clean package`, `-Dmaven.compiler.useIncrementalCompilation=false`, and
   the build cache **off**. Nothing it reports can have been reused from an earlier revision, which is the whole
   point: F-47 is the scar where a build was satisfied by a previous revision's class files and reported SUCCESS.
 - **`bun scripts/mvn-fast.js` is for iterating.** The same module set, with the Maven build cache
@@ -97,7 +97,7 @@ There are two build entry points, and the difference between them is deliberate 
   restored instead of re-run — and test execution is where the time goes: a warm `-pl <mods> -am test` of the ioc
   tooling measured 12:43 with the cache off, almost all of it tests.
 
-Both use the cache; what differs is how much they re-run. `mvn-jdk25.js` is the gate — `clean test`, incremental
+Both use the cache; what differs is how much they re-run. `mvn-jdk25.js` is the gate — `clean package`, incremental
 compilation off — and it **keeps the build cache on**, by the maintainer's decision of 2026-10-03: the cache
 checksums a module together with all of its dependencies and invalidates the whole module when anything in that
 closure changes, so a hit means "these exact inputs were already built and tested". Disabling it "just in case"
@@ -166,7 +166,7 @@ produces; it never replaces it, and removing the sidecar would leave the tool co
 revision's class files, which is how a source that did not compile once reported `BUILD SUCCESS`
 (notes F-47). The `-Dmaven.compiler.useIncrementalCompilation=false` is the other half of the same
 fix — it stops the compiler plugin from deciding within a run that a module is up to date. Both flags,
-the six-module list and the `clean test` default are declared once, in `scripts/lib/gate.js`, which the
+the six-module list and the `clean package` default are declared once, in `scripts/lib/gate.js`, which the
 launcher, `scripts/gen.js` and `scripts/run-demo.js` all import; `GateContractTest` asserts that
 definition, and asserts that no shell twin exists to diverge from it. (It used to be `GateParityTest`,
 and the name was the problem: it existed because `mvn-jdk25.cmd` and `mvn-jdk25.sh` had already

@@ -97,8 +97,17 @@ export function moduleSelectors(modules) {
   return modules.split(',').map((name) => `:${name}`).join(',');
 }
 
-/** The recorded default goal list: the gate is `clean test`, and `clean` is not optional. */
-export const DEFAULT_GOALS = ['clean', 'test'];
+/**
+ * The recorded default goal list: the gate is `clean package`, and `clean` is not optional.
+ *
+ * `package` rather than `test` is a quiet correction with a loud reason, learned the hard way once the build cache
+ * was in use: the cache key does **not** include the goal list, so an entry saved by a `clean test` run (which
+ * produces no JAR) can answer a later build that needs one — and the dependent module then fails to compile against
+ * a sibling that is present and class-less (`cannot find symbol: HipsterContext` while the module exists on disk).
+ * `package` runs the tests exactly as `test` does and leaves a JAR behind, so every entry and every consumer agree
+ * on what a built module is. `GateContractTest` asserts this list.
+ */
+export const DEFAULT_GOALS = ['clean', 'package'];
 
 /** A `-D` token with no `=` means a shell split a property before the script saw it. */
 export function splitProperty(args) {

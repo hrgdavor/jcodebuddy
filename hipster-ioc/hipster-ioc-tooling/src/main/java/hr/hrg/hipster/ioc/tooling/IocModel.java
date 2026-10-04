@@ -31,6 +31,36 @@ public final class IocModel {
     }
 
     /**
+     * One entry of a context's {@code @HipsterContext(dependencies = …)}, resolved against the index.
+     *
+     * <p>DEC-036 § 6's amendment settles what a dependency *is*: the generated implementation receives it as a
+     * constructor parameter (this generator never constructs one), and its beans become resolvable — a factory
+     * parameter whose type is one of {@link #beans()} is satisfied by calling that context's accessor. That is the
+     * cross-context wiring the ROADMAP recorded as missing until step 3.7.</p>
+     *
+     * @param typeText     the dependency as the annotation wrote it, which is what the constructor parameter and
+     *                     the field are declared with
+     * @param simpleName   the type's simple name, used to derive the field and parameter name
+     * @param beans        the dependency's own beans, in declaration order; a factory parameter matching one of
+     *                     their types is resolved from this context rather than from this context's own beans
+     * @param childContext whether the dependency is itself a {@code ChildContext}, in which case the generated
+     *                     constructor sets this context as its parent (DEC-036 § 6)
+     */
+    public record ReferencedContext(String typeText, String simpleName, List<Bean> beans, boolean childContext) {
+
+        public ReferencedContext {
+            beans = List.copyOf(beans);
+        }
+
+        /** The field and constructor-parameter name this dependency is given: {@code DataContext} → {@code dataContext}. */
+        public String fieldName() {
+            return simpleName.isEmpty()
+                    ? simpleName
+                    : Character.toLowerCase(simpleName.charAt(0)) + simpleName.substring(1);
+        }
+    }
+
+    /**
      * One parameter of a factory method.
      *
      * @param circular whether the parameter carries {@code @Circular}, i.e. whether the user has said this
@@ -82,6 +112,7 @@ public final class IocModel {
      */
     public record Context(String packageName, String simpleName, List<Bean> beans,
                           Map<String, Factory> factories, Map<String, String> initHooks,
+                          List<ReferencedContext> dependencies,
                           List<String> dependencyTypes, String parentType,
                           boolean hasImplementation, List<String> importLines) {
 
@@ -89,6 +120,7 @@ public final class IocModel {
             beans = List.copyOf(beans);
             factories = Map.copyOf(factories);
             initHooks = Map.copyOf(initHooks);
+            dependencies = List.copyOf(dependencies);
             dependencyTypes = List.copyOf(dependencyTypes);
             importLines = List.copyOf(importLines);
         }

@@ -654,7 +654,7 @@ canonical statement of a boundary that has no other home.
   for *using* the stack it points at `docs/stack/README.md` (setup, signals, the JSX/DOM contract, and the
   rules that fail silently), and its gate is `bun run check` inside the checkout. Default location
   `<repo>/.jsx6/` — a temporary folder that is **not** `target/`, because the recorded gate runs
-  `clean test` and would delete a checkout there on every run; `JCODEBUDDY_JSX6_DIR` overrides it.
+  `clean package` and would delete a checkout there on every run; `JCODEBUDDY_JSX6_DIR` overrides it.
   **Nothing about JCodeBuddy's UI may be written against a
   remembered version of jsx6** — the checkout you actually read is what counts, and it is updated on
   demand rather than pinned. Scheduled as steps 7.9–7.10 in [`plans/unified-plan.md`](plans/unified-plan.md).

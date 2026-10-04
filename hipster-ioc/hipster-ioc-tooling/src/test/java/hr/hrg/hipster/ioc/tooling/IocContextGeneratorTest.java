@@ -375,6 +375,174 @@ class IocContextGeneratorTest {
         return root;
     }
 
+    /**
+     * Two contexts where the second declares the first in {@code dependencies()} and one of its factory parameters
+     * is a bean the first owns.
+     *
+     * <p>DEC-036 § 6's amendment (step 3.7) is what makes that parameter resolvable: the dependency is received as a
+     * constructor parameter and its beans are reached through its own accessors, instead of the generator inventing
+     * a way to construct the other context. Who constructs it is the caller — the boundary the clause records.</p>
+     */
+    private Path crossContextTree(Path dir) throws IOException {
+        Path root = dir.resolve("src");
+        Path packageDir = Files.createDirectories(root.resolve("ioc/fixture"));
+        Files.writeString(packageDir.resolve("DataModule.java"), """
+                package ioc.fixture;
+
+                import java.util.List;
+
+                interface DataModule {
+                    default List<String> buildRows() {
+                        return List.of("widget");
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("DataContext.java"), """
+                package ioc.fixture;
+
+                import hr.hrg.hipster.ioc.HipsterContext;
+                import java.util.List;
+
+                @HipsterContext
+                public interface DataContext extends DataModule {
+                    List<String> rows();
+                }
+                """);
+        Files.writeString(packageDir.resolve("AppModule.java"), """
+                package ioc.fixture;
+
+                import java.util.List;
+
+                class Report {
+                    private final List<String> rows;
+
+                    Report(List<String> rows) {
+                        this.rows = rows;
+                    }
+
+                    List<String> rows() {
+                        return rows;
+                    }
+                }
+
+                interface AppModule {
+                    default Report buildReport(List<String> rows) {
+                        return new Report(rows);
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("AppContext.java"), """
+                package ioc.fixture;
+
+                import hr.hrg.hipster.ioc.HipsterContext;
+
+                @HipsterContext(dependencies = {DataContext.class})
+                public interface AppContext extends AppModule {
+                    Report report();
+                }
+                """);
+        return root;
+    }
+
+    /**
+     * The cross-context edge, end to end: the parameter is resolved from the context the caller passed in, and the
+     * generated implementation is the only place that decision is recorded — so it is also the place to look.
+     */
+    @Test
+    void aDependencyContextIsReceivedAndItsBeansAreResolvable(@TempDir Path dir) throws Exception {
+        Path root = crossContextTree(dir);
+
+        IocGeneration.Result result = IocGeneration.generate(root, root, "    ");
+
+        Assertions.assertEquals(0, result.refused(), result.divergences().toString());
+        String source = Files.readString(impl(root, "AppContext"));
+        Assertions.assertTrue(source.contains("AppContextImpl(DataContext dataContext)"),
+                "the declared dependency is a constructor parameter, not something the generator constructs — and "
+                        + "a parameter it answers from that dependency is not asked of the caller as well:\n"
+                        + source);
+        Assertions.assertTrue(source.contains("this.report = buildReport(dataContext.rows());"),
+                "and a factory parameter whose type is one of that context's beans is resolved through its own "
+                        + "accessor — the cross-context edge DEC-036 § 6 was amended for:\n" + source);
+
+        compile(root);
+
+        try (URLClassLoader loader = new URLClassLoader(
+                new URL[]{root.resolve("classes").toUri().toURL()}, getClass().getClassLoader())) {
+            Class<?> dataImpl = loader.loadClass("ioc.fixture.DataContextImpl");
+            Class<?> appImpl = loader.loadClass("ioc.fixture.AppContextImpl");
+            Object data = dataImpl.getDeclaredConstructor().newInstance();
+            Object app = appImpl.getDeclaredConstructor(loader.loadClass("ioc.fixture.DataContext")).newInstance(data);
+
+            Object report = appImpl.getMethod("report").invoke(app);
+            var rows = report.getClass().getDeclaredMethod("rows");
+            rows.setAccessible(true);
+            Assertions.assertEquals(List.of("widget"), rows.invoke(report),
+                    "the bean was built from the value the PASSED-IN context supplies, so the two contexts are "
+                            + "actually wired rather than merely co-located");
+        }
+    }
+
+    /**
+     * A child context declared as a dependency: the generated constructor adopts it, which is DEC-036 § 6's "parent
+     * assignment emitted where the child is created" — here, where the child is <em>received</em>, because the
+     * generator never creates one.
+     */
+    @Test
+    void aDependencyThatIsAChildContextGetsThisContextAsItsParent(@TempDir Path dir) throws Exception {
+        Path root = dir.resolve("src");
+        Path packageDir = Files.createDirectories(root.resolve("ioc/fixture"));
+        Files.writeString(packageDir.resolve("OuterModule.java"), """
+                package ioc.fixture;
+
+                interface OuterModule {
+                    default InnerContext buildInner() {
+                        return new InnerContextImpl();
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("InnerContext.java"), """
+                package ioc.fixture;
+
+                import hr.hrg.hipster.ioc.ChildContext;
+                import hr.hrg.hipster.ioc.HipsterContext;
+
+                @HipsterContext
+                public interface InnerContext extends ChildContext<OuterContext> {
+                }
+                """);
+        Files.writeString(packageDir.resolve("OuterContext.java"), """
+                package ioc.fixture;
+
+                import hr.hrg.hipster.ioc.HipsterContext;
+
+                @HipsterContext(dependencies = {InnerContext.class})
+                public interface OuterContext extends OuterModule {
+                    InnerContext inner();
+                }
+                """);
+
+        IocGeneration.Result result = IocGeneration.generate(root, root, "    ");
+
+        Assertions.assertEquals(0, result.refused(), result.divergences().toString());
+        String source = Files.readString(impl(root, "OuterContext"));
+        Assertions.assertTrue(source.contains("innerContext.setParent(this);"),
+                "receiving a ChildContext is where its parent is assigned (DEC-036 § 6):\n" + source);
+
+        compile(root);
+
+        try (URLClassLoader loader = new URLClassLoader(
+                new URL[]{root.resolve("classes").toUri().toURL()}, getClass().getClassLoader())) {
+            Class<?> innerImpl = loader.loadClass("ioc.fixture.InnerContextImpl");
+            Class<?> outerImpl = loader.loadClass("ioc.fixture.OuterContextImpl");
+            Object inner = innerImpl.getDeclaredConstructor().newInstance();
+            Object outer = outerImpl.getDeclaredConstructor(loader.loadClass("ioc.fixture.InnerContext"))
+                    .newInstance(inner);
+
+            Assertions.assertSame(outer, innerImpl.getMethod("getParent").invoke(inner),
+                    "the child's parent is the context that received it, at runtime and not only in the text");
+        }
+    }
+
     private static Path impl(Path root, String simpleName) {
         return root.resolve("ioc/fixture/" + simpleName + "Impl.java");
     }

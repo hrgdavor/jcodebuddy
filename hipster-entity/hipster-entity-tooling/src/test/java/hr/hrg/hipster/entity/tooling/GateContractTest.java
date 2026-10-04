@@ -82,15 +82,21 @@ class GateContractTest {
     }
 
     /**
-     * The default invocation: {@code clean test}, or the gate can be satisfied by a previous revision's class
+     * The default invocation: {@code clean package}, or the gate can be satisfied by a previous revision's class
      * files (F-47). Asserted on the shared definition, so the launcher, {@code gen.js}'s forwarded mode and
      * {@code run-demo.js} cannot disagree about it.
+     *
+     * <p>{@code package} rather than {@code test} since the build cache landed: the cache key does not include the
+     * goal list, so an entry saved by a {@code test} run — which produces no JAR — can answer a later build that
+     * needs one, and the dependent module then fails to compile against a sibling that exists and is class-less.
+     * {@code package} runs the tests exactly as {@code test} does and leaves the JAR behind.</p>
      */
     @Test
-    void theGateDefaultsToCleanTest() throws Exception {
+    void theGateDefaultsToCleanPackage() throws Exception {
         String gate = gateModule();
-        Assertions.assertTrue(gate.contains("export const DEFAULT_GOALS = ['clean', 'test']"),
-                "the recorded gate is `clean test` (D-21); it must be declared as such, in one place");
+        Assertions.assertTrue(gate.contains("export const DEFAULT_GOALS = ['clean', 'package']"),
+                "the recorded gate is `clean package` (D-21, `package` since the cache landed); it must be declared "
+                        + "as such, in one place");
         Assertions.assertTrue(gate.contains("const goals = rest.length === 0 ? defaultGoals : rest"),
                 "and it is the DEFAULT that cleans: an explicit goal list is the caller's request, which is how "
                         + "run-demo.js reuses built classes without a rebuild");
@@ -105,7 +111,7 @@ class GateContractTest {
         // by `:artifactId` — a bare directory name stopped resolving the day they moved. The recorded list is
         // still the list of NAMES (asserted above); only the selector is derived from it.
         Assertions.assertTrue(gate.contains("['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, ...goals]"),
-                "the scoped invocation is `-o -pl <:artifactId,…> -am -Dmaven...clean test`");
+                "the scoped invocation is `-o -pl <:artifactId,…> -am -Dmaven...clean package`");
         Assertions.assertTrue(gate.contains("modules.split(',').map((name) => `:${name}`).join(',')"),
                 "and the selector form is `:artifactId`, because the module directories are no longer at the root");
     }
@@ -233,13 +239,13 @@ class GateContractTest {
     @Test
     void theRootReadmeDescribesTheGateTheScriptActuallyRuns() throws Exception {
         String readme = read(repoRoot().resolve("README.md"));
-        Assertions.assertTrue(readme.contains("clean test"),
-                "README.md must name the recorded gate as `clean test` (F-47)");
+        Assertions.assertTrue(readme.contains("clean package"),
+                "README.md must name the recorded gate as `clean package` (F-47)");
         Matcher row = Pattern.compile("\\| `scripts/mvn-jdk25\\.js`[^\\n]*").matcher(readme);
         Assertions.assertTrue(row.find(),
                 "and must carry the launcher row for the script that exists, scripts/mvn-jdk25.js");
-        Assertions.assertTrue(row.group().contains("clean test"),
-                "the launcher row itself must say `clean test`, not just the prose: " + row.group());
+        Assertions.assertTrue(row.group().contains("clean package"),
+                "the launcher row itself must say `clean package`, not just the prose: " + row.group());
         // No *command row* for a removed launcher. The README may still name the old files where it explains why
         // they were replaced — that history is the point of the note — but a row is an instruction to run it.
         Assertions.assertFalse(
