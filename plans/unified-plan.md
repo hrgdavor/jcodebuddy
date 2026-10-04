@@ -3228,6 +3228,22 @@ These are not this repository's content and never were:
 
 **Gate:** `git status` clean of scratch; `git worktree list` shows only the main checkout.
 
+**Done 2026-10-03.** The scratch is gone, and two of the three bullets had to be corrected before they could be acted
+on — which is the reason this step says to confirm first:
+
+- **`.kilo/plans/*` — six files deleted** (`archive-orphaned-poms`, `dec-w007-refinement`,
+  `hipster-ioc-integration`, `metadata-server`, `metadata-no-cache-adr-plan`, `metadata-arena-module`; 61 KB
+  together). All six were untracked, so git never had them and nothing is recoverable — which 9.1's coverage check had
+  to confirm first, and did: every item they carried is a step in this plan, annotated in § 3.
+- **The stale worktree at `.kilo/worktrees/snapdragon-motorcycle` is removed** (clean, detached at `0c5f200`), and
+  `git worktree prune` leaves `git worktree list` showing the main checkout alone.
+- **The two root zero-byte files are not there, and one of them was never debris.** `explicit` no longer exists —
+  already cleaned up on some earlier pass. `hipster-entity` **is the repository's own module directory**, not a
+  mangled-command-line leftover, and deleting it would have removed six modules; the bullet is obsolete as written and
+  is left in place as the record of a hazard rather than acted on. That is why the step's own order is "verify they
+  are empty, then delete" — a check that a zero-byte file cannot be a directory is the part worth keeping.
+
+
 ### 9.4 — Retire the per-plan "open list" sections
 **Who:** agent · **Size:** S
 
