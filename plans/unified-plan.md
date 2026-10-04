@@ -2345,6 +2345,33 @@ churn in every generated file.
 **Waits on:** the generated layout (field grouping, where the constructor sits).
 **Schedulable when:** the layout stops changing and DEC-035's `region begin/end` ids are named.
 
+**Done 2026-10-03 — three ids, their thresholds, and the one interpretation the clause left open.** DEC-035's
+`region begin <id>` / `region end <id>` pair is what the generator now emits (through
+`GeneratedCodeMarkers.regionBegin`/`regionEnd`, so the spelling has one home), with the ids **`fields`**,
+**`accessors`** and **`factories`** — short stable tokens, as DEC-035 requires of a region id, at each section's own
+indentation. The thresholds are DEC-036 § 9's: bean fields > 5, accessors > 3, creations > 3.
+
+**The open question was which generated section "BeanFactory methods" means**, and it is answered rather than
+guessed: a generated context has no factory method of its own — it *calls* the module's
+`default build<Bean>(...)` factories — so the section the threshold applies to is the **creation block**, and
+`factories` delimits exactly the statements that call those factories. A stricter reading would put the threshold on
+a section that never exists in the file being generated, which cannot be what the clause meant; DEC-036 § 9 records
+the reading.
+
+**The counting boundary is stated too**: the thresholds count the context's beans, and the `fields` region wraps the
+bean fields only — the extra-parameter fields and a `ChildContext` parent field stay outside it, because they do not
+grow with the object graph the markers exist to make navigable.
+
+**The example does not churn**: `hipster-ioc-test`'s context has one bean, so it is below every threshold and
+regenerating it would be a no-op. The feature is proved by two fixtures instead — 6 beans (all three regions
+present, each `begin` with its matching `end`, and the file still compiles) and 3 vs 4 beans, which pins both sides
+of both thresholds.
+
+**Evidence:** `-pl hipster-ioc/hipster-ioc-tooling -am clean test` → BUILD SUCCESS, `hipster-ioc-tooling`
+**17 tests** (15 + the two region tests) · the recorded gate → BUILD SUCCESS · `hipster-ioc/doc/ROADMAP.md` updated:
+region markers are off the "what the prototype does not do" list, leaving cross-context wiring (3.7) as the only
+generator gap · LINKS green.
+
 ### 3.7 — Cross-context `dependencies()` and `ChildContext` parent assignment
 **Who:** agent · **Size:** M
 

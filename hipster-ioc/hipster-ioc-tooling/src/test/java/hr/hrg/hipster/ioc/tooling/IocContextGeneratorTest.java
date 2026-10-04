@@ -302,6 +302,79 @@ class IocContextGeneratorTest {
         return root;
     }
 
+    /**
+     * DEC-036 § 9: a large context gets region markers around its three sections, so a reader — or a hand edit —
+     * can find them. 6 beans is over all three thresholds.
+     */
+    @Test
+    void regionMarkersAppearOnlyAboveTheirThresholds(@TempDir Path dir) throws Exception {
+        Path root = manyBeansTree(dir, 6);
+
+        IocGeneration.Result result = IocGeneration.generate(root, root, "    ");
+
+        Assertions.assertEquals(0, result.refused(), "nothing here is refused: " + result.divergences());
+        String source = Files.readString(impl(root, "ManyContext"));
+        for (String id : List.of("fields", "accessors", "factories")) {
+            Assertions.assertTrue(source.contains("// @generated region begin " + id + " "),
+                    "a 6-bean context is over the " + id + " threshold:\n" + source);
+            Assertions.assertTrue(source.contains("// @generated region end " + id + "\n"),
+                    "and every begin has its matching end, by id (DEC-035):\n" + source);
+        }
+        compile(root);
+    }
+
+    /**
+     * The other side of every threshold, which is where a marker would be noise forever: 3 beans is under the
+     * section thresholds and 4 is over them but still under the field one.
+     */
+    @Test
+    void regionMarkersStayAwayBelowTheirThresholds(@TempDir Path dir) throws Exception {
+        Path small = manyBeansTree(Files.createDirectories(dir.resolve("small")), 3);
+        IocGeneration.Result smallResult = IocGeneration.generate(small, small, "    ");
+        Assertions.assertEquals(0, smallResult.refused(), String.valueOf(smallResult.divergences()));
+        String smallSource = Files.readString(impl(small, "ManyContext"));
+        Assertions.assertFalse(smallSource.contains("region begin"),
+                "3 beans is under every threshold, and a marker per small section is noise:\n" + smallSource);
+
+        Path medium = manyBeansTree(Files.createDirectories(dir.resolve("medium")), 4);
+        IocGeneration.Result mediumResult = IocGeneration.generate(medium, medium, "    ");
+        Assertions.assertEquals(0, mediumResult.refused(), String.valueOf(mediumResult.divergences()));
+        String mediumSource = Files.readString(impl(medium, "ManyContext"));
+        Assertions.assertTrue(mediumSource.contains("// @generated region begin accessors "),
+                "4 beans is over the section thresholds:\n" + mediumSource);
+        Assertions.assertFalse(mediumSource.contains("// @generated region begin fields "),
+                "but still under the field threshold, which needs more than five:\n" + mediumSource);
+    }
+
+    /**
+     * A context with {@code count} independent beans of one type, which is the cheapest tree that can cross the
+     * thresholds. The beans are independent on purpose: the sections are what is under test, not the ordering.
+     */
+    private Path manyBeansTree(Path dir, int count) throws IOException {
+        Path root = dir.resolve("src");
+        Path packageDir = Files.createDirectories(root.resolve("ioc/fixture"));
+        StringBuilder module = new StringBuilder("package ioc.fixture;\n\ninterface ManyModule {\n");
+        StringBuilder context = new StringBuilder("package ioc.fixture;\n\n")
+                .append("import hr.hrg.hipster.ioc.HipsterContext;\n\n")
+                .append("@HipsterContext\npublic interface ManyContext extends ManyModule {\n");
+        for (int i = 1; i <= count; i++) {
+            module.append("    default Leaf buildLeaf").append(i).append("() {\n")
+                    .append("        return new Leaf(\"").append(i).append("\");\n    }\n\n");
+            context.append("    Leaf leaf").append(i).append("();\n");
+        }
+        Files.writeString(packageDir.resolve("ManyModule.java"), module.append("}\n").toString());
+        Files.writeString(packageDir.resolve("ManyContext.java"), context.append("}\n").toString());
+        Files.writeString(packageDir.resolve("Leaf.java"), """
+                package ioc.fixture;
+
+                public class Leaf {
+                    public Leaf(String id) {
+                    }
+                }
+                """);
+        return root;
+    }
+
     private static Path impl(Path root, String simpleName) {
         return root.resolve("ioc/fixture/" + simpleName + "Impl.java");
     }
