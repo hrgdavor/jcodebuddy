@@ -1,4 +1,8 @@
 > ## ⚠ SUPERSEDED — do not use this document as a plan
+
+> **Archived 2026-10-03.** This plan is superseded: everything it still had open was absorbed into
+> [`plans/unified-plan.md`](../../plans/unified-plan.md), which is the single schedule. It is kept because a plan
+> records the reasoning of its time, not only its remaining work.
 >
 > This document is **stale and superseded**. It was generated on
 > 2026-07-21 from an earlier analysis of the tree, and several of its
@@ -30,7 +34,7 @@
 > whose execution findings are recorded in `plans__p1/plan.dsflash.notes.md`,
 > removed by the same reorganization.
 > Current implementation status is tracked in
-> [`roadmap/README.md`](README.md).
+> [`roadmap/README.md`](../../doc-hipster-entity/roadmap/README.md).
 
 # Plan for Continuing Work on hipster-entity
 

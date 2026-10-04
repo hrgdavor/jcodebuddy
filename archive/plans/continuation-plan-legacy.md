@@ -1,5 +1,9 @@
 > **Deprecated**: This continuation plan is superseded by the unified JCodeBuddy merge plan. It contains outdated assumptions (Phase 1.0 "completed" work that does not exist on disk). Refer to the current plan at the repo root `README.md` and the unified build structure.
 
+> **Archived 2026-10-03.** This plan is superseded: everything it still had open was absorbed into
+> [`plans/unified-plan.md`](../../plans/unified-plan.md), which is the single schedule. It is kept because a plan
+> records the reasoning of its time, not only its remaining work.
+
 # Code-Buddy Submodule Continuation Plan
 
 **Created:** 2026-07-21 (based on handoff document)  
@@ -151,6 +155,6 @@ jcodebuddy/
 
 The four mentions describe a pre-migration module layout — "All generators parse Java source and modify AST nodes", a `jcodebuddy/jcodebuddy-agent/pom.xml` depending on `javaparser-core:3.28.0`, and a demo generator applying "imperative transformations using JavaParser AST". That layout is what this plan was written against, and the plan's own deprecation banner already says so; no reader should take `javaparser-core:3.28.0` as the current dependency.
 
-The generators now read through [`RecordBuilderProcessor`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/RecordBuilderProcessor.java) and take source positions from [`LineLookup`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/LineLookup.java) in `jwa-builder`, over OpenRewrite's LST.
+The generators now read through [`RecordBuilderProcessor`](../../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/RecordBuilderProcessor.java) and take source positions from [`LineLookup`](../../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/LineLookup.java) in `jwa-builder`, over OpenRewrite's LST.
 
-The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).
+The representation decision is [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../../doc_knowledge/code.graph.md).
