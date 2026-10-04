@@ -104,6 +104,15 @@ accident. And the cache's safety was verified rather than argued when it was add
 real change produced a **new checksum, a miss, and a failing test that failed the build**, which is the property
 that matters — a cache may not answer with a stale SUCCESS.
 
+**Two rules the fast path enforces, both learned by getting them wrong.** Its goal is `package` rather than `test`,
+because a cached module restored without a JAR cannot be depended on by the next module in the reactor. And it turns
+the cache **off** for `--tests` and `--no-clean` runs, because `-Dtest=…` is not part of the cache key: a run that
+verified one test class could otherwise leave an entry that a later **full** run hits — reporting SUCCESS with
+surefire skipped and no tests executed. That was measured, not imagined (cache on: zero tests run, SUCCESS; cache
+off: 467 tests, one failure, FAILURE). The same rule binds anyone running Maven by hand here: **populate the cache
+only with a full `package` run**, and if a build reports impossible symbol errors, delete `~/.m2/build-cache` — it
+is a cache, and deleting it is always safe.
+
 **Use the fast path while working, the gate before a commit.** The cache lives in the user's Maven repository
 (`~/.m2/build-cache`), not in the workspace: it is a fact about one machine, and deleting it is always safe.
 

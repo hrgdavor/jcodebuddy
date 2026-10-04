@@ -149,6 +149,27 @@ class GateContractTest {
     }
 
     /**
+     * The fast path must not let a narrowed run populate the cache.
+     *
+     * <p>Measured, not reasoned: `-Dtest=` is not part of the cache key, so a run that verified one test class
+     * stored an entry a later FULL run hit — and that run reported BUILD SUCCESS with surefire skipped and no tests
+     * executed. Cache on: zero tests, SUCCESS. Cache off: 467 tests, one failure, FAILURE. The script therefore
+     * turns the cache off whenever the run is narrowed (`--tests`) or the tree is not cleaned (`--no-clean`, where a
+     * half-restored `target/` made a compile harness fail); this asserts that rule survives the next edit.</p>
+     */
+    @Test
+    void theFastPathNeverCachesANarrowedOrUncleanedRun() throws Exception {
+        String fast = read(repoRoot().resolve("scripts/mvn-fast.js"));
+
+        Assertions.assertTrue(fast.contains("if (options.tests !== null || !options.clean) {"),
+                "the guard must exist where the options are parsed");
+        Assertions.assertTrue(fast.contains("options.cache = false;"),
+                "and it must turn the cache off rather than warn about it");
+        Assertions.assertTrue(fast.contains("-Dtest=${options.tests}"),
+                "while --tests still narrows surefire, so the narrowing itself is not lost with the cache");
+    }
+
+    /**
      * A property argument that a shell split before the script saw it must be refused, never forwarded (notes
      * D-20). In the old {@code .cmd} the fragments made Maven drop the whole {@code -pl} list, so the failure of an
      * unrelated module looked like the gate failing.

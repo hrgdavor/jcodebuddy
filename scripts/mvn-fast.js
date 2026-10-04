@@ -31,6 +31,14 @@
  *      compile perfectly. The cache is keyed in a way that lets this happen, so the rule is about how it is used:
  *      populate with `package` (this script), and if a build reports impossible symbol errors, delete
  *      `~/.m2/build-cache` — it is a cache, and deleting it is always safe.
+ *   3. **`--tests` and `--no-clean` turn the cache OFF, and that is a correctness rule rather than a preference.**
+ *      A narrowed run and a full run share a cache key: `-Dtest=…` is not part of it. So a run that verified ONE
+ *      test class stores an entry that a later full run can hit — and that run then reports BUILD SUCCESS with
+ *      surefire skipped and **no tests executed at all**. Measured: cache on, 0 tests run, SUCCESS; cache off,
+ *      467 tests, 1 failure, FAILURE. A narrowed run must therefore never populate the cache, which this script
+ *      enforces by not using it; `--no-clean` does the same because a cache restore into a tree that was not
+ *      cleaned is how a half-restored `target/` produced a compile failure in a test harness that resolves the
+ *      reactor's own output directories.
  *
  * Usage:
  *   bun scripts/mvn-fast.js                          the recorded module set, `clean test`, cached
@@ -59,14 +67,19 @@ const LIFECYCLE_PHASES = new Set([
 function usage() {
     console.log(`mvn-fast.js — the cached iteration build (the recorded gate is mvn-jdk25.js)
 
-  bun scripts/mvn-fast.js                        the recorded module set, clean test, build cache on
-  bun scripts/mvn-fast.js --tests SomeTest       the same narrowed to one test class
-  bun scripts/mvn-fast.js --no-clean             reuse the tree as it is
-  bun scripts/mvn-fast.js --off-cache            full no-reuse run, but still parallel and cached-off only here
-  bun scripts/mvn-fast.js -pl :module -am test   a free-form Maven invocation
+  bun scripts/mvn-fast.js                        the recorded module set, clean package, build cache on
+  bun scripts/mvn-fast.js --tests SomeTest       the same narrowed to one test class (cache off: see below)
+  bun scripts/mvn-fast.js --no-clean             reuse the tree as it is (cache off: see below)
+  bun scripts/mvn-fast.js --off-cache            full no-reuse run
+  bun scripts/mvn-fast.js --no-parallel          one module at a time
+  bun scripts/mvn-fast.js -pl :module -am package   a free-form Maven invocation
 
   Differences from the recorded gate: build cache ON, incremental compilation at Maven's default, -T 1C.
-  The gate stays \`clean test\`, cache off, incremental off — run it before a commit.`);
+  The gate stays \`clean test\`, cache off, incremental off — run it before a commit.
+
+  --tests and --no-clean force the cache OFF. A narrowed run shares a cache key with a full one (the -Dtest
+  property is not hashed), so allowing it to populate the cache lets a later full run hit evidence from one test
+  class and report SUCCESS without running anything.`);
 }
 
 /** Splits this script's own options from the Maven arguments that follow them. */
@@ -90,6 +103,15 @@ function parse(argv) {
         } else {
             maven.push(arg);
         }
+    }
+    // Correctness, not preference. `-Dtest=…` is not part of the cache key, so a narrowed run and a full run share
+    // an entry: a one-class run would populate it and a later full run would hit it, skip surefire and report
+    // SUCCESS having run no tests. Measured, not reasoned: cache on, zero tests, SUCCESS; cache off, 467 tests,
+    // one failure, FAILURE. `--no-clean` is the same rule for a different reason — restoring a cache entry into a
+    // tree that was not cleaned is how a half-restored `target/` made a compile harness fail on sources that
+    // compile.
+    if (options.tests !== null || !options.clean) {
+        options.cache = false;
     }
     return { maven, options };
 }

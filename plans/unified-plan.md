@@ -86,9 +86,19 @@ took **12:43**, with the engine compiled already). What landed:
    `-Dmaven.build.cache.enabled=false`, and `GateContractTest` asserts the constant and its two uses — the same
    shape as `clean` and the incremental switch, and for the same reason (F-47: a build satisfied by a previous
    revision's outputs once reported SUCCESS).
-4. **The cache was verified to be honest rather than argued to be**: a real source change produced a new checksum,
-   a **miss**, and a deliberately failing test that **failed the build**. A cache may not answer with a stale
-   SUCCESS, and that is the property that was tested.
+4. **The cache was verified to be honest rather than argued to be — and the verification found a second, worse
+   failure.** A real source change produced a new checksum, a **miss**, and a deliberately failing test that
+   **failed the build**: a cache may not answer with a stale SUCCESS. That was not enough. `-Dtest=…` is **not**
+   part of the cache key, so a run that verified one test class stored an entry that a later **full** run hit — and
+   that run reported BUILD SUCCESS with surefire skipped and **no tests executed at all** (measured: cache on, zero
+   tests, SUCCESS; cache off, 467 tests, one failure, FAILURE). `scripts/mvn-fast.js` therefore turns the cache off
+   whenever a run is narrowed (`--tests`) or the tree is not cleaned (`--no-clean`), `GateContractTest` asserts that
+   guard so a later edit cannot quietly drop it, and the cache was purged and repopulated from a full `package` run.
+
+   The lesson generalises past this tool: **a cache entry is evidence about the run that produced it, and it is only
+   valid for runs at least as broad.** The first commit of this change claimed the cache had been verified honest;
+   it had been verified for the *changed-input* direction and not for the *narrower-evidence* direction, and that
+   difference is what the follow-up commit records.
 
 **Two failures worth recording, because each was a broken build before it was a sentence:**
 
