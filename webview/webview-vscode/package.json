@@ -19,7 +19,8 @@
         "Other"
     ],
     "activationEvents": [
-        "onStartupFinished"
+        "onStartupFinished",
+        "onLanguage:java"
     ],
     "main": "./out/extension.js",
     "contributes": {
@@ -105,9 +106,22 @@
                     "type": "string",
                     "default": "",
                     "description": "Shared secret the state-changing routes require (/api/v1/applyEdit and friends). Without it those routes refuse every caller, including pages this bridge served."
+                },
+                "webviewExplorer.sidecar.javaHome": {
+                    "type": "string",
+                    "default": "",
+                    "description": "JDK to run the JWA sidecar with. Empty means JAVA_HOME, then java from PATH."
+                },
+                "webviewExplorer.sidecar.jarPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "The sidecar JAR to launch. Empty means the JAR bundled in this extension, then webview/jwa-sidecar/target/jwa-sidecar.jar in the workspace."
                 }
             }
         }
+    },
+    "dependencies": {
+        "vscode-languageclient": "^8.1.0"
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
@@ -117,7 +131,7 @@
         "lint": "eslint src --ext ts",
         "test": "node ./out/test/runTest.js",
         "pretest:unit": "npm run compile",
-        "test:unit": "node ./src/test/BridgePolicy.test.js && node ./src/test/HostRegistration.test.js"
+        "test:unit": "node ./src/test/BridgePolicy.test.js && node ./src/test/HostRegistration.test.js && node ./src/test/SidecarPaths.test.js"
     },
     "devDependencies": {
         "@types/glob": "^8.1.0",

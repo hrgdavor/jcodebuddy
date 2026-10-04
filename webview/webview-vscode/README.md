@@ -52,6 +52,29 @@ carries a *configured* port and never a constant.
 - `webviewExplorer.allowedOrigins`: Comma-separated list of origins allowed to call the bridge (e.g., `http://localhost:3000`).
 - `webviewExplorer.token`: Required by the state-changing routes (`/api/v1/applyEdit` and friends) — an allowed
   `Origin` is deliberately not enough for a route that changes something.
+- `webviewExplorer.sidecar.javaHome`: JDK to run the JWA sidecar with. Empty means `JAVA_HOME`, then `java` from
+  `PATH`. The search order is `SidecarPaths.discoverJavaExecutable`, and it is unit-tested.
+- `webviewExplorer.sidecar.jarPath`: The sidecar JAR to launch. Empty means the JAR bundled in this extension
+  (`sidecar/jwa-sidecar.jar`), then `webview/jwa-sidecar/target/jwa-sidecar.jar` in the workspace. When none
+  exists the output channel names every path that was looked in.
+
+## The JWA sidecar as a language server
+
+This extension launches `webview/jwa-sidecar` as a **language server for Java** and listens for its jump
+notification. That half was merged in step 3.0q from the earlier `webview/vscode-jwa` attempt, which is why the
+discovery rules live in `SidecarPaths.ts` as pure functions with their own unit test rather than inline in
+`activate`: the old file called `path.join` without importing `path`, so its discovery branch threw, and its
+development JAR path had been left a level too high by the 2026-10-02 directory move. Neither defect survives
+here — `path` is imported, and the development candidate is derived from the workspace root.
+
+Build the sidecar with
+`bun scripts/mvn-jdk25.js -pl webview/jwa-sidecar -am package`; without it the extension still works and says so
+in the **JWA Sidecar** output channel.
+
+| Name                               | Kind                              | Refactor-sensitive?                      | Why |
+| ---------------------------------- | --------------------------------- | ---------------------------------------- | --- |
+| `mytool/jump`                      | LSP notification from the sidecar | **no — an explicit API label** (DEC-022) | the sidecar declares it (`JwaLanguageClient.java:12`); an IDE rename must never touch it, and the client must match the exact string. It carries the sidecar's `JumpParams`: a uri, a 1-based line and column |
+| `hr.hrg.watch2.sidecar.SidecarApp` | the class the client launches     | **no — an external contract**            | it is the sidecar artifact's own entry point, so renaming the Java class without changing this string would break the launch |
 
 ## The rules, and where they live
 
