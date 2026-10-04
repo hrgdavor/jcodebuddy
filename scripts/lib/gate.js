@@ -22,16 +22,44 @@
  * generated-code vocabulary and its parser (DEC-035), the one thing in this reactor that a tool outside the
  * reactor reads without wanting anything else. Step 3.0l made it a leaf so that stays true; the gate keeps
  * its tests running now that it is no longer a package inside a module that is already in the set.
+ *
+ * **Step 3.0k added the migrated consumers, and the test for whether a module belongs here is whether it holds
+ * part of the engine's contract:**
+ *
+ * - `jcodebuddy-meta` owns the provider contract every metadata client reads
+ *   (`MetadataProvider`/`CacheEntry`), and since 3.0j its `parse` default is the engine-backed one — a change
+ *   that breaks the engine's parse or the provider's shape must fail here rather than in a consumer's build.
+ * - `jcodebuddy-meta-mcp` is the MCP tool surface over that provider, which is what a client actually calls.
+ * - `project-automation` is the dev-time pass, and since 3.0j it is the first caller of the per-file cache
+ *   (DEC-041) — the module where "a warm rebuild parses nothing" stops being an engine-level claim.
+ * - `hipster-ioc-api` and `hipster-ioc-tooling` are the generator's API and its model-driven implementation
+ *   (step 3.0e part two): the generator parses nothing now, so the tooling's tests are the ones that notice if
+ *   the model stops answering what it used to. **`hipster-ioc-api` has no test classes** and is here for its
+ *   build: it is the API the generated source implements against.
+ * - `hipster-ioc-test` has no test classes either, and is in the set for its **compile**: it is where generated
+ *   context source lands, so a generator change that emits something that does not compile fails here. Two
+ *   modules in for their compile is a deliberate price, not an oversight — a module that only builds still fails
+ *   the gate when the code it holds stops compiling.
+ *
+ * **The cost, stated rather than implied:** a larger gate is a slower gate. These were chosen because a change
+ * that breaks them is a change to the engine's contract, not because they compile — the webview, watch and
+ * merge modules stay out for exactly that reason.
  */
 export const GATE_MODULES = [
   'jcodebuddy-core',
   'jcodebuddy-generated',
+  'jcodebuddy-meta',
+  'jcodebuddy-meta-mcp',
   'hipster-entity-api',
   'hipster-entity-core',
   'hipster-entity-tooling',
   'hipster-entity-jackson',
   'hipster-entity-test',
   'hipster-entity-example',
+  'hipster-ioc-api',
+  'hipster-ioc-tooling',
+  'hipster-ioc-test',
+  'project-automation',
 ].join(',');
 
 /**

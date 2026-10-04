@@ -4,7 +4,7 @@
 
 Code generation has moved too much into background, and this project aims to provide coopeartive code generation where all generated code lives alongside manually typed code with clear visibility and deterministic behavior. The idea itself mimics one direction AI coding popularized where we accept the generated code directly into the codebase.
 
-Technically **JCodeBuddy** is a development buddy(companion) for Java that automates the synchronization between project structure and source code.Unlike traditional annotation processing, which is isolated and happens during the compilation phase, JCodeBuddy reads and writes source through OpenRewrite's **Lossless Semantic Tree** to enable **cooperative code generation**: it reads a tree for its shape, splices generated members into the original text so nothing around them is reformatted, and asks javac — not the tree — where anything is. The reading/querying/writing contract is in [`doc_knowledge/code.graph.md`](doc_knowledge/code.graph.md). 
+Technically **JCodeBuddy** is a development buddy(companion) for Java that automates the synchronization between project structure and source code.Unlike traditional annotation processing, which is isolated and happens during the compilation phase, JCodeBuddy reads and writes source through OpenRewrite's **Lossless Semantic Tree** to enable **cooperative code generation**: it reads a tree for its shape, splices generated members into the original text so nothing around them is reformatted, and asks javac — not the tree — where anything is. The reading/querying/writing contract is in [`doc_knowledge/code.graph.md`](code.graph.md). 
 
 To ensure a seamless developer experience, the framework integrates **real-time file watching**. This creates a "live" development loop where changes to the project structure or configuration are immediately detected and reflected in the codebase via the cooperative generators.
 
@@ -34,7 +34,7 @@ the affected driver project belongs to the same change rather than to follow-up 
 a licence to leave JCodeBuddy broken: the recorded gate still has to pass.
 
 The producer-side detail — what a change here owes a driver project, and which rules bind only JCodeBuddy —
-is in [`doc/AGENTS.md`](doc/AGENTS.md) and [`proto/AGENTS.md`](proto/AGENTS.md).
+is in [`doc/AGENTS.md`](../doc/AGENTS.md) and [`proto/AGENTS.md`](../proto/AGENTS.md).
 
 ## `project-automation` Architectural Convention
 
@@ -152,8 +152,8 @@ One consequence worth knowing: an unquoted `-Dtest=X` on the shortcut used to re
 fix in the message.
 
 Entity-specific generators, the R1 field-enum order contract and its checker CLI are documented in
-[`hipster-entity/hipster-entity-tooling/README.md`](hipster-entity/hipster-entity-tooling/README.md); the architecture decisions
-behind them are under [`doc-hipster-entity/architecture/decisions/`](doc-hipster-entity/architecture/decisions/).
+[`hipster-entity/hipster-entity-tooling/README.md`](../hipster-entity/hipster-entity-tooling/README.md); the architecture decisions
+behind them are under [`doc-hipster-entity/architecture/decisions/`](../doc-hipster-entity/architecture/decisions/).
 
 ### The gate is local — there is no CI
 

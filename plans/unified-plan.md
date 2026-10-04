@@ -1109,6 +1109,46 @@ rather than an accident, which is the reason this is a step and not a line of co
 recorded. State the cost honestly: a larger gate is a slower gate, so add the modules that hold the
 *contract*, not every module that happens to compile.
 
+**Done 2026-10-03 — six modules joined, and the test for membership is "does it hold part of the engine's
+contract".** The set went from eight to fourteen, and each addition is named with its reason inside `gate.js`
+itself, because that comment is where the next person asks "why is this one here?":
+
+- **`jcodebuddy-meta`** owns the provider contract every metadata client reads, and since 3.0j its `parse` default
+  is engine-backed — a change that breaks either must fail in the gate rather than in a consumer's build.
+- **`jcodebuddy-meta-mcp`** is the MCP tool surface over that provider: what a client actually calls.
+- **`project-automation`** is the dev-time pass and, since 3.0j, the first caller of the per-file cache
+  (DEC-041) — the module where "a warm rebuild parses nothing" stops being an engine-level claim.
+- **`hipster-ioc-api`** and **`hipster-ioc-tooling`** are the generator's API and its model-driven implementation
+  (3.0e part two): it parses nothing now, so the tooling's 12 tests are what notices if the model stops answering
+  what it used to. `hipster-ioc-api` has no test classes and is here for its build.
+- **`hipster-ioc-test`** has no test classes either and is in the set **for its compile**: generated context source
+  lands there, so a generator change that emits something which does not compile fails the gate. Two modules in for
+  their compile is a deliberate price — a module that only builds still fails the gate when its code stops
+  compiling.
+
+**Every record of the set moved in the same change**, which is what the step asks for and what the stale "six
+modules" sentence in four documents showed was necessary: `scripts/lib/gate.js` (with the reasons),
+`GateContractTest`'s recorded list, and the prose in `doc/AGENTS.md`, `README.md`, the engine's README,
+`scripts/mvn-jdk25.js`'s usage text and `hipster-entity-example/codebuddy.md`. Historical statements ("the six
+modules", in earlier steps' records and in DEC-037/038/039) are deliberately left as written: they describe what
+was true then, and rewriting them is the archaeology this plan exists to replace.
+
+**The cost, paid and stated:** the gate's reactor went from 9 to 18 modules (the named set plus the dependencies
+`-am` builds) and the run is slower. What stayed out is what does not hold the engine's contract — the `webview/`,
+`watch/`, `merge-java` and `metadata-arena` families.
+
+**What it buys, measured:** `jcodebuddy-meta`'s 24 tests, its MCP surface's 8, the ioc generator's 12, the compile
+of the two ioc modules that hold generated source, and `project-automation`'s 89 now run on **every** gate
+invocation instead of only when someone remembered the `-pl` incantation — which is how the MCP module's stale
+"provider with no parser" test survived until 3.0j changed it.
+
+> **One cruft note for step 9.3:** `scripts/extract-marker-leaf.js` is a one-off patcher from step 3.0l that
+> embeds the old `GateContractTest` assertion string. It is harmless (nothing runs it) and it is exactly the kind
+> of scratch the cleanup step should judge rather than inherit. So is an **untracked** `doc_knowledge/codebuddy.md`
+> — a draft that duplicates the example module's tracked copy and wrote its links root-relative while living one
+> directory down; this step repaired the five links so the LINKS check can pass, and left the file for 9.3 to
+> decide about rather than deleting a working copy's document mid-step.
+
 **Gate:** `GATE` green with the enlarged set, `GateContractTest` green, and the plan's gate line updated.
 
 **Done when:** a later change that breaks the engine or a migrated consumer fails `bun scripts/mvn-jdk25.js`

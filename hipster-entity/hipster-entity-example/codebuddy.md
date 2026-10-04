@@ -164,7 +164,7 @@ tree?", and it does **not** regenerate. Run from PowerShell it needs the
 scripts\mvn-jdk25.cmd
 ```
 
-`mvn -o -pl <six hipster-entity modules> -am clean test`. This is the gate: it
+`mvn -o -pl <the recorded module set> -am clean test`. This is the gate: it
 compiles everything and runs the tests, `ExampleRegenerationTest` included. It
 does **not** regenerate, because nothing is bound to the lifecycle any more — so
 run § 3.2 (or § 3.1 and then the gate) when you have changed a view or the

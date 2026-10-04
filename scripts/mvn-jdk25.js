@@ -36,7 +36,7 @@ function usage() {
 
   bun scripts/mvn-jdk25.js                        the hipster-entity set, clean test
   bun scripts/mvn-jdk25.js hipster-entity test    the same module set with an explicit goal
-  bun scripts/mvn-jdk25.js hipster-entity install install the six modules into the local repository
+  bun scripts/mvn-jdk25.js hipster-entity install install the recorded module set into the local repository
   bun scripts/mvn-jdk25.js -o -pl <mods> -am test a free-form Maven invocation with the JDK pinned
 
   Every invocation passes ${INCREMENTAL_OFF}.

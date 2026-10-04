@@ -73,7 +73,8 @@ Implementation is plan step 3.0u.
 
 ## Tests and the gate
 
-`bun scripts/mvn-jdk25.js` runs the recorded gate, and this module is in it — so a change here is verified by
-the engine's own tests plus the six `hipster-entity` modules that consume the model. The engine's tests are the
-place a *model contract* is pinned (a round trip, an always-emitted field, a refusal of an unknown kind), not
-only a feature.
+`bun scripts/mvn-jdk25.js` runs the recorded gate, and this module is in it — so a change here is verified by the
+engine's own tests plus every migrated consumer's (the entity tooling, `jcodebuddy-meta` and its MCP surface, the
+hipster-ioc generator, and the dev-time pass that adopted the per-file cache; step 3.0k is where they joined the
+set). The engine's tests are the place a *model contract* is pinned (a round trip, an always-emitted field, a
+refusal of an unknown kind), not only a feature.
