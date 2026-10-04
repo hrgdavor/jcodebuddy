@@ -26,6 +26,12 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>java-watch-core</artifactId>
         </dependency>
+        <!-- The dev-time pass drives the hipster-ioc generator (DEC-036 § 11, plan step 3.9). One direction only:
+             the generator's module must never depend on a project-automation module (AGENTS.md § 1.1). -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>hipster-ioc-tooling</artifactId>
+        </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>jcodebuddy-builder</artifactId>

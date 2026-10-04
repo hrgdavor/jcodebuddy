@@ -2505,6 +2505,27 @@ decision, since a watch-mode pass regenerates on save and would otherwise rewrit
 repeatedly.
 **Schedulable when:** 7.8 has landed and the emitted shape is settled.
 
+**Part one done 2026-10-03 — the pass half.** 7.8 landed (the two kinds are a type), so the pass exists and drives the
+generator: `IocRegeneration` in `project-automation` builds the model (the one step that reads sources, via
+`IocGeneration.index`), hands it to each `ProjectGenerator` as a `ProjectContext`, and **writes** what they return.
+The line charter § 2.8 draws is now visible in the code — `IocGeneration` was split into `render` (metadata in, code
+out, writes nothing) and `write` (the pass's half) — and `IocProjectGenerator` is the first real implementation of the
+engine's project-scoped kind: it decides applicability from the model (`ContextReader.contextsIn`) rather than from
+the filesystem, and it cannot be handed a file. The dependency runs one way only: `project-automation` depends on
+`hipster-ioc-tooling`, never the reverse (AGENTS.md § 1.1).
+
+**The hazard the step named is answered by measurement rather than by suppression:** a second pass over an unchanged
+tree writes **nothing** (`IocRegenerationTest`: one implementation on the first pass, `filesWritten == 0` on the
+second while the model still holds the context), because `IocGeneration.write` writes only what differs. That is what
+makes running the pass on every save safe, so the watch half can be a thin loop rather than a policy about when to
+regenerate.
+
+**Part two (the watch half) is next:** `EntityRegenerationWatcher` is the template — a debounced `BatchedFileWatcher`
+plus a content-hash check that breaks the loop its own output would otherwise create — and the IoC watcher will reuse
+that mechanism rather than copy it.
+
+**Gate (part one):** the recorded gate green with the cache on — BUILD SUCCESS in 33 s, 85 cached steps.
+
 ### 3.10 — Retire `hipster-ioc-test`'s hand-written context
 **Who:** agent · **Size:** S–M
 

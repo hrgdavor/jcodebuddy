@@ -53,24 +53,61 @@ public final class IocGeneration {
     }
 
     /**
-     * @param sourceRoot the tree to read and to write implementations into
-     * @param moduleRoot the module the graph describes; its {@code .jcodebuddy/} is where the graph goes,
-     *                   which is why this is not derived from {@code sourceRoot} — a Maven module's source
-     *                   root is {@code src/main/java}, and a {@code .jcodebuddy/} inside it would be a
-     *                   derived directory committed as source (DEC-026)
-     * @param indent     one indentation step for the generated code
+     * One file the generator wants to exist, and its whole content.
+     *
+     * <p>Produced by {@link #render} and written by {@link #write} — the split the plan's charter § 2.8 draws:
+     * a generator's kind is what it reads and it returns; a pass's kind is what it writes.</p>
      */
-    public static Result generate(Path sourceRoot, Path moduleRoot, String indent) throws IOException {
+    public record GeneratedFile(Path file, String source) {
+    }
+
+    /**
+     * A run that has produced its output and written nothing: metadata in, code out.
+     *
+     * @param files        every implementation to write, in the order the contexts were read
+     * @param graphJson    the dependency graph as JSON, for the caller to place
+     * @param graphFile    where that graph belongs ({@code moduleRoot/.jcodebuddy/metadata/hipster-ioc/contexts.json})
+     * @param contextsRead how many context interfaces were found
+     * @param refused      how many contexts were declined, each with a diagnostic
+     * @param divergences  every diagnostic the run produced, in DEC-022's format
+     */
+    public record Rendered(List<GeneratedFile> files, String graphJson, Path graphFile,
+                           int contextsRead, int refused, List<String> divergences) {
+
+        public Rendered {
+            files = List.copyOf(files);
+            divergences = List.copyOf(divergences);
+        }
+    }
+
+    /**
+     * Produce everything and write nothing — the project-scoped generator's half.
+     *
+     * <p>It is separate from {@link #write} because the two answer different questions: this one is "what should
+     * exist", which a watch agent applies through an editor and a pass applies to disk, and the other is "make it
+     * so". Keeping them apart is what lets the dev-time pass drive this generator (step 3.9) without either side
+     * pretending the other's job is its own.</p>
+     */
+    public static Rendered render(Path sourceRoot, Path moduleRoot, String indent) throws IOException {
+        return render(index(sourceRoot, moduleRoot, new ArrayList<>()), sourceRoot, moduleRoot, indent);
+    }
+
+    /**
+     * Render against a model the caller already built — what the dev-time pass does (step 3.9).
+     *
+     * <p>The index is the pass's to produce: it is the one step that reads sources, and a generator that builds its
+     * own model would be reading the tree again (DEC-036 § 11). So the pass hands the model over and this method
+     * answers only the generation question.</p>
+     */
+    public static Rendered render(ClassIndex index, Path sourceRoot, Path moduleRoot, String indent)
+            throws IOException {
         IocContextGenerator generator = new IocContextGenerator();
         List<String> divergences = new ArrayList<>();
+        List<GeneratedFile> files = new ArrayList<>();
         List<Map<String, Object>> graph = new ArrayList<>();
         int contextsRead = 0;
-        int filesWritten = 0;
         int refused = 0;
 
-        // The model first, then the generation: the index is built here because a caller must produce the facts
-        // once (DEC-036 § 11), and everything after this point reads them rather than the sources.
-        ClassIndex index = indexOf(sourceRoot, moduleRoot, divergences);
         for (ClassRecord contextRow : ContextReader.contextsIn(index)) {
             contextsRead++;
             IocContextGenerator.GeneratedContext generated =
@@ -80,21 +117,42 @@ public final class IocGeneration {
                 refused++;
                 continue;
             }
-            if (writeIfChanged(generated.implFile(), generated.source())) {
-                filesWritten++;
-            }
+            files.add(new GeneratedFile(generated.implFile(), generated.source()));
             graph.add(graphEntry(contextRow, index));
         }
 
-        Path graphFile = moduleRoot.resolve(GRAPH_PATH);
-        Files.createDirectories(graphFile.getParent());
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("generator", IocContextGenerator.NAME);
         document.put("contexts", graph);
-        Files.writeString(graphFile, new ObjectMapper().writeValueAsString(document) + "\n",
-                StandardCharsets.UTF_8);
+        return new Rendered(files, new ObjectMapper().writeValueAsString(document) + "\n",
+                moduleRoot.resolve(GRAPH_PATH), contextsRead, refused, divergences);
+    }
 
-        return new Result(contextsRead, filesWritten, refused, divergences, graphFile);
+    /** Write what {@link #render} produced, and say how much of it was new. The pass's half. */
+    public static Result write(Rendered rendered) throws IOException {
+        int filesWritten = 0;
+        for (GeneratedFile file : rendered.files()) {
+            if (writeIfChanged(file.file(), file.source())) {
+                filesWritten++;
+            }
+        }
+        Path graphFile = rendered.graphFile();
+        Files.createDirectories(graphFile.getParent());
+        Files.writeString(graphFile, rendered.graphJson(), StandardCharsets.UTF_8);
+        return new Result(rendered.contextsRead(), filesWritten, rendered.refused(),
+                rendered.divergences(), graphFile);
+    }
+
+    /**
+     * @param sourceRoot the tree to read and to write implementations into
+     * @param moduleRoot the module the graph describes; its {@code .jcodebuddy/} is where the graph goes,
+     *                   which is why this is not derived from {@code sourceRoot} — a Maven module's source
+     *                   root is {@code src/main/java}, and a {@code .jcodebuddy/} inside it would be a
+     *                   derived directory committed as source (DEC-026)
+     * @param indent     one indentation step for the generated code
+     */
+    public static Result generate(Path sourceRoot, Path moduleRoot, String indent) throws IOException {
+        return write(render(sourceRoot, moduleRoot, indent));
     }
 
     /**
@@ -103,8 +161,11 @@ public final class IocGeneration {
      * <p>This is the step that reads sources, and it is deliberately not the generator's: a generator that reads
      * the tree is what step 3.0e removes, while producing the model is what the metadata pass is for (DEC-036
      * § 11). A file that cannot be read is reported and skipped, exactly as the pass reports it (F-34).</p>
+     *
+     * <p>Public because the dev-time pass must build the model <em>before</em> it can hand one to a
+     * {@code ProjectGenerator} (step 3.9): the pass produces the facts, the generator renders from them.</p>
      */
-    private static ClassIndex indexOf(Path sourceRoot, Path moduleRoot, List<String> divergences)
+    public static ClassIndex index(Path sourceRoot, Path moduleRoot, List<String> divergences)
             throws IOException {
         ClassIndex index = ClassIndex.forPass(moduleRoot.resolve(hr.hrg.jcodebuddy.engine.JcodebuddyDirectory.DIR),
                 moduleRoot, sourceRoot);

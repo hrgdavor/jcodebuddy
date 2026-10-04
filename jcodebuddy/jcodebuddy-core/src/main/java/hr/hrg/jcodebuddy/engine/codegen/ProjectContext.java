@@ -25,12 +25,16 @@ import java.util.List;
  * here, and must not read an unanswered question as a negative answer.</p>
  *
  * @param sourceRoot  the root a generated file's package is resolved against, and the boundary of the model
+ * @param moduleRoot  the module the project's derived output belongs to — where a {@code .jcodebuddy/} marker goes
+ *                    (DEC-026). Not derivable from {@code sourceRoot}: a Maven module's source root is
+ *                    {@code src/main/java}, and a {@code .jcodebuddy/} inside it would be a derived directory
+ *                    committed as source
  * @param index       the project's class index: one row per type, keyed by fully qualified name
  * @param query       the typed questions this generator may ask (relations, members, annotations, assignability)
  * @param diagnostics where a generator reports what it could not resolve
  * @param packages    the packages to generate for, or empty for the whole root
  */
-public record ProjectContext(Path sourceRoot, ClassIndex index, MetadataQuery query,
+public record ProjectContext(Path sourceRoot, Path moduleRoot, ClassIndex index, MetadataQuery query,
                              DiagnosticSink diagnostics, List<String> packages) {
 
     public ProjectContext {
@@ -38,8 +42,8 @@ public record ProjectContext(Path sourceRoot, ClassIndex index, MetadataQuery qu
     }
 
     /** The whole root, with no package restriction. */
-    public static ProjectContext of(Path sourceRoot, ClassIndex index, MetadataQuery query,
+    public static ProjectContext of(Path sourceRoot, Path moduleRoot, ClassIndex index, MetadataQuery query,
                                     DiagnosticSink diagnostics) {
-        return new ProjectContext(sourceRoot, index, query, diagnostics, List.of());
+        return new ProjectContext(sourceRoot, moduleRoot, index, query, diagnostics, List.of());
     }
 }
