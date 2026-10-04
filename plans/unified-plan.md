@@ -86,19 +86,30 @@ took **12:43**, with the engine compiled already). What landed:
    `-Dmaven.build.cache.enabled=false`, and `GateContractTest` asserts the constant and its two uses — the same
    shape as `clean` and the incremental switch, and for the same reason (F-47: a build satisfied by a previous
    revision's outputs once reported SUCCESS).
-4. **The cache was verified to be honest rather than argued to be — and the verification found a second, worse
-   failure.** A real source change produced a new checksum, a **miss**, and a deliberately failing test that
-   **failed the build**: a cache may not answer with a stale SUCCESS. That was not enough. `-Dtest=…` is **not**
-   part of the cache key, so a run that verified one test class stored an entry that a later **full** run hit — and
-   that run reported BUILD SUCCESS with surefire skipped and **no tests executed at all** (measured: cache on, zero
-   tests, SUCCESS; cache off, 467 tests, one failure, FAILURE). `scripts/mvn-fast.js` therefore turns the cache off
-   whenever a run is narrowed (`--tests`) or the tree is not cleaned (`--no-clean`), `GateContractTest` asserts that
-   guard so a later edit cannot quietly drop it, and the cache was purged and repopulated from a full `package` run.
+4. **The cache was verified to be honest rather than argued to be — and the verification found a real gap, and then a
+   mistake in how it was fixed.** A real source change produced a new checksum, a **miss**, and a deliberately failing
+   test that **failed the build**: a cache may not answer with a stale SUCCESS. Then an A/B found the gap: `-Dtest=…`
+   is not part of the checksum, so a run that executed one test class and saved left an entry a later **full** run hit
+   — and that run reported BUILD SUCCESS with surefire skipped and **no tests executed** (cache on: zero tests,
+   SUCCESS; cache off: 468 tests, one failure, FAILURE).
 
-   The lesson generalises past this tool: **a cache entry is evidence about the run that produced it, and it is only
-   valid for runs at least as broad.** The first commit of this change claimed the cache had been verified honest;
-   it had been verified for the *changed-input* direction and not for the *narrower-evidence* direction, and that
-   difference is what the follow-up commit records.
+   **The first remedy was wrong, and the maintainer corrected it on 2026-10-03**: `mvn-fast.js` was changed to
+   *disable* the cache for narrowed runs, which throws away the very mechanism the fast path exists for. The cache
+   checksums a module together with all of its dependencies and invalidates the **whole module** when anything in that
+   closure changes — it never reuses part of a changed module — so "disable it when unsure" is counter-productive
+   rather than cautious. The fix is now `-Dmaven.build.cache.skipSave=true` for `--tests` and `--no-clean` runs: they
+   still **read** the cache (a narrowed run resolves unchanged modules instantly from a previous full run) and simply
+   never **write** it, which closes the false-green hole without giving up a single hit. `GateContractTest` asserts
+   that the only way the fast path disables the cache is the explicit `--off-cache` flag.
+
+   **Still open, and reported rather than papered over:** with the extension's default restore behaviour a
+   cache-restored module has **no `target/classes` at all** (measured: 23/28/12/126 class files before a restore-only
+   run, 0 after) while Maven still reports SUCCESS — Maven does not need them, but
+   `CompileHarness.generatedSourceClasspath` reads `hipster-entity-{api,core,jackson,example}/target/classes` **by
+   path**, so a run in which `hipster-entity-tooling` executes its tests while those four modules come from cache fails
+   to compile its generated fixtures (`cannot find symbol: FieldDef, EntityBase, View, TypeUtils`). Two candidates,
+   both for the maintainer to choose: exclude those four modules from the cache (`maven.build.cache.exclude`, so they
+   always compile), or change the harness to resolve them from the restored artifacts.
 
 **Two failures worth recording, because each was a broken build before it was a sentence:**
 

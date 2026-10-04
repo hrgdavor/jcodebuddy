@@ -36,10 +36,35 @@ same reason as `clean`: a cache hit restores a previous revision's outputs.
 **Iterate with `bun scripts/mvn-fast.js`; verify with the gate.** The fast path is the same module set with the build
 cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default, and modules built in parallel. It
 exists because test execution dominates a warm run — measured at 12:43 for `-pl <mods> -am test` with the cache off —
-and because a cached module's compile, test and jar phases are restored instead of re-run. It is deliberately **not**
-the gate, and the two cannot be confused: the gate passes the switch that turns the cache off, and the contract test
-asserts that it does. Use `package` as its goal, not `test`: a cached module restored without a jar cannot be
-depended on by the next module in the reactor.
+and because a cached module's compile, test and jar phases are restored instead of re-run. Its goal is `package`, not
+`test`: `package` runs the tests anyway, and it is what puts a JAR in `target/`, without which the next module in the
+reactor cannot resolve its sibling.
+
+### The Maven build cache: what it covers, and the two things it does not
+
+`org.apache.maven.extensions:maven-build-cache-extension` is loaded for every Maven invocation here
+(`.mvn/extensions.xml`), configured by `.mvn/maven-build-cache-config.xml`. It is **on by default and is not to be
+turned off** — disabling it throws away the mechanism that makes iteration fast. What it does:
+
+- **It checksums a module together with all of its dependencies**, and that checksum is the cache key. A change
+  anywhere in that closure — one letter in any source, POM, resource or fixture the module reads — invalidates the
+  entry for that module *and every module downstream of it*, so those are rebuilt and retested.
+- **It is whole-module, never per-file or per-class.** There is no path in which a module's cached classes are mixed
+  with changed ones: either the module's inputs are identical to those of the run that produced the entry, or the
+  entry is not used. That is why a hit is sound evidence, and why deleting `~/.m2/build-cache` is always safe.
+- **It lives per machine**, in `~/.m2/build-cache`. The `.mvn/` files are tracked; the entries are not.
+
+Two things it does **not** cover, both measured rather than assumed:
+
+- **A command-line test filter is not part of the checksum.** `-Dtest=SomeTest` yields the *same* key as a full run,
+  so a narrowed run that saved would leave an entry a later **full** run hits — and that run would report SUCCESS
+  with surefire skipped and no tests executed. The remedy is not to disable the cache but to withhold the *save*:
+  `bun scripts/mvn-fast.js` passes `-Dmaven.build.cache.skipSave=true` for `--tests` and `--no-clean` runs, which
+  still reads the cache but never writes it. A hand-run `mvn … -Dtest=` should pass the same switch.
+- **A run that produces nothing must not populate the cache.** A `mvn … validate` run stores an entry per module with
+  a near-empty output tree, and a later build that hits it compiles against a module with no classes — reported as
+  `cannot find symbol` on sources that compile perfectly. Populate with `package` (what the fast path uses), and
+  reach for `rm -rf ~/.m2/build-cache` whenever entries look wrong; it is a cache, and deleting it costs only time.
 
 **JCodeBuddy-only.** A driver project has its own build and its own commands; the gate is this
 repository's, and no command in the root README's table builds anything under `proto/`.

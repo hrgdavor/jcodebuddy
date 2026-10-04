@@ -149,24 +149,33 @@ class GateContractTest {
     }
 
     /**
-     * The fast path must not let a narrowed run populate the cache.
+     * The fast path must never disable the cache, and must withhold only the *save* where a save would be wrong.
      *
-     * <p>Measured, not reasoned: `-Dtest=` is not part of the cache key, so a run that verified one test class
-     * stored an entry a later FULL run hit — and that run reported BUILD SUCCESS with surefire skipped and no tests
-     * executed. Cache on: zero tests, SUCCESS. Cache off: 467 tests, one failure, FAILURE. The script therefore
-     * turns the cache off whenever the run is narrowed (`--tests`) or the tree is not cleaned (`--no-clean`, where a
-     * half-restored `target/` made a compile harness fail); this asserts that rule survives the next edit.</p>
+     * <p>The cache is the mechanism that makes iteration fast: it checksums a module together with all of its
+     * dependencies, so a change anywhere in that closure invalidates the whole module — it never reuses part of a
+     * changed module. Turning it off throws that away.</p>
+     *
+     * <p>What it does not cover is a command-line test filter: `-Dtest=…` is not part of the checksum (measured —
+     * the same module produced the same checksum with and without it). So a run that executes ONE test class and
+     * saves would leave an entry a later FULL run hits, and that run would report SUCCESS with surefire skipped and
+     * no tests executed. `maven.build.cache.skipSave=true` closes that without giving up the reads: a narrowed run
+     * still resolves unchanged modules from cache, it just never defines one. This asserts the shape so the next
+     * edit cannot quietly turn it back into a blanket disable.</p>
      */
     @Test
-    void theFastPathNeverCachesANarrowedOrUncleanedRun() throws Exception {
+    void theFastPathKeepsTheCacheOnAndWithholdsOnlyTheSave() throws Exception {
         String fast = read(repoRoot().resolve("scripts/mvn-fast.js"));
 
-        Assertions.assertTrue(fast.contains("if (options.tests !== null || !options.clean) {"),
-                "the guard must exist where the options are parsed");
-        Assertions.assertTrue(fast.contains("options.cache = false;"),
-                "and it must turn the cache off rather than warn about it");
+        Assertions.assertTrue(fast.contains("-Dmaven.build.cache.skipSave=true"),
+                "a narrowed or uncleaned run withholds the save through the extension's own switch");
+        Assertions.assertTrue(fast.contains("options.skipSave = true;"),
+                "and the script decides that where it parses --tests/--no-clean");
+        long disables = fast.lines().filter(line -> line.contains("options.cache = false;")).count();
+        Assertions.assertEquals(1, disables,
+                "the ONLY way to turn the cache off is the explicit --off-cache flag; the cache is not disabled "
+                        + "automatically for anything");
         Assertions.assertTrue(fast.contains("-Dtest=${options.tests}"),
-                "while --tests still narrows surefire, so the narrowing itself is not lost with the cache");
+                "while --tests still narrows surefire, so the narrowing itself is not lost");
     }
 
     /**

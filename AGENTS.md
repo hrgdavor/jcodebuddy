@@ -355,6 +355,16 @@ canonical statement of a boundary that has no other home.
   module orchestrates dev-time codegen; the runtime app modules
   depend on released JCodeBuddy libraries, never on
   `project-automation`. See [`README.md`](README.md).
+- **The Maven build cache is on, and it is not to be disabled.** `.mvn/extensions.xml` loads
+  `maven-build-cache-extension` for every Maven invocation here. It **checksums a module together with all of its
+  dependencies**, and a change anywhere in that closure — one letter in any file the module reads — invalidates the
+  entry for the whole module *and every module downstream of it*, so those are rebuilt and retested. It is
+  **whole-module, never per-file or per-class**: a module's cached classes are never mixed with changed ones. Turning
+  it off throws away what makes iteration fast (a fully cached run of the recorded module set: seconds against ~13
+  minutes). The entries live in `~/.m2/build-cache`, per machine, and deleting them is always safe. Two measured
+  caveats are in [`doc/AGENTS.md`](doc/AGENTS.md): a command-line `-Dtest=` filter is **not** part of the checksum, so
+  a narrowed run must withhold the *save* (`-Dmaven.build.cache.skipSave=true`) rather than the cache; and a run that
+  produces nothing (`validate`) must not populate it.
 - **`proto/` holds driver projects, and it is not part of this
   repository.** It exists because JCodeBuddy is under heavy
   development and is driven through **real projects**. A driver

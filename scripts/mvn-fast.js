@@ -28,17 +28,17 @@
  *   2. **Never populate the cache with a phase that produces nothing.** A `mvn … validate` run stores an entry per
  *      module whose output tree is next to empty, and a later `package` build that HITS such an entry then
  *      compiles a sibling against a module with no classes — which reads as "cannot find symbol" on sources that
- *      compile perfectly. The cache is keyed in a way that lets this happen, so the rule is about how it is used:
- *      populate with `package` (this script), and if a build reports impossible symbol errors, delete
- *      `~/.m2/build-cache` — it is a cache, and deleting it is always safe.
- *   3. **`--tests` and `--no-clean` turn the cache OFF, and that is a correctness rule rather than a preference.**
- *      A narrowed run and a full run share a cache key: `-Dtest=…` is not part of it. So a run that verified ONE
- *      test class stores an entry that a later full run can hit — and that run then reports BUILD SUCCESS with
- *      surefire skipped and **no tests executed at all**. Measured: cache on, 0 tests run, SUCCESS; cache off,
- *      467 tests, 1 failure, FAILURE. A narrowed run must therefore never populate the cache, which this script
- *      enforces by not using it; `--no-clean` does the same because a cache restore into a tree that was not
- *      cleaned is how a half-restored `target/` produced a compile failure in a test harness that resolves the
- *      reactor's own output directories.
+ *      compile perfectly. Which is the general rule: an entry is evidence about the run that produced it, and it is
+ *      only valid for runs at least as broad. If a build ever reports impossible symbol errors, delete
+ *      `~/.m2/build-cache`; it is a cache, and deleting it is always safe.
+ *
+ * THE CACHE IS NEVER DISABLED HERE, only its *saving* is withheld where that would be wrong. Measured: `-Dtest=…`
+ * is not part of the cache checksum, so a run that executes ONE test class and saves would leave an entry that a
+ * later FULL run hits — and that run then reports SUCCESS with surefire skipped and no tests executed (cache on:
+ * zero tests, SUCCESS; cache off: 468 tests, one failure, FAILURE). The remedy is `-Dmaven.build.cache.skipSave=true`
+ * on `--tests` and `--no-clean` runs: they still READ the cache (so a module whose inputs are unchanged, and whose
+ * every test passed in a previous full run, resolves instantly), they simply never WRITE. Disabling the cache would
+ * have thrown away the mechanism that makes iteration fast; withholding the save keeps it and closes the hole.
  *
  * Usage:
  *   bun scripts/mvn-fast.js                          the recorded module set, `clean test`, cached
@@ -55,6 +55,7 @@ import { GATE_MODULES, moduleSelectors, splitProperty, splitPropertyAdvice } fro
 import { envWith, repoRoot, resolveJdk25, resolveMaven, run } from './lib/toolchain.js';
 
 const CACHE_OFF = '-Dmaven.build.cache.enabled=false';
+const CACHE_SKIP_SAVE = '-Dmaven.build.cache.skipSave=true';
 const PARALLEL = '-T';
 const PARALLEL_FACTOR = '1C';
 const NO_TESTS_SPECIFIED = '-Dsurefire.failIfNoSpecifiedTests=false';
@@ -104,14 +105,14 @@ function parse(argv) {
             maven.push(arg);
         }
     }
-    // Correctness, not preference. `-Dtest=…` is not part of the cache key, so a narrowed run and a full run share
-    // an entry: a one-class run would populate it and a later full run would hit it, skip surefire and report
-    // SUCCESS having run no tests. Measured, not reasoned: cache on, zero tests, SUCCESS; cache off, 467 tests,
-    // one failure, FAILURE. `--no-clean` is the same rule for a different reason — restoring a cache entry into a
-    // tree that was not cleaned is how a half-restored `target/` made a compile harness fail on sources that
-    // compile.
+    // Correctness for the WRITE side only: the cache is still read. `-Dtest=…` is not part of the cache checksum,
+    // so a narrowed run that saved an entry would leave evidence a later FULL run trusts — which then reports
+    // SUCCESS with surefire skipped and nothing executed. skipSave lets the narrowed run use the cache (a module
+    // whose inputs are unchanged resolves instantly from a previous full run) without defining any.
+    // `--no-clean` gets the same treatment: an entry saved from a tree that was not cleaned can carry outputs the
+    // run did not produce.
     if (options.tests !== null || !options.clean) {
-        options.cache = false;
+        options.skipSave = true;
     }
     return { maven, options };
 }
@@ -141,8 +142,10 @@ function main() {
     const extraOptions = [];
     if (!options.cache) {
         // The cache is on by default through .mvn/, so nothing has to be passed to enable it. `--off-cache` is the
-        // switch worth having, and it is the same property the gate sets.
+        // explicit escape hatch for a run that must reuse nothing at all.
         extraOptions.push(CACHE_OFF);
+    } else if (options.skipSave) {
+        extraOptions.push(CACHE_SKIP_SAVE);
     }
     if (options.parallel && !maven.some((arg) => arg === PARALLEL || arg.startsWith(PARALLEL))) {
         extraOptions.push(PARALLEL, PARALLEL_FACTOR);

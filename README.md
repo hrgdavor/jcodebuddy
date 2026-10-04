@@ -69,10 +69,10 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 | `scripts/mvn-jdk25.js hipster-entity test`    | the same module set with an explicit goal (no implicit `clean`)                                     |
 | `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository                                                   |
 | `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned                                                    |
-| `scripts/mvn-fast.js`                         | **the cached iteration build** — the same module set, `clean test`, with the Maven build cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default and `-T 1C`. **Not the gate**: see below |
-| `scripts/mvn-fast.js --tests SomeTest`        | the same, narrowed to one test class (adds `-Dtest=` and `-Dsurefire.failIfNoSpecifiedTests=false`) |
-| `scripts/mvn-fast.js --no-clean`              | iterate without letting Maven touch the tree                                                        |
-| `scripts/mvn-fast.js --off-cache`             | the fast path's flags without any cache reuse, when a result surprises you                          |
+| `scripts/mvn-fast.js`                         | **the cached iteration build** — the same module set, `clean package`, with the Maven build cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default and `-T 1C`. **Not the gate**: see below |
+| `scripts/mvn-fast.js --tests SomeTest`        | the same, narrowed to one test class (adds `-Dtest=` and `-Dsurefire.failIfNoSpecifiedTests=false`; the cache is still read, just never written) |
+| `scripts/mvn-fast.js --no-clean`              | iterate without letting Maven touch the tree (likewise: reads cached, never saves)                  |
+| `scripts/mvn-fast.js --off-cache`             | no cache reuse at all, for when a result surprises you                                              |
 | `scripts/gen.js`                              | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
 | `scripts/gen.js with-tests`                   | the same pass, then the entity test set                                                             |
 | `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop)                         |
@@ -105,12 +105,14 @@ real change produced a **new checksum, a miss, and a failing test that failed th
 that matters — a cache may not answer with a stale SUCCESS.
 
 **Two rules the fast path enforces, both learned by getting them wrong.** Its goal is `package` rather than `test`,
-because a cached module restored without a JAR cannot be depended on by the next module in the reactor. And it turns
-the cache **off** for `--tests` and `--no-clean` runs, because `-Dtest=…` is not part of the cache key: a run that
-verified one test class could otherwise leave an entry that a later **full** run hits — reporting SUCCESS with
-surefire skipped and no tests executed. That was measured, not imagined (cache on: zero tests run, SUCCESS; cache
-off: 467 tests, one failure, FAILURE). The same rule binds anyone running Maven by hand here: **populate the cache
-only with a full `package` run**, and if a build reports impossible symbol errors, delete `~/.m2/build-cache` — it
+because a cached module restored without a JAR cannot be depended on by the next module in the reactor. And it
+withholds the *save* — never the cache — for `--tests` and `--no-clean` runs, through the extension's own
+`-Dmaven.build.cache.skipSave=true`: a command-line test filter is not part of the checksum, so a run that executed
+one test class and saved would leave an entry a later **full** run hits — reporting SUCCESS with surefire skipped and
+no tests executed (measured: cache on, zero tests, SUCCESS; cache off, 468 tests, one failure, FAILURE). Withholding
+the save closes that while keeping every read: a narrowed run still resolves unchanged modules instantly from a
+previous full run. The same rule binds anyone running Maven by hand: **populate the cache only with a full `package`
+run**, and if a build reports impossible symbol errors, delete `~/.m2/build-cache` — it is a cache, and deleting it
 is a cache, and deleting it is always safe.
 
 **Use the fast path while working, the gate before a commit.** The cache lives in the user's Maven repository
