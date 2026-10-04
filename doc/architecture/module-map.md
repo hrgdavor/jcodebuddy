@@ -192,19 +192,23 @@ change — which is what did not happen for `java-watch-agent`'s rename, three s
 
 The following directories are **NOT** part of the Maven build:
 
-| Directory       | Reason                                          |
-| --------------- | ----------------------------------------------- |
-| `vscode-jwa`    | VS Code extension (npm/Gradle build)            |
-| `vscode-jswa`   | VS Code extension (npm/Gradle build)            |
-| `intellij-jwa`  | IntelliJ plugin (Gradle build)                  |
-| `intellij-jswa` | IntelliJ plugin (Gradle build)                  |
-| `jswa-core`     | Vendored TypeScript/undici node_modules runtime |
-| `demo`          | Static HTML demo                                |
+| Directory             | Reason                                                            |
+| --------------------- | ----------------------------------------------------------------- |
+| `webview-jetbrains`   | IntelliJ Platform plugin (Gradle build)                           |
+| `webview-vscode`      | VS Code extension (TypeScript, npm build)                         |
+| `webview/zed`         | Zed dev extension (TypeScript)                                    |
+| `webview/kit`         | The copy-pasteable page kit — no build of its own                 |
+| `demo`                | Static HTML demo                                                  |
+
+Five earlier sidecar attempts (`intellij-jwa`, `intellij-jswa`, `vscode-jwa`, `vscode-jswa`, `jswa-core`) used to
+be listed here. Step 3.0p audited them and step 3.0q merged the two that held a capability the suite lacked — the
+IntelliJ LSP registration, now in `webview-jetbrains`, and the VS Code language client plus its `mytool/jump`
+handler, now in `webview-vscode` — and deleted all five; see
+[`webview/doc/earlier-attempts-audit.md`](../../webview/doc/earlier-attempts-audit.md).
 
 ## Naming Convention Rationale
 
 - **`jwa`** = Java Sidecar (JWA). Used by `jcodebuddy-builder`, `jcodebuddy-builder-api`, `jwa-sidecar`, `vscode-jwa`, `intellij-jwa`.
-- **`jswa`** = JS/TS Sidecar (JSWA). Used by `vscode-jswa`, `intellij-jswa`, `jswa-core`.
 - **`watch`** = Legacy file watcher module, retained for backward compatibility.
 
 Do **not** rename `jswa` to `watch`. The `jwa`/`jswa` branding is intentional: Java vs JS sidecars.

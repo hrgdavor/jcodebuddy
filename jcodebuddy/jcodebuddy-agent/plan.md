@@ -148,9 +148,12 @@ For complex refactorings and large-scale migrations, we propose integrating [Ope
 > first two Phase 4 items are done (the dashboard is
 > [`src/main/resources/web/`](src/main/resources/web)). On the two open ones:
 >
-> - **IDE hooks** — the `intellij-jwa`, `intellij-jswa`, `vscode-jwa` and `vscode-jswa` clients exist,
->   but they are JWA/JSWA **sidecar** clients under the `webview` product, not the lightweight hooks
->   this plan asked for; nothing here implements them.
+> - **IDE hooks** — the `intellij-jwa`, `intellij-jswa`, `vscode-jwa` and `vscode-jswa` clients existed,
+>   but they were JWA/JSWA **sidecar** clients under the `webview` product, not the lightweight hooks this plan
+>   asked for; nothing here implemented them. **Updated 2026-10-03 (step 3.0q):** the two that held a real
+>   capability — the IntelliJ LSP registration and the VS Code language client — were merged into
+>   `webview-jetbrains` and `webview-vscode`, and all five earlier attempts were deleted; the lightweight
+>   hooks this plan asked for are still unimplemented here.
 > - **OpenRewrite tool prototype** — nothing in this module references OpenRewrite (`Recipe` /
 >   `org.openrewrite` appear in no source file under `jcodebuddy/jcodebuddy-agent/`), so the prototype was never
 >   started. The representation decision that would govern it is

@@ -62,14 +62,13 @@ endpoint binds `127.0.0.1` only, and it is rate limited to 20 jumps per 20 secon
 ## IDE Integration
 
 ### IntelliJ IDEA
-1. Open the [intellij-jwa](webview/intellij-jwa) module.
-2. Build the plugin: `./gradlew buildPlugin`.
-3. Install from disk from `build/distributions/`.
+The earlier standalone `intellij-jwa` plugin is gone: step 3.0q merged its language-server registration into the
+plugin this repository ships. Open `webview/webview-jetbrains`, build it (`./gradlew buildPlugin`) and install from
+disk from `build/distributions/`.
 
 ### VS Code
-1. Open [vscode-jwa](webview/vscode-jwa).
-2. Follow the setup and configuration instructions in [webview/vscode-jwa/README.md](webview/vscode-jwa/README.md).
-3. `npm install` and `F5`.
+The earlier standalone `vscode-jwa` extension is gone for the same reason: its language client and its
+`mytool/jump` handler now live in `webview/webview-vscode`. Open that folder, run `npm install`, and press `F5`.
 
 ## ⚖️ License
 

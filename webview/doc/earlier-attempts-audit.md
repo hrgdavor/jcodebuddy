@@ -1,5 +1,15 @@
 # The five earlier sidecar attempts — the 3.0p audit
 
+> **LANDED, 2026-10-03 — step 3.0q acted on this audit and all five directories are gone.** The two capabilities
+> marked *unique and worth keeping* were merged, each in its own commit with tests: the IntelliJ **LSP
+> registration** into `webview/webview-jetbrains` (with `SidecarLaunch`'s rules asserted in `SidecarLaunchTest`,
+> and a new `PluginDescriptorTest` guard for the runtime `<depends>` the F8 lesson requires), and the VS Code
+> **language client plus its `mytool/jump` handler** into `webview/webview-vscode` (with `SidecarPaths`' rules
+> asserted in `SidecarPaths.test.js`). All five directories — `intellij-jwa`, `intellij-jswa`, `vscode-jwa`,
+> `vscode-jswa`, `jswa-core`: 50 tracked files, 25 of them the committed `.gradle/` cache — were then deleted.
+> **This document is kept as the audit that was made**, so the sections below describe files that no longer exist
+> and their verdicts are the ones that were carried out.
+>
 > **What this is.** Five directories under `webview/` are earlier takes on the sidecar functionality the current
 > suite provides: `intellij-jwa`, `intellij-jswa`, `vscode-jwa`, `vscode-jswa` and `jswa-core`. DEC-039 moved them
 > under `webview/`, three of them now say so at the top of their README, and **nothing had compared them**. This is

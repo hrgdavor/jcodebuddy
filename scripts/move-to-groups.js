@@ -70,11 +70,6 @@ const MOVES = [
   // modules (two Kotlin/Gradle IntelliJ plugins, two VS Code extensions, one TypeScript library), so this is a
   // directory move with no POM to fix; their duplication against the current implementation is audited by
   // plan step 3.0p, and 3.0q merges or deletes what that finds.
-  { group: 'webview', from: 'intellij-jwa', to: 'webview/intellij-jwa' },
-  { group: 'webview', from: 'intellij-jswa', to: 'webview/intellij-jswa' },
-  { group: 'webview', from: 'vscode-jwa', to: 'webview/vscode-jwa' },
-  { group: 'webview', from: 'vscode-jswa', to: 'webview/vscode-jswa' },
-  { group: 'webview', from: 'jswa-core', to: 'webview/jswa-core' },
 ];
 
 const TEXT_EXTENSIONS = ['.md', '.java', '.js', '.mjs', '.cjs', '.ts', '.json', '.xml', '.txt', '.properties', '.yml', '.yaml'];

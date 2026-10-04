@@ -1460,6 +1460,44 @@ grep is the check) and `LINKS` green; the record names what was merged and what 
 **Done when:** nothing under `webview/` is both an earlier attempt and unexamined — what survived is
 merged, what did not is gone with a reason.
 
+**Done 2026-10-03, in three commits, because the audit's list had three parts.** The gate the step asks for is per
+merge (that module's own build and tests) and per deletion (a grep and `LINKS`):
+
+**Merged — VS Code (3.0q-a):** `webview/webview-vscode` now runs the sidecar as a **language server** and listens for
+its `mytool/jump` notification. The rules live in `SidecarPaths.ts` as pure functions over an injected `exists`
+(setting → `JAVA_HOME` → `PATH`; configured → bundled → development) and the editor half in `SidecarClient.ts`.
+`npm run compile` clean under the extension's `strict` + `noUnusedLocals` tsconfig, `npm run test:unit` **11/11**
+with the two pre-existing suites green in the same `&&` chain. The new test failed its own first run (it hard-coded a
+POSIX path while `path.join` on Windows produces backslashes) — the code was right and the assertion was wrong,
+recorded because it is the kind of thing a copied test hides.
+
+**Merged — IntelliJ (3.0q-b):** `webview/webview-jetbrains` registers `platform.lsp.serverSupportProvider`, with the
+rules in `SidecarLaunch.java` (per-project property → IDE-wide property → bundled → development under the project
+base path) and the platform half in the descriptor. `gradlew test` → **BUILD SUCCESSFUL, 35 tests**:
+`SidecarLaunchTest` 9, `PluginDescriptorTest` 7 (was 6 — it now guards the `com.intellij.modules.java` runtime
+`<depends>`, extending the F8 lesson this plugin's README records), plus the 19 existing. No `gradle.properties`
+change was needed: the LSP API is in the base distribution, so only the runtime dependency was missing. The compiler
+caught one real error on the way (`Files::exists` takes a `Path`, while the injected `Exists` answers about a String).
+
+**Deleted (3.0q-c):** all five directories — `intellij-jwa`, `intellij-jswa`, `vscode-jwa`, `vscode-jswa`,
+`jswa-core` — **50 tracked files, 25 of them the committed `.gradle/` cache**, plus their untracked build output,
+each absolute path verified before removal. The two that were merged go because the capability moved; the three that
+were dead go because the JS/TS sidecar they served was never implemented. Git history is the archive, and the audit
+carries a **LANDED** note saying exactly that.
+
+**The references the deletion would have left dangling, all fixed:** `module-map.md`'s "Excluded from Maven Reactor"
+table listed the five as current (it now lists the projects actually outside the reactor, with a paragraph naming
+what happened), three broken links in `README.java_watch_2.md`, `jwa-sidecar/how_to_test.md`'s three instructions to
+open the deleted extension, the webview suite plan's inventory row **and its open question 5** — now answered — the
+agent plan's note that nothing implements those IDE hooks, `plan.reimplement.md`'s "not in scope" sentence, and the
+plan's own **Q5**, which is settled. The remaining mentions are prose that *describes* the deletion (this record, the
+audit, DEC-039's history, the merged code's javadoc): no path that no longer exists is pointed at, which is what
+`LINKS` and the grep are for.
+
+**Evidence:** VS Code — compile clean, `test:unit` 11/11 plus the two existing suites · JetBrains — `gradlew test`
+35 tests, 0 failures · `LINKS` green (257 files, 1591 links) and the webview folder's own check green (220 links) ·
+the deletion: 50 tracked files removed, grep clean of live references.
+
 **Added 2026-10-02, asked for directly: annotation info in the core model.** `ClassRecord`/`TypeFacts` now carry
 `List<TypeAnnotation>` — the annotation's name as written plus its arguments as source text, unevaluated — the
 writer always emits the field, `DEC-029` gained the field row and a dated amendment, and
@@ -2517,14 +2555,15 @@ plus `node webview/check-links.mjs` are green.
 
 Q2 ("which hosts are in scope for the write verbs") is answered by delivery — every host has them — so it
 only needs the plan to say so. **Q3** (do the JetBrains and VS Code plugins become proxying adapters, or
-keep their in-process implementations and share only the core?) and **Q5** (do the `vscode-jwa` /
-`vscode-jswa` / `intellij-jwa` / `intellij-jswa` clients also move under `webview/`?) are still
-unanswered, and each changes a boundary.
+keep their in-process implementations and share only the core?) is still unanswered, and it changes a boundary.
+**Q5 is answered**: the `vscode-jwa` / `vscode-jswa` / `intellij-jwa` / `intellij-jswa` clients did move under
+`webview/` (DEC-039's amendment), and steps 3.0p/3.0q then merged the two capabilities worth keeping into the
+hosts this reactor ships and deleted all five directories.
 
-**Do:** put both to the maintainer, then record the answers where they bind: Q3 in the webview host API
-document (or a DEC if it changes the boundary), Q5 in the plan and in
-[`doc/architecture/module-map.md`](../doc/architecture/module-map.md) if the answer moves modules.
-Update the plan's § 10 with the answers and drop the questions that are settled.
+**Do:** put Q3 to the maintainer, then record the answer where it binds (the webview host API document, or a DEC
+if it changes the boundary). Q5 is settled and recorded above; its module-map half is done
+([`doc/architecture/module-map.md`](../doc/architecture/module-map.md) no longer lists the five deleted
+attempts). Update the plan's § 10 with the answer and drop the questions that are settled.
 
 **Gate:** `LINKS` green; the plan's status line no longer lists Q3/Q5 as open.
 
@@ -2891,7 +2930,7 @@ version-named record, because a claim that is not observed is not a claim
 | --- | -------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
 | 8.1 | JetBrains § 8's five maintainer questions (vendor identity, the empty-allow-list default, one vs two settings services, dropping Kotlin, plan location) and acceptance criteria 2/5/7 in a running IDE | maintainer | [`plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) § 8, and `webview-jetbrains`' own docs |
 | 8.2 | Eclipse 4.41 workbench observations — the caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim; then answer **Q2** (dropins vs p2) | maintainer | [`ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md) § 1a/§ 2a, then `PLAN-eclipse-host.md` |
-| 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the existing `intellij-jwa`/`vscode-jwa` are sidecar clients, not these) | maintainer decides, agent implements | [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md) |
+| 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the `intellij-jwa`/`vscode-jwa` attempts were sidecar clients, not these; after 3.0q what a host has is `webview-vscode`'s language client and `webview-jetbrains`' LSP registration) | maintainer decides, agent implements | [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md) |
 | 8.4 | The ACP spike's Zed run (see step 5.3) | maintainer                           | `PLAN-webview-suite.md` Phase 5 record                                          |
 
 ---

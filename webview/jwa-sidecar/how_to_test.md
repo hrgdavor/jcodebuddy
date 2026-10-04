@@ -1,6 +1,6 @@
 # Testing JWA Builder via VS Code Actions
 
-You can now test the **Record Builder Generator** directly in any VS Code-based editor using the newly created `vscode-jwa` extension.
+You can now test the **Record Builder Generator** directly in any VS Code-based editor using the VS Code host in `webview/webview-vscode`, which runs this sidecar as a language server (step 3.0q merged that client into it from the earlier `vscode-jwa` attempt).
 
 ## 1. Prerequisites
 - **JDK 25** installed; the whole reactor now compiles with `--release 25` (this file used to say Java 21).
@@ -15,7 +15,7 @@ You can now test the **Record Builder Generator** directly in any VS Code-based 
 
 ## 2. Launching the Extension
 To test the extension:
-1. Open the `vscode-jwa` folder in a new VS Code window.
+1. Open the `webview/webview-vscode` folder in a new VS Code window.
 2. Press `F5` (or go to **Run and Debug** -> **Launch Extension**). This will open a new window called **[Extension Development Host]**.
 3. In that new window, open the `jcodebuddy` project folder.
 
@@ -50,5 +50,5 @@ answers `429`.
 
 ## Summary of Integration
 - **LSP Server**: `jwa-sidecar` in `webview/jwa-sidecar` (port 7979 for HTTP, stdio for LSP).
-- **VS Code Client**: `vscode-jwa` extension (Handles command tunneling and jumps).
-- **Core Engine**: `jwa-builder` (Shared logic), plus `webview-core` for the path jail and rate limit.
+- **VS Code Client**: `webview/webview-vscode` (the language client and the `mytool/jump` handler; the earlier standalone `vscode-jwa` was merged into it in step 3.0q and deleted).
+- **Core Engine**: `jcodebuddy-builder` (shared logic; renamed from `jwa-builder` in step 3.0n), plus `webview-core` for the path jail and rate limit.

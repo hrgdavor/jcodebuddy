@@ -371,8 +371,12 @@ checker, and the rate limiter must be extractable classes with no `Project` in t
 * Changing the renderer (`scripts/entity-html/render.js`) to use success callbacks or a bridge token.
 * Porting the module to Kotlin.
 * Marketplace publishing, plugin signing, or bumping `pluginVersion` past `1.0.0`.
-* The sibling `webview/webview-vscode` extension and the other Gradle plugin modules (`intellij-jswa` is still
-  on 2.1.0 / 2024.1 — worth its own plan, not this one).
+  * The sibling `webview/webview-vscode` extension and the other Gradle plugin modules (`intellij-jswa` was
+    then on 2.1.0 / 2024.1, and worth its own plan). **Updated 2026-10-03 (step 3.0q):** `intellij-jswa` no
+    longer exists — it was one of five earlier sidecar attempts audited in 3.0p and deleted in 3.0q, because the
+    JS/TS sidecar it registered was never implemented. The IntelliJ **LSP registration** from its sibling
+    `intellij-jwa` was merged into this plugin instead, which is why `META-INF/plugin.xml` now declares
+    `com.intellij.modules.java` and the `platform.lsp.serverSupportProvider` extension.
 
 ---
 
