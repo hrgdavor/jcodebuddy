@@ -3292,6 +3292,27 @@ npm run check:examples            # EXAMPLES
 4. Remove the "scheduled in `plans/unified-plan.md`" pointers from the documents whose steps are now
    closed, so the cross-links do not outlive the schedule.
 
+**Items 1–3 done 2026-10-03; item 4 waits on a condition that has not happened, and that is recorded rather than
+fudged.**
+
+1. **§ Progress is ticked from the records.** It reads 34 done / 32 open of 78, up from the 26 the 9.1 check started
+   from: six rows whose own step bodies said done while their boxes said open (3.0e, 3.0k, 3.0p, 3.0q, 3.0t, 7.8),
+   plus 9.2 and 9.3, whose changes were untracked or outside git and so could not tick themselves. The tick reads
+   each step's body for a completion **record** — a date, or "the step is complete" — and refuses to count a
+   criterion, so a `**Done when:**` line can never tick a box.
+2. **[\`plans/README.md\`](../plans/README.md) carries the outcome line** — still live, 34 of 78, and what
+   remains, so the directory index and the plan agree instead of the index describing an intention.
+3. **The plan STAYS where it is.** Its own rule — archive it only if every step is closed or explicitly dropped —
+   does not hold: 32 rows are open, and one of them (9.7) is reserved on purpose as the final validation. A schedule
+   with open steps is a live document, so this is the decision the rule produces rather than a choice made here.
+4. **Item 4 is deferred, with its trigger named.** It exists so a cross-link does not outlive the schedule, and the
+   schedule is still live, so the pointers it targets are the index TO it rather than residue of it. There are ~57 of
+   them across 29 documents (DEC-037, DEC-027, AGENTS.md, the watch decisions, the ROADMAP, the webview plans), and
+   most are accurate history: a decision that says "scheduled as step 3.0j" is recording what was known on its date.
+   The removal belongs to whichever change finally archives this plan — the same change that makes the pointers
+   false — and doing it now would delete live navigation to satisfy a rule about dead links.
+
+
 **Done when:** the repository has one place that says what is open, and it says "nothing".
 
 ### 9.7 — Validate what the build cache checksums, and add what it misses (LAST STEP)
