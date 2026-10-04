@@ -154,6 +154,10 @@ public final class MergeReportWriter {
                 .append(",\n");
             json.append("          \"resolvedCode\": ").append(quote(resolution.getResolvedCode()))
                 .append(",\n");
+            json.append("          \"signature\": ")
+                .append(quote(ConflictSignature.of(resolution.getType(), resolution.getFilePath(),
+                        resolution.getBranch1Code(), resolution.getBranch2Code()).toFileName()))
+                .append(",\n");
             json.append("          \"sides\": ").append(sidesJson(resolution)).append(",\n");
             json.append("          \"fixPaths\": ").append(fixPathsJson(resolution)).append('\n');
             json.append("        }");

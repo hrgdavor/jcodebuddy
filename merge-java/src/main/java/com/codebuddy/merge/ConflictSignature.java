@@ -34,10 +34,25 @@ public record ConflictSignature(ConflictType conflictType, String filePath, Stri
      */
     public static ConflictSignature of(Conflict conflict) {
         Objects.requireNonNull(conflict, "conflict");
+        return of(conflict.getType(), conflict.getFilePath(), conflict.getBranch1Code(),
+            conflict.getBranch2Code());
+    }
+
+    /**
+     * Derive the signature from the parts a report carries.
+     *
+     * <p>A resolution holds its own three sides, so a renderer that shows a resolution can key the decision a
+     * reviewer makes on it without reconstructing a {@link Conflict} first - which is what the review page's
+     * exported decisions need (plan step 4.3), and what lets the recorder check that the key the page showed
+     * is the key the incoming conflict really has.</p>
+     */
+    public static ConflictSignature of(ConflictType conflictType, String filePath, String branch1Code,
+                                       String branch2Code) {
+        Objects.requireNonNull(conflictType, "conflictType");
         return new ConflictSignature(
-            conflict.getType(),
-            conflict.getFilePath(),
-            hash(normalise(conflict.getBranch1Code()) + "\u0000" + normalise(conflict.getBranch2Code()))
+            conflictType,
+            filePath,
+            hash(normalise(branch1Code) + "\u0000" + normalise(branch2Code))
         );
     }
 

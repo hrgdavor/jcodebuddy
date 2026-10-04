@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **2026-10-03 - the review page can record a decision, and a command replays it.** Plan step 4.3: per
+  resolution the page offers a fix-path choice, an editable result and Accept, then exports what was accepted
+  as `decisions.json`; `DecisionRecorder` records each one into `BranchConflictStore` as a sticky replay, so
+  the next merge answers that conflict with it. The page writes nothing itself - it is opened from `file://`
+  - and the recorder verifies the signature the page showed against the conflict it builds, refusing a
+  mismatch rather than recording a decision against the wrong conflict. `--history` is the BRANCH directory
+  (`<historyRoot>/decisions/`), which is what `MergeConflictResolver` is given; the command prints the
+  absolute path it used because passing the parent fails silently.
 - **2026-10-03 - the review display is a jsx6 page, and the vanilla `scripts/merge-report/render.js`
   it replaced is deleted.** DEC-027's 2026-10-01 amendment sends a per-item review workflow to jsx6, so
   the page lives in `review/` with a build of its own (`src_build/`), renders the three sides beside the

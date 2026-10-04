@@ -50,8 +50,33 @@ consumer outside the jsx6 workspace cannot `file:`-link packages that depend on 
 `workspace:*`, and aliasing gives what the rule asks for — no `node_modules` for the stack, always the
 source `git pull` last put there.
 
-## Not here yet
+## Actions: a decision, exported and recorded
 
-Actions. This page is read-only; **plan step 4.3** is the action display (pick a fix path, edit, accept,
-and have the decision replay from `BranchConflictStore`), which needs somewhere to write — a `file://` page
-cannot.
+Since step 4.3 each resolution also offers a decision: pick a fix path (or keep the result), edit the code to
+accept, and **Accept**. Accepted decisions are listed in the export bar at the top, and
+`Download decisions.json` hands them to the browser as a file.
+
+The page does not write them anywhere, and that is the design rather than a gap: it is opened from `file://`,
+which cannot write, so the maintainer chose a separation on 2026-10-03 — the page **exports**, a command
+**records**, and the next merge **replays**. It also keeps the page free of a host and of any dependency beyond
+the stack itself.
+
+```sh
+# from the repository root, with the branch directory (NOT its parent - see below):
+java -cp <merge-java classpath> com.codebuddy.merge.DecisionRecorder \
+    --decisions ~/Downloads/decisions-feature-payments.json \
+    --history .jcodebuddy/merge-history/feature-payments \
+    --branch feature-payments
+```
+
+`DecisionRecorder` records each decision as a sticky replay — the same thing "remember this choice" means
+everywhere else in the module — so the next update answers that conflict with it instead of re-litigating it.
+It **verifies the signature** the page displayed against the one it computes from the payload's own sides, and
+refuses a mismatch: the failure it prevents is a decision landing on the wrong conflict.
+
+**The one thing to get right:** `--history` is the **branch's** directory, the same path
+`MergeConflictResolver` is given, because decisions live in `<historyRoot>/decisions/`. Passing its parent
+writes successfully and is never replayed, so the command prints the absolute directory it used.
+
+Still not here: recording *into* a served page. The exported format is the contract, so a webview host could
+drive the same command later without changing it.

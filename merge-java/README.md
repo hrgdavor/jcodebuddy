@@ -363,7 +363,7 @@ keeps a branch up to date through JGit, `MergeBatch` handles many files at once,
 `MergeReportWriter` writes the report and the **jsx6 review page** ([`review/`](review/README.md)) renders it as
 one self-contained HTML file a reviewer opens, and
 `MergeFileTool` fixes a marker-carrying file in place - preparing everything it
-cannot fix as a private, anonymization-first fixture for the next resolver.
+cannot fix as a private, anonymization-first fixture for the next resolver. A decision a reviewer accepts in that page is exported as JSON and recorded by `DecisionRecorder`, so the next update replays it like any other sticky decision.
 
 Overload comparison is now **type-aware**: it compares resolved parameter types, so
 two spellings of one signature are recognised as one. Placing imports, merging

@@ -1,11 +1,15 @@
 import { insert } from '@jsx6/jsx6'
+import { signal } from '@jsx6/signal'
 import { report, reportSource, isSample } from '../.generated/report.js'
+import { buildDecisions, fileNameFor, fixPathOptions, isActionable, toJson } from './decisions.js'
 
 /**
  * The merge-java resolution review page (plan step 4.2), as a jsx6 app.
  *
- * It is a reader of the model `MergeReportWriter` writes and nothing else: it parses no Java, decides
- * nothing, and writes nothing (4.3 is the step that adds actions). Every value it shows comes from
+ * It is a reader of the model `MergeReportWriter` writes: it parses no Java and decides nothing. Since step 4.3
+ * it also collects what a reviewer *accepts* — but only as an export, because a `file://` page cannot write:
+ * `DecisionRecorder` records the exported decisions, and the next merge replays them. Every value the page shows
+ * comes from
  * `merge-report.json`, so a reviewer sees what was decided and why rather than a count.
  *
  * Two deliberate behaviours worth keeping:
@@ -16,6 +20,80 @@ import { report, reportSource, isSample } from '../.generated/report.js'
  */
 
 const percent = (part, whole) => (whole === 0 ? 0 : Math.round((part / whole) * 100))
+
+/**
+ * The decisions a reviewer has accepted so far (plan step 4.3).
+ *
+ * They are collected here and exported as one file rather than posted anywhere: this page is opened from
+ * `file://`, which cannot write, and the maintainer's answer on 2026-10-03 was to keep that separation — the page
+ * exports, `DecisionRecorder` records, and the next merge replays the decisions like any other sticky choice.
+ */
+const $accepted = signal([])
+
+/** Hand the payload to the browser as a download. The one write a `file://` page can perform. */
+function downloadDecisions(payload) {
+  const url = URL.createObjectURL(new Blob([toJson(payload)], { type: 'application/json' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileNameFor(payload.branchName)
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * What a reviewer does with one resolution: pick a fix path (or keep the result), edit the code that will be
+ * accepted, and accept it. Nothing here is applied to the repository — an accepted decision is data until
+ * `DecisionRecorder` records it, which is what keeps the page unable to change a branch on its own.
+ */
+function Actions({ filePath, resolution }) {
+  const options = fixPathOptions(resolution)
+  const $choice = signal('keep')
+  const $code = signal(resolution.resolvedCode || '')
+
+  const accept = () => {
+    const chosen = $choice()
+    $accepted([
+      ...$accepted(),
+      {
+        filePath,
+        resolution,
+        resolvedCode: $code(),
+        explanation:
+          chosen === 'keep'
+            ? 'reviewer accepted the resolved result'
+            : `reviewer chose ${chosen}`,
+      },
+    ])
+  }
+
+  return (
+    <div class="actions">
+      <div class="label">your decision</div>
+      {options.length ? (
+        <select onchange={(event) => $choice(event.target.value)}>
+          <option value="keep">keep the resolved result</option>
+          {options.map(({ option, fixPath }) => (
+            <option value={option}>
+              {option}
+              {fixPath.recommended === option ? ' (recommended)' : ''} — {fixPath.description}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <textarea
+        rows="3"
+        placeholder="the code to accept — edit the resolved result if the fix path needs it"
+        oninput={(event) => $code(event.target.value)}
+      >
+        {$code}
+      </textarea>
+      <div>
+        <button onclick={accept}>Accept</button>
+        <span class="note">{options.length ? 'the choice is recorded with the code above' : ''}</span>
+      </div>
+    </div>
+  )
+}
 
 function Chip({ label, value, tone }) {
   return (
@@ -110,7 +188,7 @@ function FixPath({ fixPath }) {
   )
 }
 
-function Resolution({ resolution }) {
+function Resolution({ resolution, filePath }) {
   const region = resolution.region
   return (
     <div class={`card ${resolution.kind}`}>
@@ -142,6 +220,7 @@ function Resolution({ resolution }) {
           ))}
         </div>
       ) : null}
+      {isActionable(resolution) ? <Actions filePath={filePath} resolution={resolution} /> : null}
     </div>
   )
 }
@@ -154,7 +233,9 @@ function FileSection({ file }) {
         branch {file.branchName} · {file.clean ? 'clean' : 'conflicts'} · {file.summary}
       </div>
       {file.resolutions?.length ? (
-        file.resolutions.map((resolution) => <Resolution resolution={resolution} />)
+        file.resolutions.map((resolution) => (
+          <Resolution resolution={resolution} filePath={file.filePath} />
+        ))
       ) : (
         <div class="note">No resolutions recorded for this file.</div>
       )}
@@ -178,9 +259,41 @@ function App() {
       <div class="source">
         schema v{report.schemaVersion} · from <code>{reportSource}</code>
       </div>
+      <ExportBar branchName={files[0]?.branchName ?? ''} />
       <Summary summary={report.summary ?? {}} />
       <h2>Files</h2>
       {files.length ? files.map((file) => <FileSection file={file} />) : <div class="note">No files in this report.</div>}
+    </div>
+  )
+}
+
+/**
+ * The export half of the action display (plan step 4.3).
+ *
+ * A reviewer's accepted decisions stay in the page until they are exported: that is the whole reason this page
+ * needs no host, and the reason an accepted decision cannot change a branch by itself. `DecisionRecorder` is what
+ * turns the file this produces into stored decisions that the next merge replays.
+ */
+function ExportBar({ branchName }) {
+  const count = $accepted().length
+  return (
+    <div class="exportbar">
+      <span>
+        <b>{count}</b> decision(s) accepted
+      </span>
+      <button
+        onclick={() => downloadDecisions(buildDecisions({ branchName, accepted: $accepted() }))}
+        disabled={() => $accepted().length === 0}
+      >
+        Download decisions.json
+      </button>
+      <button onclick={() => $accepted([])} disabled={() => $accepted().length === 0}>
+        Clear
+      </button>
+      <span class="note">
+        then: record-decisions --decisions &lt;file&gt; --history .jcodebuddy/merge-history/
+        {branchName || '<branch>'} --branch {branchName || '<branch>'} (--history is the BRANCH's directory)
+      </span>
     </div>
   )
 }

@@ -34,6 +34,13 @@
     </properties>
 
     <dependencies>
+        <!-- Reading the decisions a reviewer exported from the review page (plan step 4.3). Jackson 3 is
+             the version the parent manages; declaring it makes the dependency intentional rather than
+             inherited from OpenRewrite's transitive graph. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
         <!-- OpenRewrite versions are managed by the parent POM. OpenRewrite
              bundles its own Java parser, so no separate JavaParser dependency
              is needed. -->

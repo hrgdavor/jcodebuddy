@@ -2724,6 +2724,31 @@ first: reviewing what the tool did must not require trusting it.
 **Done when:** a resolution can be reviewed after the fact, with the reason attached.
 
 ### 4.3 — Phase 13, step 2: the action display, writing back to `BranchConflictStore`
+
+**Done 2026-10-03 - the action display, with the maintainer's answer on where a decision goes.** The page
+collects what a reviewer accepts and exports it; a command records it into `BranchConflictStore`; the next merge
+replays it. The maintainer chose that over a local endpoint ("export + cli is ok ... it is an ok separation,
+could be useful"), which also keeps the page host-free: it stays one self-contained file.
+
+- **`DecisionRecorder`** (main sources, with a `main`): reads the page's `decisions.json` - Jackson 3, now
+  declared in the module's POM rather than inherited from OpenRewrite's transitive graph - and records each
+  decision as a sticky replay (`STICKY_REPLAY`, kind `DEFERRED`, `sticky(true)`), which is what "remember this
+  choice" means in this module. It **verifies the `signature`** the page displayed against the one it computes
+  from the payload's own sides and refuses a mismatch, because the failure that prevents is a decision recorded
+  against the wrong conflict.
+- **The page** gained, per resolution, a fix-path picker, an editable result pre-filled from the report, and
+  Accept, plus an export bar with a `decisions.json` download. The payload shape lives in `src/decisions.js`
+  rather than in the component, so the contract is testable without a DOM.
+- **A gotcha the gate test caught, and now documented where it bites:** the store's history root IS the branch
+  directory (`<historyRoot>/decisions/`) and the resolver is handed the same path, so recording one level up
+  writes successfully and is never replayed. The command prints the absolute directory it used, and the page's
+  hint shows `.jcodebuddy/merge-history/<branch>`.
+
+**Gate, both halves:** `DecisionRecorderTest` - a payload of exactly the shape the page exports is recorded and
+**replayed** on the next resolve (kind `DEFERRED`, strategy `STICKY_REPLAY`, the reviewer's code); a mismatched
+key is refused; an unknown schema version is refused; an empty export records nothing. `bun test` in
+`merge-java/review` - **8 pass, 0 fail** (four page-build, four payload-contract). `mvn -f merge-java/pom.xml
+test` - **709 tests, BUILD SUCCESS**.
 **Who:** agent · **Size:** M
 
 The manual cases already carry machine-readable fix paths (named options, a recommendation, a
@@ -3473,7 +3498,7 @@ start)
 | 3.11 | Editor-agnostic graph navigation + embedded host                                      | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
 | 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                   | agent              | S–M  | `[x]`                                                                                       |
 | 4.2  | merge-java Phase 13 step 1 — review render                                            | agent              | M    | `[x]`                                                                                       |
-| 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                        | agent              | M    | `[ ]`                                                                                       |
+| 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                        | agent              | M    | `[x]`                                                                                       |
 | 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                             | agent              | M    | `[ ]`                                                                                       |
 | 4.5  | Residual structural conflict should not veto a partly-overlapping block               | agent              | S–M  | `[ ]`                                                                                       |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                     | agent              | M    | `[ ]`                                                                                       |
