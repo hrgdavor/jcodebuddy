@@ -11,21 +11,23 @@ The decision it implements is [DEC-036](../../doc-hipster-entity/architecture/de
 > waits on. What this prototype does **not** do: cross-context wiring from `dependencies()`, `init*`
 > methods, region markers, and the `@Circular` two-phase form.
 >
-> **And it is the wrong shape in one respect, which the plan already schedules.** hipster-ioc is a
-> **project-wide** generator — it needs the project's type relations (who extends whom, who implements
-> what), which no single file contains — and **extracting metadata is not its job**: it consumes the
-> project's metadata to produce IoC code, while the metadata layer (the class index, the checksum cache,
-> the arena-backed index) reads and indexes sources. This prototype instead implements the *file-scoped*
-> `CodeGenerator` SPI and reads the sibling module interface itself. That is a category error kept as a
-> shortcut, and it is removed rather than re-labelled by
-> [the plan's step 3.0e](../../plans/unified-plan.md), which lands on top of the one metadata engine
-> [DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md) puts in `jcodebuddy-core` (steps
-> 3.0a–3.0k, of which this generator is one consumer). Until then, `bun scripts/ioc-gen.js` is the supported entry point — do not offer this
-> generator to an isolated file.
+> **The wrong shape this prototype had is gone (2026-10-03, plan step 3.0e part two).** hipster-ioc is a
+> **project-wide** generator — it needs the project's type relations (who extends whom, who implements what),
+> which no single file contains — and **extracting metadata is not its job**. It used to keep a shortcut for the
+> second half of that: it implemented the *file-scoped* `CodeGenerator` SPI and re-read the sibling module
+> interface itself. It now consumes the model instead: a pass builds the class index
+> ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md)'s engine in `jcodebuddy-core`) and the
+> generator is handed rows and an index, so it parses no source at all. What it still reads is the file it
+> **writes**, because cooperative codegen has to recognise its own previous output (DEC-020) — a different
+> question from where the facts come from, and conflating the two was the category error.
+>
+> `bun scripts/ioc-gen.js` is still the supported entry point, and it now builds the index itself before
+> generating, so the tree is read once per run rather than once per context.
 
 ## What it does
 
-Reads a `@HipsterContext` interface and writes `<Context>Impl` beside it, in the same package:
+Reads a `@HipsterContext` row out of the class index and writes `<Context>Impl` beside the interface, in the same
+package:
 
 ```
 hipster-ioc/hipster-ioc-test/src/test/java/hr/hrg/hipster/ioc/test/

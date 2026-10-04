@@ -4,7 +4,7 @@ import hr.hrg.hipster.ioc.HipsterContext;
 
 /** Outside facing interface of a context, declaring exported beans */
 @HipsterContext
-public interface CtxMain extends CtxMainModule{
+public interface CtxMain {
 
     ObjectMapper mapper();
 }

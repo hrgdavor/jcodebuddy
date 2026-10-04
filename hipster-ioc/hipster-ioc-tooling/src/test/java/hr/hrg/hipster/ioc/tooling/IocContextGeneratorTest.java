@@ -1,6 +1,8 @@
 package hr.hrg.hipster.ioc.tooling;
 
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
+import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassRecord;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -391,14 +393,15 @@ class IocContextGeneratorTest {
      * modifier being a keyword, and a factory method being recognised by the bean it builds.</p>
      */
     @Test
-    void readsTheContextModelFromTheInterfaceFile(@TempDir Path dir) throws Exception {
+    void readsTheContextModelFromTheIndex(@TempDir Path dir) throws Exception {
         Path root = tree(dir);
         DivergenceReporter divergences = new DivergenceReporter();
 
+        ClassIndex index = indexOf(root, root);
         java.util.Optional<IocModel.Context> read =
-                ContextReader.read(root.resolve("ioc/fixture/AppContext.java"), divergences);
+                ContextReader.read(contextRow(index, "ioc.fixture.AppContext"), index, divergences);
 
-        Assertions.assertTrue(read.isPresent(), "the file declares a context: " + divergences.render());
+        Assertions.assertTrue(read.isPresent(), "the row declares a context: " + divergences.render());
         IocModel.Context model = read.get();
         Assertions.assertEquals("ioc.fixture", model.packageName());
         Assertions.assertEquals("AppContext", model.simpleName());
@@ -413,6 +416,67 @@ class IocContextGeneratorTest {
                 model.factories().get("widget").parameters().stream().map(IocModel.Parameter::name).toList());
         Assertions.assertFalse(model.hasImplementation());
         Assertions.assertFalse(model.hasParent());
+        Assertions.assertTrue(model.importLines().stream().noneMatch(line -> line.contains("HipsterContext")),
+                "the imports come from the index's sidecar, with the marker annotation's own import dropped — a"
+                        + " generated class implements the interface and never names the annotation: "
+                        + model.importLines());
+    }
+
+    /**
+     * The point of step 3.0e part two: the generator reads the <strong>model</strong>, not the sources.
+     *
+     * <p>The test deletes the context interface's own file after the index is built and then generates. It still
+     * produces the right implementation, which it could not do if it were reading the file it was pointed at —
+     * and the file it does still read is the one it <em>writes</em>, because cooperative codegen has to recognise
+     * its own previous output (DEC-020). That is a different question from where the facts come from, and this is
+     * the test that keeps them apart.</p>
+     */
+    @Test
+    void generatesFromTheModelWithTheSourceFileGone(@TempDir Path dir) throws Exception {
+        Path root = tree(dir);
+        ClassIndex index = indexOf(root, root);
+        ClassRecord contextRow = contextRow(index, "ioc.fixture.AppContext");
+
+        Files.delete(root.resolve("ioc/fixture/AppContext.java"));
+        Assertions.assertFalse(Files.exists(root.resolve("ioc/fixture/AppContext.java")),
+                "the source the facts came from is gone");
+
+        IocContextGenerator.GeneratedContext generated =
+                new IocContextGenerator().generate(contextRow, index, root, "    ");
+
+        Assertions.assertFalse(generated.refused(), "it generated: " + generated.divergences());
+        Assertions.assertTrue(generated.source().contains("class AppContextImpl"),
+                "the implementation it renders names the context it only knows from the model");
+        Assertions.assertTrue(generated.source().contains("Gadget gadget"),
+                "and its beans, which the model recorded as the interface's accessors");
+        Assertions.assertTrue(generated.source().contains("public AppContextImpl("),
+                "and the factory parameter that becomes a constructor parameter");
+    }
+
+    /** Every {@code .java} file under {@code root} indexed through the engine — what a pass does first. */
+    private static ClassIndex indexOf(Path root, Path moduleRoot) throws IOException {
+        ClassIndex index = ClassIndex.forPass(moduleRoot.resolve(".jcodebuddy"), moduleRoot, root);
+        try (java.util.stream.Stream<Path> files = Files.walk(root)) {
+            for (Path file : files.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".java")).sorted().toList()) {
+                String relative = moduleRoot.relativize(file).toString().replace('\\', '/');
+                String source = Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+                hr.hrg.jcodebuddy.engine.source.SourceReader.Read read =
+                        hr.hrg.jcodebuddy.engine.source.SourceReader.readText(source);
+                Assertions.assertTrue(read.readable(), relative + " must parse");
+                index.addTypes(relative, read.unit(), source, false);
+            }
+        }
+        // A pass writes its table, which is also what stamps the file facts a relation's SLICE needs to be usable.
+        index.write();
+        return index;
+    }
+
+    private static ClassRecord contextRow(ClassIndex index, String fqn) {
+        ClassRecord row = index.row(fqn);
+        Assertions.assertNotNull(row, fqn + " must be indexed: " + index.rows().stream()
+                .map(ClassRecord::fqn).toList());
+        return row;
     }
 
     /** A guard that the kinds this generator produces are the kinds the project's vocabulary lists. */

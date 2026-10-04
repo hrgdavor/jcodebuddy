@@ -14,7 +14,7 @@ public class CtxMainImpl implements CtxMain {
     private final ObjectMapper mapper;
 
     public CtxMainImpl() {
-        this.mapper = buildMapper();
+        this.mapper = new ObjectMapper();
     }
 
     @Override

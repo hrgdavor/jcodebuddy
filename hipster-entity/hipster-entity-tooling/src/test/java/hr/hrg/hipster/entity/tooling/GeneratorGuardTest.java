@@ -203,6 +203,10 @@ class GeneratorGuardTest {
                         String name = entry.getFileName().toString();
                         boolean allowed = name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.FILE_NAME)
                                 || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.MTIME_FILE_NAME)
+                                // The file's import lines: a sidecar since DEC-040 D1, because an import belongs
+                                // to the FILE while a row belongs to a type, and repeating it per row is the copy
+                                // problem the same decision rejects.
+                                || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.IMPORTS_FILE_NAME)
                                 || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.README_NAME);
                         if (!allowed) {
                             problems.add(repoRoot.relativize(entry).toString().replace('\\', '/'));
@@ -222,8 +226,9 @@ class GeneratorGuardTest {
         Assertions.assertTrue(checked > 0,
                 "the repository has a module with a .jcodebuddy/index/, or this guard asserts nothing");
         Assertions.assertEquals(List.of(), problems,
-                "a module's index directory holds the class index, its mtime sidecar and the README "
-                        + "(DEC-029); a stale files.json is a second table nothing maintains, and the class "
-                        + "index records names, paths and hashes rather than content");
+                "a module's index directory holds the class index, its two sidecars (the working-tree mtime and "
+                        + "the file's import lines, DEC-029/DEC-040) and the README; a stale files.json is a second "
+                        + "table nothing maintains, and the class index records names, paths and hashes rather than "
+                        + "content");
     }
 }

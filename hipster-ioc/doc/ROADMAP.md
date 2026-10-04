@@ -27,14 +27,12 @@
 > what, what is assignable) to decide how beans are wired, and no single file contains them — so it cannot
 > work file by file, and it does not. **Extracting metadata is not its job:** it *consumes* the project's
 > metadata to produce IoC code, while the metadata layer (the class index with its checksums, the cache,
-> the arena-backed index) reads and indexes sources. The seam for that exists in the metadata engine —
-> `hr.hrg.jcodebuddy.engine.query`'s `TypeResolver`/`TypeDefinition`, in `jcodebuddy-core` since step **3.0i**
-> dissolved the SPI's own module into it — and is empty: `TypeDefinition` carries a
-> type's fields and **no relations**, and nothing but `EmptyTypeResolver` implements `TypeResolver`. The
-> plan schedules the contract for it as steps **3.0a–3.0k**, which since 2026-10-02 means one metadata
-> engine in `jcodebuddy-core` ([DEC-037](../../doc-hipster-entity/architecture/decisions/DEC-037.md)) with
-> this generator as one of its consumers, and moving this generator onto it as
-> **3.0e/3.0j**. The prototype's file-scoped `CodeGenerator` implementation is a shortcut that 3.0e removes.
+> the arena-backed index) reads and indexes sources. **And it now does consume it (2026-10-03, step 3.0e
+> part two):** `ContextReader` takes a class-index row and an index, `IocContextGenerator` no longer
+> implements the file-scoped `CodeGenerator` SPI, and a test generates a context whose source file has been
+> deleted — which is the difference between reading the model and reading the file. Regenerating the
+> committed example produced the same bytes except one line, because the last hand-written wiring
+> (`CtxMainModule.default buildMapper()`) was retired with it.
 >
 > **What the prototype does not do, stated rather than discovered:** no cross-context wiring (a context's
 > `dependencies()` are recorded in the graph and never used to build anything), no `init*` methods, no

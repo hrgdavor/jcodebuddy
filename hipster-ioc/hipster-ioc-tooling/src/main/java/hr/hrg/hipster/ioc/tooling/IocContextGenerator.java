@@ -2,7 +2,8 @@ package hr.hrg.hipster.ioc.tooling;
 
 import hr.hrg.hipster.entity.tooling.CooperativeCodegen;
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
-import hr.hrg.jcodebuddy.engine.codegen.CodeContext;
+import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassRecord;
 import hr.hrg.jcodebuddy.engine.codegen.CodeGenerator;
 
 import java.io.IOException;
@@ -14,42 +15,37 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The hipster-ioc context generator, as a JCodeBuddy {@link CodeGenerator} (DEC-036).
+ * The hipster-ioc context generator, driven by the metadata model (DEC-036, plan step 3.0e part two).
  *
- * <p>It answers the SPI's two questions the way the SPI intends: {@link #isApplicable} is a substring test
- * on the file's text, not a parse, so offering this generator to every file in a tree costs one read; and
- * {@link #generate} returns the file's text rather than writing it, so the caller decides whether that text
- * reaches the disk. A watch agent can hand the same text to an editor, and a command can write it — the
- * generator does not know which is happening.</p>
+ * <p><strong>It is no longer a {@code CodeGenerator}.</strong> The per-file SPI asks "is this file yours, and what
+ * would you write for it", which forces a generator to read the file it is offered — and this one does not need
+ * to, because everything it renders is in the model: the context's beans are its methods, its module is the type a
+ * relation names, its factories are that module's {@code default} methods, and the parent of a
+ * {@code ChildContext<P>} comes from slicing the declaring file at the relation's range. So the pass hands it a row
+ * and an index, and it parses nothing. What it still reads is the file it <em>writes</em>, because cooperative
+ * codegen has to recognise its own previous output and preserve a developer's edits (DEC-020) — that is a
+ * different question from where the facts come from, and conflating the two is what this split undoes.</p>
  *
  * <p>Three refusals, all of them deliberate, and each reported in DEC-022's format rather than silently
- * skipped:</p>
- *
- * <ul>
- *   <li>a dependency cycle (marked or not) — see {@link DependencyOrder};</li>
- *   <li>a {@code Supplier<Bean>} or {@code DynamicResource<Bean>} bean with no factory, because laziness is
- *       opt-in and "generate something that looks lazy" is how a generator lies (DEC-036 § 8);</li>
- *   <li>a context whose {@code impl()} names a class, because an implementation already exists and this
- *       generator must not compete with it (DEC-036 § 7).</li>
- * </ul>
+ * skipped: a dependency cycle (marked or not, see {@link DependencyOrder}); a {@code Supplier<Bean>} or
+ * {@code DynamicResource<Bean>} bean with no factory, because laziness is opt-in and "generate something that
+ * looks lazy" is how a generator lies (DEC-036 § 8); and a context whose {@code impl()} names a class, because an
+ * implementation already exists and this generator must not compete with it (DEC-036 § 7).</p>
  *
  * <p>When it does generate, the text goes through {@link CooperativeCodegen#reconcileMembers}: members the
  * developer added are carried through verbatim, and {@code enabled:false} in the header freezes the file
  * (DEC-020, DEC-021 § 6). That is why this generator never writes to the file itself — the reconciliation is
  * the only place that decides what the file should become.</p>
  */
-public final class IocContextGenerator implements CodeGenerator<IocContextGenerator.GeneratedContext> {
+public final class IocContextGenerator {
 
     /** The generator's stable name, as a log line or a report calls it. */
     public static final String NAME = "hipster-ioc";
 
-    /** The substring {@link #isApplicable} looks for: cheap, and a false positive only costs a parse. */
-    private static final String MARKER = "@" + ContextReader.CONTEXT_ANNOTATION;
-
     /**
      * What one run produced.
      *
-     * @param sourceFile  the context interface that was read
+     * @param sourceFile  the context interface the model describes (its path, from the row)
      * @param implFile    the file that would be written, or {@code null} when nothing is generated
      * @param source      the text for {@code implFile}; for a refused context this is the file as it is now
      * @param divergences what the run reported, in DEC-022's format
@@ -63,70 +59,61 @@ public final class IocContextGenerator implements CodeGenerator<IocContextGenera
         }
     }
 
-    @Override
-    public String name() {
-        return NAME;
-    }
-
-    @Override
-    public boolean isApplicable(CodeContext context) {
-        Path file = context.getFilePath();
-        if (file == null || !Files.isRegularFile(file) || !file.toString().endsWith(".java")) {
-            return false;
-        }
-        try {
-            return Files.readString(file).contains(MARKER);
-        } catch (IOException e) {
-            // Unreadable is not "not applicable", it is "nothing can be decided here" — and the caller's own
-            // pass reports unreadable files. Answering false keeps the SPI's contract (a predicate) honest.
-            return false;
-        }
-    }
-
-    @Override
-    public GeneratedContext generate(CodeContext context) {
-        Path sourceFile = context.getFilePath();
+    /**
+     * Generate one context from the model.
+     *
+     * @param contextRow the {@code @HipsterContext} row, from {@code index}
+     * @param index      the index the row came from — the reader's only source of facts
+     * @param moduleRoot the module the row's path is relative to, which is where the implementation is written
+     * @param indent     one indentation step for the generated text
+     */
+    public GeneratedContext generate(ClassRecord contextRow, ClassIndex index, Path moduleRoot, String indent) {
+        Path sourceFile = moduleRoot.resolve(contextRow.path());
         DivergenceReporter divergences = new DivergenceReporter();
-        try {
-            Optional<IocModel.Context> read = ContextReader.read(sourceFile, divergences);
-            if (read.isEmpty()) {
-                return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
-            }
-            IocModel.Context model = read.get();
-
-            if (model.hasImplementation()) {
-                divergences.report("context_implementation_present", model.qualifiedName(),
-                        "the @HipsterContext annotation names an implementation, so one already exists",
-                        "@HipsterContext(impl = ...)", "no generated implementation",
-                        "nothing to do: the named class is the implementation. Remove impl() to let this "
-                                + "generator emit one");
-                return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
-            }
-
-            DependencyOrder.Ordered ordered = DependencyOrder.sort(model, divergences);
-            if (ordered.refused()) {
-                return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
-            }
-
-            if (lazyBeanWithoutFactory(model, ordered, divergences)) {
-                return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
-            }
-
-            Path implFile = implFileFor(sourceFile, model);
-            String canonical = ContextSource.render(model, ordered.beans(), ordered.extraParameters(),
-                    context.getIndent());
-            CooperativeCodegen.Reconciled reconciled = CooperativeCodegen.reconcileMembers(
-                    implFile, model.implSimpleName(), canonical, CooperativeCodegen.Reconciliation.ALL, Set.of());
-
-            List<String> all = new ArrayList<>(divergences.entries());
-            all.addAll(reconciled.divergences());
-            return new GeneratedContext(sourceFile, implFile, reconciled.source(), all, false);
-        } catch (IOException e) {
-            divergences.report("source_not_parsed", String.valueOf(sourceFile.getFileName()),
-                    "reading or reconciling the file failed: " + e.getMessage(),
-                    "the file as it is on disk", "a generated implementation", "fix the file and re-run");
+        Optional<IocModel.Context> read = ContextReader.read(contextRow, index, divergences);
+        if (read.isEmpty()) {
             return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
         }
+        IocModel.Context model = read.get();
+
+        if (model.hasImplementation()) {
+            divergences.report("context_implementation_present", model.qualifiedName(),
+                    "the @HipsterContext annotation names an implementation, so one already exists",
+                    "@HipsterContext(impl = ...)", "no generated implementation",
+                    "nothing to do: the named class is the implementation. Remove impl() to let this "
+                            + "generator emit one");
+            return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
+        }
+
+        DependencyOrder.Ordered ordered = DependencyOrder.sort(model, divergences);
+        if (ordered.refused()) {
+            return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
+        }
+
+        if (lazyBeanWithoutFactory(model, ordered, divergences)) {
+            return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
+        }
+
+        Path implFile = implFileFor(sourceFile, model);
+        String canonical = ContextSource.render(model, ordered.beans(), ordered.extraParameters(), indent);
+        CooperativeCodegen.Reconciled reconciled;
+        try {
+            reconciled = CooperativeCodegen.reconcileMembers(
+                    implFile, model.implSimpleName(), canonical, CooperativeCodegen.Reconciliation.ALL, Set.of());
+        } catch (IOException unreadable) {
+            // Reading the file this generator OWNS is the one read it still does — cooperative codegen has to
+            // recognise its own previous output (DEC-020) — and a failure there is this context's problem, not
+            // the run's: report it and refuse this one rather than aborting every other context.
+            divergences.report("implementation_not_readable", String.valueOf(implFile.getFileName()),
+                    "the implementation file could not be read to reconcile against: " + unreadable.getMessage(),
+                    "the file as it is on disk", "a readable or absent implementation file",
+                    "fix the file's permissions or contents and re-run");
+            return new GeneratedContext(sourceFile, null, currentText(sourceFile), divergences.entries(), true);
+        }
+
+        List<String> all = new ArrayList<>(divergences.entries());
+        all.addAll(reconciled.divergences());
+        return new GeneratedContext(sourceFile, implFile, reconciled.source(), all, false);
     }
 
     /**

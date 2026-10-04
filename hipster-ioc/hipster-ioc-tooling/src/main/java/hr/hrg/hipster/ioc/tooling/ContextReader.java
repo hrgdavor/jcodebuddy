@@ -1,14 +1,14 @@
 package hr.hrg.hipster.ioc.tooling;
 
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
-import hr.hrg.jcodebuddy.engine.source.SourceReader;
-import hr.hrg.jcodebuddy.engine.source.TreeQueries;
-import org.openrewrite.java.tree.Expression;
-import org.openrewrite.java.tree.J;
+import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.MemberParameter;
+import hr.hrg.jcodebuddy.engine.index.MemberRecord;
+import hr.hrg.jcodebuddy.engine.index.SourceSlice;
+import hr.hrg.jcodebuddy.engine.index.TypeAnnotation;
+import hr.hrg.jcodebuddy.engine.index.TypeRelation;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,18 +16,27 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Reads one {@code @HipsterContext} interface into an {@link IocModel.Context}.
+ * Reads a hipster-ioc context out of the <strong>metadata model</strong> rather than out of source text
+ * (DEC-036, plan step 3.0e part two).
  *
- * <p>The reading goes through the repository's one source representation — OpenRewrite's LST, via
- * {@code hipster-entity-tooling}'s {@link TreeQueries} (DEC-030). That is not a stylistic preference: a
- * second, hand-rolled scan for annotations and method shapes is the defect DEC-030 exists to prevent, and
- * the queries this class needs (an interface's {@code extends} clause held in {@code getImplements()}, an
- * empty parameter list held as one {@code J.Empty}, a {@code default} modifier that is a keyword rather
- * than an accessor) are exactly the ones a second parser gets subtly wrong.</p>
+ * <p>Before this rewrite the reader parsed the context interface, then hunted for the module interface by
+ * <em>file name</em> beside it, and pulled the parent type out of a supertype's text. All three are facts the
+ * engine already holds: the context is a row whose annotations carry {@code @HipsterContext}, its beans are its
+ * no-argument methods, the module is the type one of its relations names, and the parent of a
+ * {@code ChildContext<P>} is recovered by slicing the declaring file at the relation's range — which is what the
+ * ranges exist for (DEC-040 D2/D6). So this class now reads the model, and the generator it serves parses
+ * nothing.</p>
  *
- * <p>A file that cannot be read cleanly is reported and yields nothing (F-34: the verdict is
- * {@code readable()}, never "a parse produced a result"), because a context half-read would generate a
- * context half-wired.</p>
+ * <p><strong>What it still reports rather than guesses.</strong> Two things the model states honestly and this
+ * reader passes on instead of papering over: a file whose imports were <em>not recorded</em> in the index (a
+ * caller that built rows from facts rather than from a parse), and a module interface that is named but absent
+ * from the index. Each is a divergence in DEC-022's format, because a generated context missing an import
+ * compiles into an error the reader cannot see from here.</p>
+ *
+ * <p><strong>Annotation arguments are text in this model</strong> (DEC-029's "as written" rule), so
+ * {@code @HipsterContext(dependencies = {A.class})} arrives as one argument string and this reader takes the
+ * attribute apart itself. That is the honest level: the model records what the source says, and a consumer that
+ * wants structure from it says so in its own code rather than the engine storing a second interpretation.</p>
  */
 public final class ContextReader {
 
@@ -41,207 +50,195 @@ public final class ContextReader {
     }
 
     /**
-     * Reads {@code file}, or returns empty when it declares no context (or cannot be read).
+     * Every context in an index: the rows carrying the marker annotation, in FQN order.
      *
-     * @param file        the interface file
-     * @param divergences where a problem is reported, in DEC-022's format
+     * <p>The model's answer to "which files hold a context" — and it is asked of the index rather than of the
+     * tree, which is what lets a caller run the generator from committed metadata with no sources at hand.</p>
      */
-    public static Optional<IocModel.Context> read(Path file, DivergenceReporter divergences) throws IOException {
-        String text = Files.readString(file);
-        SourceReader.Read read = SourceReader.readText(text);
-        if (!read.readable()) {
-            divergences.report("source_not_parsed", file.getFileName().toString(),
-                    "the file could not be parsed, so its context is unknown",
-                    "the file as it is on disk", "a readable Java interface",
-                    "fix the syntax error; nothing was generated for this context");
-            return Optional.empty();
-        }
-
-        J.CompilationUnit cu = read.unit();
-        J.ClassDeclaration context = null;
-        for (J.ClassDeclaration declaration : TreeQueries.interfaces(cu)) {
-            if (TreeQueries.annotationNamed(declaration, CONTEXT_ANNOTATION) != null) {
-                context = declaration;
-                break;
+    public static List<ClassRecord> contextsIn(ClassIndex index) {
+        List<ClassRecord> contexts = new ArrayList<>();
+        for (ClassRecord row : index.rows()) {
+            if (markerOf(row) != null) {
+                contexts.add(row);
             }
         }
-        if (context == null) {
+        return List.copyOf(contexts);
+    }
+
+    /**
+     * One context, read from the model, or empty when {@code context} carries no marker annotation.
+     *
+     * @param context      the row of the {@code @HipsterContext} interface
+     * @param index        the index the row came from — where its module interface, its imports and the file its
+     *                     ranges point into are found
+     * @param divergences  where a problem is reported, in DEC-022's format
+     */
+    public static Optional<IocModel.Context> read(ClassRecord context, ClassIndex index,
+                                                  DivergenceReporter divergences) {
+        if (context == null || index == null) {
             return Optional.empty();
         }
-
-        J.Annotation annotation = TreeQueries.annotationNamed(context, CONTEXT_ANNOTATION);
-        String packageName = TreeQueries.packageName(cu);
-        Map<String, J.ClassDeclaration> declaredTypes = new LinkedHashMap<>();
-        for (J.ClassDeclaration declaration : TreeQueries.interfaces(cu)) {
-            declaredTypes.put(declaration.getSimpleName(), declaration);
+        TypeAnnotation marker = markerOf(context);
+        if (marker == null) {
+            // Not a context: not a problem, and not reported — a caller that hands over every row in an index is
+            // asking "is this one?", and the answer is no.
+            return Optional.empty();
         }
 
         List<IocModel.Bean> beans = beansOf(context);
-        // The module interface is the context's own supertype: the API documents it as a package-private
-        // interface holding the `default buildXxx` methods, and in practice it is a *sibling file*
-        // (`CtxMain extends CtxMainModule`, one file each). So the lookup is the same file first, then the
-        // file named after the supertype beside it — the two shapes the API's own example uses.
-        List<String> supertypes = TreeQueries.supertypeTexts(context);
-        J.ClassDeclaration module = moduleOf(context, declaredTypes);
-        String moduleText = null;
-        if (module == null) {
-            moduleText = siblingModuleText(file, supertypes);
-            module = moduleIn(moduleText, supertypes);
-        }
+        ClassRecord module = moduleOf(context, index, divergences);
         Map<String, IocModel.Factory> factories = module == null
-                ? Map.of()
-                : factoriesOf(module, beans);
+                ? Map.of() : factoriesOf(module, beans);
 
-        return Optional.of(new IocModel.Context(packageName, context.getSimpleName(), beans, factories,
-                classValues(annotation, "dependencies"), parentTypeOf(context), hasImplementation(annotation),
-                importLines(text, moduleText)));
+        return Optional.of(new IocModel.Context(packageOf(context.fqn()), simpleNameOfFqn(context.fqn()),
+                beans, factories,
+                classValues(marker, "dependencies"),
+                parentTypeOf(context, index, divergences),
+                hasImplementation(marker),
+                importLines(index, context, module, divergences)));
     }
 
-    /** The text of the sibling file named after one of the supertypes, or {@code null} when there is none. */
-    private static String siblingModuleText(Path file, List<String> supertypes) throws IOException {
-        Path directory = file.getParent();
-        if (directory == null) {
-            return null;
-        }
-        for (String supertype : supertypes) {
-            String simpleName = simpleNameOf(supertype);
-            Path sibling = directory.resolve(simpleName + ".java");
-            if (Files.isRegularFile(sibling)) {
-                return Files.readString(sibling);
+    /** The {@code @HipsterContext} annotation on a row, or {@code null} when it carries none. */
+    private static TypeAnnotation markerOf(ClassRecord row) {
+        for (TypeAnnotation annotation : row.annotations()) {
+            if (CONTEXT_ANNOTATION.equals(annotation.simpleName())) {
+                return annotation;
             }
         }
         return null;
-    }
-
-    /** The interface named by one of {@code supertypes} inside {@code text}, or {@code null}. */
-    private static J.ClassDeclaration moduleIn(String text, List<String> supertypes) {
-        if (text == null) {
-            return null;
-        }
-        SourceReader.Read read = SourceReader.readText(text);
-        if (!read.readable()) {
-            return null;
-        }
-        for (String supertype : supertypes) {
-            String simpleName = simpleNameOf(supertype);
-            for (J.ClassDeclaration declaration : TreeQueries.interfaces(read.unit())) {
-                if (declaration.getSimpleName().equals(simpleName)) {
-                    return declaration;
-                }
-            }
-        }
-        return null;
-    }
-
-    /** {@code ChildContext<AppContext>} becomes {@code ChildContext}. */
-    private static String simpleNameOf(String supertype) {
-        return supertype.replaceAll("<.*", "").trim();
     }
 
     /** Every abstract no-arg, non-void accessor: DEC-036 § 2's definition of a bean. */
-    private static List<IocModel.Bean> beansOf(J.ClassDeclaration context) {
+    private static List<IocModel.Bean> beansOf(ClassRecord context) {
         List<IocModel.Bean> beans = new ArrayList<>();
-        for (J.MethodDeclaration method : TreeQueries.methodsOf(context)) {
-            if (TreeQueries.isDefaultMethod(method) || TreeQueries.isStaticMethod(method)
-                    || TreeQueries.isVoidReturn(method) || !TreeQueries.hasNoParameters(method)) {
+        for (MemberRecord member : context.members()) {
+            if (member.kind() != MemberRecord.Kind.METHOD
+                    || member.modifiers().contains("default")
+                    || member.modifiers().contains("static")
+                    || member.type().isEmpty()
+                    || "void".equals(member.type())
+                    || !member.parameters().isEmpty()) {
                 continue;
             }
-            beans.add(new IocModel.Bean(method.getSimpleName(),
-                    TreeQueries.typeText(method.getReturnTypeExpression())));
+            beans.add(new IocModel.Bean(member.name(), member.type()));
         }
         return beans;
     }
 
-    /** The supertype declared in this same file, which is where {@code default buildXxx} methods live. */
-    private static J.ClassDeclaration moduleOf(J.ClassDeclaration context,
-                                               Map<String, J.ClassDeclaration> declaredTypes) {
-        for (String supertype : TreeQueries.supertypeTexts(context)) {
-            String simpleName = supertype.replaceAll("<.*", "").trim();
-            J.ClassDeclaration declaration = declaredTypes.get(simpleName);
-            if (declaration != null && !simpleName.equals(context.getSimpleName())) {
-                return declaration;
+    /**
+     * The module interface: the type the context's supertype relation names.
+     *
+     * <p>Found <strong>in the index</strong> rather than beside the file, which is both simpler and more correct:
+     * a module in another package is found now, and one that is absent is reported instead of silently yielding
+     * no factories. {@code ChildContext} is excluded because it is the API's own parent marker, not a module.</p>
+     */
+    private static ClassRecord moduleOf(ClassRecord context, ClassIndex index, DivergenceReporter divergences) {
+        for (TypeRelation relation : context.relations()) {
+            String name = simpleNameOf(relation.name());
+            if ("ChildContext".equals(name)) {
+                continue;
             }
+            ClassRecord samePackage = index.row(packageOf(context.fqn()) + "." + name);
+            if (samePackage != null) {
+                return samePackage;
+            }
+            // A module written without its package (or imported from elsewhere): find it by simple name, and say
+            // so when more than one candidate exists rather than picking by iteration order.
+            List<ClassRecord> candidates = new ArrayList<>();
+            for (ClassRecord row : index.rows()) {
+                if (simpleNameOfFqn(row.fqn()).equals(name)) {
+                    candidates.add(row);
+                }
+            }
+            if (candidates.size() == 1) {
+                return candidates.get(0);
+            }
+            if (candidates.size() > 1) {
+                divergences.report("module_interface_ambiguous", context.fqn() + " -> " + name,
+                        "the context names " + name + " as its module and the index holds several types with that"
+                                + " simple name",
+                        name, "one module interface",
+                        "qualify the supertype in the source, or index only the module it belongs to");
+                return null;
+            }
+            divergences.report("module_interface_not_indexed", context.fqn() + " -> " + name,
+                    "the context names " + name + " as its module, and the index has no such type, so its"
+                            + " factory methods are unknown",
+                    name, "the module interface in the same index",
+                    "index the module's own source root as well, or fix the supertype");
+            return null;
         }
         return null;
     }
 
-    /** {@code default buildMapper(...)} on the module interface becomes the factory for the {@code mapper} bean. */
-    private static Map<String, IocModel.Factory> factoriesOf(J.ClassDeclaration module,
-                                                             List<IocModel.Bean> beans) {
+    /** {@code default buildMapper(...)} on the module becomes the factory for the {@code mapper} bean. */
+    private static Map<String, IocModel.Factory> factoriesOf(ClassRecord module, List<IocModel.Bean> beans) {
         Map<String, IocModel.Factory> factories = new LinkedHashMap<>();
-        for (J.MethodDeclaration method : TreeQueries.methodsOf(module)) {
-            if (!TreeQueries.isDefaultMethod(method)) {
+        for (MemberRecord member : module.members()) {
+            if (member.kind() != MemberRecord.Kind.METHOD || !member.modifiers().contains("default")) {
                 continue;
             }
-            String methodName = method.getSimpleName();
+            String methodName = member.name();
             if (!methodName.startsWith(FACTORY_PREFIX) || methodName.length() == FACTORY_PREFIX.length()) {
                 continue;
             }
             String suffix = methodName.substring(FACTORY_PREFIX.length());
             for (IocModel.Bean bean : beans) {
-                // The method name decides which bean it builds, and the bean's own capitalisation decides
-                // the spelling — `buildMapper` for `mapper`, `buildURLSource` for `uRLSource` would be
-                // wrong, so a bean whose capitalised name does not match is simply not this factory's.
+                // The method name decides which bean it builds, and the bean's own capitalisation decides the
+                // spelling — `buildMapper` for `mapper`, and `buildURLSource` for `uRLSource` would be wrong, so a
+                // bean whose capitalised name does not match is simply not this factory's.
                 if (bean.capitalized().equals(suffix)) {
-                    factories.put(bean.name(),
-                            new IocModel.Factory(bean.name(), methodName, parametersOf(method)));
+                    factories.put(bean.name(), new IocModel.Factory(bean.name(), methodName,
+                            parametersOf(member)));
                 }
             }
         }
         return factories;
     }
 
-    private static List<IocModel.Parameter> parametersOf(J.MethodDeclaration method) {
-        List<IocModel.Parameter> parameters = new ArrayList<>();
-        if (method.getParameters() == null) {
-            return parameters;
-        }
-        for (org.openrewrite.java.tree.Statement parameter : method.getParameters()) {
-            if (!(parameter instanceof J.VariableDeclarations declarations) || declarations.getVariables() == null) {
-                continue;
-            }
-            for (J.VariableDeclarations.NamedVariable variable : declarations.getVariables()) {
-                boolean circular = declarations.getLeadingAnnotations() != null
-                        && declarations.getLeadingAnnotations().stream()
-                                .anyMatch(a -> "Circular".equals(TreeQueries.annotationName(a)));
-                parameters.add(new IocModel.Parameter(TreeQueries.typeText(declarations.getTypeExpression()),
-                        variable.getSimpleName(), circular));
-            }
+    /**
+     * A factory method's parameters, each with the {@code @Circular} marker the generator needs.
+     *
+     * <p>A parameter's own annotations are in the model because step 3.0e part one put them there: the question
+     * "which of these parameters is circular" is a question about a parameter, and answering it from source was
+     * the second parse this rewrite removes.</p>
+     */
+    private static List<IocModel.Parameter> parametersOf(MemberRecord method) {
+        List<IocModel.Parameter> parameters = new ArrayList<>(method.parameters().size());
+        for (MemberParameter parameter : method.parameters()) {
+            parameters.add(new IocModel.Parameter(parameter.type(), parameter.name(),
+                    parameter.hasAnnotation("Circular")));
         }
         return parameters;
     }
 
     /**
-     * The class-valued entries of an annotation attribute, as written.
+     * The {@code P} of a {@code ChildContext<P>} supertype, or empty.
      *
-     * <p>{@code Text} rather than a resolved type, and that is the honest level of this reader: the
-     * generator matches parameter types to a bean's <em>declared</em> text, exactly as a reader of the
-     * source would, and a name that resolves to nothing is reported instead of being guessed at. The
-     * trailing {@code .class} is trimmed because the LST spells a class literal as an expression whose text
-     * ends that way, and the generator only needs the type's name.</p>
+     * <p>Recovered by <strong>slicing</strong> the declaring file at the relation's range, because the model keeps
+     * the bare name for matching and the range for the written form (DEC-040 D2). When the slice is not usable —
+     * the file moved on, or the caller built rows without ranges — the relation's own name is the fallback, which
+     * is the honest degradation: a parent type without its argument rather than a guess at it.</p>
      */
-    private static List<String> classValues(J.Annotation annotation, String attribute) {
-        Expression value = TreeQueries.annotationArg(annotation, attribute);
-        List<String> values = new ArrayList<>();
-        if (value instanceof J.NewArray array && array.getInitializer() != null) {
-            for (Expression element : array.getInitializer()) {
-                values.add(classText(element));
+    private static String parentTypeOf(ClassRecord context, ClassIndex index, DivergenceReporter divergences) {
+        for (TypeRelation relation : context.relations()) {
+            String written = relation.name();
+            SourceSlice.Slice slice = SourceSlice.read(index, context, relation);
+            if (slice.usable()) {
+                written = slice.text();
+            } else if ("ChildContext".equals(written)) {
+                // The relation names the parent marker but its written form could not be sliced, so the `P` of
+                // `ChildContext<P>` is unknown. Reported rather than guessed: the generated context then omits the
+                // parent accessors, and a reader has to know that the reason is a missing range rather than a
+                // context that has no parent (DEC-040 D2/D4).
+                divergences.report("parent_type_not_readable", context.fqn(),
+                        "the context names ChildContext as a supertype and its written form could not be read ("
+                                + slice.problem() + "), so the parent type argument is unknown",
+                        "ChildContext", "ChildContext<P> sliced from the declaring file",
+                        "index this file with its content checksum (write the table after indexing) so the"
+                                + " relation's range is usable");
             }
-        } else if (value != null) {
-            values.add(classText(value));
-        }
-        return values;
-    }
-
-    private static String classText(Expression expression) {
-        String text = expression.toString().trim();
-        return text.endsWith(".class") ? text.substring(0, text.length() - ".class".length()) : text;
-    }
-
-    /** The {@code P} of a {@code ChildContext<P>} supertype, or empty. */
-    private static String parentTypeOf(J.ClassDeclaration context) {
-        for (String supertype : TreeQueries.supertypeTexts(context)) {
-            String trimmed = supertype.trim();
+            String trimmed = written.trim();
             if (trimmed.startsWith("ChildContext<") && trimmed.endsWith(">")) {
                 return trimmed.substring("ChildContext<".length(), trimmed.length() - 1).trim();
             }
@@ -249,40 +246,103 @@ public final class ContextReader {
         return "";
     }
 
+    /**
+     * The class-valued entries of an annotation attribute, from the argument text the model records.
+     *
+     * <p>{@code dependencies = {A.class, B.class}} arrives as one string, because DEC-029 records an annotation's
+     * arguments <em>as written</em>. The attribute is therefore taken apart here — the one place in this reader
+     * that interprets text rather than reading a fact — and the trailing {@code .class} is trimmed because a class
+     * literal is spelled that way and the generator needs the type's name.</p>
+     */
+    private static List<String> classValues(TypeAnnotation annotation, String attribute) {
+        List<String> values = new ArrayList<>();
+        for (String argument : annotation.arguments()) {
+            String text = argument.trim();
+            if (!text.startsWith(attribute)) {
+                continue;
+            }
+            int equals = text.indexOf('=');
+            if (equals < 0) {
+                continue;
+            }
+            String value = text.substring(equals + 1).trim();
+            if (value.startsWith("{")) {
+                value = value.substring(1, value.endsWith("}") ? value.length() - 1 : value.length());
+            }
+            for (String element : value.split(",")) {
+                String trimmed = element.trim();
+                if (!trimmed.isEmpty()) {
+                    values.add(trimmed.endsWith(".class")
+                            ? trimmed.substring(0, trimmed.length() - ".class".length()).trim()
+                            : trimmed);
+                }
+            }
+        }
+        return values;
+    }
+
     /** Whether {@code impl()} names a class, in which case an implementation already exists. */
-    private static boolean hasImplementation(J.Annotation annotation) {
-        Expression impl = TreeQueries.annotationArg(annotation, "impl");
-        return impl != null && !impl.toString().contains("Void");
+    private static boolean hasImplementation(TypeAnnotation annotation) {
+        for (String value : classValues(annotation, "impl")) {
+            return !value.isEmpty() && !value.endsWith("Void");
+        }
+        return false;
     }
 
     /**
-     * The import lines of the interface <em>and</em> of its module interface, deduplicated, in order.
+     * The import lines of the context's file <em>and</em> of its module's, deduplicated, in order.
      *
-     * <p>Both files' imports, because the generated class names the types both files name: a bean's type
-     * comes from the context, and a factory's parameter type comes from the module. Copying only the
-     * context's imports produces a file that does not compile the moment a factory mentions a type the
-     * context did not — which is the common case, since the factory exists to build that type.</p>
+     * <p>Both files' imports, because the generated class names the types both files name: a bean's type comes
+     * from the context, and a factory's parameter type comes from the module. They are read from the index's
+     * {@code imports.json} sidecar (DEC-040 D1) — and when a file's imports were never recorded, that is reported
+     * rather than silently producing a class whose types are unimported.</p>
      */
-    private static List<String> importLines(String text, String moduleText) {
+    private static List<String> importLines(ClassIndex index, ClassRecord context, ClassRecord module,
+                                            DivergenceReporter divergences) {
         List<String> imports = new ArrayList<>();
-        for (String source : new String[]{text, moduleText}) {
-            if (source == null) {
+        List<String> paths = new ArrayList<>();
+        paths.add(context.path());
+        if (module != null && !paths.contains(module.path())) {
+            paths.add(module.path());
+        }
+        for (String path : paths) {
+            List<String> recorded = index.importsOf(path);
+            if (recorded == null) {
+                divergences.report("imports_not_recorded", path,
+                        "the index carries no import lines for this file, so the generated class cannot name the"
+                                + " types it writes",
+                        "no imports recorded", "the file's imports in the index",
+                        "index this file with a parse (addTypes with its compilation unit) rather than from facts");
                 continue;
             }
-            for (String line : source.split("\n", -1)) {
-                String trimmed = line.strip();
-                if (!trimmed.startsWith("import ") || imports.contains(trimmed)) {
-                    continue;
+            for (String line : recorded) {
+                // The marker annotation's own import is dropped: the generated class implements the interface and
+                // never names the annotation, and an unused import in generated source is noise a reviewer stops
+                // reading.
+                if (!imports.contains(line) && !line.endsWith("." + CONTEXT_ANNOTATION + ";")) {
+                    imports.add(line);
                 }
-                // The marker annotation's own import is dropped: the generated class implements the
-                // interface and never names the annotation, and an unused import in generated source is
-                // exactly the noise a reviewer stops reading.
-                if (trimmed.endsWith("." + CONTEXT_ANNOTATION + ";")) {
-                    continue;
-                }
-                imports.add(trimmed);
             }
         }
         return imports;
+    }
+
+    /** The package of a fully qualified name, empty for the default package. */
+    static String packageOf(String fqn) {
+        int dot = fqn.lastIndexOf('.');
+        return dot < 0 ? "" : fqn.substring(0, dot);
+    }
+
+    /** The last segment of a fully qualified name — the simple name a row is addressed by. */
+    static String simpleNameOfFqn(String fqn) {
+        int dot = fqn.lastIndexOf('.');
+        return dot < 0 ? fqn : fqn.substring(dot + 1);
+    }
+
+    /** The last segment of a written type name, with any type arguments removed. */
+    private static String simpleNameOf(String written) {
+        String withoutArguments = written.replaceAll("<.*", "").trim();
+        int dot = withoutArguments.lastIndexOf('.');
+        return dot < 0 ? withoutArguments : withoutArguments.substring(dot + 1);
     }
 }

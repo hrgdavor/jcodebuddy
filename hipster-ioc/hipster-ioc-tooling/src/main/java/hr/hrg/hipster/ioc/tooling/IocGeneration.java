@@ -1,6 +1,7 @@
 package hr.hrg.hipster.ioc.tooling;
 
-import hr.hrg.jcodebuddy.engine.codegen.CodeContextImpl;
+import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassRecord;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
@@ -67,13 +68,13 @@ public final class IocGeneration {
         int filesWritten = 0;
         int refused = 0;
 
-        for (Path file : javaFiles(sourceRoot)) {
-            if (!generator.isApplicable(new CodeContextImpl(sourceRoot, file, 0, indent))) {
-                continue;
-            }
+        // The model first, then the generation: the index is built here because a caller must produce the facts
+        // once (DEC-036 § 11), and everything after this point reads them rather than the sources.
+        ClassIndex index = indexOf(sourceRoot, moduleRoot, divergences);
+        for (ClassRecord contextRow : ContextReader.contextsIn(index)) {
             contextsRead++;
             IocContextGenerator.GeneratedContext generated =
-                    generator.generate(new CodeContextImpl(sourceRoot, file, 0, indent));
+                    generator.generate(contextRow, index, moduleRoot, indent);
             divergences.addAll(generated.divergences());
             if (generated.refused()) {
                 refused++;
@@ -82,7 +83,7 @@ public final class IocGeneration {
             if (writeIfChanged(generated.implFile(), generated.source())) {
                 filesWritten++;
             }
-            graph.add(graphEntry(file, indent));
+            graph.add(graphEntry(contextRow, index));
         }
 
         Path graphFile = moduleRoot.resolve(GRAPH_PATH);
@@ -97,40 +98,65 @@ public final class IocGeneration {
     }
 
     /**
-     * What the graph says about one context: its beans, their declared types, and the order they are created
-     * in. Deliberately not the generated source — a report describes the model, and the source is one
+     * The facts, once: every {@code .java} file under {@code sourceRoot} indexed by the engine.
+     *
+     * <p>This is the step that reads sources, and it is deliberately not the generator's: a generator that reads
+     * the tree is what step 3.0e removes, while producing the model is what the metadata pass is for (DEC-036
+     * § 11). A file that cannot be read is reported and skipped, exactly as the pass reports it (F-34).</p>
+     */
+    private static ClassIndex indexOf(Path sourceRoot, Path moduleRoot, List<String> divergences)
+            throws IOException {
+        ClassIndex index = ClassIndex.forPass(moduleRoot.resolve(hr.hrg.jcodebuddy.engine.JcodebuddyDirectory.DIR),
+                moduleRoot, sourceRoot);
+        for (Path file : javaFiles(sourceRoot)) {
+            String relative = moduleRoot.relativize(file).toString().replace('\\', '/');
+            String source = Files.readString(file, StandardCharsets.UTF_8);
+            hr.hrg.jcodebuddy.engine.source.SourceReader.Read read =
+                    hr.hrg.jcodebuddy.engine.source.SourceReader.readText(source);
+            if (!read.readable() || read.unit() == null) {
+                divergences.add("kind=source_not_parsed, location=" + relative
+                        + ", cause=the file could not be parsed, current=unparseable, canonical=a readable Java"
+                        + " file, action=fix the syntax error; its context was not generated");
+                continue;
+            }
+            index.addTypes(relative, read.unit(), source, false);
+        }
+        // Written before anything reads it, and that order is not incidental: writing stamps each row' WITH FILE FACTS, and a relation's range is only sliceable when the row carries the checksum of the file it points into (DEC-040 D2). A caller that reads a context's parent type from an unwritten index gets the bare name and a reported reason instead.
+        index.write();
+        return index;
+    }
+
+    /**
+     * What the graph says about one context, from the model: its beans, their declared types, and the order they
+     * are created in. Deliberately not the generated source — a report describes the model, and the source is one
      * rendering of it.
      */
-    private static Map<String, Object> graphEntry(Path file, String indent) {
+    private static Map<String, Object> graphEntry(ClassRecord contextRow, ClassIndex index) {
         Map<String, Object> entry = new LinkedHashMap<>();
-        try {
-            hr.hrg.hipster.entity.tooling.DivergenceReporter quiet =
-                    new hr.hrg.hipster.entity.tooling.DivergenceReporter();
-            java.util.Optional<IocModel.Context> read = ContextReader.read(file, quiet);
-            if (read.isEmpty()) {
-                return entry;
-            }
-            IocModel.Context model = read.get();
-            entry.put("context", model.qualifiedName());
-            entry.put("implementation", model.qualifiedName().replace(model.simpleName(),
-                    model.implSimpleName()));
-            entry.put("dependencies", model.dependencyTypes());
-            if (model.hasParent()) {
-                entry.put("parent", model.parentType());
-            }
-            List<Map<String, Object>> beans = new ArrayList<>();
-            for (IocModel.Bean bean : model.beans()) {
-                Map<String, Object> beanEntry = new LinkedHashMap<>();
-                beanEntry.put("name", bean.name());
-                beanEntry.put("type", bean.typeText());
-                IocModel.Factory factory = model.factories().get(bean.name());
-                beanEntry.put("createdBy", factory == null ? "new " + bean.typeText() + "()" : factory.methodName());
-                beans.add(beanEntry);
-            }
-            entry.put("beans", beans);
-        } catch (IOException e) {
-            entry.put("error", "unreadable: " + e.getMessage());
+        hr.hrg.hipster.entity.tooling.DivergenceReporter quiet =
+                new hr.hrg.hipster.entity.tooling.DivergenceReporter();
+        java.util.Optional<IocModel.Context> read = ContextReader.read(contextRow, index, quiet);
+        if (read.isEmpty()) {
+            return entry;
         }
+        IocModel.Context model = read.get();
+        entry.put("context", model.qualifiedName());
+        entry.put("implementation", model.qualifiedName().replace(model.simpleName(),
+                model.implSimpleName()));
+        entry.put("dependencies", model.dependencyTypes());
+        if (model.hasParent()) {
+            entry.put("parent", model.parentType());
+        }
+        List<Map<String, Object>> beans = new ArrayList<>();
+        for (IocModel.Bean bean : model.beans()) {
+            Map<String, Object> beanEntry = new LinkedHashMap<>();
+            beanEntry.put("name", bean.name());
+            beanEntry.put("type", bean.typeText());
+            IocModel.Factory factory = model.factories().get(bean.name());
+            beanEntry.put("createdBy", factory == null ? "new " + bean.typeText() + "()" : factory.methodName());
+            beans.add(beanEntry);
+        }
+        entry.put("beans", beans);
         return entry;
     }
 

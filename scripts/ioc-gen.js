@@ -39,8 +39,12 @@ import { join } from 'node:path';
 import { delimiter, envWith, repoRoot, resolveJdk25, resolveMaven, run } from './lib/toolchain.js';
 
 const REPO = repoRoot();
-const MODULE = join(REPO, 'hipster-ioc-tooling');
-const DEFAULT_ROOT = join(REPO, 'hipster-ioc-test', 'src', 'test', 'java');
+// The module groups are the paths since DEC-039: hipster-ioc/<module>, not <module> at the root. This script's
+// defaults were left on the pre-grouping paths when the modules moved, and its own error message ("no such source
+// root") is what named the stale default rather than a silent no-op.
+const MODULE = join(REPO, 'hipster-ioc', 'hipster-ioc-tooling');
+const DEFAULT_MODULE_ROOT = join(REPO, 'hipster-ioc', 'hipster-ioc-test');
+const DEFAULT_ROOT = join(DEFAULT_MODULE_ROOT, 'src', 'test', 'java');
 const CLASSPATH_FILE = join(MODULE, 'target', 'ioc-classpath.txt');
 
 function usage() {
@@ -76,7 +80,7 @@ function main() {
   // export maps reactor modules to target/classes only while they are in this reactor run.
   console.log(`ioc-gen: compiling with ${jdk.version} …`);
   const build = run(maven.command, [
-    '-o', '-q', '-pl', 'hipster-ioc-tooling', '-am', '-DskipTests',
+    '-o', '-q', '-pl', 'hipster-ioc/hipster-ioc-tooling', '-am', '-DskipTests',
     'test-compile', 'dependency:build-classpath', `-Dmdep.outputFile=${CLASSPATH_FILE}`,
   ], { stdio: 'inherit', env, cwd: REPO });
   if (build.error || build.status !== 0) {

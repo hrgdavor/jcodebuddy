@@ -1809,6 +1809,30 @@ seam is the metadata layer's).
 
 **Done when:** hipster-ioc parses nothing, and the per-file SPI has no project-wide implementer.
 
+**Part two landed 2026-10-03 — the generator reads the model, and the hand-written wiring is gone.** Concretely:
+
+- **`ContextReader` takes a row and an index**, not a file: the context is the row carrying `@HipsterContext`, its
+  beans are its no-argument methods, its module is the type a relation names (found **in the index**, so a module
+  in another package is found now and an absent one is *reported* instead of yielding no factories silently), and
+  the `P` of a `ChildContext<P>` is recovered by **slicing** the declaring file at the relation's range — which is
+  what the ranges were built for (DEC-040 D2). Annotation arguments are text in this model, so the reader takes
+  `dependencies = {A.class, B.class}` apart itself rather than the engine storing a second interpretation.
+- **`IocContextGenerator` no longer implements `CodeGenerator`**, and that was not bookkeeping: the SPI asks "is
+  this file yours, and what would you write for it", which forces a generator to read the file it is offered; the
+  model-driven one is handed a row. What it still reads is the file it **writes**, because cooperative codegen has
+  to recognise its own previous output (DEC-020) — a different question from where the facts come from, and
+  conflating the two *was* the category error the tooling README described.
+- **The test is the claim's proof**: after the index is built, the context's source file is deleted, and the
+  generator still produces the right implementation. A generator reading its input file cannot do that.
+- **`hipster-ioc-test` carries no hand-written wiring.** `CtxMainModule.default buildMapper()` was the last of it,
+  and the regenerated `CtxMainImpl` constructs the bean directly. Regenerating the committed example after the
+  rewrite produced the **same bytes except that one line** — the strongest evidence available that reading the
+  model says what reading the source said.
+- **A stale default fell out of it**: `bun scripts/ioc-gen.js` still pointed at the pre-DEC-039 paths
+  (`hipster-ioc-test/`, `hipster-ioc-tooling/`), and its own "no such source root" message is what named the bug. A
+  guard caught the rest: `GeneratorGuardTest` refused the `imports.json` sidecar appearing in a committed index
+  directory — the guard working as designed — and its expectation now names all three files and why each is there.
+
 ### 3.0u — The base layer: per-file metadata with its own hash (DEC-041)
 **Who:** agent · **Size:** M
 
