@@ -108,6 +108,14 @@ public final class ContextSource {
         for (IocModel.Bean bean : ordered) {
             sb.append(i2).append("this.").append(bean.name()).append(" = ")
                     .append(creationOf(context, bean, deferredTargets)).append(";\n");
+            // DEC-036 § 3: the same order that creates the beans drives the init* hooks. The hook for a bean
+            // runs immediately after that bean exists and before anything that depends on it is created, which
+            // is the guarantee the clause is about — and it is the user's own default method being called, so
+            // no generated code lands in the user's edit path.
+            String hook = context.initHooks().get(bean.name());
+            if (hook != null) {
+                sb.append(i2).append(hook).append('(').append(bean.name()).append(");\n");
+            }
         }
         sb.append(i1).append("}\n");
 

@@ -11,9 +11,11 @@ import hr.hrg.jcodebuddy.engine.index.TypeRelation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Reads a hipster-ioc context out of the <strong>metadata model</strong> rather than out of source text
@@ -45,6 +47,13 @@ public final class ContextReader {
 
     /** The prefix of a module-interface factory method: {@code buildMapper} builds the {@code mapper} bean. */
     private static final String FACTORY_PREFIX = "build";
+
+    /**
+     * The prefix of an initialisation hook: {@code default void initFoo(Foo foo)}. See
+     * {@link #initHooksOf} for the rules that make a method a hook rather than a method that merely starts
+     * with {@code init}.
+     */
+    private static final String INIT_PREFIX = "init";
 
     private ContextReader() {
     }
@@ -89,9 +98,11 @@ public final class ContextReader {
         ClassRecord module = moduleOf(context, index, divergences);
         Map<String, IocModel.Factory> factories = module == null
                 ? Map.of() : factoriesOf(module, beans);
+        Map<String, String> initHooks = module == null
+                ? Map.of() : initHooksOf(module, beans, divergences);
 
         return Optional.of(new IocModel.Context(packageOf(context.fqn()), simpleNameOfFqn(context.fqn()),
-                beans, factories,
+                beans, factories, initHooks,
                 classValues(marker, "dependencies"),
                 parentTypeOf(context, index, divergences),
                 hasImplementation(marker),
@@ -194,6 +205,55 @@ public final class ContextReader {
             }
         }
         return factories;
+    }
+
+    /**
+     * {@code default void initMapper(Mapper mapper)} on the module becomes the hook called right after the
+     * {@code mapper} bean is created (DEC-036 § 3's amendment).
+     *
+     * <p>The recognition rules are deliberately narrow, because the alternative to a narrow rule is calling a
+     * method the user did not intend as a hook: the method must be a {@code default} method (the generated class
+     * inherits it, which is what makes the call compile), return {@code void}, take exactly one parameter, and
+     * that parameter's type must be the type of a bean this context builds. Anything else named {@code init*} is
+     * simply not a hook and is left alone — the generator only ever <em>adds</em> a call to code it can place.</p>
+     *
+     * <p>A bean may have at most one hook. Two methods claiming the same bean are reported rather than resolved
+     * by order, because "which initialiser runs" is not a question to answer by declaration order.</p>
+     */
+    private static Map<String, String> initHooksOf(ClassRecord module, List<IocModel.Bean> beans,
+                                                DivergenceReporter divergences) {
+        Map<String, String> hooks = new LinkedHashMap<>();
+        Set<String> claimed = new LinkedHashSet<>();
+        for (MemberRecord member : module.members()) {
+            if (member.kind() != MemberRecord.Kind.METHOD || !member.modifiers().contains("default")) {
+                continue;
+            }
+            String methodName = member.name();
+            if (!methodName.startsWith(INIT_PREFIX) || methodName.length() == INIT_PREFIX.length()) {
+                continue;
+            }
+            if (!"void".equals(member.type()) || member.parameters().size() != 1) {
+                continue;
+            }
+            String parameterType = member.parameters().get(0).type().trim();
+            for (IocModel.Bean bean : beans) {
+                if (!bean.typeText().trim().equals(parameterType)) {
+                    continue;
+                }
+                if (claimed.add(bean.name())) {
+                    hooks.put(bean.name(), methodName);
+                } else {
+                    divergences.report("init_hook_ambiguous",
+                            module.fqn() + "." + methodName,
+                            "the bean '" + bean.name() + "' already has the initialisation hook '"
+                                    + hooks.get(bean.name()) + "', and this context can only call one",
+                            methodName + "(" + parameterType + ")",
+                            "one hook per bean",
+                            "rename or remove one of the two hooks");
+                }
+            }
+        }
+        return hooks;
     }
 
     /**

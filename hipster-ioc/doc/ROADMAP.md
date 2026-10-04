@@ -35,9 +35,13 @@
 > (`CtxMainModule.default buildMapper()`) was retired with it.
 >
 > **What the prototype does not do, stated rather than discovered:** no cross-context wiring (a context's
-> `dependencies()` are recorded in the graph and never used to build anything), no `init*` methods, no
-> region markers, and no `@Circular` two-phase form — a cycle is refused with a diagnostic rather than
-> wired (DEC-036 § 5). The browsable page rendered by Bun (DEC-027/029) and the embedded light HTTP server
+> `dependencies()` are recorded in the graph and never used to build anything) and no region markers. Two items
+> on this list have since been implemented and are no longer qualifications on the generator: the **`@Circular`
+> two-phase form** (step 3.4 — a marked edge is written `@Circular Supplier<Bean>` and the generated argument is
+> a call to the accessor of the bean it supplies, DEC-036 § 5) and the **`init*` hooks** (step 3.5 — a
+> `default void init<Bean>(<BeanType> bean)` on the module interface, called immediately after that bean is
+> created, DEC-036 § 3). Both are proven by tests that compile *and run* the generated context. The browsable
+> page rendered by Bun (DEC-027/029) and the embedded light HTTP server
 > do not exist; the module's README says which entry points do.
 >
 > Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), with the

@@ -81,12 +81,14 @@ public final class IocModel {
      *                         name the same types the interface does
      */
     public record Context(String packageName, String simpleName, List<Bean> beans,
-                          Map<String, Factory> factories, List<String> dependencyTypes, String parentType,
+                          Map<String, Factory> factories, Map<String, String> initHooks,
+                          List<String> dependencyTypes, String parentType,
                           boolean hasImplementation, List<String> importLines) {
 
         public Context {
             beans = List.copyOf(beans);
             factories = Map.copyOf(factories);
+            initHooks = Map.copyOf(initHooks);
             dependencyTypes = List.copyOf(dependencyTypes);
             importLines = List.copyOf(importLines);
         }

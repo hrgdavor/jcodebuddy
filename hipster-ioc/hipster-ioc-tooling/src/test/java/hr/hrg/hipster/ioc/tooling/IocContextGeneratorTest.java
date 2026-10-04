@@ -198,6 +198,110 @@ class IocContextGeneratorTest {
         return root;
     }
 
+    /**
+     * DEC-036 § 3's `init*` hooks: the order that creates the beans is the order that initialises them, and a
+     * hook runs <strong>after</strong> its bean exists and <strong>before</strong> anything that depends on it.
+     *
+     * <p>The trace is what makes the claim checkable rather than plausible: the bean constructors write
+     * {@code newB}/{@code newA} and the hooks write {@code initB}/{@code initA}, so the exact sequence
+     * {@code [newB, initB, newA, initA]} shows both halves at once — B is built and initialised before A is
+     * built, and each hook is handed a non-null bean (a hook that received {@code null} would record
+     * {@code initB:NULL} instead).</p>
+     */
+    @Test
+    void initHooksRunInCreationOrderAndAfterTheirBeanExists(@TempDir Path dir) throws Exception {
+        Path root = hookTree(dir);
+        IocGeneration.Result result = IocGeneration.generate(root, root, "    ");
+
+        Assertions.assertEquals(0, result.refused(), "hooks refuse nothing: " + result.divergences());
+        String source = Files.readString(impl(root, "HookContext"));
+        Assertions.assertTrue(source.contains("initB(b);") && source.contains("initA(a);"),
+                "the hook is called with the bean it initialises:\n" + source);
+        compile(root);
+
+        try (URLClassLoader loader = new URLClassLoader(
+                new URL[]{root.resolve("classes").toUri().toURL()}, getClass().getClassLoader())) {
+            Class<?> implClass = loader.loadClass("ioc.fixture.HookContextImpl");
+            implClass.getDeclaredConstructor().newInstance();
+            List<?> order = (List<?>) loader.loadClass("ioc.fixture.Trace").getField("ORDER").get(null);
+
+            Assertions.assertEquals(List.of("newB", "initB", "newA", "initA"), order,
+                    "each hook runs after its own bean and before that bean's dependents; the no-argument and "
+                            + "non-bean-typed init* methods are left alone entirely");
+        }
+    }
+
+    /**
+     * Two hooks for one bean are reported, because "which initialiser runs" must not be answered by declaration
+     * order — the first is used and the second is named in a {@code init_hook_ambiguous} diagnostic.
+     */
+    @Test
+    void twoHooksForOneBeanAreReported(@TempDir Path dir) throws Exception {
+        Path root = hookTree(dir, HOOK_MODULE.replace("default void initB(B b)",
+                "default void initAlsoB(B b) {\n            Trace.ORDER.add(\"initAlsoB\");\n        }\n\n        default void initB(B b)"));
+
+        IocGeneration.Result result = IocGeneration.generate(root, root, "    ");
+
+        Assertions.assertTrue(result.divergences().stream()
+                        .anyMatch(e -> e.startsWith("kind=init_hook_ambiguous")),
+                "the second hook is named rather than silently dropped: " + result.divergences());
+    }
+
+    /**
+     * The tree for the hook tests: a two-bean chain whose factories and hooks all record into {@code Trace}, so
+     * the generated context's behaviour can be read back as a sequence.
+     */
+    private Path hookTree(Path dir) throws IOException {
+        return hookTree(dir, HOOK_MODULE);
+    }
+
+    private Path hookTree(Path dir, String moduleSource) throws IOException {
+        Path root = dir.resolve("src");
+        Path packageDir = Files.createDirectories(root.resolve("ioc/fixture"));
+        Files.writeString(packageDir.resolve("HookModule.java"), moduleSource);
+        Files.writeString(packageDir.resolve("HookContext.java"), """
+                package ioc.fixture;
+
+                import hr.hrg.hipster.ioc.HipsterContext;
+
+                @HipsterContext
+                public interface HookContext extends HookModule {
+                    A a();
+
+                    B b();
+                }
+                """);
+        Files.writeString(packageDir.resolve("Trace.java"), """
+                package ioc.fixture;
+
+                import java.util.ArrayList;
+                import java.util.List;
+
+                public class Trace {
+                    public static final List<String> ORDER = new ArrayList<>();
+                }
+                """);
+        Files.writeString(packageDir.resolve("A.java"), """
+                package ioc.fixture;
+
+                public class A {
+                    A(B b) {
+                        Trace.ORDER.add("newA");
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("B.java"), """
+                package ioc.fixture;
+
+                public class B {
+                    B() {
+                        Trace.ORDER.add("newB");
+                    }
+                }
+                """);
+        return root;
+    }
+
     private static Path impl(Path root, String simpleName) {
         return root.resolve("ioc/fixture/" + simpleName + "Impl.java");
     }
@@ -473,6 +577,41 @@ class IocContextGeneratorTest {
     }
 
     /**
+     * The hook fixture: a factory for each bean, a hook for each bean, and two methods that merely start with
+     * {@code init} — one with no parameter, one whose parameter type is not a bean this context builds. Neither
+     * of those is a hook, and the trace proves the generator left them alone.
+     */
+    private static final String HOOK_MODULE = """
+            package ioc.fixture;
+
+            interface HookModule {
+                default A buildA(B b) {
+                    return new A(b);
+                }
+
+                default B buildB() {
+                    return new B();
+                }
+
+                default void initA(A a) {
+                    Trace.ORDER.add("initA" + (a == null ? ":NULL" : ""));
+                }
+
+                default void initB(B b) {
+                    Trace.ORDER.add("initB" + (b == null ? ":NULL" : ""));
+                }
+
+                default void initNothing() {
+                    Trace.ORDER.add("initNothing");
+                }
+
+                default void initNotABean(String value) {
+                    Trace.ORDER.add("initNotABean");
+                }
+            }
+            """;
+
+    /**
      * Two beans whose factories reference each other.
      *
      * <p>One fixture serves both cycle tests: the marked variant is this text with {@code @Circular} added to
@@ -602,7 +741,7 @@ class IocContextGeneratorTest {
     @Test
     void theDiagnosticKindsThisGeneratorProducesAreInTheProjectsVocabulary() {
         for (String kind : List.of("circular_dependency_unmarked", "circular_dependency_needs_supplier",
-                "lazy_bean_needs_factory", "context_implementation_present")) {
+                "init_hook_ambiguous", "lazy_bean_needs_factory", "context_implementation_present")) {
             Assertions.assertTrue(DivergenceReporter.KINDS.contains(kind),
                     "a diagnostic nobody can find in the vocabulary is a private dialect: " + kind);
         }

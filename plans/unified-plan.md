@@ -2301,6 +2301,39 @@ puts generated code into the user's edit path.
 **Waits on:** the shape of the initialisation seam, and whether it belongs in the context class at all.
 **Schedulable when:** DEC-036 names the seam and the order contract it has to satisfy.
 
+**Done 2026-10-03 — the seam is the user's own hook, and the order is proven by running it.** DEC-036 § 3
+presupposed `init*` methods without saying what one is, which is why nothing emitted any; it now names the seam, and
+the shape was chosen so that **no generated code lands in a user's edit path**:
+
+- **An `init*` method is the user's hook on the module interface**, beside the `default build<Bean>(...)` factories:
+  a `default` method named `init*`, returning `void`, taking exactly one parameter whose type is a bean this context
+  builds. `default` is what makes it inheritable by the generated class, which is what makes the generated call
+  compile — the mechanism the factories already rely on, so the seam needed no new API type.
+- **The generated constructor calls it immediately after that bean's field is assigned**, so the guarantee is: a
+  hook runs after its own bean exists and before anything that depends on it is created. The beans are still created
+  by generated code; the initialisation is the user's, which is what "the same order drives them" meant.
+- **Everything else named `init*` is left alone** — no parameter, a non-`void` return, or a parameter type that
+  names no bean. The generator only ever *adds* a call to code it can place, so a user helper that happens to start
+  with `init` is not swept in.
+- **Two hooks for one bean are reported** as `init_hook_ambiguous` (the first is used), because which initialiser
+  runs is not a question to answer by declaration order. The vocabulary guard forced the usual two-file bookkeeping
+  in the same commit.
+- **One boundary stated rather than discovered:** a hook for a bean whose factory takes a `@Circular Supplier<…>`
+  runs before that supplier's target exists, so it must not call it — the supplier is what makes the cycle work
+  later, and calling it during construction is the one thing the two-phase form cannot make safe.
+- **A bean in a field initializer would have no hook position at all**, which is the second reason every bean is
+  built in the constructor: DEC-036 clause 4's "SHOULD" is satisfied by an order that can be followed.
+
+**The proof is the sequence, not the rendering.** A fixture whose factories and hooks both append to a trace gives
+`[newB, initB, newA, initA]`: B is built and initialised before A is built, and each hook is handed a non-null bean
+(a hook that received `null` would have recorded `initB:NULL`). A second fixture claims one bean twice and asserts
+`init_hook_ambiguous`. Both contexts are compiled by the JDK running the test.
+
+**Evidence:** `-pl hipster-ioc/hipster-ioc-tooling,hipster-entity/hipster-entity-tooling -am clean test` → BUILD
+SUCCESS: `hipster-ioc-tooling` **15 tests** (13 + the two hook tests) and `hipster-entity-tooling` 466 · the recorded
+gate → BUILD SUCCESS · `hipster-ioc/doc/ROADMAP.md` updated, so `init*` and `@Circular` are off the "what the
+prototype does not do" list, leaving cross-context wiring (3.7) and region markers (3.6) · LINKS green.
+
 ### 3.6 — Region markers above the thresholds
 **Who:** agent · **Size:** S
 
