@@ -692,6 +692,17 @@ canonical statement of a boundary that has no other home.
   `jsx6`/`nodditor`; a critical gap is a decision about an additional library for that specific output,
   taken with the evidence and recorded as its own decision.
 
+- **A UI must be usable standalone, and the webview is never a requirement for a tool.** The maintainer's rule,
+  as given on 2026-10-04:
+
+  > This UI must be usable standalone even without webview, the webview is not a requirement for many tools
+
+  Concretely: a page a person opens to do one task must work as a plain `file://` document — no host running, no
+  port, no server to start, nothing to install — and a webview integration is an **enhancement** on top of that,
+  never the thing that makes the tool work. This is why the merge review page exports its decisions as a file and
+  a CLI applies them instead of posting them to an endpoint (plan step 4.3, and the "one serving host per project"
+  rule above, which that design also respects). A tool that only works when a host happens to be running is not
+  finished; say so rather than shipping it as if it were.
 
 - **`java-watch*` is standalone — no Jackson, no OpenRewrite, nothing else from this workspace.** The rule, as
   given by the maintainer on 2026-10-02:

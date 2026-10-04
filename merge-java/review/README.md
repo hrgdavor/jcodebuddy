@@ -27,8 +27,7 @@ vanilla renderers (AGENTS.md § 1).
 
 This is the flow when a merge is stuck on a specific file, and it is the one to reach for first.
 **No webview, no server, no host is involved** — the page is a single self-contained HTML file that opens from
-`file://`, which is what keeps this usable on a machine where nothing else is running. (The maintainer's rule:
-the webview is not a requirement for many tools.)
+`file://`, which is what keeps this usable on a machine where nothing else is running. (The maintainer's rule, and now a rule in AGENTS.md § 2: the webview is not a requirement for many tools.)
 
 ```sh
 # 1. Analyse the file and build the page. This is a DRY RUN: the file is not touched.
