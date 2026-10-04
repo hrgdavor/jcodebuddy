@@ -23,6 +23,61 @@ vanilla renderers (AGENTS.md § 1).
 - Says where its data came from. The header prints the report's path, and the badge reads `sample data`
   when the build had no real report to inline — a screenshot can never be mistaken for a run's evidence.
 
+## Run it on one file
+
+This is the flow when a merge is stuck on a specific file, and it is the one to reach for first.
+**No webview, no server, no host is involved** — the page is a single self-contained HTML file that opens from
+`file://`, which is what keeps this usable on a machine where nothing else is running. (The maintainer's rule:
+the webview is not a requirement for many tools.)
+
+```sh
+# 1. Analyse the file and build the page. This is a DRY RUN: the file is not touched.
+bun run merge-java/scripts/merge-report/review-file.js src/main/java/com/example/OrderService.java \
+    --branch feature-payments \
+    --classpath-from target/classpath.txt        # optional, and worth it - see below
+
+# 2. Open the file:// path it printed. Review each block, accept what you can (or press
+#    "Apply all resolved"), then press "Download decisions.json".
+
+# 3. Record AND APPLY what you accepted, with the same tool that analysed the file:
+bun run merge-java/scripts/merge-report/review-file.js src/main/java/com/example/OrderService.java \
+    --branch feature-payments \
+    --apply-decisions ~/Downloads/decisions-feature-payments.json
+```
+
+Then look at the file. What the engine and your decisions covered is written; **every block nobody decided keeps
+its conflict markers**, so the parts this engine will not guess are left for you to finish in your editor. That
+separation is deliberate: the page is where you decide, the file is where you finish, and neither pretends to do
+the other's job.
+
+**The classpath is what makes a conflict about your own types resolvable.** Write it out once:
+
+```sh
+mvn -q dependency:build-classpath -Dmdep.outputFile=target/classpath.txt
+```
+
+and pass `--classpath-from target/classpath.txt`. Without it the resolver sees only the JVM classpath: JDK
+types still resolve, your project's own types escalate with a warning saying so, and you will see more blocks
+left for you than there needed to be. `--classpath <entries>` takes the entries directly (separated the way the
+platform separates them) if you already have them in a variable.
+
+### The controls
+
+| Control                     | What it does                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| **Accept** (per change)     | Records your decision for *that* conflict: the fix path you picked and the code in the box.   |
+| **Apply all resolved**      | Accepts every conflict that already has an answer, leaving the refused and human cases alone. |
+| **Download decisions.json** | The export `--apply-decisions` is pointed at. It is the only write this page can do.          |
+| **Clear**                   | Empties the accepted list, for when you want to start the pass over.                          |
+
+Accepting twice for one conflict **replaces** rather than doubles, and "Apply all resolved" never overwrites a
+decision you made by hand for the same conflict — the hand-made one is the more specific statement.
+
+### What is written where
+
+The decisions are recorded into the branch's history (`.jcodebuddy/merge-history/<branch>/decisions/`), which
+is what makes the next update replay them instead of asking again. Recording and applying happen in one run,
+because a reviewer who picked an answer wants it used.
 ## Use it
 
 ```sh

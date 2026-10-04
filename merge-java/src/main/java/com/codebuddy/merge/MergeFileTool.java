@@ -255,6 +255,19 @@ public final class MergeFileTool {
         private Path fixtureRoot = DEFAULT_FIXTURE_ROOT;
         private String branchName;
         private Path historyPath;
+
+    /**
+     * Where to write the report the review page renders ({@code --report}). The page is the reason this
+     * exists: a conflict file is the one case where a reviewer needs the three sides of each block, and
+     * without this the page had no way to be pointed at a single file.
+     */
+    private Path reportPath;
+
+    /**
+     * The decisions a reviewer exported from the review page ({@code --decisions}), recorded into this
+     * branch's store before the file is analysed, so the very run that records them also applies them.
+     */
+    private Path decisionsFile;
         private Boolean inMemoryOnly;
         private TypeContext typeContext;
         private List<Path> classpath = List.of();
@@ -308,7 +321,26 @@ public final class MergeFileTool {
          * The branch whose history is consulted. Defaults to the repository's
          * current branch when the file is inside one, else {@code "unknown"}.
          */
-        public Builder branchName(String branchName) {
+        /** Write the review page's input for this file to {@code target}. */
+    public Builder reportPath(Path target) {
+        this.reportPath = target;
+        return this;
+    }
+
+    /**
+     * Record the decisions a reviewer exported from the review page, then apply them.
+     *
+     * <p>Recording happens before the analysis, because the store is read while resolving: a decision that
+     * arrives with this run must be visible to it. Choosing a decisions file therefore implies
+     * {@link #applyRecordedDecisions(boolean)} — a reviewer who picked an answer wants it used.</p>
+     */
+    public Builder decisionsFile(Path decisions) {
+        this.decisionsFile = decisions;
+        this.applyRecordedDecisions = true;
+        return this;
+    }
+
+    public Builder branchName(String branchName) {
             this.branchName = branchName;
             return this;
         }
@@ -429,11 +461,48 @@ public final class MergeFileTool {
         ConflictDetectionService detector = builder.detector != null
             ? builder.detector
             : new ConflictDetectionService();
-        MergeConflictResolver resolver = builder.resolver != null
-            ? builder.resolver
-            : defaultResolver(builder, findings, branchName, typeContext);
+          // Before the resolver exists: the store is read while resolving, so a decision exported from the
+          // review page has to be recorded first for this run to apply it.
+          if (builder.decisionsFile != null) {
+              Path history = historyPathFor(builder, findings, branchName);
+              try {
+                  DecisionRecorder.Result recorded =
+                      DecisionRecorder.record(builder.decisionsFile, history, branchName);
+                  if (recorded.recorded() == 0) {
+                      System.err.println("no decisions were recorded from " + builder.decisionsFile
+                          + ": " + String.join("; ", recorded.problems()));
+                  throw new IllegalStateException("no decisions were recorded from "
+                      + builder.decisionsFile + ": "
+                      + String.join("; ", recorded.problems()));
+                  }
+                  System.out.println(recorded.describe());
+                  recorded.problems().forEach(problem ->
+                      System.out.println("  refused: " + problem));
+              } catch (java.io.IOException | RuntimeException failure) {
+                  System.err.println("could not read the decisions file " + builder.decisionsFile
+                      + ": " + failure.getMessage());
+                  throw new IllegalStateException("could not read the decisions file "
+                      + builder.decisionsFile + ": " + failure.getMessage(), failure);
+              }
+          }
+
+          MergeConflictResolver resolver = builder.resolver != null
+              ? builder.resolver
+              : defaultResolver(builder, findings, branchName, typeContext);
 
         List<BlockOutcome> outcomes = new ArrayList<>();
+
+
+        // Everything this file produced, in block order: the report the review page renders is built from
+
+
+        // these, as one MergeReport for the file.
+
+
+        List<Conflict> reportedConflicts = new ArrayList<>();
+
+
+        List<ConflictResolution> reportedResolutions = new ArrayList<>();
         List<ConflictFixtureWriter.FixtureCase> cases = new ArrayList<>();
         List<Integer> fixtureBlocks = new ArrayList<>();
         Map<Integer, List<String>> replacements = new LinkedHashMap<>();
@@ -446,6 +515,13 @@ public final class MergeFileTool {
             for (Conflict conflict : conflicts) {
                 resolutions.add(resolver.resolve(conflict));
             }
+
+            reportedConflicts.addAll(conflicts);
+
+
+            reportedResolutions.addAll(resolutions);
+
+
 
             BlockDecision decision = decide(block, conflicts, resolutions,
                 builder.applyRecordedDecisions);
@@ -479,6 +555,28 @@ public final class MergeFileTool {
             write(file, rebuild(parsed, replacements));
             fileWritten = true;
         }
+
+        if (builder.reportPath != null) {
+
+
+            MergeConflictResolver.MergeReport report = new MergeConflictResolver.MergeReport(reportedPath,
+
+
+                reportedConflicts, reportedResolutions, branchName);
+
+
+            MergeReportWriter.write(builder.reportPath, List.of(report), summaryFor(builder, report, outcomes));
+
+
+            System.out.println("report written to " + builder.reportPath
+
+
+                + " - render it with merge-java/review");
+
+
+        }
+
+
 
         Path runDir = null;
         if (builder.prepareFixtures && !cases.isEmpty()) {
@@ -793,18 +891,65 @@ public final class MergeFileTool {
         boolean inMemory = builder.inMemoryOnly != null
             ? builder.inMemoryOnly
             : !findings.repositoryFound() && builder.historyPath == null;
-        Path history = builder.historyPath != null
-            ? builder.historyPath
-            : findings.repositoryFound()
-                ? findings.repositoryRoot().resolve(".jcodebuddy").resolve("merge-history")
-                    .resolve(branchName)
-                : Path.of(".jcodebuddy", "merge-history", branchName);
-        return new MergeConflictResolver.Builder()
+        Path history = historyPathFor(builder, findings, branchName);        return new MergeConflictResolver.Builder()
             .setBranchName(branchName)
             .setHistoryPath(history)
             .setInMemoryOnly(inMemory)
             .setTypeContext(typeContext)
             .build();
+    }
+
+    /**
+     * The branch's history directory: where its decisions live, and what the resolver is given.
+     *
+     * <p>One method because two callers must agree on it exactly. A recording that lands one level above
+     * this directory writes successfully and is never replayed — the failure mode the review flow already
+     * hit once, silently, so the path is computed in one place from now on.</p>
+     */
+    private static Path historyPathFor(Builder builder, RepositoryProbe.Findings findings,
+                                      String branchName) {
+        if (builder.historyPath != null) {
+            return builder.historyPath;
+        }
+        return findings.repositoryFound()
+            ? findings.repositoryRoot().resolve(".jcodebuddy").resolve("merge-history")
+                .resolve(branchName)
+            : Path.of(".jcodebuddy", "merge-history", branchName);
+    }
+
+    /**
+     * The counts the report carries, derived the same way the batch path derives them, so the page sees one
+     * vocabulary whether the report came from a whole merge or from a single conflict file.
+     */
+    private static MergeBatch.Summary summaryFor(Builder builder,
+                                                MergeConflictResolver.MergeReport report,
+                                                List<BlockOutcome> outcomes) {
+        List<Conflict> conflicts = report.getConflicts();
+        List<ConflictResolution> resolutions = report.getResolutions();
+        int auto = 0;
+        // The rule for "independently applicable" belongs to the report, so it is asked rather than
+        // re-derived here: two copies of it would drift.
+        int applicable = report.getIndependentlyApplicable().size();
+        int review = 0;
+        int manual = 0;
+        int replayed = 0;
+        for (ConflictResolution resolution : resolutions) {
+            switch (resolution.getKind()) {
+                case AUTO -> auto++;
+                case REVIEW -> review++;
+                case MANUAL -> manual++;
+                case DEFERRED -> {
+                    /* deferred: counted by the replay below */
+                }
+            }
+            if (resolution.getResolutionStrategy()
+                    == ConflictResolution.ResolutionStrategy.STICKY_REPLAY) {
+                replayed++;
+            }
+        }
+        long applied = outcomes.stream().filter(BlockOutcome::applied).count();
+        return new MergeBatch.Summary(1, conflicts.isEmpty() ? 1 : 0, conflicts.size(), auto,
+            applicable, review, manual, replayed, !builder.applyFixes && applied == 0);
     }
 
     private static String reportPathOf(Path file, RepositoryProbe.Findings findings) {
@@ -1028,7 +1173,7 @@ public final class MergeFileTool {
                 }
                 case "--apply", "--apply-recorded", "--no-fixtures" ->
                     options.add(new String[] {arg});
-                case "--fixtures", "--branch", "--classpath" -> {
+                case "--fixtures", "--branch", "--classpath", "--report", "--decisions" -> {
                     if (i + 1 >= args.length) {
                         System.err.println(arg + " needs a value argument");
                         return 2;
@@ -1065,6 +1210,10 @@ public final class MergeFileTool {
                 case "--no-fixtures" -> builder.prepareFixtures(false);
                 case "--fixtures" -> builder.fixtureRoot(Path.of(option[1]));
                 case "--branch" -> builder.branchName(option[1]);
+
+                case "--report" -> builder.reportPath(Path.of(option[1]));
+
+                case "--decisions" -> builder.decisionsFile(Path.of(option[1]));
                 case "--classpath" -> {
                     // Checked here rather than left to the resolver: a misspelled entry
                     // contributes nothing to attribution, so the conflict would escalate
@@ -1105,7 +1254,7 @@ public final class MergeFileTool {
         out.println("""
             usage: MergeFileTool <file> [--apply] [--apply-recorded] [--no-fixtures]
                                  [--fixtures <dir>] [--branch <name>]
-                                 [--classpath <entries>]
+                                 [--classpath <entries>] [--report <path>] [--decisions <file.json>]
 
               <file>              a file carrying git conflict markers
               --apply             write the automatically resolved blocks back to the file
@@ -1127,6 +1276,17 @@ public final class MergeFileTool {
                                   sees only the JVM classpath, which decides JDK types
                                   and escalates the project's own - with a warning
                                   saying so.
+
+                --report <path>     write the report the review page renders for this
+                                    file, so a reviewer sees the three sides of every
+                                    block instead of a count. Render it with
+                                    merge-java/review (no host, no server needed).
+                --decisions <file.json>
+                                    the decisions a reviewer exported from that page:
+                                    they are recorded into this branch's history and
+                                    then applied, because a reviewer who picked an
+                                    answer wants it used. Implies --apply-recorded.
+                                    The file is the page's own export format.
 
             exit status: 0 when no conflict block remains, 1 while the file still
             carries conflicts, 2 on a usage or input error.""".formatted(

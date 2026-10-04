@@ -70,3 +70,63 @@ export function fixPathOptions(resolution) {
 export function isActionable(resolution) {
   return resolution.kind !== 'AUTO' || fixPathOptions(resolution).length > 0
 }
+
+/** The text the engine writes where it refuses to decide, so a page never mistakes it for an answer. */
+export const MANUAL_MARKER = '<<< MERGE-JAVA: MANUAL RESOLUTION REQUIRED >>>'
+
+/**
+ * Whether a resolution already HAS an answer: something "apply all resolved" may accept on the reviewer's behalf.
+ *
+ * <p>An empty result is not an answer, and neither is the engine's own manual marker - it is the absence of one.
+ * Automatic resolutions with a real result are, which is where this differs from {@link isActionable}: actionable
+ * is about what a reviewer may decide, this is about what is already decided.</p>
+ */
+export function isResolved(resolution) {
+  const code = resolution.resolvedCode ?? ''
+  return code.trim().length > 0 && !code.includes(MANUAL_MARKER)
+}
+
+/** One decision's identity: a file and a conflict's key, so accepting twice replaces rather than doubles. */
+export function decisionKey(filePath, resolution) {
+  return `${filePath ?? ''}::${resolution.signature ?? resolution.type ?? ''}`
+}
+
+/**
+ * Every resolution in a report that already has an answer, as entries ready to accept.
+ *
+ * <p>This is what the "Apply all resolved" button adds, and it is deliberately the *narrow* reading: blocks the
+ * engine refused, and blocks it left for a human, are not accepted silently. A reviewer can still accept those one
+ * at a time, with an edit.</p>
+ */
+export function acceptAllResolved(files) {
+  const accepted = []
+  for (const file of files ?? []) {
+    for (const resolution of file.resolutions ?? []) {
+      if (!isResolved(resolution)) {
+        continue
+      }
+      accepted.push({
+        filePath: file.filePath,
+        resolution,
+        resolvedCode: resolution.resolvedCode ?? '',
+        explanation: `accepted the ${resolution.kind} resolution as resolved`,
+      })
+    }
+  }
+  return accepted
+}
+
+/**
+ * Add decisions that are not already decided, keeping what the reviewer decided themselves.
+ *
+ * <p>"Apply all resolved" is a bulk convenience, so it must never overwrite a choice somebody made by hand for
+ * that same conflict - the hand-made one is the more specific statement, and silently replacing it would change
+ * what gets applied to the file.</p>
+ */
+export function mergeAccepted(existing, incoming) {
+  const decided = new Set((existing ?? []).map((entry) => decisionKey(entry.filePath, entry.resolution)))
+  const added = (incoming ?? []).filter(
+    (entry) => !decided.has(decisionKey(entry.filePath, entry.resolution)),
+  )
+  return [...(existing ?? []), ...added]
+}

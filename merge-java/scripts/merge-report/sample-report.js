@@ -22,6 +22,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { delimiter, envWith, repoRoot, resolveJdk25, resolveMaven, run } from '../../../scripts/lib/toolchain.js'
+import { moduleClasspath } from './classpath.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const mergeJavaRoot = resolve(here, '../..')
@@ -41,20 +42,9 @@ const maven = resolveMaven()
 const env = envWith(jdk)
 
 // ── 1. the classpath, from Maven so it cannot drift from the POM ────────────────────────────────────
-const classpathFile = join(scratch, 'classpath.txt')
-console.log('[sample-report] resolving the module classpath')
-const classpathRun = run(
-  maven.command,
-  ['-o', '-q', '-f', join(mergeJavaRoot, 'pom.xml'), 'dependency:build-classpath',
-   `-Dmdep.outputFile=${classpathFile}`],
-  { env, cwd: root, stdio: 'pipe' },
-)
-if (classpathRun.status !== 0) {
-  console.error(`[sample-report] could not resolve the classpath (exit ${classpathRun.status})`)
-  console.error(classpathRun.stderr || classpathRun.stdout)
-  process.exit(classpathRun.status ?? 1)
-}
-const dependencies = (await Bun.file(classpathFile).text()).trim()
+const resolvedClasspath = moduleClasspath({ moduleRoot: mergeJavaRoot, scratchDir: scratch, maven, env, cwd: root })
+console.log(`[sample-report] module classpath ${resolvedClasspath.fromCache ? 'from cache' : 'resolved'} (keyed by the POM)`)
+const dependencies = resolvedClasspath.entries
 
 // ── 2. the harness: real three-way inputs through the public API ────────────────────────────────────
 const harness = join(scratch, 'RenderSampleReport.java')

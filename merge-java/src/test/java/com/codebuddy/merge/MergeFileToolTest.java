@@ -3,6 +3,10 @@
 package com.codebuddy.merge;
 
 import com.codebuddy.merge.ConflictResolution.ResolutionKind;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import com.codebuddy.merge.ConflictResolution.ResolutionStrategy;
 import com.codebuddy.merge.MergeFileTool.Outcome;
 import com.codebuddy.merge.MergeFileTool.Result;
@@ -20,6 +24,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -792,4 +797,83 @@ class MergeFileToolTest {
         assertEquals(2, MergeFileTool.runMain(new String[] {"--fixtures"}));
         assertEquals(0, MergeFileTool.runMain(new String[] {"--help"}));
     }
+    @Test
+    @DisplayName("writes the report the review page renders, for one file")
+    void writesTheReportTheReviewPageRenders() throws Exception {
+        Path file = write("OrderService.java", IMPORT_CONFLICT_FILE);
+        Path report = tempDir.resolve("merge-report.json");
+
+        toolFor(file).reportPath(report).run();
+
+        assertTrue(Files.isRegularFile(report), "the report must be written");
+        String json = read(report);
+        assertTrue(json.contains("OrderService.java"), "the file must be named: " + json);
+        assertTrue(json.contains("IMPORT_ADD"), "the conflict type must be there: " + json);
+        assertTrue(json.contains("\"sides\""),
+            "the three sides are what the page compares: " + json);
+        assertTrue(json.contains("\"signature\""),
+            "and the key a decision is recorded under: " + json);
+    }
+
+    /**
+     * The round trip the review flow depends on, end to end and without a browser: the tool writes the report the
+     * page renders, the page's export is built from that report's own facts (signature, type, filePath, sides -
+     * exactly what {@code src/decisions.js} reads), and the SAME CLI records and applies it. A decision the tool
+     * could not have made by itself is what makes this a test rather than a coincidence.
+     */
+    @Test
+    @DisplayName("applies the decisions the review page exported, built from its own report")
+    void appliesTheDecisionsTheReviewPageExported() throws Exception {
+        Path file = write("Ledger.java", STRUCTURAL_CONFLICT_FILE);
+        Path report = tempDir.resolve("merge-report.json");
+
+        // 1. The report the page would render.
+        toolFor(file).reportPath(report).run();
+        String before = read(file);
+
+        // 2. The page's export, built from that report.
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode document = mapper.readTree(read(report));
+        JsonNode section = document.path("files").get(0);
+        JsonNode resolution = section.path("resolutions").get(0);
+        JsonNode sides = resolution.path("sides");
+        String resolvedCode = sides.path("branch1").asString("");
+
+        Map<String, Object> decision = new LinkedHashMap<>();
+        decision.put("signature", resolution.path("signature").asString(""));
+        decision.put("type", resolution.path("type").asString(""));
+        decision.put("filePath", section.path("filePath").asString(""));
+        decision.put("description", "");
+        decision.put("base", sides.path("base").asString(""));
+        decision.put("branch1", sides.path("branch1").asString(""));
+        decision.put("branch2", sides.path("branch2").asString(""));
+        decision.put("resolvedCode", resolvedCode);
+        decision.put("explanation", "reviewer chose branch 1 in the review page");
+
+        Map<String, Object> export = new LinkedHashMap<>();
+        export.put("schemaVersion", 1);
+        export.put("branchName", "feature-payments");
+        export.put("decisions", List.of(decision));
+        Path decisions = tempDir.resolve("decisions.json");
+        Files.writeString(decisions, mapper.writeValueAsString(export), StandardCharsets.UTF_8);
+
+        // 3. The same CLI records them and applies them.
+        MergeFileTool.Result result = MergeFileTool.forFile(file)
+            .fixtureRoot(tempDir.resolve("fixture-root"))
+            .historyPath(tempDir.resolve("history"))
+            .branchName("feature-payments")
+            .decisionsFile(decisions)
+            .applyFixes(true)
+            .run();
+
+        String after = read(file);
+        assertNotEquals(before, after, "the accepted decision must change the file");
+        String chosen = resolvedCode.strip();
+        String firstLine = chosen.lines().findFirst().orElse("").strip();
+        assertFalse(firstLine.isEmpty(), "the report must carry the branch 1 side to accept");
+        assertTrue(after.contains(firstLine),
+            "the code the reviewer accepted must be in the file, got: " + after);
+        assertTrue(result.outcomes().size() > 0, result.describe());
+    }
+
 }

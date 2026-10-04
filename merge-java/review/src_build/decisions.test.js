@@ -11,11 +11,16 @@
 import { test } from 'bun:test'
 import assert from 'node:assert/strict'
 import {
+  MANUAL_MARKER,
   SCHEMA_VERSION,
+  acceptAllResolved,
   buildDecisions,
+  decisionKey,
   fileNameFor,
   fixPathOptions,
   isActionable,
+  isResolved,
+  mergeAccepted,
   toJson,
 } from '../src/decisions.js'
 
@@ -102,4 +107,57 @@ test('what a reviewer can act on', () => {
   assert.ok(!isActionable({ kind: 'AUTO' }), 'and one that offers nothing is not a decision to make')
   assert.equal(fixPathOptions(resolution).length, 3, 'every option of every fix path is offered')
   assert.equal(fixPathOptions(resolution)[0].fixPath.description, 'keep both overloads')
+})
+
+test('what "Apply all resolved" accepts, and what it refuses to decide for you', () => {
+  assert.ok(isResolved({ resolvedCode: 'void process() {}' }))
+  assert.ok(!isResolved({ resolvedCode: '' }), 'an empty result is not an answer')
+  assert.ok(!isResolved({ resolvedCode: '   \n ' }), 'nor is whitespace')
+  assert.ok(!isResolved({ resolvedCode: MANUAL_MARKER }), 'the engine refusing is not an answer')
+  assert.ok(!isResolved({}), 'nor is a resolution with no result at all')
+
+  const accepted = acceptAllResolved([
+    {
+      filePath: 'src/main/java/com/example/demo/OrderService.java',
+      resolutions: [
+        { type: 'IMPORT_ADD', kind: 'AUTO', signature: 's1', resolvedCode: 'import java.util.List;' },
+        { type: 'STRUCTURAL_CHANGE', kind: 'MANUAL', signature: 's2', resolvedCode: MANUAL_MARKER },
+        { type: 'API_INCOMPATIBILITY', kind: 'MANUAL', signature: 's3', resolvedCode: '' },
+      ],
+    },
+  ])
+
+  assert.equal(accepted.length, 1, 'only the resolution that HAS an answer')
+  assert.equal(accepted[0].resolvedCode, 'import java.util.List;')
+  assert.match(accepted[0].explanation, /AUTO/)
+})
+
+test('a decision made by hand survives "Apply all resolved"', () => {
+  const mine = {
+    filePath: 'A.java',
+    resolution: { type: 'IMPORT_ADD', kind: 'AUTO', signature: 's1', resolvedCode: 'import a;' },
+    resolvedCode: 'import a; // edited by hand',
+    explanation: 'reviewer chose the recommended fix path',
+  }
+  const bulk = acceptAllResolved([
+    {
+      filePath: 'A.java',
+      resolutions: [
+        { type: 'IMPORT_ADD', kind: 'AUTO', signature: 's1', resolvedCode: 'import a;' },
+        { type: 'COMMENT_ADD', kind: 'AUTO', signature: 's2', resolvedCode: '// b' },
+      ],
+    },
+  ])
+
+  const merged = mergeAccepted([mine], bulk)
+
+  assert.equal(merged.length, 2, 'the bulk action adds, it does not replace')
+  assert.equal(
+    merged.find((entry) => entry.resolution.signature === 's1').resolvedCode,
+    'import a; // edited by hand',
+    'the more specific, hand-made decision must win',
+  )
+  assert.equal(merged.find((entry) => entry.resolution.signature === 's2').resolvedCode, '// b')
+  const keys = merged.map((entry) => decisionKey(entry.filePath, entry.resolution))
+  assert.equal(new Set(keys).size, keys.length, 'one decision per conflict, never two')
 })

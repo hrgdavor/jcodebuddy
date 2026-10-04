@@ -2749,7 +2749,31 @@ could be useful"), which also keeps the page host-free: it stays one self-contai
 key is refused; an unknown schema version is refused; an empty export records nothing. `bun test` in
 `merge-java/review` - **8 pass, 0 fail** (four page-build, four payload-contract). `mvn -f merge-java/pom.xml
 test` - **709 tests, BUILD SUCCESS**.
-**Who:** agent · **Size:** M
+
+**Operational follow-on, 2026-10-03 (maintainer request): the flow for ONE file, end to end, standalone.** 4.2
+and 4.3 gave the page and the write-back; using them on a single stuck file still needed a chain of commands,
+and the page had no input for that case at all — `MergeReportWriter` was only ever reached from a whole merge.
+
+- **`MergeFileTool --report <path>`** writes the report the page renders, from the same analysis that decides the
+  blocks. **`MergeFileTool --decisions <file.json>`** records the page's export and applies it, in one run: the
+  store is read while resolving, so a decision that arrives with the run has to be recorded before the resolver
+  is built. Both are on the same CLI as everything else, which is what the maintainer asked for.
+- **`bun run merge-java/scripts/merge-report/review-file.js <file>`** is the one-command entry point: analyse,
+  build the page, print the `file://` path, and (with `--apply-decisions`) come back to record and apply. The
+  classpath comes from `--classpath` or `--classpath-from <file>` — the latter because the alternative is
+  quoting a classpath in a shell, which is exactly the kind of thing § 2 keeps out of the workflow.
+- **The UI gained the buttons the maintainer asked for**: each change has its own Accept, and one "Apply all
+  resolved" accepts every conflict that already has an answer. The rule for that is in `src/decisions.js` and
+  pinned by tests: the engine's manual marker is not an answer, an empty result is not an answer, and the bulk
+  action never overwrites a hand-made decision for the same conflict.
+- **Blocks nobody decided keep their markers**, so a merge continues in whatever editor the reviewer likes. The
+  page is standalone by design: no webview, no server, no host — the maintainer's rule, and the reason the
+  export-and-record split stays right rather than being a stopgap.
+
+**Gate:** `MergeFileToolTest` (24 tests) proves the round trip — the report, then a decisions payload built
+from that report's own facts (the shape `src/decisions.js` exports), then the same CLI recording and applying it
+so the file changes. `bun test` in `merge-java/review` — **10 pass, 0 fail**. `mvn -f merge-java/pom.xml test` —
+**711 tests, BUILD SUCCESS**.**Who:** agent · **Size:** M
 
 The manual cases already carry machine-readable fix paths (named options, a recommendation, a
 justification, an impact). The review display becomes an action display: pick a fix path, edit the

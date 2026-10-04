@@ -69,14 +69,16 @@ java -cp … com.codebuddy.merge.MergeFileTool <file> [--apply] [--apply-recorde
      [--no-fixtures] [--fixtures <dir>] [--branch <name>]
 ```
 
-| Flag                    | Meaning                                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------------------- |
-| `--apply`               | write the safely resolved blocks back to the file (default is a dry run)                  |
-| `--apply-recorded`      | also write blocks whose answer was replayed from this branch's recorded decisions         |
-| `--no-fixtures`         | do not prepare the temporary fixture workspace                                            |
-| `--fixtures <dir>`      | where workspaces are created (default: `${java.io.tmpdir}/merge-java-fixtures`)           |
-| `--branch <name>`       | the branch whose decision history is consulted (default: the repository's current branch) |
-| `--classpath <entries>` | the project's compile classpath, so a conflict about its own types can be **decided instead of escalated**. Entries are separated by the platform's path separator and may repeat; each must exist. They are **added to** the JVM classpath, which is what carries the platform |
+| Flag                      | Meaning                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| `--apply`                 | write the safely resolved blocks back to the file (default is a dry run)                  |
+| `--apply-recorded`        | also write blocks whose answer was replayed from this branch's recorded decisions         |
+| `--report <path>`         | write the report the review page renders for this file, so a reviewer sees the three sides of every block instead of a count. Render it with `merge-java/review` — no host, no server. |
+| `--decisions <file.json>` | the decisions a reviewer exported from that page: they are recorded into this branch's history and then applied, because a reviewer who picked an answer wants it used. Implies `--apply-recorded`. |
+| `--no-fixtures`           | do not prepare the temporary fixture workspace                                            |
+| `--fixtures <dir>`        | where workspaces are created (default: `${java.io.tmpdir}/merge-java-fixtures`)           |
+| `--branch <name>`         | the branch whose decision history is consulted (default: the repository's current branch) |
+| `--classpath <entries>`   | the project's compile classpath, so a conflict about its own types can be **decided instead of escalated**. Entries are separated by the platform's path separator and may repeat; each must exist. They are **added to** the JVM classpath, which is what carries the platform |
 
 ## The classpath, and what it changes
 

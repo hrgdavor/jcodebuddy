@@ -1,7 +1,16 @@
 import { insert } from '@jsx6/jsx6'
 import { signal } from '@jsx6/signal'
 import { report, reportSource, isSample } from '../.generated/report.js'
-import { buildDecisions, fileNameFor, fixPathOptions, isActionable, toJson } from './decisions.js'
+import {
+  acceptAllResolved,
+  buildDecisions,
+  decisionKey,
+  fileNameFor,
+  fixPathOptions,
+  isActionable,
+  mergeAccepted,
+  toJson,
+} from './decisions.js'
 
 /**
  * The merge-java resolution review page (plan step 4.2), as a jsx6 app.
@@ -52,23 +61,32 @@ function Actions({ filePath, resolution }) {
 
   const accept = () => {
     const chosen = $choice()
-    $accepted([
-      ...$accepted(),
-      {
-        filePath,
-        resolution,
-        resolvedCode: $code(),
-        explanation:
-          chosen === 'keep'
-            ? 'reviewer accepted the resolved result'
-            : `reviewer chose ${chosen}`,
-      },
-    ])
+    const entry = {
+      filePath,
+      resolution,
+      resolvedCode: $code(),
+      explanation:
+        chosen === 'keep'
+          ? 'reviewer accepted the resolved result'
+          : `reviewer chose ${chosen}`,
+    }
+    // Replacing by key rather than appending: a reviewer who changes their mind about one conflict must not end
+    // up recording two decisions for it.
+    const key = decisionKey(filePath, resolution)
+    const others = $accepted().filter((existing) => decisionKey(existing.filePath, existing.resolution) !== key)
+    $accepted([...others, entry])
   }
+  const accepted = () =>
+    $accepted().some(
+      (existing) => decisionKey(existing.filePath, existing.resolution) === decisionKey(filePath, resolution),
+    )
 
   return (
-    <div class="actions">
-      <div class="label">your decision</div>
+    <div class={`actions${accepted() ? ' accepted' : ''}`}>
+      <div class="label">
+        your decision{' '}
+        {accepted() ? <span class="badge">accepted — export to apply</span> : null}
+      </div>
       {options.length ? (
         <select onchange={(event) => $choice(event.target.value)}>
           <option value="keep">keep the resolved result</option>
@@ -276,11 +294,17 @@ function App() {
  */
 function ExportBar({ branchName }) {
   const count = $accepted().length
+  // Static, and that is correct: what already has an answer does not change while the page is open.
+  const resolvable = acceptAllResolved(report.files ?? []).length
   return (
     <div class="exportbar">
       <span>
         <b>{count}</b> decision(s) accepted
+        {resolvable ? <> of {resolvable} already resolved</> : null}
       </span>
+      <button onclick={() => $accepted(mergeAccepted($accepted(), acceptAllResolved(report.files ?? [])))}>
+        Apply all resolved ({resolvable})
+      </button>
       <button
         onclick={() => downloadDecisions(buildDecisions({ branchName, accepted: $accepted() }))}
         disabled={() => $accepted().length === 0}
@@ -291,8 +315,9 @@ function ExportBar({ branchName }) {
         Clear
       </button>
       <span class="note">
-        then: record-decisions --decisions &lt;file&gt; --history .jcodebuddy/merge-history/
-        {branchName || '<branch>'} --branch {branchName || '<branch>'} (--history is the BRANCH's directory)
+        then: bun run merge-java/scripts/merge-report/review-file.js &lt;your file&gt; --apply-decisions
+        &lt;the downloaded json&gt; --branch {branchName || '<branch>'} — this page stays standalone: no host, no
+        server, nothing to start
       </span>
     </div>
   )
