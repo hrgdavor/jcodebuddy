@@ -3212,6 +3212,12 @@ Move, do not delete — the repository's convention is
 
 **Gate:** `LINKS` green, and `git status` shows the moves as renames (not delete+add).
 
+**Done 2026-10-03.** Both plans are in `archive/plans/` as **renames** — `git status` shows `R`, not delete+add —
+each carries an archive banner pointing at this plan as the single schedule, and the five relative links the move
+broke (four in the legacy plan, one in the hipster-entity one) are repaired: the checker named them, so none was
+guessed at. `plans/inject-examples-feature-port.md` stays where it is, with its status header, as item 5 allows —
+archiving it would hide the outcome rather than tidy anything.
+
 ### 9.3 — Remove the local scratch
 **Who:** agent · **Size:** S
 
@@ -3408,8 +3414,8 @@ start)
 | 8.3  | Agent IDE hooks                                                                       | human decides      | —    | `[ ]`                                                                                       |
 | 8.4  | Zed ACP run                                                                           | human              | —    | `[ ]`                                                                                       |
 | 9.1  | Coverage check                                                                        | agent              | S    | `[ ]`                                                                                       |
-| 9.2  | Archive the superseded plans                                                          | agent              | S    | `[ ]`                                                                                       |
-| 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                           | agent              | S    | `[ ]`                                                                                       |
+| 9.2  | Archive the superseded plans                                                          | agent              | S    | `[x]`                                                                                       |
+| 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                           | agent              | S    | `[x]`                                                                                       |
 | 9.4  | Retire the per-plan open lists                                                        | agent              | S    | `[ ]`                                                                                       |
 | 9.5  | Full sweep (gate + links + examples)                                                  | agent              | S    | `[ ]`                                                                                       |
 | 9.6  | Close the books                                                                       | agent              | S    | `[ ]`                                                                                       |
