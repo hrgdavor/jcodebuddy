@@ -162,11 +162,34 @@ class GeneratedTrackingBuilderContractTest {
         }
     }
 
+    /**
+     * The classpath for this test's compile, which is a subset of the harness's: {@code api} and {@code core} are
+     * all a generated materialization needs.
+     *
+     * <p>Each module contributes its {@code target/classes} <em>and</em> its {@code target/*.jar}, for the reason
+     * the harness documents: a build the Maven cache restored has the jar and no class directory (measured — a
+     * restore-only run skips both {@code compiler:compile} and {@code jar:jar}, and leaves 0 class files where a
+     * compiling run left 23), so a classpath that named only the directory made a cached build fail while an
+     * uncached one passed. javac ignores a path that does not exist, so asking for both is free.</p>
+     */
     private static String classpath() {
         String separator = System.getProperty("path.separator");
-        return String.join(separator,
-                repoRoot().resolve("hipster-entity/hipster-entity-api/target/classes").toString(),
-                repoRoot().resolve("hipster-entity/hipster-entity-core/target/classes").toString());
+        List<String> entries = new java.util.ArrayList<>();
+        for (String module : List.of("hipster-entity-api", "hipster-entity-core")) {
+            Path target = repoRoot().resolve("hipster-entity/" + module + "/target");
+            entries.add(target.resolve("classes").toString());
+            try (var jars = Files.list(target)) {
+                jars.filter(p -> p.toString().endsWith(".jar"))
+                        .filter(p -> !p.toString().contains("-sources"))
+                        .filter(p -> !p.toString().contains("-javadoc"))
+                        .sorted()
+                        .forEach(p -> entries.add(p.toString()));
+            } catch (java.io.IOException | RuntimeException ignored) {
+                // No target directory yet: the class-directory entry stays on the classpath and the compiler's
+                // own diagnostics name anything unresolved.
+            }
+        }
+        return String.join(separator, entries);
     }
 
     private static Path repoRoot() {

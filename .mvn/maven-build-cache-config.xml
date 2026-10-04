@@ -1,21 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The build cache's configuration (org.apache.maven.extensions:maven-build-cache-extension, loaded by
-  `.mvn/extensions.xml`). Deliberately minimal: every knob left at its default is a behaviour nobody had to
-  reason about, and the defaults here are the ones the extension's own schema documents.
+  `.mvn/extensions.xml`). It is ON for every Maven invocation in this repository, including the recorded gate.
 
-  WHAT IS NOT CONFIGURED, AND WHY. In particular the `input/global/glob` that decides which files are hashed is
-  left alone. Widening it looks safer — this repository's modules also decide their output from `.js` and `.json`
-  inputs — but a glob the extension's matcher does not read the way I assume would match *nothing*, and a cache
-  that hashes nothing answers every build with the first revision it ever saw. That is the one failure this file
-  must not cause, so the default is kept and the behaviour is verified instead: turning a source file into a
-  change must produce a cache miss for its module and its dependents, and that is what the round's evidence
-  shows (see the plan's infrastructure record).
+  WHAT THE CACHE DOES, and why nothing here weakens it: it checksums a module together with all of its
+  dependencies, and a change anywhere in that closure invalidates the entry for the whole module and every module
+  downstream of it. It is whole-module, never per-file or per-class.
 
-  THE GATE IS NOT CACHED. A cache hit answering with an earlier revision's outputs is the same hazard `clean`
-  exists to prevent (F-47). `scripts/lib/gate.js` therefore passes `-Dmaven.build.cache.enabled=false` on every
-  invocation and `GateContractTest` asserts it, so "the recorded gate" and "the cache" cannot be confused for one
-  another by accident.
+  `input/global/includes` below is a list of files that live OUTSIDE the modules and that a module's tests read —
+  the Bun tools under `scripts/`, and the shared decision vectors under `webview/conformance/` that both the Java
+  and the TypeScript sides assert against. They are added on the ASSUMPTION that the extension scans them relative
+  to this file's project, which is not verified: the final plan step (9.7) is where that gets examined, together
+  with the question of whether any input Maven cannot see needs a hash folded into a POM property to participate.
+  Until then the list is here because a path that resolves hashes those files and a path that does not is inert —
+  the assumption can only under-cover, never corrupt an entry.
+
+  `.mvn/maven.config` excludes four small modules from the cache, and the reason lives here because that file
+  accepts arguments only — a `#` line in it is an unrecognised entry and Maven refuses to start. With the
+  extension's default restore behaviour a cache-restored module has no `target/classes` at all (measured:
+  23/28/12/126 class files before a restore-only run, 0 after) while Maven still reports SUCCESS; Maven does not
+  need those directories, but `hipster-entity-tooling`'s `CompileHarness` builds its javac classpath from
+  `hipster-entity-{api,core,jackson,example}/target/classes` BY PATH — so a run in which that module executes its
+  tests while those four come from cache fails to compile its generated fixtures. Excluding four small modules keeps
+  the cache aggressive (the other ~25 modules still cache) while keeping the build correct, and it is provisional:
+  step 9.7 may replace it with a harness that reads the restored artifacts.
 -->
 <cache xmlns="http://maven.apache.org/BUILD-CACHE-CONFIG/1.0.0"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -26,4 +34,20 @@
              non-cryptographic hash is kept rather than second-guessed. -->
         <hashAlgorithm>XX</hashAlgorithm>
     </configuration>
+    <input>
+        <global>
+            <includes>
+                <!-- The generator and tooling scripts: `scripts/gen.js`, `scripts/ioc-gen.js`,
+                     `scripts/entity-html/*`, and the Maven launchers' own `lib/`. A test that asserts what one of
+                     these emits must see the cache invalidated when the script changes. -->
+                <include>scripts</include>
+                <include>../../scripts</include>
+                <!-- The conformance vectors are read by both sides of the webview bridge (DEC-032/DEC-033). -->
+                <include>webview/conformance</include>
+                <include>../../webview/conformance</include>
+                <!-- The cache's own configuration: changing what is hashed must invalidate, not silently reuse. -->
+                <include>../../.mvn/maven-build-cache-config.xml</include>
+            </includes>
+        </global>
+    </input>
 </cache>

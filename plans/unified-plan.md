@@ -82,10 +82,11 @@ took **12:43**, with the engine compiled already). What landed:
    default is kept and the behaviour is verified instead.
 2. **`scripts/mvn-fast.js`** — the cached iteration build: the recorded module set, `clean package`, cache on,
    incremental compilation at Maven's default, `--tests`, `--no-clean`, `--off-cache`, `--no-parallel`.
-3. **The gate stays uncached, on every invocation**: `scripts/lib/gate.js` passes
-   `-Dmaven.build.cache.enabled=false`, and `GateContractTest` asserts the constant and its two uses — the same
-   shape as `clean` and the incremental switch, and for the same reason (F-47: a build satisfied by a previous
-   revision's outputs once reported SUCCESS).
+3. **The gate uses the cache too** — the maintainer's decision of 2026-10-03, taken after the first version of this
+   change had the gate switch the cache off. The reasoning is that the cache checksums a module together with all of
+   its dependencies and invalidates the whole module when anything in that closure changes, so a hit *is* evidence;
+   `scripts/lib/gate.js` carries the decision as `BUILD_CACHE_NOTE`, and `GateContractTest` now asserts the gate
+   does **not** disable it.
 4. **The cache was verified to be honest rather than argued to be — and the verification found a real gap, and then a
    mistake in how it was fixed.** A real source change produced a new checksum, a **miss**, and a deliberately failing
    test that **failed the build**: a cache may not answer with a stale SUCCESS. Then an A/B found the gap: `-Dtest=…`
@@ -3185,6 +3186,46 @@ npm run check:examples            # EXAMPLES
    closed, so the cross-links do not outlive the schedule.
 
 **Done when:** the repository has one place that says what is open, and it says "nothing".
+
+### 9.7 — Validate what the build cache checksums, and add what it misses (LAST STEP)
+**Who:** agent · **Size:** M, and it is the **final step of this plan**
+
+**Why it is last, and why nothing before it validates this.** The maintainer's instruction of 2026-10-03, when the
+build cache landed: *use the cache aggressively; do not validate how it computes its checksum until the end.* The
+cache is correct about everything Maven can see — it checksums a module together with all of its dependencies and
+invalidates the whole module when anything in that closure changes — and this repository has inputs that Maven
+**cannot** see, because they are run by Bun and not by a plugin: the generator and tooling scripts, the
+`entity-html` renderer, the ioc generator, and any tool an agent runs by hand before a test reads its output. A wrong
+answer there is a green build from an entry that should have been invalidated, which is the F-47 failure class this
+repository already has a scar for.
+
+**What is in place until then, by assumption and deliberately unverified:** `.mvn/maven-build-cache-config.xml`
+lists extra inputs under `input/global/includes` (the Bun tools under `scripts/`, the shared vectors under
+`webview/conformance/`, and that config file itself). Some of those paths may not resolve relative to a module and so
+hash nothing; the list is there because it can only under-cover, never corrupt an entry, and because it is the shape
+the answer will take.
+
+**Do:**
+
+1. Establish what the extension actually checksums — its own documentation, and experiments on this reactor: which
+   file globs, whether POM/plugin configuration and parent POMs participate, whether system properties (`-Dtest=…`,
+   `-DskipTests`) do (**measured once already: they do not**), and how a dependency's checksum propagates to its
+   dependents.
+2. Verify the assumed include list resolves, and fix the paths that do not.
+3. Decide the answer for inputs Maven cannot see: extend that list, or fold a hash of them into a **POM property** the
+   checksum does cover (the mechanism the maintainer named), or — if the honest answer is "the cache cannot see
+   these" — record the boundary and the purge rule instead.
+4. Re-check the two harnesses that read a sibling module by path (`CompileHarness.generatedSourceClasspath` and
+   `GeneratedTrackingBuilderContractTest.classpath`): they now accept the restored jar as well as `target/classes`,
+   which is what makes a cached build and an uncached one agree.
+5. Record the verdict in `doc/AGENTS.md` and in this plan, and delete whatever of the above turned out to be
+   superstition.
+
+**Gate:** the verdict is written down, the include list is either verified or replaced by something verified, and a
+full gate run passes with the cache on.
+
+**Done when:** a reviewer can answer "if I change file X, which modules rebuild?" from the repository alone, and the
+answer is right for the files Maven cannot see as well as for the ones it can.
 
 ---
 

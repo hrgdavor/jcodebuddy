@@ -101,14 +101,34 @@ final class CompileHarness {
      * {@code PersonDemo}, which prints a change set as JSON — compiles as one unit. That is stronger
      * than compiling the generated files alone: it also proves the generated code and the
      * hand-written code that consumes it agree.</p>
+     *
+     * <p><strong>Each module contributes both its {@code target/classes} and its {@code target/*.jar}.</strong>
+     * The class directory is what a build that just compiled the module leaves; the jar is what the Maven build
+     * cache leaves when it restores a module instead of building it — measured: a restore-only run reports
+     * {@code Skipping plugin execution (cached): compiler:compile} **and** {@code jar:jar}, and afterwards
+     * {@code target/classes} is absent while the jar is there (23/28/12/126 class files before such a run, 0
+     * after). Asking for both costs nothing — javac ignores a path that does not exist — and it is the difference
+     * between a cached build and an uncached one producing the same test result, which is the property the cache
+     * has to have to be worth having.</p>
      */
     static String generatedSourceClasspath(Path repoRoot) {
         String separator = System.getProperty("path.separator");
-        List<String> entries = new ArrayList<>(List.of(
-                repoRoot.resolve("hipster-entity/hipster-entity-api/target/classes").toString(),
-                repoRoot.resolve("hipster-entity/hipster-entity-core/target/classes").toString(),
-                repoRoot.resolve("hipster-entity/hipster-entity-jackson/target/classes").toString(),
-                repoRoot.resolve("hipster-entity/hipster-entity-example/target/classes").toString()));
+        List<String> entries = new ArrayList<>();
+        for (String module : List.of("hipster-entity-api", "hipster-entity-core", "hipster-entity-jackson",
+                "hipster-entity-example")) {
+            Path target = repoRoot.resolve("hipster-entity/" + module + "/target");
+            entries.add(target.resolve("classes").toString());
+            try (var jars = Files.list(target)) {
+                jars.filter(p -> p.toString().endsWith(".jar"))
+                        .filter(p -> !p.toString().contains("-sources"))
+                        .filter(p -> !p.toString().contains("-javadoc"))
+                        .sorted()
+                        .forEach(p -> entries.add(p.toString()));
+            } catch (IOException | RuntimeException ignored) {
+                // No target directory yet: the class-directory entry above is still on the classpath, and a
+                // caller's diagnostics will name anything unresolved.
+            }
+        }
 
         // The Jackson jars the jackson module itself needs, taken from the local repository. They
         // are not on the tooling module's own test classpath, so they are located by path.

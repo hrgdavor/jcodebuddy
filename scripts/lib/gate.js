@@ -72,14 +72,18 @@ export const GATE_MODULES = [
 export const INCREMENTAL_OFF = '-Dmaven.compiler.useIncrementalCompilation=false';
 
 /**
- * The build cache (`.mvn/extensions.xml`) is turned off for the gate, explicitly and on every invocation.
+ * **The gate does NOT disable the build cache** (`.mvn/extensions.xml`), and that is a decision rather than an
+ * omission — the maintainer's, on 2026-10-03: the cache checksums a module together with all of its dependencies
+ * and invalidates the whole module when anything in that closure changes, so a hit means "these exact inputs were
+ * already built and tested", which is evidence rather than a shortcut. Disabling it "just in case" throws away
+ * what makes the build fast for no gain.
  *
- * A cache hit restores a previous revision's outputs, so it is the same *class* of hazard `clean` and
- * {@link INCREMENTAL_OFF} exist to prevent, and "the cache is content-hashed, so a hit is sound" is an argument
- * the gate must not have to win. Iterating is what `.mvn/` is for (`bun scripts/mvn-fast.js`); the recorded gate
- * stays the thing that verifies a commit with no reuse at all.
+ * What the gate *does* owe is that its inputs are complete, and that is a separate question with its own home: the
+ * final plan step (9.7) examines what the cache can and cannot see, and `.mvn/maven-build-cache-config.xml` carries
+ * the inputs added on assumption until then.
  */
-export const BUILD_CACHE_OFF = '-Dmaven.build.cache.enabled=false';
+export const BUILD_CACHE_NOTE =
+  'the build cache stays ON for the gate (see .mvn/maven-build-cache-config.xml)';
 
 /**
  * The `-pl` selector list for a module-name list.
@@ -125,12 +129,12 @@ export function buildGateArgs(argv, options = {}) {
 
   const shortcut = argv.length === 0 || argv[0] === 'hipster-entity';
   if (!shortcut) {
-    // Free-form: the caller's own arguments, with the JDK pinned, the incremental path disabled and the build
-    // cache off. Callers that want the cache are asking for the fast path, not the gate.
+    // Free-form: the caller's own arguments, with the JDK pinned and the incremental path disabled. The build
+    // cache is left on — see BUILD_CACHE_NOTE.
     const bad = splitProperty(argv);
     return bad
       ? { args: [], shortcut, error: bad }
-      : { args: [INCREMENTAL_OFF, BUILD_CACHE_OFF, ...argv], shortcut, error: null };
+      : { args: [INCREMENTAL_OFF, ...argv], shortcut, error: null };
   }
 
   const rest = argv[0] === 'hipster-entity' ? argv.slice(1) : argv;
@@ -140,7 +144,7 @@ export function buildGateArgs(argv, options = {}) {
   }
   const goals = rest.length === 0 ? defaultGoals : rest;
   return {
-    args: ['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, BUILD_CACHE_OFF, ...goals],
+    args: ['-o', '-pl', moduleSelectors(modules), '-am', INCREMENTAL_OFF, ...goals],
     shortcut,
     error: null,
   };

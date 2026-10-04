@@ -97,12 +97,14 @@ There are two build entry points, and the difference between them is deliberate 
   restored instead of re-run — and test execution is where the time goes: a warm `-pl <mods> -am test` of the ioc
   tooling measured 12:43 with the cache off, almost all of it tests.
 
-The two are kept honest by construction rather than by convention. The gate passes
-`-Dmaven.build.cache.enabled=false` on **every** invocation, and `GateContractTest` asserts that it does — the same
-way it asserts `clean` and the incremental switch — so "the recorded gate" and "the cache" cannot be confused by
-accident. And the cache's safety was verified rather than argued when it was added: turning a source file into a
-real change produced a **new checksum, a miss, and a failing test that failed the build**, which is the property
-that matters — a cache may not answer with a stale SUCCESS.
+Both use the cache; what differs is how much they re-run. `mvn-jdk25.js` is the gate — `clean test`, incremental
+compilation off — and it **keeps the build cache on**, by the maintainer's decision of 2026-10-03: the cache
+checksums a module together with all of its dependencies and invalidates the whole module when anything in that
+closure changes, so a hit means "these exact inputs were already built and tested". Disabling it "just in case"
+throws away what makes a build fast for no gain, and `GateContractTest` asserts that the gate does not do it. The
+safety of a hit was verified rather than argued when the cache was added: turning a source file into a real change
+produced a **new checksum, a miss, and a failing test that failed the build** — a cache may not answer with a stale
+SUCCESS.
 
 **Two rules the fast path enforces, both learned by getting them wrong.** Its goal is `package` rather than `test`,
 because a cached module restored without a JAR cannot be depended on by the next module in the reactor. And it

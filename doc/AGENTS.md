@@ -27,11 +27,11 @@ These come from the root file's § 2 and are restated here in the terms that mat
 
 The recorded gate is `bun scripts/mvn-jdk25.js` — the engine, the `hipster-entity` modules and the migrated
 consumers (the set is `GATE_MODULES` in `scripts/lib/gate.js`, and step 3.0k is where the consumers joined it),
-`clean test`, with `-Dmaven.compiler.useIncrementalCompilation=false` and the Maven build cache **off**
-(`-Dmaven.build.cache.enabled=false`). `clean` is not optional: without it a build can be satisfied by a previous
-revision's class files, which is how a source that did not compile once reported `BUILD SUCCESS`. One definition of
-the gate lives in `scripts/lib/gate.js`, and `GateContractTest` asserts it — including the cache switch, for the
-same reason as `clean`: a cache hit restores a previous revision's outputs.
+`clean test`, with `-Dmaven.compiler.useIncrementalCompilation=false`. `clean` is not optional: without it a build
+can be satisfied by a previous revision's class files, which is how a source that did not compile once reported
+`BUILD SUCCESS`. One definition of the gate lives in `scripts/lib/gate.js`, and `GateContractTest` asserts it — and
+asserts, deliberately, that the gate does **not** switch the build cache off (the maintainer's decision of
+2026-10-03, with the reasoning at `BUILD_CACHE_NOTE` in that file).
 
 **Iterate with `bun scripts/mvn-fast.js`; verify with the gate.** The fast path is the same module set with the build
 cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default, and modules built in parallel. It
@@ -40,7 +40,7 @@ and because a cached module's compile, test and jar phases are restored instead 
 `test`: `package` runs the tests anyway, and it is what puts a JAR in `target/`, without which the next module in the
 reactor cannot resolve its sibling.
 
-### The Maven build cache: what it covers, and the two things it does not
+### The Maven build cache: what it covers, and what it does not
 
 `org.apache.maven.extensions:maven-build-cache-extension` is loaded for every Maven invocation here
 (`.mvn/extensions.xml`), configured by `.mvn/maven-build-cache-config.xml`. It is **on by default and is not to be
@@ -61,10 +61,22 @@ Two things it does **not** cover, both measured rather than assumed:
   with surefire skipped and no tests executed. The remedy is not to disable the cache but to withhold the *save*:
   `bun scripts/mvn-fast.js` passes `-Dmaven.build.cache.skipSave=true` for `--tests` and `--no-clean` runs, which
   still reads the cache but never writes it. A hand-run `mvn … -Dtest=` should pass the same switch.
+- **A restore leaves the JAR and no class directory.** Measured: a restore-only run reports `Skipping plugin
+  execution (cached): compiler:compile` **and** `jar:jar`, and afterwards `target/classes` is absent where a
+  compiling run left class files (23/28/12/126 before, 0 after). Maven does not care, but a test that builds a javac
+  classpath from those directories does: two harnesses here (`CompileHarness.generatedSourceClasspath` and
+  `GeneratedTrackingBuilderContractTest.classpath`) now add each module's `target/*.jar` as well as its
+  `target/classes`, which is why a run with four modules restored and `hipster-entity-tooling` rebuilding ends with
+  all 468 of its tests passing. Any new test that compiles against a sibling module by path must do the same.
 - **A run that produces nothing must not populate the cache.** A `mvn … validate` run stores an entry per module with
   a near-empty output tree, and a later build that hits it compiles against a module with no classes — reported as
   `cannot find symbol` on sources that compile perfectly. Populate with `package` (what the fast path uses), and
   reach for `rm -rf ~/.m2/build-cache` whenever entries look wrong; it is a cache, and deleting it costs only time.
+
+The inputs the cache cannot see are listed, **by assumption**, in `.mvn/maven-build-cache-config.xml`
+(`input/global/includes`: the Bun tools under `scripts/` and the shared vectors under `webview/conformance/`). That
+list is not verified and is not meant to be: the final plan step (9.7) is where the checksum gets examined, together
+with the question of whether an input Maven cannot see needs a hash folded into a POM property to participate.
 
 **JCodeBuddy-only.** A driver project has its own build and its own commands; the gate is this
 repository's, and no command in the root README's table builds anything under `proto/`.
