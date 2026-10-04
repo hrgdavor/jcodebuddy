@@ -43,6 +43,7 @@ webview/
   README.md                      <- this file: the product, and which file to read
   PLAN-webview-suite.md          the plan and its implementation record, phase by phase
   PLAN-eclipse-host.md           the Eclipse host's plan and its implementation record
+  doc/earlier-attempts-audit.md  step 3.0p: what the five earlier sidecar attempts hold, and what 3.0q does with them
   check-links.mjs                verifies every relative link in this folder
   kit/                           THE CONSUMER HALF — what another project copies (see kit/README.md)
     README.md                    what the kit is, what to copy, and the premise that a host is available

@@ -1401,6 +1401,42 @@ than describing them.
 **Gate:** the audit is written down with a verdict per capability and per directory, and `LINKS` green. No
 build gate — this step reads.
 
+**Done 2026-10-03 — the audit is [`webview/doc/earlier-attempts-audit.md`](../webview/doc/earlier-attempts-audit.md),
+and 3.0q has a small list instead of a worry.** The five are 50 tracked files together (219 Java lines, 204 JS, 85
+TS, no Kotlin sources) and **25 of those files are committed Gradle `.gradle/` cache state** — build output that no
+clone reads. Against the maintainer's shape (one shared host, one thin client per editor) the verdicts are:
+
+| Directory               | Verdict                   | What it holds                                                              |
+| ----------------------- | ------------------------- | -------------------------------------------------------------------------- |
+| `webview/intellij-jwa`  | **has material to merge** | an IntelliJ **LSP registration**: `ProjectWideLspServerDescriptor` (97 lines) + provider (15) + the `plugin.xml` entry, launching `java -cp <jar> hr.hrg.watch2.sidecar.SidecarApp` |
+| `webview/vscode-jwa`    | **has material to merge** | a VS Code **language client**: `LanguageClient` on `onLanguage:java` (116 lines), the `jwa.java.home` → `JAVA_HOME` → `PATH` rule, and a **`mytool/jump` notification handler** |
+| `webview/intellij-jswa` | **delete**                | the same registration shape for a JS/TS sidecar that was never implemented |
+| `webview/vscode-jswa`   | **delete**                | the same client shape for that sidecar                                     |
+| `webview/jswa-core`     | **delete**                | an 85-line LSP sketch: declared capabilities, one hard-coded `signal` snippet, placeholder diagnostics |
+
+**Two capabilities are genuinely unique, and neither current host has them.** `webview/webview-jetbrains` is a JCEF
+tool window that registers no language server; `webview/webview-vscode` is a sidebar plus an HTTP bridge with no
+language client. So the audit is not "pick the winner" — the two `*-jwa` attempts hold the *LSP client half* of the
+suite, and the Zed extension is the precedent that shows the shape: register the sidecar as a language server.
+The **`mytool/jump` handler** is the sharpest find: the sidecar already sends that notification
+(`JwaLanguageClient.java:12`) and nothing in the suite listens for it — today's VS Code navigation goes through the
+HTTP bridge instead, which is a different route.
+
+**The audit also found why deletion is safe rather than lossy**: the two IntelliJ attempts and `vscode-jwa` carry
+development paths that the 3.0o move left pointing a level too high (`../webview/jwa-sidecar/...` →
+`webview/webview/...`, which does not exist), and `vscode-jwa`'s `path.join` calls never import `path`, so its
+discovery branch throws. Their *capabilities* are worth taking; their *code* is not fit to copy, and the audit says
+so in the row rather than leaving a reviewer to discover it.
+
+**The two `*-jswa` clients and `jswa-core` are dead, and the record says what died**: a JS/TS sidecar sketched as an
+LSP server with `.`/`:` completion triggers and a `signal` snippet, wired for VS Code, IntelliJ, Zed and Neovim in
+63 lines of `INTEGRATION.md` whose instructions (an absolute `java_watch2` path, `cd vscode-jswa` at the old root)
+no longer describe this tree. Deleting them is not a judgement on the idea; the idea is recorded, and git history
+is the archive.
+
+**Read-only, as the step requires**: no build was run (the step's own gate says "this step reads"), no file was
+merged and nothing was deleted — 3.0q does that.
+
 **Done when:** 3.0q has a list it can act on: what to merge into which current implementation, and what to
 delete with a reason.
 
