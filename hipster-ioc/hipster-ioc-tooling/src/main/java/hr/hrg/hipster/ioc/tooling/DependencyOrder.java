@@ -27,10 +27,12 @@ import java.util.Set;
  * to prevent. So a cycle is reported as {@code circular_dependency_unmarked} and the context is
  * <strong>refused</strong> — no file is written, and the previous one is left exactly as it is.</p>
  *
- * <p>A cycle the user <em>did</em> mark is refused too, and that is a limitation of this first
- * implementation rather than a decision: closing a marked cycle needs the dependency to be resolved after
- * construction (a {@code Supplier<Bean>} parameter or a setter the generator can call), and neither shape
- * is expressible through the current API. The diagnostic says so; DEC-036 § 5 carries the amendment.</p>
+ * <p>A cycle the user <em>did</em> mark is closed in two phases, which is what {@code @Circular} asks for: the
+ * marked parameter is written {@code @Circular Supplier<Bean>}, it is <strong>not</strong> an ordering edge (the
+ * supplier is only called after the context exists), and the renderer emits {@code () -> bean()} — a call to the
+ * context's own accessor, so the cycle is closed in source a stock IDE can follow rather than by reflection. A
+ * marked parameter that is not a {@code Supplier} is refused with {@code circular_dependency_needs_supplier},
+ * because there is no way to resolve it after construction.</p>
  *
  * <p>A factory parameter that matches no bean is not an error: it becomes a constructor parameter of the
  * generated context, so the caller supplies it. The alternative — passing {@code null} — would compile and
@@ -42,14 +44,30 @@ public final class DependencyOrder {
      * @param beans           the beans in creation order
      * @param extraParameters factory parameters the context does not provide, in a stable order; the
      *                        generated constructor takes them, so the caller decides what they are
-     * @param refused         whether the context was refused (a cycle), in which case nothing is generated
+     * @param deferred        the marked circular edges, each naming the bean whose factory takes the parameter
+     *                        and the bean that parameter resolves to after construction (DEC-036 § 5)
+     * @param refused         whether the context was refused (an unmarked cycle, or a marked edge that is not a
+     *                        {@code Supplier}), in which case nothing is generated
      */
-    public record Ordered(List<IocModel.Bean> beans, List<IocModel.Parameter> extraParameters, boolean refused) {
+    public record Ordered(List<IocModel.Bean> beans, List<IocModel.Parameter> extraParameters,
+                          List<Deferred> deferred, boolean refused) {
 
         public Ordered {
             beans = List.copyOf(beans);
             extraParameters = List.copyOf(extraParameters);
+            deferred = List.copyOf(deferred);
         }
+    }
+
+    /**
+     * One marked circular edge: {@code owner}'s factory takes {@code parameter}, which is a {@code Supplier} of
+     * {@code target}.
+     *
+     * <p>It is deliberately <strong>not</strong> an ordering edge: the supplier is only called after the context
+     * exists, which is exactly what breaks the cycle. Recording it rather than dropping it is what lets the
+     * renderer emit {@code () -> target()} instead of the bare field name.</p>
+     */
+    public record Deferred(String owner, String parameter, String target) {
     }
 
     private DependencyOrder() {
@@ -65,6 +83,7 @@ public final class DependencyOrder {
 
         Map<String, Set<String>> dependencies = new LinkedHashMap<>();
         Set<IocModel.Parameter> extras = new LinkedHashSet<>();
+        List<Deferred> deferred = new ArrayList<>();
         boolean refused = false;
 
         for (IocModel.Bean bean : context.beans()) {
@@ -73,15 +92,33 @@ public final class DependencyOrder {
             if (factory != null) {
                 for (IocModel.Parameter parameter : factory.parameters()) {
                     if (parameter.circular()) {
-                        divergences.report("circular_dependency_marked_unsupported",
-                                context.qualifiedName() + "." + factory.methodName(),
-                                "the parameter '" + parameter.name() + "' is marked @Circular, and the "
-                                        + "two-phase form that would close a marked cycle is not implemented",
-                                parameter.typeText() + " " + parameter.name(),
-                                "a cycle closed after construction",
-                                "restructure the factory so the cycle is not needed, or track the "
-                                        + "Supplier-parameter form in DEC-036 § 5");
-                        refused = true;
+                        // A marked edge is resolved after construction, so it is NOT an ordering edge: the
+                        // supplier is only called once the context exists, which is what breaks the cycle. It
+                        // does have to say what it supplies, and that type has to name a bean this context
+                        // builds — otherwise the caller provides the supplier like any other extra parameter.
+                        String supplied = parameter.suppliedType();
+                        if (supplied == null) {
+                            divergences.report("circular_dependency_needs_supplier",
+                                    context.qualifiedName() + "." + factory.methodName(),
+                                    "the parameter '" + parameter.name() + "' is marked @Circular but is not a "
+                                            + "Supplier, and only a Supplier can be resolved after construction",
+                                    parameter.typeText() + " " + parameter.name(),
+                                    "@Circular Supplier<" + parameter.typeText().trim() + "> "
+                                            + parameter.name(),
+                                    "write the parameter as @Circular Supplier<Bean>, the two-phase form "
+                                            + "DEC-036 § 5 settled on");
+                            refused = true;
+                            continue;
+                        }
+                        IocModel.Bean target = byName.get(parameter.name());
+                        if (target == null) {
+                            target = byType.get(supplied);
+                        }
+                        if (target == null || target.name().equals(bean.name())) {
+                            extras.add(parameter);
+                        } else {
+                            deferred.add(new Deferred(bean.name(), parameter.name(), target.name()));
+                        }
                         continue;
                     }
                     IocModel.Bean match = byName.get(parameter.name());
@@ -130,8 +167,8 @@ public final class DependencyOrder {
         if (refused) {
             // Refused means "nothing is generated", not "generate what happened to sort": a partial
             // context would not compile, and a partially written file is worse than an untouched one.
-            return new Ordered(List.of(), List.of(), true);
+            return new Ordered(List.of(), List.of(), List.of(), true);
         }
-        return new Ordered(ordered, new ArrayList<>(extras), false);
+        return new Ordered(ordered, new ArrayList<>(extras), deferred, false);
     }
 }

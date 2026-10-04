@@ -31,14 +31,21 @@ public final class ContextSource {
      * @param ordered         the beans in creation order
      * @param extraParameters factory parameters the context does not provide; they become constructor
      *                        parameters, so no generated code ever passes a {@code null}
+     * @param deferred        the marked circular edges (DEC-036 § 5); each renders as a call to the accessor of
+     *                        the bean it supplies, which is what closes the cycle after construction
      * @param indent          one indentation step, taken from the caller so generated code matches the
      *                        project's own style rather than the generator's
      * @return the file's text, ending in a newline
      */
     public static String render(IocModel.Context context, List<IocModel.Bean> ordered,
-                                List<IocModel.Parameter> extraParameters, String indent) {
+                                List<IocModel.Parameter> extraParameters,
+                                List<DependencyOrder.Deferred> deferred, String indent) {
         String i1 = indent;
         String i2 = indent + indent;
+        Map<String, String> deferredTargets = new java.util.LinkedHashMap<>();
+        for (DependencyOrder.Deferred edge : deferred) {
+            deferredTargets.put(edge.owner() + "." + edge.parameter(), edge.target());
+        }
         StringBuilder sb = new StringBuilder();
 
         // DEC-035's file marker and DEC-021's config line. The marker is what tells a parser, an agent or a
@@ -100,7 +107,7 @@ public final class ContextSource {
         }
         for (IocModel.Bean bean : ordered) {
             sb.append(i2).append("this.").append(bean.name()).append(" = ")
-                    .append(creationOf(context, bean)).append(";\n");
+                    .append(creationOf(context, bean, deferredTargets)).append(";\n");
         }
         sb.append(i1).append("}\n");
 
@@ -133,8 +140,15 @@ public final class ContextSource {
      *
      * <p>The factory's arguments are the very fields the constructor has just filled — that is what makes
      * the generated file a picture of the dependency graph rather than a description of it.</p>
+     *
+     * <p>A marked circular edge is the one exception, and it is the point of the two-phase form (DEC-036 § 5):
+     * the argument is {@code () -> target()}, a call to this context's own accessor, so the dependency is
+     * resolved when it is <em>used</em> rather than when it is constructed. The lambda is not invoked during
+     * construction, which is why the cycle closes; and because the target is named by its accessor, the edge is
+     * navigable in a stock IDE like every other line of the generated file.</p>
      */
-    private static String creationOf(IocModel.Context context, IocModel.Bean bean) {
+    private static String creationOf(IocModel.Context context, IocModel.Bean bean,
+                                     Map<String, String> deferredTargets) {
         IocModel.Factory factory = context.factories().get(bean.name());
         if (factory == null) {
             return "new " + bean.typeText() + "()";
@@ -148,6 +162,11 @@ public final class ContextSource {
             IocModel.Parameter parameter = factory.parameters().get(i);
             if (i > 0) {
                 sb.append(", ");
+            }
+            String target = deferredTargets.get(bean.name() + "." + parameter.name());
+            if (target != null) {
+                sb.append("() -> ").append(target).append("()");
+                continue;
             }
             IocModel.Bean match = byName.get(parameter.name());
             sb.append(match != null ? match.name() : parameter.name());

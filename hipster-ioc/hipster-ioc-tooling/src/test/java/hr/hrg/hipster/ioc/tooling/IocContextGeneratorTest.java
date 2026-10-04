@@ -11,6 +11,8 @@ import tools.jackson.databind.ObjectMapper;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -116,6 +118,81 @@ class IocContextGeneratorTest {
                     A a();
 
                     B b();
+                }
+                """);
+        return root;
+    }
+
+    /**
+     * The tree for the two-phase form: a marked cycle whose bean classes are <strong>public and in their own
+     * files</strong>, so the test can load the compiled context and ask each bean for its peer.
+     *
+     * <p>{@link #cycleTree} deliberately keeps its fixture package-private in one file, which is enough for
+     * "does it generate" and not enough for "does it run": a method on a package-private class is not
+     * invocable from another package without opening it up, and a test that needs reflection tricks to prove a
+     * generator's output works is a test that will be weakened later.</p>
+     */
+    private Path supplierCycleTree(Path dir) throws IOException {
+        Path root = dir.resolve("src");
+        Path packageDir = Files.createDirectories(root.resolve("ioc/fixture"));
+        Files.writeString(packageDir.resolve("CycleModule.java"), """
+                package ioc.fixture;
+
+                import hr.hrg.hipster.ioc.Circular;
+                import java.util.function.Supplier;
+
+                interface CycleModule {
+                    default A buildA(@Circular Supplier<B> b) {
+                        return new A(b);
+                    }
+
+                    default B buildB(A a) {
+                        return new B(a);
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("CycleContext.java"), """
+                package ioc.fixture;
+
+                import hr.hrg.hipster.ioc.HipsterContext;
+
+                @HipsterContext
+                public interface CycleContext extends CycleModule {
+                    A a();
+
+                    B b();
+                }
+                """);
+        Files.writeString(packageDir.resolve("A.java"), """
+                package ioc.fixture;
+
+                import java.util.function.Supplier;
+
+                public class A {
+                    private final Supplier<B> b;
+
+                    A(Supplier<B> b) {
+                        this.b = b;
+                    }
+
+                    public B peer() {
+                        return b.get();
+                    }
+                }
+                """);
+        Files.writeString(packageDir.resolve("B.java"), """
+                package ioc.fixture;
+
+                public class B {
+                    private final A a;
+
+                    B(A a) {
+                        this.a = a;
+                    }
+
+                    public A peer() {
+                        return a;
+                    }
                 }
                 """);
         return root;
@@ -241,16 +318,58 @@ class IocContextGeneratorTest {
                 "nothing is written: code that cannot run is worse than an absent file");
     }
 
+    /**
+     * The two-phase form (DEC-036 § 5): a marked cycle is generated, compiled, <strong>and run</strong>.
+     *
+     * <p>The last assertion is the one this step exists for. Compiling proves the shape is legal Java; running
+     * the context and asking each bean for its peer proves the cycle is actually closed — the supplier A holds
+     * resolves to the very B the context built, and B holds that same A. A string-matching test could not tell
+     * the difference between a closed cycle and a lambda that returns {@code null}.</p>
+     */
     @Test
-    void aMarkedCircularParameterIsRefusedWithItsOwnDiagnostic(@TempDir Path dir) throws Exception {
+    void aMarkedCircularParameterClosesTheCycleAndTheGeneratedCodeRuns(@TempDir Path dir) throws Exception {
+        Path root = supplierCycleTree(dir);
+
+        IocGeneration.Result result = IocGeneration.generate(root, root, "    ");
+
+        Assertions.assertEquals(0, result.refused(),
+                "a marked cycle is created in two phases rather than refused: " + result.divergences());
+        String source = Files.readString(impl(root, "CycleContext"));
+        Assertions.assertTrue(source.contains("() -> b()"),
+                "the marked edge renders as a call to the accessor of the bean it supplies, which is what "
+                        + "makes it navigable and what defers it past construction:\n" + source);
+        compile(root);
+
+        try (URLClassLoader loader = new URLClassLoader(
+                new URL[]{root.resolve("classes").toUri().toURL()}, getClass().getClassLoader())) {
+            Class<?> implClass = loader.loadClass("ioc.fixture.CycleContextImpl");
+            Object context = implClass.getDeclaredConstructor().newInstance();
+            Object a = implClass.getMethod("a").invoke(context);
+            Object b = implClass.getMethod("b").invoke(context);
+
+            Assertions.assertSame(b, a.getClass().getMethod("peer").invoke(a),
+                    "A's supplier resolves to the B the context built");
+            Assertions.assertSame(a, b.getClass().getMethod("peer").invoke(b),
+                    "and B holds that same A, so the cycle is closed at runtime");
+        }
+    }
+
+    /**
+     * A marked parameter that is not a {@code Supplier} cannot be resolved after construction, so it is refused
+     * with its own diagnostic — the marked edge is a request the generator can only honour one way.
+     */
+    @Test
+    void aMarkedCircularParameterThatIsNotASupplierIsRefused(@TempDir Path dir) throws Exception {
         Path root = cycleTree(dir, CYCLE_MODULE.replace("buildA(B b)", "buildA(@Circular B b)"));
 
         IocGeneration.Result result = IocGeneration.generate(root, root, "    ");
 
         Assertions.assertEquals(1, result.refused());
         Assertions.assertTrue(result.divergences().stream()
-                        .anyMatch(e -> e.startsWith("kind=circular_dependency_marked_unsupported")),
-                "the limitation is reported rather than the request being ignored: " + result.divergences());
+                        .anyMatch(e -> e.startsWith("kind=circular_dependency_needs_supplier")),
+                "the diagnostic names the shape it needs: " + result.divergences());
+        Assertions.assertFalse(Files.exists(impl(root, "CycleContext")),
+                "and nothing is written until the shape is right");
     }
 
     @Test
@@ -482,10 +601,13 @@ class IocContextGeneratorTest {
     /** A guard that the kinds this generator produces are the kinds the project's vocabulary lists. */
     @Test
     void theDiagnosticKindsThisGeneratorProducesAreInTheProjectsVocabulary() {
-        for (String kind : List.of("circular_dependency_unmarked", "circular_dependency_marked_unsupported",
+        for (String kind : List.of("circular_dependency_unmarked", "circular_dependency_needs_supplier",
                 "lazy_bean_needs_factory", "context_implementation_present")) {
             Assertions.assertTrue(DivergenceReporter.KINDS.contains(kind),
                     "a diagnostic nobody can find in the vocabulary is a private dialect: " + kind);
         }
+        Assertions.assertFalse(DivergenceReporter.KINDS.contains("circular_dependency_marked_unsupported"),
+                "the kind that said the two-phase form was unimplemented is retired: step 3.4 implemented it, "
+                        + "and a vocabulary entry nothing can produce is a promise rather than a diagnostic");
     }
 }

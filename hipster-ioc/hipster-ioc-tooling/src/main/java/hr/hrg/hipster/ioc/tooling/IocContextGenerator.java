@@ -95,7 +95,8 @@ public final class IocContextGenerator {
         }
 
         Path implFile = implFileFor(sourceFile, model);
-        String canonical = ContextSource.render(model, ordered.beans(), ordered.extraParameters(), indent);
+        String canonical = ContextSource.render(model, ordered.beans(), ordered.extraParameters(),
+                ordered.deferred(), indent);
         CooperativeCodegen.Reconciled reconciled;
         try {
             reconciled = CooperativeCodegen.reconcileMembers(

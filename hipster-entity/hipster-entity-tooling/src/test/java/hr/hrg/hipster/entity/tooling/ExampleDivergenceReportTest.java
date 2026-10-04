@@ -182,7 +182,7 @@ class ExampleDivergenceReportTest {
             // module's generator tests rather than by the entity pass, but they are part of the same
             // project-wide vocabulary, so the producer is named here just the same.
             Map.entry("circular_dependency_unmarked", "hipster-ioc-tooling IocContextGeneratorTest"),
-            Map.entry("circular_dependency_marked_unsupported", "hipster-ioc-tooling IocContextGeneratorTest"),
+            Map.entry("circular_dependency_needs_supplier", "hipster-ioc-tooling IocContextGeneratorTest"),
             Map.entry("lazy_bean_needs_factory", "hipster-ioc-tooling IocContextGeneratorTest"),
             Map.entry("context_implementation_present", "hipster-ioc-tooling IocContextGeneratorTest"));
 

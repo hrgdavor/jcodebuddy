@@ -79,7 +79,7 @@ public final class DivergenceReporter implements hr.hrg.jcodebuddy.engine.Diagno
             "deep_tracking_type_not_enabled",
             // hipster-ioc context generation (DEC-036): the generator's own refusals and skips.
             "circular_dependency_unmarked",
-            "circular_dependency_marked_unsupported",
+            "circular_dependency_needs_supplier",
             "lazy_bean_needs_factory",
             "context_implementation_present");
 

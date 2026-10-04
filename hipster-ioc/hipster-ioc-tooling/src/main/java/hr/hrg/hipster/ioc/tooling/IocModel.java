@@ -37,6 +37,24 @@ public final class IocModel {
      *                 edge is allowed to close a cycle
      */
     public record Parameter(String typeText, String name, boolean circular) {
+
+        /**
+         * The type argument when this parameter is written as a {@code Supplier<X>}, else {@code null}.
+         *
+         * <p>This is the spelling DEC-036 § 5 settled on for a marked circular edge: the annotation says the edge
+         * closes a cycle, and the JDK type says how it is resolved — after construction, by calling the context's
+         * own accessor. Both {@code Supplier<X>} and its fully qualified form are accepted, and a raw
+         * {@code Supplier} (no type argument) is not: there would be nothing to resolve against.</p>
+         */
+        public String suppliedType() {
+            String text = typeText == null ? "" : typeText.trim();
+            int start = text.lastIndexOf("Supplier<");
+            if (start < 0 || !text.endsWith(">")) {
+                return null;
+            }
+            String argument = text.substring(start + "Supplier<".length(), text.length() - 1).trim();
+            return argument.isEmpty() ? null : argument;
+        }
     }
 
     /**

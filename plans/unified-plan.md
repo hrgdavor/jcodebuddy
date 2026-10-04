@@ -2254,6 +2254,42 @@ marker? a setter convention?) **and** the metadata contract from 3.0a — whethe
 part of a cycle is a question about the relations index, not about one file.
 **Schedulable when:** that spelling is in DEC-036 and an `@Circular` cycle generates running code.
 
+**Done 2026-10-03 — the spelling is `@Circular Supplier<Bean>`, and the cycle runs.** The shape question was mine to
+answer rather than one of the deferred decisions, and the maintainer's standing answer ("free to change the
+generated shape", 2026-10-03) covers it; what the step demanded is that the answer be *written in DEC-036 first*, so
+DEC-036 § 5 gained a second amendment naming the form before any code changed:
+
+- **The annotation keeps its meaning and the JDK type supplies the mechanism.** `@Circular` says "this edge closes a
+  cycle"; `Supplier<Bean>` says how — resolved after construction, by calling the context's own accessor. That was
+  the gap the first amendment described, and the type is what closes it: no new marker, no setter convention, no
+  change to the user's bean classes.
+- **A marked edge is not an ordering edge.** The supplier is only called after the context exists, which is exactly
+  what breaks the cycle: `buildA(@Circular Supplier<B> b)` with `buildB(A a)` now sorts as A then B, where before the
+  two could not be sorted at all.
+- **The generated argument is `() -> b()`** — a call to the accessor of the bean it supplies, so the deferral is
+  ordinary source a stock IDE can navigate (DEC-019), not a lazy proxy and not reflection.
+- **The two ways a marked edge can be wrong are answered rather than guessed.** `@Circular B b` (not a `Supplier`) is
+  refused with the new **`circular_dependency_needs_supplier`**, which names the shape it wants; a `Supplier<X>` whose
+  `X` names no bean this context builds becomes an ordinary constructor parameter, so the caller supplies it — the
+  rule the generator already applied to every unresolved parameter.
+- **`circular_dependency_marked_unsupported` is retired**, and the project's own guard made that a two-file change:
+  `ExampleDivergenceReportTest` requires every kind in `DivergenceReporter.KINDS` to name a producer, so the retired
+  kind left the vocabulary and the new one joined it in the same commit. A vocabulary entry nothing can produce is a
+  promise rather than a diagnostic, which is why the bookkeeping could not be skipped.
+- **`circular_dependency_unmarked` is untouched**: a cycle nobody marked is still refused, because accepting it would
+  mean guessing which edge the user meant.
+
+**The proof is that it runs, not that it renders.** The new test generates the cycle fixture, compiles it with the JDK
+running the test, then loads it in a `URLClassLoader`, builds the context and asks each bean for its peer: `a.peer()`
+is the very `b` the context built, and `b.peer()` is that same `a`. A string-matching test could not tell a closed
+cycle from a lambda returning `null`, which is why the fixture's bean classes are public and in their own files rather
+than package-private in one — that is what makes "run it" possible without reflection tricks a later reader would
+weaken.
+
+**Evidence:** `-pl hipster-ioc/hipster-ioc-tooling,hipster-entity/hipster-entity-tooling -am clean test` → BUILD
+SUCCESS: `hipster-ioc-tooling` **13 tests** (one replaced by two — the generated-and-running cycle, and the
+not-a-`Supplier` refusal) and `hipster-entity-tooling` 466 · the recorded gate → BUILD SUCCESS · LINKS green.
+
 ### 3.5 — `init*` methods in creation order
 **Who:** agent · **Size:** S once the shape is known
 
