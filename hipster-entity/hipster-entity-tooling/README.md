@@ -3,6 +3,13 @@
 The **generator and validator** module for
 [`hipster-entity`](../../doc-hipster-entity/README.md).
 
+**Kind: project-scoped.** `EntityMetadataGenerator` takes a source root and a package
+list and writes generated Java plus `.jcodebuddy/metadata/entity/…`, so it has no
+per-file entry point to be offered one file through — a generator that needs the
+project's type relations is a different kind of program, not a file generator with a
+bigger appetite (the plan's charter § 2.8, and the engine's two SPIs in
+[`jcodebuddy-core`](../../jcodebuddy/jcodebuddy-core/README.md)).
+
 It reads hand-written view interfaces through OpenRewrite's Lossless Semantic
 Tree and writes the companion boilerplate back into the source tree: the field
 enum, the record, the `Write` interface, the builders, the tracking builder and

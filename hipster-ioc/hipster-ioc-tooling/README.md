@@ -92,19 +92,18 @@ generator (DEC-027/029).
 
 ## Boundaries
 
-- **This is not a standalone, per-file generator — use the script, not the interface.** It implements the
-  shared `CodeGenerator` SPI, whose contract is "offer me any file and I will answer about that file", but
-  it needs a file *beside* the one it is given: the context's own compilation unit holds the interface,
-  while the `default buildXxx(...)` factories live in the module interface in the **sibling**
-  `<Supertype>.java`. It also writes `<module>/.jcodebuddy/metadata/hipster-ioc/contexts.json`, which
-  describes the whole tree. Run it through `bun scripts/ioc-gen.js`, which walks a source root. The tier
-  distinction is being made explicit in
-  [the plan's step 7.8](../../plans/unified-plan.md) and recorded in
-  [DEC-036 § 11](../../doc-hipster-entity/architecture/decisions/DEC-036.md); until then, a caller holding a
-  list of generators must not hand this one an isolated file — and if a sibling module interface cannot be
-  read, that is a missing neighbour to report, never an absence to infer.
+- **Kind: project-scoped.** It is a `ProjectGenerator` — metadata in, code out — and **not** a file-scoped
+  `CodeGenerator`, which it stopped implementing in step 3.0e. The distinction is a type rather than a comment
+  (`hr.hrg.jcodebuddy.engine.codegen`), so a caller holding a list of file-scoped generators cannot be handed this
+  one at all: it is offered the project's **metadata** (the class index and the typed queries over it) and never a
+  lone file. That is not a difference of appetite — the context's own compilation unit holds the interface, while the
+  `default buildXxx(...)` factories live in the module interface, and "who extends whom" is in no single file — so a
+  caller offering it one file would get *inferred absences* rather than errors. It also produces
+  `<module>/.jcodebuddy/metadata/hipster-ioc/contexts.json`, which describes the whole tree. Run it through
+  `bun scripts/ioc-gen.js` (the CLI half of DEC-036 § 11), or let the dev-time pass drive it (step 3.9). A sibling
+  module interface that cannot be read is a missing neighbour to **report**, never an absence to infer.
 - It does **not** depend on `project-automation`; another module must never depend on a project's private
-  dev-time assistant, and this one implements the shared `CodeGenerator` SPI instead (AGENTS.md § 1.1).
+  dev-time assistant (AGENTS.md § 1.1). The pass drives the generator, never the other way round.
 - It reads Java through **OpenRewrite's LST** via `hipster-entity-tooling` (DEC-030); there is no second
   parser here.
 - It generates into the consuming module's own sources, never into `.jcodebuddy/` (DEC-026).

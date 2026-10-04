@@ -14,7 +14,7 @@ decides what the model is not allowed to lose.
 | `engine.meta`    | file-scoped facts — `SourceMetadata`, `TypeInfo` and friends, as written |
 | `engine.index`   | the class index of DEC-029: `ClassRecord` per declaration — kind, modifiers, relations, annotations, **members**, and the file's checksum identity |
 | `engine.query`   | `MetadataQuery` (relations, annotations, members, kind/modifier/package/path) and the generator-facing `TypeResolver` / `TypeDefinition` seam |
-| `engine.codegen` | the generator SPI: `CodeGenerator`, `CodeContext`, `CodeContextImpl`     |
+| `engine.codegen` | the two generator SPIs, and they are unrelated types on purpose: `CodeGenerator`/`CodeContext` is **file-scoped** (one file is all that matters, so a caller may offer it to every file), `ProjectGenerator`/`ProjectContext` is **project-scoped** (metadata in, code out, never a single file). Neither extends the other, so no caller can mix them by accident |
 | `engine.fresh`   | the freshness contract — `SAFE` / `STALE` / `UNKNOWN` — so a consumer can tell whether an answer is safe to generate from |
 
 The marker vocabulary that used to live here is **not** here: step 3.0l moved it to `jcodebuddy-generated`, so

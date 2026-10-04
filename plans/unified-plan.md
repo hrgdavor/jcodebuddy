@@ -2995,6 +2995,29 @@ type produces a diagnostic instead of an empty answer.
 **Done when:** a caller holding a generator list can tell the kinds apart without reading the generator's
 source, and no project-wide generator implements the file-scoped interface.
 
+**Done 2026-10-03.** The distinction is now a **type in the engine** rather than a paragraph: `engine.codegen`
+holds `CodeGenerator`/`CodeContext` (file-scoped) and the new **`ProjectGenerator`/`ProjectContext`**
+(project-scoped — metadata in, code out, handed the class index and the typed queries and never a single file).
+Neither interface extends the other, so a caller holding file-scoped generators cannot be handed a project-scoped
+one: the compiler enforces what the rule asked for, which is the point of putting it in the SPI at all.
+
+`GeneratorKindsTest` (3 tests, `jcodebuddy-core`) pins the three things the Gate asked for: the kinds are unrelated so
+no caller can mix them; **a wrapper's kind follows its delegate** and is exactly one kind (both wrappers are fixtures
+in the test, since `ActionToolAdapter` was deleted in step 3.0s — a shape to hold to, not a class to fix); and **an
+unresolvable type is reported rather than inferred absent** (`ClassIndex.answer` gives `TypeAnswer.NotIndexed` with a
+cause saying what is missing — the `TypeAnswer` machinery already existed, so this was pinning it, not building it).
+
+The two clarifications this step forced were already in the charter (§ 2.8) and are now in the decision as well:
+**a generator's kind is what it reads, a pass's kind is what it writes** (the IoC generator returns text,
+`IocGeneration` writes the graph), and the delegable case stated as a contract. DEC-036 § 11's amendment records the
+classification, its "until 3.0e lands" sentence is discharged (3.0e landed: the generator no longer implements
+`CodeGenerator` and parses nothing), and each generator's kind is now on its own README — `hipster-ioc-tooling`
+(project-scoped), the engine's table in `jcodebuddy-core`, and `hipster-entity-tooling`'s `EntityMetadataGenerator`
+(project-scoped by construction).
+
+**Gate:** `bun scripts/mvn-jdk25.js -pl :jcodebuddy-core,:jcodebuddy-agent -am clean package` green, with the cache
+on.
+
 ### 7.9 — Set up the `jsx6` checkout every UI must be built from
 **Who:** agent · **Size:** S–M
 
