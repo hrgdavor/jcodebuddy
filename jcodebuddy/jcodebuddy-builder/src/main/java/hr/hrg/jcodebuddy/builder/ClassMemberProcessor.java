@@ -30,7 +30,7 @@ import java.util.List;
  *       is to generate their text and put them in the class;</li>
  *   <li>returning {@code cu.toString()} re-printed the <strong>whole file</strong>, so an unrelated
  *       formatting difference anywhere in it became part of the edit. Splicing changes only the class
- *       body, which is the property {@link SourceSplicer} already established for records.</li>
+ *       body, which is the property {@link RecordBuilderEmitter} already established for records.</li>
  * </ul>
  *
  * <p>This is the same move that ported {@code JwaTextDocumentService} to
@@ -42,7 +42,7 @@ import java.util.List;
  * <p>The LST answers everything structural: which class is nearest the caret, what its fields are, and
  * which members it already declares. It cannot answer <em>where</em> anything is — an LST node has no
  * positions — so the caret arithmetic and the body braces come from javac ({@link LineLookup}) and from
- * brace matching over the text, exactly as {@link SourceSplicer} does it.</p>
+ * brace matching over the text, exactly as {@link hr.hrg.jcodebuddy.engine.source.SourceSplicer} does it.</p>
  */
 public final class ClassMemberProcessor {
 
@@ -436,7 +436,7 @@ public final class ClassMemberProcessor {
      * class's own indentation.
      *
      * <p>Everything outside the class body is untouched, and the class's existing members keep their
-     * text: the insert is a single substring splice, which is what {@link SourceSplicer} does for a
+     * text: the insert is a single substring splice, which is what {@link RecordBuilderEmitter} does for a
      * record and for the same reason.</p>
      */
     private String splice(String source, Target target, List<String> members) {

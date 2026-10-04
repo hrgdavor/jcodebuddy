@@ -39,7 +39,7 @@ import java.util.Set;
  *       identity bookkeeping, no sweep for stale members, and no member-reordering pass.</li>
  *   <li><strong>Formatting becomes ours.</strong> The printer existed because it reformats; this module
  *       used it to protect everything outside the record, then still had to re-indent the record's own
- *       text line by line. {@link SourceSplicer} applies the indent where the text is built.</li>
+ *       text line by line. {@link RecordBuilderEmitter} applies the indent where the text is built.</li>
  *   <li><strong>Nothing here builds a tree.</strong> Deliberate, and it is this module's answer to the
  *       emission-strategy question the migration guide leaves open: a builder is <em>appended</em> to a
  *       record, so text generation is the direct expression of the intent, while a {@code withXxx}
@@ -133,7 +133,7 @@ public class RecordBuilderProcessor {
 
     /** {@code recordText} with its builder completed. */
     public String complete(String recordText, String recordName, List<Component> components) {
-        return SourceSplicer.withBuilder(recordText, recordName, components, indent);
+        return RecordBuilderEmitter.withBuilder(recordText, recordName, components, indent);
     }
 
     /**
@@ -218,7 +218,7 @@ public class RecordBuilderProcessor {
         ExecutionContext context = new InMemoryExecutionContext();
         // Nothing is written back from this tree, and the inputs are fragments rather than compilation
         // units, so the print-idempotency guard is off. It is *not* off for generation: the text this
-        // class returns is produced by SourceSplicer, never by printing a tree.
+        // class returns is produced by RecordBuilderEmitter, never by printing a tree.
         context.putMessage("org.openrewrite.requirePrintEqualsInput", false);
         JavaParser parser = JavaParser.fromJavaVersion().build();
         Path path = parser.sourcePathFromSourceText(Path.of("Record.java"), source);

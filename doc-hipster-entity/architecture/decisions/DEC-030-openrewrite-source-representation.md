@@ -106,6 +106,16 @@ Two lines are different facts and are kept as different queries:
 Generators **splice generated text into the original source** (`SourceSplicer`).
 They do not build a tree and print it.
 
+> **Where the splicer lives, named 2026-10-03 (step 3.0n closed DEC-038 decision 5).** This decision named
+> `SourceSplicer` without saying which module owned it, and the gap was filled twice: `jcodebuddy-core` had one
+> (with the engine's reading path) and `jwa-builder` had another, with `matchingBrace` and `lineIndentBefore`
+> character-for-character identical in both. That is exactly the "two behaviours for the same operation" this
+> decision forbids, so the duplicate is deleted and **the home is `jcodebuddy-core`, in
+> `hr.hrg.jcodebuddy.engine.source`** — a generator that splices depends on the engine rather than carrying its
+> own copy of the primitives (the builder's emitter does, and its POM says why). The survivor also gained the
+> deleted copy's better header scan: it stops at a `;`, so a bodyless record cannot make a splice land in the
+> next declaration's body.
+
 This is not a workaround for immutability; it is the direct expression of
 DEC-020's rule that a developer's member is preserved **verbatim**, comment and
 indentation included. A printer normalises whitespace — during the migration it

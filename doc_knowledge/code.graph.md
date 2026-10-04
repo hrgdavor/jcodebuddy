@@ -310,20 +310,27 @@ print it.
 String updated = SourceSplicer.withMembers(source, typeName, members, indent);
 ```
 
-Why not reprint? Because reprinting reformats. The rule that makes cooperative
-codegen work (DEC-020) is that a generator preserves a developer's member
-**verbatim** — including the comment above it and the indentation of everything
-around it. A printer normalises whitespace; on this migration it even changes the
-generic comma above. So the text is sliced out of the original using the offsets
-javac recorded, and everything the generator did not touch is byte-identical by
-construction.
+**There is exactly one splicer, and it lives in the engine** —
+`hr.hrg.jcodebuddy.engine.source.SourceSplicer`, in `jcodebuddy-core`. That sentence is here because this section
+used to be a table of one splicer *per module*, which is how two of them came to exist (DEC-038 decision 5, closed
+by step 3.0n). A generator that needs to splice either calls `withMembers` or builds on the four primitives the
+splicer publishes — `bodyOpenOffset`, `bodyCloseOffset`, `matchingBrace`, `lineIndentBefore` — and does not write
+its own brace matcher. The primitives are public for that reason, and the two implementations that used to exist
+differed in a way that mattered: the deleted one stopped at a `;` in the declaration header, the survivor scanned
+for the next `{`. A bodyless record (`record Point(int x, int y);`) therefore used to make it splice into the
+*next* declaration's body, and that behaviour moved into the survivor before the copy went.
 
 Where the modules do it:
 
-| Module                   | Splicer                     | What it inserts                                                                           |
-| ------------------------ | --------------------------- | ----------------------------------------------------------------------------------------- |
-| `hipster-entity-tooling` | `SourceSplicer.withMembers` | generated members into a hand-written view interface                                      |
-| `jwa-builder`            | `SourceSplicer.withBuilder` | the `builder()` / `toBuilder()` entry points and the nested `Builder` class into a record |
+| Module                             | Entry point                           | What it inserts                                                                           |
+| ---------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `hipster-entity-tooling`           | `SourceSplicer.withMembers`           | generated members into a hand-written view interface                                      |
+| `jcodebuddy-builder` (its emitter) | `RecordBuilderEmitter.withBuilder`    | the `builder()` / `toBuilder()` entry points and the nested `Builder` class into a record, spliced through the engine's primitives |
+
+The second row is a **generator**, not a splice path: it owns *which* members a record's builder needs and how a
+previous copy is recognised and stripped, and it borrows the anchor from the engine rather than carrying its own.
+Its name says so now — as `SourceSplicer` it claimed to be the generic splicer, which is how a second one survives
+a review that is looking for two of the same thing.
 
 Recognition of a generator's **previous** output is by name and structure, not by
 a marker comment: the generator sees the member it would have emitted and replaces

@@ -418,7 +418,8 @@ canonical statement of a boundary that has no other home.
     `J.ClassDeclaration` covers five kinds, an interface's `extends`
     clause is held in `getImplements()`, and an empty parameter list
     is a single `J.Empty`.
-  - **writing** — generators **splice into text** (`SourceSplicer`)
+  - **writing** — generators **splice into text** (`SourceSplicer`,
+    the single one, in `jcodebuddy-core`'s `engine.source`; step 3.0n collapsed the second copy)
     rather than reprinting a tree, because reprinting reformats the
     hand-written code around the change. The tree is read for its
     shape and then discarded.

@@ -20,6 +20,14 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>jcodebuddy-builder-api</artifactId>
         </dependency>
+        <!-- The engine, for the one splice path. Step 3.0n collapsed the second `SourceSplicer` this module used to
+             carry; the survivor lives in `jcodebuddy-core` (`engine.source.SourceSplicer`), so a generator that
+             splices declares the dependency rather than owning a copy of the primitives. This is the same shape
+             `hipster-entity-tooling` already has. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-core</artifactId>
+        </dependency>
         <!-- OpenRewrite, arriving as JavaParser leaves (Phase 6 of the rewrite-migration plan).
              `rewrite-java` is a facade needing exactly one version-specific parser, and
              `rewrite-java-25` is the only OpenRewrite artifact the parent does not manage. -->

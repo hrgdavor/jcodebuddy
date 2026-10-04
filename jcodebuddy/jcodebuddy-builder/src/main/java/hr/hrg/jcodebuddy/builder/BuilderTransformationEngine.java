@@ -27,7 +27,7 @@ import java.util.Map;
  *       record. The edit is a range replacement whose replacement text is generated, so the
  *       surrounding text is never touched — preserved by construction rather than by a printer
  *       setting.</li>
- *   <li><strong>No post-hoc indentation pass.</strong> {@code SourceSplicer} applies the indent as it
+ *   <li><strong>No post-hoc indentation pass.</strong> {@link RecordBuilderEmitter} applies the indent as it
  *       builds the text, reading the record's own indentation so a nested record comes out right.</li>
  *   <li><strong>No {@code Range}.</strong> The LST exposes no positions, so the record's span and line
  *       come from javac's line map ({@link LineLookup}).</li>

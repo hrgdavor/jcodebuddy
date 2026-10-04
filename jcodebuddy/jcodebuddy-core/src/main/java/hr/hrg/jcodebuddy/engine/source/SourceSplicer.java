@@ -52,11 +52,7 @@ public final class SourceSplicer {
         if (source == null || typeName == null || members == null || members.isEmpty()) {
             return source;
         }
-        int name = declarationNameOffset(source, typeName);
-        if (name < 0) {
-            return source;
-        }
-        int bodyOpen = source.indexOf('{', name);
+        int bodyOpen = bodyOpenOffset(source, typeName);
         if (bodyOpen < 0) {
             return source;
         }
@@ -128,8 +124,14 @@ public final class SourceSplicer {
         return -1;
     }
 
-    /** The offset of the brace matching the one at {@code open}, or {@code -1}. */
-    private static int matchingBrace(String source, int open) {
+    /**
+     * The offset of the brace matching the one at {@code open}, or {@code -1}.
+     *
+     * <p>Public because it is one of the four primitives a splice is built from, and a generator that walks a
+     * declaration's own body — to recognise and strip the members it emitted before, say — needs the same brace
+     * matching the splicer uses rather than a second copy of it. The copy is what step 3.0n deleted.</p>
+     */
+    public static int matchingBrace(String source, int open) {
         int depth = 0;
         for (int index = open; index < source.length(); index++) {
             char character = source.charAt(index);
@@ -145,8 +147,58 @@ public final class SourceSplicer {
         return -1;
     }
 
-    /** The whitespace at the start of the line containing {@code offset}. */
-    private static String lineIndentBefore(String source, int offset) {
+    /**
+     * Where the declaration named {@code typeName} opens its body — <strong>the one place a splice is
+     * anchored</strong>, and the answer step 3.0n made shared.
+     *
+     * <p>From the name, the next {@code {} opens the body and a {@code ;} ends the header instead: a record
+     * written {@code record Point(int x, int y);} has no body to put a member in, and the earlier version of this
+     * method — an {@code indexOf('{', name)} — would have found the <em>next</em> declaration's brace and spliced
+     * a member into the wrong type. That care came from the second implementation this method replaced, which is
+     * the useful half of having had two: the survivor is now the more correct of the two.</p>
+     *
+     * @return the offset of the body's opening brace, or {@code -1} when the declaration or its body is absent
+     */
+    public static int bodyOpenOffset(String source, String typeName) {
+        if (source == null || typeName == null) {
+            return -1;
+        }
+        int name = declarationNameOffset(source, typeName);
+        if (name < 0) {
+            return -1;
+        }
+        for (int index = name + typeName.length(); index < source.length(); index++) {
+            char character = source.charAt(index);
+            if (character == '{') {
+                return index;
+            }
+            if (character == ';') {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Where the declaration named {@code typeName} closes its body, or {@code -1}.
+     *
+     * <p>The other half of the anchor: a member is inserted immediately before this offset, which is what makes
+     * everything outside the insertion point byte-identical.</p>
+     */
+    public static int bodyCloseOffset(String source, String typeName) {
+        int bodyOpen = bodyOpenOffset(source, typeName);
+        return bodyOpen < 0 ? -1 : matchingBrace(source, bodyOpen);
+    }
+
+    /**
+     * The whitespace at the start of the line containing {@code offset} — the indentation a generated member
+     * inherits from its owner.
+     *
+     * <p>Public because a generator that anchors its own insertion (a record's builder members, say) needs the same
+     * answer as the splicer, and reading the owner's own line is the only way not to assume a column: a nested type
+     * is already indented.</p>
+     */
+    public static String lineIndentBefore(String source, int offset) {
         int lineStart = source.lastIndexOf('\n', Math.max(offset - 1, 0)) + 1;
         StringBuilder indent = new StringBuilder();
         for (int index = lineStart; index < source.length(); index++) {

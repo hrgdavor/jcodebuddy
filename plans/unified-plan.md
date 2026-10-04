@@ -1294,10 +1294,39 @@ directory is its package, and refuses to pass when it verified nothing.
   would catch a `watch/` module depending on the builder still would, which is the outcome to want — a rule that
   only catches the names it was written against is a rule with a hole in it.
 
-**3.0n-b remains, and it is the substantive half.** Two `SourceSplicer` implementations still exist —
-`jcodebuddy-core`'s (151 lines, DEC-030's declared home) and `jcodebuddy-builder`'s (306 lines, with `LineLookup`
-beside it) — and one must go, with whatever the survivor needs ported into it. That is not a rename and does not
-belong in a rename's commit.
+**3.0n-b landed 2026-10-03 — one splice path, and the grep proves it.** `grep 'class SourceSplicer'` now returns
+**one** file: `jcodebuddy-core`'s `engine.source.SourceSplicer`. What the deleted copy contained was not a second
+splicer so much as a second *copy of the primitives* inside a domain class: `matchingBrace` and `lineIndentBefore`
+were **character-for-character identical** to the engine's, and the table in
+[`code.graph.md`](../doc_knowledge/code.graph.md) listed one "Splicer" per module — which is how two came to exist,
+and why that table is now one row for the engine plus a row for a **generator** that borrows it.
+
+**The collapse went both ways, which is the useful half of having had two.** The engine's anchor scanned for the
+next `{` from the declaration name, so a bodyless record (`record Point(int x, int y);`) would have made it splice
+into the *next* declaration's body. The deleted copy stopped at the `;` instead, and that behaviour moved into the
+survivor before the copy went. The survivor also publishes the four primitives the anchor is built from —
+`bodyOpenOffset`, `bodyCloseOffset`, `matchingBrace`, `lineIndentBefore` — because that is the difference between
+sharing a splice path and copying one.
+
+**What the builder keeps is what is not a splice question**: which members a record's builder needs, how a previous
+copy is recognised by shape and stripped so a pass is idempotent, and how the text is rendered. It is now
+`RecordBuilderEmitter` rather than `SourceSplicer` — as `SourceSplicer` it claimed to be the generic splicer, which
+is precisely how a second one survives a review that is looking for two of the same thing.
+
+**The dependency is declared rather than implied.** `jcodebuddy-builder` never needed the engine before, so its POM
+did not depend on it, and the first build after the collapse failed exactly there: Maven built the builder *before*
+the engine and reported `package hr.hrg.jcodebuddy.engine.source does not exist`. The fix is the honest one for a
+codegen module that splices — declare `jcodebuddy-core`, the shape `hipster-entity-tooling` already has — and its
+POM says why.
+
+**The three documents that named the splicer without saying where it lives now say it**: DEC-030 § 4 (with the
+amendment that closes DEC-038 decision 5), `code.graph.md`'s writing section, and `AGENTS.md` § 2's writing bullet.
+That missing home is the root cause the step named, and it is closed rather than restated.
+
+**Evidence:** `class SourceSplicer` → one file (the engine's, now 201 lines carrying the four primitives) ·
+`-pl jcodebuddy-core,jcodebuddy-builder,jcodebuddy-agent,jcodebuddy-watch-tools,webview/jwa-sidecar,project-automation,hipster-entity/hipster-entity-tooling -am test`
+→ BUILD SUCCESS, 16 reactors (builder 40, agent 15, sidecar 24, tooling 466, meta 24, mcp 8, project-automation 89) ·
+the recorded gate → BUILD SUCCESS · LINKS green.
 
 ### 3.0o — Group the reactor's modules (DEC-039)
 **Who:** agent · **Size:** M
