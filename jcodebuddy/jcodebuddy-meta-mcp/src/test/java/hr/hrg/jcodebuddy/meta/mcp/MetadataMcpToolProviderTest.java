@@ -22,7 +22,7 @@ import java.util.Map;
  * the surface is what an AI harness sees, and a tool that only <em>looks</em> registered fails at the
  * moment somebody depends on it. So each of the six is exercised here, together with the two shapes that
  * are easy to get wrong: a missing argument (an error result, not a thrown exception) and
- * {@code parse_file} against a provider that has no parser (DEC-W008's default refusal, which must arrive
+ * {@code parse_file} against a provider that refuses it (a named refusal, which must arrive
  * as a tool error rather than as a broken session).</p>
  */
 class MetadataMcpToolProviderTest {
@@ -62,8 +62,8 @@ class MetadataMcpToolProviderTest {
         }
     }
 
-    /** A provider without a parser: what a third-party provider looks like, and DEC-W008's default case. */
-    static class NoParserProvider implements MetadataProvider {
+    /** A provider that REFUSES to parse: an explicit choice now that the interface's default parses through the engine. */
+    static class RefusingProvider implements MetadataProvider {
         @Override
         public CacheEntry get(String hash) { return null; }
 
@@ -75,6 +75,11 @@ class MetadataMcpToolProviderTest {
 
         @Override
         public List<String> listClasses() { return List.of(); }
+
+        @Override
+        public CacheEntry parse(String relativePath, byte[] sourceBytes) {
+            throw new hr.hrg.jcodebuddy.meta.MetadataParseUnsupportedException(getClass().getName());
+        }
     }
 
     private static MetadataMcpToolProvider tools(MetadataProvider provider) {
@@ -183,15 +188,15 @@ class MetadataMcpToolProviderTest {
      * has to come from a cache-backed route instead.</p>
      */
     @Test
-    void aProviderWithNoParserReportsAToolErrorRatherThanThrowing() {
-        MetadataMcpToolProvider provider = tools(new NoParserProvider());
+    void aProviderThatRefusesParseReportsAToolErrorRatherThanThrowing() {
+        MetadataMcpToolProvider provider = tools(new RefusingProvider());
 
         CallToolResult result = provider.parseFile(null,
                 request("parse_file", Map.of("relPath", "demo/Demo.java", "source", "package demo;\n")));
 
         Assertions.assertEquals(Boolean.TRUE, result.isError());
         Assertions.assertTrue(text(result).contains("no source parser"), text(result));
-        Assertions.assertTrue(text(result).contains("NoParserProvider"), text(result));
+        Assertions.assertTrue(text(result).contains("RefusingProvider"), text(result));
 
         // And the cache-backed tools are unaffected by the absence: the addition is additive.
         CallToolResult listed = provider.listEntries(null, request("list_entries", Map.of()));

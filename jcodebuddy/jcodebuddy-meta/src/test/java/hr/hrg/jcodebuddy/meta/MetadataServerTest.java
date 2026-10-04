@@ -81,7 +81,36 @@ class MetadataServerTest {
      * A provider that implements only the four cache-backed methods: what a third-party provider looks
      * like, and the case DEC-W008's default has to answer for.
      */
-    static class NoParserProvider implements MetadataProvider {
+    /**
+     * A provider that <em>chooses</em> to refuse {@code parse}: the named-failure path, and the only way to reach
+     * it now that the interface's default parses through the engine.
+     *
+     * <p>Before 2026-10-03 this class was {@code NoParserProvider} — a provider with no override at all, which the
+     * default answered with a refusal because the module had no source reader on its classpath. It has one now
+     * (plan step 3.0j), so refusing is a decision a provider makes, and the RPC surface still has to report it as
+     * a named failure rather than an invented entry.</p>
+     */
+    static class RefusingProvider implements MetadataProvider {
+        @Override
+        public CacheEntry get(String hash) { return null; }
+
+        @Override
+        public List<CacheEntry> listEntries() { return List.of(); }
+
+        @Override
+        public boolean hasChanged(String relPath, String checksum) { return true; }
+
+        @Override
+        public List<String> listClasses() { return List.of(); }
+
+        @Override
+        public CacheEntry parse(String relativePath, byte[] sourceBytes) {
+            throw new MetadataParseUnsupportedException(getClass().getName());
+        }
+    }
+
+    /** A provider that overrides nothing but the four cache methods: the default has to carry {@code parse}. */
+    static class CacheOnlyProvider implements MetadataProvider {
         @Override
         public CacheEntry get(String hash) { return null; }
 
@@ -206,9 +235,9 @@ class MetadataServerTest {
      * cache-backed methods untouched — which is what "additive" has to mean for a third-party provider.
      */
     @Test
-    void aProviderWithNoParserFailsLoudlyAndOnlyForParseFile() throws Exception {
+    void aProviderThatRefusesParseFailsLoudlyAndOnlyForParseFile() throws Exception {
         int port = 18080 + (int) (Math.random() * 1000);
-        httpTransport = new HttpTransport(port, new NoParserProvider());
+        httpTransport = new HttpTransport(port, new RefusingProvider());
         httpTransport.start();
 
         URL url = new URL("http://localhost:" + port + "/api/json");
@@ -226,14 +255,14 @@ class MetadataServerTest {
         }
         try (InputStream is = conn.getInputStream()) {
             Map<?,?> res = mapper.readValue(is, Map.class);
-            assertNull(res.get("result"), "no entry can be invented for a provider with no parser");
+            assertNull(res.get("result"), "no entry can be invented for a provider that refuses to parse");
             Map<?,?> error = (Map<?,?>) res.get("error");
             assertNotNull(error, "the caller gets an error it can act on");
             assertEquals(-32603, error.get("code"));
             String message = String.valueOf(error.get("message"));
             assertTrue(message.contains("no source parser"),
                     "and the message names the thing to change: " + message);
-            assertTrue(message.contains("NoParserProvider"),
+            assertTrue(message.contains("RefusingProvider"),
                     "including which provider was asked: " + message);
         }
 
@@ -253,6 +282,43 @@ class MetadataServerTest {
             Map<?,?> res = mapper.readValue(is, Map.class);
             assertTrue(((List<?>) res.get("result")).isEmpty(),
                     "listEntries is unchanged by the addition");
+        }
+    }
+
+    /**
+     * DEC-W008's original requirement, at the transport surface: a provider that overrides nothing but the cache
+     * methods still answers {@code parseFile}, because the interface's default parses through the engine.
+     *
+     * <p>The decision asked for a default that "works correctly regardless of whether overriding exists", and its
+     * amendment recorded why it could not have one. It can now, and this is the assertion that the RPC surface
+     * benefits: no provider has to be told how Java is spelled.</p>
+     */
+    @Test
+    void aProviderWithNoParseOverrideStillAnswersParseFile() throws Exception {
+        int port = 18080 + (int) (Math.random() * 1000);
+        httpTransport = new HttpTransport(port, new CacheOnlyProvider());
+        httpTransport.start();
+
+        URL url = new URL("http://localhost:" + port + "/api/json");
+        URLConnection conn = url.openConnection();
+        conn.setDoOutput(true);
+        conn.setRequestProperty("Content-Type", "application/json");
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(mapper.writeValueAsString(Map.of(
+                    "jsonrpc", "2.0",
+                    "id", "12",
+                    "method", "parseFile",
+                    "params", Map.of("relPath", "demo/hr/PersonSummary.java",
+                            "source", "package demo.hr;\npublic interface PersonSummary {}\n")
+            )).getBytes(StandardCharsets.UTF_8));
+        }
+        try (InputStream is = conn.getInputStream()) {
+            Map<?, ?> res = mapper.readValue(is, Map.class);
+            assertNull(res.get("error"), "no error: the default parsed it");
+            Map<?, ?> result = (Map<?, ?>) res.get("result");
+            assertNotNull(result, "the caller gets an entry");
+            assertEquals("demo.hr.PersonSummary", result.get("fullClassName"),
+                    "with the type named by the file's own name, from the engine's model");
         }
     }
 

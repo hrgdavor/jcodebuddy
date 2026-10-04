@@ -50,7 +50,7 @@ public class InMemoryMetadataCacheProvider implements MetadataProvider {
      * <p>It used to answer with two invented names — {@code com.example.Foo} and {@code com.example.Bar} — which
      * is a stub that reads like data: a caller asking the server "which classes are there" got a plausible answer
      * about a project that does not exist. The names now come from the entries
-     * {@link SourceMetadataParser} produced, so the answer is what this scan actually saw.</p>
+     * {@link hr.hrg.jcodebuddy.meta.IndexMetadataProvider} produced, so the answer is what this scan actually saw.</p>
      */
     @Override
     public List<String> listClasses() {
@@ -69,7 +69,7 @@ public class InMemoryMetadataCacheProvider implements MetadataProvider {
     }
 
     /**
-     * DEC-W008's no-cache path, and the reference implementation the provider interface's javadoc points
+     * DEC-W008's no-cache path, over the engine: the interface's own default, which this provider inherits rather than implements. The javadoc of the provider interface points
      * at: this module is where the source reader (OpenRewrite's LST, DEC-030) is on the classpath, so
      * this is the provider that can answer {@code parse} for real.
      *
@@ -80,7 +80,7 @@ public class InMemoryMetadataCacheProvider implements MetadataProvider {
      */
     @Override
     public CacheEntry parse(String relativePath, byte[] sourceBytes) {
-        return SourceMetadataParser.parse(relativePath, sourceBytes);
+        return hr.hrg.jcodebuddy.meta.IndexMetadataProvider.parseSource(relativePath, sourceBytes);
     }
 
     public void put(String key, CacheEntry entry) { entries.put(key, entry); }

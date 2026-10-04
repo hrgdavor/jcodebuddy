@@ -15,30 +15,41 @@
 > **IMPLEMENTATION STATUS (2026-10-01) — the P0 half is implemented; four points of the text below were
 > wrong and are corrected here.**
 >
+> **UPDATE 2026-10-03 — correction 1 below is itself corrected, and the requirement it waived is now met.**
+> The maintainer allowed `jcodebuddy-meta` to depend on `jcodebuddy-core` (plan step 3.0j), so the module that
+> owns this interface now has the repository's one source reader on its classpath and **the default `parse`
+> parses**: it delegates to `IndexMetadataProvider.parseSource`. This decision's original requirement — a default
+> that "works correctly regardless of whether overriding exists" — is therefore satisfied rather than waived, and
+> `MetadataParseUnsupportedException` is now what a provider *chooses* to throw rather than the only option.
+> The reference implementation moved with it: `parse` lives in `jcodebuddy-meta`, over the engine's model, and
+> `project-automation`'s `SourceMetadataParser` is deleted rather than left as a second assembly of the same
+> facts. The class-and-type half arrived at the same time: `IndexMetadataProvider` answers `listClasses`,
+> `get(hash)` and `hasChanged` from the class index, and `WatchMetadataProvider` delegates those questions to it
+> while keeping what only a watcher knows.
+>
 > **Implemented.**
 >
 > - `MetadataProvider.parse(String relativePath, byte[] sourceBytes)` exists on the interface
->   (`metadata-server`).
-> - The **reference implementation** is `project-automation`'s `SourceMetadataParser`, called from
->   `InMemoryMetadataCacheProvider.parse` — the override the "Implementation boundaries" section below
->   names. It is pure (it reads and writes nothing outside its two arguments), and its facts are
->   file-scoped only: the wayhash of the LF-normalised bytes (DEC-029 § 4), the primary type's fully
->   qualified name, the type's kind, and its declared method names.
+>   (`jcodebuddy-meta`), and its **default** is the engine-backed implementation.
+> - The **reference implementation** is `jcodebuddy-meta`'s `IndexMetadataProvider.parseSource`. It is pure (it
+>   reads and writes nothing outside its two arguments), and its facts are file-scoped only: the wayhash of the
+>   LF-normalised bytes (DEC-029 § 4), the types the file declares, the primary type's fully qualified name, the
+>   type's kind, and its declared method names.
 > - The additive surfaces exist: RPC `parseFile` in `MetadataRpcService` and MCP `parse_file` in
->   `MetadataMcpToolProvider`. Both leave the cache-backed methods untouched, and a provider with no
->   parser answers with a **named** failure (`MetadataParseUnsupportedException`) rather than a silent
->   `null` — the dispatcher turns it into a JSON-RPC error whose message names the provider.
-> - Tests: `SourceMetadataParserTest` (purity, CRLF/LF checksum equality, broken source, the
->   file-name rule for the primary type, and "what `parse` derives is what the cache then holds") plus two
->   `MetadataServerTest` cases for the RPC surface and for a provider with no parser.
+>   `MetadataMcpToolProvider`. Both leave the cache-backed methods untouched, and a provider that declines to
+>   parse answers with a **named** failure (`MetadataParseUnsupportedException`) rather than a silent `null` —
+>   the dispatcher turns it into a JSON-RPC error whose message names the provider.
+> - Tests: `IndexMetadataProviderTest` (purity, CRLF/LF checksum equality, broken source, the file-name rule for
+>   the primary type, and the index-backed class questions) plus `MetadataServerTest` cases for the RPC surface,
+>   for a provider that refuses to parse, and for one that overrides nothing and is parsed for anyway.
 >
 > **Corrected in this decision's text.**
 >
 > 1. **"The default behaviour of `parse` MUST work correctly" is not implementable in `metadata-server`.**
->    The default now throws `MetadataParseUnsupportedException`. A default that parses would need the
->    repository's one source reader — OpenRewrite's LST in `hipster-entity-tooling` (DEC-030) — and the
->    metadata server does not have it, by design. This decision's own boundary section left the location to
->    "module dependency resolution"; the resolution is that the implementation lives where the reader does.
+>    **Superseded 2026-10-03** — see the update above: the reader now lives in the engine, the provider module
+>    may depend on it, and the default parses. What was true when written, and is still true: a default that
+>    parses needs the repository's one source reader, and the module that owned the interface did not have it.
+>    That is why the location mattered rather than the requirement.
 > 2. **`SourceMetadata` does not exist as a type.** DEC-W007's model was never implemented, so `parse`
 >    returns the same `Map<String, Object>` payload the cache entries already carry. Inventing a parallel
 >    model here would have made the interface's two halves disagree on the day the model lands.

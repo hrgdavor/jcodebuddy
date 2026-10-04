@@ -36,10 +36,15 @@ class WatchMetadataProviderTest {
     }
 
     private static WatchMetadataProvider provider() {
+        return WatchMetadataProvider.of(watched());
+    }
+
+    /** The three facts a watch cache really has, as a map — no model, so the class questions have no answer. */
+    private static Map<String, WatchMetadataProvider.WatchedFile> watched() {
         Map<String, WatchMetadataProvider.WatchedFile> files = new HashMap<>();
         files.put("src/A.java", new WatchMetadataProvider.WatchedFile("src/A.java", "aaaa000000000001", 1000L));
         files.put("src/B.java", new WatchMetadataProvider.WatchedFile("src/B.java", "bbbb000000000002", 2000L));
-        return WatchMetadataProvider.of(files);
+        return files;
     }
 
     @Test
@@ -95,22 +100,95 @@ class WatchMetadataProviderTest {
     }
 
     @Test
-    void listClassesIsEmptyRatherThanAGuess() {
+    void withNoModelTheClassQuestionIsAnsweredEmptyRatherThanGuessed() {
         Assertions.assertEquals(List.of(), provider().listClasses(),
-                "the cache holds no class names; paths that look like Java files would be a guess "
-                        + "dressed as a fact");
+                "with no delegate the cache holds no class names, and paths that look like Java files would be a "
+                        + "guess dressed as a fact");
     }
 
     @Test
-    void parseRefusesByNameBecauseTheWatchCacheHasNoSourceParser() {
+    void withAModelTheClassQuestionIsAnsweredFromIt() {
+        // The maintainer's answer of 2026-10-03: the watcher keeps what only it knows — the files the index has no
+        // row for, their mtime, "what changed" — and the class and type questions go to the engine. This is the
+        // assertion that the empty answer above is a missing model rather than a missing capability.
+        MetadataProvider model = new MetadataProvider() {
+            @Override
+            public CacheEntry get(String hash) {
+                return new CacheEntry(hash, "demo.hr.PersonSummary", "src/A.java",
+                        Map.of("kind", "interface"));
+            }
+
+            @Override
+            public List<CacheEntry> listEntries() {
+                return List.of(get("aaaa000000000001"));
+            }
+
+            @Override
+            public boolean hasChanged(String relPath, String checksum) {
+                return false;
+            }
+
+            @Override
+            public List<String> listClasses() {
+                return List.of("demo.hr.PersonSummary");
+            }
+        };
+        WatchMetadataProvider provider = WatchMetadataProvider.of(watched(), model);
+
+        Assertions.assertEquals(List.of("demo.hr.PersonSummary"), provider.listClasses(),
+                "the types come from the model, so the answer is a fact rather than an empty list");
+        MetadataProvider.CacheEntry entry = provider.get("aaaa000000000001");
+        Assertions.assertEquals("demo.hr.PersonSummary", entry.fullClassName(),
+                "and an entry's type name comes from the model while its checksum and mtime stay the watcher's");
+        Assertions.assertEquals("watch-cache", entry.metadata().get("source"),
+                "the entry still says where its change facts came from");
+        Assertions.assertEquals("interface", entry.metadata().get("kind"), "and carries the kind the model knows");
+        Assertions.assertTrue(provider.hasChanged("src/New.java", "dddd000000000004"),
+                "while change is still answered by the watcher, which is the question it exists for");
+    }
+
+    @Test
+    void parseWorksThroughTheEngineAndAnExplicitRefusalStillNamesItself() {
+        // The interface's parse default is engine-backed now, so a provider that has not heard of Java still
+        // answers — DEC-W008's original requirement met rather than waived.
+        MetadataProvider.CacheEntry entry = provider()
+                .parse("demo/hr/PersonSummary.java", "package demo.hr;\npublic interface PersonSummary {}\n"
+                        .getBytes(StandardCharsets.UTF_8));
+        Assertions.assertEquals("demo.hr.PersonSummary", entry.fullClassName(),
+                "the watcher inherits the engine-backed parse instead of refusing by name");
+
+        // The refusal is still reachable, and still names the provider — it is an explicit choice now.
+        MetadataProvider refusing = new MetadataProvider() {
+            @Override
+            public CacheEntry get(String hash) {
+                return null;
+            }
+
+            @Override
+            public List<CacheEntry> listEntries() {
+                return List.of();
+            }
+
+            @Override
+            public boolean hasChanged(String relPath, String checksum) {
+                return true;
+            }
+
+            @Override
+            public List<String> listClasses() {
+                return List.of();
+            }
+
+            @Override
+            public CacheEntry parse(String relativePath, byte[] sourceBytes) {
+                throw new MetadataParseUnsupportedException("a-provider-that-says-no");
+            }
+        };
         MetadataParseUnsupportedException failure = Assertions.assertThrows(
                 MetadataParseUnsupportedException.class,
-                () -> provider().parse("src/A.java", "package src;\n".getBytes(StandardCharsets.UTF_8)));
-
-        Assertions.assertTrue(failure.getMessage().contains("WatchMetadataProvider"),
-                "the refusal names the provider that was asked: " + failure.getMessage());
-        Assertions.assertTrue(failure.getMessage().contains("no source parser"),
-                "and says what is missing: " + failure.getMessage());
+                () -> refusing.parse("src/A.java", "package src;\n".getBytes(StandardCharsets.UTF_8)));
+        Assertions.assertTrue(failure.getMessage().contains("a-provider-that-says-no"),
+                "an overriding provider still names itself: " + failure.getMessage());
     }
 
     @Test

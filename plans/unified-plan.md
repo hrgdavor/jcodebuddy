@@ -1071,10 +1071,30 @@ This is also where 3.0u's cache stops being a cache nobody calls. What moved:
   and a dead interface that documents a split nobody implements is exactly what "deleting the private paths as they
   go" means.
 
-**Still here: 3.0j-a (`jcodebuddy-meta`).** The provider interface and its serving shapes stay (the maintainer's
-answer), and the engine-backed implementation behind them — `parse` through the engine, class and type questions
-from the index, `WatchMetadataProvider` delegating what the watcher does not own — is the next commit, because a
-move that breaks a consumer must be visible as that move.
+**3.0j-a landed the same day, and it closed DEC-W008's oldest open requirement.** The maintainer allowed this module
+to depend on the engine, which did more than move a method:
+
+- **`MetadataProvider.parse`'s default now parses.** DEC-W008 required a default that "works correctly regardless of
+  whether overriding exists"; its amendment recorded why it could not have one — a default that parses needs the
+  repository's one source reader, and this module deliberately had none on its classpath. The reader lives in
+  `jcodebuddy-core` now, so the default is `IndexMetadataProvider.parseSource` and the requirement is **met rather
+  than waived**. `MetadataParseUnsupportedException` is still reachable and still names the provider — it is a
+  provider's explicit choice now, not the only option.
+- **`IndexMetadataProvider` is the class-and-type surface**: entries, `get(hash)`, `hasChanged` and `listClasses()`
+  from the index rows, plus `reading(indexFile, …)` for a table on disk (a missing one yields a provider that knows
+  nothing rather than an exception). A static method cannot hide an inherited instance method, which is why the entry
+  point is `parseSource` — the compiler caught the name before a reviewer had to.
+- **`WatchMetadataProvider` delegates.** It keeps what only a watcher knows — the files the index has no row for,
+  their mtime, "what changed" — and takes class and type questions from the model: `listClasses()` returns the
+  engine's types, an entry's `fullClassName` comes from the model while its checksum and mtime stay the watcher's,
+  and `parse` is inherited. With no delegate the answer is an empty list, which is now visibly a missing model
+  rather than a missing capability.
+- **The parse moved to where the contract lives.** `project-automation`'s `SourceMetadataParser` is deleted and its
+  test moved with it: there is one engine-backed parse now, behind the interface, instead of two assemblies of the
+  same facts. `InMemoryMetadataCacheProvider` inherits it, and its test asserts that byte for byte.
+- **Three tests had to change their premise**, which is the point: a provider with no parser can no longer exist, so
+  the RPC case became "a provider that *refuses* parse fails loudly, and only for `parseFile`", and a new case
+  asserts the opposite — a provider overriding nothing but the cache methods still answers `parseFile`.
 
 ### 3.0k — Grow the recorded gate to cover the engine's contract
 **Who:** agent · **Size:** S

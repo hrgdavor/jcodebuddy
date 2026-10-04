@@ -18,6 +18,18 @@
     <description>Metadata cache access via JSON-RPC and Apache Fory over HTTP/Unix sockets</description>
 
     <dependencies>
+        <!--
+          The engine, and it is the maintainer's answer of 2026-10-03 that makes this legal: DEC-W008's
+          amendment said this module deliberately has no source reader, so `parse` had to be implemented
+          elsewhere; the reader now lives in `jcodebuddy-core`, so the provider module can host the default
+          `parse` itself and DEC-W008's original requirement ("works correctly regardless of whether overriding
+          exists") is met rather than waived. This is a dependency on the model, never on a consumer of it.
+        -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>

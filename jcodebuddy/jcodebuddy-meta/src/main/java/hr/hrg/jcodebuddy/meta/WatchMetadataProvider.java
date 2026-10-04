@@ -24,19 +24,16 @@ import java.util.Map;
  * follows is the repository's own: a reusable part is promoted into a library, and a project-specific
  * behaviour is handed in through an interface rather than reached for (AGENTS.md § 1.1).</p>
  *
- * <h3>What the watch cache can and cannot answer</h3>
+ * <h3>What the watch cache can and cannot answer, and what it delegates</h3>
  *
  * <p>It holds three facts per file: the project-relative path, the wayhash of the content, and the last
- * modification time. That is exactly what this provider reports, and nothing is invented to fill the gaps:
- * {@link MetadataProvider.CacheEntry#fullClassName()} is empty because the checksum cache has never known
- * a class name, and {@link #listClasses()} answers with an empty list for the same reason. A caller that
- * needs the class name of a file has {@link MetadataProvider#parse} for the ones with a parser, and
- * {@link MetadataProvider#get} for a real metadata cache — this provider is the one that answers "what has
- * changed", which is the question the watch agent exists for.</p>
- *
- * <p>{@link #parse} is deliberately not overridden: the watch agent has a content reader for its own
- * purposes, not a file-scoped metadata parser, so the interface's default answers with
- * {@link MetadataParseUnsupportedException} — a named refusal instead of a fabricated entry.</p>
+ * modification time. That is what this provider reports about <em>change</em>, and nothing is invented to fill
+ * the gaps: the checksum cache has never known a class name. The class and type questions are therefore
+ * <strong>delegated</strong> to an engine-backed provider when one is supplied (the maintainer's answer,
+ * 2026-10-03): {@link #listClasses()} asks it, {@link #get(String)} takes the type name from it, and
+ * {@link #parse} inherits {@link MetadataProvider}'s engine-backed default. Without a delegate the answers are
+ * the honest ones this cache can give — no classes, no type name — and {@link #listClasses()} says so by being
+ * empty rather than by inventing something.</p>
  *
  * <h3>Identity: this cache is keyed by path, and the interface is keyed by hash</h3>
  *
@@ -61,8 +58,12 @@ public final class WatchMetadataProvider implements MetadataProvider {
     /** The files, in path order: a deterministic answer for a cache that has no order of its own. */
     private final List<WatchedFile> files;
 
-    private WatchMetadataProvider(List<WatchedFile> files) {
+    /** Where the class and type questions go — the engine's model, or {@code null} when the caller has none. */
+    private final MetadataProvider delegate;
+
+    private WatchMetadataProvider(List<WatchedFile> files, MetadataProvider delegate) {
         this.files = List.copyOf(files);
+        this.delegate = delegate;
     }
 
     /**
@@ -75,12 +76,27 @@ public final class WatchMetadataProvider implements MetadataProvider {
      * @param files the files, keyed by path; the map's order is not used
      */
     public static WatchMetadataProvider of(Map<String, WatchedFile> files) {
-        return new WatchMetadataProvider(sorted(files == null ? List.of() : files.values()));
+        return new WatchMetadataProvider(sorted(files == null ? List.of() : files.values()), null);
+    }
+
+    /**
+     * The same snapshot, with the class and type questions delegated to {@code model}.
+     *
+     * <p>What the watcher owns is change; what the engine owns is what the code <em>is</em>. This is where the two
+     * meet, and the split is visible in the results: the checksum and the mtime in an entry are the watcher's, and
+     * its type name comes from the model.</p>
+     *
+     * @param files the files, keyed by path; the map's order is not used
+     * @param model an engine-backed provider (typically {@link IndexMetadataProvider}), or {@code null} to answer
+     *              only what the cache knows
+     */
+    public static WatchMetadataProvider of(Map<String, WatchedFile> files, MetadataProvider model) {
+        return new WatchMetadataProvider(sorted(files == null ? List.of() : files.values()), model);
     }
 
     /** As {@link #of(Map)}, for a caller that has a collection rather than a map. */
     public static WatchMetadataProvider of(Collection<WatchedFile> files) {
-        return new WatchMetadataProvider(sorted(files == null ? List.of() : files));
+        return new WatchMetadataProvider(sorted(files == null ? List.of() : files), null);
     }
 
     private static List<WatchedFile> sorted(Collection<WatchedFile> files) {
@@ -134,24 +150,37 @@ public final class WatchMetadataProvider implements MetadataProvider {
     }
 
     /**
-     * Empty, deliberately: the checksum cache holds no class names.
+     * Empty when there is no delegate, deliberately: a checksum cache holds no class names.
      *
-     * <p>Answering with the paths that look like Java files would be a guess dressed as a fact, and a
-     * caller of {@code listClasses} is asking which <em>types</em> are known — a question this cache
-     * cannot answer until the metadata path (DEC-W007's model, {@code parse}) fills it in.</p>
+     * <p>Answering with the paths that look like Java files would be a guess dressed as a fact, and a caller of
+     * {@code listClasses} is asking which <em>types</em> are known — a question only the model can answer. So with
+     * a delegate this returns the engine's types, and without one it returns nothing, which is the difference
+     * between "this project has no types" and "this provider was given no model" that a caller can see.</p>
      */
     @Override
     public List<String> listClasses() {
-        return List.of();
+        return delegate == null ? List.of() : delegate.listClasses();
     }
 
-    private static CacheEntry entryOf(WatchedFile file) {
+    /**
+     * One watched file's entry, with its type name taken from the model when there is one.
+     *
+     * <p>The checksum and the mtime are the watcher's; {@code fullClassName} is a fact about a declaration, so it
+     * comes from the delegate — and an entry that said nothing about the type while the model knew it would be the
+     * watcher pretending to be ignorant.</p>
+     */
+    private CacheEntry entryOf(WatchedFile file) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("checksum", file.checksum());
         metadata.put("lastModified", file.lastModified());
         metadata.put("path", file.path());
         metadata.put("source", "watch-cache");
-        // fullClassName is empty on purpose: the watch cache tracks content identity, not declarations.
-        return new CacheEntry(file.checksum(), "", file.path(), metadata);
+        CacheEntry known = delegate == null ? null : delegate.get(file.checksum());
+        if (known == null) {
+            // fullClassName is empty on purpose: the watch cache tracks content identity, not declarations.
+            return new CacheEntry(file.checksum(), "", file.path(), metadata);
+        }
+        metadata.put("kind", known.metadata() == null ? "" : known.metadata().get("kind"));
+        return new CacheEntry(file.checksum(), known.fullClassName(), file.path(), metadata);
     }
 }

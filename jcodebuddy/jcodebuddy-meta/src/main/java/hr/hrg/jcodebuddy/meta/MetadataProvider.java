@@ -41,38 +41,34 @@ public interface MetadataProvider {
     /**
      * DEC-W008's no-cache path: a fully populated {@link CacheEntry} derived from the file's own bytes.
      *
-     * <p>The returned entry carries the wayhash of {@code sourceBytes} (CRLF-normalised first, the
-     * repository's one content-identity rule — DEC-029 § 4), the input {@code relativePath}, the primary
-     * type's fully qualified name, and a metadata map of facts derived from <strong>this file
-     * alone</strong>. Cross-file facts — resolved references, annotation inventories, anything needing a
-     * second source file — are deliberately absent: DEC-W008 puts them outside {@code parse}, in the
-     * relation store DEC-W009 describes.</p>
+     * <p>The entry carries the wayhash of {@code sourceBytes} (CRLF-normalised first, the repository's one
+     * content-identity rule — DEC-029 § 4), the input {@code relativePath}, the primary type's fully qualified
+     * name, and a metadata map of facts derived from <strong>this file alone</strong>. Cross-file facts — resolved
+     * references, annotation inventories, anything needing a second source file — are deliberately absent:
+     * DEC-W008 puts them outside {@code parse}, in the relation store DEC-W009 describes.</p>
      *
-     * <p><strong>The call is pure.</strong> It must not read or write a cache, an index or any other
-     * backing store, so the same bytes always produce the same entry and a caller may use it in a fresh
-     * checkout with no daemon and no prior scan.</p>
+     * <p><strong>The call is pure.</strong> It must not read or write a cache, an index or any other backing store,
+     * so the same bytes always produce the same entry and a caller may use it in a fresh checkout with no daemon
+     * and no prior scan.</p>
      *
-     * <h3>The default, and the amendment it records</h3>
+     * <h3>The default, and the amendment it now reverses</h3>
      *
-     * <p>The default implementation throws {@link MetadataParseUnsupportedException}. DEC-W008
-     * originally required the default to "work correctly regardless of whether overriding exists",
-     * which assumed every provider could reach a Java parser; the module graph does not allow that —
-     * {@code metadata-server} deliberately has no source reader (DEC-030 puts the LST in
-     * {@code hipster-entity-tooling}), so a default that parses cannot exist in this module. The
-     * decision's own "Implementation boundaries" section anticipated the split ("whether {@code parse}
-     * lives in {@code metadata-server} or {@code project-automation} depends on module dependency
-     * resolution") and named {@code InMemoryMetadataCacheProvider} as the override; that is what
-     * happened, and DEC-W008 carries the amendment.</p>
+     * <p>DEC-W008 required this default to "work correctly regardless of whether overriding exists", and its
+     * amendment recorded why it could not: a default that parses needs the repository's one source reader, and the
+     * module owning this interface deliberately had no reader on its classpath. <strong>That is no longer true, and
+     * the requirement is met rather than waived.</strong> The reader lives in the engine
+     * ({@code jcodebuddy-core}, DEC-037), the maintainer allowed this module to depend on it (2026-10-03), and the
+     * default is now {@link IndexMetadataProvider#parse} — so a provider that has never heard of Java still answers
+     * {@code parse}, and an override is a choice rather than a prerequisite.</p>
      *
      * @param relativePath the project-relative path, forward slashes, used as the entry's identity in
      *                     reports — it is passed through, never resolved against a filesystem
      * @param sourceBytes  the file's bytes, exactly as read (line endings included; normalisation is
      *                     part of the checksum, not of the caller's duty)
      * @return the entry for those bytes; never {@code null}
-     * @throws MetadataParseUnsupportedException when this provider has no source parser
      */
     default CacheEntry parse(String relativePath, byte[] sourceBytes) {
-        throw new MetadataParseUnsupportedException(getClass().getName());
+        return IndexMetadataProvider.parseSource(relativePath, sourceBytes);
     }
 
     /**
