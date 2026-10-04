@@ -22,6 +22,14 @@ const SKIP_DIRS = new Set([
   // its own repository (root AGENTS.md § 2) — its link state is not this repo's content,
   // and a broken driver project must never block a JCodeBuddy change.
   "proto",
+  // The jsx6 checkout (AGENTS.md § 2): a clone of another repository, updated on demand, whose
+  // own docs carry its own (sometimes pre-existing) relative links. Found the hard way: pointing
+  // the UI work at `.jsx6/` made this checker report 39 broken links that were all jsx6's, not
+  // ours. Content is what is committed; a checkout is not.
+  ".jsx6",
+  // Agent scratch (§ 2): throwaway scripts and their output. Ditto — and it keeps a scratch
+  // markdown file from making a link check red.
+  ".tmp",
 ]);
 
 function walk(dir, out = []) {
