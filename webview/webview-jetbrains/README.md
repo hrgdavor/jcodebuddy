@@ -172,6 +172,34 @@ window. `runIde` already passes `-Dide.browser.jcef.debugPort=9222`, `-Dide.brow
 `-Dide.browser.jcef.gpu.disable=true`, plus the bridge port and `allowedOrigins=file://` so the HTTP
 fallback can be exercised from the sandbox.
 
+## The Java language server (the JWA sidecar)
+
+Since step 3.0q this plugin also runs `webview/jwa-sidecar` as the project's **Java language server**, through
+the platform's `platform.lsp.serverSupportProvider` extension point. That capability came from the earlier
+`webview/intellij-jwa` attempt, whose registration was the only place it existed; the Zed extension does the same
+thing for Zed.
+
+Build the sidecar once with
+`bun scripts/mvn-jdk25.js -pl webview/jwa-sidecar -am package`, and it is found automatically. Discovery order:
+a per-project property, an IDE-wide property, the copy bundled in the installed plugin, then the development build
+under the project's base path. Nothing found means the language server reports an error naming every path it
+looked in; the tool window is unaffected.
+
+| Setting (`PropertiesComponent`) | Meaning |
+| --- | --- |
+| `webview.explorer.sidecarJarPath` | The sidecar JAR. Empty means: bundled, then `<project base path>/webview/jwa-sidecar/target/jwa-sidecar.jar` |
+| `webview.explorer.sidecarJavaHome` | The JDK to run it with. Empty means `JAVA_HOME`, then `java` from `PATH` |
+
+These are properties rather than settings-page fields deliberately, and the earlier attempt's knob was the same
+kind: a half-filled settings page would be worse than two documented properties. `SidecarLaunch` holds the rules
+and `SidecarLaunchTest` asserts each fallback chain without an IDE.
+
+| Name | Kind | Refactor-sensitive? | Why |
+| --- | --- | --- | --- |
+| `hr.hrg.watch2.sidecar.SidecarApp` | the class the descriptor launches | **no — an external contract** | it is the sidecar artifact's own entry point; renaming the Java class without this string breaks the launch |
+| `jwa-sidecar.jar` | the artifact's `finalName` | **no — an external contract** | the name a built sidecar is packaged under, and the name the earlier IDE clients looked for |
+| `webview.explorer.sidecarJarPath` / `webview.explorer.sidecarJavaHome` | property keys | **no — an explicit configuration label** | a developer types them; an IDE rename must never touch them |
+
 ## Project structure
 
 ```

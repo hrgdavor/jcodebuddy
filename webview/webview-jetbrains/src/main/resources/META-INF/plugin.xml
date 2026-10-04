@@ -15,8 +15,15 @@
       See plan.reimplement.md, finding F8.
     -->
     <depends>com.intellij.modules.jcef</depends>
+    <!--
+      The Java module, for the LSP client half merged in step 3.0q: `platform.lsp.serverSupportProvider`
+      below starts `webview/jwa-sidecar` as this project's Java language server, and the LSP API for it ships
+      with the Java module. Same F8 rule as the JCEF line above — compile classpath is not runtime.
+    -->
+    <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <platform.lsp.serverSupportProvider implementation="hr.hrg.jetbrains.webview.lsp.SidecarLspServerSupportProvider"/>
         <toolWindow factoryClass="hr.hrg.jetbrains.webview.toolWindow.JcefToolWindowFactory" id="WebView Explorer" anchor="right" icon="AllIcons.General.Web" secondary="true"/>
         <projectService serviceImplementation="hr.hrg.jetbrains.webview.services.PluginStateService"/>
         <projectService serviceImplementation="hr.hrg.jetbrains.webview.services.HttpBridgeService"/>

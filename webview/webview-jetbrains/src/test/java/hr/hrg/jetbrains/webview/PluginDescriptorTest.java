@@ -48,6 +48,22 @@ public class PluginDescriptorTest {
         assertTrue(sourceDescriptor().contains("<depends>com.intellij.modules.platform</depends>"));
     }
 
+    /**
+     * The same F8 rule for the Java module, which the LSP client half merged in step 3.0q needs at runtime:
+     * the LSP API ships with the Java module, so a plugin that registers a language server without this line
+     * compiles (the IDE distribution is on the Gradle classpath) and then fails to load it.
+     */
+    @Test
+    public void declaresTheJavaRuntimeDependencyForTheLanguageServer() throws Exception {
+        String xml = sourceDescriptor();
+
+        assertTrue("the LSP API comes with the Java module, so it must be declared for runtime",
+                xml.contains("<depends>com.intellij.modules.java</depends>"));
+        assertTrue("the provider must be registered as a language server support provider",
+                xml.contains("<platform.lsp.serverSupportProvider implementation=\""
+                        + "hr.hrg.jetbrains.webview.lsp.SidecarLspServerSupportProvider\"/>"));
+    }
+
     @Test
     public void registersTheServicesThePluginLooksUp() throws Exception {
         String xml = sourceDescriptor();
