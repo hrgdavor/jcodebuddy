@@ -22,8 +22,13 @@ class MetadataAnalysisRunnerTest {
         analysis.scan();
 
         List<MetadataProvider.CacheEntry> entries = provider.listEntries();
-        assertEquals(4, entries.size());
+        // Two files, one entry each. This used to be four, because the provider stores every entry under two keys
+        // (its content hash and its path) and `listEntries` handed back the raw map values — so one file was
+        // reported twice, with the same identity. A list of entries is a list of entries (plan step 3.0j).
+        assertEquals(2, entries.size());
         assertTrue(entries.stream().anyMatch(e -> e.relativePath().endsWith("Foo.java")));
         assertTrue(entries.stream().anyMatch(e -> e.relativePath().endsWith("Bar.java")));
+        // And the class names a caller asks for are the ones the engine read, not a stub's invention.
+        assertEquals(List.of("com.example.Bar", "com.example.Foo"), provider.listClasses());
     }
 }

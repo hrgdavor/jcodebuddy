@@ -1047,6 +1047,35 @@ because a checksum cache has never known a class name), `project-automation`'s `
 one `TypeResolver` implementation — which makes it **3.0d's** subject before it is this step's — and the watch
 tools' own parse stack is **3.0n's** (the duplicate splice path). None of the three is a rename.
 
+**3.0j-b landed 2026-10-03 — `project-automation` reads the engine, and the base cache has its first caller.**
+This is also where 3.0u's cache stops being a cache nobody calls. What moved:
+
+- **`SourceMetadataParser` builds its facts from `ClassIndex.factsOf`** — the same `TypeFacts` a table row comes
+  from — so the entry's kind, its method names and its class names cannot disagree with the index the rest of the
+  repository reads. It used to assemble a *third* metadata shape by hand and take the kind from
+  `hipster-entity-tooling`'s `MetadataLocations`; that import is gone, and the entry now records **every** type the
+  file declares (`classes`), which is what makes the next line possible.
+- **`listClasses()` answers what the scan saw.** It returned two invented names — `com.example.Foo`,
+  `com.example.Bar` — which is a stub that reads like data: a caller asking the server which classes exist got a
+  plausible answer about a project that does not exist.
+- **`hasChanged` compares the entry's own hash.** It looked for a `"checksum"` key inside the metadata map, which
+  the parser never wrote, so **every file looked changed on every scan** — a cache that always misses, silently.
+- **`MetadataAnalysis.scan()` is engine-backed**, and the numbers are the evidence: it used a SHA-1 checksum (this
+  repository has one content identity, DEC-029 § 4, and it is not SHA-1) and parsed every file on every run. It now
+  hands each file to `MetadataCache.consume` and publishes entries built from the index rows, so a second scan over
+  an unchanged tree **reads nothing** — asserted, not claimed, in `MetadataAnalysisTest`.
+- **Two warts the move exposed, both fixed**: `listEntries()` reported every entry twice (the provider keys each
+  entry by hash *and* by path), and a rescan left the superseded content's entry behind under its old hash, so one
+  file appeared several times with different identities. One entry per file now.
+- **`MetadataTypeResolver` is deleted.** It had no reference anywhere — 3.0d's `IndexTypeResolver` replaced it —
+  and a dead interface that documents a split nobody implements is exactly what "deleting the private paths as they
+  go" means.
+
+**Still here: 3.0j-a (`jcodebuddy-meta`).** The provider interface and its serving shapes stay (the maintainer's
+answer), and the engine-backed implementation behind them — `parse` through the engine, class and type questions
+from the index, `WatchMetadataProvider` delegating what the watcher does not own — is the next commit, because a
+move that breaks a consumer must be visible as that move.
+
 ### 3.0k — Grow the recorded gate to cover the engine's contract
 **Who:** agent · **Size:** S
 
