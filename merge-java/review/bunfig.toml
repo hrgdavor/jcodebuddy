@@ -1,0 +1,3 @@
+# `bun test` transforms JSX itself and reads this file from the process cwd (jsx6 docs/stack/setup.md
+# § 3). Without it Bun defaults to React's runtime and fails on a missing jsxDEV/Fragment.
+jsxImportSource = "@jsx6"

@@ -90,6 +90,24 @@ class MergeReportWriterTest {
     }
 
     @Test
+    @DisplayName("carries the three sides beside the resolved code, so a reviewer can compare them (4.2)")
+    void carriesTheThreeSides() throws IOException {
+        Path target = MergeReportWriter.defaultTarget(tempDir);
+
+        MergeReportWriter.write(target, batch());
+
+        String json = Files.readString(target, StandardCharsets.UTF_8);
+        assertTrue(json.contains("\"sides\""), json);
+        // The two branches' additions are what a reviewer compares, and they exist nowhere else in the
+        // report: without them the page can only show the answer, never the question.
+        assertTrue(json.contains("import java.math.BigDecimal;"), "branch 1's side: " + json);
+        assertTrue(json.contains("import java.time.Instant;"), "branch 2's side: " + json);
+        assertTrue(json.contains("\"base\""), json);
+        assertTrue(json.contains("\"branch1\""), json);
+        assertTrue(json.contains("\"branch2\""), json);
+    }
+
+    @Test
     @DisplayName("escapes quotes, newlines and tabs so the JSON stays parseable")
     void escapesStrings() {
         assertEquals("\"a\\\"b\"", MergeReportWriter.quote("a\"b"));

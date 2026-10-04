@@ -1,0 +1,6 @@
+# Derived output of the review page, ignored here rather than in the root .gitignore so the package
+# states its own shape (the DEC-026 convention for a module that owns derived files):
+#   .generated/  the report inlined at build time (the page must not fetch a sibling JSON: file:// CORS)
+#   build/       the esbuild bundle and the copied index.html — what a reviewer opens
+.generated/
+build/

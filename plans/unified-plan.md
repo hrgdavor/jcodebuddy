@@ -2656,6 +2656,27 @@ is a real answer, not a deferral.
 Which table entries became unreachable is in the commit message, as this step requires.
 
 ### 4.2 — Phase 13, step 1: the read-only per-conflict review render
+
+**Part one landed 2026-10-03: the review page exists as jsx6 and renders a real report.** What is there:
+
+- **`merge-java/review/`** — a package of its own, per DEC-027's 2026-10-02 note that a jsx6 page is *built* and may
+  declare a dependency (the root `scripts/` subtree stays dependency-free for the vanilla renderers). It holds
+  `src/index.jsx` (the page), `src_build/esbDef.js` (the documented esbuild shape plus the jsx6 aliases),
+  `src_build/build.js` (inlines the report, bundles, emits one self-contained HTML) and `src_build/screenshot.js`
+  (headless Chrome plus pixel measurement).
+- **The writer now emits the three sides** that this step is about: `MergeReportWriter` gained
+  `sides: {base, branch1, branch2}` on every resolution, from a `ConflictResolution` that already held them. Its
+  javadoc records why a *report* may carry text where the class index may not (DEC-040 D2): the three states exist
+  nowhere to point at, and the report exists to be read.
+- **Real data, not a fixture**: `scripts/merge-report/sample-report.js` drives the same public API the module's tests
+  use (`MergeBatch.using(resolver).add(path, base, branch1, branch2)` → `MergeReportWriter.write`) over three files
+  built to exercise three shapes, so the page renders what the engine decided — real kinds, strategies, fix paths,
+  warnings, and the `<<< MERGE-JAVA: MANUAL RESOLUTION REQUIRED >>>` marker on the cases it refuses.
+
+**What remains before this step is done:** the vanilla `scripts/merge-report/render.js` is still the shipped
+renderer, and `MergeReportWriterTest` drives it in two places (its "renderer half"). Retiring it is the rest of the
+step: those tests should hold the jsx6 page to the same contract, which is a decision 4.3 informs, because the action
+display may need a host that `file://` cannot provide.
 **Who:** agent · **Size:** M
 
 Today a resolution is reported as a count. The user sees *that* something was resolved, never *what was
@@ -3054,6 +3075,25 @@ classification, its "until 3.0e lands" sentence is discharged (3.0e landed: the 
 on.
 
 ### 7.9 — Set up the `jsx6` checkout every UI must be built from
+
+**Done 2026-10-03.** The checkout is at `.jsx6/` (cloned from `github.com/hrgdavor/jsx6`, HEAD
+`a584e7a`), **gitignored** so a `git add -A` cannot swallow it, and placed beside `.tmp/` for the reason § 2 gives:
+the recorded gate runs `clean`, so it must not live under `target/`. As the rule requires, the work follows the
+checkout's own guidance rather than a remembered API — `.jsx6/AGENTS.md` (a router), `docs/stack/agent-rules.md`
+(the rules that fail silently), `docs/stack/setup.md` (what a consumer configures) and `docs/stack/README.md`.
+
+Three findings that cost time, kept because they will cost it again:
+
+- **A consumer outside the jsx6 workspace cannot `file:`-link the packages.** They depend on each other with
+  `workspace:*`, which only a workspace install satisfies, and installing published copies would pin a version —
+  the opposite of what § 2 asks. Aliasing the checkout's `libs/*/index.js` in esbuild gives both: no
+  `node_modules`, and always the source `git pull` last put there (15 libs aliased, no install of jsx6 itself).
+- **An ES module loaded with `<script type="module" src=…>` is CORS-blocked on `file://`** (a file page has a
+  null origin), so the page renders blank while the HTML looks perfect. The review page therefore **inlines** its
+  bundle: one self-contained file, openable by double-click and inside the JCEF webview.
+- **The screenshot technique works here, and it is a check rather than a picture.** `chrome --headless=new
+  … --screenshot` plus a PNG decode in `node:zlib` gives content pixels and bounds, and the script **fails when the
+  page is blank** — which is how the CORS failure above was caught instead of shipped.
 **Who:** agent · **Size:** S–M
 
 Rule § 2.9 and [`AGENTS.md` § 2](../AGENTS.md) settle *that* any UI built here uses
@@ -3428,7 +3468,7 @@ start)
 | 7.6  | Decide the three `todo.java_watch2.md` remainders                                     | agent + maintainer | S    | `[ ]`                                                                                       |
 | 7.7  | Manual-mode CLI for DEC-W008 (`metadata parse`)                                       | agent              | S    | `[ ]`                                                                                       |
 | 7.8  | Two kinds of generator: file-scoped and project-scoped                                | agent              | M    | `[x]`                                                                                       |
-| 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                        | agent              | S–M  | `[ ]`                                                                                       |
+| 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                        | agent              | S–M  | `[x]`                                                                                       |
 | 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)              | agent              | M    | `[ ]`                                                                                       |
 | 8.1  | JetBrains maintainer questions + IDE observations                                     | human              | —    | `[ ]`                                                                                       |
 | 8.2  | Eclipse observations, then Q2                                                         | human              | —    | `[ ]`                                                                                       |

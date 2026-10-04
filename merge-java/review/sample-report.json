@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "summary": {
+    "files": 2,
+    "cleanFiles": 1,
+    "conflicts": 3,
+    "autoResolutions": 1,
+    "applicableResolutions": 1,
+    "reviewResolutions": 1,
+    "manualResolutions": 1,
+    "replayedDecisions": 0,
+    "dryRun": false,
+    "fullyResolved": false
+  },
+  "files": [
+    {
+      "filePath": "src/main/java/com/example/demo/PaymentProcessor.java",
+      "branchName": "feature-payments",
+      "clean": false,
+      "summary": "3 conflict(s) - 1 auto, 1 for review, 1 manual.",
+      "conflicts": [
+        {
+          "type": "IMPORT_ADD",
+          "description": "both branches added an import",
+          "region": { "startLine": 3, "endLine": 6 },
+          "handling": "AUTO"
+        },
+        {
+          "type": "TYPE_CHANGE",
+          "description": "branch 2 declared the value as NavigableSet where branch 1 kept TreeSet",
+          "region": { "startLine": 41, "endLine": 41 },
+          "handling": "REVIEW"
+        },
+        {
+          "type": "API_INCOMPATIBILITY",
+          "description": "branch 1 calls process(String) which branch 2 replaced with process(CharSequence)",
+          "region": { "startLine": 58, "endLine": 66 },
+          "handling": "MANUAL"
+        }
+      ],
+      "resolutions": [
+        {
+          "type": "IMPORT_ADD",
+          "kind": "AUTO",
+          "strategy": "KEEP_BOTH",
+          "verification": "PASSED",
+          "region": { "startLine": 3, "endLine": 6 },
+          "independentlyApplicable": true,
+          "sticky": false,
+          "explanation": "Both branches added an import and neither removed one, so keeping both is the only reading that loses nothing. The imports are placed where the base had its import block and de-duplicated.",
+          "warnings": [],
+          "resolvedCode": "import java.util.List;\nimport java.math.BigDecimal;\nimport java.time.Instant;",
+          "sides": {
+            "base": "import java.util.List;",
+            "branch1": "import java.util.List;\nimport java.math.BigDecimal;",
+            "branch2": "import java.util.List;\nimport java.time.Instant;"
+          },
+          "fixPaths": []
+        },
+        {
+          "type": "TYPE_CHANGE",
+          "kind": "REVIEW",
+          "strategy": "PREFER_BRANCH2",
+          "verification": "PASSED",
+          "region": { "startLine": 41, "endLine": 41 },
+          "independentlyApplicable": true,
+          "sticky": false,
+          "explanation": "Branch 2 declares the field as NavigableSet and branch 1 as TreeSet. javac resolves TreeSet as a subtype of NavigableSet, so branch 2's declaration accepts every value branch 1 can produce and widening is safe in that direction only.",
+          "warnings": [
+            "the widening was decided from the fallback table because no type context was supplied; supply --classpath to have it resolved against the project's own types"
+          ],
+          "resolvedCode": "private final NavigableSet<Payment> payments = new TreeSet<>();",
+          "sides": {
+            "base": "private final Set<Payment> payments = new TreeSet<>();",
+            "branch1": "private final TreeSet<Payment> payments = new TreeSet<>();",
+            "branch2": "private final NavigableSet<Payment> payments = new TreeSet<>();"
+          },
+          "fixPaths": [
+            {
+              "description": "take whichever declaration the reviewer prefers",
+              "options": ["PREFER_BRANCH2", "PREFER_BRANCH1"],
+              "recommended": "PREFER_BRANCH2",
+              "justification": "NavigableSet is the wider type and keeps both branches' call sites compiling.",
+              "impact": "one declaration line; no call site changes"
+            }
+          ]
+        },
+        {
+          "type": "API_INCOMPATIBILITY",
+          "kind": "MANUAL",
+          "strategy": "MANUAL",
+          "verification": "NOT_RUN",
+          "region": { "startLine": 58, "endLine": 66 },
+          "independentlyApplicable": false,
+          "sticky": false,
+          "explanation": "Branch 1 calls process(String) and branch 2 replaced that overload with process(CharSequence). Choosing either signature silently changes which call sites compile, so this is a design decision and is handed to a human rather than guessed.",
+          "warnings": [
+            "structural and API conflicts are never resolved automatically (DESIGN_NEVER_AUTO_RESOLVED.md)"
+          ],
+          "resolvedCode": "",
+          "sides": {
+            "base": "void process(String id) {\n    log.info(\"processing {}\", id);\n}",
+            "branch1": "void process(String id) {\n    log.info(\"processing {}\", id);\n    audit.record(id);\n}",
+            "branch2": "void process(CharSequence id) {\n    log.info(\"processing {}\", id);\n    metrics.count(id);\n}"
+          },
+          "fixPaths": [
+            {
+              "description": "keep both overloads, each delegating to the other",
+              "options": ["process(String)", "process(CharSequence)"],
+              "recommended": "process(CharSequence)",
+              "justification": "the wider signature accepts every existing call site, so no caller and no test changes.",
+              "impact": "one method signature; the audit and metrics calls both stay"
+            },
+            {
+              "description": "rename branch 2's method so both survive unambiguously",
+              "options": ["processById(String)", "process(CharSequence)"],
+              "recommended": "processById(String)",
+              "justification": "the two branches were doing different things under the same name, which is what made this a conflict.",
+              "impact": "one signature plus every call site on branch 2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "filePath": "src/main/java/com/example/demo/OrderService.java",
+      "branchName": "feature-payments",
+      "clean": true,
+      "summary": "clean - no conflicts.",
+      "conflicts": [],
+      "resolutions": []
+    }
+  ]
+}

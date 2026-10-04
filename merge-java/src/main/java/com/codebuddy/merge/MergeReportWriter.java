@@ -154,6 +154,7 @@ public final class MergeReportWriter {
                 .append(",\n");
             json.append("          \"resolvedCode\": ").append(quote(resolution.getResolvedCode()))
                 .append(",\n");
+            json.append("          \"sides\": ").append(sidesJson(resolution)).append(",\n");
             json.append("          \"fixPaths\": ").append(fixPathsJson(resolution)).append('\n');
             json.append("        }");
             if (index < resolutions.size() - 1) {
@@ -162,6 +163,26 @@ public final class MergeReportWriter {
             json.append('\n');
         }
         return json.append("      ]").toString();
+    }
+
+    /**
+     * The three sides a reviewer compares, beside the resolved code (plan step 4.2).
+     *
+     * <p>A review display that shows only the answer cannot be reviewed: the question is always what the two
+     * branches did to the same lines, and which of them the resolution kept. The texts are already here — the
+     * resolution carries all three — so this is an omission rather than missing information.</p>
+     *
+     * <p><strong>Why a report may carry text where the class index may not.</strong> DEC-040 D2 says the model
+     * stores pointers, never copies, because a copy can silently disagree with the file it describes. That rule
+     * holds for the index, which describes <em>one</em> current file. A report describes <em>three</em> file
+     * states that the merge already reconciled and that no single file still holds — there is nothing to point
+     * at — and its whole purpose is to be read by a human. The pointer rule's guard is kept anyway: the sides
+     * are the resolver's own input, carried verbatim.</p>
+     */
+    private static String sidesJson(ConflictResolution resolution) {
+        return "{\"base\": " + quote(resolution.getBaseCode())
+            + ", \"branch1\": " + quote(resolution.getBranch1Code())
+            + ", \"branch2\": " + quote(resolution.getBranch2Code()) + "}";
     }
 
     private static String fixPathsJson(ConflictResolution resolution) {

@@ -1,0 +1,13 @@
+{
+  "name": "merge-java-review",
+  "private": true,
+  "type": "module",
+  "description": "The Phase 13 review display for merge-java: a jsx6 page over the report MergeReportWriter writes. Its own package because a jsx6 page is built and may declare a dependency (DEC-027's 2026-10-02 note), while the root scripts/ subtree stays dependency-free for the vanilla renderers.",
+  "scripts": {
+    "build": "bun run src_build/build.js",
+    "shot": "bun run src_build/screenshot.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

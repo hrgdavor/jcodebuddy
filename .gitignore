@@ -94,6 +94,12 @@ webview/zed/*/extension.wasm
 # is ever committed or required. The rule is in AGENTS.md § 2.
 .tmp/
 
+# The jsx6 checkout that AGENTS.md § 2 requires for any UI work: a local clone, updated on demand
+# (`git -C .jsx6 pull --ff-only`), never pinned and never committed. It sits beside `.tmp/` for the
+# same reason the scratch rule gives — the recorded gate runs `clean`, so it must not live under
+# target/, and it must be ignored or a `git add -A` would swallow the whole checkout.
+.jsx6/
+
 # proto/ is the driver-project area: real projects that exercise JCodeBuddy while it is under
 # development. They are *not* part of this repository - each one is a repository of its own.
 #

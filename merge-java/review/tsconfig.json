@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "@jsx6",
+    "allowJs": true,
+    "checkJs": false,
+    "target": "ESNext",
+    "module": "node16",
+    "moduleResolution": "node16",
+    "noEmit": true
+  },
+  "include": ["src", "src_build"]
+}
