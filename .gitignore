@@ -87,6 +87,13 @@ webview/zed/*/extension.wasm
 .kilo/plans
 .mvn-local-repo
 
+# Agent scratch. Deliberately NOT under `target/`: the recorded gate runs `mvn clean` on every
+# invocation, so a scratch script written under target/ is deleted by the very command that
+# verifies the work it enabled. `.tmp/` survives that, and being ignored it also cannot be
+# swallowed by a `git add -A`. It is durable against `clean`, not against a clone: nothing here
+# is ever committed or required. The rule is in AGENTS.md § 2.
+.tmp/
+
 # proto/ is the driver-project area: real projects that exercise JCodeBuddy while it is under
 # development. They are *not* part of this repository - each one is a repository of its own.
 #

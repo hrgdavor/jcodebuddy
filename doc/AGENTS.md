@@ -43,6 +43,11 @@ and because a cached module's compile, test and jar phases are restored instead 
 `test`: `package` runs the tests anyway, and it is what puts a JAR in `target/`, without which the next module in the
 reactor cannot resolve its sibling.
 
+**Scratch goes in `.tmp/` at the repository root — never under `target/`.** `clean` runs on every gate invocation, so
+a scratch script written under `target/` is deleted by the very command that verifies the work it enabled; `.tmp/` is
+gitignored (so `git add -A` cannot swallow it) and survives `clean`. The rule in full, including what does *not*
+belong there, is root [`AGENTS.md`](../AGENTS.md) § 2.
+
 ### The Maven build cache: what it covers, and what it does not
 
 `org.apache.maven.extensions:maven-build-cache-extension` is loaded for every Maven invocation here

@@ -399,7 +399,8 @@ canonical statement of a boundary that has no other home.
     relative link, because this checkout is not part of that project.
   - A project that is **not** meant to become its own repository does
     not belong under `proto/`: put it in the owning module's
-    `src/test`, or in `target/` scratch space. The full rules —
+    `src/test`, or in the repository's `.tmp/` scratch space (never
+    `target/`, which `clean` deletes). The full rules —
     tracking policy, adding a project, verified checks — are in
     [`proto/README.md`](proto/README.md).
 - **Cooperative codegen, not annotation processing.** Prefer
@@ -518,6 +519,23 @@ canonical statement of a boundary that has no other home.
     be runnable and reviewable by whoever reads the repository next,
     on whatever machine they have. A script that only runs in one
     shell on one OS is invisible wiring for the *workflow*.
+- **Agent scratch goes in `.tmp/` at the repository root — the one
+  temp folder a short cleanup does not take.** The recorded gate runs
+  `mvn clean` on every invocation, so scratch written under a module's
+  `target/` (or the root `target/`) is deleted by the very command that
+  verifies the work it enabled — observed here: a script that would
+  have ticked a progress row was gone before it could run, because an
+  earlier gate invocation had already removed it. `.tmp/` survives
+  `clean`, and being gitignored it also cannot be swallowed by a
+  `git add -A` (the other half of the same hazard: untracked scratch
+  was once committed that way). What belongs there: run-once scripts,
+  probes, generated diffs, scratch output, a file you are about to
+  move. What does not: anything a reader needs, which goes in the tree
+  (a *script* under `scripts/`, as Bun JavaScript — never a shell
+  wrapper), and anything that must be reviewed, which is committed.
+  It is durable against `clean`, **not** against a clone: nothing in
+  `.tmp/` is committed or required, so a build, test or check that
+  needs a file there in order to pass is broken rather than convenient.
 - **Markdown tables are normalised with `md-fix-tables` — run it where it is, and say so where it is not.**
   After writing or editing a Markdown document, run the tool once for each file that changed:
 
@@ -654,7 +672,8 @@ canonical statement of a boundary that has no other home.
   for *using* the stack it points at `docs/stack/README.md` (setup, signals, the JSX/DOM contract, and the
   rules that fail silently), and its gate is `bun run check` inside the checkout. Default location
   `<repo>/.jsx6/` — a temporary folder that is **not** `target/`, because the recorded gate runs
-  `clean package` and would delete a checkout there on every run; `JCODEBUDDY_JSX6_DIR` overrides it.
+  `clean package` and would delete a checkout there on every run, which is the same reason `.tmp/`
+  exists for scratch (§ 2); `JCODEBUDDY_JSX6_DIR` overrides it.
   **Nothing about JCodeBuddy's UI may be written against a
   remembered version of jsx6** — the checkout you actually read is what counts, and it is updated on
   demand rather than pinned. Scheduled as steps 7.9–7.10 in [`plans/unified-plan.md`](plans/unified-plan.md).
