@@ -100,7 +100,9 @@ generator (DEC-027/029).
   `default buildXxx(...)` factories live in the module interface, and "who extends whom" is in no single file — so a
   caller offering it one file would get *inferred absences* rather than errors. It also produces
   `<module>/.jcodebuddy/metadata/hipster-ioc/contexts.json`, which describes the whole tree. Run it through
-  `bun scripts/ioc-gen.js` (the CLI half of DEC-036 § 11), or let the dev-time pass drive it (step 3.9). A sibling
+  `bun scripts/ioc-gen.js` (the CLI half of DEC-036 § 11), let the dev-time pass drive it (`IocRegeneration` in `project-automation`, step 3.9), or let
+  `IocRegenerationWatcher` run that pass on every save — the watch half of DEC-036 § 11 shares its loop breaker with
+  the entity watcher (`WatchedRegeneration`), so regenerating on save cannot feed on its own output. A sibling
   module interface that cannot be read is a missing neighbour to **report**, never an absence to infer.
 - It does **not** depend on `project-automation`; another module must never depend on a project's private
   dev-time assistant (AGENTS.md § 1.1). The pass drives the generator, never the other way round.

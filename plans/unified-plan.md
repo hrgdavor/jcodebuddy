@@ -2520,11 +2520,25 @@ second while the model still holds the context), because `IocGeneration.write` w
 makes running the pass on every save safe, so the watch half can be a thin loop rather than a policy about when to
 regenerate.
 
-**Part two (the watch half) is next:** `EntityRegenerationWatcher` is the template — a debounced `BatchedFileWatcher`
+**Part two (the watch half) followed in the same day, and `EntityRegenerationWatcher` was the template:** a debounced `BatchedFileWatcher`
 plus a content-hash check that breaks the loop its own output would otherwise create — and the IoC watcher will reuse
 that mechanism rather than copy it.
 
 **Gate (part one):** the recorded gate green with the cache on — BUILD SUCCESS in 33 s, 85 cached steps.
+
+**Part two done 2026-10-03 — the watch half, reusing the mechanism rather than copying it.** `IocRegenerationWatcher`
+runs the pass on every save (`--source`, `--module`, `--debounce`), and the loop that makes that safe is now
+**shared**: `WatchedRegeneration` was extracted from `EntityRegenerationWatcher` — the debounced
+`BatchedFileWatcher`, the SHA-1 snapshot taken after each pass, and the content check that recognises a batch as the
+echo of the pass that wrote it — and both watchers delegate to it. That is the reuse the plan asked for, and the 3.0n
+precedent: two copies of a subtle loop breaker is how they drift apart. **The extraction is verified by the class it
+came from**: `EntityRegenerationWatcherTest`'s 14 tests pass unchanged, including the two that assert its own output
+does not start another pass.
+
+The IoC side is proven the same way, in `IocRegenerationWatcherTest`: an edit to a context regenerates and the
+implementation appears; **a batch holding the generated implementations is recognised as that pass's echo and
+ignored** (one pass, not two); a save whose bytes are unchanged is a no-op; and a deletion is acted on.
+`project-automation` is 92 → **95 tests, 0 failures**, and the recorded gate is green with the cache on.
 
 ### 3.10 — Retire `hipster-ioc-test`'s hand-written context
 **Who:** agent · **Size:** S–M

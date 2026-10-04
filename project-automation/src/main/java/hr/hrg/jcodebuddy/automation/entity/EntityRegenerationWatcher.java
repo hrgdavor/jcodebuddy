@@ -2,24 +2,16 @@ package hr.hrg.jcodebuddy.automation.entity;
 
 import hr.hrg.hipster.entity.tooling.DivergenceReporter;
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
+import hr.hrg.jcodebuddy.automation.watch.WatchedRegeneration;
 import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
-import hr.hrg.watch2.core.BatchedFileWatcher;
 import hr.hrg.watch2.core.ChangeSet;
-import hr.hrg.watch2.core.FileFilter;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Regenerates the entity views when an entity source changes (plan.dsflash § 12.5/7.17, X4).
@@ -164,14 +156,13 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
 
     private final Config config;
     private final java.util.function.Consumer<Pass> observer;
-    private final FileFilter fileFilter;
 
-    /** SHA-1 of every {@code .java} file as of the end of the last pass. */
-    private final Map<String, String> hashes = new LinkedHashMap<>();
-
-    private BatchedFileWatcher watcher;
-    private long sequence;
-    private long passes;
+    /**
+     * The shared loop: the debounced batch watcher plus the content-hash check that stops a generator reacting to
+     * its own output. Everything entity-specific is the {@link WatchedRegeneration.Regenerator} below — the
+     * mechanism moved out in step 3.9 so the hipster-ioc watcher could use it rather than copy it.
+     */
+    private final WatchedRegeneration watch;
 
     public EntityRegenerationWatcher(Config config) {
         this(config, pass -> { });
@@ -184,34 +175,25 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
     public EntityRegenerationWatcher(Config config, java.util.function.Consumer<Pass> observer) {
         this.config = config;
         this.observer = observer == null ? pass -> { } : observer;
-        // Only entity sources matter, and build output must never re-enter the loop (the same
-        // exclusion the R1 checker and the compaction command use). `.jcodebuddy` is in the list
-        // because the generator's own metadata report now lands there, inside the module it watches.
-        this.fileFilter = new FileFilter(config.sourceRoot(),
+        // Only entity sources matter, and build output must never re-enter the loop (the same exclusion the R1
+        // checker and the compaction command use). `.jcodebuddy` is in the list because the generator's own
+        // metadata report lands there, inside the module it watches.
+        this.watch = new WatchedRegeneration(config.sourceRoot(),
                 List.of("**/*.java"),
-                List.of("**/target/**", "**/tmp/**", "**/.kilo/**", "**/" + JCODEBUDDY_DIR + "/**"));
-        // Seed the hash table at construction, so the first batch is judged against the tree as the
-        // watcher found it. Doing it here rather than in start() also means the decision logic is
-        // exercisable without a real filesystem watcher.
-        snapshotHashes();
+                List.of("**/target/**", "**/tmp/**", "**/.kilo/**", "**/" + JCODEBUDDY_DIR + "/**"),
+                config.debounceMs(), this::regenerate,
+                shared -> observer.accept(new Pass(shared.sequence(), shared.regenerated(),
+                        shared.triggeringFiles(), shared.divergences())));
     }
 
     /** Starts watching asynchronously. Returns immediately; batches are handled on the watcher's thread. */
     public void start() throws IOException {
-        if (watcher != null) {
-            return;
-        }
-        watcher = new BatchedFileWatcher(config.sourceRoot(), fileFilter, config.debounceMs(),
-                this::onBatch);
-        watcher.start();
+        watch.start();
     }
 
     /** Stops watching. Safe to call twice, and safe to call without {@link #start()}. */
     public void stop() {
-        if (watcher != null) {
-            watcher.stop();
-            watcher = null;
-        }
+        watch.stop();
     }
 
     @Override
@@ -221,11 +203,11 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
 
     /** How many batches were delivered, and how many of them ran a pass. */
     public long batchCount() {
-        return sequence;
+        return watch.batchCount();
     }
 
     public long passCount() {
-        return passes;
+        return watch.passCount();
     }
 
     /** The configuration this watcher regenerates with, so a caller can log what it is watching. */
@@ -234,30 +216,17 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
     }
 
     /**
-     * Handles one batch: decide whether the tree's content actually differs from what the last pass
-     * produced, and regenerate if it does.
-     *
-     * <p>Synchronized, so a pass is never concurrent with another: the generator's configuration is
-     * process-global and the source tree is one resource.</p>
+     * Handles one batch: decide whether the tree's content actually differs from what the last pass produced, and
+     * regenerate if it does. The decision is {@link WatchedRegeneration}'s; this method only translates its verdict
+     * into this watcher's own {@link Pass} so the API callers already use keeps working.
      */
-    public synchronized Pass onBatch(ChangeSet changeSet) {
-        sequence++;
-        Set<String> triggering = relativePaths(changeSet);
-
-        if (!changeSet.fullRecompile() && !contentDiffers(changeSet, triggering)) {
-            Pass ignored = new Pass(sequence, false, triggering, List.of());
-            observer.accept(ignored);
-            return ignored;
-        }
-
-        List<String> divergences = regenerate();
-        Pass pass = new Pass(sequence, true, triggering, divergences);
-        observer.accept(pass);
-        return pass;
+    public Pass onBatch(ChangeSet changeSet) {
+        WatchedRegeneration.Pass shared = watch.onBatch(changeSet);
+        return new Pass(shared.sequence(), shared.regenerated(), shared.triggeringFiles(), shared.divergences());
     }
 
     /**
-     * Runs one generation pass with this watcher's configuration and re-snapshots the hashes.
+     * Runs one generation pass with this watcher's configuration.
      *
      * <p>The generator's statics are set and then reset, so a watcher sharing a process with another
      * generation run cannot change its behaviour. A failure is reported as a divergence rather than
@@ -284,79 +253,12 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
             EntityMetadataGenerator.setGenerateAdapters(false);
             EntityMetadataGenerator.setMapperRequests(List.of());
         }
-        passes++;
-        snapshotHashes();
         return reporter.entries();
     }
 
-    /** Whether any changed or deleted file differs from the state the last pass left behind. */
-    private boolean contentDiffers(ChangeSet changeSet, Set<String> triggering) {
-        for (String relative : triggering) {
-            Path absolute = config.sourceRoot().resolve(relative);
-            if (!Files.exists(absolute)) {
-                // A deletion always matters: the generator may need to remove or recreate a file.
-                return true;
-            }
-            String recorded = hashes.get(relative);
-            if (recorded == null || !recorded.equals(sha1(absolute))) {
-                return true;
-            }
-        }
-        // Every changed file still hashes to what the last pass left, so this batch is the echo of
-        // that pass (or a save with identical content). Nothing to do — and this is the branch that
-        // keeps the watcher from regenerating forever on its own output.
-        return false;
-    }
-
-    private Set<String> relativePaths(ChangeSet changeSet) {
-        Set<String> relatives = new LinkedHashSet<>();
-        for (Path path : changeSet.changed()) {
-            relatives.add(relative(path));
-        }
-        for (Path path : changeSet.deleted()) {
-            relatives.add(relative(path));
-        }
-        return relatives;
-    }
-
-    private String relative(Path path) {
-        Path absolute = path.toAbsolutePath().normalize();
-        return config.sourceRoot().relativize(absolute).toString().replace('\\', '/');
-    }
-
-    private void snapshotHashes() {
-        hashes.clear();
-        if (!Files.isDirectory(config.sourceRoot())) {
-            return;
-        }
-        try (Stream<Path> walk = Files.walk(config.sourceRoot())) {
-            for (Path path : walk.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".java"))
-                    .filter(fileFilter::shouldInclude)
-                    .toList()) {
-                hashes.put(relative(path), sha1(path));
-            }
-        } catch (IOException ignored) {
-            // A tree that cannot be walked leaves the table empty, which makes the next batch look
-            // like a change. That is the safe direction: one extra idempotent pass, never a missed one.
-        }
-    }
-
     /** SHA-1 of a file's bytes, or {@code "unknown"} when it cannot be read. */
-    static String sha1(Path file) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            try (InputStream in = Files.newInputStream(file)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-            return String.format("%040x", new BigInteger(1, digest.digest()));
-        } catch (Exception unreadable) {
-            return "unknown";
-        }
+    public static String sha1(Path file) {
+        return WatchedRegeneration.sha1(file);
     }
 
     // ── CLI ───────────────────────────────────────────────────────────────────
