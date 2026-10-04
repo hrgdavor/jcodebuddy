@@ -1271,6 +1271,34 @@ one `SourceSplicer` remains in the tree, and a grep proves it; the record and th
 
 **Done when:** the codegen modules are part of the family, and one splice path exists instead of two.
 
+**3.0n-a landed 2026-10-03 — the rename, by a tool instead of by hand.** `jcodebuddy/jcodebuddy-builder-api` and
+`jcodebuddy/jcodebuddy-builder`, packages `hr.hrg.jcodebuddy.builder[.api]`, six POMs and the root updated, the four
+consumers re-pointed (`jcodebuddy-agent`, `jcodebuddy-watch-tools`, `webview/jwa-sidecar`, `project-automation`),
+and the module map, DEC-038 and DEC-W003 carrying the new names. This was the **second** module rename in two steps,
+so step 3.0m's one-off script became [`scripts/rename-module.js`](../scripts/rename-module.js): parameterised, and
+carrying the four guards the 3.0m run earned by failing — `git mv` moving *into* an existing directory,
+`git ls-files 'pom.xml'` matching only the root POM, a check that passes over an empty tree, and `rmdir`-if-empty
+rather than a recursive delete that took the new tree with it. It reports what it did, verifies that every file's
+directory is its package, and refuses to pass when it verified nothing.
+
+**Three things only a build finds**, and each is a guard or a pattern doing its job:
+
+- `MigrationCompletenessTest`'s module list still named `jwa-builder*`, and its own message named the problem:
+  *"these names are not reactor modules, so the sweep silently skipped their sources"*. A guard that notices a
+  module it cannot find is why a rename cannot quietly drop a module out of a sweep.
+- The two POMs' `<name>` elements said **"JWA Builder"**, not `jwa-builder`, so the mechanical
+  `<name>${oldArtifactId}</name>` rule missed them and the reactor printed the old name for renamed modules — a
+  reminder that a rename's prose is not shaped like its coordinates.
+- `check-watch-standalone.js` needed **no** change: its workspace-artifact pattern is
+  `^(jcodebuddy|hipster|metadata|jwa)-`, so the renamed modules were already inside the boundary. The check that
+  would catch a `watch/` module depending on the builder still would, which is the outcome to want — a rule that
+  only catches the names it was written against is a rule with a hole in it.
+
+**3.0n-b remains, and it is the substantive half.** Two `SourceSplicer` implementations still exist —
+`jcodebuddy-core`'s (151 lines, DEC-030's declared home) and `jcodebuddy-builder`'s (306 lines, with `LineLookup`
+beside it) — and one must go, with whatever the survivor needs ported into it. That is not a rename and does not
+belong in a rename's commit.
+
 ### 3.0o — Group the reactor's modules (DEC-039)
 **Who:** agent · **Size:** M
 
@@ -2532,7 +2560,7 @@ two decisions are updated to match what was built.
 The sidecar advertises incremental sync but never reads the client's formatting settings: a grep for
 `tabSize` / `insertSpaces` / `formatting` across `webview/jwa-sidecar` finds nothing, so the generated
 members use the indent the engine was constructed with
-([`BuilderTransformationEngine(String indent)`](../jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/BuilderTransformationEngine.java),
+([`BuilderTransformationEngine(String indent)`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/BuilderTransformationEngine.java),
 default 4 spaces).
 
 **Do:** read `tabSize`/`insertSpaces` from the client (LSP `FormattingOptions` on the request, or

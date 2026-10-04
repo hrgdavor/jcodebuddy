@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.sidecar;
 
-import hr.hrg.watch2.builder.RecordBuilderProcessor;
+import hr.hrg.jcodebuddy.builder.RecordBuilderProcessor;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.TextDocumentService;
@@ -139,7 +139,7 @@ public class JwaTextDocumentService implements TextDocumentService {
             return CompletableFuture.completedFuture(null);
 
         log.info("Generating builder for {} at line {}", uri, line);
-        hr.hrg.watch2.builder.BuilderTransformationEngine engine = new hr.hrg.watch2.builder.BuilderTransformationEngine(
+        hr.hrg.jcodebuddy.builder.BuilderTransformationEngine engine = new hr.hrg.jcodebuddy.builder.BuilderTransformationEngine(
                 "    ");
         hr.hrg.watch2.core.TransformationResult result = engine.generate(uri, text, line);
 

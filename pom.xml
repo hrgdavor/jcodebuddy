@@ -64,8 +64,8 @@
         <!-- webviewd is the reference host of that contract and the only one that needs no editor
              (webview/PLAN-webview-suite.md, Phase 2). -->
         <module>webview/core/webviewd</module>
-        <module>jcodebuddy/jwa-builder-api</module>
-        <module>jcodebuddy/jwa-builder</module>
+        <module>jcodebuddy/jcodebuddy-builder-api</module>
+        <module>jcodebuddy/jcodebuddy-builder</module>
         <!-- The LSP sidecar lives with the webview product, not at the repository root: it is the same
              product (pages, navigation, edits), reached over LSP instead of over a webview. See
              webview/PLAN-webview-suite.md, decision D9. -->
@@ -313,12 +313,12 @@
             </dependency>
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
-                <artifactId>jwa-builder-api</artifactId>
+                <artifactId>jcodebuddy-builder-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
-                <artifactId>jwa-builder</artifactId>
+                <artifactId>jcodebuddy-builder</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

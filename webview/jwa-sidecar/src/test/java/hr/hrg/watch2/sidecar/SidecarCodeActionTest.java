@@ -52,7 +52,7 @@ public class SidecarCodeActionTest {
     private static final String ANNOTATED = """
             package demo;
 
-            @hr.hrg.watch2.builder.api.GenerateBuilder
+            @hr.hrg.jcodebuddy.builder.api.GenerateBuilder
             public record Person(String name, int age) {
             }
             """;

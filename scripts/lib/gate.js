@@ -42,8 +42,10 @@
  *   the gate when the code it holds stops compiling.
  *
  * **The cost, stated rather than implied:** a larger gate is a slower gate. These were chosen because a change
- * that breaks them is a change to the engine's contract, not because they compile — the webview, watch and
- * merge modules stay out for exactly that reason.
+ * that breaks them is a change to the engine's contract, not because they compile — the webview, watch,
+ * `merge-java` and arena families stay out for exactly that reason, and so do the two `jcodebuddy-builder*`
+ * codegen modules that step 3.0n renamed into the family: a JCodeBuddy name is not the test, holding the engine's
+ * contract is.
  */
 export const GATE_MODULES = [
   'jcodebuddy-core',

@@ -28,7 +28,7 @@
         </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>jwa-builder</artifactId>
+            <artifactId>jcodebuddy-builder</artifactId>
         </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>

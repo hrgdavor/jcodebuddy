@@ -53,7 +53,7 @@ not a Layer 1 library: it is one project's own assistant, and nothing else may b
   let both depend on that. `jcodebuddy-codegen-api` is the precedent: five leaf types (`CodeGenerator`,
   `CodeContext`, `CodeContextImpl`, `TypeResolver`, `TypeDefinition`) became a library so the rule could
   hold.
-- It depends on `hipster-entity-api`, `java-watch-core`, `jwa-builder`, `hipster-entity-tooling`,
+- It depends on `hipster-entity-api`, `java-watch-core`, `jcodebuddy-builder` (then `jwa-builder`; renamed in step 3.0n), `hipster-entity-tooling`,
   `jcodebuddy-core`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`.
   `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation
   representation is OpenRewrite's LST — see

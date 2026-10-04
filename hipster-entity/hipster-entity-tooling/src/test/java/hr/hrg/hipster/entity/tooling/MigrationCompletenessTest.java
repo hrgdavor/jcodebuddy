@@ -55,7 +55,7 @@ class MigrationCompletenessTest {
     private static final List<String> MODULES = List.of(
             "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling", "hipster-entity-jackson",
             "hipster-entity-test", "hipster-entity-example", "project-automation", "merge-java",
-            "jwa-builder", "jwa-builder-api", "jwa-sidecar", "webview-eclipse", "jcodebuddy-agent",
+            "jcodebuddy-builder", "jcodebuddy-builder-api", "jwa-sidecar", "webview-eclipse", "jcodebuddy-agent",
             "java-watch-core", "metadata-arena", "jcodebuddy-meta", "hipster-ioc-api");
 
     private static List<Path> committedSources() {

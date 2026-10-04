@@ -6,7 +6,7 @@ import java.nio.file.Files;
 import java.util.List;
 
 import hr.hrg.watch2.agent.tools.ActionTool;
-import hr.hrg.watch2.builder.BuilderTransformationEngine;
+import hr.hrg.jcodebuddy.builder.BuilderTransformationEngine;
 import hr.hrg.watch2.core.CodeEditApplier;
 import hr.hrg.watch2.core.TransformationResult;
 

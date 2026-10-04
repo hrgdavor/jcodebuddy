@@ -675,7 +675,7 @@ canonical statement of a boundary that has no other home.
   to a JCodeBuddy SPI belongs in a module that legitimately depends on both.
 
   **The boundary is the `watch/` group, and moving a module into the right group is a fix too.** A module that
-  needs Jackson, `jwa-builder` or another workspace artifact to do JCodeBuddy's work does not belong in
+  needs Jackson, `jcodebuddy-builder` or another workspace artifact to do JCodeBuddy's work does not belong in
   `watch/`: `java-watch-agent` was exactly that — JCodeBuddy's code-action server, with an HTTP command server
   and a codegen-session audit — and on 2026-10-03 it moved to the `jcodebuddy` group and was renamed
   **`jcodebuddy-agent`** (module directory, artifactId and `<name>`; the package stays `hr.hrg.watch2.agent`),

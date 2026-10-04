@@ -151,6 +151,6 @@ jcodebuddy/
 
 The four mentions describe a pre-migration module layout — "All generators parse Java source and modify AST nodes", a `jcodebuddy/jcodebuddy-agent/pom.xml` depending on `javaparser-core:3.28.0`, and a demo generator applying "imperative transformations using JavaParser AST". That layout is what this plan was written against, and the plan's own deprecation banner already says so; no reader should take `javaparser-core:3.28.0` as the current dependency.
 
-The generators now read through [`RecordBuilderProcessor`](../jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/RecordBuilderProcessor.java) and take source positions from [`LineLookup`](../jcodebuddy/jwa-builder/src/main/java/hr/hrg/watch2/builder/LineLookup.java) in `jwa-builder`, over OpenRewrite's LST.
+The generators now read through [`RecordBuilderProcessor`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/RecordBuilderProcessor.java) and take source positions from [`LineLookup`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/LineLookup.java) in `jwa-builder`, over OpenRewrite's LST.
 
 The representation decision is [DEC-030](../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md) and the reader's guide is [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md).

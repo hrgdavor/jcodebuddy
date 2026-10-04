@@ -21,7 +21,7 @@
  * itself, and on ordinary third-party libraries it chooses for itself (`directory-watcher`, `wyhash`,
  * `jsch*`, `ecj`, `slf4j`).
  *
- * **What this check's scope is: the watch/ group.** A module that needs Jackson, jwa-builder or another\n * workspace artifact to do JCodeBuddy's work is not part of the standalone watcher library — java-watch-agent\n * was exactly that and moved to the jcodebuddy group on 2026-10-03, still consuming java-watch-core (the\n * library that stays clean). Moving a module into the right group is the fix when the group is what was wrong;\n * a leak *inside* watch/ is a different thing and is what the violations below are.\n *\n * The watcher knows a directory changed; it decides nothing about Java. A port the watcher needs must be
+ * **What this check's scope is: the watch/ group.** A module that needs Jackson, jcodebuddy-builder or another\n * workspace artifact to do JCodeBuddy's work is not part of the standalone watcher library — java-watch-agent\n * was exactly that and moved to the jcodebuddy group on 2026-10-03, still consuming java-watch-core (the\n * library that stays clean). Moving a module into the right group is the fix when the group is what was wrong;\n * a leak *inside* watch/ is a different thing and is what the violations below are.\n *\n * The watcher knows a directory changed; it decides nothing about Java. A port the watcher needs must be
  * **the watcher's own** (`ActionTool` is), with the adapter that bridges it to a JCodeBuddy SPI living in the
  * module that legitimately depends on both.
  *

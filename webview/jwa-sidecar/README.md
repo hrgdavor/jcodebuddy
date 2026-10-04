@@ -103,8 +103,8 @@ Maven's dependency management handles sub-modules as distinct units. By separati
 The `jwa-builder` project in this repository serves as the reference implementation for this pattern.
 Its modules stayed at the repository root when the sidecar moved under `webview/`, so these links go up
 two levels:
-- [jwa-builder-api](../../jcodebuddy/jwa-builder-api/pom.xml)
-- [jwa-builder](../../jcodebuddy/jwa-builder/pom.xml)
+- [jwa-builder-api](../../jcodebuddy/jcodebuddy-builder-api/pom.xml)
+- [jwa-builder](../../jcodebuddy/jcodebuddy-builder/pom.xml)
 
 ## Development Workflow
 

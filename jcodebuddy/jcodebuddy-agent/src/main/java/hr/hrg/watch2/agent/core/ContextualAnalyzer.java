@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.watch2.agent.core;
 
-import hr.hrg.watch2.builder.ClassMemberProcessor;
+import hr.hrg.jcodebuddy.builder.ClassMemberProcessor;
 
 import java.io.BufferedReader;
 import java.io.IOException;
