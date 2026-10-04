@@ -15,16 +15,16 @@ because the failure mode was a conflict *disappearing*.
 
 ## Summary by workstream
 
-| #   | Workstream                                  | Status   | What was built                                                                           |
-| --- | ------------------------------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| #   | Workstream                                  | Status   | What was built                                                                              |
+| --- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------- |
 | WS1 | Compose conflicts instead of replacing them | **Done** | `Region`, region attribution, `MergeReport.getIndependentlyApplicable()`, `describeRegions()`, `isFullyAutomatic()` |
 | WS2 | Replace line-based parsing                  | **Done** | Step 1: `DeclarationScanner`. Step 2: `ResolvedTypeReader` + `TypeContext`, comparing **resolved** types |
-| WS3 | Verification gate                           | **Done** | `ResolutionVerifier`, downgrade-to-review, `ConflictResolution.Verification`             |
-| WS4 | History that stays trustworthy              | **Done** | Schema versioning, load diagnostics, pruning, signature property tests                   |
+| WS3 | Verification gate                           | **Done** | `ResolutionVerifier`, downgrade-to-review, `ConflictResolution.Verification`                |
+| WS4 | History that stays trustworthy              | **Done** | Schema versioning, load diagnostics, pruning, signature property tests                      |
 | WS5 | Continuous resolution via JGit              | **Done** | `MergeWorkflow`: branch and merge-base discovery, object-database reads, dry-run, working-tree writes |
-| WS6 | Reviewer-facing report                      | **Done** | `MergeReportWriter` (JSON) + `scripts/merge-report/render.js` (Bun, self-contained HTML) |
-| WS7 | Batch mode and dry run                      | **Done** | `MergeBatch`, `MergeBatch.Summary`, `exitCode()`, `applyTo`                              |
-| WS8 | Type resolver gaps                          | **Done** | JDK supertype chains, varargs/array equivalence, generic-type canonicalisation           |
+| WS6 | Reviewer-facing report                      | **Done** | `MergeReportWriter` (JSON) + the jsx6 review page (`review/`, one self-contained HTML file) |
+| WS7 | Batch mode and dry run                      | **Done** | `MergeBatch`, `MergeBatch.Summary`, `exitCode()`, `applyTo`                                 |
+| WS8 | Type resolver gaps                          | **Done** | JDK supertype chains, varargs/array equivalence, generic-type canonicalisation              |
 
 ---
 
@@ -248,9 +248,9 @@ MergeWorkflow.Result result = MergeWorkflow.open(Path.of("."))
 System.out.println(result.describe());
 System.exit(result.exitCode());
 
-// Render the report for a reviewer.
-// bun run scripts/merge-report/render.js \
-//     .jcodebuddy/metadata/merge-report.json .jcodebuddy/metadata/merge-report.html
+  // Render the report for a reviewer as one self-contained page (plan step 4.2).
+  // cd merge-java/review && bun run src_build/build.js \
+  //     --report ../../.jcodebuddy/metadata/merge-report.json --out build
 ```
 
 `result.exitCode()` is non-zero when a human is needed, so the whole thing composes

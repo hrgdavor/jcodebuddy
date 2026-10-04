@@ -4,6 +4,13 @@
 
 ### Changed
 
+- **2026-10-03 - the review display is a jsx6 page, and the vanilla `scripts/merge-report/render.js`
+  it replaced is deleted.** DEC-027's 2026-10-01 amendment sends a per-item review workflow to jsx6, so
+  the page lives in `review/` with a build of its own (`src_build/`), renders the three sides beside the
+  resolved code, and emits one self-contained HTML file that opens from `file://`; `MergeReportWriter`
+  gained the `sides` field it needed. Tests on both sides of the split hold it:
+  `review/src_build/build.test.js` (Bun, run from that directory) and `MergeReportWriterTest` (JVM).
+
 - **`requiresTypeContext()` now means "a classpath is a hard requirement *for this
   resolver*", and `TypeChangeConflictResolver` no longer declares it.** The entry below
   said the type-change resolver refuses to run without a context; that was true for one

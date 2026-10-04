@@ -162,50 +162,80 @@ class MergeReportWriterTest {
         }
     }
 
+    /**
+     * The review display is a jsx6 page (rule § 2 and DEC-027's 2026-10-01 amendment: a per-item
+     * review workflow is an interactive page, never a vanilla one), and these two tests are its
+     * contract: it produces ONE self-contained file, and it refuses a report it cannot read.
+     *
+     * <p>They drive the page's own build rather than a renderer script beside it, because the vanilla
+     * `scripts/merge-report/render.js` this used to test is gone — the page replaced it. The build is
+     * skipped, not failed, when the machine has not set the page up (`bun install` in `review/`, and a
+     * jsx6 checkout): a missing local toolchain is not a defect in this module.</p>
+     */
     @Test
-    @DisplayName("the Bun renderer produces one self-contained HTML file")
+    @DisplayName("the jsx6 review page builds one self-contained HTML file")
     void rendersSelfContainedHtml() throws Exception {
-        assumeTrue(bunAvailable(), "bun is not installed; renderer contract not exercised");
+        assumeTrue(bunAvailable(), "bun is not installed; the review page is not exercised");
+        Path review = Path.of("review").toAbsolutePath();
+        assumeTrue(Files.isDirectory(review.resolve("node_modules").resolve("esbuild")),
+            "the review package has no local esbuild; run `bun install` in " + review);
+        assumeTrue(Files.isDirectory(Path.of("..", ".jsx6", "libs").toAbsolutePath().normalize()),
+            "no jsx6 checkout at ../.jsx6; see root AGENTS.md § 2 (JCODEBUDDY_JSX6_DIR overrides)");
 
         Path jsonPath = tempDir.resolve("report.json");
-        Path htmlPath = tempDir.resolve("report.html");
+        // The page is built into `target/`, NOT into the @TempDir: measured in this environment, esbuild
+        // cannot write its output under %TEMP% at all ("Failed to write to output file … Access is denied",
+        // with the directory created successfully first), while the module's own build directory works and
+        // is gitignored and cleaned by `mvn clean`. The report itself stays in the @TempDir on purpose, so
+        // the test also proves the build reads a report from wherever it is given one.
+        Path outDir = Path.of("target", "review-page-test").toAbsolutePath();
+        Files.createDirectories(outDir);
         MergeReportWriter.write(jsonPath, batch());
 
-        Path script = Path.of("scripts", "merge-report", "render.js").toAbsolutePath();
-        assumeTrue(Files.isRegularFile(script), "renderer script not found at " + script);
-
-        Process process = new ProcessBuilder("bun", "run", script.toString(),
-                jsonPath.toString(), htmlPath.toString())
+        Process process = new ProcessBuilder("bun", "run", "src_build/build.js",
+                "--report", jsonPath.toString(), "--out", outDir.toString())
+            .directory(review.toFile())
             .redirectErrorStream(true)
             .start();
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        assertEquals(0, process.waitFor(), "renderer failed: " + output);
+        assertEquals(0, process.waitFor(), "the page build failed: " + output);
 
-        String html = Files.readString(htmlPath, StandardCharsets.UTF_8);
+        String html = Files.readString(outDir.resolve("index.html"), StandardCharsets.UTF_8);
 
-        // Self-contained: no external resources at all.
+        // Self-contained means nothing is FETCHED. The check is therefore on attributes rather than on
+        // the words: the jsx6 runtime legitimately contains the SVG namespace
+        // `http://www.w3.org/2000/svg` to call createElementNS, which a blanket "no http://" assertion
+        // would fail on while proving nothing about the page's self-containment.
         assertFalse(html.contains("<script src="), "no external script may be referenced");
         assertFalse(html.contains("<link "), "no external stylesheet may be referenced");
-        assertFalse(html.contains("http://"), "no network reference may appear");
-        assertFalse(html.contains("https://"), "no network reference may appear");
+        assertFalse(html.matches("(?s).*\\s(src|href)\\s*=\\s*\"https?://.*"),
+            "nothing may be fetched over the network");
+        assertFalse(html.contains("sourceMappingURL"),
+            "the inlined page must not point at the bundle's map file");
 
         // It presents the facts the reviewer needs.
-        assertTrue(html.contains("payment.java") || html.contains("Payment.java"),
-            "the conflicting file must be named");
+        assertTrue(html.contains("Payment.java"), "the conflicting file must be named");
         assertTrue(html.contains("IMPORT_ADD"), "the conflict type must be shown");
         assertTrue(html.contains("AUTO"), "the outcome must be shown");
         assertTrue(html.contains("recommended"), "the recommendation must be shown");
+        // And the three sides step 4.2 exists for, not just the answer.
+        assertTrue(html.contains("branch 1"), "the branches' own code must be shown beside the result");
     }
 
     @Test
-    @DisplayName("the renderer refuses to run without both arguments")
-    void rendererRequiresArguments() throws Exception {
+    @DisplayName("the page build refuses a report it cannot read, with a usage status")
+    void buildRefusesAReportItCannotRead() throws Exception {
         assumeTrue(bunAvailable(), "bun is not installed");
+        Path review = Path.of("review").toAbsolutePath();
+        assumeTrue(Files.isDirectory(review.resolve("node_modules").resolve("esbuild")),
+            "the review package has no local esbuild; run `bun install` in " + review);
 
-        Path script = Path.of("scripts", "merge-report", "render.js").toAbsolutePath();
-        assumeTrue(Files.isRegularFile(script), "renderer script not found");
-
-        Process process = new ProcessBuilder("bun", "run", script.toString())
+        // No jsx6 checkout is needed for this path: a report that cannot be read fails before the build
+        // reaches esbuild, and it must never fall back to the sample — that would render different data
+        // than the caller asked for, which is the one failure a review display must not have.
+        Process process = new ProcessBuilder("bun", "run", "src_build/build.js",
+                "--report", tempDir.resolve("absent.json").toString())
+            .directory(review.toFile())
             .redirectErrorStream(true)
             .start();
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);

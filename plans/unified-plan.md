@@ -2677,6 +2677,31 @@ Which table entries became unreachable is in the commit message, as this step re
 renderer, and `MergeReportWriterTest` drives it in two places (its "renderer half"). Retiring it is the rest of the
 step: those tests should hold the jsx6 page to the same contract, which is a decision 4.3 informs, because the action
 display may need a host that `file://` cannot provide.
+
+**Done 2026-10-03: the vanilla renderer is retired and the step is complete.** The rest of the step was two
+things, and both are done:
+
+- **`MergeReportWriterTest` now drives the page** (its "renderer half"): it builds `review/` with a report
+  the test itself wrote, and asserts one self-contained file — no external script, no stylesheet, nothing
+  fetched, no map reference — that shows the file, the conflict type, the outcome, the recommendation and
+  the branches' own code. Two measurement-driven corrections are recorded in that test rather than in a
+  commit message: the old blanket "no `http://`" assertion was a **proxy** that the jsx6 runtime's SVG
+  namespace (`createElementNS("http://www.w3.org/2000/svg")`) legitimately trips, so the check is now on
+  `src`/`href` attributes — the actual property, "nothing is fetched"; and the page is built into
+  `merge-java/target/`, not into a JUnit `@TempDir`, because **esbuild cannot write under `%TEMP%` in this
+  environment** ("Failed to write to output file … Access is denied", with the directory created first).
+- **`scripts/merge-report/render.js` is deleted**, and its last two tests with it. The renderer's own test now
+  lives beside the renderer, which is the pattern this step's Gate names — `review/src_build/build.test.js`,
+  four Bun tests: a self-contained page from a report, the page saying where its data came from, misuse
+  (a report that cannot be read) exiting 2 with a usage line, and the build directory being the module's
+  own. `bun test` is run from `merge-java/review`, because `bun test` reads `bunfig.toml` from the process
+  cwd and would otherwise transform JSX with React's runtime.
+
+**Gate, both halves:** `merge-java/review` — `bun test` **4 pass, 0 fail**; `mvn -f merge-java/pom.xml test`
+— **705 tests, BUILD SUCCESS**.
+
+**What this step does not do:** actions. The page is read-only, and 4.3's action display needs somewhere to
+write — a `file://` page cannot — which is the question the next step answers.
 **Who:** agent · **Size:** M
 
 Today a resolution is reported as a count. The user sees *that* something was resolved, never *what was
@@ -2685,7 +2710,7 @@ sticky decisions replayed.
 
 **Do:** render exactly that per conflict — base / branch 1 / branch 2 beside the resolved code, with the
 resolver's explanation and fix paths — as a Bun renderer over the JSON
-[`MergeReportWriter`](../merge-java/scripts/merge-report/render.js) already writes, following DEC-027/029
+[`MergeReportWriter`](../merge-java/src/main/java/com/codebuddy/merge/MergeReportWriter.java) already writes, following DEC-027/029
 (every link verified before it is written, output under the module's `.jcodebuddy/`). **This is a `jsx6`
 page, not a vanilla one**: DEC-027's 2026-10-01 amendment classifies it as interactive/advanced — three
 branches beside a resolution, an explanation, fix paths, navigation between conflicts — and 4.3 turns it
@@ -3447,7 +3472,7 @@ start)
 | 3.10 | Retire `hipster-ioc-test`'s hand-written context                                      | agent              | S–M  | `[TBD]` — waits on DEC-036 being `Accepted`                                                 |
 | 3.11 | Editor-agnostic graph navigation + embedded host                                      | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
 | 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                   | agent              | S–M  | `[x]`                                                                                       |
-| 4.2  | merge-java Phase 13 step 1 — review render                                            | agent              | M    | `[ ]`                                                                                       |
+| 4.2  | merge-java Phase 13 step 1 — review render                                            | agent              | M    | `[x]`                                                                                       |
 | 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                        | agent              | M    | `[ ]`                                                                                       |
 | 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                             | agent              | M    | `[ ]`                                                                                       |
 | 4.5  | Residual structural conflict should not veto a partly-overlapping block               | agent              | S–M  | `[ ]`                                                                                       |

@@ -207,10 +207,13 @@ against a real repository built with JGit in a temporary directory.
 
 ## Phase 11 — Reviewer-facing reporting [done → WS6]
 
-`MergeReportWriter` writes the facts as JSON; `scripts/merge-report/render.js`
-renders one self-contained HTML file with framework-free vanilla JS, no network and
-no unverified links, per DEC-027/029. A test runs Bun end to end and asserts the
-output is self-contained.
+`MergeReportWriter` writes the facts as JSON; the **jsx6 review page** (`review/`, plan step 4.2)
+renders one self-contained HTML file - no network, no unverified links, per DEC-027/029. It is **jsx6
+rather than vanilla** because this page is the per-item review workflow that DEC-027's 2026-10-01
+amendment sends to jsx6; the vanilla `scripts/merge-report/render.js` it replaced was deleted
+2026-10-03, and the sides a reviewer compares (base / branch 1 / branch 2) are emitted by the writer.
+A test on each side of the split - a Bun test beside the page and a JVM test that drives it - asserts
+the output is self-contained.
 
 ## Phase 12 — Composition, verification and history trust [done → WS1/WS3/WS4/WS7/WS8]
 

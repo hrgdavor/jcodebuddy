@@ -29,18 +29,40 @@ const dev = args.includes('--dev')
 const outDir = resolve(valueOf('--out', join(packageRoot, 'build')))
 const defaultReport = join(mergeJavaRoot, '.jcodebuddy', 'metadata', 'merge-report.json')
 const sampleReport = join(packageRoot, 'sample-report.json')
-const reportPath = resolve(valueOf('--report', defaultReport))
+const reportArg = valueOf('--report', null)
+const reportPath = resolve(reportArg ?? defaultReport)
+const USAGE = 'usage: bun run src_build/build.js [--report <report.json>] [--out <dir>] [--dev]'
 
 let reportSource = reportPath
 let reportJson
-try {
-  reportJson = readFileSync(reportSource, 'utf8')
-} catch {
-  reportSource = sampleReport
-  reportJson = readFileSync(reportSource, 'utf8')
+if (reportArg !== null) {
+  // An explicitly named report MUST exist. Falling back to the sample here would render different data
+  // than the caller asked for — the one failure a review display must never have — so it is misuse, and
+  // it exits like misuse (status 2, with the usage line), which is also the shape the shell test holds.
+  try {
+    reportJson = readFileSync(reportPath, 'utf8')
+  } catch (error) {
+    console.error(`[review] cannot read the report given with --report:\n  ${reportPath}\n  ${error.message}`)
+    console.error(USAGE)
+    process.exit(2)
+  }
+} else {
+  try {
+    reportJson = readFileSync(defaultReport, 'utf8')
+  } catch {
+    reportSource = sampleReport
+    reportJson = readFileSync(sampleReport, 'utf8')
+  }
 }
 // Parse here rather than trusting the file: a malformed report must fail the build, not the page.
-const report = JSON.parse(reportJson)
+let report
+try {
+  report = JSON.parse(reportJson)
+} catch (error) {
+  console.error(`[review] the report is not valid JSON:\n  ${reportSource}\n  ${error.message}`)
+  console.error(USAGE)
+  process.exit(2)
+}
 
 // The generated module is what the page imports; it lives outside src/ so generated output never
 // mixes with source, and the source path travels with it so the page can say where its data is from.
@@ -98,7 +120,11 @@ console.log(`[review] wrote ${join(outDir, 'review.js')}`)
 // makes the artifact openable by double-click and inside the JetBrains JCEF webview, which is the
 // whole point of a local review display (DEC-027's "one self-contained file" for a report page).
 const bundle = readFileSync(join(outDir, 'review.js'), 'utf8')
-if (bundle.includes('</script')) {
+// The inlined copy drops the map reference: a comment pointing at `review.js.map` is a reference to a
+// second file, and "one self-contained HTML" has to mean exactly that. The external review.js keeps it,
+// so debugging the bundle still works.
+const inlinedBundle = bundle.replace(/\n?\/\/# sourceMappingURL=.*\n?$/, '\n')
+if (inlinedBundle.includes('</script')) {
   // Would close the inline script tag early. Nothing in this page should contain it; fail loudly
   // rather than emit a page that silently truncates.
   console.error('[review] the bundle contains "</script" and cannot be inlined safely')
@@ -107,7 +133,7 @@ if (bundle.includes('</script')) {
 const html = readFileSync(join(packageRoot, 'index.html'), 'utf8')
 const inlined = html.replace(
   '<script type="module" src="./review.js"></script>',
-  `<script type="module">\n${bundle}\n</script>`,
+  `<script type="module">\n${inlinedBundle}\n</script>`,
 )
 if (inlined === html) {
   console.error('[review] index.html has no <script type="module" src="./review.js"> to replace')

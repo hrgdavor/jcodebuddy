@@ -360,7 +360,8 @@ is needed. Versions of OpenRewrite come from the parent POM.
 Detection, classification, resolution, fix paths, history and verification are
 implemented and tested. So is the loop the module was built for: `MergeWorkflow`
 keeps a branch up to date through JGit, `MergeBatch` handles many files at once,
-`MergeReportWriter` plus a Bun script produce a reviewer-facing report, and
+`MergeReportWriter` writes the report and the **jsx6 review page** ([`review/`](review/README.md)) renders it as
+one self-contained HTML file a reviewer opens, and
 `MergeFileTool` fixes a marker-carrying file in place - preparing everything it
 cannot fix as a private, anonymization-first fixture for the next resolver.
 
