@@ -509,8 +509,16 @@ public final class MergeFileTool {
 
         for (ConflictMarkerParser.Block block : parsed.blocks()) {
             String baseSlice = block.hasBase() ? block.base() : "";
-            List<Conflict> conflicts = detector.detect(
+            List<Conflict> detected = detector.detect(
                 reportedPath, baseSlice, block.ours(), block.theirs(), typeContext);
+            // The detector works on this block's slices, so a conflict's region is relative to the BLOCK. A reader
+            // of the report is looking at the FILE, so the block's own region is stamped instead. That is also the
+            // only thing that groups the conflicts sharing a block - and the page reads per block, because this
+            // tool will not compose several conflicts of one block into a single answer.
+            List<Conflict> conflicts = new ArrayList<>(detected.size());
+            for (Conflict conflict : detected) {
+                conflicts.add(conflict.withRegion(block.markerRegion()));
+            }
             List<ConflictResolution> resolutions = new ArrayList<>(conflicts.size());
             for (Conflict conflict : conflicts) {
                 resolutions.add(resolver.resolve(conflict));

@@ -92,6 +92,16 @@
       .actions textarea { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
       .actions.accepted { background: #f2f8f2; border-color: #bcd9bc; }
       .actions .badge { margin-left: 6px; }
+      .block {
+        margin-top: 14px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid #d8d8d0;
+        border-radius: 8px; background: #fff;
+      }
+      .block.needs-you { border-left-color: #d9a640; background: #fffdf6; }
+      .block.several { border-left-color: #c96f6f; }
+      .blockhead { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+      .blocktitle { font-weight: 600; }
+      .blockstate { margin-left: auto; color: var(--muted); font-size: 12px; }
+      .blocknote { margin: 4px 0 2px; color: var(--muted); font-size: 12px; }
       .actions .label {
         color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
       }

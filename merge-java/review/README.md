@@ -91,6 +91,19 @@ on a real mid-merge repository rather than by reading code:
 The reliable way to tell which case you are in: run the flow, then read the per-block line the tool prints.
 `LEFT_MANUAL` with "at least one is manual" means a conflict in that block still has no answer; a block that
 keeps its markers after you accepted everything is rule 1.
+### Reading it per block
+
+The page groups by **conflict block**, not by conflict, and each group says what it still needs: how many
+conflicts are in it, how many are decided, and one sentence about what is missing. A block that carries more
+than one conflict is marked and says so explicitly, because the tool will not compose several conflicts of one
+block into a single answer — accepting all of them there is still not an answer, and the block is finished in
+your editor.
+
+That reading depends on one fact from the report: a conflict's `region` is its **block's** place in the file.
+Inside `MergeFileTool` the detector works on the block's slices, so the regions it produces are block-relative —
+the first version of this page reported "lines 1–1" for a block at lines 9–21, and two conflicts of one block
+were indistinguishable. The tool now stamps the block's own region on the conflicts it reports, which is what
+groups them, and a test in `MergeFileToolTest` holds it.
 ### What is written where
 
 The decisions are recorded into the branch's history (`.jcodebuddy/merge-history/<branch>/decisions/`), which

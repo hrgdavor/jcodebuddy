@@ -803,7 +803,7 @@ class MergeFileToolTest {
         Path file = write("OrderService.java", IMPORT_CONFLICT_FILE);
         Path report = tempDir.resolve("merge-report.json");
 
-        toolFor(file).reportPath(report).run();
+        MergeFileTool.Result result = toolFor(file).reportPath(report).run();
 
         assertTrue(Files.isRegularFile(report), "the report must be written");
         String json = read(report);
@@ -813,6 +813,16 @@ class MergeFileToolTest {
             "the three sides are what the page compares: " + json);
         assertTrue(json.contains("\"signature\""),
             "and the key a decision is recorded under: " + json);
+
+        // The conflict's region is the BLOCK's, in file coordinates: the detector works on the block's slices,
+        // so its own regions are block-relative and two conflicts of one block are indistinguishable. The page
+        // groups by that region, so this is the invariant that makes reading per block possible.
+        MergeFileTool.BlockOutcome outcome = result.outcomes().get(0);
+        JsonNode conflict = new ObjectMapper().readTree(json).path("files").get(0).path("conflicts").get(0);
+        assertEquals(outcome.markerRegion().startLine(), conflict.path("region").path("startLine").asInt(),
+            "a conflict is located where its block is");
+        assertEquals(outcome.markerRegion().endLine(), conflict.path("region").path("endLine").asInt(),
+            "and spans the block");
     }
 
     /**

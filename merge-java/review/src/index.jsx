@@ -11,6 +11,7 @@ import {
   mergeAccepted,
   toJson,
 } from './decisions.js'
+import { blockLabel, blockNote, blocksOf } from './blocks.js'
 
 /**
  * The merge-java resolution review page (plan step 4.2), as a jsx6 app.
@@ -247,27 +248,44 @@ function Resolution({ resolution, filePath, conflict }) {
   )
 }
 
+
+/**
+ * One conflict block of a file, with the resolutions that answer it.
+ *
+ * A block, not a conflict, is the unit a reviewer works in: a block can disagree in more than one way at once, the
+ * tool refuses to compose several conflicts of one block into a single answer, and an answer is written back to the
+ * file per block. Reading the report flat is what let a reviewer accept everything and still find the block there,
+ * with nothing saying why.
+ */
+function Block({ block, filePath }) {
+  return (
+    <div class={`block${block.severalConflicts ? ' several' : ''}${block.undecided ? ' needs-you' : ''}`}>
+      <div class="blockhead">
+        <span class="blocktitle">{blockLabel(block)}</span>
+        <span class="blockstate">
+          {block.entries.length === 1 ? '1 conflict' : `${block.entries.length} conflicts`} · {block.decided}{' '}
+          decided
+          {block.undecided ? ` · ${block.undecided} needs you` : ''}
+        </span>
+      </div>
+      <div class="blocknote">{blockNote(block)}</div>
+      {block.entries.map(({ resolution, conflict }) => (
+        <Resolution resolution={resolution} filePath={filePath} conflict={conflict} />
+      ))}
+    </div>
+  )
+}
+
 function FileSection({ file }) {
+  const blocks = blocksOf(file)
   return (
     <div class="file">
       <div class="path">{file.filePath}</div>
       <div class="meta">
         branch {file.branchName} · {file.clean ? 'clean' : 'conflicts'} · {file.summary}
       </div>
-      {file.resolutions?.length ? (
-        file.resolutions.map((resolution, index) => (
-
-          <Resolution
-
-            resolution={resolution}
-
-            filePath={file.filePath}
-
-            conflict={(file.conflicts ?? [])[index]}
-
-          />
-
-        ))
+      {blocks.length ? (
+        blocks.map((block) => <Block block={block} filePath={file.filePath} />)
       ) : (
         <div class="note">No resolutions recorded for this file.</div>
       )}

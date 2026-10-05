@@ -2790,7 +2790,26 @@ so the file changes. `bun test` in `merge-java/review` — **10 pass, 0 fail**. 
   page must be read per BLOCK, not per conflict: **grouping the cards by block, and saying which conflict in a
   block still has no answer, is the next UI work** — today a reviewer can accept everything and still see the block
   unchanged without being told why.
-- **A stale report reads exactly like a fresh one.** A second sample repository that merged cleanly left the first
+
+**Done 2026-10-04 - the page reads per BLOCK.** The grouping the finding above asked for:
+
+- **The report locates a conflict where its block is.** `MergeFileTool` detected on the block's slices, so a
+  conflict's region was block-relative — a block at file lines 9–21 reported `1..1` for both of its conflicts,
+  which made them indistinguishable and the page's flat list inevitable. The tool now stamps the block's own
+  region (via the existing `Conflict.withRegion`), and `MergeFileToolTest` asserts a conflict is located where its
+  block is and spans it.
+- **The page groups by block and says what is missing**: `src/blocks.js` (a pure module, tested without a DOM)
+  groups a file's resolutions by region, pairs each with the conflict it answers (the report's two arrays are
+  index-parallel), counts decided against undecided — the engine's manual marker is not an answer — and flags a
+  block that carries several conflicts, with `blockNote` wording the sentence: the tool will not compose several
+  conflicts of one block into a single answer, so that block is finished in an editor even when every conflict in
+  it is decided. `src/index.jsx` renders one section per block with its heading (`lines 9–21`), its counts and
+  that sentence.
+- **Verified visually** on the temporary test environment (`test-env.js`), which is what that environment is for:
+  the sample block now reads `lines 9–21 · 2 conflicts · 1 decided · 1 needs you`, with both resolutions under it.
+
+`bun test` in `merge-java/review` — **17 pass, 0 fail**. `mvn -f merge-java/pom.xml test` — **712 tests, BUILD
+SUCCESS** (plus the new region assertion).- **A stale report reads exactly like a fresh one.** A second sample repository that merged cleanly left the first
   repository's report on disk, and reading it showed two conflicts for a file that had none. The entry point
   overwrites the report per file name, and the page prints the report path it used — keep both habits.
 **Who:** agent · **Size:** M
