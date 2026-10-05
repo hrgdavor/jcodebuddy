@@ -40,6 +40,11 @@ public class MergeConflictResolver {
     private final ConflictDetectionService detector;
     private final ResolutionVerifier verifier;
     private final TypeContext typeContext;
+    /**
+     * Optional advisor for conflicts this resolver refuses to decide (plan step 4.4). Its answer becomes a fix
+     * path and nothing else, so it cannot bypass the verification gate or the human decision.
+     */
+    private final ConflictProposer proposer;
 
     /**
      * Builder for {@link MergeConflictResolver}.
@@ -47,6 +52,7 @@ public class MergeConflictResolver {
     public static class Builder {
         private String branchName = "unknown";
         private Path historyPath;
+        private ConflictProposer proposer;
         private List<ConflictResolver> resolvers;
         private ConflictDetectionService detector;
         private boolean inMemoryOnly;
@@ -115,7 +121,19 @@ public class MergeConflictResolver {
          * {@link ResolutionVerifier#structural()}, which checks that an automatic
          * resolution is still well formed and downgrades it to review if not.
          */
-        public Builder setVerifier(ResolutionVerifier verifier) {
+        /**
+     * Offer a proposer for the conflicts this resolver escalates (plan step 4.4).
+     *
+     * <p>Optional: without one, behaviour is exactly as before. With one, its answer appears as an extra fix
+     * path on an escalated resolution, carrying the verification verdict - never as the resolution itself, so a
+     * proposal cannot reach a file except through a reviewer's decision.</p>
+     */
+    public Builder setProposer(ConflictProposer proposer) {
+        this.proposer = proposer;
+        return this;
+    }
+
+    public Builder setVerifier(ResolutionVerifier verifier) {
             this.verifier = verifier;
             return this;
         }
@@ -164,7 +182,8 @@ public class MergeConflictResolver {
                 detector == null ? new ConflictDetectionService() : detector,
                 inMemoryOnly,
                 verifier == null ? ResolutionVerifier.structural() : verifier,
-                typeContext
+                typeContext,
+                proposer
             );
         }
 
@@ -228,6 +247,16 @@ public class MergeConflictResolver {
                           boolean inMemoryOnly,
                           ResolutionVerifier verifier,
                           TypeContext typeContext) {
+        this(branchName, historyPath, resolvers, detector, inMemoryOnly, verifier, typeContext, null);
+    }
+
+    MergeConflictResolver(String branchName, Path historyPath,
+                          List<ConflictResolver> resolvers,
+                          ConflictDetectionService detector,
+                          boolean inMemoryOnly,
+                          ResolutionVerifier verifier,
+                          TypeContext typeContext,
+                          ConflictProposer proposer) {
         this.branchName = branchName == null ? "unknown" : branchName;
         this.historyPath = historyPath;
         this.resolvers = ConflictResolvers.sortByPriority(resolvers);
@@ -238,6 +267,7 @@ public class MergeConflictResolver {
         this.detector = detector;
         this.verifier = verifier;
         this.typeContext = typeContext;
+        this.proposer = proposer;
     }
 
     /**
@@ -282,6 +312,7 @@ public class MergeConflictResolver {
             : resolver.resolve(conflict);
 
         if (resolution == null) {
+            List<FixPath> options = new ArrayList<>(manualOptions(conflict, resolver));
             resolution = ConflictResolution.manual(conflict)
                 .branchName(branchName)
                 .explanation(resolver == null
@@ -289,6 +320,21 @@ public class MergeConflictResolver {
                     : resolver.name() + " could not resolve this automatically.")
                 .alternativePaths(manualOptions(conflict, resolver))
                 .build();
+        }
+
+
+        // Plan step 4.4: an escalated conflict can also be handed to a proposer, and its answer joins the fix
+        // paths and NOTHING else. Both escalation paths are covered - a conflict no resolver claimed, and one a
+        // resolver escalated (STRUCTURAL_CHANGE and API_INCOMPATIBILITY always escalate) - and only those two, so
+        // an automatic or already-replayed resolution is never second-guessed by an advisor.
+        if (resolution.getKind() == ConflictResolution.ResolutionKind.MANUAL
+            || resolution.getKind() == ConflictResolution.ResolutionKind.REVIEW) {
+            Optional<FixPath> proposed = proposedOption(conflict);
+            if (proposed.isPresent()) {
+                List<FixPath> options = new ArrayList<>(resolution.getAlternativePaths());
+                options.add(proposed.get());
+                resolution = ConflictResolution.copyOf(resolution).alternativePaths(options).build();
+            }
         }
 
         // Carry the conflict's region so a report can tell whether this
@@ -445,6 +491,60 @@ public class MergeConflictResolver {
             .sticky(true)
             .explanation("Reused the decision recorded for this branch on "
                 + stored.getResolvedAt() + ": " + stored.getExplanation())
+            .build());
+    }
+
+    /**
+     * A proposer's answer, as one more fix path (plan step 4.4).
+     *
+     * <p>The gate is applied to a proposal exactly as it is to an automatic answer - that is the only kind of
+     * answer this module verifies, because review, manual and replayed resolutions are already in front of a
+     * human. The verdict then travels into the fix path, so a reviewer reads what the gate said before deciding,
+     * and a refused proposal is labelled as refused rather than quietly dropped.</p>
+     */
+    private Optional<FixPath> proposedOption(Conflict conflict) {
+        if (proposer == null) {
+            return Optional.empty();
+        }
+        Optional<ConflictProposer.Proposal> proposed;
+        try {
+            proposed = proposer.propose(conflict);
+        } catch (RuntimeException failure) {
+            // An advisor's failure must not change a decision: the escalation stands, and the fix path says what
+            // happened instead of pretending the proposer had nothing to say.
+            return Optional.of(FixPath.builder()
+                .conflictType(conflict.getType())
+                .description("A proposal was requested and the proposer failed")
+                .options("Decide this conflict yourself, or fix the proposer")
+                .justification(String.valueOf(failure.getMessage()))
+                .impact("Nothing was applied: a proposer cannot change what this tool decides.")
+                .build());
+        }
+        if (proposed.isEmpty()) {
+            return Optional.empty();
+        }
+        ConflictProposer.Proposal proposal = proposed.get();
+        ConflictResolution candidate = ConflictResolution
+            .auto(conflict, ConflictResolution.ResolutionStrategy.MERGE_SAFE)
+            .resolvedCode(proposal.resolvedCode())
+            .explanation(proposal.explanation())
+            .branchName(branchName)
+            .build();
+        ConflictResolution verified = verifier.apply(conflict, candidate);
+        boolean passed = verified.getVerification() == ConflictResolution.Verification.PASSED;
+        return Optional.of(FixPath.builder()
+            .conflictType(conflict.getType())
+            .description(passed
+                ? "Use the proposed answer"
+                : "Use the proposed answer (the gate refused it)")
+            .options(passed
+                ? "Accept the proposed answer"
+                : "Read it, then decide - accepting is still yours")
+            .suggested(verified)
+            .justification(proposal.explanation())
+            .impact(passed
+                ? "Verified: the gate found no structural fault. Applying it is still your decision."
+                : "NOT verified: " + verified.getExplanation())
             .build());
     }
 

@@ -17,6 +17,7 @@ import {
   buildDecisions,
   decisionKey,
   fileNameFor,
+  codeForOption,
   fixPathOptions,
   isActionable,
   isResolved,
@@ -239,4 +240,24 @@ test('acceptAllResolved pairs each resolution with its conflict', () => {
   assert.equal(accepted.length, 1, 'only the resolution with an answer')
   assert.equal(accepted[0].conflict.signature, 'import_add-aaaa', 'paired with the conflict it answers')
   assert.equal(accepted[0].conflict.sides.branch1, 'one')
+})
+
+test('a fix path that carries code prefills the choice that applies it', () => {
+  // How a proposal reaches the editor (plan step 4.4): the fix path carries the code, so accepting it is a
+  // decision rather than a transcription. The fix paths that only describe a direction carry none.
+  const resolution = {
+    fixPaths: [
+      { description: 'Take branch 1', options: ['apply branch 1'] },
+      {
+        description: 'Use the proposed answer',
+        options: ['Accept the proposed answer'],
+        suggestedCode: 'void renamed() {\n}',
+      },
+    ],
+  }
+
+  assert.equal(codeForOption(resolution, 'Accept the proposed answer'), 'void renamed() {\n}')
+  assert.equal(codeForOption(resolution, 'apply branch 1'), '')
+  assert.equal(codeForOption(resolution, 'not an option'), '')
+  assert.equal(codeForOption({}, 'anything'), '')
 })

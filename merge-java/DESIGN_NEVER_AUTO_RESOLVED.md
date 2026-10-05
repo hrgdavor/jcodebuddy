@@ -259,3 +259,17 @@ directions is not symmetric:
 - Resolving an unresolvable one costs **a silent behavioural regression**.
 
 Until that evidence exists, the answer is no, and this document is why.
+
+---
+
+## Does a model proposing an answer cross this line?
+
+No - and the reason is structural rather than a promise. Plan step 4.4 added an optional `ConflictProposer`, and a
+proposal reaches a file the same way any other fix path does: it is attached to an escalated resolution's list of
+fix paths and to nothing else, so the code path that carries it cannot make it the resolution. It is verified as if
+it were an automatic answer (the gate only verifies those, since review, manual and replayed answers are already in
+front of a person), and the verdict travels with it, so a refused proposal is shown as refused instead of applied.
+
+What the proposer changes is how much a reviewer has to read, never who decides. That is the whole point of the
+asymmetry in § 2: for a substitutive conflict the missing input is intent, and intent exists in a person's head -
+a model that has not met either author does not have it either. See [`docs/LLM_PROPOSER.md`](docs/LLM_PROPOSER.md).

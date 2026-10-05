@@ -217,6 +217,12 @@ public final class MergeReportWriter {
             FixPath fixPath = fixPaths.get(index);
             json.append("{\"description\": ").append(quote(fixPath.getDescription()))
                 .append(", \"options\": ").append(stringListJson(fixPath.getOptions()))
+                // The code a choice would apply, when the fix path carries one: a proposer's answer does (plan
+                // step 4.4), so a page can prefill its editor instead of asking a reviewer to copy the code out
+                // of a justification. Empty for the fix paths that only describe a direction.
+                .append(", \"suggestedCode\": ").append(quote(fixPath.getSuggested() == null
+                    ? ""
+                    : fixPath.getSuggested().getResolvedCode()))
                 .append(", \"recommended\": ").append(quote(fixPath.getRecommended()))
                 .append(", \"justification\": ").append(quote(fixPath.getJustification()))
                 .append(", \"impact\": ").append(quote(fixPath.getImpact()))

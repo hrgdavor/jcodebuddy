@@ -70,6 +70,16 @@ export function fixPathOptions(resolution) {
   )
 }
 
+/**
+ * The code that choosing an option would apply, when the fix path carrying it has one.
+ *
+ * <p>A proposal arrives exactly this way (plan step 4.4): the fix path says what the gate thought of it and
+ * carries the code, so a reviewer accepting one does not have to copy it out of a justification.</p>
+ */
+export function codeForOption(resolution, option) {
+  const carrier = (resolution.fixPaths ?? []).find((fixPath) => (fixPath.options ?? []).includes(option))
+  return carrier?.suggestedCode || ''
+}
 /** Whether a resolution is one a reviewer can act on: anything not already applied automatically, or anything
  * that offers fix paths to choose between. */
 export function isActionable(resolution) {

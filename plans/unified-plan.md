@@ -2835,6 +2835,35 @@ to the same verification gate and the same human decision. The boundary in
 without an explicit human accept.
 
 **Done when:** the proposal path exists and cannot bypass the gate.
+**Done 2026-10-04 - the proposer exists, behind the gate.**
+
+- **`ConflictProposer`** is an optional seam: `Optional<Proposal> propose(Conflict)`, one small record, and a
+  `Builder.setProposer(...)`. Without one, behaviour is exactly as before - and a test asserts that.
+- **The hook covers both escalation paths** - a conflict no resolver claimed, and one a resolver escalated
+  (`STRUCTURAL_CHANGE` and `API_INCOMPATIBILITY` always do; the first version of this only covered the former) -
+  and only those two, so an automatic or already-replayed resolution is never second-guessed by an advisor.
+- **A proposal is attached as one more fix path and NOWHERE else.** The code that attaches it cannot reach the
+  resolution, which is what makes "cannot bypass the gate" structural rather than a promise; the tests assert
+  the escalation stays `MANUAL`, that nothing about it becomes independently applicable (the report's own rule),
+  and that the resolved code is never the proposal.
+- **It is verified as if it were automatic**, because `ResolutionVerifier` gates only automatic answers - review,
+  manual and replayed ones are already in front of a person - and the verdict travels with the fix path. A
+  refused proposal is still shown, labelled as refused, with an impact that begins `NOT verified`: a reviewer may
+  read what was suggested and why it was refused, and accepting it stays their decision. Nothing is applied on
+  its own.
+- **A proposer that throws keeps the escalation** and says so in a fix path, because an advisor's failure must
+  not change a decision.
+- **The code travels too**: the report now writes `suggestedCode` (empty for the fix paths that only describe a
+  direction) and the page prefills its editor when a chosen option carries it (`codeForOption`), so accepting a
+  proposal is a decision rather than a transcription.
+
+**Gate:** `ProposerBehindTheGateTest` - five tests: a proposal is only a fix path; one the gate refuses is
+refused and labelled; without a proposer nothing changes; a failing proposer keeps the escalation; an automatic
+resolution is never offered a proposal. `mvn -f merge-java/pom.xml test` - **717 tests, BUILD SUCCESS**.
+`bun test` in `merge-java/review` - **18 pass, 0 fail**. Written up in
+[`merge-java/docs/LLM_PROPOSER.md`](../merge-java/docs/LLM_PROPOSER.md), including how a real endpoint plugs in
+and the two things to decide before one does: the code under conflict leaves the machine, and a proposal is
+untrusted text.
 
 ### 4.5 — The residual structural conflict should not veto a block it only partly overlaps
 **Who:** agent · **Size:** S–M
@@ -3562,7 +3591,7 @@ start)
 | 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                   | agent              | S–M  | `[x]`                                                                                       |
 | 4.2  | merge-java Phase 13 step 1 — review render                                            | agent              | M    | `[x]`                                                                                       |
 | 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                        | agent              | M    | `[x]`                                                                                       |
-| 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                             | agent              | M    | `[ ]`                                                                                       |
+| 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                             | agent              | M    | `[x]`                                                                                       |
 | 4.5  | Residual structural conflict should not veto a partly-overlapping block               | agent              | S–M  | `[ ]`                                                                                       |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                     | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                     | agent + maintainer | S    | `[ ]`                                                                                       |

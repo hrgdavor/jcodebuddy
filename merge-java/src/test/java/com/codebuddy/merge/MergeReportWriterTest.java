@@ -222,6 +222,10 @@ class MergeReportWriterTest {
         assertTrue(html.contains("recommended"), "the recommendation must be shown");
         // And the three sides step 4.2 exists for, not just the answer.
         assertTrue(html.contains("branch 1"), "the branches' own code must be shown beside the result");
+        // A fix path says what code it would apply (empty for the ones that only describe a direction), which is
+        // how a proposal reaches the page: the reviewer accepts it instead of transcribing it (plan step 4.4).
+        assertTrue(html.contains("\"suggestedCode\""),
+            "the report must say what code a fix path would apply");
     }
 
     @Test

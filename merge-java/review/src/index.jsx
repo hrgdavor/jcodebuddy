@@ -7,6 +7,7 @@ import {
   decisionKey,
   fileNameFor,
   fixPathOptions,
+  codeForOption,
   isActionable,
   mergeAccepted,
   toJson,
@@ -93,7 +94,17 @@ function Actions({ filePath, resolution, conflict }) {
         {accepted() ? <span class="badge">accepted — export to apply</span> : null}
       </div>
       {options.length ? (
-        <select onchange={(event) => $choice(event.target.value)}>
+        <select
+          onchange={(event) => {
+            $choice(event.target.value)
+            // A fix path that carries code (a proposal) fills the editor: accepting it should be a decision,
+            // not a transcription.
+            const suggested = codeForOption(resolution, event.target.value)
+            if (suggested) {
+              $code(suggested)
+            }
+          }}
+        >
           <option value="keep">keep the resolved result</option>
           {options.map(({ option, fixPath }) => (
             <option value={option}>

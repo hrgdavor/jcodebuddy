@@ -401,6 +401,7 @@ proposing (never applying) a solution. Planned as Phase 13 in
 | [ADDING_A_RESOLVER.md](ADDING_A_RESOLVER.md)                       | The extension pattern                                                                        |
 | [docs/resolvers/](docs/resolvers/README.md)                        | **Resolver reference**: one folder per resolver with its decision logic in detail and examples included verbatim from test fixtures — drift fails the build |
 | [docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md)           | **`MergeFileTool`**: fixing a marker-carrying file, and the private fixture loop that turns what stays broken into a new resolver |
+| [docs/LLM_PROPOSER.md](docs/LLM_PROPOSER.md)                       | **A proposer behind the gate**: an optional advisor whose answer is one more fix path        |
 | [docs/THREE_WAY_FIXTURES.md](docs/THREE_WAY_FIXTURES.md)           | How to add a merge case as real source files, and why                                        |
 | [docs/WHAT_IS_BASE.md](docs/WHAT_IS_BASE.md)                       | **What `base` means**: the last-synced upstream state, not Git's merge base                  |
 | [VERSION_MAINTENANCE.md](VERSION_MAINTENANCE.md)                   | **The half-yearly version-update obligation**: what to bump, how to verify, and the traps    |
