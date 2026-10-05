@@ -96,6 +96,45 @@ keeps its markers after you accepted everything is rule 1.
 The decisions are recorded into the branch's history (`.jcodebuddy/merge-history/<branch>/decisions/`), which
 is what makes the next update replay them instead of asking again. Recording and applying happen in one run,
 because a reviewer who picked an answer wants it used.
+## Try it on a temporary test folder
+
+To look at the page without touching your own repository — and to rebuild that environment every time you change
+the UI — one command builds a disposable mid-merge git repository from a test fixture, analyses it, and builds the
+page from the result:
+
+```sh
+bun run merge-java/scripts/merge-report/test-env.js                        # the default fixture
+bun run merge-java/scripts/merge-report/test-env.js --list                 # what can be simulated
+bun run merge-java/scripts/merge-report/test-env.js import-add-remove-same # another fixture
+bun run merge-java/scripts/merge-report/test-env.js ../my-cases/my-case    # your own fixture
+```
+
+You get a real repository at `.tmp/merge-review/test-env-<fixture>`, left mid-merge (git shows
+`UU PaymentProcessor.java`), with **no recorded decisions** — a clean place to try things. It explains itself: its
+own `README.md` names the three commits and shows the conflict as git sees it, and `expected/` holds each side's
+diff, which is what to compare the page against. A fixture is a directory of three complete versions of one file —
+`src/test/resources/fixtures/<case>/{base,ours,theirs}/*.txt` — and a path works as well as a name;
+`merge-java/scripts/git-sample/README.md` is the reference for making one. The command finishes by printing the
+`file://` URL to open, the report it used, and the two commands below.
+
+### Rebuilding after a change
+
+| What you changed                                                                              | What to run |
+| --------------------------------------------------------------------------------------------- | ----------- |
+| `src/index.jsx` (the page), `src/decisions.js` (the export format), `index.html` (the styles) | the page only, keeping the repository and the report: `cd merge-java/review && bun run src_build/build.js --report <report>` |
+| anything about the environment itself — decisions you recorded, edits, a half-finished merge  | the whole thing again: `bun run merge-java/scripts/merge-report/test-env.js <fixture>` — `--force` replaces the folder outright |
+
+Both are safe to repeat, and neither touches your own repository or the committed tree. What is *not* safe is
+trusting a page that is still open from an earlier run: each run regenerates the report for the file it analysed,
+so reload the page and check the report path it prints in its header.
+
+### Before you judge what you see there
+
+The two shipped fixtures produce a block carrying **several** conflicts, and the tool refuses to compose several
+conflicts into one block answer — `LEFT_MANUAL` there is correct rather than a bug (see "What the engine will not
+apply" above). So this environment is for the **page**: the per-resolution cards, the three sides, the fix paths,
+the accept controls and the export. The apply half is exercised by `MergeFileToolTest` in the module's own test
+suite, which builds its payload the way this page does and asserts the file changes.
 ## Use it
 
 ```sh

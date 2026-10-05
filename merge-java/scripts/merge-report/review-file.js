@@ -43,7 +43,16 @@ const root = repoRoot()
 
 const args = process.argv.slice(2)
 if (args.includes('--help') || args.includes('-h') || args.length === 0) {
-  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('*/')[0].replace(/^\/\*\*?/, '').trim())
+  // The doc block is the usage text: drop the shebang and the block comment's own decoration.
+  console.log(
+    readFileSync(fileURLToPath(import.meta.url), 'utf8')
+      .split('*/')[0]
+      .replace(/^#![^\n]*\n/, '')
+      .split('\n')
+      .map((line) => line.replace(/^\s*\/?\*+\/?\s?/, ''))
+      .join('\n')
+      .trim(),
+  )
   process.exit(args.length === 0 ? 2 : 0)
 }
 
