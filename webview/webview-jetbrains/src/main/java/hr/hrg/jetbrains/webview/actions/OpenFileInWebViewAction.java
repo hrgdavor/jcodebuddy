@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import hr.hrg.jetbrains.webview.toolWindow.MarkdownView;
 import hr.hrg.jetbrains.webview.toolWindow.WebViewService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,14 +35,20 @@ public final class OpenFileInWebViewAction extends AnAction implements DumbAware
         if (file == null) {
             return;
         }
+        if (MarkdownView.isMarkdown(file.getName()) && MarkdownView.getInstance(project).show(file.getPath())) {
+            return;
+        }
         WebViewService.getInstance(project).openInPanel(urlFor(file));
     }
 
     @Override
     public void update(@NotNull AnActionEvent event) {
         VirtualFile file = getFileFromContext(event);
-        boolean isHtml = file != null && "html".equalsIgnoreCase(file.getExtension());
-        event.getPresentation().setEnabledAndVisible(isHtml);
+        // A Markdown file is a page this tool window renders itself (2026-10-04): the action offers itself for
+        // both, and actionPerformed decides which job it is.
+        boolean isViewable = file != null
+                && ("html".equalsIgnoreCase(file.getExtension()) || MarkdownView.isMarkdown(file.getName()));
+        event.getPresentation().setEnabledAndVisible(isViewable);
         event.getPresentation().setText("Open in WebView Explorer");
     }
 

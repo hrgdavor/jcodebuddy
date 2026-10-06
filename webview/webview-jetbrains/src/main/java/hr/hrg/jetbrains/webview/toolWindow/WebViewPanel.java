@@ -138,6 +138,21 @@ public final class WebViewPanel implements Disposable {
     }
 
     /**
+     * Push fresh view data into the live page, for a save.
+     *
+     * No reload on purpose: the page exposes {@code window.__renderMarkdown()}, so a save re-renders in place
+     * and the reader keeps their scroll position, instead of the browser fetching everything again to show a
+     * sentence that changed. The page's own URL is passed as the script's origin, which is what JCEF wants.
+     */
+    public void pushMarkdownView(@NotNull String viewJson) {
+        if (disposed) {
+            return;
+        }
+        String script = "window.__view = " + viewJson + "; window.__renderMarkdown();";
+        browser.getCefBrowser().executeJavaScript(script, browser.getCefBrowser().getURL(), 0);
+    }
+
+    /**
      * Delivers a URL that was requested before this panel existed, if there is one.
      *
      * @return true when a parked URL was delivered
@@ -200,6 +215,14 @@ public final class WebViewPanel implements Disposable {
     public void loadFromAddressBar() {
         String text = addressBar.getText();
         if (text == null || text.isBlank()) {
+            return;
+        }
+        // A Markdown file is rendered by the IDE rather than loaded as a page, and the address bar is where a
+        // person pastes the path to one. LocalFileUrls is the helper the remembered-URL fix already uses for the
+        // file: form, so a path copied out of a browser works here too (2026-10-04).
+        java.nio.file.Path pasted = LocalFileUrls.pathOf(text);
+        String markdownPath = pasted != null ? pasted.toString() : text;
+        if (MarkdownView.isMarkdown(markdownPath) && MarkdownView.getInstance(project).show(markdownPath)) {
             return;
         }
         UrlNormalizer.Normalized normalized =

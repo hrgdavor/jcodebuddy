@@ -149,3 +149,35 @@ They assert the line-suffix parser (`#L14`, `:14`, a Windows drive letter that i
 (a path, a type name, a directory, prose that must *not* resolve), the Markdown renderer (headings with
 anchors, tables, fences that are never inline-processed, task lists), and a full run over the example
 module in which every emitted link is verified against the tree.
+
+## Two assemblies, one renderer
+
+This package produces a Markdown view **two ways**, and the caller picks because a page's situation differs. Both
+are the same code path; only the assembly differs, which is the reason to have a package rather than a folder of
+scripts.
+
+```sh
+# one self-contained file: nothing fetched, openable from a file manager, shippable by a host that can only hand
+# a page its bytes (this is what the JetBrains plugin uses)
+bun run scripts/markdown-view/page.js out.html inlined
+
+# the same page with an empty view, and a marker for the host to substitute at view time
+bun run scripts/markdown-view/page.js out.html inlined --template
+
+# a page that references these files next to it, for a page that will be served: one copy of the renderer on disk
+# instead of one copy per page
+bun run scripts/markdown-view/page.js out.html assets
+```
+
+`buildMarkdownPage({ mode, ... })` is the function behind the CLI, and `writePageAssets(dir)` copies the files an
+assets-mode page asks for (`PAGE_ASSETS`).
+
+**Why a host with no server uses the inlined mode.** An ES-module page loaded from `file://` is blocked by the
+browser's own origin rules, so assets mode needs an HTTP origin to work at all. Inlined mode has no imports to
+block - which is why the JetBrains plugin ships one generated page rather than a directory of scripts.
+
+**The view data marker.** A page built for a host has no document yet: the host reads the file and hands it over.
+That template carries `VIEW_DATA_MARKER` (`__MARKDOWN_VIEW_DATA__`) inside its JSON script tag, and the host replaces
+it - one substitution, and a host that forgets it produces a page that says so rather than one that silently shows
+nothing. `window.__renderMarkdown()` re-renders from `window.__view` when a host pushes new text, which is how a save
+is shown without a reload.

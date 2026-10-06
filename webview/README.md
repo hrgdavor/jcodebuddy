@@ -171,6 +171,34 @@ navigate this way.
 link pointing at a real file in this repository - the demo, and the dogfooding. Open it through a host and every link
 should land somewhere specific.
 
+## Markdown, rendered by the host
+
+A `.md` file opened in a host is rendered into a clickable page **by the host itself** - no build step, no server,
+no `bun run` - and it stays fresh while it is being edited. That is plan step 9.7's navigation, reusable on the
+documentation this repository is full of.
+
+- The page comes from [the `markdown-view` package](../scripts/markdown-view/README.md), assembled **inlined**: one
+  self-contained HTML with the renderer, the highlighter, the style and the click client inside it. At view time
+  there is no bundler, no `node_modules`, no CDN and no network (DEC-027), which is what makes it work in an IDE
+  webview that can only hand a page its bytes.
+- The host substitutes the document into the page's `#view-data` marker and the page renders it with the
+  repository's one renderer, so a link behaves the same here as in a generated page.
+- Code fences are coloured by **microlighter**, which ships with this repository and has a **Java** grammar - and
+  **no Kotlin** one, so a Kotlin fence is escaped plaintext rather than an approximation that would mislead
+  (DEC-043).
+- **A save re-renders in place.** The page exposes `window.__renderMarkdown()`, so the host pushes the new text
+  into the live page instead of reloading it: the reader keeps their scroll position.
+- Links carry `data-open` with a location fragment, exactly as in the generated pages, so a method or a region
+  named in a Markdown link navigates to that method or region (see "Pointing at a place inside a file").
+- The page and its state live in the project's `.jcodebuddy/webview/markdown-view/`: derived, machine-written and
+  ignored (DEC-026).
+- **Confinement applies here like everywhere else**: a `.md` outside the project root is refused by the same
+  resolver every other route uses.
+
+Wired so far in the **JetBrains** host: right-click a `.md` in the Project view, editor or an editor tab and pick
+**Open in WebView Explorer**, or paste a path (or a `file:` URL) into the tool window's address bar. The other
+hosts serve pages and are not wired to this view yet - a statement about them, not a promise.
+
 ## What is implemented, and what has actually been observed
 
 The distinction matters here and is kept everywhere in this folder: a claim is *implemented and unit-tested*,

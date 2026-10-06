@@ -28,6 +28,16 @@ export const PAGE_ASSETS = Object.freeze([
   'assets/microlighter.js',
 ]);
 
+/**
+ * Where a host puts the document.
+ *
+ * A page built for a host has no document yet — the host reads the file and hands it over at view time — so the
+ * template carries this marker inside the JSON script tag, and the host replaces it. It is a marker rather than
+ * an empty JSON object on purpose: substituting a marker cannot mistake one document's data for another's, and a
+ * host that forgot to substitute it produces a page that says so rather than a page that silently shows nothing.
+ */
+export const VIEW_DATA_MARKER = '__MARKDOWN_VIEW_DATA__';
+
 /** The view a page is built with, and the keys `page-client.js` understands. */
 export const VIEW_KEYS = Object.freeze(['markdown', 'docPath', 'docDir', 'title', 'moduleName', 'indexJson']);
 
@@ -42,8 +52,8 @@ export function jsonInScriptTag(value) {
 }
 
 /** `#view-data`: how the host hands a document over, and where a save's new text can be read from. */
-export function viewDataTag(view) {
-  return `<script id="view-data" type="application/json">${jsonInScriptTag(view)}</script>`;
+export function viewDataTag(view, template = false) {
+  return `<script id="view-data" type="application/json">${template ? VIEW_DATA_MARKER : jsonInScriptTag(view)}</script>`;
 }
 
 function head(title, extra = '') {
@@ -93,6 +103,7 @@ export async function buildMarkdownPage(options = {}) {
     throw new Error(`unknown mode '${mode}': expected 'inlined' or 'assets'`);
   }
   const title = options.title ?? 'Markdown view';
+  const template = options.template === true;
   const view = {
     markdown: options.markdown ?? null,
     docPath: options.docPath ?? null,
@@ -108,7 +119,7 @@ export async function buildMarkdownPage(options = {}) {
     const scripts = `
 <script src="${base}/assets/microlighter.js"></script>
 <script type="module" src="${base}/page-client.js"></script>`;
-    return page(title, null, `${viewDataTag(view)}${scripts}`, shared);
+    return page(title, null, `${viewDataTag(view, template)}${scripts}`, shared);
   }
 
   // Inlined: bundle the client with Bun - a build-time tool, not a dependency of the page. At view time there
@@ -126,7 +137,7 @@ export async function buildMarkdownPage(options = {}) {
   const client = await bundle.outputs[0].text();
   const highlighter = readFileSync(join(HERE, 'assets', 'microlighter.js'), 'utf8');
   const scripts = `
-${viewDataTag(view)}
+${viewDataTag(view, template)}
 <script>${highlighter}</script>
 <script>${client}</script>`;
   return page(title, null, scripts, shared);
@@ -155,12 +166,22 @@ export function assetBaseFor(pageRelativePath) {
 }
 
 if (import.meta.main) {
-  const [out = 'markdown-view.html', mode = 'inlined'] = Bun.argv.slice(2);
+  // A small CLI, because two consumers need two things from it:
+  //   bun run page.js out.html inlined            - a full page for one document
+  //   bun run page.js out.html inlined --template - the page with an empty view, which a host fills at runtime
+  //                                                 (that is how the JetBrains plugin ships it, so the IDE needs
+  //                                                 no bundler at view time and no build step but this one)
+  const args = Bun.argv.slice(2);
+  const template = args.includes('--template');
+  const [out = 'markdown-view.html', mode = 'inlined'] = args.filter((a) => !a.startsWith('--'));
   const html = await buildMarkdownPage({
     mode,
-    title: 'Markdown view builder',
-    markdown: '# Built by page.js\n\nA smoke test of the builder itself.\n\n```java\nrecord Point(int x, int y) {}\n```\n',
+    title: template ? 'Markdown view' : 'Markdown view builder',
+    template,
+    markdown: template
+      ? null
+      : '# Built by page.js\n\nA smoke test of the builder itself.\n\n```java\nrecord Point(int x, int y) {}\n```\n',
   });
   writeFileSync(out, html);
-  console.log(`wrote ${out} (${mode}, ${html.length} chars)`);
+  console.log(`wrote ${out} (${mode}${template ? ', template' : ''}, ${html.length} chars)`);
 }

@@ -150,6 +150,32 @@ qodana {
 }
 
 tasks {
+    /**
+     * The Markdown page the tool window shows, built by the package that owns the renderer.
+     *
+     * One source of truth: scripts/markdown-view/page.js assembles it, inlined, so the IDE needs no bundler, no
+     * server, no node_modules and no network at view time (DEC-043). The plugin only substitutes the document's
+     * view data into the marker the template carries, which is why this runs at BUILD time and never at view time.
+     *
+     * Bun is this repository's own tooling for every check and script (AGENTS.md 2), so this adds no new kind of
+     * dependency - and a machine without it fails here, loudly, with the command that fixes it rather than shipping
+     * a plugin whose Markdown view cannot render.
+     */
+    val markdownViewDir = layout.buildDirectory.dir("generated/markdown-view")
+    val markdownPage = register<Exec>("markdownPage") {
+        val repositoryRoot = rootProject.projectDir.parentFile.parentFile
+        val output = markdownViewDir.get().file("markdown-page.html").asFile
+        group = "build"
+        description = "Builds the self-contained Markdown page from scripts/markdown-view/page.js"
+        workingDir = repositoryRoot
+        inputs.files(fileTree(File(repositoryRoot, "scripts/markdown-view")) { include("**/*.js") })
+        outputs.file(output)
+        doFirst {
+            commandLine("bun", "run", "scripts/markdown-view/page.js", output.absolutePath, "inlined", "--template")
+        }
+    }
+    named("processResources") { dependsOn(markdownPage) }
+
     wrapper {
         gradleVersion = providers.gradleProperty("gradleVersion").get()
     }
@@ -192,5 +218,11 @@ intellijPlatformTesting {
                 robotServerPlugin()
             }
         }
+    }
+}
+
+sourceSets {
+    main {
+        resources.srcDir(layout.buildDirectory.dir("generated/markdown-view"))
     }
 }

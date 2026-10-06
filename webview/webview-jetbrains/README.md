@@ -185,20 +185,20 @@ a per-project property, an IDE-wide property, the copy bundled in the installed 
 under the project's base path. Nothing found means the language server reports an error naming every path it
 looked in; the tool window is unaffected.
 
-| Setting (`PropertiesComponent`) | Meaning |
-| --- | --- |
-| `webview.explorer.sidecarJarPath` | The sidecar JAR. Empty means: bundled, then `<project base path>/webview/jwa-sidecar/target/jwa-sidecar.jar` |
+| Setting (`PropertiesComponent`)    | Meaning                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| `webview.explorer.sidecarJarPath`  | The sidecar JAR. Empty means: bundled, then `<project base path>/webview/jwa-sidecar/target/jwa-sidecar.jar` |
 | `webview.explorer.sidecarJavaHome` | The JDK to run it with. Empty means `JAVA_HOME`, then `java` from `PATH` |
 
 These are properties rather than settings-page fields deliberately, and the earlier attempt's knob was the same
 kind: a half-filled settings page would be worse than two documented properties. `SidecarLaunch` holds the rules
 and `SidecarLaunchTest` asserts each fallback chain without an IDE.
 
-| Name | Kind | Refactor-sensitive? | Why |
-| --- | --- | --- | --- |
-| `hr.hrg.watch2.sidecar.SidecarApp` | the class the descriptor launches | **no — an external contract** | it is the sidecar artifact's own entry point; renaming the Java class without this string breaks the launch |
-| `jwa-sidecar.jar` | the artifact's `finalName` | **no — an external contract** | the name a built sidecar is packaged under, and the name the earlier IDE clients looked for |
-| `webview.explorer.sidecarJarPath` / `webview.explorer.sidecarJavaHome` | property keys | **no — an explicit configuration label** | a developer types them; an IDE rename must never touch them |
+| Name                                                                   | Kind                              | Refactor-sensitive?                      | Why                                                                                         |
+| ---------------------------------------------------------------------- | --------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `hr.hrg.watch2.sidecar.SidecarApp`                                     | the class the descriptor launches | **no — an external contract**            | it is the sidecar artifact's own entry point; renaming the Java class without this string breaks the launch |
+| `jwa-sidecar.jar`                                                      | the artifact's `finalName`        | **no — an external contract**            | the name a built sidecar is packaged under, and the name the earlier IDE clients looked for |
+| `webview.explorer.sidecarJarPath` / `webview.explorer.sidecarJavaHome` | property keys                     | **no — an explicit configuration label** | a developer types them; an IDE rename must never touch them                                 |
 
 ## Project structure
 
@@ -266,3 +266,31 @@ Swing component tree to find the browser.
 ## License
 
 MIT License (or as specified in the LICENSE file).
+
+## Markdown files, rendered by the IDE
+
+A `.md` file opens in the tool window as a clickable page, without any manual rendering step:
+
+- **From the Project view, an editor or an editor tab**: right-click the file and pick **Open in WebView Explorer**
+  (the action offers itself for `.md`, `.markdown` and `.html` alike).
+- **From the address bar**: paste a path to a `.md` file, or the `file:` URL a browser gives you.
+
+What happens then: the IDE reads the file, substitutes it into one **self-contained** HTML page and writes that page
+into the project's `.jcodebuddy/webview/markdown-view/` (derived state, ignored by git), then loads it. The page
+renders the Markdown with this repository's own renderer and colours code fences with **microlighter** - which has a
+**Java** grammar and no Kotlin one, so Kotlin fences stay plaintext on purpose (DEC-043).
+
+**Saving re-renders in place.** The page exposes `window.__renderMarkdown()`, so a save of the file on screen pushes
+the new text into the live page - no reload, so the reader keeps their scroll position. Only a save counts: the
+listener asks `VFileEvent.isFromSave()`, so the page does not flicker while somebody types. `MarkdownView` in
+`toolWindow/` owns the routing and the listener.
+
+**Links in the rendered page navigate the IDE**, including to a method or a region: the page writes the whole
+location into `data-open` (plan step 9.7) and the injected bridge resolves it through the shared core. **A file
+outside the project is refused** - by the address bar, by the action and by the page's links alike (2026-10-04).
+
+**The build needs Bun.** `./gradlew buildPlugin` first runs `markdownPage`, which invokes
+`scripts/markdown-view/page.js` to build that page - one source of truth, and the plugin ships the result, so the IDE
+never needs a bundler, a server or `node_modules` at view time. Bun is already this repository's tooling for every
+script and check, so this adds no new kind of dependency; a machine without it fails the build with the command that
+fixes it rather than shipping a Markdown view that cannot render.
