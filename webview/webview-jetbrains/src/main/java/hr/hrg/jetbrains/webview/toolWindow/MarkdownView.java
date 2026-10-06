@@ -13,6 +13,7 @@ import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.openapi.Disposable;
+import hr.hrg.jetbrains.webview.services.PluginStateService;
 import hr.hrg.webview.core.PathResolution;
 import hr.hrg.webview.core.PathResolver;
 import org.jetbrains.annotations.NotNull;
@@ -62,6 +63,9 @@ public final class MarkdownView implements Disposable {
     /** The template the Gradle {@code markdownPage} task writes into the plugin's resources. */
     private static final String TEMPLATE_RESOURCE = "/markdown-page.html";
 
+    /** The key both the IDE setting and the project's committed configuration use for the generator path. */
+    private static final String GENERATOR_KEY = "markdownGenerator";
+
     /** The marker the template carries where the document goes. The same constant exists in {@code page.js}. */
     static final String VIEW_DATA_MARKER = "__MARKDOWN_VIEW_DATA__";
 
@@ -74,6 +78,10 @@ public final class MarkdownView implements Disposable {
 
     /** The absolute path of the document on screen, or null. Written and read on the EDT and the VFS thread. */
     private volatile @Nullable String shownPath;
+
+    /** The generator setting the cached template was produced from, and the template itself. */
+    private volatile @Nullable String cachedGenerator;
+    private volatile @Nullable String cachedTemplate;
 
     public MarkdownView(@NotNull Project project) {
         this.project = project;
@@ -270,12 +278,178 @@ public final class MarkdownView implements Disposable {
         return page;
     }
 
+    /**
+     * The page template: the configured generator's, or the embedded one.
+     *
+     * <p>The configured path is resolved once per change rather than per document, because asking Bun for a template
+     * is a process, and a cache keyed on the setting plus the file's modification time is what keeps a rebuild of the
+     * renderer visible without paying for it on every keystroke.
+     */
     private @Nullable String readTemplate() {
+        String configured = configuredGenerator();
+        if (!configured.isBlank()) {
+            String cached = cachedTemplate;
+            if (cached != null && configured.equals(cachedGenerator)) {
+                return cached;
+            }
+            String external = templateFromConfigured(configured);
+            if (external != null) {
+                cachedGenerator = configured;
+                cachedTemplate = external;
+                LOG.info("Markdown view: using the configured generator " + configured);
+                return external;
+            }
+            LOG.warn("Markdown view: the configured Markdown generator '" + configured + "' produced no usable "
+                    + "template (it must be a .js generator or an .html page carrying " + VIEW_DATA_MARKER
+                    + "). Falling back to the page embedded in the plugin.");
+        }
+        return embeddedTemplate();
+    }
+
+    /** The page the plugin ships, built by the Gradle task {@code markdownPage}. */
+    private @Nullable String embeddedTemplate() {
         try (InputStream stream = MarkdownView.class.getResourceAsStream(TEMPLATE_RESOURCE)) {
             return stream == null ? null : new String(stream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException unreadable) {
             LOG.warn("Markdown view: could not read " + TEMPLATE_RESOURCE, unreadable);
             return null;
+        }
+    }
+
+    /**
+     * The generator this project configured: this IDE's setting first, then the project's committed
+     * {@code .jcodebuddy/conf/webview.json}, and empty when neither says anything — which means "the embedded page".
+     */
+    private @NotNull String configuredGenerator() {
+        PluginStateService.State state = PluginStateService.getInstance(project).getState();
+        String fromIde = state == null ? null : state.markdownGenerator;
+        return resolveGeneratorSetting(fromIde, projectGeneratorSetting());
+    }
+
+    /** The {@code markdownGenerator} key of the project's committed webview configuration, or null. */
+    private @Nullable String projectGeneratorSetting() {
+        String base = project.getBasePath();
+        if (base == null) {
+            return null;
+        }
+        Path conf = Path.of(base, ".jcodebuddy", "conf", "webview.json");
+        if (!Files.isRegularFile(conf)) {
+            return null;
+        }
+        try {
+            return jsonStringKey(Files.readString(conf, StandardCharsets.UTF_8), GENERATOR_KEY);
+        } catch (IOException | RuntimeException unreadable) {
+            LOG.info("Markdown view: ignoring an unreadable " + conf + ": " + unreadable);
+            return null;
+        }
+    }
+
+    /**
+     * The settings as they resolve: an explicit IDE setting wins, the project's committed one is the fallback, and
+     * empty means the embedded page.
+     *
+     * <p>Pure and package-private so the precedence is asserted rather than assumed — this is the kind of rule that
+     * looks obvious and gets quietly reversed by a later edit.
+     */
+    static @NotNull String resolveGeneratorSetting(@Nullable String fromIde, @Nullable String fromProject) {
+        for (String candidate : new String[]{fromIde, fromProject}) {
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate.trim();
+            }
+        }
+        return "";
+    }
+
+    /** One string key of a JSON object, or null when the text is not JSON or the key is not a non-blank string. */
+    static @Nullable String jsonStringKey(@Nullable String json, @NotNull String key) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            JsonElement root = JsonParser.parseString(json);
+            if (!root.isJsonObject()) {
+                return null;
+            }
+            JsonElement value = root.getAsJsonObject().get(key);
+            if (value == null || !value.isJsonPrimitive()) {
+                return null;
+            }
+            String text = value.getAsString();
+            return text == null || text.isBlank() ? null : text.trim();
+        } catch (RuntimeException malformed) {
+            return null;
+        }
+    }
+
+    /** A configured generator's template: an {@code .html} is read, a {@code .js} is run with Bun. */
+    private @Nullable String templateFromConfigured(@NotNull String configured) {
+        PathResolver resolver = PathResolver.forProject(project.getBasePath());
+        PathResolution resolution = resolver.resolve(configured);
+        if (resolution == null || resolution.escaped()) {
+            // The 2026-10-04 rule applies to this path like every other one a project can set.
+            LOG.warn("Markdown view: the configured generator is outside the project or not a path: " + configured);
+            return null;
+        }
+        Path generator = Path.of(resolution.absolute());
+        if (!Files.isRegularFile(generator)) {
+            LOG.warn("Markdown view: no generator at " + generator);
+            return null;
+        }
+        String name = generator.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        if (name.endsWith(".html") || name.endsWith(".htm")) {
+            try {
+                String template = Files.readString(generator, StandardCharsets.UTF_8);
+                return template.contains(VIEW_DATA_MARKER) ? template : null;
+            } catch (IOException unreadable) {
+                LOG.warn("Markdown view: could not read " + generator, unreadable);
+                return null;
+            }
+        }
+        if (name.endsWith(".js") || name.endsWith(".mjs")) {
+            return generateWithBun(generator);
+        }
+        LOG.warn("Markdown view: a Markdown generator must be a .js generator or an .html page, not " + name);
+        return null;
+    }
+
+    /**
+     * Ask a JavaScript generator for an inlined template, with Bun.
+     *
+     * <p>This is the path that makes "develop the renderer" practical: point the setting at
+     * {@code markdown-view/page.js} in a checkout, edit the renderer, and the next document shows the change without
+     * rebuilding the plugin. Bun is this repository's tooling, so a machine that has the checkout has it; a machine
+     * that does not gets the embedded page and a log line saying why.
+     */
+    private @Nullable String generateWithBun(@NotNull Path generator) {
+        Path output;
+        try {
+            output = Files.createTempFile("markdown-page-", ".html");
+        } catch (IOException unwritable) {
+            LOG.warn("Markdown view: could not create a temporary file for " + generator, unwritable);
+            return null;
+        }
+        try {
+            Process process = new ProcessBuilder("bun", "run", generator.toString(), output.toString(), "inlined",
+                    "--template")
+                    .redirectErrorStream(true)
+                    .start();
+            String said = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            if (!process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) {
+                LOG.warn("Markdown view: " + generator + " failed: " + said.trim());
+                return null;
+            }
+            String template = Files.readString(output, StandardCharsets.UTF_8);
+            return template.contains(VIEW_DATA_MARKER) ? template : null;
+        } catch (IOException | InterruptedException | RuntimeException failed) {
+            LOG.warn("Markdown view: could not run " + generator + " (is Bun on the PATH?): " + failed);
+            Thread.currentThread().interrupt();
+            return null;
+        } finally {
+            try {
+                Files.deleteIfExists(output);
+            } catch (IOException ignored) {
+                // A leftover temporary file is not worth failing a render over.
+            }
         }
     }
 

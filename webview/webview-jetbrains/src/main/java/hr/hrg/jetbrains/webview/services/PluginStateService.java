@@ -30,6 +30,25 @@ public final class PluginStateService implements PersistentStateComponent<Plugin
         public String allowedOrigins = "";
         /** Optional shared secret the HTTP bridge requires; empty means only the allow-list applies. */
         public String token = "";
+        /**
+         * Optional path to the Markdown page generator this project renders with.
+         *
+         * <p>Empty means "the generator embedded in the plugin", which is the page the Gradle task {@code markdownPage}
+         * builds from {@code markdown-view/page.js}. Setting it points the Markdown view at something else, which is
+         * useful for two different reasons: developing the renderer (point at a checkout's {@code page.js} and see your
+         * changes in the IDE without rebuilding the plugin) and customising the output (point at your own generator or
+         * at a page you built yourself).
+         *
+         * <p>Two spellings are accepted, because those are the two things a person has in hand: a {@code .js}
+         * generator, which is run with Bun and asked for an inlined template; and an {@code .html} file, which is read
+         * as the template directly. Either way the result must carry the view-data marker, or the setting is refused
+         * with a log line rather than producing a page that shows nothing.
+         *
+         * <p>Resolution is the same shape as the port's, and for the same reason: this IDE setting wins, then the
+         * project's committed {@code .jcodebuddy/conf/webview.json} (so a team can share a customisation), then the
+         * embedded page.
+         */
+        public String markdownGenerator = "";
     }
 
     private State myState = new State();

@@ -289,6 +289,36 @@ listener asks `VFileEvent.isFromSave()`, so the page does not flicker while some
 location into `data-open` (plan step 9.7) and the injected bridge resolves it through the shared core. **A file
 outside the project is refused** - by the address bar, by the action and by the page's links alike (2026-10-04).
 
+**Configuring the generator — optional, per project.** The page comes from the one **embedded in the plugin** unless
+this project points somewhere else. That serves two different purposes: **developing the renderer** (point at a
+checkout's `markdown-view/page.js` and see your edits in the IDE without rebuilding the plugin) and **customising**
+the output (your own generator, or a page you built yourself).
+
+Two spellings are accepted, because they are the two things a person has in hand:
+
+- a **`.js` generator** — run with Bun and asked for an inlined template (`bun run <path> <out> inlined --template`),
+  which is what the project's own `page.js` is;
+- an **`.html` page** — read as the template directly.
+
+Either way it must carry the view-data marker (`__MARKDOWN_VIEW_DATA__`), or the setting is **refused**: a log
+line says so and the embedded page is used. A page without the marker would render nothing and say nothing, which is
+worse than falling back.
+
+Resolution is the same shape as the port's, and for the same reason — what this checkout decided, then what the
+project committed, then the embedded default:
+
+1. the project's IDE setting (`PluginStateService`), for a person's own override;
+2. the project's committed `.jcodebuddy/conf/webview.json`:
+
+   ```json
+   { "markdownGenerator": "tools/my-markdown-page.js" }
+   ```
+
+   which is how a team shares a customisation, and it is the same file the port default lives in;
+3. otherwise the page the Gradle task `markdownPage` builds into the plugin.
+
+The configured generator is resolved through the same `PathResolver` as every other path this plugin touches, so a
+generator outside the project root is refused (2026-10-04).
 **The build needs Bun.** `./gradlew buildPlugin` first runs `markdownPage`, which invokes
 `markdown-view/page.js` to build that page - one source of truth, and the plugin ships the result, so the IDE
 never needs a bundler, a server or `node_modules` at view time. Bun is already this repository's tooling for every

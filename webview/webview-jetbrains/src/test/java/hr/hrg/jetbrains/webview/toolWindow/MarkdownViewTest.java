@@ -176,4 +176,40 @@ public class MarkdownViewTest {
         assertFalse(MarkdownView.canPushInsteadOfLoad("about:blank", page));
         assertFalse(MarkdownView.canPushInsteadOfLoad("file:///D:/proj/other.html", page));
     }
+
+    @Test
+    public void theConfiguredGeneratorWinsOverTheProjectDefault() {
+        // Same shape as the port's resolution, and for the same reason: what this checkout decided, then what the
+        // project committed, then nothing - which means the page embedded in the plugin.
+        assertEquals("D:/work/my-gen.js",
+                MarkdownView.resolveGeneratorSetting("D:/work/my-gen.js", "D:/project/other.js"));
+        assertEquals("D:/project/gen.js", MarkdownView.resolveGeneratorSetting("", "D:/project/gen.js"));
+        assertEquals("D:/project/gen.js", MarkdownView.resolveGeneratorSetting("   ", "D:/project/gen.js"));
+        assertEquals("D:/work/my-gen.js", MarkdownView.resolveGeneratorSetting(" D:/work/my-gen.js ", null));
+        assertEquals("", MarkdownView.resolveGeneratorSetting(null, null));
+        assertEquals("", MarkdownView.resolveGeneratorSetting("", "   "));
+    }
+
+    @Test
+    public void theProjectSettingComesFromTheCommittedConfiguration() {
+        // The same file the port default lives in, read for one more key. Anything else there is not our business.
+        assertEquals("D:/project/markdown/gen.js",
+                MarkdownView.jsonStringKey("{\"markdownGenerator\":\"D:/project/markdown/gen.js\",\"port\":18882}",
+                        "markdownGenerator"));
+        assertEquals("gen.js", MarkdownView.jsonStringKey("{ \"markdownGenerator\" : \"gen.js\" }", "markdownGenerator"));
+        // Absent, blank, the wrong type, or not JSON at all: no setting, and therefore the embedded page.
+        assertNull(MarkdownView.jsonStringKey("{\"port\":18882}", "markdownGenerator"));
+        assertNull(MarkdownView.jsonStringKey("{\"markdownGenerator\":\"  \"}", "markdownGenerator"));
+        assertNull(MarkdownView.jsonStringKey("{\"markdownGenerator\":{\"a\":1}}", "markdownGenerator"));
+        assertNull(MarkdownView.jsonStringKey("not json at all", "markdownGenerator"));
+        assertNull(MarkdownView.jsonStringKey(null, "markdownGenerator"));
+    }
+
+    @Test
+    public void aTemplateWithoutTheMarkerIsRefusedRatherThanUsed() {
+        // The contract between the plugin and any generator: produce a page carrying the marker, or the setting is
+        // refused and the embedded page is used. A page without it would render nothing and say nothing.
+        assertNull(MarkdownView.substitute("<html><body>no marker</body></html>", "{}"));
+        assertNotNull(MarkdownView.substitute("<html>" + MarkdownView.VIEW_DATA_MARKER + "</html>", "{}"));
+    }
 }
