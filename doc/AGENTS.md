@@ -83,7 +83,7 @@ Two things it does **not** cover, both measured rather than assumed:
 
 The inputs the cache cannot see are listed, **by assumption**, in `.mvn/maven-build-cache-config.xml`
 (`input/global/includes`: the Bun tools under `scripts/` and the shared vectors under `webview/conformance/`). That
-list is not verified and is not meant to be: the final plan step (9.7) is where the checksum gets examined, together
+list is not verified and is not meant to be: the final plan step (9.8) is where the checksum gets examined, together
 with the question of whether an input Maven cannot see needs a hash folded into a POM property to participate.
 
 **JCodeBuddy-only.** A driver project has its own build and its own commands; the gate is this

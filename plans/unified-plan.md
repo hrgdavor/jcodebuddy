@@ -3485,7 +3485,7 @@ fudged.**
 2. **[\`plans/README.md\`](../plans/README.md) carries the outcome line** — still live, 34 of 78, and what
    remains, so the directory index and the plan agree instead of the index describing an intention.
 3. **The plan STAYS where it is.** Its own rule — archive it only if every step is closed or explicitly dropped —
-   does not hold: 32 rows are open, and one of them (9.7) is reserved on purpose as the final validation. A schedule
+   does not hold: 33 rows are open, and one of them (9.8) is reserved on purpose as the final validation. A schedule
    with open steps is a live document, so this is the decision the rule produces rather than a choice made here.
 4. **Item 4 is deferred, with its trigger named.** It exists so a cross-link does not outlive the schedule, and the
    schedule is still live, so the pointers it targets are the index TO it rather than residue of it. There are ~57 of
@@ -3497,7 +3497,61 @@ fudged.**
 
 **Done when:** the repository has one place that says what is open, and it says "nothing".
 
-### 9.7 — Validate what the build cache checksums, and add what it misses (LAST STEP)
+### 9.7 — Webview navigation from generated markdown: every location syntax, and markdown rendering
+**Who:** agent · **Size:** M
+
+**Why.** The suite renders generated pages that link to source, and a link can only land on a **line** today: the
+frozen contract carries `data-open` and `data-line`, `window.openFile(path, line, column)` and
+`GET /open?filePath=&line=&column=`, and the JetBrains plugin resolves a `#L42` fragment (`NavigatorServiceTest`).
+So a page can say "line 42" and cannot say "this method" or "this region" — while the repository's own
+documentation is *written* that way, because `@hrg/inject-examples` markers name a real file and a location inside
+it (`[Example.java](../merge-java/docs/resolvers/README.md#region:add)`). The maintainer asked for the whole
+grammar, including the spellings that are only a location and not injection at all, and for it to be documented in
+[`webview/README.md`](../webview/README.md).
+
+**The grammar is the deliverable.** Every fragment below is a location; `L…` wins over `region:`, which wins over a
+bare name, and a fragment that is none of them is not a location and stays an ordinary link:
+
+| Fragment                        | Means                                                                   |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| `#L42`                          | line 42 (already supported)                                             |
+| `#L42-L58`                      | a line range                                                            |
+| `#someMethod`                   | the declaration named `someMethod` — a method, constructor, inner class |
+| `#region:add`                   | the region, or the declaration, named `add`                             |
+| `#region:-add`                  | that declaration's **body only**                                        |
+| `#region:+add`                  | the declaration **and its annotations**                                 |
+| `#region:++add`                 | the declaration, annotations **and doc comment**                        |
+| `#region:name,scripts.test`     | dotted JSON key paths, for `.json` — inject-examples' JSON rule         |
+
+**Do:**
+
+1. **One location grammar, in two languages** (JavaScript for pages, Java for hosts), with shared conformance
+   vectors beside `webview/conformance/bridge-decisions.json` — this repository's way of keeping a rule that lives
+   in two languages honest, and the reason a page and a host cannot drift apart on what `#region:++add` means.
+2. **`data-fragment` on the page side**: the raw fragment the page wrote, so the **routing key is the fragment** and
+   `data-member` stays exactly the display metadata the contract says it is (never a routing key).
+3. **The host resolves the fragment to a position and selects it.** JetBrains resolves a member through PSI where
+   it can and falls back to a name search; a line range is selected as a range; a JSON key path lands on the key's
+   line. A host that cannot resolve one says so rather than landing on line 1, because a wrong line costs a click to
+   discover.
+4. **`GET /health` advertises the capability** (for example `open-fragment`), so a page degrades to `data-line` on a
+   host that cannot do it — the contract's own capability rule, rather than a page that tries and watches it fail.
+5. **Markdown rendering**, so a document can be read in the webview at all: the vanilla renderer under
+   `scripts/markdown-view/` in a page the host serves, with its links classified by the grammar. An
+   `@hrg/inject-examples` marker keeps its inject half (the fenced block that follows is still the file's content)
+   **and** becomes navigable, because "jump to the injection point" is the point.
+6. **`window.openFile` and `/open` gain an optional fragment**, not a new required argument; `bridgeVersion` moves
+   only if that turns out to be incompatible. The contract and the decision record are amended accordingly, and
+   [`webview/README.md`](../webview/README.md) documents the grammar, the attribute, the fallback ladder and how a
+   host reports its capability.
+
+**Gate:** the shared vectors (both implementations agree on every fragment spelling, including the ones that are
+not locations), a host test that a member fragment lands on the member's line rather than line 1, a page test that
+a marker is both injected and navigable, and the documentation's own link checks green.
+
+**Done when:** a link in a generated markdown page can name any location inject-examples can name, and a click
+reaches it in the editor.
+### 9.8 — Validate what the build cache checksums, and add what it misses (LAST STEP)
 **Who:** agent · **Size:** M, and it is the **final step of this plan**
 
 **Why it is last, and why nothing before it validates this.** The maintainer's instruction of 2026-10-03, when the
@@ -3546,79 +3600,80 @@ a decision that is not made** — deliberately unscheduled, with the decision na
 it is not the same as `[~]`, which waits on something outside the plan, nor as `[ ]`, which is ready to
 start)
 
-| Step | What                                                                                  | Who                | Size | State                                                                                       |
-| ---- | ------------------------------------------------------------------------------------- | ------------------ | ---- | ------------------------------------------------------------------------------------------- |
-| 0.1  | Commit the EEnumSet overlap JMH delivery                                              | agent              | S    | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer)                                    |
-| 0.2  | Commit the stale-document corrections                                                 | agent              | S    | `[x]` (landed as `ff0dc49`)                                                                 |
-| 1.1  | Honour `enabled: false` (DEC-018 / DEC-021 § 6)                                       | agent              | M    | `[x]`                                                                                       |
-| 1.2  | `MetadataProvider.parse` (DEC-W008)                                                   | agent              | M    | `[x]`                                                                                       |
-| 1.3  | `WatchMetadataProvider` over the watch cache                                          | agent              | M    | `[x]`                                                                                       |
-| 1.4  | Test the MCP tool surface                                                             | agent              | S    | `[x]`                                                                                       |
-| 2.1  | metadata-arena unit tests                                                             | agent              | M    | `[x]`                                                                                       |
-| 2.2  | metadata-arena JMH benchmarks (or close as not needed)                                | agent              | S–M  | `[x]`                                                                                       |
-| 2.3  | Decision-grade arena run + the backend decision                                       | agent              | S    | `[x]`                                                                                       |
-| 3.0a | Settle the engine decision's open points (DEC-037, ADR first)                         | agent + maintainer | S–M  | `[x]` — DEC-037 `Accepted`, DEC-038 created                                                 |
-| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index                  | agent              | M    | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
-| 3.0c | The cache: what is cached, and what invalidates it                                    | agent              | M    | `[x]` — closed as answered by 3.0g, which is where DEC-037 put it: one freshness contract instead of a cache per module, plus the mapping below |
-| 3.0d | One implementation of `TypeResolver` over the index                                   | agent              | M    | `[x]` — `IndexTypeResolver` projects a row (kind, fields with their types, relations) and answers `null` for an unknown name; the seam grew `kind` + `relations`, because a generator without them has to read the file |
-| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                          | agent              | M    | `[x]` (shape-defining) — **part one landed**: the index could not answer a factory (`default` vs abstract, parameter names, `@Circular`); the generator rewrite is what remains |
-| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037)        | agent              | L    | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
-| 3.0g | Freshness: the watch loop, its events and its invalidation                            | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
-| 3.0h | Search: the queries every consumer asks                                               | agent              | M    | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
-| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine                                     | agent              | M    | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
-| 3.0j | Move the remaining consumers onto the engine                                          | agent              | L    | `[ ]` — measured first: the renderers and the sidecar have no private path, so it is `metadata-server` + 3.0d + 3.0n |
-| 3.0k | Grow the recorded gate to cover the engine's contract                                 | agent              | S    | `[x]`                                                                                       |
-| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                            | agent              | S    | `[x]` — `jcodebuddy-generated`: three types, no compile dependency, package unchanged (no import churn); named in `GATE_MODULES` so its 49 tests keep running |
-| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                 | agent              | M    | `[x]` — also the package (`hr.hrg.jcodebuddy.meta.*`) and the MCP sibling; no class, method or wire shape moved; the sweep's module list caught the stale name |
-| 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038)                | agent              | L    | `[ ]`                                                                                       |
+| Step | What                                                                                      | Who                | Size | State                                                                                       |
+| ---- | ----------------------------------------------------------------------------------------- | ------------------ | ---- | ------------------------------------------------------------------------------------------- |
+| 0.1  | Commit the EEnumSet overlap JMH delivery                                                  | agent              | S    | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer)                                    |
+| 0.2  | Commit the stale-document corrections                                                     | agent              | S    | `[x]` (landed as `ff0dc49`)                                                                 |
+| 1.1  | Honour `enabled: false` (DEC-018 / DEC-021 § 6)                                           | agent              | M    | `[x]`                                                                                       |
+| 1.2  | `MetadataProvider.parse` (DEC-W008)                                                       | agent              | M    | `[x]`                                                                                       |
+| 1.3  | `WatchMetadataProvider` over the watch cache                                              | agent              | M    | `[x]`                                                                                       |
+| 1.4  | Test the MCP tool surface                                                                 | agent              | S    | `[x]`                                                                                       |
+| 2.1  | metadata-arena unit tests                                                                 | agent              | M    | `[x]`                                                                                       |
+| 2.2  | metadata-arena JMH benchmarks (or close as not needed)                                    | agent              | S–M  | `[x]`                                                                                       |
+| 2.3  | Decision-grade arena run + the backend decision                                           | agent              | S    | `[x]`                                                                                       |
+| 3.0a | Settle the engine decision's open points (DEC-037, ADR first)                             | agent + maintainer | S–M  | `[x]` — DEC-037 `Accepted`, DEC-038 created                                                 |
+| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index                      | agent              | M    | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
+| 3.0c | The cache: what is cached, and what invalidates it                                        | agent              | M    | `[x]` — closed as answered by 3.0g, which is where DEC-037 put it: one freshness contract instead of a cache per module, plus the mapping below |
+| 3.0d | One implementation of `TypeResolver` over the index                                       | agent              | M    | `[x]` — `IndexTypeResolver` projects a row (kind, fields with their types, relations) and answers `null` for an unknown name; the seam grew `kind` + `relations`, because a generator without them has to read the file |
+| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                              | agent              | M    | `[x]` (shape-defining) — **part one landed**: the index could not answer a factory (`default` vs abstract, parameter names, `@Circular`); the generator rewrite is what remains |
+| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037)            | agent              | L    | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
+| 3.0g | Freshness: the watch loop, its events and its invalidation                                | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
+| 3.0h | Search: the queries every consumer asks                                                   | agent              | M    | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
+| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine                                         | agent              | M    | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
+| 3.0j | Move the remaining consumers onto the engine                                              | agent              | L    | `[ ]` — measured first: the renderers and the sidecar have no private path, so it is `metadata-server` + 3.0d + 3.0n |
+| 3.0k | Grow the recorded gate to cover the engine's contract                                     | agent              | S    | `[x]`                                                                                       |
+| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                                | agent              | S    | `[x]` — `jcodebuddy-generated`: three types, no compile dependency, package unchanged (no import churn); named in `GATE_MODULES` so its 49 tests keep running |
+| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                     | agent              | M    | `[x]` — also the package (`hr.hrg.jcodebuddy.meta.*`) and the MCP sibling; no class, method or wire shape moved; the sweep's module list caught the stale name |
+| 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038)                    | agent              | L    | `[ ]`                                                                                       |
 | 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
-| 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2) | agent              | M    | `[x]`                                                                                       |
-| 3.0q | Merge what 3.0p found worth keeping, delete the rest                                  | agent              | M–L  | `[x]` (content decided by 3.0p)                                                             |
-| 3.0r | The index grows members and annotations (DEC-029 format change)                       | agent              | M    | `[x]` — `members` always emitted, closed kind vocabulary, member types/modifiers/annotations; `NotCovered` deleted, so the last unanswerable question is answered |
-| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace     | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
-| 3.0t | The model keeps what a consumer could ask (DEC-040)                                   | agent              | M    | `[x]` — **part one landed**: the relation's written text (D2's fix), loose generic matching, and the D4 contract test over the records; `permits`, `throws`, enum constants, initialisers, has-a-body and the imports sidecar remain |
-| 3.1  | The hipster-ioc ADR                                                                   | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
-| 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                  | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |
-| 3.3  | Make the hipster-ioc generator runnable and documented                                | agent              | M    | `[x]` (prototype)                                                                           |
-| 3.4  | The `@Circular` two-phase form                                                        | agent              | ?    | `[TBD]` — waits on how a lazily-resolved dependency is spelled                              |
-| 3.5  | `init*` methods in creation order                                                     | agent              | S    | `[TBD]` — waits on the initialisation seam                                                  |
-| 3.6  | Region markers above the thresholds                                                   | agent              | S    | `[TBD]` — waits on the generated layout                                                     |
-| 3.7  | Cross-context `dependencies()` / `ChildContext` creation                              | agent              | M    | `[TBD]` — waits on context-to-context creation                                              |
-| 3.8  | The dependency-graph report page                                                      | agent              | M    | `[TBD]` — waits on the graph model being settled                                            |
-| 3.9  | Drive the generator from the dev-time pass and watch mode                             | agent              | M    | `[TBD]` — waits on 7.8 and the shape                                                        |
-| 3.10 | Retire `hipster-ioc-test`'s hand-written context                                      | agent              | S–M  | `[TBD]` — waits on DEC-036 being `Accepted`                                                 |
-| 3.11 | Editor-agnostic graph navigation + embedded host                                      | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
-| 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                   | agent              | S–M  | `[x]`                                                                                       |
-| 4.2  | merge-java Phase 13 step 1 — review render                                            | agent              | M    | `[x]`                                                                                       |
-| 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                        | agent              | M    | `[x]`                                                                                       |
-| 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                             | agent              | M    | `[x]`                                                                                       |
-| 4.5  | Residual structural conflict should not veto a partly-overlapping block               | agent              | S–M  | `[ ]`                                                                                       |
-| 5.1  | webview Phase 6 — headless parity as a build gate                                     | agent              | M    | `[ ]`                                                                                       |
-| 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                     | agent + maintainer | S    | `[ ]`                                                                                       |
-| 5.3  | ACP go/no-go spike                                                                    | human              | S    | `[ ]`                                                                                       |
-| 5.4  | Eclipse Phase 5 — p2 update site (after Q2)                                           | agent              | M    | `[ ]`                                                                                       |
-| 6.1  | `FieldAnnotation` exposure in view enums                                              | agent              | M    | `[ ]`                                                                                       |
-| 6.2  | Deep tracking: generator wiring 6.5 + patch applier                                   | agent              | L    | `[ ]`                                                                                       |
-| 6.3  | Decide advisory → hard rule enforcement                                               | agent + maintainer | M    | `[ ]`                                                                                       |
-| 6.4  | Type divergence analyzer + converter manifest (DEC-006)                               | agent              | L    | `[ ]`                                                                                       |
-| 6.5  | Projection/DTO marker pattern (DEC-003/DEC-007)                                       | agent              | L    | `[ ]`                                                                                       |
-| 7.1  | jwa-sidecar reads the client's indentation                                            | agent              | S    | `[ ]`                                                                                       |
-| 7.2  | Agent web UI remote-jump front-end                                                    | agent              | S    | `[ ]`                                                                                       |
-| 7.3  | `View1Builder.merge` + proxy merge                                                    | agent              | M    | `[ ]`                                                                                       |
-| 7.4  | Documentation front door + cross-references                                           | agent              | S    | `[ ]`                                                                                       |
-| 7.5  | Agent OpenRewrite tool prototype                                                      | agent              | M    | `[ ]`                                                                                       |
-| 7.6  | Decide the three `todo.java_watch2.md` remainders                                     | agent + maintainer | S    | `[ ]`                                                                                       |
-| 7.7  | Manual-mode CLI for DEC-W008 (`metadata parse`)                                       | agent              | S    | `[ ]`                                                                                       |
-| 7.8  | Two kinds of generator: file-scoped and project-scoped                                | agent              | M    | `[x]`                                                                                       |
-| 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                        | agent              | S–M  | `[x]`                                                                                       |
-| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)              | agent              | M    | `[ ]`                                                                                       |
-| 8.1  | JetBrains maintainer questions + IDE observations                                     | human              | —    | `[ ]`                                                                                       |
-| 8.2  | Eclipse observations, then Q2                                                         | human              | —    | `[ ]`                                                                                       |
-| 8.3  | Agent IDE hooks                                                                       | human decides      | —    | `[ ]`                                                                                       |
-| 8.4  | Zed ACP run                                                                           | human              | —    | `[ ]`                                                                                       |
-| 9.1  | Coverage check                                                                        | agent              | S    | `[ ]`                                                                                       |
-| 9.2  | Archive the superseded plans                                                          | agent              | S    | `[x]`                                                                                       |
-| 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                           | agent              | S    | `[x]`                                                                                       |
-| 9.4  | Retire the per-plan open lists                                                        | agent              | S    | `[ ]`                                                                                       |
-| 9.5  | Full sweep (gate + links + examples)                                                  | agent              | S    | `[ ]`                                                                                       |
-| 9.6  | Close the books                                                                       | agent              | S    | `[ ]`                                                                                       |
+| 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2)     | agent              | M    | `[x]`                                                                                       |
+| 3.0q | Merge what 3.0p found worth keeping, delete the rest                                      | agent              | M–L  | `[x]` (content decided by 3.0p)                                                             |
+| 3.0r | The index grows members and annotations (DEC-029 format change)                           | agent              | M    | `[x]` — `members` always emitted, closed kind vocabulary, member types/modifiers/annotations; `NotCovered` deleted, so the last unanswerable question is answered |
+| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace         | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
+| 3.0t | The model keeps what a consumer could ask (DEC-040)                                       | agent              | M    | `[x]` — **part one landed**: the relation's written text (D2's fix), loose generic matching, and the D4 contract test over the records; `permits`, `throws`, enum constants, initialisers, has-a-body and the imports sidecar remain |
+| 3.1  | The hipster-ioc ADR                                                                       | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
+| 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                      | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |
+| 3.3  | Make the hipster-ioc generator runnable and documented                                    | agent              | M    | `[x]` (prototype)                                                                           |
+| 3.4  | The `@Circular` two-phase form                                                            | agent              | ?    | `[TBD]` — waits on how a lazily-resolved dependency is spelled                              |
+| 3.5  | `init*` methods in creation order                                                         | agent              | S    | `[TBD]` — waits on the initialisation seam                                                  |
+| 3.6  | Region markers above the thresholds                                                       | agent              | S    | `[TBD]` — waits on the generated layout                                                     |
+| 3.7  | Cross-context `dependencies()` / `ChildContext` creation                                  | agent              | M    | `[TBD]` — waits on context-to-context creation                                              |
+| 3.8  | The dependency-graph report page                                                          | agent              | M    | `[TBD]` — waits on the graph model being settled                                            |
+| 3.9  | Drive the generator from the dev-time pass and watch mode                                 | agent              | M    | `[TBD]` — waits on 7.8 and the shape                                                        |
+| 3.10 | Retire `hipster-ioc-test`'s hand-written context                                          | agent              | S–M  | `[TBD]` — waits on DEC-036 being `Accepted`                                                 |
+| 3.11 | Editor-agnostic graph navigation + embedded host                                          | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
+| 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                       | agent              | S–M  | `[x]`                                                                                       |
+| 4.2  | merge-java Phase 13 step 1 — review render                                                | agent              | M    | `[x]`                                                                                       |
+| 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                            | agent              | M    | `[x]`                                                                                       |
+| 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                                 | agent              | M    | `[x]`                                                                                       |
+| 4.5  | Residual structural conflict should not veto a partly-overlapping block                   | agent              | S–M  | `[ ]`                                                                                       |
+| 5.1  | webview Phase 6 — headless parity as a build gate                                         | agent              | M    | `[ ]`                                                                                       |
+| 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                         | agent + maintainer | S    | `[ ]`                                                                                       |
+| 5.3  | ACP go/no-go spike                                                                        | human              | S    | `[ ]`                                                                                       |
+| 5.4  | Eclipse Phase 5 — p2 update site (after Q2)                                               | agent              | M    | `[ ]`                                                                                       |
+| 6.1  | `FieldAnnotation` exposure in view enums                                                  | agent              | M    | `[ ]`                                                                                       |
+| 6.2  | Deep tracking: generator wiring 6.5 + patch applier                                       | agent              | L    | `[ ]`                                                                                       |
+| 6.3  | Decide advisory → hard rule enforcement                                                   | agent + maintainer | M    | `[ ]`                                                                                       |
+| 6.4  | Type divergence analyzer + converter manifest (DEC-006)                                   | agent              | L    | `[ ]`                                                                                       |
+| 6.5  | Projection/DTO marker pattern (DEC-003/DEC-007)                                           | agent              | L    | `[ ]`                                                                                       |
+| 7.1  | jwa-sidecar reads the client's indentation                                                | agent              | S    | `[ ]`                                                                                       |
+| 7.2  | Agent web UI remote-jump front-end                                                        | agent              | S    | `[ ]`                                                                                       |
+| 7.3  | `View1Builder.merge` + proxy merge                                                        | agent              | M    | `[ ]`                                                                                       |
+| 7.4  | Documentation front door + cross-references                                               | agent              | S    | `[ ]`                                                                                       |
+| 7.5  | Agent OpenRewrite tool prototype                                                          | agent              | M    | `[ ]`                                                                                       |
+| 7.6  | Decide the three `todo.java_watch2.md` remainders                                         | agent + maintainer | S    | `[ ]`                                                                                       |
+| 7.7  | Manual-mode CLI for DEC-W008 (`metadata parse`)                                           | agent              | S    | `[ ]`                                                                                       |
+| 7.8  | Two kinds of generator: file-scoped and project-scoped                                    | agent              | M    | `[x]`                                                                                       |
+| 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                            | agent              | S–M  | `[x]`                                                                                       |
+| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)                  | agent              | M    | `[ ]`                                                                                       |
+| 8.1  | JetBrains maintainer questions + IDE observations                                         | human              | —    | `[ ]`                                                                                       |
+| 8.2  | Eclipse observations, then Q2                                                             | human              | —    | `[ ]`                                                                                       |
+| 8.3  | Agent IDE hooks                                                                           | human decides      | —    | `[ ]`                                                                                       |
+| 8.4  | Zed ACP run                                                                               | human              | —    | `[ ]`                                                                                       |
+| 9.1  | Coverage check                                                                            | agent              | S    | `[ ]`                                                                                       |
+| 9.2  | Archive the superseded plans                                                              | agent              | S    | `[x]`                                                                                       |
+| 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                               | agent              | S    | `[x]`                                                                                       |
+| 9.4  | Retire the per-plan open lists                                                            | agent              | S    | `[ ]`                                                                                       |
+| 9.5  | Full sweep (gate + links + examples)                                                      | agent              | S    | `[ ]`                                                                                       |
+| 9.6  | Close the books                                                                           | agent              | S    | `[ ]`                                                                                       |
+| 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering | agent              | M    | `[ ]`                                                                                       |
