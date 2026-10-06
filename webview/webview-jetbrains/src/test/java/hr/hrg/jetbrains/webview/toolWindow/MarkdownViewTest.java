@@ -155,4 +155,25 @@ public class MarkdownViewTest {
             });
         }
     }
+
+    @Test
+    public void pushesWhenThePageOnScreenIsTheOneJustWritten() {
+        // The reported bug, in one assertion. The page is always the same file, so its URL never changes - and a
+        // browser does not reload a URL it already has. Asking for a load made the second right-click, and the
+        // address bar after it, do nothing at all: new file on disk, old document on screen.
+        String page = "file:///D:/proj/.jcodebuddy/webview/markdown-view/view.html";
+        assertTrue(MarkdownView.canPushInsteadOfLoad(page, page));
+        // JCEF and the code that wrote the URL spell a Windows path differently without meaning different files.
+        assertTrue(MarkdownView.canPushInsteadOfLoad("file:///D:\\proj\\.jcodebuddy\\webview\\markdown-view\\view.html", page));
+        // A space in a project path: %20 in what the browser reports, a literal space in what was written.
+        String spaced = "file:///D:/my%20project/.jcodebuddy/webview/markdown-view/view.html";
+        assertTrue(MarkdownView.canPushInsteadOfLoad(spaced,
+                "file:///D:/my project/.jcodebuddy/webview/markdown-view/view.html"));
+
+        // Anything else means there is no page of ours to push into, so a load is the right answer.
+        assertFalse(MarkdownView.canPushInsteadOfLoad(null, page));
+        assertFalse(MarkdownView.canPushInsteadOfLoad("", page));
+        assertFalse(MarkdownView.canPushInsteadOfLoad("about:blank", page));
+        assertFalse(MarkdownView.canPushInsteadOfLoad("file:///D:/proj/other.html", page));
+    }
 }

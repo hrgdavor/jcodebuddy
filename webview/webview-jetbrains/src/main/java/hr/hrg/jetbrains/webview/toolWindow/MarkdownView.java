@@ -128,7 +128,8 @@ public final class MarkdownView implements Disposable {
             return false;
         }
 
-        String page = buildPage(markdown, file);
+        String json = viewJson(markdown, file, classIndexFor(file));
+        String page = substitute(readTemplate(), json);
         if (page == null) {
             return false;
         }
@@ -138,9 +139,58 @@ public final class MarkdownView implements Disposable {
         }
 
         shownPath = resolution.absolute();
-        // The tool window owns the browser; it decides the first page (see PendingLoad) and this is a request like
-        // any other, which is why nothing here touches a browser directly.
-        return WebViewService.getInstance(project).openInPanel("file:///" + slash(written));
+        String pageUrl = "file:///" + slash(written);
+        WebViewPanel panel = WebViewService.getInstance(project).getPanel();
+        // The page is always the same file, so its URL never changes - and a browser does not reload a URL it
+        // already has. Asking for a load here is what made the second right-click (and the address bar after it)
+        // do nothing at all: the file on disk was new and the page on screen was the old document. Pushing the
+        // new view data re-renders in place, which is the same road the save refresh takes.
+        if (panel != null && canPushInsteadOfLoad(panel.currentUrl(), pageUrl)) {
+            panel.pushMarkdownView(json);
+            return true;
+        }
+        // No page of ours on screen: the tool window owns the browser and decides the first page (see PendingLoad).
+        return WebViewService.getInstance(project).openInPanel(pageUrl);
+    }
+
+    /**
+     * Whether fresh view data can be pushed instead of asking the browser to load the page again.
+     *
+     * <p>Pure, and tested: a browser does not reload a URL it already has, so "the page on screen is the page I
+     * just wrote" is the whole question. Equality is by normalised text - forward slashes and case, because JCEF
+     * and the code that produced the URL spell Windows paths differently without meaning different files.
+     */
+    static boolean canPushInsteadOfLoad(@Nullable String currentUrl, @NotNull String pageUrl) {
+        String current = normaliseUrl(currentUrl);
+        return !current.isEmpty() && current.equals(normaliseUrl(pageUrl));
+    }
+
+    /**
+     * A URL reduced to what names the file: no scheme, no percent-escapes, forward slashes, and case folded only
+     * where the filesystem folds it - on Linux two paths that differ in case are two files, and treating them as
+     * one would push a page into the wrong document.
+     */
+    static @NotNull String normaliseUrl(@Nullable String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        String text = url.trim();
+        if (text.regionMatches(true, 0, "file:///", 0, "file:///".length())) {
+            text = text.substring("file:///".length());
+        } else if (text.regionMatches(true, 0, "file://", 0, "file://".length())) {
+            text = text.substring("file://".length());
+        }
+        try {
+            // A space in a project path is %20 in the URL JCEF reports and a literal space in the path this class
+            // wrote, so comparing the raw text would miss and ask for a load of a URL the browser already has.
+            text = java.net.URLDecoder.decode(text, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (RuntimeException malformed) {
+            // Not decodable: compare it as it stands rather than refusing to recognise our own page.
+        }
+        String slashed = slash(text);
+        String os = System.getProperty("os.name", "");
+        boolean foldsCase = os.startsWith("Windows") || os.startsWith("Mac");
+        return foldsCase ? slashed.toLowerCase(java.util.Locale.ROOT) : slashed;
     }
 
     /** The document currently on screen, or null. Exposed for the plugin's own test. */

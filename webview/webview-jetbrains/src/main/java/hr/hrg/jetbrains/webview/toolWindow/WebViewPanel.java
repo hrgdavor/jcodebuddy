@@ -138,6 +138,21 @@ public final class WebViewPanel implements Disposable {
     }
 
     /**
+     * The URL the browser is showing, or null.
+     *
+     * Exposed because a browser will not reload a URL it already has - so a caller that re-generated a page
+     * under the same URL (the Markdown view does exactly that) must push into the live page instead of asking
+     * for a load, and it can only know which it needs by asking this.
+     */
+    public @Nullable String currentUrl() {
+        try {
+            return browser.getCefBrowser().getURL();
+        } catch (RuntimeException notReady) {
+            return null;
+        }
+    }
+
+    /**
      * Push fresh view data into the live page, for a save.
      *
      * No reload on purpose: the page exposes {@code window.__renderMarkdown()}, so a save re-renders in place
@@ -222,7 +237,13 @@ public final class WebViewPanel implements Disposable {
         // file: form, so a path copied out of a browser works here too (2026-10-04).
         java.nio.file.Path pasted = LocalFileUrls.pathOf(text);
         String markdownPath = pasted != null ? pasted.toString() : text;
-        if (MarkdownView.isMarkdown(markdownPath) && MarkdownView.getInstance(project).show(markdownPath)) {
+        if (MarkdownView.isMarkdown(markdownPath)) {
+            // Rendered here or not at all: a .md that fell through would be handed to the page loader as a URL,
+            // which is a confusing way to say "outside the project" or "unreadable".
+            if (!MarkdownView.getInstance(project).show(markdownPath)) {
+                showBrowserError("Could not open " + markdownPath + " as a Markdown view. It may be outside the project, "
+                        + "missing, or unreadable.");
+            }
             return;
         }
         UrlNormalizer.Normalized normalized =
