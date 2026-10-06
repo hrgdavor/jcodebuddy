@@ -131,16 +131,16 @@
       "expect": { "kind": "json", "keys": ["keywords.0"] }
     },
     {
-      "why": "a bare fragment in a document is a heading anchor, which the page handles itself",
+      "why": "a bare fragment in a document is a candidate too: the page scrolls to a heading of that name without asking anyone, and only asks a host when the name is not one - which is how a README region link works",
       "path": "doc/usage.md",
       "fragment": "install",
-      "expect": null
+      "expect": { "kind": "member", "name": "install" }
     },
     {
-      "why": "the same is true of HTML",
+      "why": "and the same is true of HTML, whose anchors are its own",
       "path": "docs/guide.html",
       "fragment": "install",
-      "expect": null
+      "expect": { "kind": "member", "name": "install" }
     },
     {
       "why": "but an explicit line in a document is still a location",
@@ -177,6 +177,16 @@
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
       "fragment": "",
       "expect": null
-    }
+    },
+    {"why":"THE maintainer's case: a bare name spelled like a region, with no prefix at all - it is a name exactly like a method or a field, and what it resolves to is the host's business (a declaration, or a #region directive of that name)", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"regionName", "expect":{"kind":"member", "name":"regionName"}},
+    {"why":"a declaration name and a region name are the same reference: a link should not have to know which one the author wrote", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"add", "expect":{"kind":"member", "name":"add"}},
+    {"why":"a scope modifier needs no prefix either - no language here has a declaration whose name starts with a minus, so it is unambiguous", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"-add", "expect":{"kind":"region", "name":"add", "scope":"-"}},
+    {"why":"the same, with the bare plus form", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"+add", "expect":{"kind":"region", "name":"add", "scope":"+"}},
+    {"why":"and the bare double plus, the form the resolver docs use", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"++toString", "expect":{"kind":"region", "name":"toString", "scope":"++"}},
+    {"why":"a modifier with nothing after it names nothing", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"++", "expect":null},
+    {"why":"three minuses is not a modifier, and not a name either", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"---add", "expect":null},
+    {"why":"in .json there are no declarations to find, so a bare reference is the JSON rule: dotted key paths", "path":"package.json", "fragment":"scripts.test", "expect":{"kind":"json", "keys":["scripts.test"]}},
+    {"why":"including the list form, without the prefix", "path":"package.json", "fragment":"name,scripts.test", "expect":{"kind":"json", "keys":["name", "scripts.test"]}},
+    {"why":"and in a document a region works the same way bare: the prefix is never required, only allowed", "path":"doc/usage.md", "fragment":"++install", "expect":{"kind":"region", "name":"install", "scope":"++"}}
   ]
 }

@@ -3512,16 +3512,18 @@ grammar, including the spellings that are only a location and not injection at a
 **The grammar is the deliverable.** Every fragment below is a location; `L…` wins over `region:`, which wins over a
 bare name, and a fragment that is none of them is not a location and stays an ordinary link:
 
-| Fragment                        | Means                                                                   |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `#L42`                          | line 42 (already supported)                                             |
-| `#L42-L58`                      | a line range                                                            |
-| `#someMethod`                   | the declaration named `someMethod` — a method, constructor, inner class |
-| `#region:add`                   | the region, or the declaration, named `add`                             |
-| `#region:-add`                  | that declaration's **body only**                                        |
-| `#region:+add`                  | the declaration **and its annotations**                                 |
-| `#region:++add`                 | the declaration, annotations **and doc comment**                        |
-| `#region:name,scripts.test`     | dotted JSON key paths, for `.json` — inject-examples' JSON rule         |
+| Fragment                        | Means                                                                                   |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `#L42`                          | line 42 (already supported)                                                             |
+| `#L42-L58`                      | a line range                                                                            |
+| `#someMethod`                   | the declaration named `someMethod` — a method, constructor, inner class                 |
+| `#region:add`                   | the region, or the declaration, named `add`                                             |
+| `#region:-add`                  | that declaration's **body only**                                                        |
+| `#region:+add`                  | the declaration **and its annotations**                                                 |
+| `#region:++add`                 | the declaration, annotations **and doc comment**                                        |
+| `#region:name,scripts.test`     | dotted JSON key paths, for `.json` — inject-examples' JSON rule                         |
+| `#add`                          | the declaration **or** the `#region add` directive — whichever the file has, because a link should not have to know which one the author wrote |
+| `#-add` / `#+add` / `#++add`    | the same as `#region:…`, without the prefix: the prefix is never required, only allowed |
 
 **Do:**
 

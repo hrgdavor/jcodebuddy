@@ -23,6 +23,39 @@ export const LOCATION_KINDS = ['line', 'range', 'region', 'json', 'member']
 const DOCUMENT_EXTENSIONS = new Set(['md', 'markdown', 'html', 'htm'])
 
 const isJson = (path) => /\.json$/i.test(String(path ?? ''))
+
+/** The JSON rule's reference: dotted key paths, comma-separated. Shared by the prefixed and unprefixed spellings,
+ * because the file's type decides the rule, not the spelling. */
+function jsonKeys(reference) {
+  const keys = reference.split(',').map((key) => key.trim()).filter((key) => key !== '')
+  return keys.length ? { kind: 'json', keys } : null
+}
+
+/**
+ * A scope modifier, with or without the `region:` prefix: `-` is the body only, `+` adds the annotations, `++` adds
+ * the doc comment too. No language this repository reads has a declaration whose name starts with `-` or `+`, so the
+ * reading is unambiguous - and the short spelling is what a writer reaches for.
+ *
+ * @returns {{scope: string, name: string}|null} null when what is left cannot be a name
+ */
+function scopedName(reference) {
+  let scope = ''
+  let name = reference
+  if (reference.startsWith('++')) {
+    scope = '++'
+    name = reference.slice(2)
+  } else if (reference.startsWith('+')) {
+    scope = '+'
+    name = reference.slice(1)
+  } else if (reference.startsWith('-')) {
+    scope = '-'
+    name = reference.slice(1)
+  }
+  if (name === '' || name.startsWith('+') || name.startsWith('-')) {
+    return null
+  }
+  return { scope, name }
+}
 const isDocument = (path) => DOCUMENT_EXTENSIONS.has(extensionOf(path))
 
 function extensionOf(path) {
@@ -71,28 +104,11 @@ export function parseLocation(path, fragment) {
       return null
     }
     if (isJson(path)) {
-      const keys = reference.split(',').map((key) => key.trim()).filter((key) => key !== '')
-      return keys.length ? { kind: 'json', keys } : null
+      return jsonKeys(reference)
     }
-    // The scope modifier comes off the front, and only the three spellings inject-examples defines are modifiers: a
-    // name may not start with '-' or '+' afterwards, which is what makes '+++add' malformed rather than a region
-    // called '+add'.
-    let scope = ''
-    let name = reference
-    if (reference.startsWith('++')) {
-      scope = '++'
-      name = reference.slice(2)
-    } else if (reference.startsWith('+')) {
-      scope = '+'
-      name = reference.slice(1)
-    } else if (reference.startsWith('-')) {
-      scope = '-'
-      name = reference.slice(1)
-    }
-    if (name === '' || name.startsWith('+') || name.startsWith('-')) {
-      return null
-    }
-    return { kind: 'region', name, scope }
+    // The scope modifier comes off the front; the prefix is never required, only allowed.
+    const scoped = scopedName(reference)
+    return scoped === null ? null : { kind: 'region', name: scoped.name, scope: scoped.scope }
   }
 
   // 'region:' is the only prefix this grammar owns. Anything else with a colon is a scheme-like fragment, and a
@@ -102,9 +118,23 @@ export function parseLocation(path, fragment) {
     return null
   }
 
-  // A bare fragment is a declaration only where there is a file type to tell one from a heading anchor: in a
-  // document the page scrolls to the heading itself, and with no path at all there is nothing to decide on.
-  if (!isDocument(path) && String(path ?? '') !== '') {
+  // The prefix is never required, only allowed: the same spellings work bare, which is what a writer types.
+  if (text.startsWith('+') || text.startsWith('-')) {
+    const scoped = scopedName(text)
+    return scoped === null ? null : { kind: 'region', name: scoped.name, scope: scoped.scope }
+  }
+
+  // In .json there are no declarations to find, so a bare reference is the JSON rule's key paths.
+  if (isJson(path)) {
+    return jsonKeys(text)
+  }
+
+  // A bare name is a declaration OR a `#region <name>` directive: the host tries the declaration and then the region,
+  // because a link should not have to know which one the author wrote. A name that is neither is caught there.
+  //
+  // In a document it is a heading anchor as well, and the page's own scroll wins: a renderer knows its headings, so it
+  // only asks a host when the name is not one.
+  if (String(path ?? '') !== '') {
     return { kind: 'member', name: text }
   }
 
