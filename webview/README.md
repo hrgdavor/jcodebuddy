@@ -167,6 +167,10 @@ JavaScript for tools that want to classify a link without a host; and
 [`scripts/markdown-view/`](../scripts/markdown-view/README.md) is the page that renders a document whose links
 navigate this way.
 
+**Try it:** [`doc/location-links-demo.md`](doc/location-links-demo.md) is a page written in every spelling above, each
+link pointing at a real file in this repository - the demo, and the dogfooding. Open it through a host and every link
+should land somewhere specific.
+
 ## What is implemented, and what has actually been observed
 
 The distinction matters here and is kept everywhere in this folder: a claim is *implemented and unit-tested*,
