@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "jcodebuddy-doc-tools",
+      "dependencies": {
+        "@hrg/inject-examples": "^1.0.1",
+        "@tanstack/highlight": "^1.0.0",
+      },
+    },
+  },
+  "packages": {
+    "@hrg/inject-examples": ["@hrg/inject-examples@1.0.1", "", { "bin": { "inject-examples": "cli.mjs" } }, "sha512-H1h+uf7YTmyfBWsGYHIw61vLp9gTho/8kehxGL28slQgkX7Ekq47K+OwZwRMCeihj9PAWzyq801Oncl546AVRQ=="],
+
+    "@tanstack/highlight": ["@tanstack/highlight@1.0.0", "", {}, "sha512-nrg2iZSQUZlDZGTPKh/CNlg6Orm3vFHIaIi/9DqPC1rUpfe/M6rD2iokrckWTc2Z5jYDz185BK76GUh9VIjQRw=="],
+  }
+}
