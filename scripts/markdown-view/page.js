@@ -23,6 +23,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** The files an assets-mode page needs beside it. Order matters only for reading. */
 export const PAGE_ASSETS = Object.freeze([
   'render.js',
+  'link-context.js',
   'open-file.js',
   'page-client.js',
   'assets/microlighter.js',

@@ -105,6 +105,10 @@ public final class NavigatorService implements EditorHost {
      */
     public boolean open(@Nullable String filePath, int line, int column) {
         NavigationOutcome outcome = navigator.open(filePath, line, column);
+        // One line per request. Without it, "the page said it asked and no tab appeared" is unanswerable: this
+        // names what was asked for, what it resolved to, and what the IDE decided.
+        LOG.info("WebView bridge: open '" + filePath + "' line " + line + " -> " + outcome.reason()
+                + " (" + outcome.absolutePath() + ")");
         if (!outcome.succeeded()) {
             logRefusal(outcome, filePath);
         }

@@ -1,6 +1,7 @@
 package hr.hrg.jetbrains.webview.toolWindow;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.intellij.openapi.application.ApplicationManager;
@@ -222,12 +223,41 @@ public final class MarkdownView implements Disposable {
         view.addProperty("moduleName", moduleNameOf(classIndex));
         if (classIndex != null) {
             try {
-                view.add("indexJson", JsonParser.parseString(Files.readString(classIndex, StandardCharsets.UTF_8)));
+                view.add("indexJson", absoluteIndex(classIndex));
             } catch (IOException | RuntimeException unreadable) {
                 LOG.info("Markdown view: ignoring an unreadable class index " + classIndex + ": " + unreadable);
             }
         }
         return escapeForScriptTag(GSON.toJson(view));
+    }
+
+    /**
+     * The module's class index with every row's path made absolute.
+     *
+     * <p>The index stores paths relative to the module (DEC-029), and a page resolves a link against its
+     * document's directory - which for a Markdown file in `docs/nested/` is not the module root. Handing over the
+     * rows as written would therefore point at a file that is not there, and the page cannot tell: a wrong link
+     * is worse than no link, so the host absolves the page of the guess by making the paths absolute here.
+     */
+    private static @NotNull JsonObject absoluteIndex(@NotNull Path classIndex) throws IOException {
+        JsonObject root = JsonParser.parseString(Files.readString(classIndex, StandardCharsets.UTF_8)).getAsJsonObject();
+        JsonElement classes = root.get("classes");
+        if (classes == null || !classes.isJsonObject()) {
+            return root;
+        }
+        Path moduleRoot = classIndex.getParent() == null ? null
+                : classIndex.getParent().getParent() == null ? null : classIndex.getParent().getParent().getParent();
+        if (moduleRoot == null) {
+            return root;
+        }
+        for (java.util.Map.Entry<String, JsonElement> entry : classes.getAsJsonObject().entrySet()) {
+            JsonElement row = entry.getValue();
+            if (row != null && row.isJsonObject() && row.getAsJsonObject().has("path")) {
+                String relative = row.getAsJsonObject().get("path").getAsString();
+                row.getAsJsonObject().addProperty("path", slash(moduleRoot.resolve(relative)));
+            }
+        }
+        return root;
     }
 
     private @Nullable String buildPage(@NotNull String markdown, @NotNull Path file) {

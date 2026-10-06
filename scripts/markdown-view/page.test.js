@@ -82,6 +82,35 @@ describe('the inlined page', () => {
   });
 });
 
+describe('the style', () => {
+  test('is light, in the palette a reader of documentation expects', async () => {
+    // Asked for by the maintainer after seeing the dark teal page: "the default markdown color scheme is ugly, use
+    // something light that resembles github light mode". Stated as values, so a future edit that darkens the page
+    // has to disagree with a test rather than with a memory.
+    const html = await buildMarkdownPage({ mode: 'inlined', template: true });
+    expect(html).toContain('--bg: #ffffff');
+    expect(html).toContain('--text: #1f2328');
+    expect(html).toContain('--accent: #0969da');
+    expect(html).toContain('--border: #d0d7de');
+    expect(html).toContain('#doc h1');
+    expect(html).toContain('#doc blockquote');
+    // The dark palette this replaced, gone rather than merely overridden.
+    expect(html).not.toContain('#04191b');
+    expect(html).not.toContain('#2ee6d0');
+    expect(html).not.toContain('#d8f2f0');
+  });
+
+  test('colours the code microlighter finds, which needs the ::highlight() rules', async () => {
+    // microlighter registers ranges on CSS.highlights and never wraps a token in a <span>, so without these rules
+    // the ranges exist and nothing is coloured - which is exactly how a page with no theme looks broken.
+    const html = await buildMarkdownPage({ mode: 'inlined', template: true });
+    for (const category of ['comment', 'keyword', 'string', 'function', 'type', 'tag', 'selector', 'numeric']) {
+      expect(html).toContain(`::highlight(${category})`);
+    }
+    expect(html).toContain('--syntax-comment: #6e7781');
+  });
+});
+
 describe('the assets page', () => {
   test('references the package files and does not inline the renderer', async () => {
     const html = await buildMarkdownPage({ mode: 'assets', assetBase: '../markdown-view', ...view });

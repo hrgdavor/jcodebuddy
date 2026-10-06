@@ -74,7 +74,10 @@ export function openFileClientScript(options = {}) {
       var base = LINK_BASE ? LINK_BASE.replace(/\/+$/, '') + '/' : '';
       var url = new URL(base + relative, document.baseURI);
       var path = decodeURIComponent(url.pathname);
-      return path.replace(/^\/([A-Za-z]:)/, '$1');
+      // The fragment is PART OF THE TARGET: it is how a link names a method or a region (plan 9.7), and
+      // url.pathname does not carry it. Dropping it here is what made a click open the right file at line 1.
+      var hash = url.hash || '';
+      return path.replace(/^\/([A-Za-z]:)/, '$1') + hash;
     } catch (error) {
       return relative;
     }
@@ -98,7 +101,12 @@ export function openFileClientScript(options = {}) {
 
     if (typeof window.openFile === 'function') {
       window.openFile(target, line, 1);
-      say('Opened ' + (member || relative) + ' at line ' + line + ' in the IDE.');
+      // "Asked", not "Opened": the page hands the location over and cannot know what the IDE did with it. The
+      // old wording said "at line 1" for a method link, which reads like the IDE ignored the method when the
+      // line was only ever the fallback.
+      say(member
+        ? 'Asked the IDE to open ' + member + ' in ' + String(relative).split('#')[0] + '.'
+        : 'Asked the IDE to open ' + target + (line > 1 ? ' at line ' + line : '') + '.');
       return;
     }
     if (BRIDGE_PORT > 0) {
@@ -148,12 +156,23 @@ export function openFileClientScript(options = {}) {
  * import.
  */
 export const PAGE_STYLE = String.raw`
+/* GitHub light, which is what a reader of documentation expects to see - and what the host's own Markdown
+   preview looks like, so a page rendered here does not stand out as a different program. */
 :root {
-  --bg: #04191b; --surface: #0a2427; --surface2: #0f3134; --border: #1c4a4e;
-  --text: #d8f2f0; --dim: #83b6b8; --accent: #2ee6d0; --accent-dim: #0b4f4c;
-  --green: #5fd6a8; --yellow: #dcc46a; --orange: #e0a76c; --red: #e07a7a;
-  --head-cell: #0d2e31; --hover-accent: #14444a; --filled: #0b2a2d; --empty-mark: #2b5a5e;
-  --border-green: #2a6a58; --border-orange: #6a5133; --border-red: #6a3a3a;
+  --bg: #ffffff; --surface: #f6f8fa; --surface2: #f6f8fa; --border: #d0d7de;
+  --text: #1f2328; --dim: #59636e; --accent: #0969da; --accent-dim: #0969da;
+  --green: #1a7f37; --yellow: #9a6700; --orange: #bc4c00; --red: #cf222e;
+  --head-cell: #f6f8fa; --hover-accent: #eaeef2; --filled: #f6f8fa; --empty-mark: #d0d7de;
+  --border-green: #aceebb; --border-orange: #f5d9a8; --border-red: #ffcecb;
+
+  /* microlighter's theme contract: a theme only sets these custom properties, and the ::highlight() rules
+     at the bottom of this style consume them. These are GitHub light's token colours. */
+  --syntax-background: #f6f8fa; --syntax-foreground: #1f2328;
+  --syntax-comment: #6e7781; --syntax-keyword: #cf222e; --syntax-operator: #0550ae;
+  --syntax-string: #0a3069; --syntax-constant: #0550ae; --syntax-function: #8250df;
+  --syntax-type: #953800; --syntax-variable: #953800; --syntax-property: #0550ae;
+  --syntax-tag: #116329; --syntax-selector: #6639ba; --syntax-inserted: #1a7f37;
+  --syntax-deleted: #cf222e;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text);
@@ -214,4 +233,53 @@ footer.bottom { border-top: 1px solid var(--border); padding: 1rem 1.4rem 3rem; 
   #layout { grid-template-columns: 1fr; }
   #nav { position: static; max-height: none; border-right: none; }
 }
+
+/* ---- the document ----
+   The page renders a Markdown file, so the reading experience is the feature: these are GitHub's own
+   proportions, which is what "resembles GitHub light mode" means in practice. */
+#doc { max-width: 920px; padding: 8px 32px 72px; font-size: 16px; }
+#doc > :first-child { margin-top: 0; }
+#doc h1, #doc h2 { padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+#doc h1 { font-size: 2em; font-weight: 600; margin: 24px 0 16px; }
+#doc h2 { font-size: 1.5em; font-weight: 600; margin: 24px 0 16px; }
+#doc h3 { font-size: 1.25em; font-weight: 600; margin: 24px 0 16px; }
+#doc h4 { font-size: 1em; font-weight: 600; margin: 24px 0 16px; }
+#doc h5, #doc h6 { font-size: .875em; font-weight: 600; color: var(--dim); margin: 24px 0 16px; }
+#doc p, #doc ul, #doc ol, #doc blockquote, #doc table, #doc pre { margin: 0 0 16px; }
+#doc ul, #doc ol { padding-left: 2em; }
+#doc li + li { margin-top: .25em; }
+#doc li > ul, #doc li > ol { margin: .25em 0 0; }
+#doc blockquote { padding: 0 1em; color: var(--dim); border-left: .25em solid var(--border); }
+#doc hr { height: .25em; background: var(--border); border: 0; margin: 24px 0; }
+#doc img { max-width: 100%; }
+#doc table { border-collapse: collapse; border-spacing: 0; display: block; width: max-content;
+  max-width: 100%; overflow: auto; }
+#doc th, #doc td { border: 1px solid var(--border); padding: 6px 13px; }
+#doc th { background: var(--head-cell); font-weight: 600; text-align: left; }
+#doc tr:nth-child(2n) td { background: var(--surface); }
+#doc pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; }
+#doc pre code { background: none; padding: 0; font-size: 100%; }
+#doc code { font-size: 85%; }
+
+/* ---- the code colours ----
+   microlighter never wraps a token in a <span>: it registers ranges on CSS.highlights and lets these rules
+   colour them with ::highlight(category). Without them the ranges exist and nothing shows, which is what a
+   page with no theme at all looks like - and it is why the highlighter looked broken rather than plain. */
+::highlight(comment) { color: var(--syntax-comment); }
+::highlight(keyword) { color: var(--syntax-keyword); }
+::highlight(operator) { color: var(--syntax-operator); }
+::highlight(string) { color: var(--syntax-string); }
+::highlight(constant) { color: var(--syntax-constant); }
+::highlight(numeric) { color: var(--syntax-constant); }
+::highlight(function) { color: var(--syntax-function); }
+::highlight(type) { color: var(--syntax-type); }
+::highlight(variable) { color: var(--syntax-variable); }
+::highlight(property) { color: var(--syntax-property); }
+::highlight(attribute-value) { color: var(--syntax-string); }
+::highlight(tag) { color: var(--syntax-tag); }
+::highlight(selector) { color: var(--syntax-selector); }
+::highlight(character-entity) { color: var(--syntax-constant); }
+::highlight(link) { color: var(--syntax-function); }
+::highlight(inserted) { color: var(--syntax-inserted); }
+::highlight(deleted) { color: var(--syntax-deleted); }
 `;

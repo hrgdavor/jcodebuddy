@@ -10,7 +10,8 @@
  * filesystem — so it links anything path-shaped and lets the host answer for it (`404` rather than a caret on
  * line 1, per the frozen page contract).
  */
-import { classIndexFrom, isSourcePath, renderMarkdown } from './render.js';
+import { renderMarkdown } from './render.js';
+import { anchorFor, linkContext } from './link-context.js';
 import { escapeHtml } from './open-file.js';
 
 /**
@@ -52,25 +53,6 @@ export function viewData() {
   return parsed;
 }
 
-/**
- * A link the host can act on.
- *
- * `data-open` carries the whole target — the path and, after `#`, the location — because the frozen contract
- * calls that attribute a path and the host is the only side that can resolve a location (plan step 9.7).
- * `data-member` is display metadata for a tooltip, never a routing key.
- */
-function makeLink(target, text, kind) {
-  const open = target.fragment ? `${target.open}#${target.fragment}` : target.open;
-  const attributes = [
-    `data-open="${escapeHtml(open)}"`,
-    `data-line="${target.line}"`,
-    target.member ? `data-member="${escapeHtml(target.member)}"` : '',
-    target.role ? `data-role="${escapeHtml(target.role)}"` : '',
-  ].filter(Boolean).join(' ');
-  const title = target.member ? ` title="${escapeHtml(target.member)}"` : '';
-  return `<a ${attributes}${title}>${text}</a>`;
-}
-
 /** Colour every fence microlighter has a grammar for. Returns what it managed, for the status line. */
 async function highlightFences(root) {
   const microlighter = window.microlighter;
@@ -106,27 +88,19 @@ export async function renderCurrent() {
 
   const markdown = String(view.markdown ?? '');
   const directory = String(view.docDir ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
-  const index = classIndexFrom(view.indexJson ?? {}, String(view.moduleName ?? ''));
-
-  // A browser cannot ask the disk, so the test is the same one the renderer applies to prose: a known source
-  // extension and no whitespace. A target that does not exist is the host's to refuse, with a reason.
-  const isOpenable = (candidate) => Boolean(candidate)
-    && !/\s/.test(candidate)
-    && (candidate.startsWith('/') || /^[A-Za-z]:\//.test(candidate))
-    && isSourcePath(candidate);
-
+  // The link logic lives in link-context.js, where a test can call it: a browser-rendered page has no
+  // data-open in its bytes, so nothing about a link can be checked by looking at the page.
   let links = 0;
-  const countingLink = (target, text, kind) => {
-    links++;
-    return makeLink(target, text, kind);
-  };
-
-  const { html, headings } = renderMarkdown(markdown, {
-    directory,
-    index,
-    isOpenable,
-    makeLink: countingLink,
+  const context = linkContext({
+    docDir: view.docDir,
+    indexJson: view.indexJson,
+    moduleName: view.moduleName,
+    makeLink: (target, text, kind) => {
+      links++;
+      return anchorFor(target, text, kind);
+    },
   });
+  const { html, headings } = renderMarkdown(markdown, context);
 
   doc.innerHTML = html;
   document.title = String(view.title || view.docPath || 'Markdown view');
