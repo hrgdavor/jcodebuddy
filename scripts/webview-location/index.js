@@ -118,15 +118,17 @@ export function parseLocation(path, fragment) {
     return null
   }
 
-  // The prefix is never required, only allowed: the same spellings work bare, which is what a writer types.
+  // In .json there are no declarations to find, so any bare reference is the JSON rule's key paths - checked
+  // before the modifiers, because a leading '-' is a legal key character and not a modifier there.
+  if (isJson(path)) {
+    return jsonKeys(text)
+  }
+
+  // The prefix is never required, only allowed: the same spellings work bare, which is what a writer types. No
+  // language here has a declaration whose name starts with '-' or '+', so the reading is unambiguous.
   if (text.startsWith('+') || text.startsWith('-')) {
     const scoped = scopedName(text)
     return scoped === null ? null : { kind: 'region', name: scoped.name, scope: scoped.scope }
-  }
-
-  // In .json there are no declarations to find, so a bare reference is the JSON rule's key paths.
-  if (isJson(path)) {
-    return jsonKeys(text)
   }
 
   // A bare name is a declaration OR a `#region <name>` directive: the host tries the declaration and then the region,

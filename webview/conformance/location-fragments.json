@@ -187,6 +187,7 @@
     {"why":"three minuses is not a modifier, and not a name either", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"---add", "expect":null},
     {"why":"in .json there are no declarations to find, so a bare reference is the JSON rule: dotted key paths", "path":"package.json", "fragment":"scripts.test", "expect":{"kind":"json", "keys":["scripts.test"]}},
     {"why":"including the list form, without the prefix", "path":"package.json", "fragment":"name,scripts.test", "expect":{"kind":"json", "keys":["name", "scripts.test"]}},
-    {"why":"and in a document a region works the same way bare: the prefix is never required, only allowed", "path":"doc/usage.md", "fragment":"++install", "expect":{"kind":"region", "name":"install", "scope":"++"}}
+    {"why":"and in a document a region works the same way bare: the prefix is never required, only allowed", "path":"doc/usage.md", "fragment":"++install", "expect":{"kind":"region", "name":"install", "scope":"++"}},
+    {"why":"in .json a bare reference is the JSON rule before any modifier rule: JSON has no regions, and a leading dash is a legal key character","path":"package.json","fragment":"-name","expect":{"kind":"json","keys":["-name"]}}
   ]
 }
