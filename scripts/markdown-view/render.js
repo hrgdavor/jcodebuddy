@@ -19,6 +19,7 @@
  * @module markdown-view/render
  */
 import { escapeHtml } from './open-file.js';
+import { parseLocation } from '../webview-location/index.js'
 
 /** A class index row and the maps a document needs to resolve names to locations. */
 export class ClassIndex {
@@ -111,6 +112,36 @@ export function classIndexFrom(json, moduleName = '') {
 }
 
 /** `#L14`, `#l14`, `#14` or a `:14` suffix. Returns `{target, line}` with `line` 1 when absent. */
+/**
+ * Split a link target into the file, the fallback line, and the LOCATION it names (plan step 9.7).
+ *
+ * `splitLineSuffix` stays as it is, because its shape is asserted by tests and used elsewhere; this is the
+ * location-aware sibling. `#L42` is a line the page itself can settle, `#someMethod`, `#region:++add` and
+ * `#scripts.test` are locations only the HOST can resolve — so the fragment travels on the link and the line
+ * becomes the fallback a host that cannot resolve one still understands.
+ *
+ * @returns {{target: string, line: number, fragment: string|null, location: object|null}}
+ */
+export function splitTarget(raw) {
+  const text = String(raw ?? '').trim()
+  const hash = text.indexOf('#')
+  if (hash < 0) {
+    // The `:14` shorthand, which is a line and never a fragment.
+    const { target, line } = splitLineSuffix(text)
+    return { target, line, fragment: null, location: null }
+  }
+  const target = text.slice(0, hash)
+  const fragment = text.slice(hash + 1)
+  const location = parseLocation(target, fragment)
+  const line = location === null
+    ? 1
+    : location.kind === 'line'
+      ? location.line
+      : location.kind === 'range'
+        ? location.from
+        : 1
+  return { target, line, fragment: location === null ? null : fragment, location }
+}
 export function splitLineSuffix(raw) {
   const text = String(raw ?? '');
   const hash = /#L?(\d+)$/i.exec(text);
@@ -142,7 +173,7 @@ export function isSourcePath(target) {
  * @returns {{open: string, line: number, member: string, role: string, fromIndex: boolean}|null}
  */
 export function resolveTarget(raw, context) {
-  const { target, line } = splitLineSuffix(String(raw ?? '').trim());
+  const { target, line, fragment, location } = splitTarget(String(raw ?? ''));
   // Cheapest and most important guard first: a sentence, an elided path (`src/main/java/…`) or an
   // over-long blob is prose, not a location — and this holds whatever the caller's `isOpenable` says, so
   // no caller can emit a link to one by handing the resolver a permissive predicate.
@@ -155,7 +186,26 @@ export function resolveTarget(raw, context) {
   //    Both spellings occur in real prose, so both are tried before giving up.
   for (const candidate of [joinPosix(context.directory, target), target]) {
     if (candidate && openable(candidate)) {
-      return { open: candidate, line, member: '', role: 'file', fromIndex: false };
+      if (location === null || location.kind === 'line') {
+        // Nothing a line cannot say: no fragment, and the shape stays what callers and tests know. A plain
+        // `#L42` is the page's own line, so a host has nothing to resolve.
+        return { open: candidate, line, member: '', role: 'file', fragment: null, fromIndex: false };
+      }
+      // A fragment that names a location travels with the path: the host resolves it, and the line is only what a
+      // host that cannot resolve one falls back to (webview/kit/doc/contract.md, the capability rule).
+      const named = location.kind === 'line' || location.kind === 'range'
+        ? ''
+        : location.kind === 'json'
+          ? location.keys.join(', ')
+          : location.name;
+      return {
+        open: candidate,
+        line,
+        member: named,
+        role: location.kind,
+        fragment,
+        fromIndex: false,
+      };
     }
   }
 

@@ -19,11 +19,15 @@ import { DEFAULT_BRIDGE_PORT, escapeHtml, openFileClientScript } from './open-fi
 import {
   ClassIndex, classIndexFrom, joinPosix, renderMarkdown, resolveTarget, slugify, splitLineSuffix,
 } from './render.js';
+import { splitTarget } from './render.js';
+import { parseLocation } from '../webview-location/index.js';
 import { findMarkdown, loadIndex, main, parseArgs, renderDocument, resolveModule, resolveOpenable, verifyLinks } from './index.js';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
-const MODULE = 'hipster-entity-example';
+// The example module lives in the hipster-entity group; this name went stale when it moved, and the seven
+// tests below it were red for that reason alone.
+const MODULE = 'hipster-entity/hipster-entity-example';
 const MODULE_ROOT = join(REPO_ROOT, MODULE);
 
 /** One class index row, as a document would consult it. */
@@ -324,4 +328,95 @@ describe('a full run over the example module', () => {
     expect(problems.length).toBe(1);
     expect(problems[0]).toContain('does not contain Auditable');
   });
+});
+
+// ── the location grammar, on the page side (plan step 9.7) ─────────────────────────────────────────
+
+test('splitTarget separates a file, a fallback line and the location it names', () => {
+  // A line the page can settle itself.
+  expect(splitTarget('src/A.java#L14')).toEqual({
+    target: 'src/A.java', line: 14, fragment: 'L14', location: { kind: 'line', line: 14 },
+  });
+  // The ':' shorthand is a line and never a fragment.
+  expect(splitTarget('src/A.java:14')).toEqual({ target: 'src/A.java', line: 14, fragment: null, location: null });
+  // A name: the host resolves it, and line 1 is only the fallback for a host that cannot.
+  const named = splitTarget('src/A.java#someMethod');
+  expect(named.target).toBe('src/A.java');
+  expect(named.line).toBe(1);
+  expect(named.fragment).toBe('someMethod');
+  expect(named.location).toEqual({ kind: 'member', name: 'someMethod' });
+  // The inject-examples spellings, with and without the prefix, and the scope modifiers.
+  expect(splitTarget('a/A.java#region:++add').location).toEqual({ kind: 'region', name: 'add', scope: '++' });
+  expect(splitTarget('a/A.java#++add').location).toEqual({ kind: 'region', name: 'add', scope: '++' });
+  expect(splitTarget('package.json#region:scripts.test').location).toEqual({
+    kind: 'json', keys: ['scripts.test'],
+  });
+  // A same-document heading is not a location: it has no file to resolve against.
+  expect(splitTarget('#install').location).toBe(null);
+  expect(splitTarget('#install').fragment).toBe(null);
+});
+
+test('a link that names a declaration reaches the page with the whole spelling on data-open', () => {
+  const context = {
+    directory: 'docs',
+    index: { lookup: () => null },
+    isOpenable: (candidate) => candidate === 'src/main/java/a/b/SomeFile.java',
+  };
+
+  const target = resolveTarget('../src/main/java/a/b/SomeFile.java#someMethod', context);
+
+  expect(target.open).toBe('src/main/java/a/b/SomeFile.java');
+  expect(target.fragment).toBe('someMethod');
+  expect(target.member).toBe('someMethod');
+  expect(target.role).toBe('member');
+  // Not the page's line: the fragment is what a host resolves, and 1 is the documented fallback.
+  expect(target.line).toBe(1);
+});
+
+test('without a location the resolved shape is exactly what it always was', () => {
+  const context = {
+    directory: 'docs',
+    index: { lookup: () => null },
+    isOpenable: (candidate) => candidate === 'src/A.java',
+  };
+
+  // The plain file case and the plain line case both keep their old shape, because callers and tests know it.
+  expect(resolveTarget('../src/A.java', context)).toEqual({
+    open: 'src/A.java', line: 1, member: '', role: 'file', fragment: null, fromIndex: false,
+  });
+  // A line needs no fragment either: data-line says it, and the host has nothing to resolve.
+  expect(resolveTarget('../src/A.java#L9', context)).toEqual({
+    open: 'src/A.java', line: 9, member: '', role: 'file', fragment: null, fromIndex: false,
+  });
+});
+
+test('an inject-examples marker is a link to the file, and its block is still the include', () => {
+  const opened = [];
+  const markdown = [
+    '[src/main/java/a/b/SomeFile.java](../src/main/java/a/b/SomeFile.java)',
+    '',
+    '```java',
+    'class SomeFile {',
+    '}',
+    '```',
+  ].join('\n');
+
+  const { html } = renderMarkdown(markdown, {
+    directory: 'docs',
+    index: { lookup: () => null },
+    isOpenable: (candidate) => candidate === 'src/main/java/a/b/SomeFile.java',
+    makeLink: (target, text, kind) => {
+      opened.push({ target, text, kind });
+      return `<a data-open="${target.open}">${text}</a>`;
+    },
+  });
+
+  // The location half: the marker's own line becomes a link to the file it names.
+  expect(opened.length).toBe(1);
+  expect(opened[0].target.open).toBe('src/main/java/a/b/SomeFile.java');
+  expect(opened[0].target.fragment).toBe(null);
+  expect(html).toContain('<a data-open="src/main/java/a/b/SomeFile.java">');
+  // The inject half: the fenced block after it is still the included content, rendered as code.
+  expect(html).toContain('<pre>');
+  expect(html).toContain('class SomeFile {');
 });

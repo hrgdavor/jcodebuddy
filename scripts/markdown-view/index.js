@@ -238,9 +238,13 @@ export function renderDocument(markdown, options) {
       from: documentPath,
       kind,
       fromIndex: target.fromIndex === true,
+      fragment: target.fragment ?? null,
     };
     links.push(record);
-    const attributes = `data-open="${escapeHtml(target.open)}" data-line="${target.line}"`
+    // The fragment is part of the target, not a second attribute: `data-open` is a path in the frozen
+    // contract, and a page that names a declaration writes it the way the documentation already does.
+    const openSpelling = target.fragment ? target.open + '#' + target.fragment : target.open;
+    const attributes = `data-open="${escapeHtml(openSpelling)}" data-line="${target.line}"`
       + (target.member ? ` data-member="${escapeHtml(target.member)}"` : '')
       + (target.role ? ` data-role="${escapeHtml(target.role)}"` : '')
       + ` title="${escapeHtml(title || ('open ' + (target.member || target.open) + ' at line ' + target.line))}"`;
