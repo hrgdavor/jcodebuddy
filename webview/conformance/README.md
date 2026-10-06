@@ -2,6 +2,8 @@
 
 ```
 bridge-decisions.json    the vectors: origin allow-list, CORS emission, rate-limit windows
+location-fragments.json  the vectors: how a link names a position inside a file (a line, a range, a declaration,
+                         a region with a scope modifier, a JSON key path)
 README.md                this file
 ```
 
@@ -29,6 +31,20 @@ vectors against a live bridge of its own.
 | `cors`           | `allowed`, `origin`, `sends`, `echoes`       | whether a host may emit `Access-Control-Allow-Origin` at all, and that it echoes the caller's own origin (never `*`, never a constant) |
 | `rateLimit`      | `limit`, `windowMillis`, `tryAt`, `expected` | `tryAt[i]` is the millisecond offset the injected clock is set to before call `i`; `expected[i]` is what `RateLimiter.tryAcquire()` must return. Offsets are absolute from the start of the run, and a refused call is not recorded. |
 
+## The location fragment vectors
+
+`location-fragments.json` is a second vector file, for a different kind of rule: not host policy, but the grammar a
+page and a host must read the same way. `path` and `fragment` are the input — a link's target file and the part
+after its `#` — and `expect` is the location it names, or `null` when the fragment is not a location at all (a
+heading anchor, a scheme-like fragment, a malformed position).
+
+Its shape is `{ "shape": "location-fragments", "cases": [ { "why", "path", "fragment", "expect" } ] }`, and its
+grammar is stated in the file itself, beside the cases, because the cases only make sense as instances of it.
+
+It exists for the same reason as the file above it. A page renders the link; a host resolves it; if the two disagree
+about `#region:++add`, one of them navigates somewhere wrong. Two readers assert against this file today —
+`scripts/webview-location` (JavaScript, in `scripts/`, where the dependency-free renderers live) and
+`webview/core/webview-core` (Java, the module every host builds on) — and, as above, **neither generates it**.
 ## Who reads it
 
 | Reader                            | How |

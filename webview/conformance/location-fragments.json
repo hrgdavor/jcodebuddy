@@ -1,0 +1,182 @@
+{
+  "shape": "location-fragments",
+  "note": "Every way a generated page may point INSIDE a file, and what it means. Written by hand, per webview/conformance/README.md: a vector is a claim about behaviour, and generating it from one implementation would only prove that implementation agrees with itself. The page side (scripts/webview-location) and the host side (webview-core) both assert against this file.",
+  "grammar": [
+    "A fragment is the part after '#' in a link, without the '#'. One leading '#' is tolerated and stripped.",
+    "'L<line>' and 'L<from>-L<to>' are explicit positions and always win.",
+    "'region:<ref>' names a region or a declaration, with inject-examples' scope modifiers '-' (body only), '+' (with annotations) and '++' (with annotations and the doc comment).",
+    "In a .json file the reference is a comma-separated list of dotted key paths, because JSON has no comments to hang a region on.",
+    "A bare name is a declaration in a source file, and a heading anchor in a document (.md, .markdown, .html, .htm) - which is why a link to '#install' in a README is left to the page itself.",
+    "Anything else is not a location and stays an ordinary link."
+  ],
+  "cases": [
+    {
+      "why": "the maintainer's example: a method inside a source file",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "someMethod",
+      "expect": { "kind": "member", "name": "someMethod" }
+    },
+    {
+      "why": "an explicit line, the spelling the JetBrains host resolves today",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L42",
+      "expect": { "kind": "line", "line": 42 }
+    },
+    {
+      "why": "a range, which the host selects rather than a caret",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L42-L58",
+      "expect": { "kind": "range", "from": 42, "to": 58 }
+    },
+    {
+      "why": "a one-line range is still a range: the page asked for a selection",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L42-L42",
+      "expect": { "kind": "range", "from": 42, "to": 42 }
+    },
+    {
+      "why": "line 0 means the first line rather than an error, per the contract's clamp rule",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L0",
+      "expect": { "kind": "line", "line": 0 }
+    },
+    {
+      "why": "a reversed range is a page's mistake; the grammar reports what was written and the host normalises",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L58-L42",
+      "expect": { "kind": "range", "from": 58, "to": 42 }
+    },
+    {
+      "why": "an open-ended range is not a location",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L42-",
+      "expect": null
+    },
+    {
+      "why": "a leading '#' is tolerated, because a page has the fragment either way",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "#L42",
+      "expect": { "kind": "line", "line": 42 }
+    },
+    {
+      "why": "the inject-examples marker form: a region or declaration, no scope modifier",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "region:add",
+      "expect": { "kind": "region", "name": "add", "scope": "" }
+    },
+    {
+      "why": "the body only, without the signature",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "region:-add",
+      "expect": { "kind": "region", "name": "add", "scope": "-" }
+    },
+    {
+      "why": "the declaration and its annotations",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "region:+add",
+      "expect": { "kind": "region", "name": "add", "scope": "+" }
+    },
+    {
+      "why": "the declaration, annotations and doc comment - the form the resolver docs use",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "region:++toString",
+      "expect": { "kind": "region", "name": "toString", "scope": "++" }
+    },
+    {
+      "why": "three plus signs is malformed, not a region called '+add'",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "region:+++add",
+      "expect": null
+    },
+    {
+      "why": "two minus signs is malformed, not a region called '-add'",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "region:--add",
+      "expect": null
+    },
+    {
+      "why": "an empty reference names nothing",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "region:",
+      "expect": null
+    },
+    {
+      "why": "regions exist in every file type, markdown included",
+      "path": "merge-java/docs/resolvers/README.md",
+      "fragment": "region:add",
+      "expect": { "kind": "region", "name": "add", "scope": "" }
+    },
+    {
+      "why": "in .json the reference is the JSON rule: one dotted key path",
+      "path": "package.json",
+      "fragment": "region:scripts.test",
+      "expect": { "kind": "json", "keys": ["scripts.test"] }
+    },
+    {
+      "why": "and the JSON rule takes a list, which is why the two rules are told apart by the file's type",
+      "path": "package.json",
+      "fragment": "region:name,scripts.test",
+      "expect": { "kind": "json", "keys": ["name", "scripts.test"] }
+    },
+    {
+      "why": "whitespace around the keys is the writer's formatting, not part of a key",
+      "path": "package.json",
+      "fragment": "region:name, scripts.test",
+      "expect": { "kind": "json", "keys": ["name", "scripts.test"] }
+    },
+    {
+      "why": "an array element is a dotted path like any other",
+      "path": "package.json",
+      "fragment": "region:keywords.0",
+      "expect": { "kind": "json", "keys": ["keywords.0"] }
+    },
+    {
+      "why": "a bare fragment in a document is a heading anchor, which the page handles itself",
+      "path": "doc/usage.md",
+      "fragment": "install",
+      "expect": null
+    },
+    {
+      "why": "the same is true of HTML",
+      "path": "docs/guide.html",
+      "fragment": "install",
+      "expect": null
+    },
+    {
+      "why": "but an explicit line in a document is still a location",
+      "path": "doc/usage.md",
+      "fragment": "L12",
+      "expect": { "kind": "line", "line": 12 }
+    },
+    {
+      "why": "a nested or qualified declaration name is a member like any other",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "SomeFile.Builder.withName",
+      "expect": { "kind": "member", "name": "SomeFile.Builder.withName" }
+    },
+    {
+      "why": "a scheme-like fragment is not a location; 'region:' is the only prefix the grammar owns",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "REGION:add",
+      "expect": null
+    },
+    {
+      "why": "a declaration needs a file type to be told from a heading anchor, so no path means no member",
+      "path": null,
+      "fragment": "someMethod",
+      "expect": null
+    },
+    {
+      "why": "an explicit position needs no file type at all",
+      "path": null,
+      "fragment": "L42",
+      "expect": { "kind": "line", "line": 42 }
+    },
+    {
+      "why": "and neither is an empty fragment: the file itself, which needs no navigation",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "",
+      "expect": null
+    }
+  ]
+}
