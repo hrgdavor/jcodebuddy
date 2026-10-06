@@ -22,6 +22,13 @@ public record NavigationOutcome(Reason reason, String absolutePath, String detai
         NO_HOST,
         /** The host was asked and refused — it could not find the file, most often. */
         HOST_REFUSED,
+
+        /**
+         * The file exists but does not contain what the link named - a declaration, a region or a JSON key that is
+         * not there. Deliberately distinct from a missing file: a page can tell "your link is wrong" from "that path
+         * is wrong", and neither is answered by opening line 1 (plan step 9.7).
+         */
+        LOCATION_NOT_FOUND,
         /** The rate limit refused the request; no host was asked. */
         RATE_LIMITED
     }

@@ -1,5 +1,10 @@
 package hr.hrg.webview.core;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -73,13 +78,76 @@ public final class Navigator {
 
     /** Opens a file at a one-based line and column. */
     public NavigationOutcome open(String filePath, int line, int column) {
-        Verdict verdict = check(filePath);
+        return open(filePath, line, column, null);
+    }
+
+    /**
+     * Opens a file at a position a page named, which may be a line or something only the file can answer: a
+     * declaration, a region, a JSON key path (plan step 9.7).
+     *
+     * <p>The fragment wins over the line when it is a location, because it is the more specific thing the page said -
+     * a page that also sends line 1 is sending the contract's own default, not an intention. A fragment that is not a
+     * location (a heading anchor in a document, say) leaves the page's line standing, exactly as before.</p>
+     *
+     * <p><strong>A name the file does not have is refused, not aimed at line 1.</strong> A wrong line costs the
+     * reader a search to discover, and looks like a link that worked. In a document, though, a bare name is the
+     * viewer's own business (a heading anchor), so it falls back to the line rather than refusing.</p>
+     */
+    public NavigationOutcome open(String filePath, int line, int column, String fragment) {
+        // A fragment may ride in the path itself: 'data-open="src/A.java#add"' is how a page spells a location, and
+        // the frozen contract calls that attribute a path rather than a label. Splitting it HERE, in the one place
+        // every host's request passes through, is what lets a page use the one spelling instead of learning which
+        // host understands which. An explicit fragment argument wins when both are given.
+        String pathOnly = filePath;
+        String named = fragment;
+        if (filePath != null) {
+            int hash = filePath.indexOf('#');
+            if (hash >= 0) {
+                pathOnly = filePath.substring(0, hash);
+                if (named == null || named.isEmpty()) {
+                    named = filePath.substring(hash + 1);
+                }
+            }
+        }
+        Verdict verdict = check(pathOnly);
         if (verdict.refusal() != null) {
             return verdict.refusal();
         }
         PathResolution resolution = verdict.resolution();
+        LocationFragment location = LocationFragment.parse(resolution.absolute(), named);
+        if (location == null) {
+            return act(resolution, EditorHost.CAP_OPEN,
+                    () -> host.openFileAt(resolution.absolute(), Math.max(1, line), Math.max(1, column)));
+        }
+        String text = null;
+        if (location.kind() != LocationFragment.Kind.LINE && location.kind() != LocationFragment.Kind.RANGE) {
+            try {
+                text = Files.readString(Path.of(resolution.absolute()), StandardCharsets.UTF_8);
+            } catch (IOException | RuntimeException unreadable) {
+                return NavigationOutcome.refused(NavigationOutcome.Reason.INVALID_PATH,
+                        resolution.absolute(), "could not read the file: " + unreadable.getMessage());
+            }
+        }
+        LocationResolution at = LocationResolver.resolve(location, text);
+        if (at == null) {
+            if (isDocument(resolution.absolute())) {
+                // A bare name in a document is its heading anchor: the viewer knows better than we do.
+                return act(resolution, EditorHost.CAP_OPEN,
+                        () -> host.openFileAt(resolution.absolute(), Math.max(1, line), Math.max(1, column)));
+            }
+            return NavigationOutcome.refused(NavigationOutcome.Reason.LOCATION_NOT_FOUND,
+                    resolution.absolute(), location.summary() + " is not in this file");
+        }
+        int target = Math.max(1, at.line());
         return act(resolution, EditorHost.CAP_OPEN,
-                () -> host.openFileAt(resolution.absolute(), Math.max(1, line), Math.max(1, column)));
+                () -> host.openFileAt(resolution.absolute(), target, 1));
+    }
+
+    /** The extensions whose fragments are their own anchors rather than source locations. */
+    private static boolean isDocument(String absolutePath) {
+        String lower = absolutePath.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".html")
+                || lower.endsWith(".htm");
     }
 
     /** Reveals a file in the host's own navigation UI. */
@@ -132,13 +200,16 @@ public final class Navigator {
         }
         String path = url;
         int line = 1;
+        String fragment = null;
         int hash = url.indexOf('#');
         if (hash >= 0) {
             path = url.substring(0, hash);
-            line = lineFromFragment(url.substring(hash + 1));
+            fragment = url.substring(hash + 1);
+            // The line is still read for the plain '#L42' case and as the fallback a non-location fragment leaves.
+            line = lineFromFragment(fragment);
         }
         String localPath = UrlNormalizer.localPathOf(path);
-        return open(localPath != null ? localPath : path, line, 1);
+        return open(localPath != null ? localPath : path, line, 1, fragment);
     }
 
     /**

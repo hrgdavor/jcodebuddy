@@ -5,6 +5,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -280,5 +281,171 @@ public class NavigatorTest {
     public void theSharedPolicyIsTwentyPerTwentySeconds() {
         assertEquals(20, Navigator.RATE_LIMIT_COUNT);
         assertEquals(20_000L, Navigator.RATE_LIMIT_WINDOW_MS);
+    }
+
+    /**
+     * A source file with a resolution-worthy shape: a region directive, a declaration, and a call to that
+     * declaration (which a resolver must not mistake for it).
+     */
+    private Path writeSource(Fixture fixture) throws IOException {
+        Path file = fixture.project().resolve("src/Example.java");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, """
+            package com.example;
+
+            // #region wiring
+            private final Set<String> entries = new TreeSet<>();
+            // #endregion
+
+            public boolean add(String item) {
+                return entries.add(item);
+            }
+
+            public void caller() {
+                add("x");
+            }
+            """);
+        return file;
+    }
+
+    @Test
+    public void aMemberFragmentLandsOnTheMemberAndNotOnLineOne() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        NavigationOutcome outcome = fixture.forHost(host, false).open("src/Example.java", 1, 1, "add");
+
+        assertEquals(NavigationOutcome.Reason.OK, outcome.reason());
+        assertEquals(1, host.calls.size());
+        // 'public boolean add(String item)' is line 7. Landing on line 1 is what this feature exists to stop: the
+        // page sent the contract's default line and named a declaration instead.
+        assertTrue("the caret must reach the declaration: " + host.calls.get(0),
+                host.calls.get(0).endsWith(":7:1"));
+    }
+
+    @Test
+    public void aRegionFragmentLandsInsideTheRegion() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        fixture.forHost(host, false).open("src/Example.java", 1, 1, "region:wiring");
+
+        assertEquals(1, host.calls.size());
+        assertTrue("the region's content starts on line 4: " + host.calls.get(0),
+                host.calls.get(0).endsWith(":4:1"));
+    }
+
+    @Test
+    public void aPlainLineFragmentStillWorks() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        fixture.forHost(host, false).open("src/Example.java", 1, 1, "L12");
+
+        assertEquals(1, host.calls.size());
+        assertTrue("an explicit line is still an explicit line: " + host.calls.get(0),
+                host.calls.get(0).endsWith(":12:1"));
+    }
+
+    @Test
+    public void aNameTheFileDoesNotHaveIsRefusedAndTheHostIsNeverCalled() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        NavigationOutcome outcome = fixture.forHost(host, false).open("src/Example.java", 1, 1, "missing");
+
+        assertEquals(NavigationOutcome.Reason.LOCATION_NOT_FOUND, outcome.reason());
+        assertFalse(outcome.succeeded());
+        assertTrue("a wrong line costs a search to discover, so nothing is opened: " + host.calls,
+                host.calls.isEmpty());
+    }
+
+    @Test
+    public void aDocumentKeepsItsOwnAnchors() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        Files.writeString(fixture.project().resolve("README.md"), "# Docs\n\n## install\n");
+
+        // A bare fragment in a document is the viewer's own heading anchor, so the page's line stands rather than the
+        // request being refused.
+        NavigationOutcome outcome = fixture.forHost(host, false).open("README.md", 3, 1, "install");
+
+        assertEquals(NavigationOutcome.Reason.OK, outcome.reason());
+        assertTrue(host.calls.get(0).endsWith(":3:1"));
+    }
+
+    @Test
+    public void aUrlCarriesItsFragmentThrough() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        Path file = writeSource(fixture);
+
+        fixture.forHost(host, false).openUrl(file.toUri() + "#add");
+
+        assertEquals(1, host.calls.size());
+        assertTrue("the sidecar's URL path resolves a name too: " + host.calls.get(0),
+                host.calls.get(0).endsWith(":7:1"));
+    }
+
+    @Test
+    public void aUrlWithAPlainLineFragmentIsUnchanged() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        Path file = writeSource(fixture);
+
+        fixture.forHost(host, false).openUrl(file.toUri() + "#L9");
+
+        assertEquals(1, host.calls.size());
+        assertTrue(host.calls.get(0).endsWith(":9:1"));
+    }
+
+    @Test
+    public void withoutAFragmentThePagesLineAndColumnStand() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        fixture.forHost(host, false).open("src/Example.java", 14, 3);
+
+        assertEquals(1, host.calls.size());
+        assertTrue("no fragment, no change: " + host.calls.get(0), host.calls.get(0).endsWith(":14:3"));
+    }
+
+    @Test
+    public void thePageSpellsTheFragmentInThePath() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        // This is the spelling a generated page emits: the location rides in data-open, which the contract calls a
+        // path. No fourth argument, no second attribute - and the caret still reaches the declaration.
+        NavigationOutcome outcome = fixture.forHost(host, false).open("src/Example.java#add", 1, 1);
+
+        assertEquals(NavigationOutcome.Reason.OK, outcome.reason());
+        assertEquals(1, host.calls.size());
+        assertTrue("the path's own fragment must be read: " + host.calls.get(0),
+                host.calls.get(0).endsWith(":7:1"));
+    }
+
+    @Test
+    public void aRegionInThePathIsReadTooAndADocumentStillKeepsItsAnchors() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+        Files.writeString(fixture.project().resolve("README.md"), "# Docs\\n\\n## install\\n");
+
+        NavigationOutcome region = fixture.forHost(host, false).open("src/Example.java#region:wiring", 1, 1);
+        assertEquals(NavigationOutcome.Reason.OK, region.reason());
+        assertTrue("a region spelled in the path: " + host.calls.get(0), host.calls.get(0).endsWith(":4:1"));
+
+        // A document's fragment is its own anchor, so the page's line stands - the split must not turn it into a
+        // refusal.
+        NavigationOutcome document = fixture.forHost(host, false).open("README.md#install", 3, 1);
+        assertEquals(NavigationOutcome.Reason.OK, document.reason());
+        assertTrue("a heading anchor keeps the page's line: " + host.calls.get(1), host.calls.get(1).endsWith(":3:1"));
     }
 }
