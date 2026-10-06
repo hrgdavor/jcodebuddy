@@ -39,6 +39,11 @@ for the full grammar; read `webview/conformance/README.md` for why it works that
 bun test scripts/webview-location
 ```
 
-The module is a library, not a script: it is imported by the pages that render links (the markdown renderer under
-`scripts/markdown-view/` is the first), which is why it lives in `scripts/` beside them, per AGENTS.md § 1's rule
-that a vanilla renderer stays dependency-free.
+The module is a library, not a script, and it lives in `scripts/` because that is where this repository's
+dependency-free tooling belongs (AGENTS.md § 1).
+
+**Who reads it, after 2026-10-04:** `webview-core`'s Java implementation is the *host* half, and it is the one a click
+depends on; this module is the same grammar for **tools** — a link checker, a `--verify` pass, anything that wants to
+classify a link without a host running. The pages that render links deliberately do **not** import it: a page puts the
+whole target on `data-open` and passes it through, because it needs to know nothing about what a fragment means (the
+maintainer's rule; see [`webview/README.md`](../../webview/README.md), "Pointing at a place inside a file").

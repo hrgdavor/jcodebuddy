@@ -127,6 +127,46 @@ Authorisation is in [`kit/doc/contract.md`](kit/doc/contract.md) § 3.4: an allo
 for navigation; **the token alone** for every state-changing route, because any page in the reader's browser can
 share an origin rule while only a page this host served can hold the secret.
 
+## Pointing at a place inside a file
+
+A generated page links to source, and "line 42" is the least useful thing a link can say. A link may name a place
+instead, in the same spelling the repository's own documentation already uses — `@hrg/inject-examples` markers
+name a real file and a location inside it — and the location half of that spelling navigates:
+
+| `data-open` fragment         | The place it names                                                        |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `#L42`                       | line 42 — the page settles this itself and passes nothing on              |
+| `#L42-L58`                   | a line range                                                              |
+| `#someMethod`                | a declaration: a method, a constructor, an inner class, a field           |
+| `#region:add`                | the region, or the declaration, named `add`                               |
+| `#region:-add`               | the same declaration's **body only**                                      |
+| `#region:+add`               | the declaration **and its annotations**                                   |
+| `#region:++add`              | the declaration, annotations **and doc comment**                          |
+| `#-add` / `#+add` / `#++add` | the same without the prefix — the prefix is never required, only allowed  |
+| `#region:name,scripts.test`  | dotted JSON key paths, in a `.json` file                                  |
+
+**A page needs to know none of this.** It puts the whole target on `data-open` — which the frozen contract already
+calls a path — and hands it over. The only fragment it reads is a plain `#L42`, which it can settle itself, and it
+splits the fragment off solely to check that the file exists. Everything else, including a spelling nobody has
+thought of yet, travels through untouched. That is the maintainer's rule of 2026-10-04: the webapp part need not
+know, and a host need not advertise anything about what links there are. There is no capability key and no second
+attribute for this.
+
+**The host sanitises, then resolves.** `Navigator` — the one funnel a page's request passes through — strips an
+inject prefix (`region:`) and a scope modifier (`-`, `+`, `++`) to find the marker, then looks for it: an explicit
+`#region <name>` directive wins over a declaration of the same name, which is exactly `@hrg/inject-examples`' own
+order, so one spelling can name either. A `.json` reference is its key paths. A marker the file does not have is
+**refused** (`LOCATION_NOT_FOUND`, HTTP `404`) rather than aimed at line 1, because a wrong line costs the reader a
+search to discover; a fragment that is *not* a location — a heading anchor in a document, a made-up word — leaves
+the page's own line standing instead of failing.
+
+Where the rules live: [`conformance/location-fragments.json`](conformance/location-fragments.json) is the table of
+claims, written by hand; `webview-core`'s `LocationFragment` (the grammar) and `LocationResolver` (a name to a
+position, with its reasoning in the javadoc) are the host side; `scripts/webview-location` is the same grammar in
+JavaScript for tools that want to classify a link without a host; and
+[`scripts/markdown-view/`](../scripts/markdown-view/README.md) is the page that renders a document whose links
+navigate this way.
+
 ## What is implemented, and what has actually been observed
 
 The distinction matters here and is kept everywhere in this folder: a claim is *implemented and unit-tested*,

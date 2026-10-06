@@ -68,6 +68,19 @@ Two rules follow from the table, and they are the two a generator gets wrong:
    right file on the wrong line is worse than plain text, because it costs a click to discover. Verify
    before writing the page — see [`page-authoring.md`](page-authoring.md) § "Verifying before you ship".
 
+#### 1.1.1 A `data-open` path may name a place inside the file
+
+**Added 2026-10-04; nothing above changes.** A path may carry a fragment that names a place rather than a line, in
+the spellings the repository's documentation already uses: `#L42`, `#L42-L58`, `#someMethod`, `#region:add` with a
+`-`/`+`/`++` scope modifier (or the same without the `region:` prefix, because the prefix is never required, only
+allowed), and a `.json` key path. `data-member` stays what § 1.1 says it is — display metadata for a tooltip, never
+a routing key; the fragment inside `data-open` is the routing key.
+
+A page still has to write nothing clever: it puts the whole target on `data-open` and passes it through, and the
+only fragment it needs to understand is a plain `#L42`, which it can settle without asking anyone. A page that
+prefers to be explicit may pass a line in `data-line` as well; a host that resolves the fragment uses the
+fragment, and one that does not uses the line.
+
 ### 1.2 The version probe
 
 ```js
@@ -96,7 +109,13 @@ and a page discovers that from `GET /health` rather than by trying.
 4. **Answer for a file that does not resolve**, so a broken link is diagnosable instead of silent: the
    injected path logs, and the HTTP transport answers `404` (§ 3).
 5. **Ignore a message kind it does not know**, so a newer page can speak a newer protocol to an older host
-   without breaking it.
+
+6. **Accept a location fragment, and answer for it.** A `data-open` path may carry one (§ 1.1.1). A host either
+   reaches the place it names — stripping an inject prefix and a scope modifier to find the marker, and preferring an
+   explicit `#region <name>` directive over a declaration of that name, which is `@hrg/inject-examples`' own order —
+   or answers for it: a marker the file does not contain is a `404`, not a caret on line 1, and a fragment that is not
+   a location at all leaves the caller's line standing. Nothing is advertised for this and no capability is defined:
+   accepting a location is part of accepting a navigation.   without breaking it.
 
 ---
 
