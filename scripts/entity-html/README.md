@@ -188,7 +188,7 @@ not carry and asserts the warning.
   model and the fallback ladder — is documented in
   [`webview/kit/doc/contract.md`](../../webview/kit/doc/contract.md)**, which is the document to read if you are
   writing another page or another plugin. For a smaller worked example of the same contract, see
-  [`scripts/markdown-view/`](../markdown-view/README.md), which renders Markdown this way.
+  [`markdown-view/`](../../markdown-view/README.md), which renders Markdown this way.
 - A cell is empty when the field genuinely has no such slot there — a `DERIVED` field has no setter,
   a `META` view has no builder. The absences are part of the answer, so they are rendered, not
   omitted.

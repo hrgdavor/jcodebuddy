@@ -290,7 +290,7 @@ location into `data-open` (plan step 9.7) and the injected bridge resolves it th
 outside the project is refused** - by the address bar, by the action and by the page's links alike (2026-10-04).
 
 **The build needs Bun.** `./gradlew buildPlugin` first runs `markdownPage`, which invokes
-`scripts/markdown-view/page.js` to build that page - one source of truth, and the plugin ships the result, so the IDE
+`markdown-view/page.js` to build that page - one source of truth, and the plugin ships the result, so the IDE
 never needs a bundler, a server or `node_modules` at view time. Bun is already this repository's tooling for every
 script and check, so this adds no new kind of dependency; a machine without it fails the build with the command that
 fixes it rather than shipping a Markdown view that cannot render.

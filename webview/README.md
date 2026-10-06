@@ -164,7 +164,7 @@ Where the rules live: [`conformance/location-fragments.json`](conformance/locati
 claims, written by hand; `webview-core`'s `LocationFragment` (the grammar) and `LocationResolver` (a name to a
 position, with its reasoning in the javadoc) are the host side; `scripts/webview-location` is the same grammar in
 JavaScript for tools that want to classify a link without a host; and
-[`scripts/markdown-view/`](../scripts/markdown-view/README.md) is the page that renders a document whose links
+[`markdown-view/`](../markdown-view/README.md) is the page that renders a document whose links
 navigate this way.
 
 **Try it:** [`doc/location-links-demo.md`](doc/location-links-demo.md) is a page written in every spelling above, each
@@ -177,7 +177,7 @@ A `.md` file opened in a host is rendered into a clickable page **by the host it
 no `bun run` - and it stays fresh while it is being edited. That is plan step 9.7's navigation, reusable on the
 documentation this repository is full of.
 
-- The page comes from [the `markdown-view` package](../scripts/markdown-view/README.md), assembled **inlined**: one
+- The page comes from [the `markdown-view` package](../markdown-view/README.md), assembled **inlined**: one
   self-contained HTML with the renderer, the highlighter, the style and the click client inside it. At view time
   there is no bundler, no `node_modules`, no CDN and no network (DEC-027), which is what makes it work in an IDE
   webview that can only hand a page its bytes.

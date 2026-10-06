@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = join(here, '..', '..');
+const repo = join(here, '..');
 const manifest = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
 
 describe('the markdown-view package', () => {

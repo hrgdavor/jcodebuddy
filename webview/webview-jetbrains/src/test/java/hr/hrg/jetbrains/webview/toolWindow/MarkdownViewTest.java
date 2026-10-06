@@ -23,7 +23,7 @@ import static org.junit.Assert.assertTrue;
  *
  * <ol>
  *   <li><b>The page ships inside the plugin.</b> The template is built by the Gradle task {@code markdownPage} from
- *       {@code scripts/markdown-view/page.js} at build time. If that step is ever dropped or renamed, the tool
+ *       {@code markdown-view/page.js} at build time. If that step is ever dropped or renamed, the tool
  *       window would open a blank page and nothing would say why — so this fails instead.</li>
  *   <li><b>The substitution is honest.</b> A template without the marker produces null, not a page that silently
  *       shows nothing; a document containing {@code </script>} cannot end the tag it is written into.</li>

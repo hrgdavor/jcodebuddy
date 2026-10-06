@@ -3546,7 +3546,7 @@ bare name, and a fragment that is none of them is not a location and stays an or
    no second attribute: `Navigator` accepts the fragment, strips an inject prefix (`region:`) and a scope modifier
    (`-`, `+`, `++`) to find the marker, and resolves what is left.
 5. **Markdown rendering**, so a document can be read in the webview at all: the vanilla renderer under
-   `scripts/markdown-view/` in a page the host serves, with its links classified by the grammar. An
+   `markdown-view/` in a page the host serves, with its links classified by the grammar. An
    `@hrg/inject-examples` marker keeps its inject half (the fenced block that follows is still the file's content)
    **and** becomes navigable, because "jump to the injection point" is the point.
 6. **`window.openFile` and `/open` gain an optional fragment**, not a new required argument; `bridgeVersion` moves
@@ -3577,7 +3577,7 @@ a marker is both injected and navigable, and the documentation's own link checks
   document leaves the page's line standing, because a heading anchor is the viewer's business. **JetBrains reaches a
   method or a region through this**: both its `open` and its `openUrl` delegate to the Navigator, so no plugin code
   was needed.
-- **The page renders location links** (`scripts/markdown-view`): `splitTarget` splits at `#`, keeps the file (to
+- **The page renders location links** (`markdown-view`): `splitTarget` splits at `#`, keeps the file (to
   check it exists) and a plain `#L42`, and passes everything else through verbatim; `makeLink` puts the whole
   spelling on `data-open`. A marker keeps both halves, and a test asserts both: the marker line becomes a link to
   the file it names, and the fenced block after it is still the include.

@@ -268,6 +268,76 @@ function inlineText(text, context) {
     `<a href="${url}" title="${url}">${url}</a>`);
 }
 
+/** How wide something is indented, counting a tab as four — enough to compare levels, which is all this needs. */
+function indentWidth(text) {
+  let width = 0;
+  for (const character of text) {
+    width += character === '\t' ? 4 : 1;
+  }
+  return width;
+}
+
+/**
+ * An item's text, with a task marker passed through the sentinel `renderInline` would otherwise escape.
+ *
+ * The checkbox is the only markup this renderer emits that the author did not type, so it cannot go through
+ * `renderInline`: escaping it would print the markup instead of a checkbox.
+ */
+function taskTextOrText(text) {
+  const task = /^\[([ xX])\]\s+(.*)$/.exec(text);
+  return task ? `\u0000task:${task[1] === ' ' ? ' ' : 'x'}\u0000${task[2]}` : text;
+}
+
+/**
+ * A list, nested by indentation.
+ *
+ * Items are grouped into a tree first, so a nested item is emitted **inside its parent `<li>`** — which is what makes
+ * a document's structure survive into the HTML — and consecutive items whose marker type differs start a **sibling**
+ * list rather than being merged, because `-` and `1.` are different lists (CommonMark does the same).
+ */
+function renderList(items, context) {
+  const root = { indent: -1, children: [] };
+  const stack = [root];
+  for (const item of items) {
+    // A dedent closes every deeper level it passes; an indent no open level has clamps to the level above it rather
+    // than inventing a structure out of malformed input.
+    while (stack.length > 1 && item.indent <= stack[stack.length - 1].indent) {
+      stack.pop();
+    }
+    const node = { ...item, children: [] };
+    stack[stack.length - 1].children.push(node);
+    stack.push(node);
+  }
+  return renderListLevel(root, context);
+}
+
+/** One level of the tree: its items, with an open list flushed whenever the marker type changes. */
+function renderListLevel(node, context) {
+  let html = '';
+  let open = null;
+  const flush = () => {
+    if (!open) {
+      return;
+    }
+    const cls = open.tasks ? ' class="contains-task-list"' : '';
+    html += `<${open.tag}${cls}>${open.items.join('')}</${open.tag}>`;
+    open = null;
+  };
+  for (const child of node.children) {
+    if (!open || open.ordered !== child.ordered) {
+      flush();
+      open = { ordered: child.ordered, tag: child.ordered ? 'ol' : 'ul', tasks: false, items: [] };
+    }
+    const task = child.text.startsWith('\u0000task:');
+    open.tasks = open.tasks || task;
+    const inner = task ? renderTaskItem(child.text, context) : renderInline(child.text, context);
+    const children = child.children.length > 0 ? renderListLevel(child, context) : '';
+    open.items.push(`<li>${inner}${children}</li>`);
+  }
+  flush();
+  return html;
+}
+
 /** A code span: a link when it names something openable, a `<code>` otherwise. */
 function codeSpan(content, context) {
   const target = resolveTarget(content, context);
@@ -410,43 +480,33 @@ export function renderMarkdown(markdown, context) {
       continue;
     }
 
-    // Lists: consecutive `-`/`*`/`+` or `1.` items, with task markers.
-    const listMatch = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(line);
-    if (listMatch) {
-      const ordered = /\d/.test(listMatch[2]);
+    // Lists: consecutive items, **nested by indentation**, with task markers. The indent used to be captured and
+    // then ignored, so every nested item became a sibling and a document's structure was thrown away; a change of
+    // marker type (a `1.` inside a `-` list) broke the list into two blocks instead of nesting one inside the other.
+    const listItem = (text) => /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(text);
+    const firstItem = listItem(line);
+    if (firstItem) {
       const items = [];
       while (i < lines.length) {
-        const item = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(lines[i]);
+        const item = listItem(lines[i]);
         if (!item) {
-          // A continuation line belongs to the previous item when it is indented.
-          if (items.length > 0 && /^\s+\S/.test(lines[i])) {
-            items[items.length - 1] += ' ' + lines[i].trim();
+          // A continuation line belongs to the previous item when it is indented past that item's own marker.
+          if (items.length > 0 && /^\s+\S/.test(lines[i])
+              && indentWidth(lines[i]) > items[items.length - 1].indent) {
+            items[items.length - 1].text += ' ' + lines[i].trim();
             i++;
             continue;
           }
           break;
         }
-        if (/\d/.test(item[2]) !== ordered) {
-          break;
-        }
-        let text = item[3];
-        const task = /^\[([ xX])\]\s+(.*)$/.exec(text);
-        if (task) {
-          // The checkbox is the only place this renderer emits markup the author did not type, so it goes
-          // through a sentinel: `renderInline` escapes everything else, and escaping this too would print
-          // the markup instead of a checkbox.
-          items.push(`\u0000task:${task[1] === ' ' ? ' ' : 'x'}\u0000${task[2]}`);
-        } else {
-          items.push(text);
-        }
+        items.push({
+          indent: indentWidth(item[1]),
+          ordered: /\d/.test(item[2]),
+          text: taskTextOrText(item[3]),
+        });
         i++;
       }
-      const tasks = items.some((item) => item.startsWith('\u0000task:'));
-      const tag = ordered ? 'ol' : 'ul';
-      const cls = tasks ? ' class="contains-task-list"' : '';
-      html.push(`<${tag}${cls}>${items.map((item) => `<li>${item.startsWith('\u0000task:')
-        ? renderTaskItem(item, context)
-        : renderInline(item, context)}</li>`).join('')}</${tag}>`);
+      html.push(renderList(items, context));
       continue;
     }
 
@@ -473,7 +533,9 @@ export function renderMarkdown(markdown, context) {
  */
 function renderTaskItem(item, context) {
   const end = item.indexOf('\u0000', 1);
-  const checked = item.slice(1, end) !== ' ';
+  // The character before the closing sentinel is ' ' or 'x'. Comparing the whole sentinel to ' ' was true for every
+  // item, because the sentinel carries a `task:` prefix as well - so every unchecked box rendered as done.
+  const checked = item.charAt(end - 1) === 'x';
   return `<input type="checkbox" disabled${checked ? ' checked' : ''}> `
     + renderInline(item.slice(end + 1), context);
 }

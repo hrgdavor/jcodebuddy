@@ -1,14 +1,23 @@
 # markdown-view — Markdown as a clickable page
+**This is a project of its own in the jcodebuddy family**, not a folder of scripts: it lives at the repository root
+next to `webview/`, it has its own manifest and tests, and it is meant to be developed further on its own. It was
+promoted from `scripts/markdown-view/` on 2026-10-06 for exactly that reason — a renderer with its own README, its own
+CI-worthy suite and its own bug list (nested lists were flattened; every unchecked task box rendered as checked) is a
+component, and burying it under `scripts/` made it look like a helper.
+
+It declares **no dependencies** and has no `node_modules` of its own, which is DEC-027's rule for a vanilla renderer
+and is asserted by `package.test.js`. It is also the one renderer: the generated pages, the JetBrains webview and any
+tool that wants a Markdown view all come through here.
 
 Renders a module's Markdown files into HTML pages whose code identifiers and internal links **open the
 file and line in the IDE**, plus an index page that links them together.
 
 ```bash
 # every Markdown file of the example module
-bun run scripts/markdown-view/index.js --module hipster-entity-example
+bun run markdown-view/index.js --module hipster-entity-example
 
 # one or two of them, checking every link against the tree as it goes
-bun run scripts/markdown-view/index.js --module hipster-entity-example \
+bun run markdown-view/index.js --module hipster-entity-example \
   --only codebuddy.md,README.md --verify
 ```
 
@@ -41,7 +50,7 @@ Two things, and the second is the point:
    `resolveTarget`, and you have a viewer for your own source of truth — a coverage report, a review
    dashboard, a trace viewer, a spec that references code.
 
-The contract it speaks is documented in **[`webview/kit/doc/contract.md`](../../webview/kit/doc/contract.md)**.
+The contract it speaks is documented in **[`webview/kit/doc/contract.md`](../webview/kit/doc/contract.md)**.
 Read that first if you are writing your own; this file is about *this* implementation.
 
 ---
@@ -67,7 +76,7 @@ window.openFile(target, line, column)   /* the IDE webview injected this -> use 
 
 It also writes the bridge status into `#bridge-status`, so a reader can see *why* a click did or did not
 do something. The full rules, including `data-link-base`, are in
-[`webview/kit/doc/contract.md`](../../webview/kit/doc/contract.md) § 4–5.
+[`webview/kit/doc/contract.md`](../webview/kit/doc/contract.md) § 4–5.
 
 ### `render.js` — the document
 
@@ -159,14 +168,14 @@ scripts.
 ```sh
 # one self-contained file: nothing fetched, openable from a file manager, shippable by a host that can only hand
 # a page its bytes (this is what the JetBrains plugin uses)
-bun run scripts/markdown-view/page.js out.html inlined
+bun run markdown-view/page.js out.html inlined
 
 # the same page with an empty view, and a marker for the host to substitute at view time
-bun run scripts/markdown-view/page.js out.html inlined --template
+bun run markdown-view/page.js out.html inlined --template
 
 # a page that references these files next to it, for a page that will be served: one copy of the renderer on disk
 # instead of one copy per page
-bun run scripts/markdown-view/page.js out.html assets
+bun run markdown-view/page.js out.html assets
 ```
 
 `buildMarkdownPage({ mode, ... })` is the function behind the CLI, and `writePageAssets(dir)` copies the files an

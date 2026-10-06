@@ -23,7 +23,7 @@ import { splitTarget } from './render.js';
 import { findMarkdown, loadIndex, main, parseArgs, renderDocument, resolveModule, resolveOpenable, verifyLinks } from './index.js';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
+const REPO_ROOT = resolve(SCRIPT_DIR, '..');
 // The example module lives in the hipster-entity group; this name went stale when it moved, and the seven
 // tests below it were red for that reason alone.
 const MODULE = 'hipster-entity/hipster-entity-example';
@@ -160,6 +160,40 @@ describe('the markdown renderer', () => {
     expect(renderMarkdown('- [x] done\n- [ ] todo\n', context()).html)
       .toContain('<input type="checkbox" disabled checked>');
     expect(renderMarkdown('> quoted\n', context()).html).toContain('<blockquote>');
+  });
+
+  // Nesting: the indent used to be read and then ignored, so every one of these came out as one flat list.
+  test('a nested list stays nested, inside its parent item', () => {
+    expect(renderMarkdown('- one\n  - one-a\n  - one-b\n- two\n', context()).html)
+      .toBe('<ul><li>one<ul><li>one-a</li><li>one-b</li></ul></li><li>two</li></ul>');
+  });
+
+  test('three levels deep, and back up again', () => {
+    expect(renderMarkdown('- a\n  - b\n    - c\n  - d\n- e\n', context()).html)
+      .toBe('<ul><li>a<ul><li>b<ul><li>c</li></ul></li><li>d</li></ul></li><li>e</li></ul>');
+  });
+
+  test('an ordered list nested in an unordered one is its own list', () => {
+    expect(renderMarkdown('- one\n  1. first\n  2. second\n- two\n', context()).html)
+      .toBe('<ul><li>one<ol><li>first</li><li>second</li></ol></li><li>two</li></ul>');
+  });
+
+  test('a change of marker at the same level starts a sibling list, as CommonMark does', () => {
+    // It used to break the block in two and render the second marker type as a list of its own — which for a nested
+    // `1.` inside a `-` list meant the nesting was not merely lost, the list was split.
+    expect(renderMarkdown('- a\n- b\n1. c\n1. d\n', context()).html)
+      .toBe('<ul><li>a</li><li>b</li></ul><ol><li>c</li><li>d</li></ol>');
+  });
+
+  test('a nested item carries its own checkbox, and its list says it contains tasks', () => {
+    const { html } = renderMarkdown('- [ ] parent\n  - [x] child\n', context());
+    expect(html).toContain('<ul class="contains-task-list"><li><input type="checkbox" disabled> parent');
+    expect(html).toContain('<ul class="contains-task-list"><li><input type="checkbox" disabled checked> child');
+  });
+
+  test('a continuation line belongs to the item it is indented under', () => {
+    expect(renderMarkdown('- one\n  continues\n- two\n', context()).html)
+      .toBe('<ul><li>one continues</li><li>two</li></ul>');
   });
 
   test('an external link stays a link and is not asked to resolve', () => {
