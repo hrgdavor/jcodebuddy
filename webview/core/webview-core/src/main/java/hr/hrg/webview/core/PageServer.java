@@ -34,19 +34,20 @@ public final class PageServer {
     public static final String ROUTE_PREFIX = "/file/";
 
     private final PathResolver resolver;
-    private final boolean requireConfinedPaths;
     private final Map<String, String> mimeTypes;
 
     /**
-     * @param projectRoot         the directory pages may read from; {@code null} means any file, which is
-     *                            only correct for a host that has no project at all
-     * @param requireConfinedPaths true for a route reachable from a browser — the caller can be any page the
-     *                            user has open — and false only for a host that has already established the
-     *                            caller is trusted
+     * @param projectRoot the directory pages may read from; {@code null} means any file, which is only correct
+     *                    for a host that has no project at all - there is no boundary to enforce, so nothing is
+     *                    claimed. <b>A host with a project root confines every read, always.</b> There used to be
+     *                    a {@code requireConfinedPaths} flag for a caller that had "already established the caller
+     *                    is trusted"; it was removed on 2026-10-04 because a jail with an off switch is not a jail
+     *                    - the maintainer's rule is that no file outside the project root may be reached, and a
+     *                    route's trustworthiness is a property a page cannot influence but a future caller can
+     *                    forget.
      */
-    public PageServer(String projectRoot, boolean requireConfinedPaths) {
+    public PageServer(String projectRoot) {
         this.resolver = PathResolver.forProject(projectRoot);
-        this.requireConfinedPaths = requireConfinedPaths;
         this.mimeTypes = defaultMimeTypes();
     }
 
@@ -136,7 +137,7 @@ public final class PageServer {
         if (resolution == null) {
             return new Response(Status.BAD_REQUEST, "text/plain", bytes("Invalid file path"));
         }
-        if (requireConfinedPaths && resolution.escaped()) {
+        if (resolution.escaped()) {
             return new Response(Status.FORBIDDEN, "text/plain",
                     bytes("Forbidden: '" + decoded + "' is outside the project"));
         }
@@ -178,9 +179,6 @@ public final class PageServer {
     }
 
     /** True when this server confines what a page may read to the project. */
-    public boolean requireConfinedPaths() {
-        return requireConfinedPaths;
-    }
 
     private static Map<String, String> defaultMimeTypes() {
         Map<String, String> types = new LinkedHashMap<>();

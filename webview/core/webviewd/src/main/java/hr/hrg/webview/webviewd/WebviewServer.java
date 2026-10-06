@@ -105,8 +105,8 @@ public final class WebviewServer implements AutoCloseable {
         // spins on writes cannot spend a different allowance from a page that spins on clicks.
         RateLimiter limiter = new RateLimiter(Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS,
                 Clock.SYSTEM);
-        this.navigator = new Navigator(config.project().toString(), host, true, limiter);
-        this.pageServer = new PageServer(config.project().toString(), true);
+        this.navigator = new Navigator(config.project().toString(), host, limiter);
+        this.pageServer = new PageServer(config.project().toString());
         this.editService = new EditService(config.project().toString(),
                 // Journalled, so a page that reloads — or a host that restarts — still has its undo. The files
                 // live with the descriptor, under the project's .jcodebuddy/webview/, which git ignores.
@@ -430,7 +430,11 @@ public final class WebviewServer implements AutoCloseable {
                     new Answer(403, "Forbidden: '" + outcome.absolutePath() + "' is outside the project");
             case RATE_LIMITED -> new Answer(429, "Too Many Requests: " + Navigator.RATE_LIMIT_COUNT
                     + " per " + (Navigator.RATE_LIMIT_WINDOW_MS / 1000) + "s");
-            case NO_HOST, HOST_REFUSED -> new Answer(404, "Could not open " + filePath);
+            // LOCATION_NOT_FOUND is plan 9.7's reason: the link named a place the file does not have. It is a
+            // 404 like the other "nothing there" answers, and it must be listed here or this switch will not
+            // compile - which is how these two hosts were found not to have been built since that change.
+            case NO_HOST, HOST_REFUSED, LOCATION_NOT_FOUND ->
+                    new Answer(404, "Could not open " + filePath);
         };
         if (answer.status() != 200) {
             note("refused " + filePath + ": " + answer.status() + " " + answer.body());

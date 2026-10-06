@@ -314,9 +314,9 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
     @Override
     public void connect(LanguageClient client) {
         this.client = (JwaLanguageClient) client;
-        // true: this process also serves pages over HTTP, so a caller can be any page in the user's
-        // browser, and the contract's rule for that surface is to refuse anything outside the project.
-        this.navigator = new Navigator(projectRoot, new LspClientHost(), true,
+        // This process also serves pages over HTTP, so a caller can be any page in the user's browser. Every
+        // navigation is confined to the project root (2026-10-04), for this host and every other one.
+        this.navigator = new Navigator(projectRoot, new LspClientHost(),
                 new RateLimiter(Navigator.RATE_LIMIT_COUNT, Navigator.RATE_LIMIT_WINDOW_MS,
                         hr.hrg.webview.core.Clock.SYSTEM));
     }

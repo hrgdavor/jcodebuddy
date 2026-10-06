@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as http from 'http';
 import * as url from 'url';
 import * as path from 'path';
+import { resolveInsideProject } from './ProjectJail';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import {
@@ -309,9 +310,19 @@ export class HttpBridge {
             }
             // Authorization and the rate limit were settled by decideRoute; from here the request is
             // accepted, which is why the answer no longer claims success before trying.
-            this.navigateToFile(route.filePath, route.line, route.column);
-            res.writeHead(200);
-            res.end(`Opening ${route.filePath}:${route.line}:${route.column}`);
+            // The answer follows the attempt: an outside path is a 403, not a success message.
+            this.navigateToFile(route.filePath, route.line, route.column).then((opened) => {
+                if (opened) {
+                    res.writeHead(200);
+                    res.end(`Opening ${route.filePath}:${route.line}:${route.column}`);
+                } else {
+                    res.writeHead(403);
+                    res.end(`Refused: ${route.filePath} is not inside the project`);
+                }
+            }).catch((err) => {
+                res.writeHead(500);
+                res.end(`Error opening file: ${err}`);
+            });
             return;
         }
 
@@ -523,25 +534,37 @@ export class HttpBridge {
         }
     }
 
-    public async navigateToFile(filePath: string, line: number, column: number) {
-        let fullPath = filePath;
-        if (!path.isAbsolute(filePath)) {
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (workspaceFolders) {
-                fullPath = path.join(workspaceFolders[0].uri.fsPath, filePath);
-            }
+    /**
+     * Open a file a page asked for, and refuse one outside the project.
+     *
+     * This is the single funnel: the webview's `openFile` message and the HTTP `/open` route both arrive here.
+     * It used to resolve a relative path against the workspace and then open *any* absolute path, so a page
+     * could name `/etc/passwd` or a symlink out of the project and have this host open it. Containment is
+     * checked from the disk (`ProjectJail`, realpath), not from the string, because a symlink inside the
+     * project that points out of it is textually inside.
+     *
+     * @returns true when the file was opened, so an HTTP caller can answer 403 rather than claim success
+     */
+    public async navigateToFile(filePath: string, line: number, column: number): Promise<boolean> {
+        const confined = resolveInsideProject(this.projectRoot(), filePath);
+        if (!confined) {
+            vscode.window.showErrorMessage(
+                `Refused to open a file outside the project: ${filePath}`);
+            return false;
         }
 
         try {
-            const uri = vscode.Uri.file(fullPath);
+            const uri = vscode.Uri.file(confined);
             const document = await vscode.workspace.openTextDocument(uri);
             const editor = await vscode.window.showTextDocument(document);
 
             const position = new vscode.Position(Math.max(0, line - 1), Math.max(0, column - 1));
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+            return true;
         } catch (err) {
-            vscode.window.showErrorMessage(`Failed to open file: ${filePath}`);
+            vscode.window.showErrorMessage(`Failed to open file: ${confined}`);
+            return false;
         }
     }
 

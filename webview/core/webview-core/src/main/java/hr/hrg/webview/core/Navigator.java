@@ -21,11 +21,13 @@ import java.util.function.BooleanSupplier;
  * should not get free path-validation work out of the host, and a burst of garbage must count against
  * the same budget as a burst of real clicks.
  *
- * <p>{@link #requireConfinedPaths} is the switch between the two legitimate policies. A JetBrains tool
- * window drives its own IDE and may open any absolute path the user could open by hand, so it leaves it
- * false. A host that serves pages to a browser — the sidecar — must set it true, because the caller may
- * be any page the user has open, and the frozen contract's rule for that surface is to refuse anything
- * outside the project.
+ * <p><b>Every navigation is confined to the project root.</b> There used to be a
+ * {@code requireConfinedPaths} switch, on the argument that a JetBrains tool window drives its own IDE and
+ * may open any absolute path the user could open by hand. The maintainer removed that argument on
+ * 2026-10-04: a webview plugin may not reach any file outside the project root, and a switch a caller can
+ * set to false is a jail with an off switch. The consequence is deliberate and is written down rather than
+ * discovered: the address bar is confined too, so a person cannot walk out of the project from the tool
+ * window either.
  */
 public final class Navigator {
 
@@ -35,21 +37,18 @@ public final class Navigator {
 
     private final PathResolver resolver;
     private final RateLimiter rateLimiter;
-    private final boolean requireConfinedPaths;
 
     private EditorHost host;
 
     /** A navigator with the production clock and the shared 20-per-20s policy. */
-    public Navigator(String projectRoot, EditorHost host, boolean requireConfinedPaths) {
-        this(projectRoot, host, requireConfinedPaths,
-                new RateLimiter(RATE_LIMIT_COUNT, RATE_LIMIT_WINDOW_MS, Clock.SYSTEM));
+    /** A navigator with the production clock and the shared 20-per-20s policy. */
+    public Navigator(String projectRoot, EditorHost host) {
+        this(projectRoot, host, new RateLimiter(RATE_LIMIT_COUNT, RATE_LIMIT_WINDOW_MS, Clock.SYSTEM));
     }
 
-    public Navigator(String projectRoot, EditorHost host, boolean requireConfinedPaths,
-                     RateLimiter rateLimiter) {
+    public Navigator(String projectRoot, EditorHost host, RateLimiter rateLimiter) {
         this.resolver = PathResolver.forProject(projectRoot);
         this.host = Objects.requireNonNull(host, "host");
-        this.requireConfinedPaths = requireConfinedPaths;
         this.rateLimiter = Objects.requireNonNull(rateLimiter, "rateLimiter");
     }
 
@@ -66,9 +65,6 @@ public final class Navigator {
         return host;
     }
 
-    public boolean requireConfinedPaths() {
-        return requireConfinedPaths;
-    }
 
     /** The capabilities a page may assume right now: empty while no host is attached. */
     public Set<String> capabilities() {
@@ -240,7 +236,7 @@ public final class Navigator {
             return Verdict.refuse(NavigationOutcome.Reason.INVALID_PATH, filePath,
                     "not a usable path");
         }
-        if (requireConfinedPaths && resolution.escaped()) {
+        if (resolution.escaped()) {
             return Verdict.refuse(NavigationOutcome.Reason.OUTSIDE_PROJECT, resolution.absolute(),
                     "outside the project");
         }

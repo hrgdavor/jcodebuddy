@@ -48,6 +48,6 @@ public class EclipseNavigator {
         if (root == null || root.isBlank()) {
             return NavigationOutcome.refused(NavigationOutcome.Reason.NO_HOST, path, "no project is open");
         }
-        return new Navigator(root, host, false, rateLimiter).open(path, line, column);
+        return new Navigator(root, host, rateLimiter).open(path, line, column);
     }
 }

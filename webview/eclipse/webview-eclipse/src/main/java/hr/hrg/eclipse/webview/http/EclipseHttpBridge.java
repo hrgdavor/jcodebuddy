@@ -129,8 +129,8 @@ public final class EclipseHttpBridge implements AutoCloseable {
         // A fixed-root, project-confined navigator (E7): this bridge serves one project, and a page it
         // hosts may not reach outside it. The rate limiter is the plugin's shared one, so the injected
         // bridge and this transport draw on one budget rather than charging a page twice.
-        this.navigator = new Navigator(projectRoot.toString(), editorHost, true, limiter);
-        this.pageServer = new PageServer(projectRoot.toString(), true);
+        this.navigator = new Navigator(projectRoot.toString(), editorHost, limiter);
+        this.pageServer = new PageServer(projectRoot.toString());
         // The disk half of the write contract (E8), sharing the ONE budget with navigation — a page
         // that spins on writes cannot spend a different allowance from a page that spins on clicks.
         // The checkpoints are persistent and live with the descriptor, so an undo survives a restart
@@ -485,7 +485,11 @@ public final class EclipseHttpBridge implements AutoCloseable {
                     new Answer(403, "Forbidden: '" + outcome.absolutePath() + "' is outside the project");
             case RATE_LIMITED -> new Answer(429, "Too Many Requests: " + Navigator.RATE_LIMIT_COUNT
                     + " per " + (Navigator.RATE_LIMIT_WINDOW_MS / 1000) + "s");
-            case NO_HOST, HOST_REFUSED -> new Answer(404, "Could not open " + filePath);
+            // LOCATION_NOT_FOUND is plan 9.7's reason: the link named a place the file does not have. It is a
+            // 404 like the other "nothing there" answers, and it must be listed here or this switch will not
+            // compile - which is how these two hosts were found not to have been built since that change.
+            case NO_HOST, HOST_REFUSED, LOCATION_NOT_FOUND ->
+                    new Answer(404, "Could not open " + filePath);
         };
         if (answer.status() != 200) {
             note("refused " + filePath + ": " + answer.status() + " " + answer.body());

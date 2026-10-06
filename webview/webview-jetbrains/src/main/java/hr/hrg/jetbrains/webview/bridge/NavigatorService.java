@@ -75,7 +75,7 @@ public final class NavigatorService implements EditorHost {
         // false: a tool window drives its own IDE, and a report may legitimately link to a file the user
         // opened from outside the project. The sidecar's HTTP surface sets this true, because there the
         // caller can be any page in the user's browser.
-        this.navigator = new Navigator(projectBasePath(project), this, false, rateLimiter);
+        this.navigator = new Navigator(projectBasePath(project), this, rateLimiter);
     }
 
     public static @NotNull NavigatorService getInstance(@NotNull Project project) {
