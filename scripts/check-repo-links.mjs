@@ -6,41 +6,18 @@
 // Skips derived output (.jcodebuddy/, node_modules, build dirs, .git) and
 // external URLs, mailto: and pure in-page anchors. A link with a #fragment is
 // checked on its file part; the fragment is not resolved to a heading.
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+// The ignore rule lives in one place for every JavaScript utility in this ecosystem (DEC-044). This file used to
+// carry its own skip list and walk every file in the tree before filtering to Markdown - the list was not wrong so
+// much as the shape was, and a directory nobody remembered to add cost seconds.
+import { listFiles } from "./lib/file-walk/index.js";
+import { stopwatch, reportDuration } from "./lib/timing.js";
 import { join, relative, dirname, resolve } from "node:path";
 
 const ROOT = process.cwd();
+const elapsed = stopwatch();
 const LIST = process.argv.includes("--list");
 
-const SKIP_DIRS = new Set([
-  ".git", "node_modules", "build", "out", "target", ".gradle", ".idea",
-  ".intellijPlatform", ".kotlin", ".mvn-local-repo", ".mvnd-home", ".vscode-test",
-  // Agent workspaces: .kilo holds plans and git worktrees, which are separate
-  // checkouts with their own (often pre-existing) link state. Not this repo's content.
-  ".kilo", ".jcodebuddy",
-  // Driver projects: proto/ is gitignored with no exceptions and each project under it is
-  // its own repository (root AGENTS.md § 2) — its link state is not this repo's content,
-  // and a broken driver project must never block a JCodeBuddy change.
-  "proto",
-  // The jsx6 checkout (AGENTS.md § 2): a clone of another repository, updated on demand, whose
-  // own docs carry its own (sometimes pre-existing) relative links. Found the hard way: pointing
-  // the UI work at `.jsx6/` made this checker report 39 broken links that were all jsx6's, not
-  // ours. Content is what is committed; a checkout is not.
-  ".jsx6",
-  // Agent scratch (§ 2): throwaway scripts and their output. Ditto — and it keeps a scratch
-  // markdown file from making a link check red.
-  ".tmp",
-]);
-
-function walk(dir, out = []) {
-  for (const entry of readdirSync(dir)) {
-    if (SKIP_DIRS.has(entry)) continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, out);
-    else out.push(full);
-  }
-  return out;
-}
 
 /**
  * Remove the parts of a Markdown file where `](…)` is not a link.
@@ -59,11 +36,9 @@ function stripNonLinks(text) {
     .replace(/<!--[\s\S]*?-->/g, "");                             // HTML comments
 }
 
-const files = walk(ROOT).filter((f) => {
-  if (!/\.(md|markdown)$/i.test(f)) return false;
-  if (f.includes(".jcodebuddy/") || f.includes(".jcodebuddy\\")) return false;
-  return true;
-});
+// Markdown only, and only what git would call ours: the walker never enters an ignored directory, so this reads a
+// few hundred files instead of every file in the tree.
+const files = listFiles(ROOT, { extensions: [".md", ".markdown"] }).map((path) => join(ROOT, path));
 
 const broken = [];
 let totalLinks = 0;
@@ -107,8 +82,10 @@ for (const file of files) {
 console.log(`\n${files.length} markdown file(s) scanned; ${filesWithLinks} contain ${totalLinks} relative link(s).`);
 if (broken.length === 0) {
   console.log("ALL RELATIVE LINKS RESOLVE");
-  process.exit(0);
+  console.log(reportDuration(elapsed(), { what: "links checked", files: files.length }));
+process.exit(0);
 }
 console.log(`\n${broken.length} BROKEN:\n`);
 for (const entry of broken) console.log(`  ${entry.file}\n      -> ${entry.target}\n      = ${entry.resolved}`);
+console.log(reportDuration(elapsed(), { what: "links checked", files: files.length }));
 process.exit(1);

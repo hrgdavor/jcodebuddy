@@ -6,10 +6,13 @@
       "name": "jcodebuddy-doc-tools",
       "dependencies": {
         "@hrg/inject-examples": "^1.0.1",
+        "@hrg/md-fix-tables": "^1.2.0",
       },
     },
   },
   "packages": {
     "@hrg/inject-examples": ["@hrg/inject-examples@1.0.1", "", { "bin": { "inject-examples": "cli.mjs" } }, "sha512-H1h+uf7YTmyfBWsGYHIw61vLp9gTho/8kehxGL28slQgkX7Ekq47K+OwZwRMCeihj9PAWzyq801Oncl546AVRQ=="],
+
+    "@hrg/md-fix-tables": ["@hrg/md-fix-tables@1.2.0", "", { "bin": { "md-fix-tables": "md-fix-tables.js" } }, "sha512-WnxNP+bkT5jYF1TJcgH9Dbx1ueFJAj1ro8wGIxbK/mYVInblvzoEPDXTMKfomo7t4ssAr1EUURDREg+QEp1Ndg=="],
   }
 }

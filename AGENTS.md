@@ -519,6 +519,19 @@ canonical statement of a boundary that has no other home.
     be runnable and reviewable by whoever reads the repository next,
     on whatever machine they have. A script that only runs in one
     shell on one OS is invisible wiring for the *workflow*.
+- **A JavaScript utility that does a lot of work reports its duration as the last line it prints** — through
+  [`scripts/lib/timing.js`](scripts/lib/timing.js), so no two tools invent a format: `links checked in 294ms
+  (272 files)`, not a bare number and not silence. The reason is the file walker's reason
+  ([DEC-044](doc-hipster-entity/architecture/decisions/DEC-044.md)): a tool whose cost is invisible cannot be
+  noticed getting slower, and `time` is a shell builtin — precisely the platform-specific wiring this section
+  rejects. It also makes a run cost a number a report can quote instead of an impression.
+- **A utility that walks files uses [`scripts/lib/file-walk/`](scripts/lib/file-walk/README.md), never its own
+  list of directories to skip.** `.gitignore` is the definition of what is not ours, read per directory, and an
+  ignored directory is not entered — which is both git's rule and where the speed comes from. A hand-written
+  skip list is a promise somebody has to remember to keep, and its failure is a silent slowdown rather than a
+  wrong answer: `check-repo-links.mjs` read every Java source, resource and archive in a 25,293-file checkout to
+  find 272 Markdown files, and now reads those in 294ms. DEC-044 records the decision, the measurements, and
+  the deliberate choice not to port it to Java (the watcher) until something needs it.
 - **Agent scratch goes in `.tmp/` at the repository root — the one
   temp folder a short cleanup does not take.** The recorded gate runs
   `mvn clean` on every invocation, so scratch written under a module's

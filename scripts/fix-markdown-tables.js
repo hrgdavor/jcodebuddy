@@ -67,14 +67,23 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { join, resolve } from 'node:path';
+import { listFiles } from './lib/file-walk/index.js';
+import { stopwatch, reportDuration } from './lib/timing.js';
 
 const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const check = process.argv.includes('--check');
+const elapsed = stopwatch();
 
-/** Every tracked Markdown file — tracked, because that is the set a reviewer sees (`proto/` is untracked). */
-const files = execFileSync('git', ['ls-files', '-z', '*.md'], { cwd: root, encoding: 'utf8' })
-    .split('\0').filter(Boolean);
+/**
+ * Every Markdown file the repository owns — by `.gitignore`, not by a git process (DEC-044).
+ *
+ * This used to be `git ls-files`, which is authoritative but makes the sweep depend on a git binary and a working
+ * tree; the walker answers the same question from the ignore files, and also sees an untracked document somebody
+ * just wrote, which is the one a reviewer is most likely to have in front of them.
+ */
+const files = listFiles(root, { extensions: ['.md'] }).sort();
 
 /** The tool, by name, on `PATH` — with the reason it is required when it is not there. */
 function findTool() {
@@ -100,6 +109,57 @@ function findTool() {
 const override = (process.env.JCODEBUDDY_MD_FIX_TABLES ?? '').split(' ').filter(Boolean);
 const command = override.length > 0 ? override[0] : findTool();
 const commandArgs = override.slice(1);
+
+/**
+ * The tool as a LIBRARY when one is available, because as a process it costs about 130ms of startup per file — 272
+ * times, which was this sweep's entire runtime and had nothing to do with the work it does.
+ *
+ * `md-fix-tables` publishes `fixTables(content, maxCol)`, guarded by `import.meta.main` so importing it does not run
+ * the CLI, and `files` in its package.json ships the module. So the sweep calls it in-process: same code, no
+ * process, no copy of the file.
+ *
+ * Resolution is what keeps this portable, and the order is deliberate:
+ *
+ *   1. a **package**, `@hrg/md-fix-tables`, installed at the repository root — the intended route, and the one that
+ *      needs no change when a version is published;
+ *   2. a `.js` named by `JCODEBUDDY_MD_FIX_TABLES`, the existing override that exists so this check can be pointed
+ *      at one build of the tool and shown to agree or disagree with another. Pointing it at a file was always
+ *      allowed and used to mean "run it as a program"; a JavaScript file can now simply be imported, which is the
+ *      same instruction taken more literally;
+ *   3. otherwise nothing, and every file goes through the process exactly as before — a machine with only the
+ *      binary on PATH loses the speed and keeps the behaviour.
+ */
+async function loadFixTablesLibrary(commandName, args) {
+    const candidates = [];
+    if (/\.[mc]?js$/i.test(commandName ?? '')) {
+        candidates.push(pathToFileURL(resolve(commandName)).href);
+    }
+    candidates.push('@hrg/md-fix-tables');
+    for (const candidate of candidates) {
+        try {
+            const module = await import(candidate);
+            if (typeof module.fixTables !== 'function') {
+                continue;
+            }
+            const flag = args.indexOf('--max-col');
+            const maxCol = flag >= 0 ? Number(args[flag + 1]) : module.MAX_COL;
+            return { source: candidate, fixTables: (content) => module.fixTables(content, maxCol) };
+        } catch {
+            // Not importable — not installed, or a binary. The process path below is the one that always worked.
+        }
+    }
+    return null;
+}
+
+const library = await loadFixTablesLibrary(command, commandArgs);
+
+/** Run the tool as a process, on a copy, returning what it wrote. The copy keeps it away from the real file. */
+function runToolOnCopy(commandName, args, scratchDir, file, path) {
+    const copy = join(scratchDir, file.replace(/[\\/]/g, '__'));
+    copyFileSync(path, copy);
+    execFileSync(commandName, [...args, copy], { stdio: ['ignore', 'pipe', 'pipe'] });
+    return readFileSync(copy, 'utf8');
+}
 
 if (command === null || command === undefined) {
     console.error('md-fix-tables is not on PATH, so no table was checked or re-aligned.\n\n'
@@ -241,11 +301,15 @@ try {
         const endings = splitEndings(before);
         const beforeLines = splitLines(before);
 
-        // The tool always runs on a copy: anything that fails the check is never written back.
-        const copy = join(scratch, file.replace(/[\\/]/g, '__'));
-        copyFileSync(path, copy);
-        execFileSync(command, [...commandArgs, copy], { stdio: ['ignore', 'pipe', 'pipe'] });
-        const after = readFileSync(copy, 'utf8');
+        // A Markdown table requires a `|`, so a file without one cannot change — and with no library available the
+        // tool is a process, at roughly 130ms of startup each. The text is read here anyway, so this is free.
+        if (!before.includes('|')) continue;
+
+        // In-process when there is a library: no copy, because a call cannot reach the real file. Through the process
+        // otherwise, on a copy, which is what keeps a tool that mutates its input away from the file it was given.
+        const after = library
+            ? library.fixTables(before)
+            : runToolOnCopy(command, commandArgs, scratch, file, path);
         const afterLines = splitLines(after);
 
         if (before === after) continue;
@@ -314,7 +378,7 @@ try {
     rmSync(scratch, { recursive: true, force: true });
 }
 
-console.log(`\n${check ? 'DRY RUN' : 'APPLIED'}: ${files.length} tracked Markdown files, `
+console.log(`\n${check ? 'DRY RUN' : 'APPLIED'}: ${files.length} Markdown files via ${library ? 'library' : 'process'}, `
     + `${tally.changed} ${check ? 'would change' : 'changed'}, ${tally.tableLines} table lines rewritten`
     + (tally.restored > 0 ? `, ${tally.restored} fenced line(s) in ${tally.restoredFiles} file(s) restored` : ''));
 
@@ -322,5 +386,7 @@ if (tally.refused > 0) {
     console.error(`\n${tally.refused} file(s) were refused and left untouched. Both known causes are bugs in the `
         + 'document rather than in the tool: an unescaped `|` inside a code span (the row is split and the header '
         + 'padded, inventing a column) and a table row broken by a blank line. Fix the source, then run again.');
+    console.log(reportDuration(elapsed(), { what: check ? 'dry run' : 'tables checked', files: files.length }));
     process.exit(1);
+console.log(reportDuration(elapsed(), { what: check ? 'dry run' : 'tables checked', files: files.length }));
 }

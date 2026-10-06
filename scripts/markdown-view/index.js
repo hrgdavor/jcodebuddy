@@ -28,12 +28,14 @@ import { fileURLToPath } from 'url';
 
 import { DEFAULT_BRIDGE_PORT, PAGE_STYLE, escapeHtml, openFileClientScript } from './open-file.js';
 import { classIndexFrom, renderMarkdown } from './render.js';
+import { listFiles } from '../lib/file-walk/index.js';
+import { stopwatch, reportDuration } from '../lib/timing.js';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 
-/** Directories whose Markdown is derived, vendored or generated — never a document a human wrote. */
-const SKIP_DIRS = new Set(['node_modules', 'target', 'build', 'dist', 'out', '.git', '.idea', 'coverage']);
+// Which directories are "not ours" is a .gitignore question, answered once for every JavaScript
+// utility here (DEC-044). A copy of the list in this file was a second answer that could disagree.
 
 /** Where this tool's own output lands, module-relative. Derived, and ignored like the rest of agent-state. */
 const DEFAULT_OUT = '.jcodebuddy/agent-state/markdown-view';
@@ -118,27 +120,10 @@ export function resolveModule(name) {
 }
 
 /** Every Markdown file of the module, module-relative and sorted, skipping derived directories. */
+/** Every Markdown file of the module, module-relative and sorted, skipping what git ignores. */
 export function findMarkdown(moduleRoot) {
-  const found = [];
-  const walk = (directory) => {
-    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.name.startsWith('.') && entry.isDirectory() && entry.name !== '.jcodebuddy') {
-        continue;
-      }
-      const full = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) {
-          walk(full);
-        }
-      } else if (entry.name.toLowerCase().endsWith('.md')) {
-        found.push(relative(moduleRoot, full).split(sep).join('/'));
-      }
-    }
-  };
-  walk(moduleRoot);
-  return found.sort();
+  return listFiles(moduleRoot, { extensions: ['.md'] }).sort();
 }
-
 /**
  * Where a target may live, and how it is spelled once it is found.
  *
@@ -476,5 +461,10 @@ export function main(argv = process.argv.slice(2)) {
 }
 
 if (import.meta.main) {
-  process.exit(main());
+  const elapsed = stopwatch();
+  const code = main();
+  // The last line of the run, whichever way it ended: a renderer whose cost is invisible cannot be noticed
+  // getting slower (AGENTS.md 2, and scripts/lib/timing.js).
+  console.log(reportDuration(elapsed(), { what: 'markdown view rendered' }));
+  process.exit(code);
 }

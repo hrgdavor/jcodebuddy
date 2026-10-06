@@ -53,17 +53,8 @@ import { join, relative, sep } from 'node:path';
 
 import { DOC_ALLOWLIST, docAllowlistEntryFor } from './curation.js';
 
-/** Directory names never walked. */
-const SKIP_DIRS = new Set([
-  '.git',
-  '.idea',
-  '.kilo',
-  '.mvn-local-repo',
-  'node_modules',
-  'target',
-  'build',
-  'out',
-]);
+// Which directories are "not ours" is a .gitignore question (DEC-044), not a list here.
+
 
 /**
  * The removed library, spelled out. Anchored with `(?<![\w.])`/`(?![\w])` so
@@ -258,32 +249,10 @@ export function classifyMarkdown(text, repoPath) {
 }
 
 /** Every `*.md` file under `dir`, repository-relative to `root`. */
+/** Every `*.md` file under `dir`, repository-relative to `root`, skipping what git ignores. */
 export async function findMarkdownFiles(root) {
-  const found = [];
-
-  async function walk(dir) {
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return; // An unreadable directory is not a documentation finding.
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        if (SKIP_DIRS.has(entry.name)) {
-          continue;
-        }
-        await walk(join(dir, entry.name));
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        found.push(relative(root, join(dir, entry.name)).split(sep).join('/'));
-      }
-    }
-  }
-
-  await walk(root);
-  return found.sort();
+  return listFiles(root, { extensions: ['.md'] }).sort();
 }
-
 /**
  * The whole documentation inventory.
  *

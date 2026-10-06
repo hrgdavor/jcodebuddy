@@ -7,6 +7,7 @@
     "check:examples": "npx --yes @hrg/inject-examples --check merge-java/docs/resolvers doc-hipster-entity/architecture/materialization-levels.md"
   },
   "dependencies": {
-    "@hrg/inject-examples": "^1.0.1"
+    "@hrg/inject-examples": "^1.0.1",
+    "@hrg/md-fix-tables": "^1.2.0"
   }
 }

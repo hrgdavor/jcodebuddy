@@ -1,0 +1,11 @@
+{
+  "name": "file-walk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Walk a repository the way git sees it: .gitignore honoured, ignored directories never entered, no git process and no dependencies (DEC-044).",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {}
+}
