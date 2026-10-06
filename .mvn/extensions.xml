@@ -3,12 +3,21 @@
   Maven's build cache (org.apache.maven.extensions:maven-build-cache-extension), loaded for every Maven
   invocation in this repository.
 
-  WHY THIS IS SAFE NEXT TO THE GATE, AND WHY IT IS NOT ENOUGH ON ITS OWN. The recorded gate is `clean test`
-  with `-Dmaven.compiler.useIncrementalCompilation=false`, because F-47 found the gate satisfiable by a previous
-  revision's class files. A build cache is the same class of hazard: a cache hit could answer with outputs from
-  an earlier revision. So the gate is not merely "unlikely to hit" — `scripts/lib/gate.js` passes
-  `-Dmaven.build.cache.enabled=false` on every invocation and `GateContractTest` asserts that it does. The cache
-  exists for iteration, where reusing an unchanged module's outputs is the whole point.
+  WHY THE CACHE STAYS ON, INCLUDING FOR THE GATE. The recorded gate is `clean package` with
+  `-Dmaven.compiler.useIncrementalCompilation=false`, because F-47 found the gate satisfiable by a previous
+  revision's class files. A build cache is the same class of hazard — a cache hit could answer with outputs from an
+  earlier revision — and the answer taken on 2026-10-03 was **not** to disable it: `scripts/lib/gate.js` keeps it on
+  and says so in as many words. What makes that safe is that the cache checksums a module together with everything it
+  reads, so a changed module cannot be answered from an earlier revision's outputs.
+
+  (This paragraph claimed the opposite until 2026-10-06 — that the gate passed `-Dmaven.build.cache.enabled=false`
+  and that `GateContractTest` asserted it — which was never true of the code. A reassuring sentence about a safety
+  property is worse than no sentence, so it is corrected rather than deleted. AGENTS.md 2 states the rule: the cache
+  is never turned off.)
+
+  ANYTHING A BUILD DEPENDS ON THAT MAVEN CANNOT SEE must be added to this cache's inputs, which is what
+  `.mvn/maven-build-cache-config.xml`'s `input/global/includes` and its per-module `input/project` are for. A path
+  that is not hashed is a cache entry that silently answers for a change it never saw.
 
   The cache lives in the user's Maven repository (`~/.m2/build-cache`), not in the workspace: it is a fact about
   one machine, it survives `mvn clean`, and deleting it is always safe.

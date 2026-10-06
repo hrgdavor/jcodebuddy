@@ -355,16 +355,29 @@ canonical statement of a boundary that has no other home.
   module orchestrates dev-time codegen; the runtime app modules
   depend on released JCodeBuddy libraries, never on
   `project-automation`. See [`README.md`](README.md).
-- **The Maven build cache is on, and it is not to be disabled.** `.mvn/extensions.xml` loads
-  `maven-build-cache-extension` for every Maven invocation here. It **checksums a module together with all of its
-  dependencies**, and a change anywhere in that closure — one letter in any file the module reads — invalidates the
-  entry for the whole module *and every module downstream of it*, so those are rebuilt and retested. It is
-  **whole-module, never per-file or per-class**: a module's cached classes are never mixed with changed ones. Turning
-  it off throws away what makes iteration fast (a fully cached run of the recorded module set: seconds against ~13
-  minutes). The entries live in `~/.m2/build-cache`, per machine, and deleting them is always safe. Two measured
-  caveats are in [`doc/AGENTS.md`](doc/AGENTS.md): a command-line `-Dtest=` filter is **not** part of the checksum, so
-  a narrowed run must withhold the *save* (`-Dmaven.build.cache.skipSave=true`) rather than the cache; and a run that
-  produces nothing (`validate`) must not populate it.
+- **The Maven build cache is on, and it is never turned off — in no circumstances.** `.mvn/extensions.xml` loads
+  `maven-build-cache-extension` for every Maven invocation here, **including the recorded gate** (`scripts/lib/gate.js`
+  keeps it on and says so; a comment in `extensions.xml` claimed the opposite and was wrong). It **checksums a module
+  together with all of its dependencies**, and a change anywhere in that closure — one letter in any file the module
+  reads — invalidates the entry for the whole module *and every module downstream of it*, so those are rebuilt and
+  retested. It is **whole-module, never per-file or per-class**: a module's cached classes are never mixed with changed
+  ones. Disabling it throws away what makes iteration fast (a fully cached run of the recorded module set: seconds
+  against ~13 minutes) and it is **not a knob for a slow build**: a slow build is a checksum question, answered by the
+  next bullet.
+- **Anything a build depends on that Maven cannot see must be added to the cache's inputs — deliberately, and after
+  inspection.** When a build step reads something outside a module — a Bun script under `scripts/`, a shared vector
+  file, a document a test asserts against — Maven does not know it exists, so a change to it is **invisible** and the
+  cache will answer with outputs that never saw it. That is not a reason to turn the cache off; it is a reason to
+  **inspect the dependency carefully and integrate it**: add the path to `input/global/includes` in
+  `.mvn/maven-build-cache-config.xml` when every module depends on it, or to that module's `input/project/includes` when
+  only one does. The list there is deliberately broad today — `scripts/**` is a global include, so **any** change under
+  `scripts/` invalidates **every** module (measured 2026-10-06: a change to a Markdown-only tool recompiled the
+  smallest module in 18.2s, where a cache restore is about a second) — and narrowing it is a judgement to make
+  **carefully**, because a path left out is a cache entry that silently answers for a change it never saw. The entries
+  live in `~/.m2/build-cache`, per machine, and deleting them is always safe. Two measured caveats are in
+  [`doc/AGENTS.md`](doc/AGENTS.md): a command-line `-Dtest=` filter is **not** part of the checksum, so a narrowed run
+  must withhold the *save* (`-Dmaven.build.cache.skipSave=true`) rather than the cache; and a run that produces nothing
+  (`validate`) must not populate it.
 - **`proto/` holds driver projects, and it is not part of this
   repository.** It exists because JCodeBuddy is under heavy
   development and is driven through **real projects**. A driver
