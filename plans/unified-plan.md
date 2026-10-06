@@ -3558,6 +3558,46 @@ bare name, and a fragment that is none of them is not a location and stays an or
 not locations), a host test that a member fragment lands on the member's line rather than line 1, a page test that
 a marker is both injected and navigable, and the documentation's own link checks green.
 
+
+**Done 2026-10-04 - a link names a place, and a click reaches it.** What landed, in the order it was committed:
+
+- **The grammar, as claims first**: `webview/conformance/location-fragments.json` holds 39 hand-written vectors for
+  every spelling this step names - `#L42`, `#L42-L58`, `#someMethod`, `#region:add` with `-`/`+`/`++`, the same
+  without the prefix, a `.json` key path, and the fragments that are deliberately not locations - and two readers
+  assert them: `scripts/webview-location` (JavaScript) and `webview-core`'s `LocationFragment` (Java). Neither
+  generates the file, per `webview/conformance/README.md`.
+- **A name becomes a position** (`LocationResolver`): a region directive wins over a declaration of the same name,
+  exactly as in inject-examples' code rule, so one spelling can name either; a declaration must open and close a
+  brace, which is what tells it from a call to it; `-` lands in the body while `+`/`++` land on the declaration; a
+  `.json` key lands on its key. **Nothing is invented**: a name the file does not have resolves to nothing, and
+  every answer says how it was found.
+- **The funnel resolves it for every host** (`Navigator`): a fragment may ride in the path inside `data-open`, which
+  the frozen contract already calls a path, and the fragment wins over the line when it is a location. A marker the
+  file lacks is refused (`LOCATION_NOT_FOUND`) and the host is never called; a fragment that is not a location in a
+  document leaves the page's line standing, because a heading anchor is the viewer's business. **JetBrains reaches a
+  method or a region through this**: both its `open` and its `openUrl` delegate to the Navigator, so no plugin code
+  was needed.
+- **The page renders location links** (`scripts/markdown-view`): `splitTarget` splits at `#`, keeps the file (to
+  check it exists) and a plain `#L42`, and passes everything else through verbatim; `makeLink` puts the whole
+  spelling on `data-open`. A marker keeps both halves, and a test asserts both: the marker line becomes a link to
+  the file it names, and the fenced block after it is still the include.
+- **Documented where it was asked for**: `webview/README.md` gains "Pointing at a place inside a file"; the frozen
+  contract is amended rather than replaced (§ 1.1.1, and a sixth acceptance item); and DEC-028 - the decision that
+  owns where a link points - carries an amendment naming who parses what.
+
+**The maintainer corrected the design mid-step, and the correction is the design.** "The webapp part need not know
+and host should not need to advertize anything about what links there are it just has to accept navigation to a file
+with line number as well as syntax for regions and method/field name and even sanitize inject prefixes to extract
+location marker." So the capability key and the `data-fragment` attribute this step first promised were removed, and
+the page stopped reading the grammar at all: it carries the target, and the host strips `region:` and a scope
+modifier to find the marker. A smaller contract than the one the step was written with.
+
+**Evidence:** the page's own suites (markdown view 37, page grammar 6, markdown view's seven previously-red tests
+fixed on the way), webview-core 200 tests, and the recorded gate green with the cache on; LINKS green. Two things
+this session did **not** measure, and will not claim: the JetBrains plugin's own Gradle tests were not run here
+(its code path is the shared Navigator, which is covered), and a live click in a real IDE is an **observation** -
+the repository's own `webview/doc/ide-observation-checklist.md` is where that belongs, not a unit test.
+
 **Done when:** a link in a generated markdown page can name any location inject-examples can name, and a click
 reaches it in the editor.
 ### 9.8 — Validate what the build cache checksums, and add what it misses (LAST STEP)
@@ -3685,4 +3725,4 @@ start)
 | 9.4  | Retire the per-plan open lists                                                            | agent              | S    | `[ ]`                                                                                       |
 | 9.5  | Full sweep (gate + links + examples)                                                      | agent              | S    | `[ ]`                                                                                       |
 | 9.6  | Close the books                                                                           | agent              | S    | `[ ]`                                                                                       |
-| 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering | agent              | M    | `[ ]`                                                                                       |
+| 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering | agent              | M    | `[x]`                                                                                       |
