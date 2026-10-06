@@ -1,0 +1,14 @@
+{
+  "name": "markdown-view",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The repository's one Markdown-to-HTML renderer: builds a clickable Markdown view as a single self-contained page, or as a page that references these assets by relative path (DEC-043).",
+  "exports": {
+    ".": "./index.js",
+    "./render": "./render.js",
+    "./client": "./open-file.js",
+    "./assets/microlighter.js": "./assets/microlighter.js"
+  },
+  "dependencies": {}
+}
