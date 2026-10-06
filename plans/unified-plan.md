@@ -3530,14 +3530,21 @@ bare name, and a fragment that is none of them is not a location and stays an or
 1. **One location grammar, in two languages** (JavaScript for pages, Java for hosts), with shared conformance
    vectors beside `webview/conformance/bridge-decisions.json` — this repository's way of keeping a rule that lives
    in two languages honest, and the reason a page and a host cannot drift apart on what `#region:++add` means.
-2. **`data-fragment` on the page side**: the raw fragment the page wrote, so the **routing key is the fragment** and
+2. **The page carries the target and nothing more.** The fragment rides inside `data-open`, which the frozen
+   contract already calls a path: the page splits it off only to check the file exists, keeps a plain `#L42` as
+   the page's own line, and passes every other spelling through verbatim — so a link spelling nobody has thought
+   of yet still reaches the host. `data-member` stays exactly what the contract says, display metadata.
    `data-member` stays exactly the display metadata the contract says it is (never a routing key).
 3. **The host resolves the fragment to a position and selects it.** JetBrains resolves a member through PSI where
    it can and falls back to a name search; a line range is selected as a range; a JSON key path lands on the key's
    line. A host that cannot resolve one says so rather than landing on line 1, because a wrong line costs a click to
    discover.
-4. **`GET /health` advertises the capability** (for example `open-fragment`), so a page degrades to `data-line` on a
-   host that cannot do it — the contract's own capability rule, rather than a page that tries and watches it fail.
+4. **A host advertises nothing about locations, and the page negotiates nothing.** The maintainer's
+   correction of 2026-10-04: "the webapp part need not know and host should not need to advertize anything about what
+   links there are - it just has to accept navigation to a file with line number as well as syntax for regions and
+   method/field name and even sanitize inject prefixes to extract location marker." So there is no capability key and
+   no second attribute: `Navigator` accepts the fragment, strips an inject prefix (`region:`) and a scope modifier
+   (`-`, `+`, `++`) to find the marker, and resolves what is left.
 5. **Markdown rendering**, so a document can be read in the webview at all: the vanilla renderer under
    `scripts/markdown-view/` in a page the host serves, with its links classified by the grammar. An
    `@hrg/inject-examples` marker keeps its inject half (the fenced block that follows is still the file's content)

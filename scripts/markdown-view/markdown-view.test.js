@@ -20,7 +20,6 @@ import {
   ClassIndex, classIndexFrom, joinPosix, renderMarkdown, resolveTarget, slugify, splitLineSuffix,
 } from './render.js';
 import { splitTarget } from './render.js';
-import { parseLocation } from '../webview-location/index.js';
 import { findMarkdown, loadIndex, main, parseArgs, renderDocument, resolveModule, resolveOpenable, verifyLinks } from './index.js';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -332,45 +331,22 @@ describe('a full run over the example module', () => {
 
 // ── the location grammar, on the page side (plan step 9.7) ─────────────────────────────────────────
 
-test('splitTarget separates a file, a fallback line and the location it names', () => {
-  // A line the page can settle itself.
-  expect(splitTarget('src/A.java#L14')).toEqual({
-    target: 'src/A.java', line: 14, fragment: 'L14', location: { kind: 'line', line: 14 },
+test('splitTarget keeps the file, a fallback line, and the fragment verbatim', () => {
+  // A line the page can settle itself is not a location: it never has to be passed on.
+  expect(splitTarget('src/A.java#L14')).toEqual({ target: 'src/A.java', line: 14, fragment: null });
+  expect(splitTarget('src/A.java:14')).toEqual({ target: 'src/A.java', line: 14, fragment: null });
+  // Everything else is handed to the host exactly as written - the page does not read the grammar, so a spelling
+  // nobody has thought of yet still gets through.
+  expect(splitTarget('src/A.java#someMethod')).toEqual({
+    target: 'src/A.java', line: 1, fragment: 'someMethod',
   });
-  // The ':' shorthand is a line and never a fragment.
-  expect(splitTarget('src/A.java:14')).toEqual({ target: 'src/A.java', line: 14, fragment: null, location: null });
-  // A name: the host resolves it, and line 1 is only the fallback for a host that cannot.
-  const named = splitTarget('src/A.java#someMethod');
-  expect(named.target).toBe('src/A.java');
-  expect(named.line).toBe(1);
-  expect(named.fragment).toBe('someMethod');
-  expect(named.location).toEqual({ kind: 'member', name: 'someMethod' });
-  // The inject-examples spellings, with and without the prefix, and the scope modifiers.
-  expect(splitTarget('a/A.java#region:++add').location).toEqual({ kind: 'region', name: 'add', scope: '++' });
-  expect(splitTarget('a/A.java#++add').location).toEqual({ kind: 'region', name: 'add', scope: '++' });
-  expect(splitTarget('package.json#region:scripts.test').location).toEqual({
-    kind: 'json', keys: ['scripts.test'],
+  expect(splitTarget('src/A.java#region:++add')).toEqual({
+    target: 'src/A.java', line: 1, fragment: 'region:++add',
   });
-  // A same-document heading is not a location: it has no file to resolve against.
-  expect(splitTarget('#install').location).toBe(null);
-  expect(splitTarget('#install').fragment).toBe(null);
-});
-
-test('a link that names a declaration reaches the page with the whole spelling on data-open', () => {
-  const context = {
-    directory: 'docs',
-    index: { lookup: () => null },
-    isOpenable: (candidate) => candidate === 'src/main/java/a/b/SomeFile.java',
-  };
-
-  const target = resolveTarget('../src/main/java/a/b/SomeFile.java#someMethod', context);
-
-  expect(target.open).toBe('src/main/java/a/b/SomeFile.java');
-  expect(target.fragment).toBe('someMethod');
-  expect(target.member).toBe('someMethod');
-  expect(target.role).toBe('member');
-  // Not the page's line: the fragment is what a host resolves, and 1 is the documented fallback.
-  expect(target.line).toBe(1);
+  expect(splitTarget('package.json#region:scripts.test')).toEqual({
+    target: 'package.json', line: 1, fragment: 'region:scripts.test',
+  });
+  expect(splitTarget('#install')).toEqual({ target: '', line: 1, fragment: 'install' });
 });
 
 test('without a location the resolved shape is exactly what it always was', () => {
