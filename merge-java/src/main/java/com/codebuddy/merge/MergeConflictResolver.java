@@ -2,6 +2,7 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import com.codebuddy.merge.jetbrains.merge.MergeResolve;
 import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
 
 import java.io.IOException;
@@ -388,9 +389,30 @@ public class MergeConflictResolver {
         if (resolution.getKind() != ConflictResolution.ResolutionKind.MANUAL) {
             return resolution;
         }
+        String base = conflict.getBaseCode();
+        String ours = conflict.getBranch1Code();
+        String theirs = conflict.getBranch2Code();
+
+        // The ported tier's own answer first, because it is the one the benchmark's vectors measure and it refuses
+        // rather than trading: R1/R6 semantics, no unconditional deletion. Its result also REPORTS which reading
+        // produced it, and that report is what lets the offer carry the evidence level it earned rather than the
+        // level the pass is merely capable of — `TEXT_INTRALINE` when the answer needed composition inside a line,
+        // `TEXT_LOCAL` when the line comparison alone reached it (plan step 4.11's declaration half, in the
+        // producer form: the level is recorded per answer, not declared per resolver).
+        MergeResolve.Result tier = MergeResolve.resolve(ours, base, theirs, ComparisonPolicy.DEFAULT);
+        if (tier.resolved()) {
+            return offer(conflict, resolution, resolver, tier.mergedText(),
+                tier.wordLevel() ? AnalysisLevel.TEXT_INTRALINE : AnalysisLevel.TEXT_LOCAL,
+                tier.wordLevel()
+                    ? "The ported resolve pass composed it word by word inside the changed line."
+                    : "The ported resolve pass composed it from the changed lines.",
+                List.of());
+        }
+
+        // Then the greedy pass, which is willing to trade: it applies both sides' deletions unconditionally, so its
+        // answer is PLAUSIBLE rather than a proof, and it is offered with that trade in its warnings.
         Optional<Suggestion> offered = GreedyMergeSuggestion.withWhitespaceRetry(
-            conflict.getBaseCode(), conflict.getBranch1Code(), conflict.getBranch2Code(),
-            ComparisonPolicy.DEFAULT);
+            base, ours, theirs, ComparisonPolicy.DEFAULT);
         if (offered.isEmpty()) {
             return resolution;
         }
@@ -402,7 +424,29 @@ public class MergeConflictResolver {
             .explanation((resolver == null
                     ? "No resolver is registered for " + conflict.getType() + "."
                     : resolver.name() + " could not resolve this.")
-                + " The ported merge pass composed an answer, offered for review.")
+                + " The ported greedy pass composed an answer, offered for review.")
+            .build();
+    }
+
+    /** Wrap an offered answer as a suggestion carrying its own evidence level. */
+    private static ConflictResolution offer(Conflict conflict, ConflictResolution resolution,
+                                            ConflictResolver resolver, String code,
+                                            AnalysisLevel level, String basis, List<String> warnings) {
+        Suggestion suggestion = new Suggestion(code,
+            (resolver == null
+                ? "No resolver is registered for " + conflict.getType() + "."
+                : resolver.name() + " could not resolve this.")
+                + " " + basis,
+            GreedyMergeSuggestion.PASS + " (ported tier)",
+            level,
+            warnings,
+            ConflictResolution.Verification.NOT_RUN,
+            "",
+            Suggestion.Confidence.PLAUSIBLE);
+        return ConflictResolution.copyOf(resolution)
+            .kind(ConflictResolution.ResolutionKind.SUGGESTION)
+            .suggestion(suggestion)
+            .resolvedCode("")
             .build();
     }
 

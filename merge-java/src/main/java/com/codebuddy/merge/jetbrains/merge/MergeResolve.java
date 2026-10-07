@@ -65,8 +65,12 @@ public final class MergeResolve {
      * @param policy     the policy the pass ran under
      * @param byteEqual  true when {@code mergedText} is byte-identical to the base text, which means the
      *                   pass found nothing to do
+     * @param wordLevel  true when the answer needed composition <b>inside</b> a line, which the line comparison
+     *                   alone could not reach. It is reported because it is the difference between two evidence
+     *                   levels — {@code TEXT_LOCAL} and {@code TEXT_INTRALINE} — and a caller that recorded the
+     *                   stronger one for an answer the line pass produced would be claiming a reading it did not do
      */
-    public record Result(String mergedText, ComparisonPolicy policy, boolean byteEqual) {
+    public record Result(String mergedText, ComparisonPolicy policy, boolean byteEqual, boolean wordLevel) {
 
         /** True when the pass refused: the sides disagree and no function of the inputs decides it. */
         public boolean refused() {
@@ -101,6 +105,7 @@ public final class MergeResolve {
             MergeRangeBuilder.build(baseText, leftText, rightText, effective);
 
         StringBuilder out = new StringBuilder();
+        boolean usedWordLevel = false;
         int baseAt = 0;
         for (MergeRangeBuilder.MergeChange change : changes) {
             MergeRange range = change.range();
@@ -128,9 +133,10 @@ public final class MergeResolve {
                     if (atWordLevel.isEmpty()) {
                         // Two intentions, and nothing in the text says which to keep. Refused rather than
                         // answered with a marker, because a marker is output this pass invented.
-                        return new Result(null, effective, false);
+                        return new Result(null, effective, false, usedWordLevel);
                     }
                     out.append(atWordLevel.get());
+                    usedWordLevel = true;
                 } else {
                     // The same change on both sides, so either one is the answer.
                     out.append(leftPart);
@@ -152,6 +158,6 @@ public final class MergeResolve {
         out.append(baseLines.text(baseAt, baseLines.size()));
 
         String merged = out.toString();
-        return new Result(merged, effective, merged.equals(baseText));
+        return new Result(merged, effective, merged.equals(baseText), usedWordLevel);
     }
 }

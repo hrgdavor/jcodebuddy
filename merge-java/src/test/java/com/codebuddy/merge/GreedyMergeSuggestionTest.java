@@ -157,6 +157,43 @@ class GreedyMergeSuggestionTest {
         assertFalse(provenance.contains("IGNORE_WHITESPACES"), provenance);
     }
 
+    @Test
+    @DisplayName("the offered answer records the level its reading earned, per answer rather than per resolver")
+    void theOfferedLevelFollowsTheReading() {
+        // Step 4.11's declaration half, in the form this module can honour: the level is a property of the ANSWER,
+        // not of the resolver that offered it. The same producer answers two conflicts, one reached by comparing
+        // lines and one that needed the words inside a line, and the two answers must not claim the same evidence.
+        MergeConflictResolver resolver = new MergeConflictResolver.Builder()
+            .setBranchName("level-test")
+            .setInMemoryOnly(true)
+            .setResolvers(List.of(new StructuralChangeConflictResolver()))
+            .build();
+
+        // Words: our side kept the middle word, theirs the other middle word - only a word comparison can compose
+        // this, and `MergeResolve` reports that it needed to.
+        Conflict atWordLevel = new Conflict(ConflictType.STRUCTURAL_CHANGE, "A.java", "sample",
+            "a b c\n", "b c\n", "a b\n");
+        ConflictResolution fromWords = resolver.resolve(atWordLevel);
+        assertEquals(ConflictResolution.ResolutionKind.SUGGESTION, fromWords.getKind(),
+            fromWords.getExplanation());
+        assertNotNull(fromWords.getSuggestion());
+        assertEquals(AnalysisLevel.TEXT_INTRALINE, fromWords.getSuggestion().analysisLevel(),
+            "the answer needed composition inside the line, and says so");
+        assertTrue(fromWords.getSuggestion().code().contains("b"),
+            fromWords.getSuggestion().code());
+
+        // Lines: one side changed, so the line comparison alone reaches it - and claiming the intra-line level here
+        // would be claiming a reading that never happened.
+        Conflict atLineLevel = new Conflict(ConflictType.STRUCTURAL_CHANGE, "A.java", "sample",
+            "a\nb\n", "a\nX\n", "a\nb\n");
+        ConflictResolution fromLines = resolver.resolve(atLineLevel);
+        assertEquals(ConflictResolution.ResolutionKind.SUGGESTION, fromLines.getKind(),
+            fromLines.getExplanation());
+        assertNotNull(fromLines.getSuggestion());
+        assertEquals(AnalysisLevel.TEXT_LOCAL, fromLines.getSuggestion().analysisLevel(),
+            "a one-sided line change is line reading, whatever else the producer could do");
+    }
+
     private static int occurrences(String text, String needle) {
         int count = 0;
         int at = text.indexOf(needle);
