@@ -48,8 +48,15 @@ public class JwaWorkspaceService implements WorkspaceService {
         return 0;
     }
 
+    /**
+     * The client's formatting settings arrive here (plan step 7.1), because this is the only LSP verb that
+     * carries them: a code action is a command the user picks, so there is no {@code FormattingOptions} on the
+     * request that offers it. Remembered on the server so every code action reads the same value, and read at the
+     * moment of generation rather than at initialize, because a client may send settings after connecting.
+     */
     @Override
     public void didChangeConfiguration(DidChangeConfigurationParams params) {
+        server.setFormatting(ClientFormatting.fromSettings(params == null ? null : params.getSettings()));
     }
 
     @Override

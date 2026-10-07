@@ -4968,6 +4968,38 @@ toolsets".
 **Gate:** a test that a two-space client configuration produces two-space output; `MODULE` for
 `jwa-sidecar` green.
 
+**Done 2026-10-08 — the sidecar reads the client's indentation, and the old behaviour is the default rather than gone.**
+
+- **The value is a named type, not two fields in two places**: `ClientFormatting` (`tabSize`, `insertSpaces`) with
+  `indent()` — the engine's one-level step — so the concept is navigable and there is exactly one place that knows what
+  a client's settings mean. `ClientFormatting.defaults()` is **four spaces, the value the engine was hard-coded with**,
+  so a client that never reports settings generates exactly what it generated before this step.
+- **`didChangeConfiguration` was an empty stub and is now the route the settings travel.** The step offered two
+  options — `FormattingOptions` on the request, or `workspace/didChangeConfiguration` — and the first is not available:
+  a code action is a command a user picks, so there is no `FormattingOptions` on it to read. The setting is therefore
+  remembered on the server (`volatile`, because the LSP reader thread writes it while a code action runs on another)
+  and read **at the moment of generation**, so a client that sends settings after connecting is honoured.
+- **What is accepted is stated rather than guessed**: the flat object (`{"tabSize":2,"insertSpaces":true}`) and the
+  section-wrapped one (`{"jwa":{…}}`) are both read, a missing field keeps the default **for that field**, and an
+  unrecognised shape — or `getSettings()` returning something that is not a JSON object, which is what LSP4J's
+  `Object`-typed accessor can hand over — yields the defaults rather than an exception. A settings shape we do not
+  know must not take the language server down. `insertSpaces:false` produces a tab, because that is what the client
+  asked for.
+- **The gate test asserts a RELATIONSHIP between two runs, not a golden string.** Two configurations are run over the
+  same record and every emitted line must carry the same text with **half** the indentation, plus the two concrete
+  anchors (four spaces for the default, two for the two-space client). A golden string would pass again the moment
+  somebody hard-coded the other indent; this cannot, which is the property the step exists for. A third test pins the
+  tab case: a tab-configured client must get a tab, not spaces.
+- **Measured**: `SidecarCodeActionTest` **7 tests** (from 5, so both new ones ran), the module set green —
+  `bun scripts/mvn-jdk25.js -pl webview/jwa-sidecar -am verify` **BUILD SUCCESS** (26 tests in the sidecar, and the
+  closure's 3 + 199 + 68 + 20 green).
+- **Two build lessons, paid for here and worth the next reader's minute.** (1) `-pl webview/jwa-sidecar` **without
+  `-am`** cannot resolve its sibling `jcodebuddy-builder-api`: the module needs the closure. (2) A `-pl … -am **test**`
+  run **poisoned the cache for that closure** — `test` saves entries with no JAR, the cache key does not include the
+  goal list, so the next run resolved a sibling that was class-less and failed with
+  *"Could not resolve dependencies"*. This is the trap [`doc/AGENTS.md`](../doc/AGENTS.md) already records
+  (*"`package` rather than `test` since the build cache landed"*); the fix is `verify`/`package` plus deleting
+  `~/.m2/build-cache/v1.1` when entries are already wrong, which costs only time.
 ### 7.2 — java-watch-agent: the remote-jump front-end
 **Who:** agent · **Size:** S
 
@@ -5655,7 +5687,7 @@ start)
 | 6.3  | Decide advisory → hard rule enforcement                                                         | agent + maintainer | M    | `[ ]`                                                                                       |
 | 6.4  | Type divergence analyzer + converter manifest (DEC-006)                                         | agent              | L    | `[ ]`                                                                                       |
 | 6.5  | Projection/DTO marker pattern (DEC-003/DEC-007)                                                 | agent              | L    | `[ ]`                                                                                       |
-| 7.1  | jwa-sidecar reads the client's indentation                                                      | agent              | S    | `[ ]`                                                                                       |
+| 7.1  | jwa-sidecar reads the client's indentation                                                      | agent              | S    | `[x]` — the sidecar reads the client's indentation. `ClientFormatting` (`tabSize`/`insertSpaces` → `indent()`, defaults **four spaces**, the value that was hard-coded) is the one place that knows what a client's settings mean; `didChangeConfiguration` — an empty stub until now — is the route they travel, because a code action is a command the user picks and carries no `FormattingOptions`; the setting is remembered on the server (`volatile`, written by the LSP reader thread while a code action runs) and read **at generation**. Flat and section-wrapped settings objects are both accepted, a missing field keeps its own default, an unrecognised shape (or a non-JSON `getSettings()`) yields the defaults rather than an exception, and `insertSpaces:false` gives a tab. **The gate test asserts a relationship between two runs** — every emitted line identical with half the indentation, plus the four-space and two-space anchors — because a golden string would pass again if somebody hard-coded the other indent; a third test pins the tab case. **Measured**: `SidecarCodeActionTest` 7 tests (from 5), `-pl webview/jwa-sidecar -am verify` BUILD SUCCESS. **Note**: `-pl` needs `-am` here, and a `-pl … test` run poisons the closure's cache (JAR-less entries; `package`/`verify` is the documented fix, plus purging `~/.m2/build-cache/v1.1`). |
 | 7.2  | Agent web UI remote-jump front-end                                                              | agent              | S    | `[ ]`                                                                                       |
 | 7.3  | `View1Builder.merge` + proxy merge                                                              | agent              | M    | `[ ]`                                                                                       |
 | 7.4  | Documentation front door + cross-references                                                     | agent              | S    | `[ ]`                                                                                       |

@@ -34,6 +34,13 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
 
     private final JwaTextDocumentService textDocumentService;
     private final JwaWorkspaceService workspaceService;
+
+    /**
+     * How the connected client indents its code, as last reported through {@code workspace/didChangeConfiguration}
+     * (plan step 7.1). Volatile because the LSP reader thread writes it while a code action may be running on
+     * another, and a stale indent is exactly the defect this field exists to remove.
+     */
+    private volatile ClientFormatting formatting = ClientFormatting.defaults();
     private JwaLanguageClient client;
 
     /** Where the client's project is, from {@code initialize}; the path jail is built from it. */
@@ -299,6 +306,18 @@ public class JwaLanguageServer implements LanguageServer, LanguageClientAware {
     @Override
     public void setTrace(SetTraceParams params) {
         // No-op to avoid UnsupportedOperationException from default implementation
+    }
+
+    /** The client's indentation, or {@link ClientFormatting#defaults()} until it reports one. */
+    public ClientFormatting getFormatting() {
+        return formatting;
+    }
+
+    /** Remember what the client reported; a {@code null} argument keeps the current value rather than resetting it. */
+    public void setFormatting(ClientFormatting formatting) {
+        if (formatting != null) {
+            this.formatting = formatting;
+        }
     }
 
     @Override

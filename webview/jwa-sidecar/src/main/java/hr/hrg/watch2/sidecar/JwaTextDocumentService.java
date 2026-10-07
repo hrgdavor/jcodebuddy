@@ -138,9 +138,13 @@ public class JwaTextDocumentService implements TextDocumentService {
         if (text == null)
             return CompletableFuture.completedFuture(null);
 
-        log.info("Generating builder for {} at line {}", uri, line);
-        hr.hrg.jcodebuddy.builder.BuilderTransformationEngine engine = new hr.hrg.jcodebuddy.builder.BuilderTransformationEngine(
-                "    ");
+        // The client's own indent, read at the moment of generation (plan step 7.1), with the value the engine
+        // was constructed with before this step as the default.
+        String indent = server.getFormatting().indent();
+        log.info("Generating builder for {} at line {} (indent: {})", uri, line,
+                server.getFormatting().insertSpaces() ? indent.length() + " spaces" : "one tab");
+        hr.hrg.jcodebuddy.builder.BuilderTransformationEngine engine =
+                new hr.hrg.jcodebuddy.builder.BuilderTransformationEngine(indent);
         hr.hrg.watch2.core.TransformationResult result = engine.generate(uri, text, line);
 
         if (result.edits().isEmpty()) {
