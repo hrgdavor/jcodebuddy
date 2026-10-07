@@ -195,6 +195,33 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
     }
 
     /**
+     * {@link AnalysisLevel#PROJECT_TYPES}: with a classpath carrying the project's own entries,
+     * javac decides whether one declaration's type is assignable to the other, which is the
+     * strongest evidence this module can bring to bear.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.PROJECT_TYPES;
+    }
+
+    /**
+     * The level this run actually reached, which is weaker than the maximum whenever the answer came
+     * from the platform alone.
+     *
+     * <p>The JLS primitive conversions are the language's own rule and the built-in JDK table holds
+     * only true supertype relations, so both are authoritative <em>about the platform</em> — and both
+     * are blind to the project under merge. A pair resolved by javac is stronger exactly when the
+     * classpath carried the project's own entries, because only then is a project's type known rather
+     * than {@code JavaType.Unknown}.
+     */
+    private static AnalysisLevel decidedLevel(Conflict conflict) {
+        TypeContext context = conflict.getTypeContext();
+        return context != null && context.hasProjectEntries()
+            ? AnalysisLevel.PROJECT_TYPES
+            : AnalysisLevel.PLATFORM_TYPES;
+    }
+
+    /**
      * A classpath is <strong>not</strong> a hard requirement for this resolver: it
      * degrades, visibly.
      *
@@ -247,6 +274,7 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
                     + branch2.type() + "') without a widening relationship, so the safe "
                     + "choice depends on the call sites.")
                 .alternativePaths(describeOptions(conflict))
+                .analysisLevel(decidedLevel(conflict))
                 .warnings(warnings)
                 .build();
         }
@@ -264,6 +292,7 @@ public final class TypeChangeConflictResolver extends AbstractConflictResolver {
             .explanation("'" + widerType + "' is a widening of '" + narrowerType
                 + "', so the wider declaration accepts every value the narrower one did.")
             .alternativePaths(describeOptions(conflict))
+            .analysisLevel(decidedLevel(conflict))
             .warnings(warnings)
             .build();
     }

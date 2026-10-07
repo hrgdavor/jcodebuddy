@@ -200,6 +200,90 @@
 - A test no longer leaves decision files in the repository tree.
 - `summarize()` reports "no conflicts detected" only when there is genuinely
   nothing to report, rather than whenever the conflict list is empty.
+- **2026-10-07 — a residual `STRUCTURAL_CHANGE` no longer vetoes a block it is subsumed by.**
+  Plan step 4.5. Detection emits the residual *alongside* the recognised conflicts on purpose — a
+  residual that replaced them once lost a mechanical import addition — but the application rule
+  needs one resolution to claim the block, so a block whose only real change was a decided
+  widening came out `LEFT_MANUAL` while its own report said `[TYPE_CHANGE/AUTO] 'Widget' is a
+  widening of 'Gadget'`. A subsumed residual is now dropped from the block's **decision** and stays
+  in the report, so the resolutions that remain decide it. Two shapes, each on the strongest
+  evidence the run has: **with a base side** (`diff3`/`zdiff3`) the residual is subsumed when
+  another conflict's region covers the span of base lines neither branch kept; **without one** —
+  git's default `merge` style writes no base, so every claim the residual makes is relative to a
+  base this run does not have — it is subsumed only by a single `AUTO` conflict whose code accounts
+  for the whole block. A residual that reaches a line no other conflict places keeps its veto, and
+  so does one whose only sibling is a review or a partial answer. `MergeFileTool.residualSubsumed`
+  holds the rule, and both halves are pinned by `MergeFileToolTest` — the subsumed block applies
+  and the applied code compiles, the unexplained one stays marked. The expectation step 4.1 pinned
+  (`classpathDecidesProjectTypes`: the block is left "regardless of the classpath") is updated,
+  because changing exactly that is what this step is.
+- **2026-10-07 — every resolution now records the evidence it rests on, and stronger evidence outranks a
+  weaker objection.** Plan step 4.6, decision
+  [DEC-045](../doc-hipster-entity/architecture/decisions/DEC-045.md). A block can be claimed by several conflicts
+  at once and the application rule treated every claim alike, so a claim that read one line of text could veto an
+  answer that had parsed the project's types. `AnalysisLevel` is the ordered scale that makes the two comparable —
+  `TEXT_LOCAL` → `TEXT_FILE` → `STRUCTURE` → `PLATFORM_TYPES` → `PROJECT_TYPES`, ordered by what the answer was
+  checked against — declared as a maximum on each resolver (`ConflictResolver.maxAnalysisLevel()`, all ten
+  declare it now) and recorded on each resolution, because the same resolver is weaker without a classpath:
+  `TypeChangeConflictResolver` and `OverloadAddConflictResolver` record `PLATFORM_TYPES` when no project
+  classpath was supplied and `PROJECT_TYPES` when one was, and `TypeContext.hasProjectEntries()` — derived from
+  the entries themselves, so every factory keeps its meaning — is the fact that separates them.
+  `MergeFileTool.outranking` then applies an `AUTO` claim that covers the block and strictly outranks every other
+  claim, but only where it *accounts for* what each claim was protecting: by covering that claim's region, or by
+  keeping every line of both its sides. A `DEFERRED` claim is never outranked, and the level never promotes a
+  `REVIEW` or `MANUAL` answer into application, so `DESIGN_NEVER_AUTO_RESOLVED.md` is untouched. One bug was
+  found and fixed on the way, and it is load-bearing: the rule first read the regions the report *stamps* onto
+  every conflict of a block, which makes all claims share one region and turned the protection into a formality —
+  `unexplainedResidualStillVetoes` failed, the block applied, and `retries = 7` would have been dropped. It reads
+  the detector's pre-stamp regions now. The report gained an `analysisLevel` key per resolution, and
+  `AnalysisLevelTest` (6 tests) plus two new `MergeFileToolTest` tests hold both halves. Stated honestly: with the
+  current resolver set the rule is nearly inert, because the type-level resolvers seldom share a block with a
+  claim they fully account for — the payoff needs the structure-level resolver that is still to come, and step
+  4.6 records that as outstanding.
+- **2026-10-07 — the payoff resolver: `MEMBER_ADD`, two branches adding a distinct member in the same place.**
+  Plan step 4.6 continued. Two branches appending a method beside the one the base declared produce adjacent
+  insertions, which is a conflict to a line-based tool and nothing of the sort to a reader; the block came out
+  `LEFT_MANUAL` with the structural residual as its *only* claim, so there was no stronger answer for the
+  evidence scale to arbitrate in — which is why the scale alone changed nothing.
+  `ConflictDetectionService.detectMemberAddConflicts` now recognises the shape and `MemberAddConflictResolver`
+  answers `KEEP_BOTH` at `AnalysisLevel.STRUCTURE`: nothing collides, each call site binds to the member it
+  names, and a text-level claim has no business outranking that. Detection requires a **base side** and no
+  removal on either side, so "both branches added it" is never confused with "one branch added it and the other
+  deliberately deleted it" — the distinction the import resolver draws, for the same reason — and a shared
+  signature is refused, because only one member can exist. **A defect fell out of this and is fixed: `KEEP_BOTH`
+  was implemented as concatenation, and both sides carry the members the base already declared, so keeping both
+  repeated them.** Measured: the merged class declared `audit()` twice and javac rejected it, and the same
+  `branch1Code + "\n" + branch2Code` in `OverloadAddConflictResolver` declared `process()` twice on the
+  canonical overload sample. Both now build the union through `SideUnion`, which takes the longest shared prefix
+  once, appends only the remainders, and verifies structurally that no member appears twice — refusing the block
+  when that cannot be proved, because a "keep both" that emits code the compiler rejects is worse than a block
+  left for a human. New: `MEMBER_ADD` (declared handling `AUTO`), the resolver, its
+  `docs/resolvers/member-add-conflict-resolver/` page with fixture-backed examples, `SideUnion`, a
+  `ConflictFixtures` sample, and an end-to-end test asserting the shared member appears **once** and the merged
+  class compiles. The `docs/resolvers/README.md` index gained each resolver's declared evidence level, and
+  `ResolverDocsTest` now fails if a resolver's row omits it.
+- **2026-10-07 — `MEMBER_ADD` reaches the shape a real merge actually produces, and covers fields.** Plan step
+  4.6, second pass, and it began by finding the first pass short: measured on a `diff3` hunk whose base section is
+  present but **empty** — two adjacent additions, the ordinary case — the block came out `LEFT_MANUAL`, because
+  detection required a non-blank base and a pure insertion has none. A blank base means two different things and
+  only the marker parser knows which: **present and empty** says the base had no lines there, so both sides
+  inserted, while **no base section at all** says the base is unknown, where an addition cannot be told from a
+  deletion. `ConflictDetectionService.detect(...)` gained an overload carrying that fact and `MergeFileTool`
+  passes `block.hasBase()`; the four-argument detector overload keeps the conservative reading, so a caller who
+  cannot tell the two apart is never assumed to know. With that, the ordinary insertion applies — and the
+  text-level `API_INCOMPATIBILITY` objection is outranked, which is the evidence scale doing what it exists for.
+  **Fields are members too**: `DeclarationScanner.membersOf` sees methods and fields, with two guards against
+  reading a statement as one, because "keeping both" two locals would concatenate two competing bodies and call
+  it a member addition — a fragment that declares a method or a type establishes the member level by depth, and a
+  bare insertion without one is read from its *modifier*, since a local variable cannot be declared `private`. A
+  package-private field in a bare insertion is declined rather than guessed. Parameter spelling is deliberately
+  left alone: additions whose method names match are declined here so `OverloadAddConflictResolver` answers them
+  from resolved types — verified rather than assumed, because `process(List<String>)` against
+  `process(java.util.List<java.lang.String>)` resolves through that resolver to one signature and is refused as a
+  collision instead of kept twice. Finally, the `analysisLevel` key the report already wrote is **now rendered**
+  by the review page, with the wording owned by the page (DEC-027) — built from a real report and checked, so
+  `evidence: resolved platform types` and `evidence: the block's own lines` appear beside the resolutions they
+  describe.
 
 ### Earlier in this cycle
 

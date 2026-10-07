@@ -25,6 +25,11 @@ import java.util.UUID;
  *   <li>{@link ResolutionKind#DEFERRED} - left to a previously recorded
  *       sticky decision for the same conflict signature.</li>
  * </ul>
+ *
+ * <p>Beside that classification a resolution records <em>how strong its basis was</em>: the
+ * {@link AnalysisLevel} it reached, and {@link #getWarnings() warnings} naming what was missing.
+ * The kind says what may be done with the answer; the level says how much the answer was checked
+ * against, which is what decides between two answers that disagree about one block.
  */
 public final class ConflictResolution {
 
@@ -91,6 +96,21 @@ public final class ConflictResolution {
      */
     private final List<String> warnings;
 
+    /**
+     * The strongest evidence this particular resolution rests on.
+     *
+     * <p>Distinct from {@link #warnings}, which are prose about what was <em>missing</em>: this is
+     * the position on an ordered scale ({@link AnalysisLevel}) that lets two resolutions claiming one
+     * block be compared. It records what was actually used, not what the resolver could have used —
+     * {@link TypeChangeConflictResolver} is at {@link AnalysisLevel#PLATFORM_TYPES} without a
+     * classpath and at {@link AnalysisLevel#PROJECT_TYPES} with one, and it is the weaker run whose
+     * answer must not outrank an objection.
+     *
+     * <p>Defaults to {@link AnalysisLevel#TEXT_LOCAL}: the weakest level is the only honest default,
+     * because a resolution that never says which evidence it read has not claimed any.
+     */
+    private final AnalysisLevel analysisLevel;
+
     private ConflictResolution(Builder builder) {
         this.filePath = builder.filePath == null ? "<unknown>" : builder.filePath;
         this.type = Objects.requireNonNull(builder.type, "type");
@@ -113,6 +133,28 @@ public final class ConflictResolution {
         this.region = builder.region == null ? Region.unknown() : builder.region;
         this.verification = builder.verification == null ? Verification.NOT_RUN : builder.verification;
         this.warnings = Collections.unmodifiableList(new ArrayList<>(builder.warnings));
+        this.analysisLevel = builder.analysisLevel == null
+            ? AnalysisLevel.TEXT_LOCAL
+            : builder.analysisLevel;
+    }
+
+    /**
+     * The strongest evidence behind this resolution; never {@code null}.
+     *
+     * <p>See the field's own note: this is the comparable half of {@link #getWarnings()}, and it is
+     * what decides which claim survives when several conflicts claim one block.
+     */
+    public AnalysisLevel getAnalysisLevel() {
+        return analysisLevel;
+    }
+
+    /**
+     * True when this resolution rests on strictly stronger evidence than {@code other}.
+     *
+     * <p>Null is never stronger: an absent resolution cannot outrank a present one.
+     */
+    public boolean hasStrongerAnalysisThan(ConflictResolution other) {
+        return other != null && analysisLevel.isStrongerThan(other.analysisLevel);
     }
 
     /**
@@ -327,6 +369,7 @@ public final class ConflictResolution {
         return "ConflictResolution{" + type + " @ " + filePath
             + ", strategy=" + resolutionStrategy
             + ", kind=" + kind
+            + ", analysis=" + analysisLevel
             + ", sticky=" + sticky
             + '}';
     }
@@ -351,6 +394,7 @@ public final class ConflictResolution {
         private String branchName;
         private Region region;
         private Verification verification;
+        private AnalysisLevel analysisLevel;
         private final List<String> warnings = new ArrayList<>();
 
         Builder() {
@@ -377,6 +421,7 @@ public final class ConflictResolution {
             this.branchName = source.branchName;
             this.region = source.region;
             this.verification = source.verification;
+            this.analysisLevel = source.analysisLevel;
             this.warnings.addAll(source.warnings);
         }
 
@@ -478,6 +523,20 @@ public final class ConflictResolution {
 
         public Builder verification(Verification verification) {
             this.verification = verification;
+            return this;
+        }
+
+        /**
+         * Record the strongest evidence this resolution actually rests on.
+         *
+         * <p>A resolver normally leaves this unset and inherits
+         * {@link ConflictResolver#maxAnalysisLevel()} — the strongest evidence it can bring to bear
+         * for the one type it owns — and <em>lowers</em> it on the paths where it had to answer from
+         * less, which is the honest direction: a resolution may never claim more than its resolver
+         * can reach.
+         */
+        public Builder analysisLevel(AnalysisLevel analysisLevel) {
+            this.analysisLevel = analysisLevel;
             return this;
         }
 

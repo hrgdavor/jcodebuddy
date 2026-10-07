@@ -86,6 +86,12 @@ final class ConflictFixtures {
     static final String API_INCOMPATIBILITY_BRANCH2 = "public long process() { }";
     //#endregion
 
+    //#region member-add-sample
+    static final String MEMBER_ADD_BASE = "void audit() { log.write(); }";
+    static final String MEMBER_ADD_BRANCH1 = "void audit() { log.write(); }\nvoid charge() { ledger.debit(); }";
+    static final String MEMBER_ADD_BRANCH2 = "void audit() { log.write(); }\nvoid refund() { ledger.credit(); }";
+    //#endregion
+
     private ConflictFixtures() {
     }
 
@@ -112,6 +118,7 @@ final class ConflictFixtures {
             case OVERLOAD_ADD -> "both branches added a method with the same name";
             case STRUCTURAL_CHANGE -> "both branches restructured the same member";
             case API_INCOMPATIBILITY -> "the public contract differs";
+            case MEMBER_ADD -> "both branches added a distinct member";
         };
     }
 
@@ -127,6 +134,7 @@ final class ConflictFixtures {
             case OVERLOAD_ADD -> OVERLOAD_ADD_BASE;
             case STRUCTURAL_CHANGE -> STRUCTURAL_CHANGE_BASE;
             case API_INCOMPATIBILITY -> API_INCOMPATIBILITY_BASE;
+            case MEMBER_ADD -> MEMBER_ADD_BASE;
         };
     }
 
@@ -142,6 +150,7 @@ final class ConflictFixtures {
             case OVERLOAD_ADD -> OVERLOAD_ADD_BRANCH1;
             case STRUCTURAL_CHANGE -> STRUCTURAL_CHANGE_BRANCH1;
             case API_INCOMPATIBILITY -> API_INCOMPATIBILITY_BRANCH1;
+            case MEMBER_ADD -> MEMBER_ADD_BRANCH1;
         };
     }
 
@@ -157,6 +166,7 @@ final class ConflictFixtures {
             case OVERLOAD_ADD -> OVERLOAD_ADD_BRANCH2;
             case STRUCTURAL_CHANGE -> STRUCTURAL_CHANGE_BRANCH2;
             case API_INCOMPATIBILITY -> API_INCOMPATIBILITY_BRANCH2;
+            case MEMBER_ADD -> MEMBER_ADD_BRANCH2;
         };
     }
 }

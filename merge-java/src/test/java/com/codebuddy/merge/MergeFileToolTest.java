@@ -214,14 +214,25 @@ class MergeFileToolTest {
         private final ResolutionStrategy strategy;
         private final String resolvedCode;
         private final String explanation;
+        private final AnalysisLevel level;
 
         StubResolver(ConflictType type, ResolutionKind kind, ResolutionStrategy strategy,
                      String resolvedCode, String explanation) {
+            this(type, kind, strategy, resolvedCode, explanation, null);
+        }
+
+        /**
+         * The level-aware form, for the tests about which claim outranks which. A {@code null}
+         * level leaves the resolution at its default, so the older tests are unaffected.
+         */
+        StubResolver(ConflictType type, ResolutionKind kind, ResolutionStrategy strategy,
+                     String resolvedCode, String explanation, AnalysisLevel level) {
             this.type = type;
             this.kind = kind;
             this.strategy = strategy;
             this.resolvedCode = resolvedCode;
             this.explanation = explanation;
+            this.level = level;
         }
 
         @Override
@@ -231,15 +242,19 @@ class MergeFileToolTest {
 
         @Override
         public ConflictResolution resolve(Conflict conflict) {
-            return ConflictResolution.builder()
+            ConflictResolution.Builder builder = ConflictResolution.builder()
                 .type(type)
                 .filePath(conflict.getFilePath())
                 .baseCode(conflict.getBaseCode())
+                // The sides travel, because a claim is judged on what it was protecting.
+                .branch1Code(conflict.getBranch1Code())
+                .branch2Code(conflict.getBranch2Code())
                 .resolvedCode(resolvedCode)
                 .resolutionStrategy(strategy)
                 .kind(kind)
-                .explanation(explanation)
-                .build();
+                .analysisLevel(level)
+                .explanation(explanation);
+            return builder.build();
         }
 
         @Override
@@ -670,23 +685,60 @@ class MergeFileToolTest {
             }
             """;
 
-    /** Compiles two project types into a directory, and returns that directory. */
+    /** The compiled fixture types, built once per JVM. */
+    private static Path projectTypes;
+
+    /**
+     * The project types the classpath tests resolve against, compiled <b>once</b> and shared.
+     *
+     * <p>javac is not cheap and this was run per test — seven times for this class, each time to
+     * produce the same three classes. The directory is JVM-scoped rather than the test's
+     * {@code @TempDir} (which JUnit deletes after every test), so the compile happens once for the
+     * whole fork instead.
+     */
     private Path compiledProjectTypes() throws IOException {
-        Path sources = Files.createDirectories(tempDir.resolve("project/src/com/example"));
-        Path classes = Files.createDirectories(tempDir.resolve("project/classes"));
+        if (projectTypes != null && Files.isDirectory(projectTypes)) {
+            return projectTypes;
+        }
+
+        Path root = Files.createTempDirectory("merge-java-project-types");
+        Path sources = Files.createDirectories(root.resolve("src/com/example"));
+        Path classes = Files.createDirectories(root.resolve("classes"));
         Files.writeString(sources.resolve("Widget.java"),
             "package com.example;\n\npublic class Widget {\n}\n");
         Files.writeString(sources.resolve("Gadget.java"),
             "package com.example;\n\npublic class Gadget extends Widget {\n}\n");
+        Files.writeString(sources.resolve("MiniGadget.java"),
+            "package com.example;\n\npublic class MiniGadget extends Gadget {\n}\n");
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "the test runs on a JDK");
         int status = compiler.run(null, null, null,
             "-d", classes.toString(),
             sources.resolve("Widget.java").toString(),
-            sources.resolve("Gadget.java").toString());
+            sources.resolve("Gadget.java").toString(),
+            sources.resolve("MiniGadget.java").toString());
         assertEquals(0, status, "the fixture project types must compile");
+
+        projectTypes = classes;
         return classes;
+    }
+
+    /**
+     * Compiles one file's text as {@code OrderService.java} against {@code classes}, so a
+     * test can assert that what the tool wrote is real code rather than text that merely
+     * looks resolved.
+     */
+    private boolean compiles(String code, Path classes) throws IOException {
+        Path sources = Files.createDirectories(tempDir.resolve("applied-src"));
+        Path source = sources.resolve("OrderService.java");
+        Files.writeString(source, code, StandardCharsets.UTF_8);
+        Path output = Files.createDirectories(tempDir.resolve("applied-classes"));
+
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        assertNotNull(compiler, "the test runs on a JDK");
+        return compiler.run(null, null, null,
+            "-cp", classes.toString(), "-d", output.toString(), source.toString()) == 0;
     }
 
     @Test
@@ -704,21 +756,304 @@ class MergeFileToolTest {
 
         assertTrue(decidedReport.contains("is a widening of"),
             "with the classpath, Widget is a widening of Gadget: " + decidedReport);
-        assertTrue(decidedReport.contains("[TYPE_CHANGE/AUTO]"), decidedReport);
+        assertFalse(decidedReport.contains("STRUCTURAL_CHANGE"),
+            "and the residual it is subsumed by no longer decides the block: " + decidedReport);
         assertFalse(escalatedReport.contains("is a widening of"),
             "without it both declarations are Unknown, so nothing is decided: " + escalatedReport);
         assertTrue(escalatedReport.contains("[TYPE_CHANGE/REVIEW]"), escalatedReport);
 
-        // Both runs leave the block, and that is not about types: detection emits the
-        // residual STRUCTURAL_CHANGE alongside the recognised conflict (by design - a
-        // residual that replaced the recognised conflicts once lost a mechanical import
-        // addition), and a structural conflict is never auto-applied. So the classpath
-        // changes what the *resolution* says, which is what the fixture and the review
-        // render carry, not whether this tool writes the block by itself.
+        // The residual STRUCTURAL_CHANGE is still emitted alongside the recognised
+        // conflict (by design - a residual that replaced the recognised conflicts once
+        // lost a mechanical import addition), but it no longer vetoes a block it is
+        // subsumed by: with the classpath the widening is a complete automatic answer,
+        // so the block is written. Without one the only answer is a review, so the veto
+        // stands and the classpath genuinely changes what this tool does.
         assertEquals(1, escalated.exitCode());
-        assertEquals(1, decided.exitCode(),
-            "the residual structural conflict claims the block regardless of the classpath");
-        assertTrue(read(with).contains("<<<<<<<"));
+        assertEquals(0, decided.exitCode(),
+            "a residual with nothing of its own to say must not veto the decided block");
+        assertEquals(Outcome.APPLIED_AUTO, decided.outcomes().get(0).outcome(),
+            decidedReport);
+        assertFalse(read(with).contains("<<<<<<<"));
+        assertTrue(compiles(read(with), classes),
+            "the block the residual stopped vetoing must compile: " + read(with));
+        assertTrue(read(without).contains("<<<<<<<"),
+            "and with nothing decided the block still waits for a human");
+    }
+
+    /**
+     * The same conflict carrying a base side - {@code diff3}/{@code zdiff3} style, which
+     * git writes only when asked: base {@code MiniGadget}, ours {@code Widget}, theirs
+     * {@code Gadget}. Every base line the residual can place is the declaration the type
+     * change is already about, so the residual has nothing of its own to say.
+     */
+    private static final String SUBSUMED_RESIDUAL_FILE = """
+            package com.example.demo;
+
+            public class OrderService {
+            <<<<<<< ours
+                com.example.Widget value = null;
+            ||||||| base
+                com.example.MiniGadget value = null;
+            =======
+                com.example.Gadget value = null;
+            >>>>>>> theirs
+
+                public String describe() {
+                    return String.valueOf(value);
+                }
+            }
+            """;
+
+    /**
+     * The same block plus a line both branches changed that no recognised conflict
+     * explains: {@code retries}. The residual now reaches a line of its own, so it keeps
+     * the veto - the case the alongside-emission exists for.
+     */
+    private static final String UNEXPLAINED_RESIDUAL_FILE = """
+            package com.example.demo;
+
+            public class OrderService {
+            <<<<<<< ours
+                com.example.Widget value = null;
+                private int retries = 5;
+            ||||||| base
+                com.example.MiniGadget value = null;
+                private int retries = 0;
+            =======
+                com.example.Gadget value = null;
+                private int retries = 7;
+            >>>>>>> theirs
+
+                public String describe() {
+                    return String.valueOf(value);
+                }
+            }
+            """;
+
+    @Test
+    @DisplayName("a subsumed residual stops vetoing a block with a base side, and the applied code compiles")
+    void subsumedResidualDoesNotVeto() throws IOException {
+        Path classes = compiledProjectTypes();
+        Path file = write("Subsumed.java", SUBSUMED_RESIDUAL_FILE);
+        Path report = tempDir.resolve("subsumed-report.json");
+
+        Result result = toolFor(file).classpath(List.of(classes)).applyFixes(true)
+            .reportPath(report).run();
+
+        assertEquals(Outcome.APPLIED_AUTO, result.outcomes().get(0).outcome(),
+            result.outcomes().get(0).explanation());
+        assertEquals(0, result.exitCode());
+        String applied = read(file);
+        assertFalse(applied.contains("<<<<<<<"), applied);
+        assertTrue(applied.contains("com.example.Widget value = null;"),
+            "the wider declaration is the one adopted: " + applied);
+        assertTrue(compiles(applied, classes), "the applied code must compile: " + applied);
+
+        // Dropped from the decision, never from the report: a reviewer still sees the
+        // residual, which is the whole point of emitting it alongside the recognised
+        // conflicts rather than instead of them.
+        assertTrue(read(report).contains("STRUCTURAL_CHANGE"),
+            "the subsumed residual is still reported: " + read(report));
+    }
+
+    @Test
+    @DisplayName("a residual that reaches a line no other conflict explains keeps its veto")
+    void unexplainedResidualStillVetoes() throws IOException {
+        Path classes = compiledProjectTypes();
+        Path file = write("Unexplained.java", UNEXPLAINED_RESIDUAL_FILE);
+
+        Result result = toolFor(file).classpath(List.of(classes)).applyFixes(true).run();
+
+        assertEquals(Outcome.LEFT_MANUAL, result.outcomes().get(0).outcome(),
+            result.outcomes().get(0).explanation());
+        assertEquals(1, result.exitCode());
+        assertTrue(read(file).contains("<<<<<<<"), "the markers stay");
+        assertTrue(result.outcomes().get(0).explanation().contains("is a widening of"),
+            "and the type change was still decided - the veto is the residual's, not the "
+                + "type's: " + result.outcomes().get(0).explanation());
+    }
+
+    /**
+     * Two branches each appending a member beside the one the base declared: the additions are
+     * adjacent, so git reports a conflict, and the member both sides carry is context rather than a
+     * change.
+     */
+    private static final String DISTINCT_MEMBERS_FILE = """
+            package com.example.demo;
+
+            public class OrderService {
+            <<<<<<< ours
+                public void audit() {
+                }
+
+                public int charge() {
+                    return 1;
+                }
+            ||||||| base
+                public void audit() {
+                }
+            =======
+                public void audit() {
+                }
+
+                public int refund() {
+                    return 2;
+                }
+            >>>>>>> theirs
+            }
+            """;
+
+    @Test
+    @DisplayName("a distinct member added on each side is kept - both, and the shared one once")
+    void distinctMemberAdditionsAreKept() throws IOException {
+        Path file = write("Members.java", DISTINCT_MEMBERS_FILE);
+
+        Result result = toolFor(file).applyFixes(true).run();
+
+        assertEquals(Outcome.APPLIED_AUTO, result.outcomes().get(0).outcome(),
+            result.outcomes().get(0).explanation());
+        assertEquals(0, result.exitCode());
+        String applied = read(file);
+        assertFalse(applied.contains("<<<<<<<"), applied);
+        assertTrue(applied.contains("public int charge()"), applied);
+        assertTrue(applied.contains("public int refund()"), applied);
+        assertEquals(1, applied.split("public void audit\\(\\)", -1).length - 1,
+            "the member both sides carried is context, and must appear once: " + applied);
+        assertTrue(compiles(applied, tempDir),
+            "the merged class must compile - a repeated member would not: " + applied);
+    }
+
+    /**
+     * The shape a real merge produces for two adjacent additions: a {@code diff3} hunk whose base
+     * section is present and <b>empty</b>, because the base had nothing in that region.
+     */
+    private static final String EMPTY_BASE_INSERTION_FILE = """
+            package com.example.demo;
+
+            public class OrderService {
+            <<<<<<< ours
+                public int charge() {
+                    return 1;
+                }
+            ||||||| base
+            =======
+                public int refund() {
+                    return 2;
+                }
+            >>>>>>> theirs
+            }
+            """;
+
+    /** The same shape one level down: two distinct fields, each declaring its access. */
+    private static final String EMPTY_BASE_FIELD_INSERTION_FILE = """
+            package com.example.demo;
+
+            public class OrderService {
+            <<<<<<< ours
+                private final int chargeCount = 1;
+            ||||||| base
+            =======
+                private final int refundCount = 2;
+            >>>>>>> theirs
+
+                public int total() {
+                    return 0;
+                }
+            }
+            """;
+
+    @Test
+    @DisplayName("an insertion at an empty base is applied, and the text-level objection is outranked")
+    void insertionAtAnEmptyBaseIsApplied() throws IOException {
+        Path file = write("Inserted.java", EMPTY_BASE_INSERTION_FILE);
+
+        Result result = toolFor(file).applyFixes(true).run();
+
+        assertEquals(Outcome.APPLIED_AUTO, result.outcomes().get(0).outcome(),
+            result.outcomes().get(0).explanation());
+        assertEquals(0, result.exitCode());
+        String applied = read(file);
+        assertFalse(applied.contains("<<<<<<<"), applied);
+        assertTrue(applied.contains("public int charge()") && applied.contains("public int refund()"),
+            applied);
+        assertTrue(compiles(applied, tempDir), applied);
+
+        // The API check reads the first public declaration of each side as text and calls this a
+        // changed contract; recognising the two members is what answers that, and the explanation says
+        // so rather than leaving a reviewer to guess why a manual objection was passed over.
+        assertTrue(result.outcomes().get(0).explanation().contains("Outranked on this block"),
+            result.outcomes().get(0).explanation());
+    }
+
+    @Test
+    @DisplayName("two distinct fields inserted at an empty base are both kept")
+    void distinctFieldsAtAnEmptyBaseAreKept() throws IOException {
+        Path file = write("Fields.java", EMPTY_BASE_FIELD_INSERTION_FILE);
+
+        Result result = toolFor(file).applyFixes(true).run();
+
+        assertEquals(Outcome.APPLIED_AUTO, result.outcomes().get(0).outcome(),
+            result.outcomes().get(0).explanation());
+        assertEquals(0, result.exitCode());
+        String applied = read(file);
+        assertFalse(applied.contains("<<<<<<<"), applied);
+        assertTrue(applied.contains("private final int chargeCount = 1;"), applied);
+        assertTrue(applied.contains("private final int refundCount = 2;"), applied);
+        assertTrue(compiles(applied, tempDir), applied);
+    }
+
+    // ------------------------------------------------- analysis level arbitration
+
+    /** Every line of both sides, which is what a claim must keep to have dropped nothing. */
+    private static final String BOTH_SIDES_KEPT =
+        "com.example.Widget value = null;\nprivate int retries = 5;"
+            + "\ncom.example.Gadget value = null;\nprivate int retries = 7;";
+
+    @Test
+    @DisplayName("stronger evidence outranks a weaker objection that it already accounts for")
+    void strongerEvidenceOutranksWeakerObjection() throws IOException {
+        Path file = write("Outranked.java", UNEXPLAINED_RESIDUAL_FILE);
+
+        // KEEP_BOTH, so the winner contains every line of both sides: nothing the residual was
+        // guarding is dropped, and the claim rests on resolved types where the residual compares
+        // lines. The residual keeps its region on the second line, so this is decided by what the
+        // winner accounts for and not by the regions happening to coincide.
+        Result result = toolFor(file)
+            .resolver(resolverWith(new StubResolver(ConflictType.TYPE_CHANGE,
+                ResolutionKind.AUTO, ResolutionStrategy.KEEP_BOTH, BOTH_SIDES_KEPT,
+                "Both declarations are kept.", AnalysisLevel.PROJECT_TYPES)))
+            .applyFixes(true)
+            .run();
+
+        assertEquals(Outcome.APPLIED_AUTO, result.outcomes().get(0).outcome(),
+            result.outcomes().get(0).explanation());
+        assertEquals(0, result.exitCode());
+        assertTrue(result.outcomes().get(0).explanation().contains("Outranked on this block"),
+            "and the report names the claim that lost, so the comparison can be judged: "
+                + result.outcomes().get(0).explanation());
+        assertTrue(result.outcomes().get(0).explanation().contains("STRUCTURAL_CHANGE"),
+            "the outranked claim is named by type: "
+                + result.outcomes().get(0).explanation());
+    }
+
+    @Test
+    @DisplayName("equal evidence outranks nothing - the block stays for a human")
+    void equalEvidenceOutranksNothing() throws IOException {
+        Path file = write("Equal.java", UNEXPLAINED_RESIDUAL_FILE);
+
+        // Same answer, same everything - except that this claim rests on no more evidence than the
+        // objection does. Two analyses of equal strength disagreeing is the case a human settles.
+        Result result = toolFor(file)
+            .resolver(resolverWith(new StubResolver(ConflictType.TYPE_CHANGE,
+                ResolutionKind.AUTO, ResolutionStrategy.KEEP_BOTH, BOTH_SIDES_KEPT,
+                "Both declarations are kept.", AnalysisLevel.TEXT_LOCAL)))
+            .applyFixes(true)
+            .run();
+
+        assertEquals(Outcome.LEFT_MANUAL, result.outcomes().get(0).outcome(),
+            result.outcomes().get(0).explanation());
+        assertEquals(1, result.exitCode());
+        assertTrue(read(file).contains("<<<<<<<"), "the markers stay");
     }
 
     @Test
@@ -744,9 +1079,8 @@ class MergeFileToolTest {
         int status = MergeFileTool.runMain(new String[] {file.toString(),
             "--no-fixtures", "--classpath", classes.toString()});
 
-        assertEquals(1, status,
-            "the flag is accepted: the run reaches the block and leaves it, rather than a "
-                + "usage error");
+        assertEquals(0, status,
+            "the flag is accepted and the block is decided, rather than a usage error");
         assertTrue(read(file).contains("<<<<<<<"), "and the default run writes nothing");
 
         // A misspelled entry contributes nothing to attribution, so without this check the

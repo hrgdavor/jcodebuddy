@@ -222,6 +222,21 @@ function FixPath({ fixPath }) {
   )
 }
 
+/**
+ * What each analysis level actually read, in words a reviewer can act on.
+ *
+ * The report carries the level's name and the page owns the wording, because presenting it is the
+ * renderer's job (DEC-027) — and because a bare `STRUCTURE` tells a reviewer nothing while "recognised
+ * declarations" tells them why this resolution could outrank the one beside it.
+ */
+const EVIDENCE = {
+  TEXT_LOCAL: "the block's own lines",
+  TEXT_FILE: 'the file around the change',
+  STRUCTURE: 'recognised declarations',
+  PLATFORM_TYPES: 'resolved platform types',
+  PROJECT_TYPES: 'resolved project types'
+}
+
 function Resolution({ resolution, filePath, conflict }) {
   const region = resolution.region
   return (
@@ -231,6 +246,9 @@ function Resolution({ resolution, filePath, conflict }) {
         <span class="badge">{resolution.kind}</span>
         <span class="tail">
           {resolution.strategy}
+          {resolution.analysisLevel
+            ? ` · evidence: ${EVIDENCE[resolution.analysisLevel] ?? resolution.analysisLevel}`
+            : ''}
           {resolution.verification ? ` · verified: ${resolution.verification}` : ''}
           {region ? ` · lines ${region.startLine}–${region.endLine}` : ''}
           {resolution.sticky ? ' · sticky (a recorded decision)' : ''}

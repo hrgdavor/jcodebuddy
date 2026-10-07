@@ -153,6 +153,11 @@ public final class MergeReportWriter {
                 .append(quote(resolution.getResolutionStrategy().name())).append(",\n");
             json.append("          \"verification\": ")
                 .append(quote(resolution.getVerification().name())).append(",\n");
+            // The evidence the answer rests on, as an ordered name rather than prose: the page
+            // owns the wording (DEC-027), and this is what it compares when two resolutions
+            // disagree about one block.
+            json.append("          \"analysisLevel\": ")
+                .append(quote(resolution.getAnalysisLevel().name())).append(",\n");
             json.append("          \"region\": ").append(regionJson(resolution.getRegion()))
                 .append(",\n");
             json.append("          \"independentlyApplicable\": ")

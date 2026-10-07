@@ -28,6 +28,15 @@ public final class PackageChangeConflictResolver extends AbstractConflictResolve
         return ConflictType.PACKAGE_CHANGE;
     }
 
+    /**
+     * {@link AnalysisLevel#TEXT_LOCAL}: the package declaration line of the code it was given. A
+     * class has exactly one package, so a second line could not change the answer.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_LOCAL;
+    }
+
     @Override
     protected boolean stickyByDefault() {
         return true;

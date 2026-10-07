@@ -141,7 +141,10 @@ A block's replacement is applied only when **all** of these hold:
 
 - exactly one resolution covers the block, and it is `AUTO` - or it is a
   recorded decision (`DEFERRED`) and the caller opted in with
-  `applyRecordedDecisions(true)` - or both sides are literally identical;
+  `applyRecordedDecisions(true)` - or both sides are literally identical. A
+  residual `STRUCTURAL_CHANGE` that is **subsumed** by another conflict on the
+  same block is not counted here: it is still emitted and still reported, it
+  just stops deciding (the rule is stated under the limitations below);
 - the resolution passed the `ResolutionVerifier` gate (as everywhere in this
   module);
 - the replacement contains no conflict markers;
@@ -259,17 +262,32 @@ last one:
   shape, not a bug report.
 - **The tool never stages or commits.** It writes the file when asked and
   nothing else; git operations remain the caller's (or the human's) decision.
-- **A resolved type change is still left by this tool.** Detection emits the residual
-  `STRUCTURAL_CHANGE` **alongside** the recognised conflict — by design, because a
-  residual that replaced the recognised conflicts once lost a mechanical import addition
-  — and a structural conflict is never auto-applied. So a block whose only real change is
-  a widening ends up `LEFT_MANUAL` *even when the widening was decided*: the report and
-  the prepared fixture carry `[TYPE_CHANGE/AUTO] 'Widget' is a widening of 'Gadget'`, and
-  the block still waits for a human. That is a property of the decision rule ("exactly one
-  resolution claims the block"), not of the classpath, and it is asserted in
-  [`MergeFileToolTest`](../src/test/java/com/codebuddy/merge/MergeFileToolTest.java)
-  so it cannot change unnoticed. Removing the residual from a block it only partly
-  overlaps is the open question, not whether it should be emitted at all.
+- **A residual with nothing of its own to say no longer vetoes a decided block.**
+  Detection emits the residual `STRUCTURAL_CHANGE` **alongside** the recognised conflict —
+  by design, because a residual that replaced the recognised conflicts once lost a
+  mechanical import addition — and a block is applied only when one resolution claims it.
+  That combination used to leave a block whose only real change was a decided widening at
+  `LEFT_MANUAL`, with the report carrying `[TYPE_CHANGE/AUTO] 'Widget' is a widening of
+  'Gadget'` and a human still asked for a decision that already existed. A subsumed
+  residual is now dropped from the block's **decision**, while staying in the report, so
+  the resolutions that remain decide it. Which residual counts as subsumed is decided by
+  the strongest evidence the run has:
+
+  - **with a base side** (`diff3`/`zdiff3` — git writes one only when asked), the
+    residual's region is the span of base lines that neither branch kept, and it is
+    subsumed exactly when another conflict's region **covers** that span. A residual that
+    reaches a line no other conflict places keeps its veto, which is the case the
+    alongside-emission exists for;
+  - **without one** (git's default `merge` style writes no base), the residual can place no
+    line at all, because every claim it makes is relative to a base this run does not have.
+    It is subsumed only by one **complete automatic** answer: a single other conflict that
+    is `AUTO` and whose code accounts for the whole block. A review, a partial answer, or
+    several automatic answers that cannot compose each leave the veto in place.
+
+  Both halves are asserted in
+  [`MergeFileToolTest`](../src/test/java/com/codebuddy/merge/MergeFileToolTest.java) — a
+  subsumed residual lets the block apply and the applied code compiles, and a residual
+  covering a line no recognised conflict explains still leaves the block marked.
 - **History replay needs a branch.** Outside a repository and without
   `--branch`, the history is per-run and in-memory - replay then has nothing to
   replay, by design rather than by guesswork.

@@ -21,6 +21,16 @@ public final class CommentAddConflictResolver extends AbstractConflictResolver {
         return ConflictType.COMMENT_ADD;
     }
 
+    /**
+     * {@link AnalysisLevel#TEXT_LOCAL}: the union is taken over comment lines found in the
+     * conflicting sides themselves. Documentation from two branches does not collide, so nothing
+     * outside them could change the answer.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_LOCAL;
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         List<String> branch1Comments = commentsIn(conflict.getBranch1Code());

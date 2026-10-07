@@ -129,6 +129,47 @@ public record TypeContext(Path sourceRoot, List<Path> classpath) {
     }
 
     /**
+     * True when this context carries at least one entry the platform's own classpath does not
+     * — that is, when the caller supplied the project's compiled classes.
+     *
+     * <p>This exists because it is the difference between two genuinely different answers:
+     * resolving {@code java.util.HashMap} says something about the platform, while resolving a
+     * type declared by the project under merge says something only a caller-supplied classpath can
+     * support. {@link AnalysisLevel} records the two as {@link AnalysisLevel#PLATFORM_TYPES} and
+     * {@link AnalysisLevel#PROJECT_TYPES}, and a resolver that decided a question about the
+     * project's own types must be able to state which of them it actually had.
+     *
+     * <p>Derived rather than stored, so every existing factory keeps its meaning and no caller has
+     * to declare a fact it can be asked: an entry counts as the project's when it is not one the
+     * JVM itself is running on. The answer can only underclaim — a project class directory that
+     * happened to be on this JVM's classpath already would read as the platform — and underclaiming
+     * keeps a resolution from outranking an objection, which is the safe direction.
+     */
+    public boolean hasProjectEntries() {
+        for (Path entry : classpath) {
+            if (!RuntimeClasspath.ENTRIES.contains(entry)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The JVM's own classpath, read once.
+     *
+     * <p>In a holder class rather than in a static field of {@link TypeContext}, so the platform is
+     * not queried merely because this type was loaded; and read once because it cannot change while
+     * the JVM that reads it is running, while {@link #hasProjectEntries()} is asked once per
+     * resolution.
+     */
+    private static final class RuntimeClasspath {
+        private static final Set<Path> ENTRIES = Set.copyOf(JavaParser.runtimeClasspath());
+
+        private RuntimeClasspath() {
+        }
+    }
+
+    /**
      * A short description for diagnostics.
      */
     public String describe() {

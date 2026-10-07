@@ -103,6 +103,24 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.plugin.version}</version>
+                <configuration>
+                    <!-- Test classes are distributed across forked JVMs. This suite was a single
+                         sequential fork, so its wall clock was the sum of its classes: 750 tests in
+                         530 s of test time, dominated by six that each wait on a spawned Bun process
+                         or an in-process javac. Forking keeps each class in its own JVM, which is the
+                         isolation these tests already assume (@TempDir per test, in-memory stores),
+                         and turns that sum into roughly its longest member. -->
+                    <forkCount>8</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <!-- And classes run concurrently inside each fork, so the heavy classes are not
+                         serialised behind one another. `classes` rather than `methods` on purpose:
+                         two tests of one class share its @TempDir and its target/ output, while two
+                         different classes do not - the isolation boundary these tests actually have.
+                         Sized to the machine, which has 32 cores: 8 x 4 keeps every core busy on the
+                         750 tests without serialising a class behind another. -->
+                    <parallel>classes</parallel>
+                    <threadCount>4</threadCount>
+                </configuration>
             </plugin>
         </plugins>
     </build>

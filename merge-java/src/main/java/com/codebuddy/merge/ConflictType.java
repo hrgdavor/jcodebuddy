@@ -70,7 +70,26 @@ public enum ConflictType {
      * A change to a public contract that may break callers. Always reviewed by
      * a human.
      */
-    API_INCOMPATIBILITY(Handling.MANUAL);
+    API_INCOMPATIBILITY(Handling.MANUAL),
+
+    /**
+     * Both branches added a <em>distinct</em> member in the same place: a member the base did not
+     * declare, which the other branch's addition does not collide with. Additive, so the union of the
+     * two sides is the answer.
+     *
+     * <p>Distinct from {@link #OVERLOAD_ADD}, which is two branches adding a method with the
+     * <em>same</em> name — there the parameter lists are the question and identical ones collide.
+     * Here nothing collides, so the union is safe, and the only thing that could go wrong is
+     * resurrecting a member one branch deliberately removed. That is why the detector requires a base
+     * side: without one, "both branches added it" cannot be told from "one branch added it and the
+     * other deleted it".
+     *
+     * <p>The members recognised today are those
+     * {@link DeclarationScanner#memberSignatures(String)} sees — methods, by name and parameter list.
+     * Two branches adding distinct <em>fields</em> in the same place is still the structural
+     * residual's business, and stays a human's.
+     */
+    MEMBER_ADD(Handling.AUTO);
 
     /**
      * How much automation a conflict type permits.

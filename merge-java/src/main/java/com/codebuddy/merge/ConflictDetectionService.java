@@ -52,6 +52,27 @@ public class ConflictDetectionService {
     public List<Conflict> detect(String filePath, String baseCode,
                                  String branch1Code, String branch2Code,
                                  TypeContext typeContext) {
+        // A caller who supplies text is assumed to have supplied the base it has: a non-blank base is
+        // a known one. The distinction a blank base hides — "the base had nothing here" versus "there
+        // is no base side at all" — is only knowable from the conflict markers, so a caller that has
+        // them passes it through the overload below.
+        return detect(filePath, baseCode, branch1Code, branch2Code, typeContext,
+            baseCode != null && !baseCode.isBlank());
+    }
+
+    /**
+     * Detect every conflict in a file, told whether the base side is <em>known</em>.
+     *
+     * <p>This is not a detail. A blank base means two different things, and one detector has to tell
+     * them apart: a git {@code diff3} hunk whose base section is present but <b>empty</b> says the
+     * base had no lines in that region — both branches inserted there — while a merge-style file with
+     * no base section at all says the base is <b>unknown</b>, so "both branches added it" cannot be
+     * distinguished from "one branch added it and the other deleted it". Only the marker parser knows
+     * which of the two it is, so it is passed in rather than guessed.
+     */
+    public List<Conflict> detect(String filePath, String baseCode,
+                                 String branch1Code, String branch2Code,
+                                 TypeContext typeContext, boolean baseKnown) {
         List<Conflict> conflicts = new ArrayList<>();
 
         add(conflicts, detectImportConflicts(filePath, baseCode, branch1Code, branch2Code));
@@ -63,6 +84,8 @@ public class ConflictDetectionService {
         add(conflicts, detectRenameConflicts(filePath, baseCode, branch1Code, branch2Code));
         add(conflicts, detectApiConflicts(filePath, baseCode, branch1Code, branch2Code));
         add(conflicts, detectMethodBodyConflicts(filePath, baseCode, branch1Code, branch2Code));
+        add(conflicts, detectMemberAddConflicts(filePath, baseCode, branch1Code, branch2Code,
+            baseKnown));
 
         List<Conflict> recognised = new ArrayList<>(conflicts);
         Conflict structural = detectStructuralConflict(filePath, baseCode, branch1Code, branch2Code,
@@ -116,7 +139,20 @@ public class ConflictDetectionService {
             || !difference(baseMembers, members1).isEmpty()
             || !difference(baseMembers, members2).isEmpty();
 
-        if (membersDiverged) {
+        // ...unless a recognised conflict already describes exactly this divergence.
+        // Two branches each adding a distinct member is that case: the additions are
+        // recognised (MEMBER_ADD), nothing was removed, and a residual saying "the
+        // member set differs" would only restate what the recognised conflict already
+        // knows - while vetoing it, because a residual is always a human's. Measured
+        // before this was added: a block whose two additions coexist came out
+        // LEFT_MANUAL with the residual as its only claim, so no stronger answer
+        // existed to be believed.
+        boolean additionsExplained = recognised.stream()
+            .anyMatch(conflict -> conflict.getType() == ConflictType.MEMBER_ADD)
+            && difference(baseMembers, members1).isEmpty()
+            && difference(baseMembers, members2).isEmpty();
+
+        if (membersDiverged && !additionsExplained) {
             return new Conflict(ConflictType.STRUCTURAL_CHANGE, filePath,
                 "The set of declared members differs between the branches",
                 baseCode, branch1Code, branch2Code);
@@ -719,6 +755,98 @@ public class ConflictDetectionService {
                 "One branch extended a method body that the other left equivalent",
                 baseCode, branch1Code, branch2Code));
         }
+        return conflicts;
+    }
+
+    /**
+     * Both branches added a <em>distinct</em> member in the same place.
+     *
+     * <p>Two branches appending a method at the same point in a class produce adjacent insertions,
+     * which is a conflict to a line-based tool and nothing of the sort to a reader: the additions do
+     * not interact. Comparing the declared members shows that, where comparing the changed lines
+     * cannot — which is the whole reason this detector exists, and why the resolver it feeds declares
+     * {@link AnalysisLevel#STRUCTURE}.
+     *
+     * <p>Three conditions, each of which is a way the additions could interact:
+     *
+     * <ul>
+     *   <li><b>a base side is required.</b> Without one, "both branches added it" cannot be told from
+     *       "one branch added it and the other deliberately deleted it", and the union would resurrect
+     *       a member somebody removed. This is the same distinction the import resolver draws against
+     *       the base, for the same reason;</li>
+     *   <li><b>nothing may have been removed on either side.</b> A removal is structural — a branch
+     *       that drops a method while another keeps calling it produces code that compiles nowhere —
+     *       and belongs to a human;</li>
+     *   <li><b>the two additions must not share a signature.</b> Identical signatures collide, so only
+     *       one member can exist; that is {@link OverloadAddConflictResolver}'s question, decided from
+     *       resolved parameter types, and answering it here from text would be guessing.</li>
+     * </ul>
+     */
+    public List<Conflict> detectMemberAddConflicts(String filePath, String baseCode,
+                                                   String branch1Code, String branch2Code) {
+        return detectMemberAddConflicts(filePath, baseCode, branch1Code, branch2Code,
+            baseCode != null && !baseCode.isBlank());
+    }
+
+    /**
+     * Both branches added a <em>distinct</em> member in the same place, told whether the base side is
+     * known.
+     *
+     * <p><b>Why the base side is required, and what "empty" means.</b> Two branches appending a method
+     * or a field at the same point produce adjacent insertions, which a line-based comparison reads as
+     * "both sides replaced this region" — true and useless — while comparing the declared members
+     * shows the additions do not interact. The danger is telling an addition from a deletion: keeping
+     * both sides resurrects a member one branch deliberately removed, the same outcome
+     * {@link ImportConflictResolver} refuses to produce. So the base must be there to compare against.
+     * A base that is <em>present but empty</em> is exactly that evidence — the base had no lines in
+     * this region, so both sides inserted — while a file with no base section at all is an
+     * <em>unknown</em> base and is declined. {@code diff3} and {@code zdiff3} hunks carry the first;
+     * git's default merge style carries the second.
+     *
+     * <p><b>What counts as a member.</b> Methods (by name and parameter list) and fields (by name),
+     * and only at the declaration level: a fragment that never declares a method or a type gives no
+     * way to tell a field from a local variable, so it is declined rather than guessed at.
+     *
+     * <p><b>Three conditions, each a way the additions could interact:</b> the base must be known; no
+     * member may have been removed on either side; and the two additions must not share a signature.
+     * Identical signatures collide — only one member can exist — which is
+     * {@link OverloadAddConflictResolver}'s question, decided from resolved parameter types, and
+     * answering it here from text would be guessing.
+     */
+    public List<Conflict> detectMemberAddConflicts(String filePath, String baseCode,
+                                                   String branch1Code, String branch2Code,
+                                                   boolean baseKnown) {
+        List<Conflict> conflicts = new ArrayList<>();
+
+        if (!baseKnown) {
+            return conflicts;
+        }
+
+        boolean baseBlank = baseCode == null || baseCode.isBlank();
+        Set<String> baseMembers = DeclarationScanner.membersOf(baseCode, baseBlank);
+        Set<String> members1 = DeclarationScanner.membersOf(branch1Code, baseBlank);
+        Set<String> members2 = DeclarationScanner.membersOf(branch2Code, baseBlank);
+
+        Set<String> added1 = difference(members1, baseMembers);
+        Set<String> added2 = difference(members2, baseMembers);
+
+        if (added1.isEmpty() || added2.isEmpty()) {
+            return conflicts;
+        }
+        if (!difference(baseMembers, members1).isEmpty()
+            || !difference(baseMembers, members2).isEmpty()) {
+            return conflicts;
+        }
+        // Names, not signatures: without a type context two parameter lists cannot be compared as
+        // resolved types, and two methods whose names match may or may not be the same member. The
+        // resolver re-checks this with the context it is handed, and declines when it cannot prove it.
+        if (!intersection(namesOf(added1), namesOf(added2)).isEmpty()) {
+            return conflicts;
+        }
+
+        conflicts.add(new Conflict(ConflictType.MEMBER_ADD, filePath,
+            "Both branches added distinct members: " + added1 + " and " + added2,
+            baseCode, branch1Code, branch2Code));
         return conflicts;
     }
 

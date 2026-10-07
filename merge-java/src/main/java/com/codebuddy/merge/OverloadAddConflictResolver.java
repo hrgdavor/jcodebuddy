@@ -46,6 +46,31 @@ public final class OverloadAddConflictResolver extends AbstractConflictResolver 
     }
 
     /**
+     * {@link AnalysisLevel#PROJECT_TYPES}: whether two parameter lists are the same is decided from
+     * types resolved by javac, so the answer is as strong as the classpath it resolved against — with
+     * the project's own entries present, its types are known rather than unresolved.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.PROJECT_TYPES;
+    }
+
+    /**
+     * The level this run actually reached, which is weaker than the maximum when the classpath
+     * carried only the platform.
+     *
+     * <p>The {@code methodNamesOnly} pre-filter is structure, but no answer is ever made from it:
+     * every path below this point compares resolved parameter types, so the honest floor is
+     * {@link AnalysisLevel#PLATFORM_TYPES} rather than structure.
+     */
+    private static AnalysisLevel reachableLevel(Conflict conflict) {
+        TypeContext context = conflict.getTypeContext();
+        return context != null && context.hasProjectEntries()
+            ? AnalysisLevel.PROJECT_TYPES
+            : AnalysisLevel.PLATFORM_TYPES;
+    }
+
+    /**
      * Deciding whether two parameter lists are the same is a question about
      * resolved types, so this resolver cannot work from text alone.
      */
@@ -131,14 +156,25 @@ public final class OverloadAddConflictResolver extends AbstractConflictResolver 
         if (!collisions.isEmpty()) {
             return reviewResolution(conflict, ConflictResolution.ResolutionStrategy.MERGE_SAFE)
                 .resolvedCode(conflict.getBranch1Code())
+                .analysisLevel(reachableLevel(conflict))
                 .explanation("Both branches added '" + methodName + "' with the same "
                     + "parameter types " + collisions + "; only one can exist.")
                 .alternativePaths(describeOptions(conflict))
                 .build();
         }
 
+        String merged = SideUnion.of(conflict.getBranch1Code(), conflict.getBranch2Code());
+        if (merged == null) {
+            // The two sides are not "what they share, then one addition each", so keeping both could
+            // repeat the member they both already carry. Measured before this check: concatenating the
+            // sides declared {@code process()} twice and the result did not compile. A human decides.
+            return declined(conflict, "keeping both added overloads would repeat a member the two "
+                + "sides already share, so the merged code cannot be shown to compile");
+        }
+
         return autoResolution(conflict, ConflictResolution.ResolutionStrategy.KEEP_BOTH)
-            .resolvedCode(conflict.getBranch1Code() + "\n" + conflict.getBranch2Code())
+            .resolvedCode(merged)
+            .analysisLevel(reachableLevel(conflict))
             .explanation("The added overloads of '" + methodName + "' have different resolved "
                 + "parameter types (" + parameters1 + " vs " + parameters2
                 + "), so both are kept.")
@@ -175,6 +211,7 @@ public final class OverloadAddConflictResolver extends AbstractConflictResolver 
         return reviewResolution(conflict, ConflictResolution.ResolutionStrategy.MANUAL)
             .kind(ConflictResolution.ResolutionKind.MANUAL)
             .resolvedCode(ConflictResolution.MANUAL_MARKER)
+            .analysisLevel(reachableLevel(conflict))
             .explanation("Overload resolution could not decide this conflict: " + reason)
             .alternativePaths(List.of(
                 newFixPath(conflict)

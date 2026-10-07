@@ -62,16 +62,41 @@ class MergeWorkflowTest {
     Path repositoryDir;
 
     /**
+     * One directory for the whole class, holding the repository built <b>once</b>.
+     *
+     * <p>Every test in this class rebuilt the same repository: JGit init, three commits and three
+     * checkouts, 22 times over. Measured, this was the suite's slowest class at 101 s, and the
+     * repository is identical each time — so it is built once and each test is handed its own copy,
+     * which keeps the per-test isolation the marker tests rely on (they write into their repository)
+     * at the cost of a filesystem copy.
+     */
+    @TempDir
+    static Path sharedDir;
+
+    private static Path repositoryTemplate;
+
+    /**
      * Build a repository where {@code upstream} and {@code feature} both add a
      * different import to the same file, on top of a shared base commit.
      */
     private void buildRepository() throws GitAPIException, IOException {
-        try (Git git = Git.init().setDirectory(repositoryDir.toFile()).call()) {
+        TestTrees.copy(ensureRepositoryTemplate(), repositoryDir);
+    }
+
+    /** Build the repository once for the class, into the shared directory. */
+    private static synchronized Path ensureRepositoryTemplate()
+            throws GitAPIException, IOException {
+        if (repositoryTemplate != null) {
+            return repositoryTemplate;
+        }
+
+        Path target = sharedDir.resolve("workflow-repo");
+        try (Git git = Git.init().setDirectory(target.toFile()).call()) {
             git.getRepository().getConfig().setString("user", null, "name", "Test");
             git.getRepository().getConfig().setString("user", null, "email", "test@example.com");
             git.getRepository().getConfig().save();
 
-            Path file = repositoryDir.resolve(FILE);
+            Path file = target.resolve(FILE);
             Files.writeString(file, BASE_CONTENT, StandardCharsets.UTF_8);
             git.add().addFilepattern(FILE).call();
             org.eclipse.jgit.revwalk.RevCommit base =
@@ -95,6 +120,9 @@ class MergeWorkflowTest {
             git.add().addFilepattern(FILE).call();
             git.commit().setMessage("feature adds BigDecimal").setSign(false).call();
         }
+
+        repositoryTemplate = target;
+        return target;
     }
 
     private String fileContent() throws IOException {

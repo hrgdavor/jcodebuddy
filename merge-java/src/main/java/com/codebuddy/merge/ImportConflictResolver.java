@@ -51,6 +51,18 @@ public final class ImportConflictResolver extends AbstractConflictResolver {
         return ConflictType.IMPORT_ADD;
     }
 
+    /**
+     * {@link AnalysisLevel#TEXT_FILE}: the import block of the whole code it was given, read either
+     * as lines or — when a type context is supplied — as parsed {@code J.Import} nodes, which is why
+     * the union is sorted and de-duplicated correctly. Structure is recognised, but no type is ever
+     * resolved: placing an import is a question about the file's import block, not about what the
+     * import refers to.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_FILE;
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         // Read each side as a change against the base. Comparing the branches to

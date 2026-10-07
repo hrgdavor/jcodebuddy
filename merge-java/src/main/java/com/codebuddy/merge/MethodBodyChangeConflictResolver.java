@@ -25,6 +25,17 @@ public final class MethodBodyChangeConflictResolver extends AbstractConflictReso
         return ConflictType.METHOD_BODY_CHANGE;
     }
 
+    /**
+     * {@link AnalysisLevel#TEXT_LOCAL}: the statement <em>lines</em> of the two bodies are compared
+     * as sets, so a statement the two sides formatted differently reads as two different statements.
+     * Recognising the statements as Java would be stronger evidence than this, and until it does,
+     * the level says so rather than the explanation sounding equally confident either way.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_LOCAL;
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         List<String> body1 = statementsIn(conflict.getBranch1Code());

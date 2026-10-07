@@ -15,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,7 +50,31 @@ class SampleRepoTest {
     @TempDir
     Path tempDir;
 
-    private static boolean bunAvailable() {
+    /**
+     * One directory for the whole class, holding each generated fixture made <b>once</b>.
+     *
+     * <p>Generating a repository spawns Bun, and this class generated one per test: twelve spawns for
+     * twelve tests, measured at 131 s of the suite's 530 s of test time. The generator is
+     * deterministic and nearly every test only reads the result, so the fixture is now made once and
+     * each test is handed its own copy — a filesystem copy of a handful of files, which preserves the
+     * per-test isolation exactly (one test writes a marker into its repository) at a fraction of the
+     * cost.
+     */
+    @TempDir
+    static Path sharedDir;
+
+    private static final Map<String, Path> GENERATED = new ConcurrentHashMap<>();
+
+    private static Boolean bunAvailable;
+
+    private static synchronized boolean bunAvailable() {
+        if (bunAvailable == null) {
+            bunAvailable = probeBun();
+        }
+        return bunAvailable;
+    }
+
+    private static boolean probeBun() {
         try {
             Process process = new ProcessBuilder("bun", "--version")
                 .redirectErrorStream(true)
@@ -78,7 +104,20 @@ class SampleRepoTest {
         Path generator = script();
         assumeTrue(Files.isRegularFile(generator), "generator script not found at " + generator);
 
+        Path template = generateOnce(generator, fixtureName);
         Path target = tempDir.resolve("repo-" + fixtureName);
+        TestTrees.copy(template, target);
+        return target;
+    }
+
+    /** Generate one fixture, once for the whole class; later callers get the same directory. */
+    private static synchronized Path generateOnce(Path generator, String fixtureName) throws Exception {
+        Path cached = GENERATED.get(fixtureName);
+        if (cached != null) {
+            return cached;
+        }
+
+        Path target = sharedDir.resolve("repo-" + fixtureName);
         Process process = new ProcessBuilder("bun", "run", generator.toString(),
             fixtureName, "--out", target.toString())
             .redirectErrorStream(true)
@@ -86,8 +125,10 @@ class SampleRepoTest {
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         assertEquals(0, process.waitFor(), "the generator failed: " + output);
 
+        GENERATED.put(fixtureName, target);
         return target;
     }
+
 
     @Test
     @DisplayName("the generated repository is a working tree with all three sides in it")

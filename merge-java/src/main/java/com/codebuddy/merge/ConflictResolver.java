@@ -143,4 +143,25 @@ public interface ConflictResolver {
     default boolean requiresTypeContext() {
         return false;
     }
+
+    /**
+     * The strongest {@link AnalysisLevel} this resolver can reach for the conflict type it owns.
+     *
+     * <p>Declared on the resolver and recorded per resolution, because the two are genuinely
+     * different facts: this is the best evidence the resolver can bring to bear, while a
+     * {@link ConflictResolution} records the evidence it actually used — the weaker of the two
+     * whenever it had to answer from less. {@link TypeChangeConflictResolver} is the working example:
+     * it can reach {@link AnalysisLevel#PROJECT_TYPES} with a classpath and answers at
+     * {@link AnalysisLevel#PLATFORM_TYPES} without one, and both runs come from the same resolver.
+     * A resolution may therefore never record a level above this one.
+     *
+     * <p>Defaults to {@link AnalysisLevel#TEXT_LOCAL}, because a resolver that does not say which
+     * evidence it reads has not claimed any. Raising it is a claim a reviewer ends up reading — it
+     * decides what a resolution from this resolver is worth when it disagrees with another one about
+     * the same block — so it belongs at the declaration, where it can be checked, and not at each
+     * build site.
+     */
+    default AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_LOCAL;
+    }
 }

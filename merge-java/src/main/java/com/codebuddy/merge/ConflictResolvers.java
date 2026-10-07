@@ -48,7 +48,8 @@ public final class ConflictResolvers {
             new RenameConflictResolver(),
             new PackageChangeConflictResolver(),
             new StructuralChangeConflictResolver(),
-            new ApiIncompatibilityConflictResolver()
+            new ApiIncompatibilityConflictResolver(),
+            new MemberAddConflictResolver()
         ));
         return sortByPriority(resolvers);
     }

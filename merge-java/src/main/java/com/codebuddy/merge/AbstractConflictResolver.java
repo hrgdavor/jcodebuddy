@@ -108,6 +108,10 @@ public abstract class AbstractConflictResolver implements ConflictResolver {
     private ConflictResolution fallback(Conflict conflict) {
         return ConflictResolution.manual(conflict)
             .branchName(null)
+            // The objection's strength is the resolver's own basis: what it read is what it is
+            // objecting from, so a resolver that reads structure objects with more evidence than one
+            // that reads a line of text.
+            .analysisLevel(maxAnalysisLevel())
             .explanation(name() + " could not resolve " + conflict.getType()
                 + " automatically; a reviewer must choose.")
             .alternativePaths(optionsFor(conflict))
@@ -149,6 +153,7 @@ public abstract class AbstractConflictResolver implements ConflictResolver {
             .region(conflict.getRegion())
             .resolutionStrategy(strategy)
             .kind(kind)
+            .analysisLevel(maxAnalysisLevel())
             .sticky(stickyByDefault());
     }
 

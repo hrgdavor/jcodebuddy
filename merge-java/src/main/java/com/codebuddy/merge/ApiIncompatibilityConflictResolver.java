@@ -33,6 +33,19 @@ public final class ApiIncompatibilityConflictResolver extends AbstractConflictRe
         return ConflictType.API_INCOMPATIBILITY;
     }
 
+    /**
+     * {@link AnalysisLevel#TEXT_LOCAL}: the first public or protected declaration is parsed from a
+     * single line and compared as text, which is why two branches each adding a <em>different</em>
+     * member reads here as "the contract moved" when structurally the two members simply coexist.
+     * That gap is the point of the level: this resolver's objection is cheap to outrank by an answer
+     * that recognised the members, and it should be, because the objection cannot tell the two cases
+     * apart. Making it stronger means recognising the declarations, not raising this number.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_LOCAL;
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         // A public contract cannot be changed safely without seeing its callers.

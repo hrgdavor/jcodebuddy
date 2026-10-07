@@ -40,6 +40,16 @@ public final class ConstantAddConflictResolver extends AbstractConflictResolver 
         return ConflictType.CONSTANT_ADD;
     }
 
+    /**
+     * {@link AnalysisLevel#TEXT_FILE}: the constant block is read with per-line patterns across the
+     * code it was given, so the answer is about a declaration block of the file rather than about the
+     * conflicting lines alone. No type is resolved, so it is not a type level.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_FILE;
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         Map<String, String> branch1Constants = constantsIn(conflict.getBranch1Code());

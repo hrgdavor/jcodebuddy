@@ -11,18 +11,31 @@ The resolvers are the ones registered in
 [`ConflictResolvers.defaultResolvers()`](../../src/main/java/com/codebuddy/merge/ConflictResolvers.java),
 in registration order:
 
-| Resolver                             | Conflict type         | Declared handling | Sticky | Documentation                                                                            |
-| ------------------------------------ | --------------------- | ----------------- | ------ | ---------------------------------------------------------------------------------------- |
-| `ImportConflictResolver`             | `IMPORT_ADD`          | AUTO              | no     | [import-conflict-resolver](import-conflict-resolver/README.md)                           |
-| `CommentAddConflictResolver`         | `COMMENT_ADD`         | AUTO              | no     | [comment-add-conflict-resolver](comment-add-conflict-resolver/README.md)                 |
-| `ConstantAddConflictResolver`        | `CONSTANT_ADD`        | AUTO              | no     | [constant-add-conflict-resolver](constant-add-conflict-resolver/README.md)               |
-| `OverloadAddConflictResolver`        | `OVERLOAD_ADD`        | AUTO              | no     | [overload-add-conflict-resolver](overload-add-conflict-resolver/README.md)               |
-| `MethodBodyChangeConflictResolver`   | `METHOD_BODY_CHANGE`  | REVIEW            | no     | [method-body-change-conflict-resolver](method-body-change-conflict-resolver/README.md)   |
-| `TypeChangeConflictResolver`         | `TYPE_CHANGE`         | REVIEW            | no     | [type-change-conflict-resolver](type-change-conflict-resolver/README.md)                 |
-| `RenameConflictResolver`             | `VARIABLE_RENAME`     | STICKY            | yes    | [rename-conflict-resolver](rename-conflict-resolver/README.md)                           |
-| `PackageChangeConflictResolver`      | `PACKAGE_CHANGE`      | STICKY            | yes    | [package-change-conflict-resolver](package-change-conflict-resolver/README.md)           |
-| `StructuralChangeConflictResolver`   | `STRUCTURAL_CHANGE`   | MANUAL            | no     | [structural-change-conflict-resolver](structural-change-conflict-resolver/README.md)     |
-| `ApiIncompatibilityConflictResolver` | `API_INCOMPATIBILITY` | MANUAL            | no     | [api-incompatibility-conflict-resolver](api-incompatibility-conflict-resolver/README.md) |
+| Resolver                             | Conflict type         | Declared handling | Max evidence  | Sticky | Documentation                                                                            |
+| ------------------------------------ | --------------------- | ----------------- | ------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `ImportConflictResolver`             | `IMPORT_ADD`          | AUTO              | TEXT_FILE     | no     | [import-conflict-resolver](import-conflict-resolver/README.md)                           |
+| `CommentAddConflictResolver`         | `COMMENT_ADD`         | AUTO              | TEXT_LOCAL    | no     | [comment-add-conflict-resolver](comment-add-conflict-resolver/README.md)                 |
+| `ConstantAddConflictResolver`        | `CONSTANT_ADD`        | AUTO              | TEXT_FILE     | no     | [constant-add-conflict-resolver](constant-add-conflict-resolver/README.md)               |
+| `OverloadAddConflictResolver`        | `OVERLOAD_ADD`        | AUTO              | PROJECT_TYPES | no     | [overload-add-conflict-resolver](overload-add-conflict-resolver/README.md)               |
+| `MethodBodyChangeConflictResolver`   | `METHOD_BODY_CHANGE`  | REVIEW            | TEXT_LOCAL    | no     | [method-body-change-conflict-resolver](method-body-change-conflict-resolver/README.md)   |
+| `TypeChangeConflictResolver`         | `TYPE_CHANGE`         | REVIEW            | PROJECT_TYPES | no     | [type-change-conflict-resolver](type-change-conflict-resolver/README.md)                 |
+| `RenameConflictResolver`             | `VARIABLE_RENAME`     | STICKY            | TEXT_LOCAL    | yes    | [rename-conflict-resolver](rename-conflict-resolver/README.md)                           |
+| `PackageChangeConflictResolver`      | `PACKAGE_CHANGE`      | STICKY            | TEXT_LOCAL    | yes    | [package-change-conflict-resolver](package-change-conflict-resolver/README.md)           |
+| `StructuralChangeConflictResolver`   | `STRUCTURAL_CHANGE`   | MANUAL            | STRUCTURE     | no     | [structural-change-conflict-resolver](structural-change-conflict-resolver/README.md)     |
+| `ApiIncompatibilityConflictResolver` | `API_INCOMPATIBILITY` | MANUAL            | TEXT_LOCAL    | no     | [api-incompatibility-conflict-resolver](api-incompatibility-conflict-resolver/README.md) |
+| `MemberAddConflictResolver`          | `MEMBER_ADD`          | AUTO              | PROJECT_TYPES | no     | [member-add-conflict-resolver](member-add-conflict-resolver/README.md)                   |
+
+The *max evidence* column is
+[`ConflictResolver.maxAnalysisLevel()`](../../src/main/java/com/codebuddy/merge/ConflictResolver.java): the
+strongest [`AnalysisLevel`](../../src/main/java/com/codebuddy/merge/AnalysisLevel.java) a resolution from that
+resolver can rest on — `TEXT_LOCAL` (the block's own lines), `TEXT_FILE`, `STRUCTURE`, `PLATFORM_TYPES`, up to
+`PROJECT_TYPES` (the project's own types, resolved against a classpath the caller supplied). It is worth reading
+as a claim about the resolver's basis rather than as a score, because it decides what happens when several
+conflicts claim one block and disagree: an `AUTO` answer that strictly outranks the others applies, but only
+where it already accounts for what they were protecting ([DEC-045](../../../doc-hipster-entity/architecture/decisions/DEC-045.md)).
+`ApiIncompatibilityConflictResolver` sits at `TEXT_LOCAL` because it compares one line of text, which is precisely
+why a structural answer may outrank its objection — and why the number must not be raised without teaching the
+resolver to recognise declarations.
 
 The *declared handling* is the classification each
 [`ConflictType`](../../src/main/java/com/codebuddy/merge/ConflictType.java)

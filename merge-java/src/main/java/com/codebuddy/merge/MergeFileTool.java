@@ -40,9 +40,11 @@ import java.util.regex.Pattern;
  *       covers it, it is {@code AUTO}, it passed the gate, and its code accounts
  *       for the whole block ({@link #coversBlock}) - a resolution that answers
  *       only part of a mixed block would silently drop the rest, so the block
- *       stays. Blocks are disjoint by construction, so the safe subset is per
- *       block. Nothing is written unless {@link Builder#applyFixes(boolean)}
- *       asked for it.</li>
+ *       stays. A residual {@code STRUCTURAL_CHANGE} that another conflict on the
+ *       same block subsumes is not counted here: it is still emitted and still
+ *       reported, it just stops deciding ({@link #residualSubsumed}). Blocks are
+ *       disjoint by construction, so the safe subset is per block. Nothing is
+ *       written unless {@link Builder#applyFixes(boolean)} asked for it.</li>
  *   <li><b>Extract</b> every conflict that remains into a temporary fixture
  *       workspace ({@link ConflictFixtureWriter}): the three-way sources, the
  *       exact block, what each resolver said, and a copy of
@@ -510,7 +512,8 @@ public final class MergeFileTool {
         for (ConflictMarkerParser.Block block : parsed.blocks()) {
             String baseSlice = block.hasBase() ? block.base() : "";
             List<Conflict> detected = detector.detect(
-                reportedPath, baseSlice, block.ours(), block.theirs(), typeContext);
+                reportedPath, baseSlice, block.ours(), block.theirs(), typeContext,
+                block.hasBase());
             // The detector works on this block's slices, so a conflict's region is relative to the BLOCK. A reader
             // of the report is looking at the FILE, so the block's own region is stamped instead. That is also the
             // only thing that groups the conflicts sharing a block - and the page reads per block, because this
@@ -524,6 +527,12 @@ public final class MergeFileTool {
                 resolutions.add(resolver.resolve(conflict));
             }
 
+            // A residual with nothing of its own to say must not veto a block that
+            // another conflict already resolves. Read from `detected`, not from
+            // `conflicts`: stamping the block's file region onto every conflict above is
+            // what a report needs, and is exactly what erases the evidence this reads.
+            boolean residualSubsumed = residualSubsumed(detected, resolutions, block);
+
             reportedConflicts.addAll(conflicts);
 
 
@@ -531,8 +540,8 @@ public final class MergeFileTool {
 
 
 
-            BlockDecision decision = decide(block, conflicts, resolutions,
-                builder.applyRecordedDecisions);
+            BlockDecision decision = decide(block, conflicts, detected, resolutions,
+                builder.applyRecordedDecisions, residualSubsumed);
             if (decision.replacement() != null && containsMarker(decision.replacement())) {
                 // A replacement still carrying markers would re-open a conflict
                 // while claiming to fix it: leave the block and say why.
@@ -645,12 +654,23 @@ public final class MergeFileTool {
 
     private static BlockDecision decide(ConflictMarkerParser.Block block,
                                         List<Conflict> conflicts,
+                                        List<Conflict> detected,
                                         List<ConflictResolution> resolutions,
-                                        boolean applyRecordedDecisions) {
+                                        boolean applyRecordedDecisions,
+                                        boolean residualSubsumed) {
         ConflictType type = conflicts.isEmpty() ? null : conflicts.get(0).getType();
 
-        if (resolutions.size() == 1) {
-            ConflictResolution resolution = resolutions.get(0);
+        // A subsumed residual is dropped from the decision - it is still emitted and
+        // still reported (it reaches reportedConflicts and reportedResolutions), it just
+        // stops vetoing. Whatever remains is what decides the block.
+        List<ConflictResolution> deciding = residualSubsumed
+            ? resolutions.stream()
+                .filter(resolution -> resolution.getType() != ConflictType.STRUCTURAL_CHANGE)
+                .toList()
+            : resolutions;
+
+        if (deciding.size() == 1) {
+            ConflictResolution resolution = deciding.get(0);
             return switch (resolution.getKind()) {
                 case AUTO -> coversBlock(resolution, block)
                     ? new BlockDecision(Outcome.APPLIED_AUTO, type,
@@ -673,7 +693,7 @@ public final class MergeFileTool {
             };
         }
 
-        if (resolutions.isEmpty()) {
+        if (deciding.isEmpty()) {
             if (block.ours().equals(block.theirs())) {
                 return new BlockDecision(Outcome.APPLIED_IDENTICAL_SIDES, null,
                     "Both sides of the block are identical, so either one is the answer.",
@@ -685,35 +705,291 @@ public final class MergeFileTool {
                 null, true, resolutions);
         }
 
-        boolean anyManual = resolutions.stream()
+        // Claims that disagree are not all equal: an answer reached by parsing the project's types
+        // outranks one reached by comparing lines of text, and a weaker claim must not veto an answer
+        // that already accounts for whatever the weaker claim was protecting. See outranking(...).
+        ConflictResolution outranking = outranking(deciding, resolutions, detected, block);
+        if (outranking != null) {
+            return new BlockDecision(Outcome.APPLIED_AUTO, outranking.getType(),
+                outranking.getExplanation() + " " + outranked(deciding, outranking),
+                outranking.getResolvedCode(), false, resolutions);
+        }
+
+        boolean anyManual = deciding.stream()
             .anyMatch(r -> r.getKind() == ConflictResolution.ResolutionKind.MANUAL);
         if (anyManual) {
             return new BlockDecision(Outcome.LEFT_MANUAL, type,
-                joined(resolutions) + " Multiple conflicts claim this block and at least one is "
+                joined(deciding) + " Multiple conflicts claim this block and at least one is "
                     + "manual.",
                 null, true, resolutions);
         }
-        boolean anyReview = resolutions.stream()
+        boolean anyReview = deciding.stream()
             .anyMatch(r -> r.getKind() == ConflictResolution.ResolutionKind.REVIEW);
         if (anyReview) {
             return new BlockDecision(Outcome.LEFT_REVIEW, type,
-                joined(resolutions) + " Multiple conflicts claim this block and at least one "
+                joined(deciding) + " Multiple conflicts claim this block and at least one "
                     + "needs review.",
                 null, true, resolutions);
         }
-        boolean anyDeferred = resolutions.stream()
+        boolean anyDeferred = deciding.stream()
             .anyMatch(r -> r.getKind() == ConflictResolution.ResolutionKind.DEFERRED);
         if (anyDeferred) {
             return new BlockDecision(Outcome.LEFT_DEFERRED, type,
-                joined(resolutions) + " Recorded decisions claim part of this block; re-run with "
+                joined(deciding) + " Recorded decisions claim part of this block; re-run with "
                     + "applyRecordedDecisions(true) only after confirming they still compose.",
                 null, false, resolutions);
         }
         return new BlockDecision(Outcome.LEFT_MULTIPLE_AUTOMATIC, type,
-            joined(resolutions) + " Several automatic resolutions claim this block; they cannot "
+            joined(deciding) + " Several automatic resolutions claim this block; they cannot "
                 + "be composed safely, so it is left for a resolver that understands the whole "
                 + "shape.",
             null, true, resolutions);
+    }
+
+    /**
+     * True when the block's structural residual has nothing of its own to say, so it
+     * must not veto a decision another conflict already makes (unified plan step 4.5).
+     *
+     * <p>A residual is emitted <b>alongside</b> the recognised conflicts deliberately - a
+     * residual that <em>replaced</em> them once lost a mechanical import addition - but
+     * the application rule needs <em>exactly one</em> resolution to claim a block, so an
+     * alongside-emitted residual carrying no evidence of its own turned every decided
+     * block into {@code LEFT_MANUAL}. The residual is still reported; it stops vetoing.
+     *
+     * <p>Two shapes are subsumed, each decided by the strongest evidence available:
+     *
+     * <ul>
+     *   <li><b>a base side is present</b> - the residual's region is the span of base
+     *       lines that neither branch kept, so it has nothing of its own exactly when
+     *       another conflict's region <em>covers</em> that span. A residual that reaches a
+     *       line no other conflict places keeps its veto, which is the case the
+     *       alongside-emission exists for.</li>
+     *   <li><b>no base side</b> - git's default <em>merge</em> conflict style carries no
+     *       base (only {@code diff3}/{@code zdiff3} do), so every claim the residual makes
+     *       is relative to a base this run does not have and it can place no line at all.
+     *       It is then subsumed only by one <em>complete automatic</em> answer: a single
+     *       other conflict that is {@code AUTO} and whose code accounts for the whole
+     *       block. Anything less - a review, a partial answer, or several automatic
+     *       answers that cannot compose - leaves the veto in place.</li>
+     * </ul>
+     */
+    static boolean residualSubsumed(List<Conflict> detected,
+                                    List<ConflictResolution> resolutions,
+                                    ConflictMarkerParser.Block block) {
+        int residual = -1;
+        for (int index = 0; index < detected.size(); index++) {
+            if (detected.get(index).getType() == ConflictType.STRUCTURAL_CHANGE) {
+                residual = index;
+                break;
+            }
+        }
+        if (residual < 0) {
+            return false;
+        }
+
+        List<Integer> others = new ArrayList<>(detected.size());
+        for (int index = 0; index < detected.size(); index++) {
+            if (index != residual) {
+                others.add(index);
+            }
+        }
+        if (others.isEmpty()) {
+            // Nothing else claims the block, so the residual is the only thing that knows
+            // it is unresolved: it keeps its veto.
+            return false;
+        }
+
+        Region residualRegion = detected.get(residual).getRegion();
+        if (residualRegion.isKnown()) {
+            return others.stream().anyMatch(
+                index -> coversRegion(detected.get(index).getRegion(), residualRegion));
+        }
+
+        if (others.size() != 1) {
+            return false;
+        }
+        ConflictResolution only = resolutions.get(others.get(0));
+        return only.getKind() == ConflictResolution.ResolutionKind.AUTO
+            && coversBlock(only, block);
+    }
+
+    /**
+     * True when {@code outer} spans every line of {@code inner}.
+     *
+     * <p>Both must be known: an unknown region covers nothing, so a conflict that cannot
+     * be located keeps the residual's veto rather than dropping it on missing
+     * information.
+     */
+    static boolean coversRegion(Region outer, Region inner) {
+        return outer.isKnown() && inner.isKnown()
+            && outer.startLine() <= inner.startLine()
+            && outer.endLine() >= inner.endLine();
+    }
+
+    /**
+     * The one resolution that outranks every other claim on this block, or {@code null} when no
+     * single one does.
+     *
+     * <h2>Why claims are not all equal</h2>
+     *
+     * <p>Several conflicts can claim one block, and the rule above treats them alike: any manual
+     * objection leaves the block, and several automatic answers that cannot be composed leave it too.
+     * Treating them alike is wrong in one direction, because the claims are not equally well founded.
+     * Comparing the first public method line of each side as text cannot tell "both branches added a
+     * <em>different</em> member" from "both branches changed the one member", while recognising the
+     * two declarations can — and the weaker claim used to veto the stronger answer. That is the same
+     * defect {@link #residualSubsumed} fixes for the structural residual, generalised from "a claim
+     * with no evidence of its own" to "a claim with weaker evidence than a decision that exists".
+     *
+     * <h2>The rule</h2>
+     *
+     * <p>A claim outranks the others when all of these hold:
+     *
+     * <ul>
+     *   <li>it is {@code AUTO}, so it may be applied at all — the level never promotes a review or a
+     *       manual answer, and a block whose best claim needs a human still gets one;</li>
+     *   <li>its code accounts for the whole block ({@link #coversBlock()}), so applying it cannot
+     *       drop part of a mixed block;</li>
+     *   <li>its {@link AnalysisLevel} is <em>strictly</em> stronger than every other claim's — equal
+     *       evidence decides nothing, because two analyses of the same strength disagreeing is
+     *       exactly what a human has to settle;</li>
+     *   <li>it {@link #accountsFor accounts for} every claim it outranks, so nothing a weaker claim
+     *       was protecting is silently dropped. This is what keeps the level from becoming a licence:
+     *       a widening that adopts one side outranks a residual only where its region already covered
+     *       what the residual described, and a residual reaching a line no other conflict places
+     *       still keeps its veto;</li>
+     *   <li>no other claim is {@code DEFERRED}: a recorded human decision is a decision rather than
+     *       weaker evidence, so it is never outranked.</li>
+     * </ul>
+     *
+     * <p>Two claims can each outrank the rest only by both being strictly stronger than each other,
+     * which cannot happen — so either exactly one winner exists or none does.
+     */
+    static ConflictResolution outranking(List<ConflictResolution> claims,
+                                        List<ConflictResolution> all,
+                                        List<Conflict> detected,
+                                        ConflictMarkerParser.Block block) {
+        ConflictResolution winner = null;
+        for (ConflictResolution candidate : claims) {
+            if (!outranks(candidate, claims, all, detected, block)) {
+                continue;
+            }
+            if (winner != null) {
+                return null;
+            }
+            winner = candidate;
+        }
+        return winner;
+    }
+
+    /** True when {@code candidate} outranks every other claim; see {@link #outranking}. */
+    private static boolean outranks(ConflictResolution candidate,
+                                    List<ConflictResolution> claims,
+                                    List<ConflictResolution> all,
+                                    List<Conflict> detected,
+                                    ConflictMarkerParser.Block block) {
+        if (candidate.getKind() != ConflictResolution.ResolutionKind.AUTO) {
+            return false;
+        }
+        if (!coversBlock(candidate, block)) {
+            return false;
+        }
+        Region candidateRegion = detectorRegionOf(candidate, all, detected);
+        for (ConflictResolution other : claims) {
+            if (other == candidate) {
+                continue;
+            }
+            if (other.getKind() == ConflictResolution.ResolutionKind.DEFERRED) {
+                return false;
+            }
+            if (!candidate.hasStrongerAnalysisThan(other)) {
+                return false;
+            }
+            if (!accountsFor(candidate, candidateRegion, other,
+                    detectorRegionOf(other, all, detected))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The region the detector gave the conflict this resolution answers, <em>before</em> the report
+     * stamped every conflict of a block with the block's own region.
+     *
+     * <p>Read from {@code detected} rather than from the resolution, because the stamp makes every
+     * claim's region identical — which would make "the winner's region covers the claim's" true for
+     * every pair and turn the one protection this rule has into a formality. The very first version of
+     * {@link #outranking} read the stamped region and applied a block the residual was guarding.
+     *
+     * <p>Identity is the lookup key: {@code claims} holds references into {@code all}, and
+     * {@code all} is index-aligned with {@code detected} (both built in one loop over the block).
+     */
+    private static Region detectorRegionOf(ConflictResolution resolution,
+                                           List<ConflictResolution> all,
+                                           List<Conflict> detected) {
+        for (int index = 0; index < all.size() && index < detected.size(); index++) {
+            if (all.get(index) == resolution) {
+                return detected.get(index).getRegion();
+            }
+        }
+        return Region.unknown();
+    }
+
+    /**
+     * True when applying {@code winner} leaves nothing that {@code claim} was guarding behind.
+     *
+     * <p>Two independent ways to be accounted for, and either is enough:
+     *
+     * <ul>
+     *   <li><b>the winner's region covers the claim's</b> — the winner is about everything the claim
+     *       is about, which is the test {@link #residualSubsumed} already applies to the structural
+     *       residual. This is what carries a decided widening over a residual that describes the same
+     *       declaration, and equally what <em>stops</em> it when the residual reaches a line the
+     *       widening's region does not;</li>
+     *   <li><b>the winner's code keeps every line of both of the claim's sides</b> — a
+     *       {@code KEEP_BOTH}/{@code MERGE_SAFE} answer that includes both branches entirely cannot be
+     *       dropping what the claim was about. A {@code PREFER_BRANCH1/2} answer does not pass this
+     *       test by construction, because it drops the other side on purpose, which is why the region
+     *       test above is the one that has to carry those.</li>
+     * </ul>
+     */
+    private static boolean accountsFor(ConflictResolution winner, Region winnerRegion,
+                                       ConflictResolution claim, Region claimRegion) {
+        if (coversRegion(winnerRegion, claimRegion)) {
+            return true;
+        }
+        Set<String> winnerLines = normalisedLineSet(winner.getResolvedCode());
+        return keepsEveryLine(winnerLines, claim.getBranch1Code())
+            && keepsEveryLine(winnerLines, claim.getBranch2Code());
+    }
+
+    /** True when every non-blank line of {@code side} appears in {@code winnerLines}. */
+    private static boolean keepsEveryLine(Set<String> winnerLines, String side) {
+        for (String line : normalisedLineSet(side)) {
+            if (!winnerLines.contains(line)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The sentence naming what was outranked and why, so a reviewer can see that an objection lost
+     * rather than that it was never raised — and can judge the comparison for themselves.
+     */
+    private static String outranked(List<ConflictResolution> claims, ConflictResolution winner) {
+        StringBuilder text = new StringBuilder("Outranked on this block by stronger evidence (")
+            .append(winner.getAnalysisLevel()).append("):");
+        for (ConflictResolution other : claims) {
+            if (other == winner) {
+                continue;
+            }
+            text.append(" [").append(other.getType()).append('/').append(other.getKind())
+                .append(" at ").append(other.getAnalysisLevel()).append("] ")
+                .append(other.getExplanation());
+        }
+        return text.toString();
     }
 
     /**

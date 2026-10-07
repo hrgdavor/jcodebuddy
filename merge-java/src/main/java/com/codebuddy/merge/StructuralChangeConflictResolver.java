@@ -23,6 +23,20 @@ public final class StructuralChangeConflictResolver extends AbstractConflictReso
         return ConflictType.STRUCTURAL_CHANGE;
     }
 
+    /**
+     * {@link AnalysisLevel#STRUCTURE}: this resolver never decides anything, so the level describes
+     * what it <em>objects from</em> — and that is what decides whether the objection keeps its veto
+     * when another conflict on the same block reaches an answer. One of the residual's triggers
+     * compares member-signature sets through {@link DeclarationScanner}, so the objection rests on
+     * recognised declarations rather than on lines; its line-set summary in
+     * {@link #describeOptions(Conflict)} is the weaker half of the same evidence, which is why the
+     * declaration is not raised above this.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.STRUCTURE;
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         // Never guesses. Returning null routes to the manual fallback, which is

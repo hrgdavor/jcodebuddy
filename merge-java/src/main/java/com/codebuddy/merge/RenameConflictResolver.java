@@ -37,6 +37,15 @@ public final class RenameConflictResolver extends AbstractConflictResolver {
     }
 
     /**
+     * {@link AnalysisLevel#TEXT_LOCAL}: the first declared name of each side, taken from a single
+     * line by pattern. The name is the whole of what this conflict is about.
+     */
+    @Override
+    public AnalysisLevel maxAnalysisLevel() {
+        return AnalysisLevel.TEXT_LOCAL;
+    }
+
+    /**
      * A rename is a user intent, so the answer must be reusable next time.
      */
     @Override

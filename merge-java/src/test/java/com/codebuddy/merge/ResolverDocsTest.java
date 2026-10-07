@@ -150,6 +150,17 @@ class ResolverDocsTest {
             if (!index.contains("(" + folder + "/README.md)")) {
                 problems.add("docs/resolvers/README.md does not link to " + folder + "/README.md");
             }
+            // The declared evidence level is a claim a reviewer reads, and it decides what happens
+            // when a resolution from this resolver disagrees with another about one block. Keeping it
+            // only in the class would hide the claim; the index has to carry it beside the resolver.
+            boolean levelListed = index.lines().anyMatch(line ->
+                line.contains("(" + folder + "/README.md)")
+                    && line.contains(resolver.maxAnalysisLevel().name()));
+            if (!levelListed) {
+                problems.add("docs/resolvers/README.md does not state that "
+                    + resolver.getClass().getSimpleName() + " reaches at most "
+                    + resolver.maxAnalysisLevel() + " on the row that links to it");
+            }
         }
         assertTrue(problems.isEmpty(), String.join(System.lineSeparator(), problems));
     }

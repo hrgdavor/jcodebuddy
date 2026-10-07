@@ -225,6 +225,7 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 | the `.kilo` metadata-arena plan                                                   | steps 2.1–2.2                     | **done** — closed into steps 2.1, 2.2                                                              |
 | the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md), and [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) | steps 3.0a–3.0k (the one metadata engine in `jcodebuddy-core`, then moving this generator onto it **as one consumer**); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | **partly done** — done: 3.0a, 3.0b, 3.0c, 3.0d, 3.0e, 3.0f, 3.0g, 3.0h, 3.0i, 3.0k, 3.1, 3.2, 3.3; still open: 3.0j, 3.10, 3.11, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9 |
 | [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md)       | steps 4.1–4.4                     | **partly done** — done: 4.1; still open: 4.2, 4.3, 4.4                                             |
+| the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, and upstream's test vectors | **new** — nothing of it is implemented; the plan is the only record |
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **still open** — every step this row scheduled is unticked in § Progress (5.1, 5.2, 5.3)           |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **still open** — every step this row scheduled is unticked in § Progress (5.4, 8.2)                |
 | [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5                     | **still open** — every step this row scheduled is unticked in § Progress (6.1, 6.2, 6.3, 6.4, 6.5) |
@@ -2903,6 +2904,315 @@ recognised conflict explains still does.
 **Done when:** `LEFT_MANUAL` for a decided conflict is explained by something other than a structural
 residual with nothing of its own to say.
 
+**Done 2026-10-07 — option (a), plus the half of it this step's own measurement needed.**
+
+- **The veto was never in the resolver.** `StructuralChangeConflictResolver` was already right - the residual
+  is `MANUAL`, and stays `MANUAL`. What left the block is `MergeFileTool.decide`, which replaces a block only
+  when *exactly one* resolution claims it, and the residual is emitted alongside the recognised conflicts on
+  purpose.
+- **A subsumed residual is dropped from the decision and kept in the report.** `MergeFileTool.residualSubsumed`
+  reads the detector's own regions - from `detected`, not from the copies whose region is stamped with the
+  block's for the report, because that stamp is what a reader needs and is exactly what erases this evidence -
+  and answers true when another conflict's region **covers** the residual's.
+- **The base-less shape is not an afterthought: it is the shape this step measured.** Git's default `merge`
+  style writes no base side (only `diff3`/`zdiff3` do), so the measured fixture runs with `baseCode = ""`,
+  every region comes out **unknown**, and a region rule alone would have left that block exactly as it was.
+  Without a base the residual can place no line at all, because every claim it makes is relative to a base the
+  run does not have, so it is subsumed only by one **complete automatic** answer: a single other conflict that
+  is `AUTO` and whose code accounts for the whole block.
+- **What must not change, does not.** A residual that reaches a line no other conflict places keeps its veto -
+  with a base the region test fails, and without one the type change is a `REVIEW` because both declarations
+  are `Unknown` - and so does a residual whose only sibling is a review, a partial answer, or several
+  automatic answers that cannot compose. Measured on fixtures: the subsumed block applies (exit 0) and the
+  applied code compiles; the contested one stays `LEFT_MANUAL` (exit 1) with its markers, while its own report
+  still shows the widening that *was* decided. `MIXED_CONFLICT_FILE` - an overload clash plus a residual - is
+  unchanged at `LEFT_MANUAL` for the same reason, which is what makes this a rule about evidence rather than a
+  loosening.
+- **Step 4.1's pin is updated rather than deleted**, because it asserted the old behaviour by name: the block
+  is no longer left "regardless of the classpath". Its halves now assert that the classpath changes what the
+  tool *does* - with it the widening is a complete automatic answer and the block is written; without it the
+  only answer is a review and the block waits. The old behaviour is recorded here rather than edited away in
+  [`CONFLICT_FILE_TOOL.md`](../merge-java/docs/CONFLICT_FILE_TOOL.md), which now states the rule.
+
+**Gate:** `MergeFileToolTest` — 26 tests, including `subsumedResidualDoesNotVeto` (the block applies, the
+applied code compiles, and the residual is still in the report JSON) and `unexplainedResidualStillVetoes`.
+`mvn -o -pl merge-java test` — **719 tests, 0 failures, 0 errors** (717 before this step). `bun test` in
+[`merge-java/review`](../merge-java/review) — **15 pass, 3 fail**, and all three are
+`EPERM: uv_spawn 'bun'` in `src_build/build.test.js`: the file sandbox refusing the piped-stdio spawn the page
+build itself needs, not a result of this change.
+
+---
+
+#### 4B — the JetBrains port: steps 4.7–4.13
+
+> **Why this is a lettered subsection and not `## Phase 9`.** Phases 0–8 and the `9.x` cleanup are already
+> numbered, and the cleanup's own steps are cited by number across this file. Renumbering them to make room
+> would break those references for a labelling gain, which [`§ 1`](#1-how-to-work-this-file)'s
+> "renumber nothing" rule does not ask for. The JetBrains work is nonetheless a **phase-sized block of
+> merge-java work** and is written as one; the title says so. Steps 4.7–4.13 are new and belong to Phase 4,
+> placed here rather than beside 4.1–4.5 because they follow 4.5/4.6 and depend on both.
+
+This is the **port of JetBrains' merge and diff engine** into `merge-java`, asked for on 2026-10-07. The
+whole of the extracted research — every upstream path, licence obligation, algorithm, decision rule and
+test vector — is in
+[`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md). **Read it before starting
+4.7; it is the reference these steps are written against, and it corrects three inaccuracies in the
+original instruction** (the test path is `tests/testSrc/`, not `test/`; the algorithms live in
+`platform/util/diff`, not `diff-impl`; the engine is Kotlin, not Java).
+
+| Step | What                                                                                        | Who   | Size |
+| ---- | ------------------------------------------------------------------------------------------- | ----- | ---- |
+| 4.7  | Sources, licence and the pinned upstream checkout                                           | agent | S    |
+| 4.8  | The text tier: line + word Myers diff, and the whitespace policies                          | agent | L    |
+| 4.9  | The merge tier: range building and the two word-level auto-resolve passes                   | agent | L    |
+| 4.10 | Whitespace policy as a caller-visible option, threaded through detection and resolution     | agent | M    |
+| 4.11 | `AnalysisLevel` gains the intra-line evidence level                                         | agent | S    |
+| 4.12 | The conflict **shape** ported onto detection, beside the existing domain taxonomy           | agent | M    |
+| 4.13 | Upstream test vectors, plus the randomized property test                                    | agent | M    |
+
+**Ordering.** 4.7 gates everything. Within the rest: 4.8 → 4.9 → 4.10 are a chain; 4.11 and 4.12 depend
+on 4.9; 4.13 is last because it measures the whole port. 4.12 is the step that makes the tool
+*measurably* better on non-overlapping changes, and 4.9 is the step that makes it better on
+non-overlapping changes *within one line*.
+
+### 4.7 — Sources, licence and the pinned upstream checkout
+**Who:** agent · **Size:** S
+
+Everything downstream needs the upstream files available and the licence position settled, and both are
+missing today. This step produces a **reproducible, citation-quality reference** — not a vendored copy
+of someone else's source.
+
+**Do:**
+
+1. **Recreate the checkout at the pinned commit.** The commands, and the one non-obvious failure mode
+   (`--no-checkout` plus `sparse-checkout set` leaves an *empty working tree* until an explicit
+   `checkout`), are in
+   [`JETBRAINS_PORT.md` § 11](../merge-java/docs/JETBRAINS_PORT.md). It lives under `.tmp/` — gitignored
+   scratch per root `AGENTS.md` § 2 — and is **never a build input**. Record the commit hash the port was
+   read at (`9f5f0342…`, 2026-10-07) in the port document; a moving `master` is not a citation.
+2. **Write `merge-java/THIRD_PARTY_NOTICES.md`** carrying: the Apache 2.0 text or a pointer to it, the
+   upstream repository and commit, upstream's `NOTICE`, and the list of files derived from upstream with
+   what changed about each. [`JETBRAINS_PORT.md` § 1](../merge-java/docs/JETBRAINS_PORT.md) states the four
+   obligations; this step discharges all four.
+3. **Establish the derived-file header and prove it is applied.** Every file under
+   `com.codebuddy.merge.jetbrains` opens with: the retained Apache 2.0 / JetBrains line, the upstream path
+   and pinned commit, and a one-line "derived; changed by translation from Kotlin and by removal of the
+   IntelliJ dependency". Add a test (`JetBrainsAttributionTest`) that walks the package and fails on a file
+   without it — the same enforcement shape `GeneratorGuardTest` uses, because an attribution rule that is
+   only written down is the rule that rots.
+4. **Confirm the package skeleton and the three tiers** named in
+   [`JETBRAINS_PORT.md` § 5.1](../merge-java/docs/JETBRAINS_PORT.md) — `text`, `merge`, adapter — including
+   the tier property that makes the vectors portable: everything up to `merge` must compile and test with
+   **no reference to `Conflict`, `ConflictResolution` or any other type of this module**.
+
+**Gate:** `MODULE` for `merge-java` green (the empty packages and the attribution test compile and pass);
+`JetBrainsAttributionTest` fails when a header is removed, demonstrated once by hand; a fresh checkout of
+the upstream repository at the pinned commit reproduces the file list in
+[`JETBRAINS_PORT.md` § 3](../merge-java/docs/JETBRAINS_PORT.md).
+
+**Done when:** a reader can reproduce the source material, and every derived file says where it came from
+and what was changed.
+
+### 4.8 — The text tier: line and word comparison, and the whitespace policies
+**Who:** agent · **Size:** L
+
+The module has **no diff algorithm**. `ConflictDetectionService` decides what changed with
+`line.trim()` inside a `LinkedHashSet` — a set-membership test, not a comparison — so it cannot tell
+"both sides replaced this region" from "both sides inserted here", cannot locate a change, and cannot see
+below the line. JetBrains' first pass is a line diff and its second pass is a word diff over the changed
+blocks; this step builds both.
+
+**Do:** implement the `com.codebuddy.merge.jetbrains.text` tier described in
+[`JETBRAINS_PORT.md` § 5.1](../merge-java/docs/JETBRAINS_PORT.md):
+
+- `ComparisonPolicy` — `DEFAULT`, `TRIM_WHITESPACES`, `IGNORE_WHITESPACES`
+  ([upstream: `ComparisonPolicy.kt`](../merge-java/docs/JETBRAINS_PORT.md)). Semantics per
+  [`§ 5.6`](../merge-java/docs/JETBRAINS_PORT.md): `TRIM_WHITESPACES` ignores a line's leading and
+  trailing whitespace only; `IGNORE_WHITESPACES` ignores whitespace throughout — **two different
+  operations**, which is precisely what our `line.trim()` conflates.
+- A **line diff** producing an ordered list of change ranges, and a **word diff** over a changed block
+  producing inner fragments. Take from upstream's `ByLineRt` / `ByWordRt` the **word-boundary rule and
+  the policy handling**; implement the Myers search natively rather than translating those classes, and
+  say in the header why ([`§ 3.2`](../merge-java/docs/JETBRAINS_PORT.md)'s note is the reason: they are
+  wired to `DiffConfig`, `FairDiffIterable` and the cancellation model).
+- Refuse rather than degrade on pathological input: a bounded table or a size guard, with a named failure,
+  in the shape upstream's `DiffTooBigException` uses.
+
+**Do not** make the policy or the size bound a process-global switch. Upstream's `DiffConfig` is mutable
+global state; [`§ 7`](../merge-java/docs/JETBRAINS_PORT.md) records that a library must not have one, so
+both are parameters.
+
+**Gate:** `MODULE` for `merge-java` green, with the tier's own tests: the line diff's ranges against the
+expectations transcribed from `LineComparisonUtilTest` and `WordComparisonUtilTest`; the three policies
+against `IgnoreComparisonUtilTest`; and a test that the tier compiles with no import from this module's
+merge model.
+
+**Done when:** "what changed, and where, and down to which word" is a question the module can answer.
+
+### 4.9 — The merge tier: range building and the two word-level resolve passes
+**Who:** agent · **Size:** L
+
+This is the core prize, and the step that removes the class of false conflict we are worst at: two
+branches editing **different words of the same line** are, to us, one line-level conflict escalated to a
+human.
+
+**Do:** implement `com.codebuddy.merge.jetbrains.merge` per
+[`JETBRAINS_PORT.md` § 5.2–5.4](../merge-java/docs/JETBRAINS_PORT.md):
+
+1. **`MergeRange` + `MergeRangeUtil.getMergeType`** — the emptiness × equality decision table
+   transcribed as [`§ 5.2`](../merge-java/docs/JETBRAINS_PORT.md)'s table, including the two rules we are
+   missing: a conflict is resolvable **only when both sides are non-empty**, and the
+   both-sides-inserted case is a **refusal**, because two different insertions at one point have no
+   correct order. Honour `trueEquality`: when sides are policy-equal but not byte-equal the type is still
+   `MODIFIED` and **both** sides report as changed.
+2. **`MergeResolveUtil.tryResolve`** — the `SimpleHelper` walk of
+   [`§ 5.3`](../merge-java/docs/JETBRAINS_PORT.md), **with its whitespace retry**: run with `DEFAULT`, and
+   on a refusal run again with `IGNORE_WHITESPACES`.
+3. **`MergeResolveUtil.tryGreedyResolve`** — the `GreedyHelper` of
+   [`§ 5.4`](../merge-java/docs/JETBRAINS_PORT.md), with its deletion-applying behaviour and its
+   equal-insertions-append-the-shorter rule. **The choice of strategy is a parameter, never a global**
+   ([`§ 7`](../merge-java/docs/JETBRAINS_PORT.md)), and the chosen strategy is recorded on the resolution.
+4. **The boundary rules of [`§ 6`](../merge-java/docs/JETBRAINS_PORT.md), as tests, not as comments.**
+   Upstream may trade correctness for resolve-rate because a person reviews and undoes every result; our
+   resolutions can be written to disk with nobody watching, so:
+   - a pass result whose inputs had **any deletion on either side** is at most `REVIEW`, never `AUTO`;
+   - a pass that succeeded **only** under `IGNORE_WHITESPACES` carries a warning naming the policy,
+     because the result is not byte-identical to either input;
+   - a modify/delete-shaped block is never auto-resolved — upstream encodes this twice, and we take both,
+     as a **cross-check** on `DESIGN_NEVER_AUTO_RESOLVED.md` § 2 rather than a new rule.
+
+**`DESIGN_NEVER_AUTO_RESOLVED.md` is not relaxed by this step.** Say so in the step's commit message, and
+add the test that proves it: the three boundary rules above, each with a vector that would fail if the
+rule were dropped.
+
+**Gate:** `MODULE` for `merge-java` green, with `MergeResolveUtilTest`'s vectors ported
+([`§ 5.3`-`5.4`](../merge-java/docs/JETBRAINS_PORT.md)), the three boundary tests, and a test that the
+greedy strategy is reachable only through the parameter.
+
+**Done when:** a conflict inside a single line is resolved when the edits do not interfere, and refused
+with a reason when they do.
+
+### 4.10 — Whitespace policy as a caller-visible option
+**Who:** agent · **Size:** M
+
+[`§ 8`](../merge-java/docs/JETBRAINS_PORT.md) records this as a **real gap**: the module has no
+whitespace policy at all. A branch that re-indents a block the other branch edited reads as a conflict
+today, and there is no way for a caller to say otherwise.
+
+**Do:** thread the policy from 4.8 through detection and resolution:
+
+- `ConflictDetectionService`'s line-level primitives (`normalisedLines`, `residualLines`,
+  `keptByBothBranches`, `spanNotKeptByBoth`) currently hardcode `line.trim()`. Give them the policy, and
+  keep `DEFAULT` the default so existing behaviour is unchanged unless a caller asks.
+- `MergeFileTool` grows the flag (`--whitespace=default|trim|ignore`), and it is reported in the merge
+  report so a resolution records the policy that produced it — a resolution whose basis a reviewer cannot
+  see is the failure mode `warnings` and `AnalysisLevel` already exist to prevent.
+- Recording the policy on the resolution is what makes a replayed decision safe: the same decision under
+  a different policy is a different decision.
+
+**Gate:** `MODULE` for `merge-java` green. The acceptance test is
+[`§ 10.5`](../merge-java/docs/JETBRAINS_PORT.md)'s pair: the same three texts produce **one `CONFLICT`
+covering the whole block under `DEFAULT`** and **five well-typed changes under `IGNORE_WHITESPACES`**,
+with the five-change case auto-applying to the exact expected content.
+
+**Done when:** whitespace churn stops being a conflict, and the choice is visible where the decision is
+read.
+
+### 4.11 — `AnalysisLevel` gains the intra-line evidence level
+**Who:** agent · **Size:** S
+
+Step 4.6 built the evidence scale so stronger analysis outranks a weaker objection. Its levels are
+`TEXT_LOCAL` → `TEXT_FILE` → `STRUCTURE` → `PLATFORM_TYPES` → `PROJECT_TYPES`, and
+[`§ 8`](../merge-java/docs/JETBRAINS_PORT.md) finds the hole: **`TEXT_LOCAL` is described as "the
+conflicting sides compared as text … line sets", which is a line-level notion of "text".** A
+word-characterised answer reads *within* a line — better than line sets, weaker than a whole-file region
+— and today it has nowhere to be recorded.
+
+**Do:** add `TEXT_INTRALINE` between `TEXT_LOCAL` and `TEXT_FILE`, with javadoc stating what makes it
+strictly stronger than `TEXT_LOCAL` (it locates a change to word granularity inside the block rather than
+comparing line sets) and strictly weaker than `TEXT_FILE` (it still reads nothing outside the block).
+Its `strength` is stated per constant, as the enum's own rule requires, so inserting it cannot silently
+reshuffle the order.
+
+Then let 4.9's resolvers **declare** it: `maxAnalysisLevel()` is `TEXT_INTRALINE`, and a resolution
+records the level it actually reached — `TEXT_LOCAL` when the pass refused and only line sets were read.
+
+**Gate:** `AnalysisLevelTest` extended: the new level orders correctly in both directions;
+no resolution of the new resolvers records a level above its resolver's maximum (the invariant 4.6
+established); and a resolution that fell back to line sets records `TEXT_LOCAL`, not `TEXT_INTRALINE`.
+
+**Done when:** the evidence scale can describe the analysis the port added, so arbitration can use it.
+
+### 4.12 — The conflict shape, ported onto detection
+**Who:** agent · **Size:** M
+
+The port adds a second, **orthogonal** taxonomy, and
+[`§ 8`](../merge-java/docs/JETBRAINS_PORT.md) is explicit that both are needed: our `ConflictType` is the
+*domain kind* (twelve types — an import addition, an overload clash), upstream's
+`{INSERTED, DELETED, MODIFIED, CONFLICT}` is the *shape* of the change. A domain type without a shape
+cannot say "both sides inserted here", which is exactly what a reviewer needs to see and what the
+residual-veto problem at step 4.5 is a symptom of.
+
+**Do:** every `Conflict` gains a shape, computed by 4.9's `getMergeType`, and it is:
+
+- **reported** — `MergeReportWriter` writes it, and the `review/` page renders it beside the type, so a
+  reviewer reads "import addition, both sides inserted" rather than only the first half;
+- **used by the decision** — a shape that is `INSERTED` on **one** side with the other side unchanged is
+  the case our line-level detection calls a structural change and the shape calls mechanical. That is
+  the measured defect from 4.5/4.6 (`LEFT_MANUAL` for an edit that needs no decision) and this is the
+  general form of its fix, with 4.9's word-level typing beneath it;
+- **additive only** — the shape informs *what is claimed and how it is explained*. It never promotes a
+  `REVIEW` or `MANUAL` into application; that remains `DESIGN_NEVER_AUTO_RESOLVED.md`'s rule and
+  `MergeFileTool.decide`'s.
+
+Keep `ConflictType` unchanged. Adding shapes is a widening of the model, not a replacement of the
+taxonomy, and a conflict whose shape cannot be computed (a base-less merge, where every region is
+unknown — the shape 4.5 measured) records that rather than guessing.
+
+**Gate:** `MODULE` for `merge-java` green, with: a regression test that the step-4.5 and step-4.6
+fixtures now report their shape and are still decided the same way (or better, with the reason named); a
+test that a base-less conflict records an unknown shape and keeps its current behaviour; and a test that
+no shape can turn a `MANUAL` resolution into an applied one.
+
+**Done when:** the report says what kind of change a conflict is as well as what domain it is in, and the
+decision uses it where it makes an answer mechanical.
+
+### 4.13 — Upstream test vectors, and the randomized property test
+**Who:** agent · **Size:** M
+
+The instruction asked for JetBrains' test cases to be integrated, and this is that step.
+[`§ 10`](../merge-java/docs/JETBRAINS_PORT.md) transcribes the vectors; this step lands them and adds
+the one property worth taking from the randomized suites.
+
+**Do:**
+
+1. **Land the four vector sets as fixtures.** `§ 10.1` change types, `§ 10.2` word-level resolves,
+   `§ 10.3` non-conflicting auto-apply with its remaining-change counts, `§ 10.5` the whitespace pair —
+   as `src/test/resources/fixtures/jetbrains-*` in the `THREE_WAY_FIXTURES.md` layout, so the existing
+   `ThreeWayFixture` harness runs them without a new loader. Note that the upstream `_` is a line
+   separator and that `§ 10.2`'s resolve vectors carry **expected content**, not just a verdict.
+2. **Land the refusal vectors too** (`§ 10.4`), including the **control** row. The control is the point:
+   it proves the refusal comes from the conflict *type* and not from the text, and a port that took only
+   the two refusal rows would pass while being wrong.
+3. **Re-express the randomized property, do not port its harness.** `MergeAutoTest` checks that after any
+   sequence of apply / ignore / resolve / edit, the change ranges stay ordered and undo restores the prior
+   state. Its harness is bound to `ApplicationManager`, `Disposable` and the editor undo stack
+   ([`§ 3.4`](../merge-java/docs/JETBRAINS_PORT.md)), so port the **property** over our plain-text API with
+   a **seeded** generator — a failing run must be reproducible, which a `System.currentTimeMillis()` seed
+   (upstream's choice) does not give.
+4. **Produce the before/after number.** [`§ 9`](../merge-java/docs/JETBRAINS_PORT.md) names the target:
+   conflicts escalated to a human, and blocks left `LEFT_MANUAL`, must both fall; and **zero new
+   incorrect applications** against `DESIGN_NEVER_AUTO_RESOLVED.md`. Measure it over the ported vectors
+   plus this module's own fixtures, and put the counts in the commit message. A port claimed to be an
+   improvement without that number is an assertion, not evidence.
+
+**Gate:** `MODULE` for `merge-java` green with every vector from `§ 10` executing; the seeded property
+test green and shown to fail on a deliberately broken ordering invariant; the before/after counts in the
+commit message; `LINKS` green for the new documents.
+
+**Done when:** the improvement is a measured result over upstream's own cases, and no excluded case
+became automatic.
+
 ---
 
 ## 9. Phase 5 — webview: close the suite
@@ -2913,6 +3223,90 @@ residual with nothing of its own to say.
 > sets the checkout up and step 7.10 records what the libraries can and cannot do — a capability they lack
 > is **reported** there rather than worked around in a page. A webview step that finds the checkout missing
 > should set it up rather than reach for another library.
+
+### 4.6 — Quality level: a resolution records the evidence it rests on, and stronger evidence outranks a weaker objection
+**Who:** agent · **Size:** L
+
+Approved by the maintainer on 2026-10-07, in their words: "we need to introduce quality level to resolver, where
+quality of analysis can decide if they do not concur on change", with the kinds of context that matter — local,
+same file, compile versus text compare, structure recognised ("two methods in same place added are very confident
+resolution where text can fail"), and compile with a classpath.
+
+**Do:** the decision is [DEC-045](../doc-hipster-entity/architecture/decisions/DEC-045.md). In short: an ordered
+`AnalysisLevel` on every resolution (`TEXT_LOCAL` → `TEXT_FILE` → `STRUCTURE` → `PLATFORM_TYPES` →
+`PROJECT_TYPES`), declared as a maximum per resolver and recorded per resolution; and an arbitration rule in
+`MergeFileTool.decide` under which an `AUTO` claim that covers the block and strictly outranks every other claim
+applies — but only where it already accounts for what each claim was protecting, by region or by keeping every
+line of that claim's sides. A `DEFERRED` claim is never outranked, and the level never promotes a `REVIEW` or
+`MANUAL` into application, so [`DESIGN_NEVER_AUTO_RESOLVED.md`](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md) is
+untouched.
+
+**Gate:** `MODULE` for `merge-java` green, with tests for both halves — a claim that strictly outranks a weaker
+objection applies and names what it outranked, and equal evidence still leaves the block for a human. Plus the
+invariant that no resolution records a level above its resolver's declared maximum.
+
+**Done when:** a block whose real answer is better founded than the objection against it is applied, and a
+reviewer can see which claim lost and on what evidence.
+
+**Done 2026-10-07 — the scale, the declarations, the arbitration rule and the first structure-level resolver.**
+
+- **`AnalysisLevel`** is a new ordered enum whose javadoc states, per level, what an answer was checked against and
+  what it cannot know; nothing about it changes what may be applied.
+- **The record is per resolution, the declaration is per resolver.** All ten registered resolvers now declare
+  `maxAnalysisLevel()`; `TypeChangeConflictResolver` and `OverloadAddConflictResolver` record the weaker level they
+  actually reached when no project classpath was supplied, and `TypeContext.hasProjectEntries()` — derived from the
+  entries, so every factory keeps its meaning — is the fact that separates the two type levels.
+- **The arbitration rule reads the detector's regions, not the report's**, and that is load-bearing: the first
+  version read the stamped regions, every claim then shared one region, and `unexplainedResidualStillVetoes`
+  failed — the block applied and `retries = 7` would have been dropped. The failing test is what located it.
+- **The payoff resolver is `MEMBER_ADD`.** Two branches appending a method beside the one the base declared
+  produce adjacent insertions, which a line-based comparison reads as "both sides replaced this region" — true and
+  useless — while comparing the declared members shows the additions do not interact. Measured before it existed:
+  `block 1 (lines 4-24): LEFT_MANUAL STRUCTURAL_CHANGE`, with the residual as the block's **only** claim, so
+  nothing was available for the scale to arbitrate between; that is the honest reason the scale alone changed no
+  behaviour. `detectMemberAddConflicts` recognises the shape, `MemberAddConflictResolver` answers `KEEP_BOTH` at
+  `STRUCTURE`, and the same fixture now reports `APPLIED_AUTO` with `audit()` once, `charge()` and `refund()` both
+  present, and the merged class compiles. Detection requires a **base side** and no removal on either side, so an
+  addition is never confused with a deliberate deletion, and a shared signature is refused because only one member
+  can exist.
+- **A pre-existing defect fell out of it, and it was live.** `KEEP_BOTH` was implemented as concatenation, but both
+  sides carry the members the base already declared, so keeping both repeated them: the merged class declared
+  `audit()` twice and javac rejected it, and `OverloadAddConflictResolver` did the same to `process()` on the
+  canonical overload sample. Both now build the union through `SideUnion` — longest shared prefix once, then each
+  remainder, then a structural check that no member appears twice — and **refuse** the block when that cannot be
+  proved, because emitting code the compiler rejects is worse than leaving the block for a human. Worth noting how
+  it was found: the arbitration rule *prefers* the type-level overload answer over the structure-level one, so this
+  step is what made the broken union reachable through the path it now favours.
+- **The second pass fixed a gap in the first, and it was the ordinary case.** `MEMBER_ADD` as first shipped
+  required a non-blank base, and a pure insertion has none: measured on a `diff3` hunk whose base section is
+  present but empty — two adjacent additions, which is what a real merge produces — the block still came out
+  `LEFT_MANUAL`. A blank base means two different things and only the marker parser knows which, so
+  `detect(...)` gained an overload carrying it (`MergeFileTool` passes `block.hasBase()`, the four-argument
+  overload keeps the conservative reading): **present and empty** is evidence that both sides inserted, **no
+  base section** is an unknown base and is declined. The ordinary insertion now applies, and the text-level
+  `API_INCOMPATIBILITY` objection is outranked — the evidence scale finally doing the job it was built for.
+- **Fields are members too, with two guards against reading a statement as one.** A local variable and a field
+  are the same text, and "keeping both" two locals would concatenate two competing bodies and call it a member
+  addition — so a fragment that declares a method or a type establishes the member level by depth, and a bare
+  insertion without one is read from its *modifier*, because a local cannot be declared `private`. A
+  package-private field in a bare insertion is declined rather than guessed.
+- **Parameter spelling is left to the resolver that resolves types.** Additions whose method names match are
+  declined here, and `OverloadAddConflictResolver` answers them from resolved parameter types — verified:
+  `process(List<String>)` against `process(java.util.List<java.lang.String>)` resolves to one signature and is
+  refused as a collision rather than kept twice.
+- **The `analysisLevel` key is now rendered** by the review page, with the wording owned by the page (DEC-027),
+  verified by building the page from a real report: `evidence: resolved platform types` and
+  `evidence: the block's own lines` appear beside the resolutions they describe.
+- **Still outstanding, and named rather than implied:** additions whose lines carry no access modifier and no
+  enclosing declaration in the fragment are declined, because there is then no evidence to tell a field from a
+  local; and a merge-style file with no base section at all never reaches `MEMBER_ADD`, by design.
+
+**Gate so far:** `AnalysisLevelTest` — 6 tests (the ordering; no resolution above its resolver's maximum; the two
+never-deciding resolvers object at their own basis; a declining resolver records what it actually reached; only a
+caller-supplied entry separates the two type levels; a type change records which classpath it had).
+`MergeFileToolTest` — 28 tests, including `strongerEvidenceOutranksWeakerObjection` and
+`equalEvidenceOutranksNothing`. Decision record:
+[`DEC-045`](../doc-hipster-entity/architecture/decisions/DEC-045.md).
 
 ### 5.1 — Phase 6: headless parity as a build gate
 **Who:** agent · **Size:** M
@@ -3695,7 +4089,15 @@ start)
 | 4.2  | merge-java Phase 13 step 1 — review render                                                | agent              | M    | `[x]`                                                                                       |
 | 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                            | agent              | M    | `[x]`                                                                                       |
 | 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                                 | agent              | M    | `[x]`                                                                                       |
-| 4.5  | Residual structural conflict should not veto a partly-overlapping block                   | agent              | S–M  | `[ ]`                                                                                       |
+| 4.5  | Residual structural conflict should not veto a partly-overlapping block                   | agent              | S–M  | `[x]`                                                                                       |
+| 4.6  | Quality level: evidence scale and claim arbitration                                       | agent              | L    | `[x]`                                                                                       |
+| 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                | agent              | S    | `[ ]`                                                                                       |
+| 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                   | agent              | L    | `[ ]`                                                                                       |
+| 4.9  | JetBrains port: merge tier — range building and the two word-level resolve passes         | agent              | L    | `[ ]`                                                                                       |
+| 4.10 | JetBrains port: whitespace policy as a caller-visible option                              | agent              | M    | `[ ]`                                                                                       |
+| 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                       | agent              | S    | `[ ]`                                                                                       |
+| 4.12 | JetBrains port: the conflict shape, ported onto detection                                 | agent              | M    | `[ ]`                                                                                       |
+| 4.13 | JetBrains port: upstream test vectors + the randomized property test                      | agent              | M    | `[ ]`                                                                                       |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                         | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                         | agent + maintainer | S    | `[ ]`                                                                                       |
 | 5.3  | ACP go/no-go spike                                                                        | human              | S    | `[ ]`                                                                                       |
