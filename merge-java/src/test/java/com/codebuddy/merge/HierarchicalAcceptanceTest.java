@@ -116,6 +116,77 @@ class HierarchicalAcceptanceTest {
                 + "not decide: " + json);
     }
 
+    @Test
+    @DisplayName("a resolved import block is cleared for the text tier, while the block's residual stays open")
+    void aResolvedImportClearsTheTextTierForItsRegion() throws IOException {
+        // The instruction's SECOND example, which had no end-to-end fixture: "same goes for imports resolver, if it
+        // has success, then there is no need for lower tier to touch that part of the file". The file carries both
+        // halves at once — an import hunk two branches filled differently, and a body hunk nothing decides — so the
+        // assertion can be about the REGION rather than about the file: the import region is settled AND cleared,
+        // the body region is neither, and one does not decide the other.
+        Path file = write("OrderService.java", IMPORT_AND_RESIDUAL);
+        Path report = tempDir.resolve("import-residual-report.json");
+
+        Result result = toolFor(file).reportPath(report).applyFixes(true).run();
+        String json = Files.readString(report, StandardCharsets.UTF_8);
+        long resolved = json.split("\"state\": \"RESOLVED\"", -1).length - 1;
+        long open = json.split("\"state\": \"OPEN\"", -1).length - 1;
+        System.out.println("IMPORT-REGION: outcome " + result.outcomes().get(0).outcome()
+            + ", exit " + result.exitCode() + ", states RESOLVED=" + resolved + " OPEN=" + open
+            + ", block says: " + result.outcomes().get(0).explanation());
+
+        // The import region is settled, and by the import claim's own answer rather than by a removal: detection
+        // produced ONE conflict over those lines and `ImportConflictResolver` answered it, so there is no lower-tier
+        // conflict over that region for the hierarchy to clear. The measurable guarantees are therefore these:
+        assertEquals(1, resolved, "the import conflict is settled and the report says so: " + json);
+        assertTrue(result.outcomes().get(0).explanation().contains("import"),
+            "and the block's own explanation names the import composition: "
+                + result.outcomes().get(0).explanation());
+        assertTrue(read(file).contains("BigDecimal") && read(file).contains("Instant"),
+            "both imports kept, which is the answer: " + read(file));
+
+        // The residue is NOT settled, and that is what proves the settlement was scoped to the region the import
+        // claim explained rather than to the file. `OPEN` is also the report's way of saying the tier WAS asked about
+        // the body region and did not decide — the opposite of "never asked", which is why the two states are
+        // asserted together rather than one of them alone.
+        assertEquals(1, open, "the body conflict nothing decided is reported open: " + json);
+        assertTrue(read(file).contains("<<<<<<<"),
+            "and it survives for a person: " + read(file));
+        assertEquals(1, result.exitCode(),
+            "a file with an unresolved region reports that, even though part of it was applied");
+        assertFalse(result.outcomes().get(0).explanation().contains("never asked"),
+            "nothing removed the body region, so nothing may claim the text tier was cleared for it: "
+                + result.outcomes().get(0).explanation());
+    }
+
+    /**
+     * The instruction's second example: an import hunk both branches filled, plus a body hunk neither decides.
+     *
+     * <p>Two hunks rather than one, and that is the point of the fixture: a single-hunk file cannot show that
+     * clearing one region leaves the other alone, and the import claim's authority is exactly that it is <b>not</b>
+     * authority over the whole file.
+     */
+    private static final String IMPORT_AND_RESIDUAL = """
+            package com.example.demo;
+
+            <<<<<<< ours
+            import java.math.BigDecimal;
+            ||||||| base
+            =======
+            import java.time.Instant;
+            >>>>>>> theirs
+
+            public class OrderService {
+            <<<<<<< ours
+                private int retries = 5;
+            ||||||| base
+                private int retries = 0;
+            =======
+                private int retries = 7;
+            >>>>>>> theirs
+            }
+            """;
+
     /**
      * A block where both branches change one statement differently, so no detector decides it.
      *
