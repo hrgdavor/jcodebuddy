@@ -69,8 +69,20 @@ class JetBrainsParityGateTest {
 
     private static final ComparisonPolicy POLICY = ComparisonPolicy.DEFAULT;
 
+    /**
+     * Transcribe an upstream vector's text.
+     *
+     * <p>{@code JETBRAINS_PORT.md} § 11 says "`_` is a line separator", and that is the whole rule: {@code x_y} is
+     * two lines and {@code x} is one, with <b>no trailing newline</b> unless the vector writes one ({@code x_}).
+     *
+     * <p>This helper used to append {@code "\n"} to every vector, which invented a line on all three sides and — on
+     * the vectors where the three sides end differently — put an insertion one base line later than the benchmark
+     * does. Two insertions that are at the same point in the benchmark's model are then at different points in ours,
+     * so R6's refusal is bypassed and a text neither side has is composed. The vectors were wrong, not the code; the
+     * measurement is only worth something if the fixture says what the benchmark says.
+     */
     private static String lines(String text) {
-        return text.replace("_", "\n") + (text.isEmpty() ? "" : "\n");
+        return text.replace("_", "\n");
     }
 
     /** The ranges the benchmark reports for a change-type vector (§ 11.1's `expected` column). */
@@ -147,17 +159,16 @@ class JetBrainsParityGateTest {
      * disappear when the work lands rather than being renegotiated.
      *
      * <p><b>The serious one is the first, and it is the kind this step exists to catch.</b> For the vector
-     * {@code x_Y | x_z_Y | z_Y} the benchmark expects one conflict — a person decides — and we <b>apply</b>
-     * {@code "Y\n"}: the line each branch kept ({@code x} on the left, {@code z} on the right) is silently dropped,
-     * and the result matches neither side. The cause is in the <b>range's own coordinates</b>: a side that deleted
-     * only part of a base extent is recorded with extent length 0, so a range in which each side deleted a
-     * <em>different</em> line reads as "both sides deleted the same lines" and composes to nothing. That is core
-     * {@code MergeRangeBuilder}/{@code MergeRange} construction, so it is fixed as its own measured change rather
-     * than inside the step that found it.
+     * {@code x_Y | x_z_Y | z_Y} the benchmark expects one conflict — a person decides — and we <b>applied</b>
+     * {@code "Y\n"}: the line each branch kept ({@code x} on the left, {@code z} on the right) was silently dropped,
+     * and the result matched neither side. The cause was in the <b>range's own coordinates</b>: a side that deleted
+     * only part of a base extent was recorded with extent length 0, so a range in which each side deleted a
+     * <em>different</em> line read as "both sides deleted the same lines" and composed to nothing. That is fixed in
+     * {@code MergeRangeBuilder}, and <b>this entry was removed from the list in the same commit</b> — a ratchet whose
+     * entries are not removed when the work lands is a permanent excuse, and moving the vector into the strict set is
+     * what proves the fix is real rather than the baseline being widened.
      */
-    private static final List<String> KNOWN_DEFECTS = List.of(
-        "testChangeTypes: conflict around a base insertion",
-        "testLastLine: conflict over a removed last line");
+    private static final List<String> KNOWN_DEFECTS = List.of();
 
     @Test
     @DisplayName("the benchmark's change-type vectors: our classifier reports what upstream reports")
@@ -242,6 +253,33 @@ class JetBrainsParityGateTest {
         assertEquals(List.of(MergeType.conflict(false)),
             ConflictShape.typesOf(lines("y"), lines("x"), lines("z"), POLICY),
             "and the shape says why: the change is a conflict, not an insertion");
+    }
+
+    @Test
+    @DisplayName("every change the benchmark calls a conflict, we refuse rather than apply")
+    void noApplicationWhereTheBenchmarkNeedsAPerson() {
+        // THE assertion this step needed, and the one that would have caught the defect as an APPLICATION rather
+        // than as a type mismatch: the change-type vectors only compare our classifier's naming, so a range that is
+        // NAMED `deleted both` and then composed to nothing passes them - which is exactly how `x_Y | x_z_Y | z_Y`
+        // came to be applied as `Y`, dropping the line each branch kept. This checks the outcome instead: where the
+        // benchmark says a person decides, we must not produce text at all.
+        List<String> applied = new ArrayList<>();
+        for (ChangeVector vector : CHANGE_VECTORS) {
+            boolean needsAPerson = vector.expected().stream()
+                .anyMatch(type -> type.kind() == MergeType.Kind.CONFLICT);
+            if (!needsAPerson) {
+                continue;
+            }
+            MergeResolve.Result result = MergeResolve.resolve(
+                lines(vector.left()), lines(vector.base()), lines(vector.right()), POLICY);
+            if (!result.refused()) {
+                applied.add(vector.name() + " (" + vector.citation() + ") — applied "
+                    + result.mergedText().replace("\n", "\\n"));
+            }
+        }
+        assertTrue(applied.isEmpty(),
+            "the benchmark needs a person here and we applied an answer:\n  - "
+                + String.join("\n  - ", applied));
     }
 
     /**

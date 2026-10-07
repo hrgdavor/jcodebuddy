@@ -112,6 +112,8 @@ public final class MergeRangeBuilder {
             // would otherwise leave the range half-described.
             int leftLength = 0;
             int rightLength = 0;
+            int leftDeleted = 0;
+            int rightDeleted = 0;
             boolean leftChanged = false;
             boolean rightChanged = false;
             while (leftIndex < leftChanges.size()
@@ -119,6 +121,7 @@ public final class MergeRangeBuilder {
                 DiffRange change = leftChanges.get(leftIndex);
                 baseEnd = Math.max(baseEnd, change.end1());
                 leftLength += change.length2();
+                leftDeleted += change.length1();
                 leftChanged = true;
                 leftIndex++;
             }
@@ -127,17 +130,28 @@ public final class MergeRangeBuilder {
                 DiffRange change = rightChanges.get(rightIndex);
                 baseEnd = Math.max(baseEnd, change.end1());
                 rightLength += change.length2();
+                rightDeleted += change.length1();
                 rightChanged = true;
                 rightIndex++;
             }
 
+            // Each side's extent is the lines that side HAS over the base extent, which is not the same as the
+            // lines it CHANGED there. The base lines this side did not delete it kept, and they belong to the
+            // extent: `kept + inserted`. Recording only `inserted` - which this code did - makes a side that
+            // deleted part of a base extent look like a side with nothing there at all, and then a range in which
+            // each branch deleted a DIFFERENT line reads as "both sides deleted the same lines" and composes to
+            // nothing: the benchmark's vector `x_Y | x_z_Y | z_Y` was applied as `Y`, silently dropping the line
+            // each branch kept. It is the same rule this project has met at every consumer of a range - a side with
+            // no change kept what the base had - stated where it belongs, in the range's own coordinates.
             int baseLength = baseEnd - baseAt;
-            ranges.add(new MergeChange(new MergeRange(leftAt, leftAt + leftLength,
+            int leftExtent = (baseLength - leftDeleted) + leftLength;
+            int rightExtent = (baseLength - rightDeleted) + rightLength;
+            ranges.add(new MergeChange(new MergeRange(leftAt, leftAt + leftExtent,
                 baseAt, baseAt + baseLength,
-                rightAt, rightAt + rightLength), leftChanged, rightChanged));
+                rightAt, rightAt + rightExtent), leftChanged, rightChanged));
             baseAt += baseLength;
-            leftAt += leftLength;
-            rightAt += rightLength;
+            leftAt += leftExtent;
+            rightAt += rightExtent;
         }
 
         return List.copyOf(ranges);

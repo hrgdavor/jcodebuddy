@@ -3033,7 +3033,7 @@ verifies a suggestion *as if* it were automatic.
 | 4.10 | Whitespace policy as a caller-visible option, threaded through detection and resolution     | agent | M    |
 | 4.11 | `AnalysisLevel` gains the intra-line evidence level                                         | agent | S    |
 | 4.12 | The conflict **shape** ported onto detection, beside the existing domain taxonomy           | agent | M    |
-| 4.13 | Upstream vectors, the parity gate, and the randomized property test                         | agent | M    | `[~]` — **the gate exists and runs the benchmark's § 11.1/§ 11.2 vectors**, grading per vector in both directions and printing `16/18` change types and `0/3 resolved, 3 declined, 0 regressions`. **It caught a serious defect on its first run**: for `x_Y \| x_z_Y \| z_Y` the benchmark expects a conflict and we **apply** `Y\n`, silently dropping a line each branch kept — a range's side extent records only the side's *changed* lines, so a side that deleted part of a base extent gets length 0 and "each side deleted a different line" reads as "both deleted the same". Core `MergeRangeBuilder` work, fixed as its own change. **Also open:** the on-disk `jetbrains-*` fixtures, § 11.3/§ 11.4/§ 11.5, the invalidating-edit row, the seeded property test, and the § 10.3/§ 10.2 numbers |
+| 4.13 | Upstream vectors, the parity gate, and the randomized property test                         | agent | M    | `[~]` — **the gate exists and runs the benchmark's § 11.1/§ 11.2 vectors**, grading per vector in both directions and printing `18/18` change types (0 recorded defects) and `0/3 resolved, 3 declined, 0 regressions`. **It caught a serious defect on its first run**: for `x_Y \| x_z_Y \| z_Y` the benchmark expects a conflict and we **applied** `Y\n`, silently dropping a line each branch kept — a range's side extent recorded only the side's *changed* lines, so a side that deleted part of a base extent got length 0 and "each side deleted a different line" read as "both deleted the same". **Fixed in `MergeRangeBuilder`** (each side's extent is now the lines it *has*: `(baseLength - deleted) + inserted`), proven by reverting it and watching the new outcome-level family fail with *"applied Y"*, and two fixture errors of my own were corrected with it — including a transcription helper that invented a line on every vector. **Also open:** the on-disk `jetbrains-*` fixtures, § 11.3/§ 11.4/§ 11.5, the invalidating-edit row, the seeded property test, and the § 10.3/§ 10.2 numbers |
 | 4.14 | The suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`     | agent | M    |
 | 4.15 | Move the resolvers that already compute an answer onto the channel                          | agent | M    |
 | 4.16 | The page and the decisions contract: Accept / Edit / Reject, and the bulk-accept guard      | agent | M    |
@@ -3536,8 +3536,43 @@ serious defect in this module.**
   invalidating-edit row, the seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 /
   § 10.2 numbers. **`MergeRange`'s extent coordinates** is the first item of that list, because the gate says so.
 
-**Gate so far:** `merge-java verify` — **888 tests, 0 failures, 0 errors**, with the build cache **on** (see the
-note below); `LINKS` green.
+**Gate so far:** `merge-java verify` — **887 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
+with the build cache **on**; `LINKS` green.
+
+**Fixed 2026-10-07, and the gate proves it: the serious defect is gone and 18/18 change types now agree.**
+
+- **`MergeRangeBuilder` records each side's extent as the lines that side *has* over the base extent**, not the
+  lines it *changed*: `(baseLength - deleted) + inserted`. A side that deleted part of a base extent used to be
+  recorded with extent length 0, which made *"the left kept `b`"* and *"the left deleted `b`"* the same range — and
+  then a range in which each branch deleted a **different** line read as "both sides deleted the same lines" and
+  composed to nothing. This is the fourth appearance of the rule *"a side with no change kept what the base had"* in
+  this project, and the first one **inside the range's own coordinates** — the place the other three were working
+  around.
+- **The gate fails without the fix, and that exact failure was demonstrated**: with `MergeRangeBuilder` reverted,
+  `noApplicationWhereTheBenchmarkNeedsAPerson` reports *"the benchmark needs a person here and we applied an answer:
+  testChangeTypes: conflict around a base insertion (§ 11.1) — applied Y"*, and the change-type family drops to
+  17/18. With the fix: **18/18, 0 recorded defects, 0 regressions**, and `KNOWN_DEFECTS` is **empty** — the entry
+  was removed in the same commit, because a ratchet whose entries are never removed is a permanent excuse.
+- **A new family covers the direction that matters**: *every change the benchmark calls a conflict, we refuse
+  rather than apply*. The change-type vectors only compare our classifier's **naming**, so a range named
+  `deleted both` and then composed to nothing passes them — which is precisely how this defect lived. Asserting the
+  **outcome** is what makes the floor real, and it is the assertion that will catch the next one of these.
+- **Two of my own errors were found and fixed in the fixtures rather than in the code**, and both decide how much the
+  measurement is worth. First, the transcription helper appended `"\n"` to every vector, inventing a line on all
+  three sides and moving a trailing insertion one base line later than the benchmark puts it — so two fixtures were
+  testing a case the benchmark does not state. (§ 11 says "`_` is a line separator": `x` is one line and `x_` is
+  two, with no trailing newline unless the vector writes one.) Second, an assertion in `MergeResolveTest`
+  **encoded the defect as a description**: it asserted `leftIsEmpty()` for a range where the left had kept its line.
+  It now asserts that the kept line is *inside* the range and that the type is `modified(false, true)`.
+- **`clean test`, and a caveat about counts.** This round's runs used `clean`, because a **deleted scratch probe's
+  class file** stayed in `target/test-classes` and kept running — a stale-class hazard of the same family as the
+  incremental-compile one. **886** is the count from a clean build; earlier counts in this plan may have included
+  stale scratch classes, so a count is only comparable against another clean run.
+
+**Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
+`src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its remaining-change
+counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the invalidating-edit row, the
+seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 / § 10.2 numbers.
 
 > **Note for the maintainer — a rule I had been breaking.** My evidence runs used
 > `-Dmaven.build.cache.enabled=false`, which `AGENTS.md` § 2 forbids in every circumstance ("the Maven build

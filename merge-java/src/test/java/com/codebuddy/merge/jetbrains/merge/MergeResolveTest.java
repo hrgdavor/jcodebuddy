@@ -2,6 +2,7 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge.jetbrains.merge;
 
+import com.codebuddy.merge.ConflictShape;
 import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -170,13 +171,25 @@ class MergeResolveTest {
     @Test
     @DisplayName("a range is built for a change on one side only, and for both")
     void rangesDescribeWhichSideChanged() {
-        // Only the right changed: one range, and the left side has no lines in it.
+        // Only the right changed: one range - and the left's KEPT line is inside it.
+        //
+        // This assertion used to read `leftIsEmpty()`, and that was the defect rather than a description of one: a
+        // range's side extent is the lines that side HAS over the base extent, so a side that did not change has the
+        // base's line there. Recording only the side's *changed* lines made "the left kept `b`" and "the left
+        // deleted `b`" the same range, which is how the benchmark's `x_Y | x_z_Y | z_Y` came to be applied as `Y`,
+        // dropping the line each branch kept. The type is asserted too, because that is what the range is for.
         List<MergeRangeBuilder.MergeChange> onlyRight = MergeRangeBuilder.build(
             text("a_b_c"), text("a_b_c"), text("a_X_c"), ComparisonPolicy.DEFAULT);
         assertEquals(1, onlyRight.size(), "one change, one range: " + onlyRight);
         assertFalse(onlyRight.get(0).leftChanged(), "the left side did not change");
         assertTrue(onlyRight.get(0).rightChanged());
-        assertTrue(onlyRight.get(0).range().leftIsEmpty());
+        assertEquals(1, onlyRight.get(0).range().length1(),
+            "the left kept its line, so the range holds it: " + onlyRight.get(0));
+        assertFalse(onlyRight.get(0).range().leftIsEmpty(),
+            "`empty` must mean the side has nothing here, not that it changed nothing");
+        assertEquals(List.of(MergeType.modified(false, true)),
+            ConflictShape.typesOf(text("a_b_c"), text("a_b_c"), text("a_X_c"), ComparisonPolicy.DEFAULT),
+            "the right modified the line and the left did not: not a conflict");
 
         // Only the left changed, symmetrically.
         List<MergeRangeBuilder.MergeChange> onlyLeft = MergeRangeBuilder.build(
