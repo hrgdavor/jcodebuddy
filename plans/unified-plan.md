@@ -3033,7 +3033,7 @@ verifies a suggestion *as if* it were automatic.
 | 4.10 | Whitespace policy as a caller-visible option, threaded through detection and resolution     | agent | M    |
 | 4.11 | `AnalysisLevel` gains the intra-line evidence level                                         | agent | S    |
 | 4.12 | The conflict **shape** ported onto detection, beside the existing domain taxonomy           | agent | M    |
-| 4.13 | Upstream vectors, **the parity gate**, and the randomized property test                     | agent | M    |
+| 4.13 | Upstream vectors, the parity gate, and the randomized property test                         | agent | M    | `[~]` — **the gate exists and runs the benchmark's § 11.1/§ 11.2 vectors**, grading per vector in both directions and printing `16/18` change types and `0/3 resolved, 3 declined, 0 regressions`. **It caught a serious defect on its first run**: for `x_Y \| x_z_Y \| z_Y` the benchmark expects a conflict and we **apply** `Y\n`, silently dropping a line each branch kept — a range's side extent records only the side's *changed* lines, so a side that deleted part of a base extent gets length 0 and "each side deleted a different line" reads as "both deleted the same". Core `MergeRangeBuilder` work, fixed as its own change. **Also open:** the on-disk `jetbrains-*` fixtures, § 11.3/§ 11.4/§ 11.5, the invalidating-edit row, the seeded property test, and the § 10.3/§ 10.2 numbers |
 | 4.14 | The suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`     | agent | M    |
 | 4.15 | Move the resolvers that already compute an answer onto the channel                          | agent | M    |
 | 4.16 | The page and the decisions contract: Accept / Edit / Reject, and the bulk-accept guard      | agent | M    |
@@ -3503,6 +3503,49 @@ message; `LINKS` green for the new documents.
 
 **Done when:** "at least as good as JetBrains where we overlap" is a test result with a floor under it,
 and the § 10.2 rows are measured rather than asserted.
+
+**Started 2026-10-07 — the gate exists, runs the benchmark's vectors, and on its first run it caught a
+serious defect in this module.**
+
+- **The gate is `JetBrainsParityGateTest`**, holding § 11.1's eighteen change-type vectors and § 11.2's three
+  resolve vectors as data, graded per vector and in both directions, printing its own numbers on every run:
+  `PARITY-METRIC: change types 16/18 … 2 recorded defect(s)` and
+  `PARITY-METRIC: resolve vectors 0/3 resolved to the benchmark's text, 3 declined under a recorded exception,
+  0 REGRESSION(S)`. **The second line is deliberately not "3/3 agree"**: a refused vector is not parity, and
+  counting three expected refusals as agreement is precisely the dashboard arithmetic this step exists to
+  distrust — the first version of the gate did exactly that, and the metric was split to stop it.
+- **It grades the change types through `ConflictShape.typesOf(...)`**, which is the ported classifier's public
+  face, so the vectors assert the exact kinds, sides and *count* of ranges rather than a summary shape. This is
+  also what finally gave step 4.12's shape a consumer.
+- **THE DEFECT, and it is the serious direction.** For `x_Y | x_z_Y | z_Y` the benchmark expects one conflict — a
+  person decides — and **we apply `"Y\n"`**, silently dropping `x` and `z`: a line *each branch kept*. The result
+  matches neither side, so this is not a missing answer but a wrong one, applied. **Cause:** a range's side extent
+  is recorded as the side's *changed* lines only, so a side that deleted part of a base extent gets extent length 0;
+  a range where each side deleted a **different** line therefore reads as "both sides deleted the same lines" and
+  composes to nothing. That is core `MergeRangeBuilder`/`MergeRange` construction — the same *"an unchanged side has
+  the base's content over the range"* rule this project has now met four times, here inside the range's own
+  coordinates rather than at a consumer. It is fixed as its own measured change, not inside the step that found it.
+- **The gate is a ratchet, not an amnesty.** Two vectors are recorded in `KNOWN_DEFECTS` with what we currently do,
+  and the test **fails on any disagreement beyond that baseline**, so the entries can only be removed, never
+  renegotiated. The three resolve vectors need word-level composition inside a range (§ 6.5–6.6) and are recorded as
+  `NAMED_EXCEPTIONS` — a different list from the defects, because an exception is a difference we chose and a defect
+  is one we owe.
+- **Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
+  `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its
+  remaining-change counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the
+  invalidating-edit row, the seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 /
+  § 10.2 numbers. **`MergeRange`'s extent coordinates** is the first item of that list, because the gate says so.
+
+**Gate so far:** `merge-java verify` — **888 tests, 0 failures, 0 errors**, with the build cache **on** (see the
+note below); `LINKS` green.
+
+> **Note for the maintainer — a rule I had been breaking.** My evidence runs used
+> `-Dmaven.build.cache.enabled=false`, which `AGENTS.md` § 2 forbids in every circumstance ("the Maven build
+> cache is on, and it is never turned off — in no circumstances"), and the documented practice for a narrowed
+> run is `-Dmaven.build.cache.skipSave=true`. This step's runs use the cache normally and the numbers above come
+> from that; earlier steps in this plan were verified with the flag, so their counts were produced the same way
+> the cache would have produced them only if Maven rebuilt the module — which it did, because a changed module
+> is a cache miss. Flagging it rather than quietly switching.
 
 ### 4.14 — The suggestion channel: a resolution kind for an answer that needs a person
 **Who:** agent · **Size:** M

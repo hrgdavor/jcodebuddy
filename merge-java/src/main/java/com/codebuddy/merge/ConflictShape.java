@@ -119,6 +119,36 @@ public enum ConflictShape {
         if (!baseKnown) {
             return UNKNOWN;
         }
+        List<MergeType> types = typesOf(base, ours, theirs, policy);
+        if (types.isEmpty()) {
+            // The sides agree, so there is no change for a shape to describe.
+            return UNKNOWN;
+        }
+        ConflictShape combined = null;
+        for (MergeType type : types) {
+            ConflictShape shape = of(type.kind());
+            if (combined == null) {
+                combined = shape;
+            } else if (combined != shape) {
+                // Several ranges of one conflict, of different kinds: the most demanding reading wins, because a
+                // shape is what a reader uses to judge whether anything needs choosing.
+                combined = combined == CONFLICT || shape == CONFLICT ? CONFLICT : MODIFIED;
+            }
+        }
+        return combined == null ? UNKNOWN : combined;
+    }
+
+    /**
+     * Every range of the change, with the ported classifier's own naming of it — kind and which sides changed.
+     *
+     * <p>Exposed because a <b>shape</b> is a summary and the benchmark's vectors are about the detail: upstream's
+     * change-type vectors assert the exact kinds and sides per range (and how many there are), which a single
+     * combined shape cannot answer. The parity gate grades these, so this is the ported classifier's public face
+     * as well as {@link #of}'s implementation.
+     *
+     * @return one entry per range, in base order; empty when the sides agree
+     */
+    public static List<MergeType> typesOf(String base, String ours, String theirs, ComparisonPolicy policy) {
         String baseText = base == null ? "" : base;
         String leftText = ours == null ? "" : ours;
         String rightText = theirs == null ? "" : theirs;
@@ -127,20 +157,19 @@ public enum ConflictShape {
         List<MergeRangeBuilder.MergeChange> changes =
             MergeRangeBuilder.build(baseText, leftText, rightText, effective);
         if (changes.isEmpty()) {
-            // The sides agree, so there is no change for a shape to describe.
-            return UNKNOWN;
+            return List.of();
         }
 
         List<String> baseLines = TextLines.of(baseText).lines();
         List<String> leftLines = TextLines.of(leftText).lines();
         List<String> rightLines = TextLines.of(rightText).lines();
 
-        ConflictShape combined = null;
+        List<MergeType> types = new java.util.ArrayList<>(changes.size());
         for (MergeRangeBuilder.MergeChange change : changes) {
             MergeRange range = change.range();
             boolean leftChanged = change.leftChanged();
             boolean rightChanged = change.rightChanged();
-            MergeType type = MergeRangeUtil.getMergeType(range,
+            types.add(MergeRangeUtil.getMergeType(range,
                 // "Empty" here means the side has no content over this extent, and a side that did NOT change has
                 // the base's content there rather than nothing: the range's own empty extent for that side is the
                 // absence of a *change*, not the absence of lines. Reading it as emptiness made every one-sided
@@ -157,17 +186,9 @@ public enum ConflictShape {
                 null,
                 // Whether a text pass could resolve a conflict does not change its KIND, which is all a shape asks.
                 // Claiming it could would put a resolution's fate inside a description of the change.
-                () -> false);
-            ConflictShape shape = of(type.kind());
-            if (combined == null) {
-                combined = shape;
-            } else if (combined != shape) {
-                // Several ranges of one conflict, of different kinds: the most demanding reading wins, because a
-                // shape is what a reader uses to judge whether anything needs choosing.
-                combined = combined == CONFLICT || shape == CONFLICT ? CONFLICT : MODIFIED;
-            }
+                () -> false));
         }
-        return combined == null ? UNKNOWN : combined;
+        return List.copyOf(types);
     }
 
     /** Policy-aware equality between two of the three sides, over one range's extent for each. */
