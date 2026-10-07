@@ -110,6 +110,14 @@ public final class MergeFileTool {
         /** Markers kept: the one automatic resolution rewrites only part of the
          *  block - applying it would silently drop the rest. */
         LEFT_PARTIAL_RESOLUTION,
+        /** <b>Applied in part</b>: the stretches a resolution settled were written into the file, and only the
+         *  genuinely contested stretches keep their markers (plan step 4.22).
+         *
+         *  <p>A result shape the tool could not previously express, and it is deliberately <em>not</em> one of
+         *  the {@code APPLIED_*} outcomes that count as applied: the file still carries conflict markers, so
+         *  {@link Result#exitCode()} is non-zero and the block is still prepared as a fixture. What changed is
+         *  that the answer the tool does have is no longer thrown away with the part it does not. */
+        APPLIED_PARTIAL,
         /** Markers kept: the sides differ but detection recognised no type. */
         LEFT_UNCLASSIFIED
     }
@@ -597,6 +605,15 @@ public final class MergeFileTool {
                     decision.explanation() + " " + removalNote(tiered.removals()),
                     decision.replacement(), decision.fixtureCase(), decision.resolutions());
             }
+            if (decision.replacement() == null && decision.outcome() != Outcome.APPLIED_PARTIAL
+                && decision.outcome() != Outcome.LEFT_REVIEW) {
+                // The block stays, and part of it may still be known. Composing the settled stretches into it
+                // is what turns "leave the whole block" into "apply what is known and mark what is not"
+                // (plan step 4.22). The triggers are the outcomes that keep the block: a partly answering
+                // resolution, a manual block, and one detection could not classify. A refusal leaves the
+                // decision exactly as it was.
+                decision = composePartial(decision, block, detected, tiered, whitespace);
+            }
             if (decision.replacement() != null) {
                 replacements.put(block.number(), splitReplacement(decision.replacement()));
             }
@@ -887,6 +904,56 @@ public final class MergeFileTool {
      */
     private static ConflictResolution reattached(ConflictResolution resolution, Conflict placed) {
         return resolution == null ? null : resolution.withRegion(placed.getRegion());
+    }
+
+    /**
+     * Try to turn a partly answered block into an applied-in-part one (plan step 4.22).
+     *
+     * <p>The answer was thrown away before this existed, and the reason was sound: replacing the block with it
+     * would drop the stretches it does not mention. What that reading missed is that most of those stretches
+     * are not contested at all — both branches carry them — so keeping them is not a decision, it is not losing
+     * them. {@link BlockSplice} does that, and {@link BlockComposition} says where every line is.
+     *
+     * <p>A refusal ({@link BlockSplice} returning empty: no base, a partly covered stretch, two answers for
+     * one) leaves the decision untouched, so the fallback is exactly today's behaviour rather than a guess.
+     */
+    private static BlockDecision composePartial(BlockDecision decision,
+                                                ConflictMarkerParser.Block block,
+                                                List<Conflict> detected,
+                                                TieredResolution.Result tiered,
+                                                ComparisonPolicy policy) {
+        if (!block.hasBase()) {
+            // No base, no coordinates: the ranges are built against a base, so a two-sided block cannot be
+            // composed and this stays a fixture.
+            return decision;
+        }
+        List<BlockSplice.Settled> settled = new ArrayList<>();
+        for (int index = 0; index < detected.size() && index < tiered.pass().all().size(); index++) {
+            ResolutionPass.LiveConflict live = tiered.pass().all().get(index);
+            Region span = detected.get(index).getRegion();
+            if (live.state() == ConflictState.RESOLVED && live.resolution() != null && span.isKnown()) {
+                settled.add(new BlockSplice.Settled(span, live.resolution().getResolvedCode()));
+            }
+        }
+        if (settled.isEmpty()) {
+            return decision;
+        }
+        return BlockSplice.compose(block.base(), block.ours(), block.theirs(),
+                block.oursLabel(), block.theirsLabel(), block.baseLabel(), settled, policy)
+            .map(result -> new BlockDecision(
+                result.isComplete() ? Outcome.APPLIED_AUTO : Outcome.APPLIED_PARTIAL,
+                decision.type(),
+                decision.explanation() + " " + (result.isComplete()
+                    ? "Composed from the settlement and the lines neither branch touched, so the block is"
+                        + " complete."
+                    : "Applied the settled stretches and left " + result.openSpans().size()
+                        + " contested stretch(es) marked."),
+                result.text(),
+                // Markers in the result mean the file still carries a conflict, so it is still left - and
+                // still worth a fixture - however much of it was applied.
+                !result.isComplete(),
+                decision.resolutions()))
+            .orElse(decision);
     }
 
     /**

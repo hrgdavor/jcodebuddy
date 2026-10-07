@@ -4017,6 +4017,46 @@ composed block **parsing back** as a conflict block.
 **Done when:** a mixed block comes out with the part the tool understood applied and only the genuinely open
 lines marked, the outcome says which of the two it was, and the result can be merged again.
 
+**Done 2026-10-07 — `BlockSplice`, `Outcome.APPLIED_PARTIAL`, and both halves end to end.**
+
+- **`BlockSplice`** composes a block from 4.21's segments: `UNCHANGED`/`AGREED` once, `LEFT_ONLY`/`RIGHT_ONLY`
+  from their side, `CONTESTED`-and-settled as the settling claim's text **emitted once at the first stretch it
+  answers** (a resolver's text is its answer for the whole conflict, not for each range), and
+  `CONTESTED`-and-unanswered as the four markers with the block's **own labels**. It refuses — returning empty
+  rather than guessing — when the block has no base, when a contested stretch is only partly inside a settled
+  span, when two claims answer one stretch, and when nothing is settled at all.
+- **`Outcome.APPLIED_PARTIAL`**, and it is deliberately *not* one of the `APPLIED_*` values that
+  {@code applied()} counts: the file still carries markers, so `exitCode()` is non-zero and the block is still
+  prepared as a fixture. What changed is that the answer the tool has is no longer thrown away together with
+  the part it does not have.
+- **The trigger is every outcome that keeps the block** (except `REVIEW`, whose confirmation is a human's), not
+  only `LEFT_PARTIAL_RESOLUTION`. Measured rather than assumed: widening it left **the whole suite green**, so
+  no existing left-block path is disturbed, and a `diff3` block with a settled import stretch and a contested
+  method body now comes out `APPLIED_PARTIAL` with the imports written *outside* the markers and the body
+  inside them.
+- **A defect found by probing, and it would have reformatted every composed block.** `TextLines` lines
+  **carry their terminators** — the type exists so splitting and joining are inverses — and the first
+  `append` added a newline of its own, doubling every line break in the output. The probe printed the composed
+  text and the doubled blank lines were plain; no assertion would have caught it, because every assertion I
+  had written was a `contains`. `BlockSpliceTest.untouchedLinesAreKept` now asserts the composed text is
+  **not reformatted**, which is the assertion that was missing.
+- **The base-less limit stands, and the fixture says so.** `partialResolutionLeavesTheBlock` is unchanged and
+  passing: it is git's default merge style, so there are no coordinates to compose in, and its explanation now
+  reports how much of the block is contested against how much neither branch touched.
+
+**Gate:** `merge-java verify` green with: `BlockSpliceTest` — 9 tests, both halves, every refusal, an insertion
+inside a settled span answered by position, and the composed block **parsing back** through
+`ConflictMarkerParser` with the labels it was given; `HierarchicalAcceptanceTest` — 5 tests, the last two being
+the two halves end to end; `partialResolutionLeavesTheBlock` unchanged. `merge-java` — **850 tests, 0 failures,
+0 errors** with the build cache off.
+
+**The § 4C block is complete: 4.18–4.22 all land.** What it leaves open is named rather than implied, and none
+of it is required for the block's own claim: the per-conflict `state` covers `OPEN`/`RESOLVED`/`PARTIAL` but no
+detail of *which* stretches a partial result left open beyond the count in the explanation; `DEFERRED` settles
+at its resolver's tier rather than before every tier; an import-vs-`TEXT_LOCAL` fixture is still missing; and the
+question of whether the catch-all residual should declare `STRUCTURE` at all is the maintainer's
+([`DEC-046` clause 17](../doc-hipster-entity/architecture/decisions/DEC-046.md)).
+
 ---
 
 ## 9. Phase 5 — webview: close the suite
@@ -4917,7 +4957,7 @@ start)
 | 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in and the instruction's first example now works end to end**: `TieredResolution` + `Reliability` + `explainedSpan`, and a settled conflict is never offered to the resolver below. Four findings came from tests, all corrected in the design: the kept-lines check must judge the *settled* conflict; removal follows the hierarchy's direction (else `equalEvidenceOutranksNothing` became `APPLIED_AUTO`); an insertion has no base lines so an unplaceable conflict is judged over its block; and the report's region stamp must not be applied before resolution (else `IMPORT_ADD` settled an unrelated `COMMENT_ADD`). **Still open:** the per-conflict state as a report key (4.20 changes that shape), `DEFERRED` settling at its resolver's tier, an import-vs-`TEXT_LOCAL` fixture, and the open question of whether the catch-all residual should declare `STRUCTURE` at all |
 | 4.20 | Hierarchical resolution: the state of every conflict in the report                              | agent              | S    | `[x]` — a `state` key per conflict (`RESOLVED`/`OPEN`/`PARTIAL`), aligned with the **conflicts** because a settled one has no resolution of its own and appeared nowhere before; `HierarchicalAcceptanceTest` asserts both states separately |
 | 4.21 | Hierarchical resolution: the three-coordinate position model and the tiling invariant           | agent              | S–M  | `[x]` — `BlockComposition` places a block's lines in base/ours/theirs as segments **including the gaps** (the lines in no range at all, which a walk emitting only ranges drops silently), `audit` is the tiling invariant, and the `LEFT_PARTIAL_RESOLUTION` explanation now uses it. **A base-less block can be classified but not composed** — no base, no coordinates — so 4.22 works on `diff3` blocks |
-| 4.22 | Hierarchical resolution: the splice, and the grown outcome enum                                 | agent              | M–L  | `[ ]` — compose from 4.21's segments, mapping each claim's `explainedSpan` (base lines, 1-based) onto the segments' 0-based half-open base extents; the emitted markers must **parse back**, so the round trip is a test |
+| 4.22 | Hierarchical resolution: the splice, and the grown outcome enum                                 | agent              | M–L  | `[x]` — `BlockSplice` composes the settled stretches and the kept ones, marks only what is contested, and **refuses** rather than guesses (no base, a partly covered stretch, two answers, nothing settled); `Outcome.APPLIED_PARTIAL` is deliberately not counted as applied, because markers remain; the trigger is every outcome that keeps the block, measured green across the suite. **A defect a probe caught**: `TextLines` lines carry their terminators, so the first `append` doubled every line break — every assertion I had was a `contains`, and none would have seen it |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |
 | 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |

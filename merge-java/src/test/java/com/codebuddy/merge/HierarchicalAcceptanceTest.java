@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -134,6 +135,111 @@ class HierarchicalAcceptanceTest {
             >>>>>>> theirs
             }
             """;
+
+    /**
+     * A {@code diff3} block whose import addition is answered and whose class declaration is not mentioned by
+     * that answer — because neither branch touched it.
+     *
+     * <p>This is the shape the partial dead end was about, with the base the composition needs. The class
+     * declaration is inside the block and identical on both sides, so the answer legitimately does not carry
+     * it, and replacing the block with the answer would have deleted it.
+     */
+    private static final String ANSWER_MISSES_UNTOUCHED_LINES = """
+            package com.example.demo;
+
+            <<<<<<< ours
+            import java.math.BigDecimal;
+            import java.util.List;
+
+            class OrderService {
+            ||||||| base
+            import java.util.List;
+
+            class OrderService {
+            =======
+            import java.time.Instant;
+            import java.util.List;
+
+            class OrderService {
+            >>>>>>> theirs
+            }
+            """;
+
+    @Test
+    @DisplayName("an answer that misses untouched lines is composed with them instead of being refused")
+    void untouchedLinesAreComposedBack() throws IOException {
+        Path file = write("OrderService.java", ANSWER_MISSES_UNTOUCHED_LINES);
+
+        Result result = toolFor(file).applyFixes(true).run();
+
+        MergeFileTool.BlockOutcome outcome = result.outcomes().get(0);
+        assertEquals(Outcome.APPLIED_AUTO, outcome.outcome(), outcome.explanation());
+        assertEquals(0, result.exitCode(), outcome.explanation());
+        String applied = read(file);
+        assertFalse(applied.contains("<<<<<<<"), applied);
+        assertTrue(applied.contains("import java.math.BigDecimal;"), applied);
+        assertTrue(applied.contains("import java.time.Instant;"), applied);
+        assertTrue(applied.contains("class OrderService {"),
+            "the line neither branch touched survives the composition: " + applied);
+    }
+
+    /**
+     * One block with a settled stretch and a genuinely contested one: the imports are answered, the method body
+     * is not.
+     */
+    private static final String SETTLED_AND_OPEN_IN_ONE_BLOCK = """
+            package com.example.demo;
+
+            <<<<<<< ours
+            import java.math.BigDecimal;
+            import java.util.List;
+
+            class OrderService {
+                void run() {
+                    audit();
+                }
+            ||||||| base
+            import java.util.List;
+
+            class OrderService {
+                void run() {
+                }
+            =======
+            import java.time.Instant;
+            import java.util.List;
+
+            class OrderService {
+                void run() {
+                    charge();
+                }
+            >>>>>>> theirs
+            }
+            """;
+
+    @Test
+    @DisplayName("the settled stretch is applied beside the markers the open one keeps")
+    void theSettledStretchIsAppliedBesideMarkers() throws IOException {
+        Path file = write("Mixed.java", SETTLED_AND_OPEN_IN_ONE_BLOCK);
+
+        Result result = toolFor(file).applyFixes(true).run();
+
+        MergeFileTool.BlockOutcome outcome = result.outcomes().get(0);
+        assertEquals(Outcome.APPLIED_PARTIAL, outcome.outcome(), outcome.explanation());
+        assertEquals(1, result.exitCode(),
+            "the file still carries a conflict, so the exit status says so: " + outcome.explanation());
+
+        String applied = read(file);
+        assertTrue(applied.contains("<<<<<<<"), "the open stretch keeps its markers: " + applied);
+        assertTrue(applied.contains("import java.math.BigDecimal;")
+                && applied.contains("import java.time.Instant;"),
+            "and the settled stretch was applied: " + applied);
+        assertTrue(applied.contains("class OrderService {"),
+            "the line neither branch touched survives: " + applied);
+        assertTrue(applied.indexOf("import java.time.Instant;") < applied.indexOf("<<<<<<<"),
+            "the applied stretch is written outside the markers, not inside them: " + applied);
+        assertTrue(applied.indexOf("<<<<<<<") < applied.indexOf("audit();"),
+            "and the contested stretch is inside them: " + applied);
+    }
 
     private Path write(String fileName, String content) throws IOException {
         Path file = tempDir.resolve(fileName);
