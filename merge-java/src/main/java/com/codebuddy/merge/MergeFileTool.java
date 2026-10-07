@@ -844,6 +844,17 @@ public final class MergeFileTool {
                     + "applyRecordedDecisions(true) only after confirming they still compose.",
                 null, false, resolutions);
         }
+        boolean anySuggestion = deciding.stream()
+            .anyMatch(r -> r.getKind() == ConflictResolution.ResolutionKind.SUGGESTION);
+        if (anySuggestion) {
+            // An offer is not an answer, and this must be said before "several automatic answers cannot compose":
+            // a block whose only content is an offered answer would otherwise be reported as automatic answers
+            // that clash, which tells a reviewer the opposite of what happened.
+            return new BlockDecision(Outcome.LEFT_SUGGESTION, type,
+                joined(deciding) + " The ported merge pass or a resolver offered an answer for part of this"
+                    + " block; it is yours to accept or refuse.",
+                null, true, resolutions);
+        }
         return new BlockDecision(Outcome.LEFT_MULTIPLE_AUTOMATIC, type,
             joined(deciding) + " Several automatic resolutions claim this block; they cannot "
                 + "be composed safely, so it is left for a resolver that understands the whole "

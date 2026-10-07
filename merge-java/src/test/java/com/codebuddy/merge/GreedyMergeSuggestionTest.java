@@ -6,10 +6,12 @@ import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -163,5 +165,57 @@ class GreedyMergeSuggestionTest {
             at = text.indexOf(needle, at + needle.length());
         }
         return count;
+    }
+
+    @Test
+    @DisplayName("the pass fills the space where nothing decided, and only there")
+    void theResolverOffersWhereNothingDecided() {
+        // The wiring, at the point where it is decided: a conflict no resolver answered becomes an offered answer,
+        // an automatic answer is left alone, and a refusal stays a refusal.
+        MergeConflictResolver resolver = new MergeConflictResolver.Builder()
+            .setBranchName("greedy-test")
+            .setInMemoryOnly(true)
+            .setResolvers(List.of(new StructuralChangeConflictResolver()))
+            .build();
+
+        // Two independent changes at different places: the two-way diffs do not overlap, so each side's change is
+        // taken and the composition is mechanical.
+        Conflict independent = new Conflict(ConflictType.STRUCTURAL_CHANGE, "A.java", "sample",
+            "a\nb\nc\n", "A\nb\nc\n", "a\nb\nC\n");
+        ConflictResolution offered = resolver.resolve(independent);
+
+        assertEquals(ConflictResolution.ResolutionKind.SUGGESTION, offered.getKind(),
+            offered.getExplanation());
+        assertNotNull(offered.getSuggestion());
+        assertEquals("A\nb\nC\n", offered.getSuggestion().code());
+        assertTrue(offered.getSuggestion().provenance().contains("greedy word-level merge"),
+            offered.getSuggestion().provenance());
+        assertTrue(offered.getResolvedCode().isEmpty(),
+            "the text lives in the suggestion, so no field holds code the tool may not apply");
+
+        // Both sides changing the same place differently is R6: the ordering is a person's decision, so there is
+        // nothing to offer and the block stays manual.
+        Conflict differing = new Conflict(ConflictType.STRUCTURAL_CHANGE, "A.java", "sample",
+            "a\nb\nc\n", "a\nOURS\nc\n", "a\nTHEIRS\nc\n");
+        assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolver.resolve(differing).getKind(),
+            "a refusal must stay a refusal rather than becoming an offer of nothing");
+    }
+
+    @Test
+    @DisplayName("a resolver that decided something is never second-guessed by the pass")
+    void anAutomaticAnswerIsLeftAlone() {
+        MergeConflictResolver resolver = new MergeConflictResolver.Builder()
+            .setBranchName("greedy-test")
+            .setInMemoryOnly(true)
+            .setResolvers(ConflictResolvers.defaultResolvers())
+            .setTypeContext(TestTypeContexts.jdk())
+            .build();
+
+        // The import union is an answer the tool may apply. If the pass ran here it would replace a decision with
+        // an offer, which is the opposite of what the channel is for.
+        ConflictResolution resolution = resolver.resolve(ConflictFixtures.sample(ConflictType.IMPORT_ADD));
+
+        assertEquals(ConflictResolution.ResolutionKind.AUTO, resolution.getKind(), resolution.getExplanation());
+        assertFalse(resolution.hasSuggestion(), "no offer where there is already an answer");
     }
 }

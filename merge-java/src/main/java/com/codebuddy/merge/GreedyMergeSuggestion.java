@@ -103,27 +103,33 @@ public final class GreedyMergeSuggestion {
             baseAt = nextBase;
 
             // One run: every change on either side that overlaps in base coordinates.
+            int baseStart = baseAt;
             int baseEnd = baseAt;
             int leftLength = 0;
             int rightLength = 0;
+            boolean leftChanged = false;
+            boolean rightChanged = false;
             while (leftIndex < leftChanges.size() && leftChanges.get(leftIndex).start1() <= baseEnd) {
                 DiffRange change = leftChanges.get(leftIndex++);
                 baseEnd = Math.max(baseEnd, change.end1());
                 leftLength += change.length2();
+                leftChanged = true;
             }
             while (rightIndex < rightChanges.size() && rightChanges.get(rightIndex).start1() <= baseEnd) {
                 DiffRange change = rightChanges.get(rightIndex++);
                 baseEnd = Math.max(baseEnd, change.end1());
                 rightLength += change.length2();
+                rightChanged = true;
             }
+            int baseLength = baseEnd - baseStart;
 
             String ourText = joined(leftLines, leftAt, leftAt + leftLength);
             String theirText = joined(rightLines, rightAt, rightAt + rightLength);
             if (leftLength == 0 && rightLength == 0) {
                 // Neither side inserted anything here, so this run is a pure deletion: **the base lines are
-                // dropped**, which is R4's trade, and the cursors still have to move past them. An earlier version
-                // returned early here, and the deletion it was supposed to apply was simply re-emitted from the
-                // tail - the pass looking like it worked while doing the opposite of what it documents.
+                // dropped**, which is R4's trade. An earlier version returned early here, and the deletion it was
+                // supposed to apply was simply re-emitted from the tail — the pass looking like it worked while
+                // doing the opposite of what it documents.
             } else if (rightLength == 0) {
                 merged.append(ourText);
             } else if (leftLength == 0) {
@@ -137,9 +143,15 @@ public final class GreedyMergeSuggestion {
             }
             // R4, the trade: base lines inside the run are dropped - on a pure deletion that is the whole point of
             // the run, and on a replacement it is what "greedy" means.
+            //
+            // The cursors are the subtle half. A side that **changed** inside the run advances by its own text for
+            // the run; a side that did not change **kept the run's base lines**, so it advances by the run's base
+            // length. Advancing both by their own changed length is the bug this code carried: with one side
+            // unchanged in a run, its cursor fell behind the base lines it still had, and every later slice of that
+            // side was read from the wrong offset.
             baseAt = baseEnd;
-            leftAt += leftLength;
-            rightAt += rightLength;
+            leftAt += leftChanged ? leftLength : baseLength;
+            rightAt += rightChanged ? rightLength : baseLength;
         }
         append(merged, baseLines, baseAt, baseLines.size());
 

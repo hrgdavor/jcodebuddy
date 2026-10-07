@@ -200,13 +200,24 @@ public final class BlockComposition {
                 rightAt += unchanged;
             }
 
+            int baseLength = range.end2() - range.start2();
+            // A side that **changed** in this range has its own extent in it; a side that did not change **kept the
+            // range's base lines**, so its extent is the range's base length and not the empty range the change
+            // flags would otherwise leave. Getting this wrong is invisible to a coverage check - the lines are
+            // still covered, just by the wrong segment - and it is what made every later slice of that side be
+            // read from the wrong offset.
+            int leftStart = leftAt;
+            int leftEnd = change.leftChanged() ? range.end1() : leftAt + baseLength;
+            int rightStart = rightAt;
+            int rightEnd = change.rightChanged() ? range.end3() : rightAt + baseLength;
+
             segments.add(new Segment(classify(change, leftLines, rightLines),
                 range.start2(), range.end2(),
-                range.start1(), range.end1(),
-                range.start3(), range.end3()));
+                leftStart, leftEnd,
+                rightStart, rightEnd));
             baseAt = range.end2();
-            leftAt = range.end1();
-            rightAt = range.end3();
+            leftAt = leftEnd;
+            rightAt = rightEnd;
         }
 
         int baseTail = baseLines.size() - baseAt;
@@ -270,6 +281,13 @@ public final class BlockComposition {
      * Whether {@code segments} tile the block: every line of ours and of theirs, and every base line when the
      * block has a base at all, in exactly one segment.
      *
+     * <p><b>Coverage is necessary and not sufficient, and the difference bit this type once.</b> A segment for a
+     * range in which only one side changed used to carry the empty extent the change flags imply for the other
+     * side, so the lines that side had kept were covered by a <em>later</em> segment instead — every line still
+     * counted exactly once, and every later slice of that side was read from the wrong offset. So {@link #audit}
+     * also reports <b>an {@code UNCHANGED} segment whose extents are not the same length</b>: that is the shape a
+     * mis-advanced cursor leaves behind, and a coverage check alone will never see it.
+     *
      * <p>The base is exempt when {@code base} is empty, and the reason is a counting artifact rather than a
      * rule: a merge-style block has <em>no</em> base side, while {@link TextLines#of(String)} reads {@code ""}
      * as one empty line, so requiring that phantom line to be covered would fail every base-less block for a
@@ -310,6 +328,16 @@ public final class BlockComposition {
         collectCoveredTwice(baseCovered, "base", twice);
         collectCoveredTwice(leftCovered, "ours", twice);
         collectCoveredTwice(rightCovered, "theirs", twice);
+        // A shape check the coverage check cannot make: an UNCHANGED stretch means the sides are equal there, so
+        // unequal extents are the footprint of a cursor that fell behind.
+        for (Segment segment : segments == null ? List.<Segment>of() : segments) {
+            if (segment.kind() == Kind.UNCHANGED
+                && (segment.leftLength() != segment.rightLength()
+                    || segment.baseLength() != segment.leftLength())) {
+                twice.add("an UNCHANGED stretch with unequal extents: base " + segment.baseLength()
+                    + ", ours " + segment.leftLength() + ", theirs " + segment.rightLength());
+            }
+        }
         return new Audit(baseCount, missingBase, missingLeft, missingRight, twice);
     }
 

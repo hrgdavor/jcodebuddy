@@ -172,6 +172,47 @@ class BlockCompositionTest {
     }
 
     @Test
+    @DisplayName("a stretch one side left alone carries the lines that side kept, not an empty extent")
+    void anUnchangedSideKeepsItsLinesInPlace() {
+        // The defect the coverage check cannot see: with only one side changing, the other side's extent used to be
+        // the empty range the change flags imply, so the lines it had kept were covered by a LATER segment instead -
+        // every line still counted once, and every later slice of that side read from the wrong offset.
+        List<BlockComposition.Segment> segments =
+            BlockComposition.segments("a\nb\nc", "a\nB\nc", "a\nb\nc", POLICY);
+
+        assertTrue(BlockComposition.audit("a\nb\nc", "a\nB\nc", "a\nb\nc", segments).holds(),
+            BlockComposition.audit("a\nb\nc", "a\nB\nc", "a\nb\nc", segments).describe());
+        for (BlockComposition.Segment segment : segments) {
+            if (segment.kind() == BlockComposition.Kind.UNCHANGED) {
+                assertEquals(segment.leftLength(), segment.rightLength(),
+                    "an unchanged stretch is equal on both sides: " + segment);
+                assertEquals(segment.baseLength(), segment.leftLength(), segment.toString());
+            }
+        }
+        BlockComposition.Segment changed = segments.stream()
+            .filter(segment -> segment.kind() == BlockComposition.Kind.LEFT_ONLY)
+            .findFirst().orElseThrow();
+        assertEquals(1, changed.rightLength(),
+            "and the side that did not change kept its line inside the changed stretch: " + changed);
+    }
+
+    @Test
+    @DisplayName("an UNCHANGED stretch with unequal extents is reported")
+    void anUnequalUnchangedStretchIsReported() {
+        // The assertion that was missing: coverage alone accepted a segment claiming to be unchanged while its three
+        // extents had different lengths, which is the footprint of a cursor that fell behind.
+        BlockComposition.Segment broken =
+            new BlockComposition.Segment(BlockComposition.Kind.UNCHANGED, 1, 2, 1, 3, 1, 2);
+
+        BlockComposition.Audit audit = BlockComposition.audit("a\nb\nc", "a\nb\nc", "a\nb\nc", List.of(broken));
+
+        assertFalse(audit.holds());
+        assertTrue(audit.coveredTwice().stream().anyMatch(entry -> entry.contains("unequal extents")),
+            audit.coveredTwice().toString());
+        assertTrue(audit.describe().contains("claimed twice"), audit.describe());
+    }
+
+    @Test
     @DisplayName("an empty segment list is reported rather than passing silently")
     void anEmptyWalkIsReported() {
         BlockComposition.Audit audit = BlockComposition.audit("a\nb", "a\nb", "a\nb", List.of());

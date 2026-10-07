@@ -2,6 +2,8 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -346,6 +348,12 @@ public class MergeConflictResolver {
         // travels *after* the proposer above so that a proposer's option stays among its alternatives.
         resolution = asSuggestion(conflict, resolution, resolver);
 
+        // Plan step 4.17: where nothing decided at all, the ported greedy pass may still have an answer worth
+        // offering. It runs only on a MANUAL resolution - an answer nobody produced - so it never second-guesses a
+        // resolver that decided something, and it produces a suggestion rather than an application because its
+        // deletion handling is a trade rather than a proof (JETBRAINS_PORT.md section 5.2).
+        resolution = greedyOffer(conflict, resolution, resolver);
+
         // WS3: nothing is applied without passing the verification gate.
         resolution = verifier.apply(conflict, resolution);
 
@@ -353,6 +361,49 @@ public class MergeConflictResolver {
             historyStore.record(conflict, resolution);
         }
         return resolution;
+    }
+
+    /**
+     * Offer what the ported greedy pass can compose, when nothing else decided the conflict (plan step 4.17).
+     *
+     * <h2>Why only on a MANUAL resolution, and why it is never applied</h2>
+     *
+     * <p>A {@code MANUAL} resolution means no resolver produced an answer — the conflict was declined,
+     * escalated, or belongs to a type nothing recognises. That is precisely the space the ported pass fills: it
+     * composes text from the two sides without needing to understand the language, and its result is worth a
+     * reviewer's attention even though it is not provable. Running it on anything else would second-guess a
+     * resolver that already answered.
+     *
+     * <p>It is a suggestion and never an application, for the reason {@link GreedyMergeSuggestion} records in its
+     * own javadoc: the pass applies deletions unconditionally, upstream states that as a trade, and applying a
+     * trade with nobody watching is the invisible regression {@code DESIGN_NEVER_AUTO_RESOLVED.md} § 5.3 exists to
+     * prevent.
+     *
+     * <p>The policy is {@link ComparisonPolicy#DEFAULT} with the {@code IGNORE_WHITESPACES} retry, which is
+     * upstream's own order — and the retry produces a suggestion whose provenance names the lenient policy, so a
+     * reviewer can refuse one without refusing the other.
+     */
+    private static ConflictResolution greedyOffer(Conflict conflict, ConflictResolution resolution,
+                                                  ConflictResolver resolver) {
+        if (resolution.getKind() != ConflictResolution.ResolutionKind.MANUAL) {
+            return resolution;
+        }
+        Optional<Suggestion> offered = GreedyMergeSuggestion.withWhitespaceRetry(
+            conflict.getBaseCode(), conflict.getBranch1Code(), conflict.getBranch2Code(),
+            ComparisonPolicy.DEFAULT);
+        if (offered.isEmpty()) {
+            return resolution;
+        }
+        return ConflictResolution.copyOf(resolution)
+            .kind(ConflictResolution.ResolutionKind.SUGGESTION)
+            .suggestion(offered.get())
+            // The text lives in the suggestion alone, so no field holds code the tool may not apply.
+            .resolvedCode("")
+            .explanation((resolver == null
+                    ? "No resolver is registered for " + conflict.getType() + "."
+                    : resolver.name() + " could not resolve this.")
+                + " The ported merge pass composed an answer, offered for review.")
+            .build();
     }
 
     /**
