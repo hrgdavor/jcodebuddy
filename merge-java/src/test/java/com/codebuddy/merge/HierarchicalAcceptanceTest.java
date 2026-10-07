@@ -83,6 +83,58 @@ class HierarchicalAcceptanceTest {
                 + result.outcomes().get(0).explanation());
     }
 
+    @Test
+    @DisplayName("the report says what became of every conflict, including the one never asked about")
+    void theReportCarriesTheStateOfEveryConflict() throws IOException {
+        // A settled conflict has no claim of its own, so without this key it appears nowhere in the report:
+        // the reviewer sees a conflict that vanished rather than one that was cleared (DEC-046 clause 7).
+        Path file = write("OrderService.java", TWO_METHODS_ADDED);
+        Path report = tempDir.resolve("state-report.json");
+
+        Result result = toolFor(file).reportPath(report).run();
+
+        assertEquals(0, result.exitCode());
+        String json = Files.readString(report, StandardCharsets.UTF_8);
+        long resolved = json.split("\"state\": \"RESOLVED\"", -1).length - 1;
+        assertEquals(2, resolved,
+            "both conflicts are settled: one by its own answer, one by never having been asked: " + json);
+    }
+
+    @Test
+    @DisplayName("a conflict nothing settled is reported open rather than absent")
+    void anUnsettledConflictIsReportedOpen() throws IOException {
+        Path file = write("Unsettled.java", UNSETTLED_LINE);
+        Path report = tempDir.resolve("open-report.json");
+
+        Result result = toolFor(file).reportPath(report).run();
+
+        assertEquals(1, result.exitCode(), "the block is left for a human");
+        String json = Files.readString(report, StandardCharsets.UTF_8);
+        assertTrue(json.contains("\"state\": \"OPEN\""),
+            "an open conflict is named as open, which is what tells a reviewer the tier was asked and did "
+                + "not decide: " + json);
+    }
+
+    /**
+     * A block where both branches change one statement differently, so no detector decides it.
+     *
+     * <p>The counterweight to the fixture above: it is what an {@code OPEN} conflict looks like in a report,
+     * and it is the case a settled conflict must not be confused with.
+     */
+    private static final String UNSETTLED_LINE = """
+            package com.example.demo;
+
+            public class OrderService {
+            <<<<<<< ours
+                private int retries = 5;
+            ||||||| base
+                private int retries = 0;
+            =======
+                private int retries = 7;
+            >>>>>>> theirs
+            }
+            """;
+
     private Path write(String fileName, String content) throws IOException {
         Path file = tempDir.resolve(fileName);
         Files.writeString(file, content, StandardCharsets.UTF_8);

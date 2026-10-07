@@ -117,6 +117,7 @@ public final class MergeReportWriter {
 
     private static String conflictsJson(MergeConflictResolver.MergeReport report) {
         List<Conflict> conflicts = report.getConflicts();
+        List<ConflictState> states = report.getStates();
         StringBuilder json = new StringBuilder("[");
         for (int index = 0; index < conflicts.size(); index++) {
             Conflict conflict = conflicts.get(index);
@@ -124,9 +125,16 @@ public final class MergeReportWriter {
                 .append(", \"description\": ").append(quote(conflict.getDescription()))
                 .append(", \"region\": ").append(regionJson(conflict.getRegion()))
                 .append(", \"signature\": ")
-                    .append(quote(ConflictSignature.of(conflict).toFileName()))
-                .append(", \"sides\": ")
-                    .append(sidesJson(conflict.getBaseCode(), conflict.getBranch1Code(), conflict.getBranch2Code()))
+                    .append(quote(ConflictSignature.of(conflict).toFileName()));
+            if (index < states.size()) {
+                // What became of this conflict. Written per conflict rather than per resolution because a
+                // conflict another claim settled has no resolution of its own, and this key is the only
+                // place it appears at all (plan step 4.20, DEC-046 clause 7). Omitted when the caller did
+                // not track states, rather than inventing one.
+                json.append(", \"state\": ").append(quote(states.get(index).name()));
+            }
+            json.append(", \"sides\": ")
+                .append(sidesJson(conflict.getBaseCode(), conflict.getBranch1Code(), conflict.getBranch2Code()))
                 .append(", \"handling\": ")
                 .append(quote(conflict.getType().handling().name()))
                 .append('}');

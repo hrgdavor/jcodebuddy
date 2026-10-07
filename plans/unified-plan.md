@@ -3606,10 +3606,10 @@ of thing to everyone downstream, and **a new suggestion source adds a producer a
 
 ---
 
-#### 4C — hierarchical resolution: a confident answer resolves its region and removes the conflict (steps 4.18–4.20)
+#### 4C — hierarchical resolution: a confident answer resolves its region and removes the conflict (steps 4.18–4.21)
 
 > **Why a second lettered subsection.** The same reason as 4B: renumbering is forbidden, and this is a
-> phase-sized block of merge-java work that follows 4.6 and depends on it. Steps 4.18–4.20 belong to
+> phase-sized block of merge-java work that follows 4.6 and depends on it. Steps 4.18–4.21 belong to
 > Phase 4 and sit here for the same cause 4.7–4.17 do.
 
 **The instruction this block exists for**, given by the maintainer on 2026-10-07, and sharpened by them
@@ -3658,18 +3658,19 @@ requires `coversBlock`, so an answer that settles part of a block becomes `LEFT_
 and the whole block — including the part already right — goes to a human; and `residualSubsumed`
 removes a claim before arbitration, so "cleared" and "never raised" read identically.
 
-**Ordering.** 4.18 gates 4.19 and 4.20. 4.18 is deliberately behaviour-neutral — the working set exists
+**Ordering.** 4.18 gates 4.19; 4.21 gates on 4.20. 4.18 is deliberately behaviour-neutral — the working set exists
 and nothing is removed — so the invariant test is what lands first and the two removing steps are judged
-against it. 4.20 needs 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`),
+against it. 4.21 needs 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`),
 which is why it comes after the port's SAFE half rather than beside it. **4C is independent of
 4.11–4.17** and may be landed before, after or between them; where the ordering matters it is stated per
 step.
 
-| Step | What                                                                                          | Who   | Size |
-| ---- | --------------------------------------------------------------------------------------------- | ----- | ---- |
-| 4.18 | The working set: the three conflict states, the tier order, and the partition invariant       | agent | S–M  |
+| Step | What                                                                                           | Who   | Size |
+| ---- | ---------------------------------------------------------------------------------------------- | ----- | ---- |
+| 4.18 | The working set: the three conflict states, the tier order, and the partition invariant        | agent | S–M  |
 | 4.19 | Reliability and removal: a reliable claim spanning a whole region resolves it, and the lower tier is never asked | agent | M |
-| 4.20 | Partial resolution and composition — applied spans beside markers, and the outcome vocabulary | agent | M    |
+| 4.20 | The state of every conflict in the report — the shape 4.21's composition will need             | agent | S    |
+| 4.21 | The composed partial result: applied spans beside markers, and the outcome the enum is missing | agent | M–L  |
 
 ### 4.18 — The working set: tiers, the three states, and the invariant that comes first
 **Who:** agent · **Size:** S–M
@@ -3909,36 +3910,70 @@ now reports "never asked" instead of "Outranked on this block", which is the imp
 step-4.6 arbitration test is untouched. `merge-java` — **828 tests, 0 failures, 0 errors** with the build cache
 off.
 
-### 4.20 — Partial resolution: applied spans beside markers, and the outcome the enum was missing
-**Who:** agent · **Size:** M
+### 4.20 — The state of every conflict in the report, and the shape the composition will need
+**Who:** agent · **Size:** S · **Done 2026-10-07**
+
+**This began as one step and is now two, and the split is the honest part.** The original 4.20 was "compose the
+block from resolved regions and open lines, retire `LEFT_PARTIAL_RESOLUTION`, grow the outcome enum". Writing it
+showed what that actually is: **text surgery on the person's file, in three coordinate systems**, where a wrong
+offset does not fail loudly — it deletes a line of their code. The machinery exists (`MergeRangeBuilder` returns
+`MergeChange` records carrying base, left and right line ranges, which is exactly the position information the
+composition needs) but getting it wrong is the worst failure this tool can have, so it gets its own step with its
+own tests. **That is 4.21.** What landed here is the part that needed no surgery and that a reviewer needs first:
+the report can now say what became of every conflict, which is also 4.19's last named remainder.
 
 **Do:**
 
-1. **Compose the block from resolved regions and open lines.** Where a claim resolves base lines 10–20
-   of a 10–40 block, the result is the applied text for 10–20 and conflict markers for 21–40. The
-   composition uses 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`) —
-   range building is what it is for — rather than a second splicer.
-2. **Retire `LEFT_PARTIAL_RESOLUTION` as a dead end.** Today an automatic answer that does not cover
-   the whole block leaves the whole block for a human. That outcome exists because the tool could not
-   express "applied in part"; once it can, the shape that produced it resolves, and the outcome stays
-   only for an answer that leaves *nothing* settled.
-3. **Grow the outcome vocabulary where a new result shape exists** (the maintainer's 2026-10-07
-   instruction that the outcome enum is to grow). "Some spans applied, the rest left open" is a result
-   the tool has never been able to report and is not any existing outcome; it gets a value of its own
-   rather than overloading `APPLIED_AUTO`. An outcome the enum can no longer produce is **removed,
-   not left as a synonym**.
-4. **The partition still holds at the file level**, and the invariant test now runs over composed
-   output as well as over the pass: every block line reaches the output exactly once, applied or as a
-   marked open line, and no resolved region is applied twice.
+1. **A `state` per conflict in the report**, index-aligned with the conflicts rather than with the resolutions.
+   That alignment is the point: a conflict another claim settled **has no resolution of its own** — it was never
+   asked about — so before this key it appeared nowhere in the report at all, and a reviewer saw a conflict that
+   vanished rather than one that was cleared (DEC-046 clause 7). The key is omitted when a caller does not track
+   states, because inventing one would be worse than saying nothing.
+2. **The two states are asserted separately**, so "cleared" and "asked and undecided" cannot be confused: the
+   instruction's own example reports `RESOLVED` for both of its conflicts, and a block nothing settles reports
+   `OPEN`.
 
-**Gate:** `MODULE` for `merge-java` green, with a fixture block whose two halves are settled by
-different tiers, showing the applied half in the output and markers on the open half; the file-level
-partition invariant; a test that the new outcome is reported for exactly this shape; and the composed
-result of the fixture **compiling** — an applied half and a marked half are not a reason for the file
-to stop being Java elsewhere.
+**Still to do in 4.21**, kept here so the split loses nothing: the composition itself, retiring
+`LEFT_PARTIAL_RESOLUTION` for the shape it can now express, the outcome value for "applied in part", and the
+file-level partition invariant over composed output.
 
-**Done when:** a mixed block comes out with the part the tool understood applied and only the genuinely
-open lines marked, and the outcome says which of the two it was.
+**Gate:** `merge-java` green with `HierarchicalAcceptanceTest` asserting the report carries `RESOLVED` for the
+cleared conflict and `OPEN` for an unsettled one. `merge-java` — **830 tests, 0 failures, 0 errors** with the
+build cache off.
+
+### 4.21 — The composed partial result: applied spans beside markers, and the outcome the enum is missing
+**Who:** agent · **Size:** M–L
+
+**Do:**
+
+1. **Compose the block from resolved regions and open lines.** Where a claim resolves base lines 10–20 of a
+   10–40 block, the result is the applied text for 10–20 and conflict markers for 21–40. The composition uses
+   4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`) — range building is what it is
+   for, and its three coordinate pairs are the position information no other part of the module has — rather than
+   a second splicer. **The hazard, stated before the work rather than discovered by it:** this rewrites the
+   person's file in three coordinate systems at once, and a wrong offset does not fail loudly, it deletes a line
+   of their code. So the tests come first, and the partition invariant is what they assert.
+2. **Retire `LEFT_PARTIAL_RESOLUTION` as a dead end.** Today an automatic answer that does not cover the whole
+   block leaves the whole block for a human. That outcome exists because the tool could not express "applied in
+   part"; once it can, the shape that produced it resolves, and the outcome stays only for an answer that leaves
+   *nothing* settled. `MergeFileToolTest.partialResolutionLeavesTheBlock` is the fixture to watch: its import
+   union is a correct answer for the import lines, and the class header it does not mention is **uncontested** —
+   both sides carry it — so composing those lines back is not a decision, it is not losing them.
+3. **Grow the outcome vocabulary where a new result shape exists** (the maintainer's 2026-10-07 instruction that
+   the outcome enum is to grow). "Some spans applied, the rest left open" is a result the tool has never been
+   able to report and is not any existing outcome; it gets a value of its own rather than overloading
+   `APPLIED_AUTO`. An outcome the enum can no longer produce is **removed, not left as a synonym**.
+4. **The partition still holds at the file level**, and the invariant test now runs over composed output as well
+   as over the pass: every block line reaches the output exactly once, applied or as a marked open line, and no
+   resolved region is applied twice.
+
+**Gate:** `MODULE` for `merge-java` green, with a fixture block whose two halves are settled by different tiers,
+showing the applied half in the output and markers on the open half; the file-level partition invariant; a test
+that the new outcome is reported for exactly this shape; and the composed result of the fixture **compiling** —
+an applied half and a marked half are not a reason for the file to stop being Java elsewhere.
+
+**Done when:** a mixed block comes out with the part the tool understood applied and only the genuinely open
+lines marked, and the outcome says which of the two it was.
 
 ---
 
@@ -4035,7 +4070,7 @@ caller-supplied entry separates the two type levels; a type change records which
 `equalEvidenceOutranksNothing`. Decision record:
 [`DEC-045`](../doc-hipster-entity/architecture/decisions/DEC-045.md).
 
-**Companion, and the next thing in this area: § 4C (steps 4.18–4.20).** This step says how claims are
+**Companion, and the next thing in this area: § 4C (steps 4.18–4.21).** This step says how claims are
 *compared*; the instruction of 2026-10-07 says they must not all be *produced* in the first place. The
 scale built here is the order § 4C runs in — a claim's tier is the level it records — and
 `outranking` survives there for the one case the hierarchy cannot separate: two claims at the same
@@ -4838,7 +4873,8 @@ start)
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
 | 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in and the instruction's first example now works end to end**: `TieredResolution` + `Reliability` + `explainedSpan`, and a settled conflict is never offered to the resolver below. Four findings came from tests, all corrected in the design: the kept-lines check must judge the *settled* conflict; removal follows the hierarchy's direction (else `equalEvidenceOutranksNothing` became `APPLIED_AUTO`); an insertion has no base lines so an unplaceable conflict is judged over its block; and the report's region stamp must not be applied before resolution (else `IMPORT_ADD` settled an unrelated `COMMENT_ADD`). **Still open:** the per-conflict state as a report key (4.20 changes that shape), `DEFERRED` settling at its resolver's tier, an import-vs-`TEXT_LOCAL` fixture, and the open question of whether the catch-all residual should declare `STRUCTURE` at all |
-| 4.20 | Hierarchical resolution: partial resolution, composed output, and the grown outcome enum        | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied regions beside markers               |
+| 4.20 | Hierarchical resolution: the state of every conflict in the report                              | agent              | S    | `[x]` — a `state` key per conflict (`RESOLVED`/`OPEN`/`PARTIAL`), aligned with the **conflicts** because a settled one has no resolution of its own and appeared nowhere before; `HierarchicalAcceptanceTest` asserts both states separately |
+| 4.21 | Hierarchical resolution: the composed partial result and the grown outcome enum                 | agent              | M–L  | `[ ]` — needs 4.9's range machinery (`MergeChange` carries the base/left/right positions) to compose applied regions beside markers; **text surgery in three coordinate systems, so the tests come first** |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |
 | 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |

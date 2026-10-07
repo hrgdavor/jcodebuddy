@@ -571,13 +571,33 @@ public class MergeConflictResolver {
         private final List<Conflict> conflicts;
         private final List<ConflictResolution> resolutions;
         private final String branchName;
+        private final List<ConflictState> states;
 
         MergeReport(String filePath, List<Conflict> conflicts,
                     List<ConflictResolution> resolutions, String branchName) {
+            this(filePath, conflicts, resolutions, branchName, List.of());
+        }
+
+        /**
+         * A report that also records what became of each conflict, index-aligned with
+         * {@link #getConflicts()}.
+         *
+         * <p>Needed because a conflict another claim settled has <b>no claim of its own</b> — it was never
+         * asked about, so it appears in neither {@link #getResolutions()} nor the block's outcome, and a
+         * reviewer would otherwise see it silently disappear. The state is per conflict rather than per
+         * resolution for exactly that reason (unified plan step 4.20, DEC-046 clauses 7 and 9).
+         *
+         * <p>A caller that does not track states passes the four-argument constructor and the report omits
+         * the key rather than inventing a state for every conflict.
+         */
+        MergeReport(String filePath, List<Conflict> conflicts,
+                    List<ConflictResolution> resolutions, String branchName,
+                    List<ConflictState> states) {
             this.filePath = filePath;
             this.conflicts = Collections.unmodifiableList(new ArrayList<>(conflicts));
             this.resolutions = Collections.unmodifiableList(new ArrayList<>(resolutions));
             this.branchName = branchName;
+            this.states = Collections.unmodifiableList(new ArrayList<>(states));
         }
 
         public String getFilePath() {
@@ -590,6 +610,14 @@ public class MergeConflictResolver {
 
         public List<ConflictResolution> getResolutions() {
             return resolutions;
+        }
+
+        /**
+         * The state each conflict reached, index-aligned with {@link #getConflicts()}; empty when the
+         * caller did not track states.
+         */
+        public List<ConflictState> getStates() {
+            return states;
         }
 
         public String getBranchName() {

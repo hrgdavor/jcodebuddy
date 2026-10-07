@@ -529,6 +529,7 @@ public final class MergeFileTool {
 
 
         List<ConflictResolution> reportedResolutions = new ArrayList<>();
+        List<ConflictState> reportedStates = new ArrayList<>();
         List<ConflictFixtureWriter.FixtureCase> cases = new ArrayList<>();
         List<Integer> fixtureBlocks = new ArrayList<>();
         Map<Integer, List<String>> replacements = new LinkedHashMap<>();
@@ -568,6 +569,12 @@ public final class MergeFileTool {
             boolean residualSubsumed = residualSubsumed(detected, resolutions, block);
 
             reportedConflicts.addAll(conflicts);
+
+            // What became of each of them, in the same order. A settled conflict has no claim of its own, so
+            // this is the only place in the report where it appears (plan step 4.20, DEC-046 clause 7).
+            for (ResolutionPass.LiveConflict live : tiered.pass().all()) {
+                reportedStates.add(live.state());
+            }
 
 
             reportedResolutions.addAll(present);
@@ -620,7 +627,7 @@ public final class MergeFileTool {
             MergeConflictResolver.MergeReport report = new MergeConflictResolver.MergeReport(reportedPath,
 
 
-                reportedConflicts, reportedResolutions, branchName);
+                reportedConflicts, reportedResolutions, branchName, reportedStates);
 
 
             MergeReportWriter.write(builder.reportPath, List.of(report), summaryFor(builder, report, outcomes));
