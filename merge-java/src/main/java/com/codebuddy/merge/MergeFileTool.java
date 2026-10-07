@@ -101,6 +101,17 @@ public final class MergeFileTool {
         LEFT_REVIEW,
         /** Markers kept: no resolver could decide; fix paths describe the choices. */
         LEFT_MANUAL,
+        /** Markers kept: the tool worked out an answer and offers it as a suggestion, which it never applies
+         *  on its own (plan step 4.14). The markers stay until a person accepts it. */
+        LEFT_SUGGESTION,
+        /** <b>Applied from an accepted suggestion</b>: the answer came from the suggestion channel and a
+         *  person accepted it, so the tool did not decide it.
+         *
+         *  <p>Distinct from {@link #APPLIED_AUTO} on purpose. A run's report must be able to say "three blocks
+         *  were decided by the tool, two were applied from your accepted suggestions" — one merged "applied"
+         *  count would claim credit the tool has not earned, and the difference is exactly what a reader needs
+         *  in order to know how much of this merge they have already looked at. */
+        APPLIED_SUGGESTION,
         /** Markers kept: this branch already recorded a decision; re-run with
          *  {@link Builder#applyRecordedDecisions(boolean)} to write it. */
         LEFT_DEFERRED,
@@ -135,6 +146,17 @@ public final class MergeFileTool {
             return outcome == Outcome.APPLIED_AUTO
                 || outcome == Outcome.APPLIED_IDENTICAL_SIDES
                 || outcome == Outcome.APPLIED_RECORDED_DECISION;
+        }
+
+        /**
+         * True when this block is done, whoever decided it.
+         *
+         * <p>Wider than {@link #applied()} by exactly the case that distinction exists for: a block applied
+         * from an accepted suggestion is finished, and the tool still did not decide it. The exit status must
+         * follow the first question, the report's tally the second.
+         */
+        boolean settled() {
+            return applied() || outcome == Outcome.APPLIED_SUGGESTION;
         }
 
         @Override
@@ -175,7 +197,7 @@ public final class MergeFileTool {
          * True when no conflict block remains unapplied.
          */
         public boolean fullyResolved() {
-            return leftCount() == 0;
+            return outcomes.stream().allMatch(BlockOutcome::settled);
         }
 
         /**
@@ -745,11 +767,14 @@ public final class MergeFileTool {
         if (deciding.size() == 1) {
             ConflictResolution resolution = deciding.get(0);
             return switch (resolution.getKind()) {
-                case AUTO -> coversBlock(resolution, block)
-                    ? new BlockDecision(Outcome.APPLIED_AUTO, type,
-                        resolution.getExplanation(), resolution.getResolvedCode(), false,
-                        resolutions)
-                    : partial(type, resolution, resolutions, block, policy);
+                case AUTO -> !coversBlock(resolution, block)
+                    ? partial(type, resolution, resolutions, block, policy)
+                    // An automatic resolution that carries a suggestion is one a person accepted: the code is
+                    // the decision, and the tool must not report it as its own (plan step 4.14).
+                    : new BlockDecision(
+                        resolution.hasSuggestion() ? Outcome.APPLIED_SUGGESTION : Outcome.APPLIED_AUTO,
+                        type, resolution.getExplanation(), resolution.getResolvedCode(), false,
+                        resolutions);
                 case DEFERRED -> applyRecordedDecisions
                     // A recorded decision is the human answer to exactly this
                     // disagreement (the signature matched), so the coverage
@@ -763,6 +788,11 @@ public final class MergeFileTool {
                     resolution.getExplanation(), null, true, resolutions);
                 case MANUAL -> new BlockDecision(Outcome.LEFT_MANUAL, type,
                     resolution.getExplanation(), null, true, resolutions);
+                // A suggestion is never applied here, and there is no flag that makes it be: the markers stay
+                // and the answer is shown. No fixture is prepared either - the suggestion *is* the artifact a
+                // person works from, and preparing a second copy of it would be noise (plan step 4.14).
+                case SUGGESTION -> new BlockDecision(Outcome.LEFT_SUGGESTION, type,
+                    resolution.getExplanation(), null, false, resolutions);
             };
         }
 

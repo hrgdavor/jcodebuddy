@@ -371,6 +371,10 @@ public class MergeConflictResolver {
         return switch (resolution.getKind()) {
             case DEFERRED, REVIEW -> true;
             case AUTO, MANUAL -> false;
+            // A suggestion must never be recorded: replaying it would apply an answer nobody accepted, which is
+            // the one thing the channel exists to prevent. What is recorded is the person's decision, and that
+            // arrives as a different resolution (plan step 4.14).
+            case SUGGESTION -> false;
         };
     }
 

@@ -77,6 +77,25 @@ public interface ResolutionVerifier {
      * method.
      */
     default ConflictResolution apply(Conflict conflict, ConflictResolution resolution) {
+        if (resolution.getKind() == ConflictResolution.ResolutionKind.SUGGESTION) {
+            // A suggestion is verified and <b>labelled</b>, never suppressed and never promoted (plan step
+            // 4.14, SUGGESTIONS.md § 5 rule 2). Upstream validates nothing and relies on a human in an editor;
+            // this module has a verifier, so the answer a reviewer is about to read gets the same floor an
+            // automatic one would - and a failure is written into the suggestion rather than hiding it,
+            // because a person may still want to see what was proposed and repair it. This is the treatment
+            // ProposerBehindTheGateTest already demands of a refused proposal.
+            if (resolution.getSuggestion() == null) {
+                return resolution;
+            }
+            Result verdict = verify(conflict, resolution);
+            if (verdict == null) {
+                verdict = Result.skipped("verifier returned no result");
+            }
+            return ConflictResolution.copyOf(resolution)
+                .suggestion(resolution.getSuggestion()
+                    .withVerification(verdict.status(), verdict.detail()))
+                .build();
+        }
         if (resolution.getKind() != ConflictResolution.ResolutionKind.AUTO) {
             // Only an automatic resolution carries the promise that is being
             // verified. Review, manual and replayed resolutions are already

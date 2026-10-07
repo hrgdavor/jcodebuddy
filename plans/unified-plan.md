@@ -3496,6 +3496,50 @@ write the resolution's `resolvedCode` or `kind`.
 outcome, and a new producer can offer one without touching `ConflictType`, `ConflictResolvers` or the
 page — the generality test in [`SUGGESTIONS.md` § 8](../merge-java/docs/SUGGESTIONS.md).
 
+**Done 2026-10-07 — the channel, with no producer and no page.**
+
+- **`Suggestion`** is the standalone value of [`SUGGESTIONS.md` § 3](../merge-java/docs/SUGGESTIONS.md):
+  `code`, `explanation`, `provenance`, `analysisLevel`, `warnings`, `verification` with its detail, and
+  `confidence` (`PROVEN`/`PLAUSIBLE`). It is deliberately **not** a field a producer must wrap in a
+  `ConflictResolution` to offer — that is what keeps the channel open to sources that are not resolvers at
+  all, and it is the generality the step's last line claims. `Confidence` is two-valued and the javadoc says
+  why: the tool can honestly say whether a proof exists, and a number would be read as a probability and
+  acted on as one.
+- **`ResolutionKind.SUGGESTION`**, and it is a kind rather than "a `REVIEW` that carries code" because the two
+  need different rules and sharing would turn each into a subtype check. The rule that bites first is the bulk
+  accept: `AUTO` is what "apply all resolved" takes, and a suggestion is a judgement about code a person has
+  read. `ConflictResolution.suggestion` is a field of its own with a getter and no setter — the structural
+  guarantee, generalised from `ConflictProposer`, that the channel cannot write `resolvedCode` or `kind`.
+- **`Outcome.LEFT_SUGGESTION`** (markers stay, and **no fixture is prepared** — the suggestion *is* the
+  artifact a person works from, so a second copy would be noise) and **`Outcome.APPLIED_SUGGESTION`**.
+- **The exit status and the tally ask different questions, and that is now two predicates.** `applied()` is
+  what the *tool* decided — a suggestion is not in it — while `settled()` also counts an applied suggestion,
+  and `fullyResolved()` uses `settled()`. One merged "applied" count would claim credit the tool has not
+  earned, which is the whole reason `APPLIED_SUGGESTION` is distinct.
+- **`ResolutionVerifier` now runs on a suggestion and *labels* it.** Upstream validates nothing and relies on a
+  human in an editor; this module has a floor, so the answer a reviewer is about to read gets the same check an
+  automatic one would — and a failure is written into the suggestion rather than suppressing it or turning it
+  into something else. `ProposerBehindTheGateTest` already demanded that treatment of a refused proposal;
+  `SuggestionChannelTest.aFailedSuggestionIsLabelledNotHidden` asserts it for the channel.
+- **A suggestion is never replayable**, whatever its sticky flag: recording it would replay an answer nobody
+  accepted, which is the one thing the channel must not do. `MergeConflictResolver.isWorthRemembering` says so
+  in an exhaustive switch, so a future kind cannot be forgotten there.
+
+**Deliberately not in this step, and named:** no producer offers a suggestion yet (4.15 moves the answers the
+module already computes onto the channel; 4.17 brings the word-level passes and the proposer), the page that
+shows one is 4.16, and **`APPLIED_SUGGESTION` therefore has no producer in this commit** — it is the vocabulary
+the acceptance path will produce, and the acceptance path itself is the page's `Accept` action plus the
+recorded-decision round trip. One more finding worth recording: a block whose other claim is `MANUAL` does
+**not** reach `LEFT_SUGGESTION`, because `decide`'s several-claims path reports the manual objection. Whether a
+suggestion should win the block's *outcome* in that case is a question for 4.15, not something to settle by
+accident here.
+
+**Gate:** `SuggestionChannelTest` — 3 tests, the three boundaries: a suggestion is offered and **never
+applied** (markers stay, exit 1); a suggestion that fails verification is **still there and marked failed**,
+with its proposed code intact; and a resolution whose only content is a suggestion carries **no code**, is not
+an automatic answer, and is not replayable. `merge-java verify` — **853 tests, 0 failures, 0 errors** with the
+build cache off.
+
 ### 4.15 — Move the answers we already compute onto the channel
 **Who:** agent · **Size:** M
 
@@ -4949,7 +4993,7 @@ start)
 | 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                             | agent              | S    | `[ ]`                                                                                       |
 | 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[ ]`                                                                                       |
 | 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
-| 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[ ]`                                                                                       |
+| 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
 | 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[ ]`                                                                                       |
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |

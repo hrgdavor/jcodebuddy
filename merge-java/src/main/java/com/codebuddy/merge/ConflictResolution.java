@@ -64,7 +64,18 @@ public final class ConflictResolution {
         AUTO,
         REVIEW,
         MANUAL,
-        DEFERRED
+        DEFERRED,
+        /**
+         * The resolution carries a {@link Suggestion}: an answer the tool worked out and offers, which it
+         * <b>never applies on its own</b> (plan step 4.14, {@code docs/SUGGESTIONS.md}).
+         *
+         * <p>A separate kind rather than "a {@code REVIEW} that carries code", because the two need different
+         * rules for application, for bulk actions and for reporting — and sharing a kind would force every one
+         * of those to become a subtype check. The difference is not cosmetic in either direction:
+         * {@code REVIEW} means "the tool is prepared to apply this and wants a nod", while this means "this is
+         * yours to accept or refuse", and only one of the two survives a bulk accept.
+         */
+        SUGGESTION
     }
 
     private final String filePath;
@@ -155,6 +166,19 @@ public final class ConflictResolution {
      */
     private final Region explainedSpan;
 
+    /**
+     * The suggestion this resolution carries, or {@code null} when it carries none.
+     *
+     * <p><b>A field of its own, and that is the structural guarantee rather than a style choice.</b> The
+     * property that makes the proposer seam safe is that the code attaching a proposal cannot reach the
+     * resolution — and it must hold for every producer, not for one implementation. A
+     * {@link Suggestion} cannot write {@link #resolvedCode} or {@link #kind}: there is no method on it that
+     * does, and this class exposes no setter. A suggestion is information; applying it is a decision somebody
+     * else makes, and the only way it becomes an application is a resolution built elsewhere
+     * ({@link Builder#suggestion(Suggestion)} on a resolution that is already {@link ResolutionKind#AUTO}).
+     */
+    private final Suggestion suggestion;
+
     private ConflictResolution(Builder builder) {
         this.filePath = builder.filePath == null ? "<unknown>" : builder.filePath;
         this.type = Objects.requireNonNull(builder.type, "type");
@@ -186,6 +210,22 @@ public final class ConflictResolution {
         this.explainedSpan = builder.explainedSpan == null
             ? Region.unknown()
             : builder.explainedSpan;
+        this.suggestion = builder.suggestion;
+    }
+
+    /**
+     * The suggestion this resolution carries, or {@code null}.
+     *
+     * <p>Read-only by construction: see the field's own note on why the channel cannot reach the resolution's
+     * code or kind.
+     */
+    public Suggestion getSuggestion() {
+        return suggestion;
+    }
+
+    /** True when this resolution offers an answer rather than deciding one. */
+    public boolean hasSuggestion() {
+        return suggestion != null;
     }
 
     /**
@@ -380,6 +420,17 @@ public final class ConflictResolution {
             || kind == ResolutionKind.DEFERRED;
     }
 
+    /**
+     * True when this resolution is an answer offered rather than a decision taken.
+     *
+     * <p>A suggestion is not among the replayable kinds whatever its sticky flag: recording it in the branch
+     * history would replay it as though a person had chosen it, which is the one thing the channel must not do.
+     * What gets recorded is the person's decision, and that arrives as a different resolution.
+     */
+    public boolean isSuggestion() {
+        return kind == ResolutionKind.SUGGESTION;
+    }
+
     public Instant getResolvedAt() {
         return resolvedAt;
     }
@@ -467,6 +518,7 @@ public final class ConflictResolution {
         private AnalysisLevel analysisLevel;
         private ComparisonPolicy whitespacePolicy;
         private Region explainedSpan;
+        private Suggestion suggestion;
         private final List<String> warnings = new ArrayList<>();
 
         Builder() {
@@ -496,6 +548,7 @@ public final class ConflictResolution {
             this.analysisLevel = source.analysisLevel;
             this.whitespacePolicy = source.whitespacePolicy;
             this.explainedSpan = source.explainedSpan;
+            this.suggestion = source.suggestion;
             this.warnings.addAll(source.warnings);
         }
 
@@ -638,6 +691,22 @@ public final class ConflictResolution {
          */
         public Builder explainedSpan(Region explainedSpan) {
             this.explainedSpan = explainedSpan;
+            return this;
+        }
+
+        /**
+         * Attach a suggestion: an answer the tool worked out and offers rather than applies.
+         *
+         * <p>Attaching it does <b>not</b> make it applied, and no call here does. On a
+         * {@link ResolutionKind#SUGGESTION} resolution the tool keeps the markers and shows it; on an
+         * {@link ResolutionKind#AUTO} resolution it means the suggestion has already been through the
+         * acceptance path and its code is the decision — which is why that combination is reported as an
+         * applied suggestion rather than as an ordinary automatic result. The two are different states of the
+         * same value, and the caller that builds the second one is the one carrying a person's decision,
+         * never this channel.
+         */
+        public Builder suggestion(Suggestion suggestion) {
+            this.suggestion = suggestion;
             return this;
         }
 
