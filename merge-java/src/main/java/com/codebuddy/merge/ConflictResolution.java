@@ -129,6 +129,32 @@ public final class ConflictResolution {
      */
     private final ComparisonPolicy whitespacePolicy;
 
+    /**
+     * The part of the conflicting region <b>this answer's own evidence accounts for</b> (unified plan step
+     * 4.19, DEC-046 clause 4).
+     *
+     * <p>This is the fact hierarchical resolution turns on, and it is not the same as "the region the
+     * resolver was asked about". A claim may <em>settle</em> a region — so that no lower tier is asked
+     * about it and the conflict leaves the working set — only where its own evidence explains every line
+     * of it. Three kinds of evidence do that, and a resolver that has one of them says so here:
+     *
+     * <ul>
+     *   <li><b>it recognised the declarations forming the span</b>, so it knows what is in it line by
+     *       line — {@link MemberAddConflictResolver} over the members it parsed;</li>
+     *   <li><b>its applied text keeps every line of both sides</b> in that span — checked independently
+     *       ({@link Reliability}), so a resolver need not declare this case at all;</li>
+     *   <li><b>the span is its own domain and it is authoritative there</b> — the import block, for
+     *       {@link ImportConflictResolver}.</li>
+     * </ul>
+     *
+     * <p><b>Defaults to {@link Region#unknown()}, which explains nothing.</b> The default is the safe
+     * direction and it is load-bearing: a resolver that said nothing would otherwise appear to explain its
+     * whole region, and every claim would settle every conflict it was asked about. A resolver that
+     * genuinely reads its whole region says so; one that reads a line of text says nothing, is still a
+     * claim, and is still arbitrated by evidence strength as before.
+     */
+    private final Region explainedSpan;
+
     private ConflictResolution(Builder builder) {
         this.filePath = builder.filePath == null ? "<unknown>" : builder.filePath;
         this.type = Objects.requireNonNull(builder.type, "type");
@@ -157,6 +183,20 @@ public final class ConflictResolution {
         this.whitespacePolicy = builder.whitespacePolicy == null
             ? ComparisonPolicy.TRIM_WHITESPACES
             : builder.whitespacePolicy;
+        this.explainedSpan = builder.explainedSpan == null
+            ? Region.unknown()
+            : builder.explainedSpan;
+    }
+
+    /**
+     * The part of the conflicting region this answer's own evidence accounts for; never {@code null}.
+     *
+     * <p>See the field's own note: the default is {@link Region#unknown()}, which explains nothing and
+     * therefore settles nothing, and a resolver that genuinely read its whole region says so through
+     * {@link Builder#explainedSpan(Region)}.
+     */
+    public Region getExplainedSpan() {
+        return explainedSpan;
     }
 
     /**
@@ -426,6 +466,7 @@ public final class ConflictResolution {
         private Verification verification;
         private AnalysisLevel analysisLevel;
         private ComparisonPolicy whitespacePolicy;
+        private Region explainedSpan;
         private final List<String> warnings = new ArrayList<>();
 
         Builder() {
@@ -454,6 +495,7 @@ public final class ConflictResolution {
             this.verification = source.verification;
             this.analysisLevel = source.analysisLevel;
             this.whitespacePolicy = source.whitespacePolicy;
+            this.explainedSpan = source.explainedSpan;
             this.warnings.addAll(source.warnings);
         }
 
@@ -581,6 +623,21 @@ public final class ConflictResolution {
          */
         public Builder whitespacePolicy(ComparisonPolicy whitespacePolicy) {
             this.whitespacePolicy = whitespacePolicy;
+            return this;
+        }
+
+        /**
+         * Declare the part of the conflicting region this answer's own evidence accounts for.
+         *
+         * <p>Set this only where the answer <em>is</em> the region's content — the declarations the
+         * resolver parsed, or the block it is authoritative over — because a claim that explains its
+         * region settles it: no lower tier is asked about those lines and the conflict leaves the working
+         * set ({@link Reliability}, DEC-046 clause 4). Leave it unset when the answer is a reading of the
+         * sides rather than knowledge of what is in them, which is the honest position for every
+         * text-level resolver, and which keeps it in the arbitration as before.
+         */
+        public Builder explainedSpan(Region explainedSpan) {
+            this.explainedSpan = explainedSpan;
             return this;
         }
 

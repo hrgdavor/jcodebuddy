@@ -58,6 +58,21 @@ public final class MemberAddConflictResolver extends AbstractConflictResolver {
         return AnalysisLevel.PROJECT_TYPES;
     }
 
+    /**
+     * The region this resolver was asked about, and it is justified rather than assumed.
+     *
+     * <p>{@link #doResolve} reaches a resolution only by <em>recognising</em> the declarations on both
+     * sides and proving they do not collide: a shared name or signature returns {@code null} above, and so
+     * does a union that cannot be built. The region's content is therefore known rather than inferred from
+     * a line comparison, which is exactly what makes this answer able to settle the region — the conflict
+     * leaves the working set and a text-level objection to those lines is never constructed. This is the
+     * instruction's own first example (plan step 4.19, DEC-046 clause 4).
+     */
+    @Override
+    protected Region explainedSpanFor(Conflict conflict) {
+        return conflict.getRegion();
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         // A blank base reaches only a conflict detection already established a *known* base for

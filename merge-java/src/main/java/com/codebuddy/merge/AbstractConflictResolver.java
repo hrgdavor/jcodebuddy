@@ -154,7 +154,33 @@ public abstract class AbstractConflictResolver implements ConflictResolver {
             .resolutionStrategy(strategy)
             .kind(kind)
             .analysisLevel(maxAnalysisLevel())
+            .explainedSpan(explainedSpanFor(conflict))
             .sticky(stickyByDefault());
+    }
+
+    /**
+     * The part of the conflicting region this resolver's answers <b>explain</b>, defaulting to nothing.
+     *
+     * <p>This is the one declaration that lets an answer <em>settle</em> a region: the conflict leaves the
+     * working set, no lower tier is asked about it, and no objection to it is ever constructed
+     * ({@link Reliability}, plan step 4.19, DEC-046 clause 4). It is therefore <b>not</b> the same
+     * declaration as {@link #maxAnalysisLevel()}, and overriding one does not imply the other:
+     *
+     * <ul>
+     *   <li>{@code maxAnalysisLevel()} says what a resolver <em>reads</em>, and orders the pass;</li>
+     *   <li>this says that the answer <em>is</em> the region's content, and settles it.</li>
+     * </ul>
+     *
+     * <p><b>The default is {@link Region#unknown()}, which explains nothing</b>, and the default is
+     * load-bearing rather than conservative politeness: a resolver that said nothing while appearing to
+     * explain its whole region would settle every conflict it was asked about, which is how a confident
+     * sentence becomes a licence. Override it only where the answer really is knowledge of what is in the
+     * region — the declarations the resolver parsed, or a block it is authoritative over — and say why at
+     * the override. An answer that keeps every line of both sides needs no override at all;
+     * {@link Reliability} checks that case independently.
+     */
+    protected Region explainedSpanFor(Conflict conflict) {
+        return Region.unknown();
     }
 
     /**

@@ -63,6 +63,22 @@ public final class ImportConflictResolver extends AbstractConflictResolver {
         return AnalysisLevel.TEXT_FILE;
     }
 
+    /**
+     * The import block the answer was composed from, which this resolver is authoritative over.
+     *
+     * <p>An import block is the one place where a text-level answer really is knowledge of the region's
+     * content rather than a reading of it: an import list is a set, its order is not content, and this
+     * resolver has read <em>every</em> change to it — the union it returns accounts for each side's
+     * additions and removals, and a clash it cannot justify is escalated as a {@code REVIEW} rather than
+     * applied, which settles nothing ({@link Reliability}). It is therefore this resolver's own domain,
+     * the third of the ways DEC-046 clause 4 names, and it is the instruction's second example: a
+     * successful import resolution means no lower tier touches that part of the file (plan step 4.19).
+     */
+    @Override
+    protected Region explainedSpanFor(Conflict conflict) {
+        return conflict.getRegion();
+    }
+
     @Override
     protected ConflictResolution doResolve(Conflict conflict) {
         // Read each side as a change against the base. Comparing the branches to

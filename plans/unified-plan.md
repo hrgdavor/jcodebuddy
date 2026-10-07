@@ -3794,6 +3794,48 @@ when it fails; and the existing `MergeFileToolTest` and step-4.6 arbitration tes
 lower resolver is never called about it — and a reviewer reading the report can see the state each
 conflict reached and the claim that reached it.
 
+**Started 2026-10-07 — the predicate exists, and nothing consumes it yet.** The half that landed is the
+one the whole step rests on, and it is behaviour-neutral: `explainedSpan` is recorded and reliability is
+computable, but no caller reads either yet, so the module behaves exactly as it did.
+
+- **A claim now says what it explains** (`ConflictResolution.explainedSpan`, plan step 4.19's missing
+  fact). It is *not* the region the resolver was asked about: a claim may settle a region only where its
+  own evidence accounts for every line of it, and the previous model had no way to say that, which is why
+  "spans the whole merge conflict region" was unanswerable. **The default is `Region.unknown()`, and the
+  default is load-bearing** — a span that defaulted to "the whole region" would let every claim settle
+  every conflict it was asked about, which is how a confident sentence becomes a licence. An answer that
+  keeps every line of both sides needs no declaration at all, because that case is checked instead.
+- **`AbstractConflictResolver.explainedSpanFor(Conflict)`** is the single place a resolver declares it,
+  applied in `resolutionFor(...)` so every resolution a resolver builds carries it. The default is
+  nothing, and the hook's javadoc says why the two declarations are different: `maxAnalysisLevel()` says
+  what a resolver *reads* and orders the pass; this says the answer *is* the region's content and settles
+  it. Overridden by exactly two resolvers, which are the instruction's own two examples:
+  `MemberAddConflictResolver` (the declarations it parsed, after proving they do not collide) and
+  `ImportConflictResolver` (the import block, its own domain).
+- **`Reliability`** is the predicate, as its own type: may be applied (`AUTO`, or `DEFERRED` as a recorded
+  human decision — **never** `REVIEW`/`MANUAL`), the region is known, and the claim explains every line of
+  it — either its explained span covers the region, or its applied text keeps every line of both sides.
+  The four verdicts (`RELIABLE`, `NOT_APPLICABLE`, `UNPLACED`, `UNEXPLAINED`) each carry a one-sentence
+  reason, so a report can say *why* a conflict was or was not removed rather than only that it was.
+  **It does not read the level**, which is clause 11 as code: a resolver can buy being asked early and can
+  never buy authority.
+- **`Reliability.normalisedLines`/`keepsEveryLine` are now the one definition** of "did this line
+  survive", with `MergeFileTool` delegating (its private copies are deleted). The coverage rule and the
+  new predicate ask the same question about the same text, and two answers is how they would drift.
+
+**Still to do, and it is the whole of the behaviour change:** the tiered pass — resolve in
+`ConflictResolvers.inTierOrder(...)` order over `ResolutionPass.live()`, record a removed conflict's slot
+as having no claim of its own, teach `decide` not to count it, and report each conflict's state — so that
+the lower resolver is **not called** rather than called and outranked. That is what the two acceptance
+tests assert, and until it lands this step changes nothing observable.
+
+**Gate so far:** `ReliabilityTest` — 13 tests, of which the negative ones are the point: an answer that
+keeps both sides is reliable without declaring anything; one that prefers a side and explains nothing is
+not; **`PROJECT_TYPES` with no evidence for the region is `UNEXPLAINED`**; a partial explained span is not
+enough; `REVIEW` and `MANUAL` are never reliable while `DEFERRED` is; an unknown region is `UNPLACED`; the
+unset span explains nothing; and reordered/re-indented lines still count as kept. `merge-java` — **819
+tests, 0 failures, 0 errors** with the build cache off.
+
 ### 4.20 — Partial resolution: applied spans beside markers, and the outcome the enum was missing
 **Who:** agent · **Size:** M
 
@@ -4722,7 +4764,7 @@ start)
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
-| 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[ ]` — the acceptance cases are the instruction's two examples (two whole-method additions, the import block), asserted by the lower resolver not being called |
+| 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the predicate and the two declarations are in; the wiring is not.** `ConflictResolution.explainedSpan` (default: nothing), `AbstractConflictResolver.explainedSpanFor` overridden by `MEMBER_ADD` and `IMPORT_ADD`, and `Reliability` (13 tests, negative cases included). Behaviour is unchanged because nothing consumes either yet; the tiered pass that stops calling the lower resolver is what remains |
 | 4.20 | Hierarchical resolution: partial resolution, composed output, and the grown outcome enum        | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied regions beside markers               |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |

@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -986,19 +985,9 @@ public final class MergeFileTool {
         if (coversRegion(winnerRegion, claimRegion)) {
             return true;
         }
-        Set<String> winnerLines = normalisedLineSet(winner.getResolvedCode());
-        return keepsEveryLine(winnerLines, claim.getBranch1Code())
-            && keepsEveryLine(winnerLines, claim.getBranch2Code());
-    }
-
-    /** True when every non-blank line of {@code side} appears in {@code winnerLines}. */
-    private static boolean keepsEveryLine(Set<String> winnerLines, String side) {
-        for (String line : normalisedLineSet(side)) {
-            if (!winnerLines.contains(line)) {
-                return false;
-            }
-        }
-        return true;
+        Set<String> winnerLines = Reliability.normalisedLines(winner.getResolvedCode());
+        return Reliability.keepsEveryLine(winnerLines, claim.getBranch1Code())
+            && Reliability.keepsEveryLine(winnerLines, claim.getBranch2Code());
     }
 
     /**
@@ -1074,13 +1063,13 @@ public final class MergeFileTool {
             && sameLineSet(resolved, block.theirs())) {
             return true;
         }
-        Set<String> resolvedLines = normalisedLineSet(resolved);
+        Set<String> resolvedLines = Reliability.normalisedLines(resolved);
         return coversSide(resolvedLines, block.ours(), resolution.getType())
             && coversSide(resolvedLines, block.theirs(), resolution.getType());
     }
 
     private static boolean coversSide(Set<String> resolvedLines, String side, ConflictType type) {
-        for (String line : normalisedLineSet(side)) {
+        for (String line : Reliability.normalisedLines(side)) {
             if (resolvedLines.contains(line) || inResolverDomain(line, type)) {
                 continue;
             }
@@ -1109,18 +1098,7 @@ public final class MergeFileTool {
     }
 
     private static boolean sameLineSet(String left, String right) {
-        return normalisedLineSet(left).equals(normalisedLineSet(right));
-    }
-
-    private static Set<String> normalisedLineSet(String text) {
-        Set<String> lines = new LinkedHashSet<>();
-        for (String line : text.split("\n")) {
-            String collapsed = line.strip().replaceAll("\\s+", " ");
-            if (!collapsed.isEmpty()) {
-                lines.add(collapsed);
-            }
-        }
-        return lines;
+        return Reliability.normalisedLines(left).equals(Reliability.normalisedLines(right));
     }
 
     private static String joined(List<ConflictResolution> resolutions) {
