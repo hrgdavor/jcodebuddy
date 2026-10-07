@@ -116,23 +116,37 @@ public final class MergeRangeBuilder {
             int rightDeleted = 0;
             boolean leftChanged = false;
             boolean rightChanged = false;
-            while (leftIndex < leftChanges.size()
-                && leftChanges.get(leftIndex).start1() <= baseEnd) {
-                DiffRange change = leftChanges.get(leftIndex);
-                baseEnd = Math.max(baseEnd, change.end1());
-                leftLength += change.length2();
-                leftDeleted += change.length1();
-                leftChanged = true;
-                leftIndex++;
-            }
-            while (rightIndex < rightChanges.size()
-                && rightChanges.get(rightIndex).start1() <= baseEnd) {
-                DiffRange change = rightChanges.get(rightIndex);
-                baseEnd = Math.max(baseEnd, change.end1());
-                rightLength += change.length2();
-                rightDeleted += change.length1();
-                rightChanged = true;
-                rightIndex++;
+            // Absorb until neither side has anything left inside the range, because each absorb can EXTEND it.
+            //
+            // Running the two loops once, one after the other, is a bug this builder carried: when the second loop
+            // extended `baseEnd` past a change the first loop had already passed, that change stayed unconsumed and
+            // the next range began BEFORE the previous one ended — overlapping ranges in base coordinates, with base
+            // lines claimed twice by the composition. The randomized property (step 4.13, JETBRAINS_PORT.md § 11.6)
+            // found it in 2000 cases where no vector could: the benchmark's vectors all have at most one change per
+            // side per range, which is exactly the shape that hides it.
+            boolean grew = true;
+            while (grew) {
+                grew = false;
+                while (leftIndex < leftChanges.size()
+                    && leftChanges.get(leftIndex).start1() <= baseEnd) {
+                    DiffRange change = leftChanges.get(leftIndex);
+                    baseEnd = Math.max(baseEnd, change.end1());
+                    leftLength += change.length2();
+                    leftDeleted += change.length1();
+                    leftChanged = true;
+                    leftIndex++;
+                    grew = true;
+                }
+                while (rightIndex < rightChanges.size()
+                    && rightChanges.get(rightIndex).start1() <= baseEnd) {
+                    DiffRange change = rightChanges.get(rightIndex);
+                    baseEnd = Math.max(baseEnd, change.end1());
+                    rightLength += change.length2();
+                    rightDeleted += change.length1();
+                    rightChanged = true;
+                    rightIndex++;
+                    grew = true;
+                }
             }
 
             // Each side's extent is the lines that side HAS over the base extent, which is not the same as the

@@ -2,6 +2,8 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import com.codebuddy.merge.jetbrains.merge.MergeRangeBuilder;
+import com.codebuddy.merge.jetbrains.merge.MergeRangeUtil;
 import com.codebuddy.merge.jetbrains.merge.MergeResolve;
 import com.codebuddy.merge.jetbrains.merge.MergeType;
 import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
@@ -12,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -280,6 +284,67 @@ class JetBrainsParityGateTest {
         assertTrue(applied.isEmpty(),
             "the benchmark needs a person here and we applied an answer:\n  - "
                 + String.join("\n  - ", applied));
+    }
+
+    @Test
+    @DisplayName("the refusal vectors AND their control: the type refuses, not the text")
+    void refusalVectorsWithTheirControl() {
+        // Section 11.4, and the control is the point: a port that took only the two refusal rows would pass while
+        // being wrong, because it could be refusing the TEXT. The control has the same shape of asymmetry — one side
+        // changed, the other did not — and must auto-resolve, which is only true if the refusal comes from the
+        // modify/delete TYPE.
+        String base = lines("A_B_C");
+        String edited = lines("A_X_C");
+
+        // Rows 1 and 2 are modify/delete: one branch removed the lines, the other EDITED them. Nothing decides it.
+        assertTrue(MergeResolve.resolve("", base, edited, POLICY).refused(),
+            "DELETED/MODIFIED: the pass must refuse it");
+        assertTrue(MergeResolve.resolve(edited, base, "", POLICY).refused(),
+            "MODIFIED/DELETED: the mirror image, likewise");
+        // WHERE the refusal comes from is asserted too, because "it refused" is not the same fact as "the rule we
+        // claim refused it" — and here the route is not the one the port document describes. The modify/delete
+        // guard reads a range's extents, and an EMPTY TEXT is one empty line to `TextLines.of("")`, not nothing, so
+        // a whole-side deletion arrives as "replaced everything with a blank line" and the guard sees a modifica-
+        // tion on both sides. The refusal is carried by the shape instead: both sides have content over the range and
+        // they disagree, which is a CONFLICT, and a conflict is never resolved. The rule holds; the guard is a second
+        // statement of it that a built range cannot reach — it is exercisable only on a hand-built range, which is
+        // exactly how `MergeResolveTest` tests it.
+        assertEquals(List.of(MergeType.conflict(false)), ConflictShape.typesOf(base, "", edited, POLICY),
+            "the refusal's route is the shape, not the guard: a conflict is unresolvable");
+        MergeRangeBuilder.MergeChange deletedAgainstEdit =
+            MergeRangeBuilder.build(base, "", edited, POLICY).get(0);
+        assertFalse(deletedAgainstEdit.range().leftIsEmpty(),
+            "an empty text is one empty line to TextLines, so the guard cannot see this as a deletion");
+        assertNull(MergeRangeUtil.modifyDeleteShape(deletedAgainstEdit.range()),
+            "and that is why the guard is not what refuses it");
+        assertEquals(MergeRangeUtil.DeletedSide.LEFT,
+            MergeRangeUtil.modifyDeleteShape(new com.codebuddy.merge.jetbrains.merge.MergeRange(0, 0, 0, 3, 0, 3)),
+            "the guard's rule is intact — a range that HAS an empty side still names it, as its own test asserts");
+
+        // THE CONTROL: the same asymmetry — the left changed, the right did not — and it resolves, because no side
+        // deleted. Same shape of asymmetry, same kind of texts, different TYPE.
+        MergeResolve.Result control = MergeResolve.resolve(base, base, edited, POLICY);
+        assertFalse(control.refused(),
+            "the control must auto-resolve, or the two rows above prove nothing about the type");
+        assertEquals(edited, control.mergedText(), "and to the changed side's text");
+        assertEquals(List.of(MergeType.modified(false, true)),
+            ConflictShape.typesOf(base, base, edited, POLICY),
+            "the control's shape is a modification, not a deletion: that difference IS the refusal's cause");
+        assertNull(MergeRangeUtil.modifyDeleteShape(
+                MergeRangeBuilder.build(base, base, edited, POLICY).get(0).range()),
+            "and the guard has no opinion about it, which is why it resolves");
+
+        // A DELIBERATE DIFFERENCE, recorded with its argument. Upstream writes its two rows with the other side
+        // UNCHANGED (theirs == base), which is their FILE-level `DELETED_MODIFIED` conflict: one branch deleted the
+        // file and the other left it alone. At range level we apply that one-sided deletion, because a change only
+        // one side made is exactly what non-conflicting auto-apply is for — § 11.3's own "remove-right" vector
+        // requires it, and refusing here would make the two vector sets contradict each other. So the refusal is
+        // ported at the level where our model has it: delete against EDIT, the rule the guard and the pass implement
+        // twice on purpose.
+        MergeResolve.Result oneSidedDeletion = MergeResolve.resolve("", base, base, POLICY);
+        assertFalse(oneSidedDeletion.refused(),
+            "a deletion only one side made is a non-conflicting change, and § 11.3 requires us to apply it");
+        assertEquals("", oneSidedDeletion.mergedText());
     }
 
     /**

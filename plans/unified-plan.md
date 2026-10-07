@@ -3033,7 +3033,7 @@ verifies a suggestion *as if* it were automatic.
 | 4.10 | Whitespace policy as a caller-visible option, threaded through detection and resolution     | agent | M    |
 | 4.11 | `AnalysisLevel` gains the intra-line evidence level                                         | agent | S    |
 | 4.12 | The conflict **shape** ported onto detection, beside the existing domain taxonomy           | agent | M    |
-| 4.13 | Upstream vectors, the parity gate, and the randomized property test                         | agent | M    | `[~]` — **the gate exists and runs the benchmark's § 11.1/§ 11.2 vectors**, grading per vector in both directions and printing `18/18` change types (0 recorded defects) and `0/3 resolved, 3 declined, 0 regressions`. **It caught a serious defect on its first run**: for `x_Y \| x_z_Y \| z_Y` the benchmark expects a conflict and we **applied** `Y\n`, silently dropping a line each branch kept — a range's side extent recorded only the side's *changed* lines, so a side that deleted part of a base extent got length 0 and "each side deleted a different line" read as "both deleted the same". **Fixed in `MergeRangeBuilder`** (each side's extent is now the lines it *has*: `(baseLength - deleted) + inserted`), proven by reverting it and watching the new outcome-level family fail with *"applied Y"*, and two fixture errors of my own were corrected with it — including a transcription helper that invented a line on every vector. **Also open:** the on-disk `jetbrains-*` fixtures, § 11.3/§ 11.4/§ 11.5, the invalidating-edit row, the seeded property test, and the § 10.3/§ 10.2 numbers |
+| 4.13 | Upstream vectors, the parity gate, and the randomized property test                         | agent | M    | `[~]` — **gate**: § 11.1 change types `18/18` (0 recorded defects), § 11.2 resolve vectors `0/3 resolved, 3 declined under a recorded exception, 0 regressions`, plus an outcome-level family (*every benchmark conflict, we refuse*) and § 11.4 **with its control**. **Two defects found and fixed**: a range's side extent recorded only the side's *changed* lines (we applied `Y` where the benchmark needs a person, dropping a line each branch kept), and — found by the new seeded property test in 2000 cases where no vector could — `MergeRangeBuilder`'s absorb loops leaving ranges overlapping when the second loop extended the base extent. **Also open:** the on-disk `jetbrains-*` fixtures (§ 11.1–11.5), § 11.3's remaining-change counts, the invalidating-edit row, and the § 10.3/§ 10.2 numbers |
 | 4.14 | The suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`     | agent | M    |
 | 4.15 | Move the resolvers that already compute an answer onto the channel                          | agent | M    |
 | 4.16 | The page and the decisions contract: Accept / Edit / Reject, and the bulk-accept guard      | agent | M    |
@@ -3530,13 +3530,48 @@ serious defect in this module.**
   renegotiated. The three resolve vectors need word-level composition inside a range (§ 6.5–6.6) and are recorded as
   `NAMED_EXCEPTIONS` — a different list from the defects, because an exception is a difference we chose and a defect
   is one we owe.
-- **Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
+- **Added 2026-10-07 — § 11.4 with its control, and the randomized property; the property found a second defect
+immediately.**
+
+- **§ 11.4 is ported at the level where our model has the rule, and the control is asserted as its proof.**
+  The two refusal rows are *delete against edit*, which the pass refuses; the control is the **same shape of
+  asymmetry** (one side changed, the other did not) with no deletion, and it resolves — so the refusal comes from
+  the modify/delete **type**, not from the text, which is the whole point of porting the third row.
+- **The route of that refusal is asserted, and it is not the route the port document describes.** The
+  modify/delete guard reads a range's extents, and an **empty text is one empty line** to `TextLines.of("")` rather
+  than nothing, so a whole-side deletion arrives as "replaced everything with a blank line" and the guard sees a
+  modification. The refusal is carried by the **shape** instead — both sides have content and they disagree, which
+  is a `CONFLICT`, and a conflict is never resolved. The rule holds; the guard is a second statement of it that a
+  built range cannot reach, exercisable only on a hand-built range, which is how `MergeResolveTest` tests it.
+- **A deliberate difference, recorded with its argument.** Upstream writes its two rows with the other side
+  **unchanged**, which is their *file-level* `DELETED_MODIFIED`: one branch deleted the file and the other left it
+  alone. At range level we **apply** that one-sided deletion, because a change only one side made is exactly what
+  non-conflicting auto-apply is for — § 11.3's own "remove-right" vector requires it, and refusing here would make
+  the two vector sets contradict each other.
+- **The randomized property is ported as a property, not as its harness** (§ 11.6): `SeededMergePropertyTest`
+  states over our plain-text API what upstream states over an editor — *the ranges tile all three sides exactly
+  once, in order, without overlap* — on a **fixed, printed seed** (`System.currentTimeMillis()` would make a failure
+  a story about a run nobody can repeat), over **5 seeds × 400 cases**, and it also asserts the text pass is
+  deterministic per case. `theInvariantCheckerHasTeeth` feeds the checker a deliberately broken range list and
+  asserts it says so, because an invariant nobody has seen fail is a claim rather than a check.
+- **The property paid for itself on its first sweep**, which is the argument for having it: `PROPERTY-METRIC: 2000
+  cases over 5 seeds from 20261007, 580 resolved, 1420 refused, 8 invariant violation(s)`. The first 400 cases were
+  clean, so **one seed would have shipped this**. The violations were all the same defect: `MergeRangeBuilder`'s two
+  absorb loops ran one after the other, so when the second extended the base extent past a change the first had
+  already passed, that change stayed unconsumed and **the next range began before the previous one ended** — ranges
+  overlapping in base coordinates, base lines claimed twice by the composition. Absorbing to a **fixpoint** fixes
+  it: `0 invariant violation(s)` in the same 2000 cases. The benchmark's vectors cannot reach this shape — they all
+  have at most one change per side per range — which is precisely what § 11.6 says the randomized suite is for.
+- Metrics after the fix: `PARITY-METRIC: change types 18/18 … 0 REGRESSION(S)`;
+  `PARITY-METRIC: resolve vectors 0/3 resolved to the benchmark's text, 3 declined under a recorded exception, 0
+  REGRESSION(S)`; `PROPERTY-METRIC: 2000 cases …, 0 invariant violation(s)`; **890 tests**, 0 failures.
+**Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
   `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its
   remaining-change counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the
   invalidating-edit row, the seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 /
   § 10.2 numbers. **`MergeRange`'s extent coordinates** is the first item of that list, because the gate says so.
 
-**Gate so far:** `merge-java verify` — **887 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
+**Gate so far:** `merge-java verify` — **890 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
 with the build cache **on**; `LINKS` green.
 
 **Fixed 2026-10-07, and the gate proves it: the serious defect is gone and 18/18 change types now agree.**
@@ -3569,6 +3604,41 @@ with the build cache **on**; `LINKS` green.
   incremental-compile one. **886** is the count from a clean build; earlier counts in this plan may have included
   stale scratch classes, so a count is only comparable against another clean run.
 
+**Added 2026-10-07 — § 11.4 with its control, and the randomized property; the property found a second defect
+immediately.**
+
+- **§ 11.4 is ported at the level where our model has the rule, and the control is asserted as its proof.**
+  The two refusal rows are *delete against edit*, which the pass refuses; the control is the **same shape of
+  asymmetry** (one side changed, the other did not) with no deletion, and it resolves — so the refusal comes from
+  the modify/delete **type**, not from the text, which is the whole point of porting the third row.
+- **The route of that refusal is asserted, and it is not the route the port document describes.** The
+  modify/delete guard reads a range's extents, and an **empty text is one empty line** to `TextLines.of("")` rather
+  than nothing, so a whole-side deletion arrives as "replaced everything with a blank line" and the guard sees a
+  modification. The refusal is carried by the **shape** instead — both sides have content and they disagree, which
+  is a `CONFLICT`, and a conflict is never resolved. The rule holds; the guard is a second statement of it that a
+  built range cannot reach, exercisable only on a hand-built range, which is how `MergeResolveTest` tests it.
+- **A deliberate difference, recorded with its argument.** Upstream writes its two rows with the other side
+  **unchanged**, which is their *file-level* `DELETED_MODIFIED`: one branch deleted the file and the other left it
+  alone. At range level we **apply** that one-sided deletion, because a change only one side made is exactly what
+  non-conflicting auto-apply is for — § 11.3's own "remove-right" vector requires it, and refusing here would make
+  the two vector sets contradict each other.
+- **The randomized property is ported as a property, not as its harness** (§ 11.6): `SeededMergePropertyTest`
+  states over our plain-text API what upstream states over an editor — *the ranges tile all three sides exactly
+  once, in order, without overlap* — on a **fixed, printed seed** (`System.currentTimeMillis()` would make a failure
+  a story about a run nobody can repeat), over **5 seeds × 400 cases**, and it also asserts the text pass is
+  deterministic per case. `theInvariantCheckerHasTeeth` feeds the checker a deliberately broken range list and
+  asserts it says so, because an invariant nobody has seen fail is a claim rather than a check.
+- **The property paid for itself on its first sweep**, which is the argument for having it: `PROPERTY-METRIC: 2000
+  cases over 5 seeds from 20261007, 580 resolved, 1420 refused, 8 invariant violation(s)`. The first 400 cases were
+  clean, so **one seed would have shipped this**. The violations were all the same defect: `MergeRangeBuilder`'s two
+  absorb loops ran one after the other, so when the second extended the base extent past a change the first had
+  already passed, that change stayed unconsumed and **the next range began before the previous one ended** — ranges
+  overlapping in base coordinates, base lines claimed twice by the composition. Absorbing to a **fixpoint** fixes
+  it: `0 invariant violation(s)` in the same 2000 cases. The benchmark's vectors cannot reach this shape — they all
+  have at most one change per side per range — which is precisely what § 11.6 says the randomized suite is for.
+- Metrics after the fix: `PARITY-METRIC: change types 18/18 … 0 REGRESSION(S)`;
+  `PARITY-METRIC: resolve vectors 0/3 resolved to the benchmark's text, 3 declined under a recorded exception, 0
+  REGRESSION(S)`; `PROPERTY-METRIC: 2000 cases …, 0 invariant violation(s)`; **890 tests**, 0 failures.
 **Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
 `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its remaining-change
 counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the invalidating-edit row, the
