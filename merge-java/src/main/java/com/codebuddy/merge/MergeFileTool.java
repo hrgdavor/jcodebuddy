@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
+
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -275,6 +277,7 @@ public final class MergeFileTool {
         private List<Path> classpath = List.of();
         private MergeConflictResolver resolver;
         private ConflictDetectionService detector;
+    private ComparisonPolicy whitespacePolicy = ComparisonPolicy.TRIM_WHITESPACES;
 
         private Builder(Path file) {
             this.file = Objects.requireNonNull(file, "file");
@@ -428,6 +431,27 @@ public final class MergeFileTool {
             return this;
         }
 
+        /**
+         * Compare the sides under a whitespace policy (unified plan step 4.10).
+         *
+         * <p>The choice is what decides whether a re-indented region is a conflict. Under
+         * {@link ComparisonPolicy#DEFAULT} it is — the indentation is content — and under
+         * {@link ComparisonPolicy#IGNORE_WHITESPACES} it is not. {@code TRIM_WHITESPACES} sits between
+         * them: a line's edges are ignored, its interior is not.
+         *
+         * <p>Defaults to {@link ComparisonPolicy#TRIM_WHITESPACES}, the behaviour this tool had before the
+         * policy was a choice, so a caller that does not ask gets what it used to.
+         */
+        public Builder whitespacePolicy(ComparisonPolicy whitespacePolicy) {
+            this.whitespacePolicy = whitespacePolicy;
+            return this;
+        }
+
+        /** The policy this run compares under; never {@code null}. */
+        public ComparisonPolicy whitespacePolicy() {
+            return whitespacePolicy == null ? ComparisonPolicy.TRIM_WHITESPACES : whitespacePolicy;
+        }
+
         public MergeFileTool.Result run() {
             return execute(this);
         }
@@ -460,6 +484,7 @@ public final class MergeFileTool {
             : builder.classpath.isEmpty()
                 ? TypeContext.withRuntimeClasspath(guessSourceRoot(file))
                 : TypeContext.withRuntimeClasspathAnd(guessSourceRoot(file), builder.classpath);
+        ComparisonPolicy whitespace = builder.whitespacePolicy();
         ConflictDetectionService detector = builder.detector != null
             ? builder.detector
             : new ConflictDetectionService();
@@ -513,7 +538,7 @@ public final class MergeFileTool {
             String baseSlice = block.hasBase() ? block.base() : "";
             List<Conflict> detected = detector.detect(
                 reportedPath, baseSlice, block.ours(), block.theirs(), typeContext,
-                block.hasBase());
+                block.hasBase(), whitespace);
             // The detector works on this block's slices, so a conflict's region is relative to the BLOCK. A reader
             // of the report is looking at the FILE, so the block's own region is stamped instead. That is also the
             // only thing that groups the conflicts sharing a block - and the page reads per block, because this
@@ -1457,7 +1482,7 @@ public final class MergeFileTool {
                 }
                 case "--apply", "--apply-recorded", "--no-fixtures" ->
                     options.add(new String[] {arg});
-                case "--fixtures", "--branch", "--classpath", "--report", "--decisions" -> {
+                case "--fixtures", "--branch", "--classpath", "--report", "--decisions", "--whitespace" -> {
                     if (i + 1 >= args.length) {
                         System.err.println(arg + " needs a value argument");
                         return 2;
@@ -1498,6 +1523,15 @@ public final class MergeFileTool {
                 case "--report" -> builder.reportPath(Path.of(option[1]));
 
                 case "--decisions" -> builder.decisionsFile(Path.of(option[1]));
+                case "--whitespace" -> {
+                    ComparisonPolicy policy = whitespacePolicyOf(option[1]);
+                    if (policy == null) {
+                        System.err.println("--whitespace must be default, trim or ignore, was: "
+                            + option[1]);
+                        return 2;
+                    }
+                    builder.whitespacePolicy(policy);
+                }
                 case "--classpath" -> {
                     // Checked here rather than left to the resolver: a misspelled entry
                     // contributes nothing to attribution, so the conflict would escalate
@@ -1532,6 +1566,26 @@ public final class MergeFileTool {
                 : e.getMessage());
             return 2;
         }
+    }
+
+    /**
+     * The policy a {@code --whitespace} value names, or {@code null} when it names none.
+     *
+     * <p>Accepting the three names rather than a number or an enum ordinal: a command line is read by
+     * people, and {@code --whitespace=2} would make the caller look up which policy that is. The names are
+     * the constants lowercased, and the two the codebase actually distinguishes are spelled the way the
+     * text tier spells them.
+     */
+    static ComparisonPolicy whitespacePolicyOf(String name) {
+        if (name == null) {
+            return null;
+        }
+        return switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "default" -> ComparisonPolicy.DEFAULT;
+            case "trim", "trim_whitespaces" -> ComparisonPolicy.TRIM_WHITESPACES;
+            case "ignore", "ignore_whitespaces" -> ComparisonPolicy.IGNORE_WHITESPACES;
+            default -> null;
+        };
     }
 
     private static void printUsage(java.io.PrintStream out) {

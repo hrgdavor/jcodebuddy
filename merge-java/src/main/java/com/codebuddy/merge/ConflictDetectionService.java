@@ -75,6 +75,30 @@ public class ConflictDetectionService {
     public List<Conflict> detect(String filePath, String baseCode,
                                  String branch1Code, String branch2Code,
                                  TypeContext typeContext, boolean baseKnown) {
+        return detect(filePath, baseCode, branch1Code, branch2Code, typeContext, baseKnown,
+            ComparisonPolicy.TRIM_WHITESPACES);
+    }
+
+    /**
+     * Detect every conflict in a file, under a whitespace policy.
+     *
+     * <p>This is the entry point step 4.10 adds, and the policy is the caller's choice for the same reason
+     * it is a parameter everywhere below: <b>a branch that only re-indented a region has changed
+     * nothing</b> under {@link ComparisonPolicy#IGNORE_WHITESPACES}, so the residual it would otherwise
+     * produce is not a conflict. Selecting the policy here rather than deep inside means every detector
+     * that asks a content question asks it the same way, which is what stops two of them disagreeing about
+     * whether a line was kept.
+     *
+     * <p>The default is {@link ComparisonPolicy#TRIM_WHITESPACES}, so the overload above behaves exactly
+     * as it did before this parameter existed.
+     */
+    public List<Conflict> detect(String filePath, String baseCode,
+                                 String branch1Code, String branch2Code,
+                                 TypeContext typeContext, boolean baseKnown,
+                                 ComparisonPolicy policy) {
+        ComparisonPolicy effective = policy == null
+            ? ComparisonPolicy.TRIM_WHITESPACES
+            : policy;
         List<Conflict> conflicts = new ArrayList<>();
 
         add(conflicts, detectImportConflicts(filePath, baseCode, branch1Code, branch2Code));
@@ -91,12 +115,14 @@ public class ConflictDetectionService {
 
         List<Conflict> recognised = new ArrayList<>(conflicts);
         Conflict structural = detectStructuralConflict(filePath, baseCode, branch1Code, branch2Code,
-            recognised);
+            recognised, effective);
         if (structural != null) {
             conflicts.add(structural);
         }
 
-        return attributeRegions(baseCode, conflicts, typeContext);
+        // The regions are attributed under the same policy, because a region is a statement about which
+        // base lines were kept — the same question the residual asks, and the answer has to match.
+        return attributeRegions(baseCode, conflicts, typeContext, effective);
     }
 
     /**
@@ -123,6 +149,26 @@ public class ConflictDetectionService {
     public Conflict detectStructuralConflict(String filePath, String baseCode,
                                              String branch1Code, String branch2Code,
                                              List<Conflict> recognised) {
+        return detectStructuralConflict(filePath, baseCode, branch1Code, branch2Code, recognised,
+            ComparisonPolicy.TRIM_WHITESPACES);
+    }
+
+    /**
+     * The residual conflict, under a whitespace policy.
+     *
+     * <p>The policy reaches the two questions this method asks about content — whether any base line is
+     * left unkept ({@code residualLines}) and whether both branches changed content at all
+     * ({@code bothBranchesChangedContent}) — because under {@link ComparisonPolicy#IGNORE_WHITESPACES} a
+     * branch that only respaced has changed nothing. Asking those questions under a policy the caller did
+     * not choose is how a formatting-only branch comes to be reported as one side of a conflict.
+     */
+    public Conflict detectStructuralConflict(String filePath, String baseCode,
+                                             String branch1Code, String branch2Code,
+                                             List<Conflict> recognised,
+                                             ComparisonPolicy policy) {
+        ComparisonPolicy effective = policy == null
+            ? ComparisonPolicy.TRIM_WHITESPACES
+            : policy;
         if (!differs(baseCode, branch1Code) || !differs(baseCode, branch2Code)) {
             // Both sides must have changed something for there to be a conflict.
             return null;
@@ -160,7 +206,7 @@ public class ConflictDetectionService {
                 baseCode, branch1Code, branch2Code);
         }
 
-        Set<String> residual = residualLines(baseCode, branch1Code, branch2Code);
+        Set<String> residual = residualLines(baseCode, branch1Code, branch2Code, effective);
         if (residual.isEmpty()) {
             // A recognised conflict only accounts for the divergence if it can
             // actually be resolved. A REVIEW conflict is still a decision a human
@@ -175,7 +221,7 @@ public class ConflictDetectionService {
             // Content does not vanish just because the lines agree on both sides:
             // two branches can each add a statement to the same body, changing it
             // twice in ways neither the body detector nor any other claims.
-            if (bothBranchesChangedContent(baseCode, branch1Code, branch2Code)) {
+            if (bothBranchesChangedContent(baseCode, branch1Code, branch2Code, effective)) {
                 return new Conflict(ConflictType.STRUCTURAL_CHANGE, filePath,
                     "Both branches changed the same member in incompatible ways",
                     baseCode, branch1Code, branch2Code);
@@ -198,9 +244,18 @@ public class ConflictDetectionService {
      */
     private static boolean bothBranchesChangedContent(String baseCode, String branch1Code,
                                                       String branch2Code) {
-        Set<String> base = normalisedLines(baseCode);
-        Set<String> changed1 = difference(normalisedLines(branch1Code), base);
-        Set<String> changed2 = difference(normalisedLines(branch2Code), base);
+        return bothBranchesChangedContent(baseCode, branch1Code, branch2Code,
+            ComparisonPolicy.TRIM_WHITESPACES);
+    }
+
+    private static boolean bothBranchesChangedContent(String baseCode, String branch1Code,
+                                                      String branch2Code, ComparisonPolicy policy) {
+        ComparisonPolicy effective = policy == null
+            ? ComparisonPolicy.TRIM_WHITESPACES
+            : policy;
+        Set<String> base = normalisedLines(baseCode, effective);
+        Set<String> changed1 = difference(normalisedLines(branch1Code, effective), base);
+        Set<String> changed2 = difference(normalisedLines(branch2Code, effective), base);
 
         if (changed1.isEmpty() || changed2.isEmpty()) {
             return false;
@@ -317,10 +372,10 @@ public class ConflictDetectionService {
      * need a human, and the type context a resolver may need.
      */
     private List<Conflict> attributeRegions(String baseCode, List<Conflict> conflicts,
-                                            TypeContext typeContext) {
+                                            TypeContext typeContext, ComparisonPolicy policy) {
         List<Conflict> attributed = new ArrayList<>(conflicts.size());
         for (Conflict conflict : conflicts) {
-            Conflict withRegion = conflict.withRegion(regionFor(baseCode, conflict));
+            Conflict withRegion = conflict.withRegion(regionFor(baseCode, conflict, policy));
             attributed.add(typeContext == null ? withRegion : withRegion.withTypeContext(typeContext));
         }
         return attributed;
@@ -334,14 +389,15 @@ public class ConflictDetectionService {
      * which is the conservative answer: an unattributable conflict is never
      * treated as independent of anything.
      */
-    private Region regionFor(String baseCode, Conflict conflict) {
+    private Region regionFor(String baseCode, Conflict conflict, ComparisonPolicy policy) {
         if (conflict.getType() == ConflictType.STRUCTURAL_CHANGE
             || conflict.getType() == ConflictType.METHOD_BODY_CHANGE
             || conflict.getType() == ConflictType.API_INCOMPATIBILITY) {
             // These types have no single anchor declaration: what changed is the
             // content of a member, so the region is the span of base lines the
             // branches did not both preserve.
-            return structuralRegion(baseCode, conflict.getBranch1Code(), conflict.getBranch2Code());
+            return structuralRegion(baseCode, conflict.getBranch1Code(), conflict.getBranch2Code(),
+                policy);
         }
         String anchor = anchorFor(baseCode, conflict);
         return anchor == null ? Region.unknown() : Region.of(baseCode, anchor);
@@ -475,11 +531,12 @@ public class ConflictDetectionService {
      * insertion point by comparing the branches would understate the blast radius
      * of the added code. Unknown is the safe answer.
      */
-    private Region structuralRegion(String baseCode, String branch1Code, String branch2Code) {
+    private Region structuralRegion(String baseCode, String branch1Code, String branch2Code,
+                                     ComparisonPolicy policy) {
         String[] baseLines = baseCode == null || baseCode.isBlank()
             ? new String[0]
             : baseCode.split("\n", -1);
-        return spanNotKeptByBoth(baseLines, branch1Code, branch2Code);
+        return spanNotKeptByBoth(baseLines, branch1Code, branch2Code, policy);
     }
 
     /**

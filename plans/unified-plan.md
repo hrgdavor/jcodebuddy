@@ -3283,6 +3283,44 @@ with the five-change case auto-applying to the exact expected content.
 **Done when:** whitespace churn stops being a conflict, and the choice is visible where the decision is
 read.
 
+**Progress 2026-10-07 — the flag and the acceptance pair, and a limit found by writing the pair.**
+
+- **The policy is threaded for the comparison and the residual.** `detect` takes a `ComparisonPolicy` and
+  passes it to the residual questions (`residualLines`, `bothBranchesChangedContent`) and to region
+  attribution (`structuralRegion` → `spanNotKeptByBoth` → `keptByBothBranches`). `MergeFileTool` grows
+  `--whitespace=default|trim|ignore` plus `Builder.whitespacePolicy(...)`, and `whitespacePolicyOf`
+  **refuses an unknown name** rather than silently defaulting — a caller that mistyped must be told, or it
+  would believe it had chosen a policy it had not. The default is `TRIM_WHITESPACES`, which is what the
+  tool did before the policy existed, and a test asserts that choosing nothing and choosing `trim` produce
+  identical outcomes.
+- **The acceptance pair is `WhitespacePolicyTest`** (7 tests): the same three-sided block is left for a
+  human under `DEFAULT` and is not reported as a recognised conflict under `IGNORE_WHITESPACES`; the
+  comparison underneath is asserted directly, so the wiring is shown to *do* something rather than merely
+  to exist; and `applyingUnderDefaultLeavesTheMarkers` pins the safety half — the default must **not** write
+  a block whose sides differ only in indentation, because that would discard a formatting intention
+  somebody made on purpose.
+- **A limit found by writing the pair, recorded rather than asserted away.** `§ 11.5`'s target is *five
+  well-typed changes* under `IGNORE_WHITESPACES`. What this step delivers is **no conflict type at all** —
+  the block comes out `LEFT_UNCLASSIFIED`. The reason is structural, not an oversight: **JCodeBuddy detects
+  by domain shape** (twelve `ConflictType`s) and treats line-level divergence as the structural residual,
+  whereas upstream **derives shape from a line diff** (`INSERTED`/`DELETED`/`MODIFIED`/`CONFLICT`). The
+  policy reaches the content questions; the shape detectors ask their own line questions without it.
+  Reaching *five well-typed changes* therefore needs the ported differ wired into detection as the
+  classifier — **step 4.12's job**, which is where the shape taxonomy lands. So 4.10's criterion is met as
+  *"whitespace churn stops being a conflict"* and **not** as the typed-change count; claiming otherwise
+  would be overclaiming, and the gap is named rather than tested around.
+- **A fixture defect worth recording**, because it produced a green test that proved nothing: the first
+  version of the block used three **byte-identical** sides, and the tool correctly reported
+  `APPLIED_IDENTICAL_SIDES` under every policy. A vector for a policy must differ *in what the policy
+  ignores* — a different thing from not differing at all.
+
+**Gate:** `MODULE` for `merge-java` — **793 tests, 0 failures, 0 errors** with the build cache off (786
+before). `WhitespacePolicyTest` is 7 of them.
+
+**Still open, precisely named:** wiring the ported differ into detection so the policy yields *typed*
+changes (4.12), and reporting the policy in the merge report JSON so a reviewer reads it beside the
+decision.
+
 ### 4.11 — `AnalysisLevel` gains the intra-line evidence level
 **Who:** agent · **Size:** S
 
@@ -4447,7 +4485,7 @@ start)
 | 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                | agent              | S    | `[x]` — the pin is verified against a real checkout (`verify-jetbrains-sources.js` exit 0), the `@derived` header is enforced by `JetBrainsAttributionTest` and was shown to fail on a real file, and the three-tier skeleton exists with the pin in one home |
 | 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                   | agent              | L    | `[x]` — 14 vectors from `LineComparisonUtilTest`; the differ is an **LCS table, not Myers**, a deviation decided on measurement and recorded in `JETBRAINS_PORT.md` § 3.2; tier isolation enforced |
 | 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals             | agent              | L    | `[x]` — `MergeRange`, `MergeType`, `MergeRangeUtil`, `MergeRangeBuilder` and `MergeResolve`; **C1, C2 and C6 all tested** (`modifyDeleteShape` is the named C2 guard, cross-referencing `DESIGN_NEVER_AUTO_RESOLVED.md` § 2, with a control proving an insertion is not a deletion); **`MergeTierScopeTest` asserts the greedy pass, `DiffConfig` and the whitespace retry are absent**, in code rather than in a comment. Two upstream vectors are kept as **expected refusals** because they need word-level composition (4.14–4.15) — a named limit, not a gap |
-| 4.10 | JetBrains port: whitespace policy as a caller-visible option                              | agent              | M    | `[~]` — **the mechanical half is done**: `normalisedLines`, `keptByBothBranches`/`containsLine`, `residualLines` and `spanNotKeptByBoth` each take a `ComparisonPolicy` and default to `TRIM_WHITESPACES`, which is what their `trim()` did — four refactors with no behaviour change (786 tests, unchanged each time). **The recording half is in**: `ConflictResolution` carries a `whitespacePolicy` (default `TRIM_WHITESPACES`), with a builder method and a getter, so a resolution says which policy produced it — the same decision under a different policy is a different decision. **Still open:** the `--whitespace` flag on `MergeFileTool` and the § 11.5 acceptance pair |
+| 4.10 | JetBrains port: whitespace policy as a caller-visible option                              | agent              | M    | `[~]` — **the flag, the wiring and the acceptance pair are in**: `--whitespace=default      | trim | ignore` on `MergeFileTool` (an unknown name is refused, not defaulted); the policy reaches the residual questions and region attribution; `ConflictResolution` records it; `WhitespacePolicyTest` (7 tests) pins the pair. **A limit was found by writing the pair and is recorded, not hidden:** `§ 11.5`'s *five well-typed changes* need the ported differ wired into detection as the classifier — **4.12's job** — because this module detects by domain shape and treats line divergence as the residual, while upstream derives shape from the diff. **Still open:** the policy in the merge report JSON, and the typed-change count (4.12) |
 | 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                       | agent              | S    | `[ ]`                                                                                       |
 | 4.12 | JetBrains port: the conflict shape, ported onto detection                                 | agent              | M    | `[ ]`                                                                                       |
 | 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test             | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
