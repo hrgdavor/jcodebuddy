@@ -123,6 +123,9 @@ public final class MergeReportWriter {
             Conflict conflict = conflicts.get(index);
             json.append("{\"type\": ").append(quote(conflict.getType().name()))
                 .append(", \"description\": ").append(quote(conflict.getDescription()))
+                // What KIND of change it is, beside what it is about: "import addition, both sides inserted" is
+                // two facts, and the second is what tells a reviewer whether anything needs choosing (plan 4.12).
+                .append(", \"shape\": ").append(quote(conflict.getShape().name()))
                 .append(", \"region\": ").append(regionJson(conflict.getRegion()))
                 .append(", \"signature\": ")
                     .append(quote(ConflictSignature.of(conflict).toFileName()));

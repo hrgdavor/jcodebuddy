@@ -286,10 +286,26 @@ function FixPath({ fixPath }) {
  */
 const EVIDENCE = {
   TEXT_LOCAL: "the block's own lines",
+  // Step 4.11's level: the ported pass reads within the block, so it is still "the block's own lines" seen more
+  // closely - and the page must not claim it read the file around the change.
+  TEXT_INTRALINE: "the block's own lines, word by word",
   TEXT_FILE: 'the file around the change',
   STRUCTURE: 'recognised declarations',
   PLATFORM_TYPES: 'resolved platform types',
   PROJECT_TYPES: 'resolved project types'
+}
+
+/**
+ * What kind of change a conflict is, in the page's own words (plan step 4.12).
+ *
+ * <p>Beside the domain type, never instead of it: "import addition, both sides inserted" is two facts a reviewer
+ * needs, and the second says whether anything needs choosing at all.
+ */
+const SHAPE = {
+  INSERTED: 'inserted',
+  DELETED: 'deleted',
+  MODIFIED: 'changed',
+  CONFLICT: 'both sides changed it'
 }
 
 function Resolution({ resolution, filePath, conflict }) {
@@ -298,6 +314,12 @@ function Resolution({ resolution, filePath, conflict }) {
     <div class={`card ${resolution.kind}`}>
       <div class="top">
         <span class="type">{resolution.type}</span>
+        {/* The SHAPE beside the domain type (plan step 4.12): "import addition, both sides inserted" is two facts,
+            and the second is what tells a reviewer whether anything needs choosing. The wording is the page's
+            (DEC-027); the report carries the name. */}
+        {conflict?.shape && conflict.shape !== 'UNKNOWN' ? (
+          <span class="shape">{SHAPE[conflict.shape] ?? conflict.shape}</span>
+        ) : null}
         <span class="badge">{resolution.kind}</span>
         <span class="tail">
           {resolution.strategy}

@@ -122,7 +122,8 @@ public class ConflictDetectionService {
 
         // The regions are attributed under the same policy, because a region is a statement about which
         // base lines were kept — the same question the residual asks, and the answer has to match.
-        return attributeRegions(baseCode, conflicts, typeContext, effective);
+        return attributeShapes(
+            attributeRegions(baseCode, conflicts, typeContext, effective), baseKnown, effective);
     }
 
     /**
@@ -379,6 +380,27 @@ public class ConflictDetectionService {
             attributed.add(typeContext == null ? withRegion : withRegion.withTypeContext(typeContext));
         }
         return attributed;
+    }
+
+    /**
+     * Give every conflict its {@link ConflictShape}, beside its domain {@link ConflictType} (plan step 4.12).
+     *
+     * <p>The shape is computed from the conflict's own three sides with the ported classifier, under the same
+     * comparison policy the rest of the run uses — a shape is a statement about which lines differ, and answering
+     * it under a different policy than the detection used would describe a change nobody detected.
+     *
+     * <p>{@code baseKnown} is passed through rather than inferred: git's default merge style carries no base, and
+     * with no base "both sides inserted" and "one side inserted while the other deleted" are the same two texts, so
+     * the shape is recorded as unknown instead of guessed. A wrong shape would be read as evidence.
+     */
+    private List<Conflict> attributeShapes(List<Conflict> conflicts, boolean baseKnown,
+                                           ComparisonPolicy policy) {
+        List<Conflict> shaped = new ArrayList<>(conflicts.size());
+        for (Conflict conflict : conflicts) {
+            shaped.add(conflict.withShape(ConflictShape.of(conflict.getBaseCode(),
+                conflict.getBranch1Code(), conflict.getBranch2Code(), policy, baseKnown)));
+        }
+        return shaped;
     }
 
     /**

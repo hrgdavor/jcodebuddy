@@ -23,6 +23,14 @@ public final class Conflict {
     private final Region region;
     private final TypeContext typeContext;
 
+    /**
+     * What kind of change this conflict is, beside what it is about (plan step 4.12).
+     *
+     * <p>{@link ConflictType#UNKNOWN_UNSET} is not a shape: the default is {@link ConflictShape#UNKNOWN}, which
+     * says the shape could not be computed — a merge-style block with no base — rather than that nobody asked.
+     */
+    private final ConflictShape shape;
+
     public Conflict(ConflictType type, String filePath, String description,
                     String baseCode, String branch1Code, String branch2Code) {
         this(type, filePath, description, baseCode, branch1Code, branch2Code, Region.unknown(),
@@ -37,6 +45,24 @@ public final class Conflict {
     public Conflict(ConflictType type, String filePath, String description,
                     String baseCode, String branch1Code, String branch2Code, Region region,
                     TypeContext typeContext) {
+        this(type, filePath, description, baseCode, branch1Code, branch2Code, region, typeContext,
+            ConflictShape.UNKNOWN);
+    }
+
+    /**
+     * The full constructor, carrying the {@link ConflictShape} as well.
+     *
+     * <p>The shape is a separate component rather than something derived here because deriving it needs the
+     * comparison policy and whether the block has a base at all — facts the detection run has and a single conflict
+     * does not.
+     *
+     * <p><b>A copy helper that dropped it would be a silent loss</b>: {@link MergeFileTool} re-stamps every
+     * detected conflict with the block's file region, so a shape set during detection would be erased by the very
+     * next step if {@link #withRegion} did not carry it forward.
+     */
+    public Conflict(ConflictType type, String filePath, String description,
+                    String baseCode, String branch1Code, String branch2Code, Region region,
+                    TypeContext typeContext, ConflictShape shape) {
         this.type = Objects.requireNonNull(type, "type");
         this.filePath = filePath == null ? "<unknown>" : filePath;
         this.description = description == null ? "" : description;
@@ -45,6 +71,7 @@ public final class Conflict {
         this.branch2Code = branch2Code == null ? "" : branch2Code;
         this.region = region == null ? Region.unknown() : region;
         this.typeContext = typeContext;
+        this.shape = shape == null ? ConflictShape.UNKNOWN : shape;
     }
 
     /**
@@ -101,19 +128,44 @@ public final class Conflict {
     }
 
     /**
+     * What kind of change this conflict is; never {@code null}.
+     *
+     * <p>Orthogonal to {@link #getType()}: that says what the conflict is <em>about</em> — an import addition, an
+     * overload clash — and this says what <em>shape</em> the change has: both sides inserted, one side changed it,
+     * both changed it differently. A domain type cannot say the second, and a shape cannot say the first.
+     *
+     * <p>{@link ConflictShape#UNKNOWN} means it could not be computed — a block with no base to compare against —
+     * or that the conflict was built by hand rather than by detection. Both are "not known", and neither is a
+     * claim about the change.
+     */
+    public ConflictShape getShape() {
+        return shape;
+    }
+
+    /** Return a copy of this conflict carrying a computed shape. */
+    public Conflict withShape(ConflictShape newShape) {
+        return new Conflict(type, filePath, description, baseCode, branch1Code, branch2Code,
+            region, typeContext, newShape);
+    }
+
+    /**
      * Return a copy of this conflict bound to a concrete file path.
      */
     public Conflict withFilePath(String newFilePath) {
         return new Conflict(type, newFilePath, description, baseCode, branch1Code, branch2Code,
-            region, typeContext);
+            region, typeContext, shape);
     }
 
     /**
      * Return a copy of this conflict bound to a region.
+     *
+     * <p>Carries the shape forward, which is not incidental: {@link MergeFileTool} re-stamps every detected conflict
+     * with its block's file region, so a shape computed during detection would be erased here if this copy dropped
+     * it — and the report would say "unknown" for every conflict in a diff3 file.
      */
     public Conflict withRegion(Region newRegion) {
         return new Conflict(type, filePath, description, baseCode, branch1Code, branch2Code,
-            newRegion, typeContext);
+            newRegion, typeContext, shape);
     }
 
     /**
@@ -121,7 +173,7 @@ public final class Conflict {
      */
     public Conflict withTypeContext(TypeContext newTypeContext) {
         return new Conflict(type, filePath, description, baseCode, branch1Code, branch2Code,
-            region, newTypeContext);
+            region, newTypeContext, shape);
     }
 
     /**

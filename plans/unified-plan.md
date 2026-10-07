@@ -3406,6 +3406,44 @@ no shape can turn a `MANUAL` resolution into an applied one.
 **Done when:** the report says what kind of change a conflict is as well as what domain it is in, and the
 decision uses it where it makes an answer mechanical.
 
+**Done 2026-10-07, with one clause deliberately not met and named below.**
+
+- **`ConflictShape`** — `INSERTED`, `DELETED`, `MODIFIED`, `CONFLICT` and `UNKNOWN` — is upstream's
+  `MergeType.Kind` ported rather than invented, and it is **computed by the ported classifier**:
+  `ConflictShape.of(...)` builds the ranges with `MergeRangeBuilder` and names each one with
+  `MergeRangeUtil.getMergeType`. That makes it the ported classifier's **first caller in this module** — it was
+  written and tested in step 4.9 and nothing had asked it anything until now.
+- **`ConflictType` is unchanged**, which was the step's constraint: this is a widening of the model, not a second
+  opinion about it. The report writes `shape` beside `type` per conflict, and the page renders the shape in its own
+  words beside the domain type, because "import addition, both sides inserted" is two facts and the page owns the
+  wording (DEC-027).
+- **A copy helper that dropped the shape would have lost it silently**, and the trap was specific:
+  `MergeFileTool` re-stamps every detected conflict with its block's file region, so `withRegion` (and
+  `withFilePath`, and `withTypeContext`) now carry the shape forward. `theShapeSurvivesTheCopies` asserts it,
+  because the symptom would have been "unknown" for every conflict in a diff3 file — plausible enough to pass for
+  a base-less block.
+- **The rule about merge ranges showed up a third time, and each appearance cost a defect.** A side that did **not**
+  change has the **base's** lines over a range, not the empty extent the range records for it. Reading the extent as
+  the content made every one-sided modification report as `CONFLICT` (and, in the greedy pass two steps ago, made
+  every later slice of that side read from the wrong offset). The same rule now appears in
+  `ConflictShape.sideLines`, `GreedyMergeSuggestion` and `BlockComposition` — three independent places, which is
+  the sign that it is not a trick but the only reading of a range that exists.
+- **A base-less block records `UNKNOWN` rather than guessing**, asserted at the detection level as well as on the
+  factory: with no base, "both sides inserted" and "one side inserted while the other deleted" are the same two
+  texts, and a wrong shape would be read as evidence.
+- **The clause that is not met: the decision does not yet *use* the shape.** The shape is computed, recorded and
+  rendered, and the step's own gate allows "still decided the same way, with the reason named" — which is what the
+  regression shows: the suite is green with **zero** changes to the step-4.5 and step-4.6 fixtures. The general
+  fix those steps measured (a one-sided insertion that a line comparison calls a structural change) is therefore
+  *expressible* now and not yet applied; it belongs with 4.13's parity work, where the measurement that justifies
+  it exists.
+
+**Gate:** `ConflictShapeTest` — 10 tests: the four kinds including the identical-change case, both-insertions
+differing as `CONFLICT` (R6 in shape form), the base-less `UNKNOWN`, agreeing sides having no shape, the shape
+surviving every copy helper, detection attributing a shape on a real diff3 block and `UNKNOWN` on a base-less one,
+and the boundary that a shape never makes a `MANUAL` resolution applied. `merge-java verify` — **884 tests, 0
+failures, 0 errors** with the build cache off; `bun test` in `review` green and the page builds.
+
 ### 4.13 — Upstream vectors, the parity gate, and the randomized property test
 **Who:** agent · **Size:** M
 
@@ -5139,7 +5177,7 @@ start)
 | 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals                   | agent              | L    | `[x]` — `MergeRange`, `MergeType`, `MergeRangeUtil`, `MergeRangeBuilder` and `MergeResolve`; **C1, C2 and C6 all tested** (`modifyDeleteShape` is the named C2 guard, cross-referencing `DESIGN_NEVER_AUTO_RESOLVED.md` § 2, with a control proving an insertion is not a deletion); **`MergeTierScopeTest` asserts the greedy pass, `DiffConfig` and the whitespace retry are absent**, in code rather than in a comment. Two upstream vectors are kept as **expected refusals** because they need word-level composition (4.14–4.15) — a named limit, not a gap |
 | 4.10 | JetBrains port: whitespace policy as a caller-visible option                                    | agent              | M    | `[~]` — **functionally complete; one criterion variant is deferred to 4.12 and named** — the flag, the wiring and the acceptance pair are in: `--whitespace=default | trim | ignore` on `MergeFileTool` (an unknown name is refused, not defaulted); the policy reaches the residual questions and region attribution; `ConflictResolution` records it; `WhitespacePolicyTest` (7 tests) pins the pair. **A limit was found by writing the pair and is recorded, not hidden:** `§ 11.5`'s *five well-typed changes* need the ported differ wired into detection as the classifier — **4.12's job** — because this module detects by domain shape and treats line divergence as the residual, while upstream derives shape from the diff. **Still open:** the policy in the merge report JSON, and the typed-change count (4.12) |
 | 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                             | agent              | S    | `[~]` — **the level exists and is ordered in both directions** (`TEXT_INTRALINE(2)`, with every other number shifted and no meaning changed). **Nothing reaches it yet, and that is the honest state**: the greedy producer ported in 4.17 compares whole lines, so it records `TEXT_LOCAL` and warns "not word by word" — claiming the intra-line level would be the overclaim the level exists to make visible. Reaching it needs the word-level half of the port (§ 6.5–6.6), and the step's "let 4.9's resolvers declare it" has no counterpart because the port produced no intra-line resolver |
-| 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[ ]`                                                                                       |
+| 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[x]` — **`ConflictShape` computed by the ported classifier**, which makes it `MergeRangeUtil.getMergeType`'s first caller in this module; `ConflictType` unchanged, the report writes `shape` per conflict and the page renders it in its own words. **A copy helper that dropped the shape would have lost it silently** — `MergeFileTool` re-stamps regions, so `withRegion`/`withFilePath`/`withTypeContext` carry it and a test asserts it. The merge-range rule (an unchanged side has the **base's** lines, not the range's empty extent) appeared a **third** time, here costing "every one-sided change reads as a conflict". **One clause named as not met:** the decision does not yet *use* the shape — the 4.5/4.6 fixtures are unchanged and green, and the measurement that would justify the general fix belongs with 4.13 |
 | 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
 | 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
 | 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[x]` — one rule in the orchestrator converts a `REVIEW` carrying code into a `SUGGESTION` carrying **that same text** (provenance = the resolver's name, level = what it recorded, `resolvedCode` cleared so the text lives in one place). **Measured: 3 of 7 sampled review paths were computing an answer and hiding it**, asserted by comparing the suggestion against a direct resolver call, and printed by the test. Nothing promoted; three existing assertions changed, each the step's own point |
