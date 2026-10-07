@@ -492,10 +492,28 @@ public class ConflictDetectionService {
      * without going through detection.
      */
     static Region spanNotKeptByBoth(String[] baseLines, String branch1Code, String branch2Code) {
+        return spanNotKeptByBoth(baseLines, branch1Code, branch2Code,
+            ComparisonPolicy.TRIM_WHITESPACES);
+    }
+
+    /**
+     * The 1-based span of the first to the last entry that both branches did not keep, under a policy.
+     *
+     * <p>The policy decides what "kept" means, and it therefore decides the <b>size of this span</b> —
+     * which is not a cosmetic difference, because the span is what says whether a file's automatic part
+     * can be applied independently of the parts that need a human. Under
+     * {@link ComparisonPolicy#IGNORE_WHITESPACES} a region whose only change was respacing is kept by
+     * both branches, so the span narrows and more of the file becomes independently applicable; under
+     * {@code TRIM} it narrows less. Reporting the span under a policy the caller did not choose would
+     * overstate the blast radius of a conflict, which is the safe direction to be wrong in but still
+     * wrong.
+     */
+    static Region spanNotKeptByBoth(String[] baseLines, String branch1Code, String branch2Code,
+                                    ComparisonPolicy policy) {
         int first = -1;
         int last = -1;
         for (int index = 0; index < baseLines.length; index++) {
-            if (keptByBothBranches(baseLines[index], branch1Code, branch2Code)) {
+            if (keptByBothBranches(baseLines[index], branch1Code, branch2Code, policy)) {
                 continue;
             }
             if (first < 0) {
