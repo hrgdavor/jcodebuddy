@@ -52,6 +52,10 @@ public final class DivergenceReporter implements hr.hrg.jcodebuddy.engine.Diagno
             "field_in_interface_not_in_enum",
             "stale_switch",
             "missing_setter",
+            // Plan step 7.3: the builder-to-builder merge. A name-only match cannot be copied without a
+            // conversion, and a merge request that shares nothing is almost always a mistake in the request.
+            "merge_field_type_mismatch",
+            "merge_copies_nothing",
             "type_mismatch",
             "type_ambiguous",
             "type_unresolved",

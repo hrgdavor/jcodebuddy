@@ -159,6 +159,10 @@ class ExampleDivergenceReportTest {
             Map.entry("field_in_interface_not_in_enum", "DivergenceKindTest"),
             Map.entry("stale_switch", "DivergenceKindTest"),
             Map.entry("missing_setter", "DivergenceKindTest"),
+            // Plan step 7.3: the merge diagnostics are produced on a builder pair rather than on the example
+            // project, so their producer is the merge test itself.
+            Map.entry("merge_field_type_mismatch", "ViewMergeGeneratorTest"),
+            Map.entry("merge_copies_nothing", "ViewMergeGeneratorTest"),
             Map.entry("type_mismatch", "DivergenceKindTest"),
             Map.entry("ordinal_drift", "DivergenceKindTest"),
             Map.entry("enum_constant_removed", "DivergenceKindTest"),
