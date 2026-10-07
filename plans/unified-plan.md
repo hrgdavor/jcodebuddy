@@ -5012,6 +5012,39 @@ outcome (the sidecar reports a navigation *outcome*, not an assumed success, sin
 **Gate:** a test or a scripted end-to-end run against a live sidecar; the dashboard's own test stays
 green.
 
+**Done 2026-10-08 — the dashboard jumps, and the page never holds the sidecar's token.**
+
+- **The jump goes through the agent's own server**, not from the page to the sidecar: `CommandServer` gained a
+  `/jump` route that forwards to the sidecar's `/jump` and **relays its answer verbatim** (a new `sendJson` writes a
+  body that is already JSON, because re-encoding it through a map would be a second place for the two to disagree).
+  That is what makes the token story right: the page posts to the origin that served it, and the **server** presents
+  `X-WebView-Token`, so the sidecar's origin gate never has to allow this page and the token never reaches a browser.
+- **The port and token are read per request** (`jwa.sidecar.jumpPort`, default 7979 — the sidecar's own default — and
+  `jwa.sidecar.token`), because they are facts about one machine's running host rather than configuration of this
+  server: a sidecar that restarts on another port does not need the agent restarted.
+- **An outcome, never an assumed success.** Whatever the sidecar answered is what the caller gets; a sidecar that is
+  not listening is **502 `unreachable`** with the port and the reason rather than a jump that "worked". The page shows
+  it in the words the sidecar used — `detail`, then `reason`, then `error`, then the raw body — and the
+  `.jump-failed` styling exists so "the sidecar refused or was not there" cannot look like "the editor moved".
+- **The dashboard itself**: `API.jump`, a `Jump to editor` button per pending action beside `Review Diff`, and a
+  result span. The page is the minimal vanilla one DEC-027 keeps framework-free, and this keeps it that way — no
+  framework, no bundler, one `fetch` and one function.
+- **The gate is a test, and it asserts the two halves that can rot quietly** (`RemoteJumpTest`, **2 tests**): a stub
+  sidecar sees `X-WebView-Token` with the token the sidecar requires, the location the page asked for is what is
+  forwarded, and the outcome comes back **relayed** (`"reason":"exact"` still in the body); and a sidecar that is not
+  listening is reported as a 502. A stub rather than the real sidecar, deliberately: starting the real one would add
+  a JDK-version dependency, a port-claim race and an LSP client to prove the same three things, and the sidecar's own
+  suite already covers its half. **The dashboard's JS has no test** — the module has no JS test harness at all — so
+  that change rests on the HTTP test above plus inspection, and it is said rather than implied.
+- **Measured**: `bun scripts/mvn-jdk25.js -pl jcodebuddy/jcodebuddy-agent -am verify` — **BUILD SUCCESS**, and the
+  new tests run: `RemoteJumpTest 2 tests, 0 failures` beside the module's existing 15.
+- **Two traps this step cost time to, both worth the next reader's minute.** (1) **This module is JUnit 5.** The test
+  was first written with JUnit 4 imports and surefire's JUnit Platform provider **ignored it entirely**: the build was
+  green, the module's other 15 tests ran, and the new test silently ran nowhere. Nothing in the exit code said so —
+  the **surefire reports** did, and that is why the count was checked per class rather than read from `BUILD SUCCESS`.
+  (2) **A cache restore skips surefire**, so a re-run of the same command printed `Skipping plugin execution
+  (cached): surefire:test` and executed nothing at all; a targeted re-run needs the file changed (`skipSave` withholds
+  the save, not the read) and its numbers read from `target/surefire-reports/`.
 ### 7.3 — `View1Builder.merge(View2 other)`, and its proxy version
 **Who:** agent · **Size:** M
 
@@ -5688,7 +5721,7 @@ start)
 | 6.4  | Type divergence analyzer + converter manifest (DEC-006)                                         | agent              | L    | `[ ]`                                                                                       |
 | 6.5  | Projection/DTO marker pattern (DEC-003/DEC-007)                                                 | agent              | L    | `[ ]`                                                                                       |
 | 7.1  | jwa-sidecar reads the client's indentation                                                      | agent              | S    | `[x]` — the sidecar reads the client's indentation. `ClientFormatting` (`tabSize`/`insertSpaces` → `indent()`, defaults **four spaces**, the value that was hard-coded) is the one place that knows what a client's settings mean; `didChangeConfiguration` — an empty stub until now — is the route they travel, because a code action is a command the user picks and carries no `FormattingOptions`; the setting is remembered on the server (`volatile`, written by the LSP reader thread while a code action runs) and read **at generation**. Flat and section-wrapped settings objects are both accepted, a missing field keeps its own default, an unrecognised shape (or a non-JSON `getSettings()`) yields the defaults rather than an exception, and `insertSpaces:false` gives a tab. **The gate test asserts a relationship between two runs** — every emitted line identical with half the indentation, plus the four-space and two-space anchors — because a golden string would pass again if somebody hard-coded the other indent; a third test pins the tab case. **Measured**: `SidecarCodeActionTest` 7 tests (from 5), `-pl webview/jwa-sidecar -am verify` BUILD SUCCESS. **Note**: `-pl` needs `-am` here, and a `-pl … test` run poisons the closure's cache (JAR-less entries; `package`/`verify` is the documented fix, plus purging `~/.m2/build-cache/v1.1`). |
-| 7.2  | Agent web UI remote-jump front-end                                                              | agent              | S    | `[ ]`                                                                                       |
+| 7.2  | Agent web UI remote-jump front-end                                                              | agent              | S    | `[x]` — the dashboard jumps, and the page never holds the sidecar's token. `CommandServer` gained `/jump`, which forwards to the sidecar and **relays its answer verbatim** (`sendJson`; re-encoding through a map would be a second place for the two to disagree), so the page posts to its own origin and the **server** presents `X-WebView-Token` — the sidecar's origin gate never has to allow the page, and no token reaches a browser. Port/token are read **per request** (`jwa.sidecar.jumpPort`, default 7979, and `jwa.sidecar.token`) because they are facts about one machine's running host. **An outcome, never an assumed success**: the sidecar's own words are shown (`detail` → `reason` → `error` → raw body) and a sidecar that is not listening is **502 `unreachable`** with the port and reason. The page keeps its minimal vanilla shape (DEC-027): `API.jump`, a `Jump to editor` button beside `Review Diff`, a result span. **Gate**: `RemoteJumpTest` **2 tests** — the token is presented by the server, the requested location is forwarded, the outcome is relayed (`"reason":"exact"`), and an unreachable sidecar is reported as 502; a stub sidecar deliberately, since starting the real one would add a JDK-version dependency, a port race and an LSP client to prove the same three things. **The dashboard's JS has no test** — the module has no JS harness — so that half rests on the HTTP test plus inspection. **Measured**: `-pl jcodebuddy/jcodebuddy-agent -am verify` BUILD SUCCESS, `RemoteJumpTest 2 tests, 0 failures` beside the module's 15. **Traps**: this module is **JUnit 5** — a JUnit 4 test is *ignored* and the build stays green (found only by reading the surefire reports); and a cache **restore skips surefire**, so re-runs must change an input and be read from `target/surefire-reports/`. |
 | 7.3  | `View1Builder.merge` + proxy merge                                                              | agent              | M    | `[ ]`                                                                                       |
 | 7.4  | Documentation front door + cross-references                                                     | agent              | S    | `[ ]`                                                                                       |
 | 7.5  | Agent OpenRewrite tool prototype                                                                | agent              | M    | `[ ]`                                                                                       |

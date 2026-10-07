@@ -114,6 +114,9 @@ public class CommandServer {
         createAuthenticatedContext("/accept", new AcceptHandler(), auth);
         createAuthenticatedContext("/reject", new RejectHandler(), auth);
         createAuthenticatedContext("/diff", new DiffHandler(), auth);
+        // Plan step 7.2: the dashboard's remote jump. The page never holds the sidecar's token — it posts to this
+        // server, which is the origin it was served from, and this server is what presents the token.
+        createAuthenticatedContext("/jump", new JumpHandler(), auth);
         createAuthenticatedContext("/", new StaticHandler(), auth);
         server.setExecutor(null);
         server.start();
@@ -132,6 +135,16 @@ public class CommandServer {
         if (server != null) {
             server.stop(0);
         }
+    }
+
+    /**
+     * The port this server is actually listening on.
+     *
+     * <p>Not the constructor's argument: that may be {@code 0}, meaning "any free port", which is what a test or a
+     * second instance on one machine wants — and then only the bound socket knows the answer.
+     */
+    public int port() {
+        return server == null ? port : server.getAddress().getPort();
     }
 
     private class SuggestHandler implements HttpHandler {
@@ -176,7 +189,6 @@ public class CommandServer {
     }
 
     private class TriggerHandler implements HttpHandler {
-
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -326,6 +338,74 @@ public class CommandServer {
         exchange.sendResponseHeaders(statusCode, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
+        }
+    }
+
+    /**
+     * Send a body that is already JSON, unchanged.
+     *
+     * <p>Used by the remote jump, which relays the sidecar's answer verbatim: the sidecar's own vocabulary describes
+     * what happened, and re-encoding it through a map here would be a second place for the two to disagree.
+     */
+    private void sendJson(HttpExchange exchange, int statusCode, String json) throws IOException {
+        byte[] bytes = json == null ? new byte[0] : json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(statusCode, bytes.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+        }
+    }
+
+    /**
+     * The dashboard's remote jump (plan step 7.2): forward the request to the JWA sidecar's own {@code /jump} and
+     * relay what the sidecar answered.
+     *
+     * <p><b>The page never holds the sidecar's token.</b> It posts to the origin that served it, and this server is
+     * what presents {@code X-WebView-Token} — which is also why the page needs no CORS allowance from the sidecar,
+     * whose origin gate refuses anything it was not configured to accept.
+     *
+     * <p><b>An outcome, never an assumed success</b> — the sidecar's rule since 2026-09-25. Whatever it answered is
+     * what the caller gets, and a sidecar that is not running is reported as <b>unreachable</b> with {@code 502}
+     * rather than as a jump that "worked", because the dashboard has to be able to show a person which of the two
+     * happened.
+     *
+     * <p>The port and token are read per request from {@code jwa.sidecar.jumpPort} (default 7979, the sidecar's own
+     * default) and {@code jwa.sidecar.token}: they are facts about one machine's running host rather than
+     * configuration of this server, so they are not constructor state and a host that restarts on another port does
+     * not need this server restarted.
+     */
+    private class JumpHandler implements HttpHandler {
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, Map.of("error", "Method not allowed"));
+                return;
+            }
+            int sidecarPort = Integer.getInteger("jwa.sidecar.jumpPort", 7979);
+            String token = System.getProperty("jwa.sidecar.token", "").trim();
+            try {
+                Map<?, ?> request = mapper.readValue(exchange.getRequestBody(), Map.class);
+                java.net.http.HttpRequest forward = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create("http://127.0.0.1:" + sidecarPort + "/jump"))
+                        .header("Content-Type", "application/json")
+                        .header("X-WebView-Token", token)
+                        .timeout(java.time.Duration.ofSeconds(5))
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(request)))
+                        .build();
+                java.net.http.HttpResponse<String> answer = java.net.http.HttpClient.newHttpClient()
+                        .send(forward, java.net.http.HttpResponse.BodyHandlers.ofString());
+                sendJson(exchange, answer.statusCode(), answer.body());
+            } catch (java.net.ConnectException | java.net.http.HttpTimeoutException unreachable) {
+                log.warn("remote jump: no sidecar answered on port {}: {}", sidecarPort, unreachable.getMessage());
+                sendResponse(exchange, 502, Map.of("error", "sidecar unreachable", "port", sidecarPort,
+                        "detail", String.valueOf(unreachable.getMessage())));
+            } catch (Exception failure) {
+                log.error("Remote jump failed", failure);
+                sendResponse(exchange, 502, Map.of("error", "remote jump failed",
+                        "detail", String.valueOf(failure.getMessage())));
+            }
         }
     }
 }

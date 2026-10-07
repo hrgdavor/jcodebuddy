@@ -5,7 +5,14 @@ const API = {
     actions: () => fetch('/actions').then(r => r.json()),
     accept: (id) => fetch(`/accept?idx=${id}`).then(r => r.json()),
     reject: (id) => fetch(`/reject?idx=${id}`).then(r => r.json()),
-    diff: (id) => fetch(`/diff?idx=${id}`).then(r => r.json())
+    diff: (id) => fetch(`/diff?idx=${id}`).then(r => r.json()),
+    // Plan step 7.2: the remote jump goes through OUR server, which holds the sidecar's token. The page never sees
+    // the token, and the request is same-origin, so the sidecar's own origin gate does not have to allow this page.
+    jump: (file, line) => fetch('/jump', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uri: file, line: line })
+    }).then(async (response) => ({ status: response.status, body: await response.json() }))
 };
 
 const state = {
@@ -40,9 +47,36 @@ function renderActions() {
             </div>
             <div class="card-footer">
                 <button onclick="showDiff(${action.id})" class="btn btn-secondary">Review Diff</button>
+                <button onclick="jumpToEditor(${action.id})" class="btn btn-secondary">Jump to editor</button>
+                <span id="jump-result-${action.id}" class="jump-result"></span>
             </div>
         </div>
     `).join('');
+}
+
+/**
+ * Plan step 7.2: ask the editor to jump to an action's location, and show what the SIDECAR reported.
+ *
+ * The sidecar reports a navigation OUTCOME rather than an assumed success (its rule since 2026-09-25): the editor
+ * may have reached the exact line, only opened the file, or been unable to be asked at all. So the answer is
+ * displayed as reported - `reason`/`detail` when the sidecar named one, its `error` when it refused, and the raw
+ * body as a last resort - and a 502 means no sidecar was listening on the port. "Jumping..." is deliberately not
+ * left on screen after a failure, because that is exactly the assumed success this step exists to remove.
+ */
+async function jumpToEditor(id) {
+    const action = state.actions.find(a => a.id === id)
+    const target = document.getElementById(`jump-result-${id}`)
+    target.textContent = 'Jumping...'
+    target.className = 'jump-result'
+    try {
+        const answer = await API.jump(action.file, action.line)
+        const body = answer.body || {}
+        target.textContent = body.detail || body.reason || body.error || JSON.stringify(body)
+        target.className = answer.status === 200 ? 'jump-result' : 'jump-result jump-failed'
+    } catch (e) {
+        target.textContent = `Jump failed: ${e.message}`
+        target.className = 'jump-result jump-failed'
+    }
 }
 
 async function showDiff(id) {

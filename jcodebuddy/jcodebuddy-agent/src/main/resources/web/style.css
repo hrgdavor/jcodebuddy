@@ -262,3 +262,16 @@ del {
     text-decoration: none;
     color: #f43f5e;
 }
+/* Plan step 7.2: the remote jump's reported outcome, beside the button that asked for it. It is a REPORT, so it
+   reads as one line of text rather than as a button; `.jump-failed` exists so "the sidecar refused or was not
+   there" is visually different from "the editor moved", which is the whole point of showing an outcome. */
+.jump-result {
+    margin-left: 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.jump-failed {
+    color: #b3261e;
+    opacity: 1;
+}
