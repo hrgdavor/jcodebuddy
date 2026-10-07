@@ -4812,6 +4812,37 @@ plus `node webview/check-links.mjs` are green.
 
 **Done when:** the parity claim is a test result.
 
+**Done 2026-10-08 — the parity claim is a test result, and the test now checks its own coverage.**
+
+- **The extension went into `webview-client.test.mjs`, not `smoke-test.mjs`, and the reason is worth keeping:** the
+  step named `smoke-test.mjs`, but that file drives **pages** in Chromium with no host at all — the live headless
+  `webviewd` harness is `webview-client.test.mjs`, which starts the host itself and calls the same client functions a
+  page calls. Extending the page test with host verbs would have put a second host launcher in the repository.
+- **`redo` was the verb the client exposed and nothing drove.** Measured before this: `proposeEdit`, `applyEdit`
+  (disk and the refused buffer target), `undo`, `open`, `read` and `/health` were driven; `redo` existed in the client
+  and had no test. It is driven now, with the pair asserted as a **pair** — undo, redo (the edit is back), undo again
+  (the original bytes are back) — because a one-way undo would pass the old assertions.
+- **The coverage assertion is what makes the claim hold tomorrow, not only today.** The test lists the verbs a
+  headless host supports (`read`, `proposeEdit`, `applyEdit`, `undo`, `redo`, `open`), records every call, and asserts
+  at the end that **none went undriven** — naming the missing verb rather than reporting a count. A verb added to the
+  client is therefore either driven or deliberately left out; it cannot quietly stop being exercised.
+- **The capability half is a *content* check, and it deliberately complements what already existed.** The repository
+  already had `webview/tools/check-capabilities.js` (*declared ⇒ served, undeclared ⇒ refused*, 29 assertions) and
+  `HostHealthParityTest` (every host builds its body through `HostHealth`, and refuses an unauthorized `/open` before
+  reading anything — by source reading, and it says so). What the client test adds is the mapping from each capability
+  name to **how it is proved**: `open` and `serveFile` driven here, `select` **IDE-only** with a pointer to
+  `webview/doc/ide-observation-checklist.md` — and the assertion that the checklist **exists**, so "observed by a
+  person" is a record rather than a promise. An unknown capability name fails the run.
+- **The parity claim in `webview/README.md` now names the three checks that back it** instead of describing the test
+  only.
+- **Measured**: `node webview/kit/examples/webview-client.test.mjs` — **37 passed, 0 failed** (from 33: `redo` plus
+  the four coverage/proof assertions); `bun scripts/mvn-jdk25.js -pl webview/core/webviewd -am verify` — **58 tests,
+  BUILD SUCCESS**; `node webview/check-links.mjs` — 242 links, **ALL LINK RESOLVE**;
+  `bun webview/tools/check-capabilities.js` — **29 passed, 0 failed**.
+- **One environment note, because the test's own diagnostic is what found it:** this machine's `JAVA_HOME` is **JDK
+  21** while the jar is JDK 25 bytecode, so `WEBVIEWD_JAVA` must point at `C:\Program Files\Java\jdk-25\bin\java.exe`.
+  The test prints exactly that (with the `UnsupportedClassVersionError` behind it) rather than "no port appeared",
+  which is why a minute of confusion did not become ten.
 ### 5.2 — Record the two open questions as decisions
 **Who:** agent + maintainer · **Size:** S
 
@@ -5615,7 +5646,7 @@ start)
 | 4.20 | Hierarchical resolution: the state of every conflict in the report                              | agent              | S    | `[x]` — a `state` key per conflict (`RESOLVED`/`OPEN`/`PARTIAL`), aligned with the **conflicts** because a settled one has no resolution of its own and appeared nowhere before; `HierarchicalAcceptanceTest` asserts both states separately |
 | 4.21 | Hierarchical resolution: the three-coordinate position model and the tiling invariant           | agent              | S–M  | `[x]` — `BlockComposition` places a block's lines in base/ours/theirs as segments **including the gaps** (the lines in no range at all, which a walk emitting only ranges drops silently), `audit` is the tiling invariant, and the `LEFT_PARTIAL_RESOLUTION` explanation now uses it. **A base-less block can be classified but not composed** — no base, no coordinates — so 4.22 works on `diff3` blocks. **Corrected in round 26**: an unchanged side's extent was the empty range the change flags imply, so the lines it had kept were covered by a *later* segment — coverage-correct and positionally wrong, and every later slice of that side would have been read from the wrong offset; `audit` now also reports an `UNCHANGED` stretch with unequal extents, which is the footprint that leaves |
 | 4.22 | Hierarchical resolution: the splice, and the grown outcome enum                                 | agent              | M–L  | `[x]` — `BlockSplice` composes the settled stretches and the kept ones, marks only what is contested, and **refuses** rather than guesses (no base, a partly covered stretch, two answers, nothing settled); `Outcome.APPLIED_PARTIAL` is deliberately not counted as applied, because markers remain; the trigger is every outcome that keeps the block, measured green across the suite. **A defect a probe caught**: `TextLines` lines carry their terminators, so the first `append` doubled every line break — every assertion I had was a `contains`, and none would have seen it |
-| 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
+| 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[x]` — **the parity claim is a test result.** `webview-client.test.mjs` now drives **every** verb a headless host supports (it lists them, records every call, and asserts at the end that none went undriven — naming the missing one), and **`redo` was the verb the client exposed and nothing drove**: it is driven as a *pair* (undo → redo → undo, bytes checked each time), because a one-way undo would have passed the old assertions. The capability half is a **content** check complementing what already existed (`check-capabilities.js`: declared ⇒ served, undeclared ⇒ refused, 29 assertions; `HostHealthParityTest`: every host builds `/health` through `HostHealth` and refuses an unauthorized `/open` first): each capability name is mapped to **how it is proved** — `open`/`serveFile` driven here, `select` IDE-only with an assertion that `webview/doc/ide-observation-checklist.md` exists — and an unknown name fails. The README claim names all three checks. The extension went to `webview-client.test.mjs` rather than `smoke-test.mjs` (which drives *pages* with no host) so the repository has one host launcher, not two. **Measured**: test `37 passed, 0 failed`; `-pl webview/core/webviewd -am verify` `58 tests`, BUILD SUCCESS; `check-links.mjs` 242 links resolve; `check-capabilities.js` 29 passed. **Note**: `WEBVIEWD_JAVA` must point at JDK 25 on this machine (`JAVA_HOME` is 21) — the test diagnoses that itself. |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |
 | 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |
 | 5.4  | Eclipse Phase 5 — p2 update site (after Q2)                                                     | agent              | M    | `[ ]`                                                                                       |

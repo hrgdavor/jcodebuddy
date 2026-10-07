@@ -252,7 +252,14 @@ node webview/check-links.mjs                      # every relative link in this 
 ```
 
 `webview-client.test.mjs` starts `webviewd` itself and drives the same functions a browser page calls — nothing
-is mocked — so a verb that stops working fails the run rather than being discovered by a reader.
+is mocked — so a verb that stops working fails the run rather than being discovered by a reader. **It also asserts
+its own coverage** (plan step 5.1): the verbs a headless host supports are listed in the test and every one of them
+must have been *called* by the end of the run, so a verb the client gains is either driven or deliberately left out
+rather than silently untested — and the run prints the count it checked. That is what makes **"headless lacks
+nothing" a test result** rather than a claim, together with the two checks beside it:
+`bun webview/tools/check-capabilities.js` (declared ⇒ served, undeclared ⇒ refused) and
+[`HostHealthParityTest`](core/webview-core/src/test/java/hr/hrg/webview/core/HostHealthParityTest.java) (every host
+builds its `/health` body through `HostHealth`, and refuses an unauthorized `/open` before reading the request).
 `smoke-test.mjs` drives a real Chromium over the DevTools Protocol, with no dependencies, and skips the browser
 half if no Chromium is installed; it reports the highlighted block and token-category counts per page, so a
 grammar that silently stops loading fails the run rather than looking fine.

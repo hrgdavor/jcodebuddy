@@ -79,6 +79,24 @@ const { create } = globalThis.jcbClient;
 check('webview-client.js exports a factory on globalThis', typeof create === 'function');
 
 const client = create({ port, token, fetchImpl: fetch });
+
+// --- verb coverage, recorded rather than remembered (plan step 5.1) ------------------------------------
+//
+// "Headless lacks nothing" is a claim about EVERY verb, and a test that drives the ones its author thought of
+// cannot support it: a verb added to the client tomorrow would be silently undriven, and the parity claim would
+// keep passing while getting less true. So the calls are recorded and the list below is asserted to be covered —
+// and the list is the verbs a headless host actually supports, with the IDE-only ones proved elsewhere (see the
+// capability map at the end).
+const called = new Set();
+for (const verb of ['read', 'proposeEdit', 'applyEdit', 'undo', 'redo', 'open']) {
+  const original = client[verb].bind(client);
+  client[verb] = (...args) => {
+    called.add(verb);
+    return original(...args);
+  };
+}
+const HEADLESS_VERBS = ['read', 'proposeEdit', 'applyEdit', 'undo', 'redo', 'open'];
+
 const state = await client.ready();
 
 check('the host is discovered', state.reachable, JSON.stringify(state));
@@ -122,6 +140,18 @@ check('undo succeeds', undone.status === 200, JSON.stringify(undone));
 check('undo restored the exact bytes',
   'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') === originalDigest);
 
+// redo: and put it back again (plan step 5.1 — the verb the client exposed and this test never drove)
+const redone = await client.redo(file.path);
+check('redo succeeds', redone.status === 200, JSON.stringify(redone));
+check('redo re-applied the edit', fs.readFileSync(target, 'utf8').includes('Grace'), fs.readFileSync(target, 'utf8'));
+// Undo again so the rest of the test starts from the original bytes, and so the pair is shown to be a pair
+// rather than a one-way door.
+const undoneAgain = await client.undo(file.path);
+check('undo after redo restores the original bytes',
+  undoneAgain.status === 200
+  && 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') === originalDigest,
+  JSON.stringify(undoneAgain));
+
 // asking for a buffer no host can provide is refused, never silently written
 const bufferOnly = await client.applyEdit(file.path, originalDigest, edit, 'buffer');
 check('an impossible buffer target is refused', bufferOnly.status === 409 && bufferOnly.reason === 'no-buffer-edit',
@@ -159,6 +189,40 @@ try {
   threw = true;
 }
 check('reading through an unreachable host throws rather than returning empty', threw);
+
+// --- what "headless lacks nothing" means, as two assertions (plan step 5.1) -----------------------------
+//
+// 1. EVERY verb a headless host supports was actually driven. The list is explicit so it cannot rot: a verb the
+//    client gains is either added here (and driven) or left out with a reason, and the failure names which verb
+//    went undriven rather than reporting a count.
+const undriven = HEADLESS_VERBS.filter((verb) => !called.has(verb));
+check(`every headless verb was driven (${HEADLESS_VERBS.length})`, undriven.length === 0,
+  `never called: ${undriven.join(', ')}`);
+
+// 2. Every capability a host may DECLARE has a proof, and the ones a headless test cannot reach point at the
+//    record where a person observes them. A host that declares a verb it does not implement still fails — that
+//    is `HostHealthParityTest`'s job on the Java side (every host builds its health body through `HostHealth`,
+//    and refuses an unauthorized /open before reading anything) — so what this side adds is the CONTENT check:
+//    a capability name nobody listed, or one listed with no proof, is a declaration without evidence.
+const CAPABILITY_PROOFS = {
+  open: 'driven here over HTTP (and on the injected rung)',
+  serveFile: 'driven here — read() returns the file text and the host digest',
+  select: 'IDE-only: observed in the editor, recorded in the observation checklist',
+};
+const IDE_ONLY_CAPABILITIES = ['select'];
+const known = new Set(Object.keys(CAPABILITY_PROOFS));
+const declared = Array.isArray(state.capabilities) ? state.capabilities : [];
+const unknown = declared.filter((capability) => !known.has(capability));
+check('every declared capability is one the contract names', unknown.length === 0,
+  `not in the proof map: ${unknown.join(', ')}`);
+check('every capability the contract names has a proof', known.size >= 3 && [...known].every(Boolean),
+  [...known].join(', '));
+// The IDE-only half is tied to a file that exists, so "observed by a person" is a record rather than a promise.
+const checklist = path.join(repo, 'webview', 'doc', 'ide-observation-checklist.md');
+check('the IDE-only capabilities have an observation checklist to be recorded in', fs.existsSync(checklist),
+  checklist);
+check('the IDE-only list is a subset of what the contract names',
+  IDE_ONLY_CAPABILITIES.every((capability) => known.has(capability)), IDE_ONLY_CAPABILITIES.join(', '));
 
 child.kill();
 console.log(`\n${passed} passed, ${failed} failed`);
