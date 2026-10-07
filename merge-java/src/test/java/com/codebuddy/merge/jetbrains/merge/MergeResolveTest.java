@@ -221,4 +221,40 @@ class MergeResolveTest {
                 "an empty range is not a change: " + range);
         }
     }
+
+    @Test
+    @DisplayName("the modify/delete shape is named, and a one-sided insertion is not it")
+    void modifyDeleteShapeIsNamed() {
+        // The left removed the base's lines and the right edited them: check C2, and the same rule as
+        // DESIGN_NEVER_AUTO_RESOLVED.md section 2's substitutive/additive split.
+        MergeRange leftDeleted = new MergeRange(0, 0, 0, 1, 0, 1);
+        assertEquals(MergeRangeUtil.DeletedSide.LEFT, MergeRangeUtil.modifyDeleteShape(leftDeleted),
+            "the left has nothing where the base had a line");
+
+        MergeRange rightDeleted = new MergeRange(0, 1, 0, 1, 0, 0);
+        assertEquals(MergeRangeUtil.DeletedSide.RIGHT, MergeRangeUtil.modifyDeleteShape(rightDeleted));
+
+        // THE CONTROL, and the reason the guard asks about the base rather than only about emptiness: an
+        // insertion by one side has the same emptiness pattern as a deletion by the other. A guard that
+        // could not tell them apart would resolve a deletion as an addition.
+        MergeRange insertion = new MergeRange(0, 0, 0, 0, 0, 1);
+        assertNull(MergeRangeUtil.modifyDeleteShape(insertion),
+            "the base had nothing here, so an empty left side is an insertion, not a deletion");
+
+        // Both sides deleted the same lines: they agree, so it is not a modify/delete conflict.
+        assertNull(MergeRangeUtil.modifyDeleteShape(new MergeRange(0, 0, 0, 1, 0, 0)));
+
+        // Neither side is empty: an ordinary modification, about which this guard has no opinion.
+        assertNull(MergeRangeUtil.modifyDeleteShape(new MergeRange(0, 1, 0, 1, 0, 1)));
+    }
+
+    @Test
+    @DisplayName("a deletion competing with an edit is refused by the pass as well as by the guard")
+    void deletionAgainstEditIsRefused() {
+        // The guard and the pass must agree. If the pass resolved this the guard would be documentation
+        // rather than a rule; if the guard refused what the pass resolved, one of the two is wrong.
+        MergeResolve.Result result = resolve("", "A_B_C", "A_X_C");
+        assertTrue(result.refused(),
+            "one branch removed the lines and the other edited them: nothing decides it");
+    }
 }

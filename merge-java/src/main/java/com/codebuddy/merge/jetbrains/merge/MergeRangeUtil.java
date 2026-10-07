@@ -149,6 +149,59 @@ public final class MergeRangeUtil {
     }
 
     /**
+     * Whether a range is a <b>modify/delete</b> shape: one side has content here and the other has
+     * nothing, while the base had content.
+     *
+     * <p>This is check C2 of {@code JETBRAINS_PORT.md} § 5.3, and it is the same rule as
+     * {@code DESIGN_NEVER_AUTO_RESOLVED.md} § 2's substitutive/additive split — arrived at
+     * <b>independently</b>, which is why it is spelled out here rather than left implicit. Upstream
+     * encodes it twice, in its range table and again as
+     * {@code MergeConflictModel.isModifyDeleteFileConflict}; this module encodes it here and in
+     * {@code MergeFileTool} — and a rule two projects derive separately is worth naming where a reader
+     * meets it, so that a future change to one is visibly a change to both.
+     *
+     * <h2>Why it must be refused rather than resolved</h2>
+     *
+     * <p>One branch decided these lines should not exist and the other decided they should, edited. That
+     * is not a disagreement about <em>content</em> — it is a disagreement about whether there is any — and
+     * no comparison of text can arbitrate it. Textually the two sides look like "one is empty, one is
+     * not", which is exactly the shape that also describes a plain insertion; the difference is whether
+     * the <em>base</em> had lines here. A guard that only looked at emptiness would resolve a deletion as
+     * an addition, which is the silent regression the whole design exists to prevent.
+     *
+     * <p>Note the contrast with {@link #bothSidesHaveContent}: that asks whether a conflict <em>may</em> be
+     * attempted, this asks whether the shape is one no automatic answer may touch. A caller can use either
+     * alone; a caller that uses both is asking the two questions the design actually has.
+     *
+     * @return which side deleted, or {@code null} when the range is not a modify/delete shape
+     * @see <a href="../../../../../../../DESIGN_NEVER_AUTO_RESOLVED.md">DESIGN_NEVER_AUTO_RESOLVED.md § 2</a>
+     */
+    public static DeletedSide modifyDeleteShape(MergeRange range) {
+        if (range.baseIsEmpty()) {
+            // The base had nothing here, so an empty side means an insertion by the other, not a deletion.
+            // This is the branch that makes the guard safe: without it, every one-sided insertion would
+            // look like a deletion competing with an edit.
+            return null;
+        }
+        boolean leftEmpty = range.leftIsEmpty();
+        boolean rightEmpty = range.rightIsEmpty();
+        if (leftEmpty && !rightEmpty) {
+            return DeletedSide.LEFT;
+        }
+        if (rightEmpty && !leftEmpty) {
+            return DeletedSide.RIGHT;
+        }
+        // Both empty is a deletion by both, which agrees; neither empty is an ordinary modification.
+        return null;
+    }
+
+    /** Which branch removed the lines a modify/delete shape disagrees about. */
+    public enum DeletedSide {
+        LEFT,
+        RIGHT
+    }
+
+    /**
      * The table, for callers that have already decided whether a text pass may attempt a conflict.
      *
      * <p>Use this overload when the answer to "can a text pass resolve this?" is already known — for
