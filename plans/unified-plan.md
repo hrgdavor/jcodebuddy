@@ -3606,10 +3606,10 @@ of thing to everyone downstream, and **a new suggestion source adds a producer a
 
 ---
 
-#### 4C — hierarchical resolution: a confident answer resolves its region and removes the conflict (steps 4.18–4.21)
+#### 4C — hierarchical resolution: a confident answer resolves its region and removes the conflict (steps 4.18–4.22)
 
 > **Why a second lettered subsection.** The same reason as 4B: renumbering is forbidden, and this is a
-> phase-sized block of merge-java work that follows 4.6 and depends on it. Steps 4.18–4.21 belong to
+> phase-sized block of merge-java work that follows 4.6 and depends on it. Steps 4.18–4.22 belong to
 > Phase 4 and sit here for the same cause 4.7–4.17 do.
 
 **The instruction this block exists for**, given by the maintainer on 2026-10-07, and sharpened by them
@@ -3658,9 +3658,9 @@ requires `coversBlock`, so an answer that settles part of a block becomes `LEFT_
 and the whole block — including the part already right — goes to a human; and `residualSubsumed`
 removes a claim before arbitration, so "cleared" and "never raised" read identically.
 
-**Ordering.** 4.18 gates 4.19; 4.21 gates on 4.20. 4.18 is deliberately behaviour-neutral — the working set exists
+**Ordering.** 4.18 gates 4.19; 4.22 gates on 4.21, which gates on 4.20. 4.18 is deliberately behaviour-neutral — the working set exists
 and nothing is removed — so the invariant test is what lands first and the two removing steps are judged
-against it. 4.21 needs 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`),
+against it. 4.21 and 4.22 need 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`),
 which is why it comes after the port's SAFE half rather than beside it. **4C is independent of
 4.11–4.17** and may be landed before, after or between them; where the ordering matters it is stated per
 step.
@@ -3670,7 +3670,8 @@ step.
 | 4.18 | The working set: the three conflict states, the tier order, and the partition invariant        | agent | S–M  |
 | 4.19 | Reliability and removal: a reliable claim spanning a whole region resolves it, and the lower tier is never asked | agent | M |
 | 4.20 | The state of every conflict in the report — the shape 4.21's composition will need             | agent | S    |
-| 4.21 | The composed partial result: applied spans beside markers, and the outcome the enum is missing | agent | M–L  |
+| 4.21 | The position model: the block's lines in three coordinates, and the invariant that tiles them  | agent | S–M  |
+| 4.22 | The splice: applied stretches beside markers, and the outcome the enum is missing              | agent | M–L  |
 
 ### 4.18 — The working set: tiers, the three states, and the invariant that comes first
 **Who:** agent · **Size:** S–M
@@ -3941,39 +3942,80 @@ file-level partition invariant over composed output.
 cleared conflict and `OPEN` for an unsettled one. `merge-java` — **830 tests, 0 failures, 0 errors** with the
 build cache off.
 
-### 4.21 — The composed partial result: applied spans beside markers, and the outcome the enum is missing
+### 4.21 — The position model: the block's lines in three coordinates, and the invariant that tiles them
+**Who:** agent · **Size:** S–M · **Done 2026-10-07**
+
+**This is the "tests come first" the step demanded, and the split is again the honest part.** The composition
+rewrites a person's file; the failure it can produce is not a wrong answer but a **deleted line**, with nothing
+in the outcome text to show for it. So the coordinates were built and tested before anything splices, and this
+step does no text manipulation at all.
+
+**Do:**
+
+1. **`BlockComposition`** places one block's lines in all three coordinate systems — base, ours, theirs — as an
+   ordered list of `Segment`s. The coordinates come from `MergeRangeBuilder`, whose triples are
+   `(left, base, right)` — the constructor argument order, which is not the order a reader guesses — each
+   half-open and 0-based. The lines **both sides kept appear in no range at all**: they are the gaps, and a walk
+   that emitted only the ranges would drop every one of them. That is the trap the type exists for, and
+   `MergeRangeBuilder`'s own javadoc says so.
+2. **`BlockComposition.audit` is the invariant**: every line of ours and of theirs — and every base line when the
+   block has a base — is in exactly one segment. It reports the *lines*, not a boolean, because "which line" is
+   the only useful thing to know about a lost one.
+3. **`Kind` classifies who changed a stretch** (`UNCHANGED`, `LEFT_ONLY`, `RIGHT_ONLY`, `AGREED`, `CONTESTED`)
+   from the range flags plus a text comparison rather than from `MergeRangeUtil.getMergeType`: that classifier
+   answers "what is this change and could a text pass resolve it", which a *resolver* needs, while a composer
+   needs only who changed it and whether the sides agree. Asking the bigger question here would drag a
+   conflict's fate into a position model.
+4. **It is consumed, not speculative.** The `LEFT_PARTIAL_RESOLUTION` explanation now describes the block in
+   these terms — how many stretches are contested at all against how many neither branch touched — which is the
+   distinction that says whether "rewrites only part of the block" is a fact about the answer or about the block.
+
+**A finding that changes what 4.22 can do, and it is a fact about the module rather than a preference.** A
+merge-style block has **no base** — git's default conflict carries only the two sides — and the ranges are built
+*against a base*. With no base there are no coordinates to place a resolver's rendering between, so a base-less
+block can be classified but **not composed**. The fixture that motivated this step,
+`partialResolutionLeavesTheBlock`, is base-less: 4.22 will not fix it, and cannot. What 4.22 can fix is a
+`diff3`/`zdiff3` block whose contested stretches are settled and whose untouched stretches merely need keeping.
+
+**Gate:** `BlockCompositionTest` — 8 tests: eleven fixtures each proved to tile exactly (identical sides,
+one-sided changes, both-same, both-different, an empty-base insertion, a base-less block, deletions, an empty
+side, a shared tail), unchanged lines asserted to be **segments of their own** rather than gaps, an insertion at
+an empty base placed rather than lost, and two invariants **proved to fail** — a dropped segment names the lines
+that would have been deleted, and a doubled one names the side and the line. `merge-java` — **838 tests, 0
+failures, 0 errors** with the build cache off.
+
+### 4.22 — The splice: applied stretches beside markers, and the outcome the enum is missing
 **Who:** agent · **Size:** M–L
 
 **Do:**
 
-1. **Compose the block from resolved regions and open lines.** Where a claim resolves base lines 10–20 of a
-   10–40 block, the result is the applied text for 10–20 and conflict markers for 21–40. The composition uses
-   4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`) — range building is what it is
-   for, and its three coordinate pairs are the position information no other part of the module has — rather than
-   a second splicer. **The hazard, stated before the work rather than discovered by it:** this rewrites the
-   person's file in three coordinate systems at once, and a wrong offset does not fail loudly, it deletes a line
-   of their code. So the tests come first, and the partition invariant is what they assert.
-2. **Retire `LEFT_PARTIAL_RESOLUTION` as a dead end.** Today an automatic answer that does not cover the whole
-   block leaves the whole block for a human. That outcome exists because the tool could not express "applied in
-   part"; once it can, the shape that produced it resolves, and the outcome stays only for an answer that leaves
-   *nothing* settled. `MergeFileToolTest.partialResolutionLeavesTheBlock` is the fixture to watch: its import
-   union is a correct answer for the import lines, and the class header it does not mention is **uncontested** —
-   both sides carry it — so composing those lines back is not a decision, it is not losing them.
+1. **Compose the block from the segments 4.21 produced.** For a `diff3` block: `UNCHANGED` stretches from
+   whichever side carries them (they are equal by construction), `LEFT_ONLY`/`RIGHT_ONLY` stretches from that
+   side, `AGREED` stretches once, and `CONTESTED` stretches either from the claim that settles them (mapped
+   through the claim's `explainedSpan`, which is in **base** lines and 1-based, against the segments' 0-based
+   half-open base extents) or as conflict markers. `BlockComposition.audit` is the invariant the result is
+   judged by, at the file level: every block line reaches the output exactly once.
+2. **Retire `LEFT_PARTIAL_RESOLUTION` for the shape it can now express.** An answer that covers the contested
+   stretches and leaves the untouched ones exactly as they were loses nothing, so it applies; the outcome stays
+   only for an answer that leaves *nothing* settled. `MergeFileToolTest.partialResolutionLeavesTheBlock` stays as
+   it is — it is base-less, and its explanation now says so — and a `diff3` fixture with two halves settled by
+   different tiers is what the new outcome is asserted on.
 3. **Grow the outcome vocabulary where a new result shape exists** (the maintainer's 2026-10-07 instruction that
-   the outcome enum is to grow). "Some spans applied, the rest left open" is a result the tool has never been
+   the outcome enum is to grow). "Some stretches applied, the rest left open" is a result the tool has never been
    able to report and is not any existing outcome; it gets a value of its own rather than overloading
    `APPLIED_AUTO`. An outcome the enum can no longer produce is **removed, not left as a synonym**.
-4. **The partition still holds at the file level**, and the invariant test now runs over composed output as well
-   as over the pass: every block line reaches the output exactly once, applied or as a marked open line, and no
-   resolved region is applied twice.
+4. **The markers the splice emits are the shape the parser reads back.** A composed block that keeps markers must
+   still parse as a conflict block on a second run, or the tool's own output becomes input it cannot read — the
+   `FixtureAgentInstructions` path and `MergeWorkflow` both re-read files. That round trip is a test, not an
+   assumption.
 
-**Gate:** `MODULE` for `merge-java` green, with a fixture block whose two halves are settled by different tiers,
-showing the applied half in the output and markers on the open half; the file-level partition invariant; a test
-that the new outcome is reported for exactly this shape; and the composed result of the fixture **compiling** —
-an applied half and a marked half are not a reason for the file to stop being Java elsewhere.
+**Gate:** `MODULE` for `merge-java` green, with a `diff3` fixture block whose two halves are settled by different
+tiers, showing the applied half in the output and markers on the open half; the file-level partition invariant;
+a test that the new outcome is reported for exactly this shape; the composed result **compiling**; and the
+composed block **parsing back** as a conflict block.
 
 **Done when:** a mixed block comes out with the part the tool understood applied and only the genuinely open
-lines marked, and the outcome says which of the two it was.
+lines marked, the outcome says which of the two it was, and the result can be merged again.
 
 ---
 
@@ -4070,7 +4112,7 @@ caller-supplied entry separates the two type levels; a type change records which
 `equalEvidenceOutranksNothing`. Decision record:
 [`DEC-045`](../doc-hipster-entity/architecture/decisions/DEC-045.md).
 
-**Companion, and the next thing in this area: § 4C (steps 4.18–4.21).** This step says how claims are
+**Companion, and the next thing in this area: § 4C (steps 4.18–4.22).** This step says how claims are
 *compared*; the instruction of 2026-10-07 says they must not all be *produced* in the first place. The
 scale built here is the order § 4C runs in — a claim's tier is the level it records — and
 `outranking` survives there for the one case the hierarchy cannot separate: two claims at the same
@@ -4874,7 +4916,8 @@ start)
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
 | 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in and the instruction's first example now works end to end**: `TieredResolution` + `Reliability` + `explainedSpan`, and a settled conflict is never offered to the resolver below. Four findings came from tests, all corrected in the design: the kept-lines check must judge the *settled* conflict; removal follows the hierarchy's direction (else `equalEvidenceOutranksNothing` became `APPLIED_AUTO`); an insertion has no base lines so an unplaceable conflict is judged over its block; and the report's region stamp must not be applied before resolution (else `IMPORT_ADD` settled an unrelated `COMMENT_ADD`). **Still open:** the per-conflict state as a report key (4.20 changes that shape), `DEFERRED` settling at its resolver's tier, an import-vs-`TEXT_LOCAL` fixture, and the open question of whether the catch-all residual should declare `STRUCTURE` at all |
 | 4.20 | Hierarchical resolution: the state of every conflict in the report                              | agent              | S    | `[x]` — a `state` key per conflict (`RESOLVED`/`OPEN`/`PARTIAL`), aligned with the **conflicts** because a settled one has no resolution of its own and appeared nowhere before; `HierarchicalAcceptanceTest` asserts both states separately |
-| 4.21 | Hierarchical resolution: the composed partial result and the grown outcome enum                 | agent              | M–L  | `[ ]` — needs 4.9's range machinery (`MergeChange` carries the base/left/right positions) to compose applied regions beside markers; **text surgery in three coordinate systems, so the tests come first** |
+| 4.21 | Hierarchical resolution: the three-coordinate position model and the tiling invariant           | agent              | S–M  | `[x]` — `BlockComposition` places a block's lines in base/ours/theirs as segments **including the gaps** (the lines in no range at all, which a walk emitting only ranges drops silently), `audit` is the tiling invariant, and the `LEFT_PARTIAL_RESOLUTION` explanation now uses it. **A base-less block can be classified but not composed** — no base, no coordinates — so 4.22 works on `diff3` blocks |
+| 4.22 | Hierarchical resolution: the splice, and the grown outcome enum                                 | agent              | M–L  | `[ ]` — compose from 4.21's segments, mapping each claim's `explainedSpan` (base lines, 1-based) onto the segments' 0-based half-open base extents; the emitted markers must **parse back**, so the round trip is a test |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |
 | 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |

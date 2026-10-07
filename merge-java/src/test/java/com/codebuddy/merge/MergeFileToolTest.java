@@ -497,6 +497,10 @@ class MergeFileToolTest {
         MergeFileTool.BlockOutcome outcome = result.outcomes().get(0);
         assertEquals(Outcome.LEFT_PARTIAL_RESOLUTION, outcome.outcome());
         assertTrue(outcome.explanation().contains("part of the block"), outcome.explanation());
+        // And in the terms the composition will use: how much of the block is contested at all against how
+        // much neither branch touched. The class header in this fixture is the second kind, which is why
+        // "rewrites only part of the block" is a statement about the answer rather than about the block.
+        assertTrue(outcome.explanation().contains("neither branch touched"), outcome.explanation());
         assertTrue(read(file).contains("<<<<<<<"));
         assertNotNull(outcome.fixtureCase());
         assertTrue(Files.isDirectory(outcome.fixtureCase()));

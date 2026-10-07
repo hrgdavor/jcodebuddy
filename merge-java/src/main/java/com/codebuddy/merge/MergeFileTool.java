@@ -582,7 +582,7 @@ public final class MergeFileTool {
 
 
             BlockDecision decision = decide(block, conflicts, detected, resolutions,
-                builder.applyRecordedDecisions, residualSubsumed);
+                builder.applyRecordedDecisions, residualSubsumed, whitespace);
             if (decision.replacement() != null && containsMarker(decision.replacement())) {
                 // A replacement still carrying markers would re-open a conflict
                 // while claiming to fix it: leave the block and say why.
@@ -705,7 +705,8 @@ public final class MergeFileTool {
                                         List<Conflict> detected,
                                         List<ConflictResolution> resolutions,
                                         boolean applyRecordedDecisions,
-                                        boolean residualSubsumed) {
+                                        boolean residualSubsumed,
+                                        ComparisonPolicy policy) {
         ConflictType type = conflicts.isEmpty() ? null : conflicts.get(0).getType();
 
         // A conflict another claim settled has no claim of its own — nothing was asked about it — so it
@@ -731,7 +732,7 @@ public final class MergeFileTool {
                     ? new BlockDecision(Outcome.APPLIED_AUTO, type,
                         resolution.getExplanation(), resolution.getResolvedCode(), false,
                         resolutions)
-                    : partial(type, resolution, resolutions);
+                    : partial(type, resolution, resolutions, block, policy);
                 case DEFERRED -> applyRecordedDecisions
                     // A recorded decision is the human answer to exactly this
                     // disagreement (the signature matched), so the coverage
@@ -1082,15 +1083,46 @@ public final class MergeFileTool {
      * The verdict for an automatic resolution that does not cover the whole
      * block: leave the markers and prepare a fixture, because a resolver for
      * the complete shape does not exist yet.
+     *
+     * <p>The block is also described in the terms the composition will use
+     * ({@link BlockComposition}): how many stretches are contested at all, and how many neither branch
+     * touched. That distinction is the whole reason this outcome is not the end of the story — an answer
+     * that rewrites the contested stretches and leaves the untouched ones exactly as they are loses
+     * nothing, and saying so is what a reviewer needs in order to judge the dead end rather than take it
+     * on trust.
      */
     private static BlockDecision partial(ConflictType type, ConflictResolution resolution,
-                                         List<ConflictResolution> resolutions) {
+                                         List<ConflictResolution> resolutions,
+                                         ConflictMarkerParser.Block block,
+                                         ComparisonPolicy policy) {
         return new BlockDecision(Outcome.LEFT_PARTIAL_RESOLUTION, type,
             "[" + resolution.getType() + "/" + resolution.getKind() + "] "
                 + resolution.getExplanation()
                 + " The resolution rewrites only part of the block, so applying it would drop"
-                + " the rest; the block is left and prepared as a fixture.",
+                + " the rest; the block is left and prepared as a fixture."
+                + describeBlockShape(block, policy),
             null, true, resolutions);
+    }
+
+    /**
+     * The block's contested and untouched stretches, as a sentence.
+     *
+     * <p>Empty when the block cannot be placed — with no sides to compare there is nothing to count, and a
+     * number that came from nowhere would be worse than no number. The policy is the run's own, because
+     * "contested" is a statement about which lines differ, and that is exactly what the policy decides.
+     */
+    private static String describeBlockShape(ConflictMarkerParser.Block block, ComparisonPolicy policy) {
+        List<BlockComposition.Segment> segments = BlockComposition.segments(
+            block.hasBase() ? block.base() : "", block.ours(), block.theirs(), policy);
+        if (segments.isEmpty()) {
+            return "";
+        }
+        long contested = segments.stream().filter(BlockComposition.Segment::isContested).count();
+        long untouched = segments.stream()
+            .filter(segment -> segment.kind() == BlockComposition.Kind.UNCHANGED)
+            .count();
+        return " The block is " + contested + " contested stretch(es) plus " + untouched
+            + " that neither branch touched.";
     }
 
     /**
