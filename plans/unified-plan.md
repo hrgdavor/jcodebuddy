@@ -3565,183 +3565,6 @@ immediately.**
 - Metrics after the fix: `PARITY-METRIC: change types 18/18 … 0 REGRESSION(S)`;
   `PARITY-METRIC: resolve vectors 0/3 resolved to the benchmark's text, 3 declined under a recorded exception, 0
   REGRESSION(S)`; `PROPERTY-METRIC: 2000 cases …, 0 invariant violation(s)`; **890 tests**, 0 failures.
-**Added 2026-10-07 (round 31) — the vectors are on disk, and the layout the plan assumed is the wrong one.**
-
-- **The vector sets now live on disk as data**, in `merge-java/src/test/resources/parity/`: `jetbrains-change-types.txt`
-  (§ 11.1, 18 vectors) and `jetbrains-resolve.txt` (§ 11.2, 3), each with its own documented format and its
-  transcription provenance in the header. `JetBrainsParityGateTest` **reads them** rather than holding a second copy
-  in code, so the table a reviewer reads is the table the gate grades — a fixture set that exists twice is the
-  failure mode it invites.
-- **The plan said they would become `THREE_WAY_FIXTURES.md` cases, and they cannot.** That document's rule 1 is that
-  a fixture is three **complete, compilable** Java files — "a fragment cannot express a change", and type
-  attribution needs a plausible source path. These vectors are text-fragment ranges with expected **kinds**: they
-  exercise the ported text machinery (`MergeRangeBuilder`, `MergeRangeUtil.getMergeType`, `MergeResolve`), not a
-  `ConflictType`, and a whole-file fixture cannot state `y z | x y z | x y`. Forcing them in would have broken the
-  rule that makes those fixtures trustworthy, so `JETBRAINS_PORT.md` § 11 now carries the correction and points at
-  the two files. **§ 11.3 and § 11.4 are the rows that genuinely are whole-file cases**, and they are what a
-  `ThreeWayFixture` can carry — that is where the remaining fixture work belongs.
-- **A cache-input gap was found while doing it, and closed.** Editing `merge-java/docs/JETBRAINS_PORT.md` left the
-  module's checksum at `4e68997fff321f21` and the build was **restored from cache** — yet
-  `JetBrainsAttributionTest` reads that document off disk to assert the pinned commit is recorded. That is exactly
-  the hazard `AGENTS.md` § 2 names ("a document a test asserts against"), and the documented fix is to list the
-  path: `.mvn/maven-build-cache-config.xml` now includes `docs`, `AGENTS.md`, and their `../../merge-java/…`
-  counterparts, in the same dual form the existing `scripts` entries use. **Evidence:** the checksum went
-  `4e68997fff321f21` → `ce9523ebab02de1b` → `520bca04c0e40863` across the doc edits where it previously did not
-  move at all, and the run no longer restores from cache. The extension's 1.2.0 schema **rejects** an
-  `<input><project>` block — it fails the whole build with "xml config is not valid or not available" — which is
-  why the entries are in the global list, noted in the file.
-**Added 2026-10-07 (round 32) — the invalidating edit, and an open question about the signature.**
-
-- **§ 11.2's second table is asserted.** The rule is that *resolvability is a property of the current output, not
-  of the original inputs*: upstream resolves the vector and then, once a person replaces a result line, the answer
-  is no longer resolvable. Our expression of it is the **signature**, and `theInvalidatingEdit` asserts both halves
-  that hold today — the same conflict has the same signature, and an edit to either **side** changes it, including
-  the file name a recorded decision is looked up by.
-- **It found a gap, and the gap is a policy question rather than a bug to fix quietly.** The base is **not** part
-  of `ConflictSignature`, so a conflict whose upstream side moved — a rebase, a different merge base — keeps the
-  same signature and a recorded answer still matches it. That matters because the sides decide the *text* but the
-  base decides how the change is **read** (`ConflictShape`, the modify/delete rule, whether "both sides inserted"
-  is even true), so an answer recorded before a rebase can be replayed under a description that no longer holds.
-  Adding the base would invalidate every recorded decision whenever the base moves, which is a policy about **when
-  a person's past decision stops counting** — the maintainer's call, with a real trade on both sides (a rebase of
-  an unrelated part of the file should not throw an answer away; a base that changed under the conflict probably
-  should). **The test pins today's behaviour with the question written into its message**, so taking the decision
-  flips one assertion rather than being rediscovered. **This is a question for the maintainer, not a blocker:** the
-  work continues, and the gate is honest about which way it currently leans.
-- **Corrected a claim I made in the previous round's own correction.** I wrote that § 11.3 and § 11.4 were the
-  whole-file rows a `ThreeWayFixture` could carry. Neither is, and the port doc now says why: **§ 11.4 is
-  upstream's file-level conflict type** (`DELETED_MODIFIED`), and this module has no file-level conflict type at
-  all — it has conflict *blocks*, with the rule expressed at range level; **§ 11.3 counts remaining changes per
-  side**, a quantity from upstream's document model, while our surface counts **open conflicts after a run**. A
-  fixture written to make the earlier sentence true would have been a correspondence invented rather than
-  measured.
-**Added 2026-10-08 (round 39) — row 6 is MET, and the previous round's "unmet" was a scope error of mine.**
-
-- **`ProjectTypesLevelTest` measures the row where its claim lives**: the same `MEMBER_ADD` conflict resolved twice,
-  once with a `TypeContext` carrying a **compiled project class** and once without —
-  `PROJECT-TYPES-METRIC (row 6): with project entries -> AUTO at PROJECT_TYPES; without -> AUTO at PLATFORM_TYPES`.
-  The control is the measurement: the claim is not "the tool can resolve types" (which `ProjectClasspathResolutionTest`
-  already showed at the *parser*) but "the tool **says** whether it resolved the project's own types", and only the
-  pair of levels shows that.
-- **The correction matters more than the row.** Round 38 reported row 6 as **UNMET** on the strength of the census
-  corpus, in which `PROJECT_TYPES` never appears — but that corpus resolves every sample against the **JDK only**, so
-  the case *cannot* occur in it. **A measurement's scope is part of its claim, and a corpus that cannot contain the
-  case is evidence of nothing.** The rule § 10.2 states ("a row whose measurement does not beat the shape-only answer
-  is removed") was applied to the wrong evidence, and the census print now says which situation it is in — *"not
-  measurable from this corpus (JDK-only); measured by `ProjectTypesLevelTest` instead"* — rather than pronouncing on
-  the row.
-- **So no § 10.2 row has been removed by measurement after all**, and the count of rows with a measurement behind them
-  is: row 1 (round 33), row 2 with its control (round 38), row 3 and the level distribution (round 38), row 4 by the
-  replay tests, row 5's first half by the census, and **row 6 now**. Row 5's second half still needs an accept action
-  to exist before it can be measured at all.
-- **916 tests**, every other metric held: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions, the
-  census unchanged, the word-level corpus `2 offered at TEXT_INTRALINE + 1 refused`, `PROPERTY 2000 cases,
-  0 violations`.
-**Added 2026-10-08 (round 38) — the § 10.2 rows measured, and the one the measurement refuses.**
-
-- **Row 2 measured, with its control** (`theVerifierRowIsMeasured`): a **deliberately corrupted** automatic answer
-  becomes `REVIEW` with verification `FAILED` and the reason appended to its explanation, while the same conflict
-  with a balanced answer stays `AUTO`/`PASSED`. The control is what makes the first half evidence rather than a
-  statement about the fixture. § 10.2's own words for this row are *"the measurement is the guard firing"*, and this
-  is the guard firing on purpose.
-- **Row 3 measured** (`theRowByRowMeasurement`): the corpus's claims record `{TEXT_LOCAL=4, TEXT_FILE=2,
-  STRUCTURE=1, PLATFORM_TYPES=1}` across strategies `{KEEP_BOTH=4, MERGE_SAFE=3, PREFER_BRANCH2=1}` — four levels
-  and three strategies where a shape-only engine has four words and no strategy at all. The test also asserts the
-  thing that would quietly undo the row: **no claim records an absent level**, because a claim with no level *is*
-  the shape-only answer.
-- **Row 1 already measured** (round 33): `MEMBER_ADD` resolves `AUTO` at `STRUCTURE` where the text-only answer for
-  the same input **refuses**. Row 4 (signature-keyed replay, including a remembered refusal) is measured by
-  `MergeFileToolTest`'s recorded-decision test and `RejectionMemoryTest`'s round trip. Row 5's first half is the
-  census's `offered 3`; its second half needs an accept action that does not exist yet.
-- **Row 6 is UNMET, and § 10.2 says what to do about that.** *"Type resolution against a project classpath:
-  the resolved code compiles against the project classpath and the level is `PROJECT_TYPES`"* — the corpus resolves
-  types against the **JDK only**, so `PROJECT_TYPES` never appears and the print says so on every run. The row is a
-  capability the module has (`TypeContext` + javac) with **no fixture that exercises it at that level**, which by
-  § 10.2's own rule means the claim is dropped rather than reworded: it stays in the document as **unmet pending a
-  project-classpath corpus**, and the honest next step is a fixture with two project types rather than a sentence.
-  This is the first § 10.2 row that measurement has taken away, which is what the rule was written for.
-- **915 tests**, every other metric held: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions,
-  the census unchanged, the word-level corpus `2 offered at TEXT_INTRALINE, 1 refused`,
-  `PROPERTY 2000 cases, 0 violations`.
-**Added 2026-10-08 (round 37) — the word-level residual corpus, so the capability is a number rather than a claim.**
-
-- **The measurement round 36 owed is in `PortMetricTest.theWordLevelCorpus`**, printing on every run:
-  `WORD-LEVEL-METRIC: 3 residuals the line pass cannot reach, 2 offered as suggestions (2 at TEXT_INTRALINE),
-  1 refused`. The type-keyed census could not move — its samples hold no word-level residual — so this corpus is
-  stated separately rather than by weakening that one.
-- **The two offered answers are the shapes the benchmark's vectors use**, and both record the level they earned:
-  `int total = a + b + c;` with the sides deleting different words composes to `int total = b;`, and
-  `if (value != null && value.isValid()) {` composes to **`if (value) {`**.
-- **That second answer is the strongest argument yet for the channel's design, and it is recorded rather than
-  hidden.** It is *mechanically* right — every word it keeps is a word neither branch deleted — and it is
-  *semantically* a different condition from either branch's. A pass that applied it would be the invisible
-  regression the whole design exists to prevent; a pass that refused it would withhold the one thing a reviewer
-  needs to start from. Offering it, at `PLAUSIBLE`, with its basis on the screen, is the middle that
-  `SUGGESTIONS.md` argues for — and this is the case that makes the argument concrete rather than theoretical.
-- **The third is refused, correctly**, and the test names it: both sides edited the **same token** (one rewrote the
-  format string, the other renamed the last argument), so their edits overlap and no combination of their words is a
-  function of the inputs. R6 one granularity down, and the same rule that makes the two above offerable.
-- **Every other metric held**: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions, the
-  type-keyed census unchanged, `PROPERTY 2000 cases, 0 violations`, **913 tests**.
-**Added 2026-10-08 (round 36) — the evidence level is recorded per ANSWER, which is what this step's declaration half can honestly mean.**
-
-- **`MergeResolve.Result` reports `wordLevel()`** — true when the answer needed composition *inside* a line — and the
-  producer that offers a ported answer records `TEXT_INTRALINE` for those and `TEXT_LOCAL` for the rest.
-  `theOfferedLevelFollowsTheReading` asserts both **from the same producer**, so the level cannot drift into a claim
-  about capability: a one-sided line change is offered at `TEXT_LOCAL` even though that producer *could* read words.
-- **`maxAnalysisLevel()` stays honest per resolver, and the one that would have tempted me is refused.**
-  `MethodBodyChangeConflictResolver` compares the two bodies' *statement lines as sets*, so its declaration stays
-  `TEXT_LOCAL`. An earlier note hoped it would move to `TEXT_INTRALINE` once the word-level half landed — but landing
-  the capability **elsewhere** does not make that resolver read words, and a level is a claim about what was read.
-- **The offer path now prefers the ported tier's answer over the greedy pass**, because the two are not equivalent
-  evidence: the tier is R1/R6 semantics with **no** unconditional deletion, while the greedy pass applies both sides'
-  deletions as a stated trade. The tier's answer is offered first, with its own recorded level; the greedy pass stays
-  the fallback, and its suggestions keep `PLAUSIBLE` and their warning about the trade.
-- **Every metric held**: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions, the census
-  unchanged (`escalated 3`, `LEFT_MANUAL 3`, `offered 3`, verified auto `5`), `PROPERTY 2000 cases, 0 violations`,
-  **912 tests**. That the census did **not** move is the honest reading rather than a disappointment: the sample
-  corpus's residual blocks are not word-level cases, so the new capability changed no outcome **on this corpus** — it
-  changed what the tool can *say* about the answers it offers. A corpus with word-level residuals would show it, and
-  building one is the honest next measurement.
-**Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
-  `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its
-  remaining-change counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the
-  invalidating-edit row, the seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 /
-  § 10.2 numbers. **`MergeRange`'s extent coordinates** is the first item of that list, because the gate says so.
-
-**Gate so far:** `merge-java verify` — **916 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
-with the build cache **on**; `LINKS` green.
-
-**Fixed 2026-10-07, and the gate proves it: the serious defect is gone and 18/18 change types now agree.**
-
-- **`MergeRangeBuilder` records each side's extent as the lines that side *has* over the base extent**, not the
-  lines it *changed*: `(baseLength - deleted) + inserted`. A side that deleted part of a base extent used to be
-  recorded with extent length 0, which made *"the left kept `b`"* and *"the left deleted `b`"* the same range — and
-  then a range in which each branch deleted a **different** line read as "both sides deleted the same lines" and
-  composed to nothing. This is the fourth appearance of the rule *"a side with no change kept what the base had"* in
-  this project, and the first one **inside the range's own coordinates** — the place the other three were working
-  around.
-- **The gate fails without the fix, and that exact failure was demonstrated**: with `MergeRangeBuilder` reverted,
-  `noApplicationWhereTheBenchmarkNeedsAPerson` reports *"the benchmark needs a person here and we applied an answer:
-  testChangeTypes: conflict around a base insertion (§ 11.1) — applied Y"*, and the change-type family drops to
-  17/18. With the fix: **18/18, 0 recorded defects, 0 regressions**, and `KNOWN_DEFECTS` is **empty** — the entry
-  was removed in the same commit, because a ratchet whose entries are never removed is a permanent excuse.
-- **A new family covers the direction that matters**: *every change the benchmark calls a conflict, we refuse
-  rather than apply*. The change-type vectors only compare our classifier's **naming**, so a range named
-  `deleted both` and then composed to nothing passes them — which is precisely how this defect lived. Asserting the
-  **outcome** is what makes the floor real, and it is the assertion that will catch the next one of these.
-- **Two of my own errors were found and fixed in the fixtures rather than in the code**, and both decide how much the
-  measurement is worth. First, the transcription helper appended `"\n"` to every vector, inventing a line on all
-  three sides and moving a trailing insertion one base line later than the benchmark puts it — so two fixtures were
-  testing a case the benchmark does not state. (§ 11 says "`_` is a line separator": `x` is one line and `x_` is
-  two, with no trailing newline unless the vector writes one.) Second, an assertion in `MergeResolveTest`
-  **encoded the defect as a description**: it asserted `leftIsEmpty()` for a range where the left had kept its line.
-  It now asserts that the kept line is *inside* the range and that the type is `modified(false, true)`.
-- **`clean test`, and a caveat about counts.** This round's runs used `clean`, because a **deleted scratch probe's
-  class file** stayed in `target/test-classes` and kept running — a stale-class hazard of the same family as the
-  incremental-compile one. **886** is the count from a clean build; earlier counts in this plan may have included
-  stale scratch classes, so a count is only comparable against another clean run.
-
 **Added 2026-10-07 — § 11.4 with its control, and the randomized property; the property found a second defect
 immediately.**
 
@@ -3777,6 +3600,7 @@ immediately.**
 - Metrics after the fix: `PARITY-METRIC: change types 18/18 … 0 REGRESSION(S)`;
   `PARITY-METRIC: resolve vectors 0/3 resolved to the benchmark's text, 3 declined under a recorded exception, 0
   REGRESSION(S)`; `PROPERTY-METRIC: 2000 cases …, 0 invariant violation(s)`; **890 tests**, 0 failures.
+
 **Added 2026-10-07 (round 31) — the vectors are on disk, and the layout the plan assumed is the wrong one.**
 
 - **The vector sets now live on disk as data**, in `merge-java/src/test/resources/parity/`: `jetbrains-change-types.txt`
@@ -3802,6 +3626,7 @@ immediately.**
   move at all, and the run no longer restores from cache. The extension's 1.2.0 schema **rejects** an
   `<input><project>` block — it fails the whole build with "xml config is not valid or not available" — which is
   why the entries are in the global list, noted in the file.
+
 **Added 2026-10-07 (round 32) — the invalidating edit, and an open question about the signature.**
 
 - **§ 11.2's second table is asserted.** The rule is that *resolvability is a property of the current output, not
@@ -3827,19 +3652,156 @@ immediately.**
   side**, a quantity from upstream's document model, while our surface counts **open conflicts after a run**. A
   fixture written to make the earlier sentence true would have been a correspondence invented rather than
   measured.
-**Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
-`src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its remaining-change
-counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the invalidating-edit row, the
-seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 / § 10.2 numbers.
 
-> **Note for the maintainer — a rule I had been breaking.** My evidence runs used
-> `-Dmaven.build.cache.enabled=false`, which `AGENTS.md` § 2 forbids in every circumstance ("the Maven build
-> cache is on, and it is never turned off — in no circumstances"), and the documented practice for a narrowed
-> run is `-Dmaven.build.cache.skipSave=true`. This step's runs use the cache normally and the numbers above come
-> from that; earlier steps in this plan were verified with the flag, so their counts were produced the same way
-> the cache would have produced them only if Maven rebuilt the module — which it did, because a changed module
-> is a cache miss. Flagging it rather than quietly switching.
+**Added 2026-10-08 (round 36) — the evidence level is recorded per ANSWER, which is what this step's declaration half can honestly mean.**
 
+- **`MergeResolve.Result` reports `wordLevel()`** — true when the answer needed composition *inside* a line — and the
+  producer that offers a ported answer records `TEXT_INTRALINE` for those and `TEXT_LOCAL` for the rest.
+  `theOfferedLevelFollowsTheReading` asserts both **from the same producer**, so the level cannot drift into a claim
+  about capability: a one-sided line change is offered at `TEXT_LOCAL` even though that producer *could* read words.
+- **`maxAnalysisLevel()` stays honest per resolver, and the one that would have tempted me is refused.**
+  `MethodBodyChangeConflictResolver` compares the two bodies' *statement lines as sets*, so its declaration stays
+  `TEXT_LOCAL`. An earlier note hoped it would move to `TEXT_INTRALINE` once the word-level half landed — but landing
+  the capability **elsewhere** does not make that resolver read words, and a level is a claim about what was read.
+- **The offer path now prefers the ported tier's answer over the greedy pass**, because the two are not equivalent
+  evidence: the tier is R1/R6 semantics with **no** unconditional deletion, while the greedy pass applies both sides'
+  deletions as a stated trade. The tier's answer is offered first, with its own recorded level; the greedy pass stays
+  the fallback, and its suggestions keep `PLAUSIBLE` and their warning about the trade.
+- **Every metric held**: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions, the census
+  unchanged (`escalated 3`, `LEFT_MANUAL 3`, `offered 3`, verified auto `5`), `PROPERTY 2000 cases, 0 violations`,
+  **912 tests**. That the census did **not** move is the honest reading rather than a disappointment: the sample
+  corpus's residual blocks are not word-level cases, so the new capability changed no outcome **on this corpus** — it
+  changed what the tool can *say* about the answers it offers. A corpus with word-level residuals would show it, and
+  building one is the honest next measurement.
+
+**Added 2026-10-08 (round 37) — the word-level residual corpus, so the capability is a number rather than a claim.**
+
+- **The measurement round 36 owed is in `PortMetricTest.theWordLevelCorpus`**, printing on every run:
+  `WORD-LEVEL-METRIC: 3 residuals the line pass cannot reach, 2 offered as suggestions (2 at TEXT_INTRALINE),
+  1 refused`. The type-keyed census could not move — its samples hold no word-level residual — so this corpus is
+  stated separately rather than by weakening that one.
+- **The two offered answers are the shapes the benchmark's vectors use**, and both record the level they earned:
+  `int total = a + b + c;` with the sides deleting different words composes to `int total = b;`, and
+  `if (value != null && value.isValid()) {` composes to **`if (value) {`**.
+- **That second answer is the strongest argument yet for the channel's design, and it is recorded rather than
+  hidden.** It is *mechanically* right — every word it keeps is a word neither branch deleted — and it is
+  *semantically* a different condition from either branch's. A pass that applied it would be the invisible
+  regression the whole design exists to prevent; a pass that refused it would withhold the one thing a reviewer
+  needs to start from. Offering it, at `PLAUSIBLE`, with its basis on the screen, is the middle that
+  `SUGGESTIONS.md` argues for — and this is the case that makes the argument concrete rather than theoretical.
+- **The third is refused, correctly**, and the test names it: both sides edited the **same token** (one rewrote the
+  format string, the other renamed the last argument), so their edits overlap and no combination of their words is a
+  function of the inputs. R6 one granularity down, and the same rule that makes the two above offerable.
+- **Every other metric held**: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions, the
+  type-keyed census unchanged, `PROPERTY 2000 cases, 0 violations`, **913 tests**.
+
+**Added 2026-10-08 (round 38) — the § 10.2 rows measured, and the one the measurement refuses.**
+
+- **Row 2 measured, with its control** (`theVerifierRowIsMeasured`): a **deliberately corrupted** automatic answer
+  becomes `REVIEW` with verification `FAILED` and the reason appended to its explanation, while the same conflict
+  with a balanced answer stays `AUTO`/`PASSED`. The control is what makes the first half evidence rather than a
+  statement about the fixture. § 10.2's own words for this row are *"the measurement is the guard firing"*, and this
+  is the guard firing on purpose.
+- **Row 3 measured** (`theRowByRowMeasurement`): the corpus's claims record `{TEXT_LOCAL=4, TEXT_FILE=2,
+  STRUCTURE=1, PLATFORM_TYPES=1}` across strategies `{KEEP_BOTH=4, MERGE_SAFE=3, PREFER_BRANCH2=1}` — four levels
+  and three strategies where a shape-only engine has four words and no strategy at all. The test also asserts the
+  thing that would quietly undo the row: **no claim records an absent level**, because a claim with no level *is*
+  the shape-only answer.
+- **Row 1 already measured** (round 33): `MEMBER_ADD` resolves `AUTO` at `STRUCTURE` where the text-only answer for
+  the same input **refuses**. Row 4 (signature-keyed replay, including a remembered refusal) is measured by
+  `MergeFileToolTest`'s recorded-decision test and `RejectionMemoryTest`'s round trip. Row 5's first half is the
+  census's `offered 3`; its second half needs an accept action that does not exist yet.
+- **Row 6 is UNMET, and § 10.2 says what to do about that.** *"Type resolution against a project classpath:
+  the resolved code compiles against the project classpath and the level is `PROJECT_TYPES`"* — the corpus resolves
+  types against the **JDK only**, so `PROJECT_TYPES` never appears and the print says so on every run. The row is a
+  capability the module has (`TypeContext` + javac) with **no fixture that exercises it at that level**, which by
+  § 10.2's own rule means the claim is dropped rather than reworded: it stays in the document as **unmet pending a
+  project-classpath corpus**, and the honest next step is a fixture with two project types rather than a sentence.
+  This is the first § 10.2 row that measurement has taken away, which is what the rule was written for.
+- **915 tests**, every other metric held: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions,
+  the census unchanged, the word-level corpus `2 offered at TEXT_INTRALINE, 1 refused`,
+  `PROPERTY 2000 cases, 0 violations`.
+
+**Added 2026-10-08 (round 39) — row 6 is MET, and the previous round's "unmet" was a scope error of mine.**
+
+- **`ProjectTypesLevelTest` measures the row where its claim lives**: the same `MEMBER_ADD` conflict resolved twice,
+  once with a `TypeContext` carrying a **compiled project class** and once without —
+  `PROJECT-TYPES-METRIC (row 6): with project entries -> AUTO at PROJECT_TYPES; without -> AUTO at PLATFORM_TYPES`.
+  The control is the measurement: the claim is not "the tool can resolve types" (which `ProjectClasspathResolutionTest`
+  already showed at the *parser*) but "the tool **says** whether it resolved the project's own types", and only the
+  pair of levels shows that.
+- **The correction matters more than the row.** Round 38 reported row 6 as **UNMET** on the strength of the census
+  corpus, in which `PROJECT_TYPES` never appears — but that corpus resolves every sample against the **JDK only**, so
+  the case *cannot* occur in it. **A measurement's scope is part of its claim, and a corpus that cannot contain the
+  case is evidence of nothing.** The rule § 10.2 states ("a row whose measurement does not beat the shape-only answer
+  is removed") was applied to the wrong evidence, and the census print now says which situation it is in — *"not
+  measurable from this corpus (JDK-only); measured by `ProjectTypesLevelTest` instead"* — rather than pronouncing on
+  the row.
+- **So no § 10.2 row has been removed by measurement after all**, and the count of rows with a measurement behind them
+  is: row 1 (round 33), row 2 with its control (round 38), row 3 and the level distribution (round 38), row 4 by the
+  replay tests, row 5's first half by the census, and **row 6 now**. Row 5's second half still needs an accept action
+  to exist before it can be measured at all.
+- **916 tests**, every other metric held: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions, the
+  census unchanged, the word-level corpus `2 offered at TEXT_INTRALINE + 1 refused`, `PROPERTY 2000 cases,
+  0 violations`.
+
+**Still open in this step:** one § 10.2 measurement (*blocks a reviewer accepted in one action* — it needs an
+accept action to exist before it can be measured at all), and the **shape/classification question** the
+maintainer is holding: whether a shape may override a type's declared handling, and whether an additive
+one-sided change gets a type. The control that measures it reports `LEFT_UNCLASSIFIED` with `type null`, which is
+weaker than the `LEFT_MANUAL` steps 4.5/4.6 recorded.
+
+**Handover, 2026-10-08 — where this step stands and what comes first.**
+
+- **Two questions are the maintainer's, and both are pinned by tests that state them rather than decide them.**
+  (1) *May a shape override a type's declared handling, and does an additive one-sided change get a type?*
+  `DeletionConflictTest` measures the case: a block where only one side changed is **`LEFT_UNCLASSIFIED` with
+  `type null`**, weaker than the `LEFT_MANUAL` steps 4.5/4.6 recorded — so the fix has a **classification** half
+  before its resolution half. (2) *Should the base be part of `ConflictSignature`?* Adding it would invalidate every
+  recorded decision whenever the base moves; `JetBrainsParityGateTest.theInvalidatingEdit` pins today's behaviour
+  with the question in its message, and the decision flips one assertion.
+- **One measurement is blocked on an action, not on evidence**: § 10.3's *blocks a reviewer accepted in one
+  action*. The page has a bulk accept and a test that it never takes a suggestion (4.16); no CLI accept action
+  exists, so the number has nothing to count.
+- **A future session should not re-derive these**: the parity gate prints its numbers on every run, the census and
+  word-level corpus print theirs, and the seeded property test prints its seed. If a number moves, the commit
+  message that moved it is where the reason is.
+- **A documentation defect this round repaired**: the round-34 paragraph had been written into two sections (a
+  whole-file replace matched two identical anchors), and both sections' "Still open" lists had gone stale. The
+  step's own record is now the only copy, and each list names what is actually outstanding.
+
+**Gate so far:** `merge-java verify` — **916 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
+with the build cache **on**; `LINKS` green.
+
+**Fixed 2026-10-07, and the gate proves it: the serious defect is gone and 18/18 change types now agree.**
+
+- **`MergeRangeBuilder` records each side's extent as the lines that side *has* over the base extent**, not the
+  lines it *changed*: `(baseLength - deleted) + inserted`. A side that deleted part of a base extent used to be
+  recorded with extent length 0, which made *"the left kept `b`"* and *"the left deleted `b`"* the same range — and
+  then a range in which each branch deleted a **different** line read as "both sides deleted the same lines" and
+  composed to nothing. This is the fourth appearance of the rule *"a side with no change kept what the base had"* in
+  this project, and the first one **inside the range's own coordinates** — the place the other three were working
+  around.
+- **The gate fails without the fix, and that exact failure was demonstrated**: with `MergeRangeBuilder` reverted,
+  `noApplicationWhereTheBenchmarkNeedsAPerson` reports *"the benchmark needs a person here and we applied an answer:
+  testChangeTypes: conflict around a base insertion (§ 11.1) — applied Y"*, and the change-type family drops to
+  17/18. With the fix: **18/18, 0 recorded defects, 0 regressions**, and `KNOWN_DEFECTS` is **empty** — the entry
+  was removed in the same commit, because a ratchet whose entries are never removed is a permanent excuse.
+- **A new family covers the direction that matters**: *every change the benchmark calls a conflict, we refuse
+  rather than apply*. The change-type vectors only compare our classifier's **naming**, so a range named
+  `deleted both` and then composed to nothing passes them — which is precisely how this defect lived. Asserting the
+  **outcome** is what makes the floor real, and it is the assertion that will catch the next one of these.
+- **Two of my own errors were found and fixed in the fixtures rather than in the code**, and both decide how much the
+  measurement is worth. First, the transcription helper appended `"\n"` to every vector, inventing a line on all
+  three sides and moving a trailing insertion one base line later than the benchmark puts it — so two fixtures were
+  testing a case the benchmark does not state. (§ 11 says "`_` is a line separator": `x` is one line and `x_` is
+  two, with no trailing newline unless the vector writes one.) Second, an assertion in `MergeResolveTest`
+  **encoded the defect as a description**: it asserted `leftIsEmpty()` for a range where the left had kept its line.
+  It now asserts that the kept line is *inside* the range and that the type is `modified(false, true)`.
+- **`clean test`, and a caveat about counts.** This round's runs used `clean`, because a **deleted scratch probe's
+  class file** stayed in `target/test-classes` and kept running — a stale-class hazard of the same family as the
+  incremental-compile one. **886** is the count from a clean build; earlier counts in this plan may have included
+  stale scratch classes, so a count is only comparable against another clean run.
 ### 4.14 — The suggestion channel: a resolution kind for an answer that needs a person
 **Who:** agent · **Size:** M
 
@@ -5512,7 +5474,7 @@ start)
 | 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                         | agent              | L    | `[x]` — 14 vectors from `LineComparisonUtilTest`; the differ is an **LCS table, not Myers**, a deviation decided on measurement and recorded in `JETBRAINS_PORT.md` § 3.2; tier isolation enforced |
 | 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals                   | agent              | L    | `[x]` — `MergeRange`, `MergeType`, `MergeRangeUtil`, `MergeRangeBuilder` and `MergeResolve`; **C1, C2 and C6 all tested** (`modifyDeleteShape` is the named C2 guard, cross-referencing `DESIGN_NEVER_AUTO_RESOLVED.md` § 2, with a control proving an insertion is not a deletion); **`MergeTierScopeTest` asserts the greedy pass, `DiffConfig` and the whitespace retry are absent**, in code rather than in a comment. Two upstream vectors are kept as **expected refusals** because they need word-level composition (4.14–4.15) — a named limit, not a gap |
 | 4.10 | JetBrains port: whitespace policy as a caller-visible option                                    | agent              | M    | `[~]` — **functionally complete; one criterion variant is deferred to 4.12 and named** — the flag, the wiring and the acceptance pair are in: `--whitespace=default | trim | ignore` on `MergeFileTool` (an unknown name is refused, not defaulted); the policy reaches the residual questions and region attribution; `ConflictResolution` records it; `WhitespacePolicyTest` (7 tests) pins the pair. **A limit was found by writing the pair and is recorded, not hidden:** `§ 11.5`'s *five well-typed changes* need the ported differ wired into detection as the classifier — **4.12's job** — because this module detects by domain shape and treats line divergence as the residual, while upstream derives shape from the diff. **Still open:** the policy in the merge report JSON, and the typed-change count (4.12) |
-| 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                             | agent              | S    | `[~]` — **the level exists and is ordered in both directions** (`TEXT_INTRALINE(2)`, with every other number shifted and no meaning changed). **Nothing reaches it yet, and that is the honest state**: the greedy producer ported in 4.17 compares whole lines, so it records `TEXT_LOCAL` and warns "not word by word" — claiming the intra-line level would be the overclaim the level exists to make visible. Reaching it needs the word-level half of the port (§ 6.5–6.6), and the step's "let 4.9's resolvers declare it" has no counterpart because the port produced no intra-line resolver |
+| 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                             | agent              | S    | `[~]` — **the level exists and is ordered both ways** (`TEXT_INTRALINE(2)`), **the capability is real** (the word-level half landed: `WordLevelMerge`, ported tier, wired where the line pass gave up — § 11.2 parity rose from `0/3` to `2/3`), and **the level is recorded per ANSWER** (`TEXT_INTRALINE` when the answer needed words, `TEXT_LOCAL` otherwise, asserted from one producer). **The remainder is a resolver that *reads* words**: `maxAnalysisLevel()` on the ported text resolvers still says `TEXT_LOCAL` because none of them reads inside a line, and declaring it without one would be the overclaim this step exists to make inexpressible. `MethodBodyChangeConflictResolver` deliberately stays `TEXT_LOCAL` — it compares statement lines as sets. |
 | 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[x]` — **`ConflictShape` computed by the ported classifier**, which makes it `MergeRangeUtil.getMergeType`'s first caller in this module; `ConflictType` unchanged, the report writes `shape` per conflict and the page renders it in its own words. **A copy helper that dropped the shape would have lost it silently** — `MergeFileTool` re-stamps regions, so `withRegion`/`withFilePath`/`withTypeContext` carry it and a test asserts it. The merge-range rule (an unchanged side has the **base's** lines, not the range's empty extent) appeared a **third** time, here costing "every one-sided change reads as a conflict". **One clause named as not met:** the decision does not yet *use* the shape — the 4.5/4.6 fixtures are unchanged and green, and the measurement that would justify the general fix belongs with 4.13 |
 | 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[~]` — **gate**: § 11.1 `18/18`, § 11.2 `2/3` + 1 recorded defect + 0 regressions; word-level corpus `2 offered at TEXT_INTRALINE, 1 refused`. **§ 10.2 rows all measured**: row 1 (`MEMBER_ADD` → `AUTO` at `STRUCTURE` where text-only refuses), row 2 with its control (corrupted `AUTO` → `REVIEW`+`FAILED`; balanced stays `AUTO`/`PASSED`), row 3 (`{TEXT_LOCAL=4, TEXT_FILE=2, STRUCTURE=1, PLATFORM_TYPES=1}`, 3 strategies), row 4 by the replay tests, row 5 half (offered `3`), and **row 6 now MET** (`AUTO` at `PROJECT_TYPES` with a project classpath, `PLATFORM_TYPES` without) — round 38's "unmet" was a **scope error**: the JDK-only corpus cannot contain the case, and the census print now says so instead of pronouncing on the row. **Open:** *blocks accepted in one action* (needs an accept action), and the shape/classification question (control measured `LEFT_UNCLASSIFIED`, `type null`). |  |
 | 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
