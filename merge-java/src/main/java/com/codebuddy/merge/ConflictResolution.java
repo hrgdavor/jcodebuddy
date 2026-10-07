@@ -2,6 +2,8 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -111,6 +113,22 @@ public final class ConflictResolution {
      */
     private final AnalysisLevel analysisLevel;
 
+    /**
+     * The whitespace policy this resolution's comparison ran under (unified plan step 4.10).
+     *
+     * <p>A resolution whose basis a reviewer cannot see is the failure mode {@link #getWarnings() warnings}
+     * and {@link #getAnalysisLevel() the analysis level} already exist to prevent, and this is the third
+     * facet of the same thing: <b>the same decision reached under a different policy is a different
+     * decision</b>. "Both sides changed this line" is true under {@code DEFAULT} and false under
+     * {@code IGNORE_WHITESPACES}, so a recorded decision replayed under another policy would be answering
+     * a question nobody asked — which is why this is recorded rather than assumed.
+     *
+     * <p>Defaults to {@link ComparisonPolicy#TRIM_WHITESPACES}, the policy the module's detection used
+     * before the policy became a choice, so a resolution built by a caller that does not set it behaves
+     * exactly as it did.
+     */
+    private final ComparisonPolicy whitespacePolicy;
+
     private ConflictResolution(Builder builder) {
         this.filePath = builder.filePath == null ? "<unknown>" : builder.filePath;
         this.type = Objects.requireNonNull(builder.type, "type");
@@ -136,6 +154,9 @@ public final class ConflictResolution {
         this.analysisLevel = builder.analysisLevel == null
             ? AnalysisLevel.TEXT_LOCAL
             : builder.analysisLevel;
+        this.whitespacePolicy = builder.whitespacePolicy == null
+            ? ComparisonPolicy.TRIM_WHITESPACES
+            : builder.whitespacePolicy;
     }
 
     /**
@@ -146,6 +167,15 @@ public final class ConflictResolution {
      */
     public AnalysisLevel getAnalysisLevel() {
         return analysisLevel;
+    }
+
+    /**
+     * The whitespace policy this resolution's comparison ran under; never {@code null}.
+     *
+     * <p>See the field's own note: the same decision under a different policy is a different decision.
+     */
+    public ComparisonPolicy getWhitespacePolicy() {
+        return whitespacePolicy;
     }
 
     /**
@@ -395,6 +425,7 @@ public final class ConflictResolution {
         private Region region;
         private Verification verification;
         private AnalysisLevel analysisLevel;
+        private ComparisonPolicy whitespacePolicy;
         private final List<String> warnings = new ArrayList<>();
 
         Builder() {
@@ -422,6 +453,7 @@ public final class ConflictResolution {
             this.region = source.region;
             this.verification = source.verification;
             this.analysisLevel = source.analysisLevel;
+            this.whitespacePolicy = source.whitespacePolicy;
             this.warnings.addAll(source.warnings);
         }
 
@@ -537,6 +569,18 @@ public final class ConflictResolution {
          */
         public Builder analysisLevel(AnalysisLevel analysisLevel) {
             this.analysisLevel = analysisLevel;
+            return this;
+        }
+
+        /**
+         * Record the whitespace policy this resolution's comparison ran under.
+         *
+         * <p>A resolver that does not set it inherits {@link ComparisonPolicy#TRIM_WHITESPACES}, which is
+         * what this module used before the policy was a choice — so this is a widening with no behaviour
+         * change for a caller that never asks.
+         */
+        public Builder whitespacePolicy(ComparisonPolicy whitespacePolicy) {
+            this.whitespacePolicy = whitespacePolicy;
             return this;
         }
 
