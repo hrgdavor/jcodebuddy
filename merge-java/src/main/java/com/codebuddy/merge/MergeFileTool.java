@@ -546,10 +546,19 @@ public final class MergeFileTool {
             for (Conflict conflict : detected) {
                 conflicts.add(conflict.withRegion(block.markerRegion()));
             }
-            List<ConflictResolution> resolutions = new ArrayList<>(conflicts.size());
-            for (Conflict conflict : conflicts) {
-                resolutions.add(resolver.resolve(conflict));
-            }
+            // Resolve in tier order over a working set, so a conflict a stronger claim settles reliably is
+            // never handed to a weaker resolver at all (plan step 4.19). The pass is built from `detected`,
+            // whose regions are the detector's own: `conflicts` above carries the block's region so the
+            // report can name it, and that stamp would make every conflict appear to cover every other.
+            TieredResolution.Result tiered = TieredResolution.resolve(
+                detected, block.markerRegion(), resolver.getResolvers(),
+                (index, conflict) -> resolver.resolve(conflicts.get(index)));
+            List<ConflictResolution> resolutions = tiered.claims();
+            // A conflict another claim settled has no claim of its own - nothing was asked about it - so it
+            // is absent from everything a reader or a fixture sees.
+            List<ConflictResolution> present = resolutions.stream()
+                .filter(resolution -> resolution != null)
+                .toList();
 
             // A residual with nothing of its own to say must not veto a block that
             // another conflict already resolves. Read from `detected`, not from
@@ -560,7 +569,7 @@ public final class MergeFileTool {
             reportedConflicts.addAll(conflicts);
 
 
-            reportedResolutions.addAll(resolutions);
+            reportedResolutions.addAll(present);
 
 
 
@@ -571,7 +580,14 @@ public final class MergeFileTool {
                 // while claiming to fix it: leave the block and say why.
                 decision = new BlockDecision(Outcome.LEFT_MANUAL, decision.type(),
                     "The proposed resolution still contains conflict markers, so the block "
-                        + "was left for a human.", null, false, resolutions);
+                        + "was left for a human.", null, false, present);
+            }
+            if (!tiered.removals().isEmpty()) {
+                // A removed conflict leaves no other trace in the report, and "this tier had nothing to
+                // say" must not read like "this tier was never asked" (DEC-046 clause 7).
+                decision = new BlockDecision(decision.outcome(), decision.type(),
+                    decision.explanation() + " " + removalNote(tiered.removals()),
+                    decision.replacement(), decision.fixtureCase(), decision.resolutions());
             }
             if (decision.replacement() != null) {
                 replacements.put(block.number(), splitReplacement(decision.replacement()));
@@ -582,7 +598,7 @@ public final class MergeFileTool {
                     caseName(block, conflicts), reportedPath, decision.type(),
                     decision.description(conflicts),
                     block.startLine(), block.endLine(), decision.outcome().name(),
-                    signatureText(block, conflicts), resolutions,
+                    signatureText(block, conflicts), present,
                     block.raw(), block.base(), block.ours(), block.theirs()));
                 fixtureBlocks.add(block.number());
             }
@@ -683,6 +699,13 @@ public final class MergeFileTool {
                                         boolean applyRecordedDecisions,
                                         boolean residualSubsumed) {
         ConflictType type = conflicts.isEmpty() ? null : conflicts.get(0).getType();
+
+        // A conflict another claim settled has no claim of its own — nothing was asked about it — so it
+        // does not decide the block either. The absence is the record of a removal, not a gap in the list
+        // (plan step 4.19, DEC-046 clause 9), and everything below works on what is present.
+        resolutions = resolutions.stream()
+            .filter(resolution -> resolution != null)
+            .toList();
 
         // A subsumed residual is dropped from the decision - it is still emitted and
         // still reported (it reaches reportedConflicts and reportedResolutions), it just
@@ -833,8 +856,30 @@ public final class MergeFileTool {
             return false;
         }
         ConflictResolution only = resolutions.get(others.get(0));
-        return only.getKind() == ConflictResolution.ResolutionKind.AUTO
+        // A null claim here is a conflict a stronger tier settled: it was never asked, so it is not an
+        // automatic answer that can subsume the residual's veto.
+        return only != null
+            && only.getKind() == ConflictResolution.ResolutionKind.AUTO
             && coversBlock(only, block);
+    }
+
+    /**
+     * The sentence naming what was settled without the weaker tiers being asked, so a reviewer can see that
+     * a tier was skipped rather than that it had nothing to say (DEC-046 clause 7).
+     *
+     * <p>This is the only trace a removed conflict leaves: it has no claim of its own, so nothing else in
+     * the report mentions it, and a block that came out applied would otherwise read as if the text tier had
+     * simply found nothing.
+     */
+    private static String removalNote(List<TieredResolution.Removal> removals) {
+        StringBuilder text = new StringBuilder(
+            "Settled by stronger evidence, so the weaker tiers were never asked:");
+        for (TieredResolution.Removal removal : removals) {
+            text.append(" [").append(removal.type()).append(" at ").append(removal.region())
+                .append(" resolved by ").append(removal.by().getType())
+                .append(" at ").append(removal.tier()).append("]");
+        }
+        return text.toString();
     }
 
     /**

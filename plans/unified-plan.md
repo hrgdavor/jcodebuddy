@@ -3794,9 +3794,9 @@ when it fails; and the existing `MergeFileToolTest` and step-4.6 arbitration tes
 lower resolver is never called about it — and a reviewer reading the report can see the state each
 conflict reached and the claim that reached it.
 
-**Started 2026-10-07 — the predicate exists, and nothing consumes it yet.** The half that landed is the
-one the whole step rests on, and it is behaviour-neutral: `explainedSpan` is recorded and reliability is
-computable, but no caller reads either yet, so the module behaves exactly as it did.
+**Done 2026-10-07, in two commits — the predicate and the tiered pass.** The first half is the vocabulary
+(`explainedSpan` and `Reliability`); the second is the behaviour change, and it is what makes "the lower
+resolver is never asked" true rather than merely reported.
 
 - **A claim now says what it explains** (`ConflictResolution.explainedSpan`, plan step 4.19's missing
   fact). It is *not* the region the resolver was asked about: a claim may settle a region only where its
@@ -3819,22 +3819,66 @@ computable, but no caller reads either yet, so the module behaves exactly as it 
   reason, so a report can say *why* a conflict was or was not removed rather than only that it was.
   **It does not read the level**, which is clause 11 as code: a resolver can buy being asked early and can
   never buy authority.
-- **`Reliability.normalisedLines`/`keepsEveryLine` are now the one definition** of "did this line
-  survive", with `MergeFileTool` delegating (its private copies are deleted). The coverage rule and the
-  new predicate ask the same question about the same text, and two answers is how they would drift.
+- **`Reliability.normalisedLines`/`keepsEveryLine` are now the one definition** of "did this line survive",
+  with `MergeFileTool` delegating (its private copies are deleted). The coverage rule and the new predicate
+  ask the same question about the same text, and two answers is how they would drift.
+- **`TieredResolution`** is the pass itself: it walks `ConflictResolvers.inTierOrder(...)` and asks a
+  `ClaimSource` about each still-live conflict, so a conflict an earlier tier settled is **never offered**.
+  A settled conflict's slot is left null — it has no claim of its own, because nothing was asked about it —
+  and `MergeFileTool` decides on the claims that exist rather than on the conflicts that were detected. The
+  two acceptance cases are `TieredResolutionTest`'s: the source is asked about index 0 and **not** about
+  index 1. Asserting on the outcome could not tell "never asked" from "asked and overruled", which is the
+  whole distinction this step makes.
+- **The block's explanation now names every removal** (`removalNote`), which is DEC-046 clause 7 in the
+  smallest honest form: a settled conflict has no claim, so nothing else in the report would mention it, and
+  a block that came out applied would otherwise read as if the weaker tier had simply found nothing.
 
-**Still to do, and it is the whole of the behaviour change:** the tiered pass — resolve in
-`ConflictResolvers.inTierOrder(...)` order over `ResolutionPass.live()`, record a removed conflict's slot
-as having no claim of its own, teach `decide` not to count it, and report each conflict's state — so that
-the lower resolver is **not called** rather than called and outranked. That is what the two acceptance
-tests assert, and until it lands this step changes nothing observable.
+**Two bounds had to be added, and the tests are what found them. Both are in
+[`HIERARCHICAL_RESOLUTION.md` § 3.2a](../merge-java/docs/HIERARCHICAL_RESOLUTION.md) and DEC-046's second
+amendment.**
 
-**Gate so far:** `ReliabilityTest` — 13 tests, of which the negative ones are the point: an answer that
-keeps both sides is reliable without declaring anything; one that prefers a side and explains nothing is
-not; **`PROJECT_TYPES` with no evidence for the region is `UNEXPLAINED`**; a partial explained span is not
-enough; `REVIEW` and `MANUAL` are never reliable while `DEFERRED` is; an unknown region is `UNPLACED`; the
-unset span explains nothing; and reordered/re-indented lines still count as kept. `merge-java` — **819
-tests, 0 failures, 0 errors** with the build cache off.
+- **The kept-lines way was judged against the wrong sides.** The first `Reliability` read "keeps every line
+  of both sides" as the sides the *claim* was built from — and a resolver's answer almost always contains
+  those, so any claim was "reliable" over *any* region, including one three hundred lines away. The sides
+  that matter are the settled conflict's, which is why the predicate takes a `Conflict` and cannot take a
+  `Region`: a region is not enough information for the question.
+- **Removal had no direction.** Running step 4.6's arbitration tests showed a claim that recorded
+  `TEXT_LOCAL` settling a `STRUCTURE` conflict, which turned `equalEvidenceOutranksNothing` — a block left
+  for a human — into `APPLIED_AUTO`. A mechanism that widens what the tool decides by itself, with nobody
+  deciding it should, is the failure this module's history is a list of. So a claim speaks for conflicts at
+  or below its own recorded level and never above it, a type no resolver in the set owns is settled by
+  nothing, and a claim settling **its own** conflict is exempt (a resolver that recorded `STRUCTURE` while
+  declaring `PROJECT_TYPES` is still the authority on the question it was asked). With the bound in place
+  **no step-4.6 test needed changing** — `strongerEvidenceOutranksWeakerObjection` passes untouched, because
+  its restricted resolver set owns no `STRUCTURAL_CHANGE` resolver, and the removal path appears only where
+  the module's full resolver set is in play.
+
+**Still outstanding, and named rather than implied:**
+
+- **The per-conflict `resolved`/`partial` state is in the block's explanation, not yet a report key** of its
+  own beside `analysisLevel` and `warnings`. Clause 7 is satisfied in substance — every removal is named —
+  but the report's *shape* does not carry the state, and 4.20 is where that shape changes anyway.
+- **`DEFERRED` settles at its resolver's tier, not before every tier.** The gate asked for "at the top of
+  the order"; a recorded decision arrives through `MergeConflictResolver`'s replay inside the tier loop, so
+  moving it truly to the top means enumerating recorded decisions before the pass asks anything, which is a
+  separate change. What holds today is the part that matters: a recorded human decision is reliable, it
+  settles, and no lower tier touches the conflict afterwards.
+- **The acceptance cases are proven with the mechanism's own stubs, not end-to-end with the real
+  resolvers.** `TieredResolutionTest` asserts on `ClaimSource`, which is what makes "never asked" checkable;
+  whether `MEMBER_ADD`'s and `IMPORT_ADD`'s regions actually cover their neighbours' in a real fixture
+  depends on region attribution and is not yet asserted.
+- **A failed `ResolutionVerifier` run keeps a claim out of the hierarchy by construction**: verification
+  runs inside `MergeConflictResolver.resolve`, a failure downgrades the answer to `REVIEW`, and a `REVIEW`
+  claim settles nothing (`aReviewAnswerSettlesNothing`). That composition is asserted; a verifier fixture is
+  not.
+
+**Gate:** `MERGE-JAVA` green with: `TieredResolutionTest` — 8 tests, including the acceptance case (the
+source is asked about one conflict and never about the settled one), the tier order, the negative control
+(a claim that explains nothing settles nothing and both tiers are asked), `REVIEW` settling nothing, the
+weaker-tier bound **as the defect it was**, self-settlement under the bound, an unowned type being neither
+settled nor forgotten, and a declining tier being asked exactly once. `ReliabilityTest` — 13 tests whose
+negative cases are the point. And `MergeFileToolTest`'s 31 tests unchanged. `merge-java` — **827 tests, 0
+failures, 0 errors** with the build cache off.
 
 ### 4.20 — Partial resolution: applied spans beside markers, and the outcome the enum was missing
 **Who:** agent · **Size:** M
@@ -4764,7 +4808,7 @@ start)
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
-| 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the predicate and the two declarations are in; the wiring is not.** `ConflictResolution.explainedSpan` (default: nothing), `AbstractConflictResolver.explainedSpanFor` overridden by `MEMBER_ADD` and `IMPORT_ADD`, and `Reliability` (13 tests, negative cases included). Behaviour is unchanged because nothing consumes either yet; the tiered pass that stops calling the lower resolver is what remains |
+| 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in**: `TieredResolution` walks the tiers and a settled conflict is never offered to the resolver below (asserted on the claim source, not on the outcome). `ConflictResolution.explainedSpan` + `Reliability` + `AbstractConflictResolver.explainedSpanFor` (overridden by `MEMBER_ADD` and `IMPORT_ADD`) + `removalNote`. **Two bounds were added because tests found them**: the kept-lines check must judge the *settled* conflict's sides, and removal follows the hierarchy's direction — without which `equalEvidenceOutranksNothing` became `APPLIED_AUTO`. **Still open:** the per-conflict state as a report key (4.20 changes that shape anyway), `DEFERRED` settling at its resolver's tier rather than before every tier, and the end-to-end acceptance fixture with the real resolvers |
 | 4.20 | Hierarchical resolution: partial resolution, composed output, and the grown outcome enum        | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied regions beside markers               |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |

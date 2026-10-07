@@ -108,9 +108,20 @@ public final class Reliability {
     }
 
     /**
-     * Judge whether {@code claim} explains {@code region} well enough to settle it.
+     * Judge whether {@code claim} explains {@code subject} — the conflict whose region it would settle —
+     * well enough to take it out of the lower tiers' hands.
+     *
+     * <p>The subject is a {@link Conflict} rather than a {@link Region} deliberately, and the first version
+     * of this method took a region. That version had a defect the tests found: the kept-lines way of
+     * explaining a span compared the applied text against the <b>claim's own</b> two sides, so any claim
+     * that kept its own sides was "reliable" over <em>any</em> region at all — including one it had nothing
+     * to do with. A claim whose conflict was in the import block would settle a conflict about a method
+     * body three hundred lines away. The sides a claim must keep are the sides of the conflict it is
+     * settling, and those are only reachable from the conflict itself, so the region alone was never enough
+     * information and the compiler now says so.
      */
-    public static Result of(ConflictResolution claim, Region region) {
+    public static Result of(ConflictResolution claim, Conflict subject) {
+        Region region = subject == null ? Region.unknown() : subject.getRegion();
         if (claim == null) {
             return new Result(Verdict.UNEXPLAINED, region, "there is no claim to settle anything");
         }
@@ -122,7 +133,7 @@ public final class Reliability {
                 "a " + kind + " answer cannot be applied, so it settles nothing");
         }
 
-        if (region == null || !region.isKnown()) {
+        if (!region.isKnown()) {
             return new Result(Verdict.UNPLACED, region,
                 "the region has no location, so there is nothing to explain");
         }
@@ -133,7 +144,7 @@ public final class Reliability {
                 "the claim's explained span " + explained + " accounts for the whole region");
         }
 
-        if (keepsBothSides(claim)) {
+        if (keepsBothSides(claim, subject)) {
             return new Result(Verdict.RELIABLE, region,
                 "the applied text keeps every line of both sides in " + region);
         }
@@ -145,24 +156,24 @@ public final class Reliability {
     }
 
     /**
-     * True when the applied text keeps every non-blank line of both sides.
+     * True when the applied text keeps every non-blank line of <b>{@code subject}'s</b> two sides.
      *
      * <p>This is the second way to explain a region, and it is the one that needs no declaration from the
-     * resolver: an answer that includes both branches entirely cannot be dropping what the region was
-     * about. A {@code PREFER_BRANCH1/2} answer fails it by construction, because dropping the other side
-     * is the decision rather than an accident — which is why such an answer must declare an explained span
-     * if it is to settle anything.
+     * resolver: an answer that includes both sides of the conflict it is settling entirely cannot be
+     * dropping what that conflict was about. A {@code PREFER_BRANCH1/2} answer fails it by construction,
+     * because dropping the other side is the decision rather than an accident — which is why such an answer
+     * must declare an explained span if it is to settle anything.
      *
      * <p>An empty or blank applied text is never reliable: it keeps nothing, and the two sides are only
      * blank when there is no content to keep.
      */
-    public static boolean keepsBothSides(ConflictResolution claim) {
-        if (claim == null || claim.getResolvedCode().isBlank()) {
+    public static boolean keepsBothSides(ConflictResolution claim, Conflict subject) {
+        if (claim == null || subject == null || claim.getResolvedCode().isBlank()) {
             return false;
         }
         Set<String> applied = normalisedLines(claim.getResolvedCode());
-        return keepsEveryLine(applied, claim.getBranch1Code())
-            && keepsEveryLine(applied, claim.getBranch2Code());
+        return keepsEveryLine(applied, subject.getBranch1Code())
+            && keepsEveryLine(applied, subject.getBranch2Code());
     }
 
     /** True when every non-blank line of {@code side} appears in {@code appliedLines}. */

@@ -1018,6 +1018,12 @@ class MergeFileToolTest {
         // guarding is dropped, and the claim rests on resolved types where the residual compares
         // lines. The residual keeps its region on the second line, so this is decided by what the
         // winner accounts for and not by the regions happening to coincide.
+        //
+        // Step 4.19 leaves this block on the arbitration path, and that is the point: this resolver set
+        // owns TYPE_CHANGE only, so STRUCTURAL_CHANGE is a type no resolver here speaks for - and a type
+        // nobody owns is not settled by anything, whatever a claim explains. With the module's full
+        // resolver set the same shape is *settled* rather than outranked, which is what
+        // TieredResolutionTest asserts.
         Result result = toolFor(file)
             .resolver(resolverWith(new StubResolver(ConflictType.TYPE_CHANGE,
                 ResolutionKind.AUTO, ResolutionStrategy.KEEP_BOTH, BOTH_SIDES_KEPT,

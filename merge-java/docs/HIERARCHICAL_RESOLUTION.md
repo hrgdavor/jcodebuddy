@@ -169,6 +169,32 @@ nothing by itself, because removal needs the reliability check. A resolver there
 authority by declaring a high level — it can only buy being asked early, and its answer is judged on
 what it recorded and what it explained.
 
+### 3.2a Two refinements the tests found, and neither was in the design
+
+Both were found by writing the code and running the existing arbitration tests against it, and both are the
+same *kind* of mistake: a rule that sounded safe until it met a case it had not considered.
+
+**1. The kept-lines way must be judged against the conflict being settled, not against the claim's own
+sides.** The first version asked "does the applied text keep every line of *the claim's* two sides?", and
+the answer is almost always yes — a resolver's answer usually contains the two sides it was asked about. So
+a claim whose own conflict was in the import block would settle a conflict about a method body three hundred
+lines away, because it kept its own sides. The question that matters is whether the answer keeps the lines
+of **the conflict it is settling**, and those are only reachable from that conflict — which is why the
+predicate takes a `Conflict` and not a `Region`. A region is not enough information for the question, and
+the signature now says so.
+
+**2. Removal follows the hierarchy's direction; reliability decides inside it.** The first version let *any*
+reliable claim settle *any* conflict it explained, and running step 4.6's arbitration tests showed the cost
+immediately: a claim that recorded `TEXT_LOCAL` settled a `STRUCTURE` conflict, and a block that had been
+left for a human became `APPLIED_AUTO`. The block applied because of a mechanism nobody had asked for — a
+silent widening of what the tool decides on its own, which is exactly the failure this module's history is a
+list of. So a claim speaks for the conflicts **at or below its own recorded level** and never for one above
+it, and a conflict whose type **no resolver in the set owns** is not settled by anything: silence is not
+evidence, and a restricted resolver set leaves its uncovered conflicts exactly where today's code leaves
+them. A claim settling **its own** conflict is deliberately exempt — a resolver that recorded `STRUCTURE`
+while declaring `PROJECT_TYPES` is still the authority on the question it was asked, and its own answer
+needs no permission from the scale.
+
 ### 3.3 What a claim may close: explained, never merely covered
 
 **A claim explains the span its own evidence accounts for.** That is the safety half, and it is

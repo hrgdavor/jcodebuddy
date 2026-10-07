@@ -40,6 +40,11 @@ class ReliabilityTest {
         return conflict("a", "a\nx", "a\ny");
     }
 
+    /** The same sides, at a region nothing can place — the {@code UNPLACED} case. */
+    private static Conflict unattached() {
+        return new Conflict(ConflictType.MEMBER_ADD, "Sample.java", "sample", "a", "a\nx", "a\ny");
+    }
+
     @Test
     @DisplayName("a claim whose explained span covers the region is reliable")
     void anExplainedSpanIsReliable() {
@@ -49,7 +54,7 @@ class ReliabilityTest {
             .explainedSpan(REGION)
             .build();
 
-        Reliability.Result result = Reliability.of(claim, REGION);
+        Reliability.Result result = Reliability.of(claim, threeSides());
 
         assertTrue(result.isReliable(), result.reason());
         assertEquals(Reliability.Verdict.RELIABLE, result.verdict());
@@ -65,7 +70,7 @@ class ReliabilityTest {
             .resolvedCode("a\nx\ny")
             .build();
 
-        assertTrue(Reliability.of(claim, REGION).isReliable());
+        assertTrue(Reliability.of(claim, threeSides()).isReliable());
         assertEquals(Region.unknown(), claim.getExplainedSpan(), "nothing was declared, and that is fine");
     }
 
@@ -80,7 +85,7 @@ class ReliabilityTest {
             .resolvedCode("a\nx")
             .build();
 
-        Reliability.Result result = Reliability.of(claim, REGION);
+        Reliability.Result result = Reliability.of(claim, threeSides());
 
         assertFalse(result.isReliable());
         assertEquals(Reliability.Verdict.UNEXPLAINED, result.verdict());
@@ -95,7 +100,7 @@ class ReliabilityTest {
             .analysisLevel(AnalysisLevel.PROJECT_TYPES)
             .build();
 
-        Reliability.Result result = Reliability.of(claim, REGION);
+        Reliability.Result result = Reliability.of(claim, threeSides());
 
         assertEquals(AnalysisLevel.PROJECT_TYPES, claim.getAnalysisLevel());
         assertFalse(result.isReliable(), "the level orders the pass; it never settles a region");
@@ -111,7 +116,7 @@ class ReliabilityTest {
             .explainedSpan(Region.spanning(10, 15))
             .build();
 
-        Reliability.Result result = Reliability.of(claim, REGION);
+        Reliability.Result result = Reliability.of(claim, threeSides());
 
         assertFalse(result.isReliable());
         assertEquals(Reliability.Verdict.UNEXPLAINED, result.verdict());
@@ -128,7 +133,7 @@ class ReliabilityTest {
             .kind(ConflictResolution.ResolutionKind.REVIEW)
             .build();
 
-        Reliability.Result result = Reliability.of(claim, REGION);
+        Reliability.Result result = Reliability.of(claim, threeSides());
 
         assertFalse(result.isReliable());
         assertEquals(Reliability.Verdict.NOT_APPLICABLE, result.verdict());
@@ -147,7 +152,7 @@ class ReliabilityTest {
             .kind(ConflictResolution.ResolutionKind.MANUAL)
             .build();
 
-        assertEquals(Reliability.Verdict.NOT_APPLICABLE, Reliability.of(claim, REGION).verdict());
+        assertEquals(Reliability.Verdict.NOT_APPLICABLE, Reliability.of(claim, threeSides()).verdict());
     }
 
     @Test
@@ -160,7 +165,7 @@ class ReliabilityTest {
             .kind(ConflictResolution.ResolutionKind.DEFERRED)
             .build();
 
-        Reliability.Result result = Reliability.of(claim, REGION);
+        Reliability.Result result = Reliability.of(claim, threeSides());
 
         assertTrue(result.isReliable(), result.reason());
         assertEquals(Reliability.Verdict.RELIABLE, result.verdict());
@@ -175,7 +180,7 @@ class ReliabilityTest {
             .explainedSpan(Region.unknown())
             .build();
 
-        Reliability.Result result = Reliability.of(claim, Region.unknown());
+        Reliability.Result result = Reliability.of(claim, unattached());
 
         assertFalse(result.isReliable());
         assertEquals(Reliability.Verdict.UNPLACED, result.verdict());
@@ -184,7 +189,7 @@ class ReliabilityTest {
     @Test
     @DisplayName("a claim that does not exist cannot settle anything")
     void noClaimIsNotReliable() {
-        assertEquals(Reliability.Verdict.UNEXPLAINED, Reliability.of(null, REGION).verdict());
+        assertEquals(Reliability.Verdict.UNEXPLAINED, Reliability.of(null, threeSides()).verdict());
     }
 
     @Test
@@ -212,8 +217,13 @@ class ReliabilityTest {
             .resolvedCode("import a;\nimport b;\nimport c;")
             .build();
 
-        assertTrue(Reliability.keepsBothSides(claim));
-        assertTrue(Reliability.of(claim, REGION).isReliable());
+        // Judged against the conflict whose sides these are, which is the point of the predicate taking a
+        // Conflict rather than a Region: the same claim against an unrelated conflict's sides is not
+        // reliable, and the first version of the predicate could not tell the two apart.
+        assertTrue(Reliability.keepsBothSides(claim, sides));
+        assertTrue(Reliability.of(claim, sides).isReliable());
+        assertFalse(Reliability.of(claim, threeSides()).isReliable(),
+            "an import union keeps nothing of a declaration conflict's sides");
     }
 
     @Test
@@ -225,7 +235,7 @@ class ReliabilityTest {
             .explainedSpan(Region.unknown())
             .build();
 
-        assertFalse(Reliability.keepsBothSides(claim));
-        assertEquals(Reliability.Verdict.UNEXPLAINED, Reliability.of(claim, REGION).verdict());
+        assertFalse(Reliability.keepsBothSides(claim, threeSides()));
+        assertEquals(Reliability.Verdict.UNEXPLAINED, Reliability.of(claim, threeSides()).verdict());
     }
 }
