@@ -50,6 +50,18 @@ public class MergeConflictResolver {
     private final ConflictProposer proposer;
 
     /**
+     * The comparison policy this run resolves under, so an offered answer is composed under the SAME policy the
+     * detection and the report describe (plan step 4.10).
+     *
+     * <p>It is a field rather than a constant because the two would otherwise disagree in a way nobody would see: the
+     * tool detects under its own policy, and the ported pass composing an offer under a hardcoded `DEFAULT` would put
+     * an answer on the channel, and a policy in the report, that describe two different comparisons of the same three
+     * sides. Measured before this existed: a run under `IGNORE_WHITESPACES` reported `TRIM_WHITESPACES`, because
+     * nothing carried the caller's choice this far.
+     */
+    private final ComparisonPolicy whitespacePolicy;
+
+    /**
      * Builder for {@link MergeConflictResolver}.
      */
     public static class Builder {
@@ -61,6 +73,7 @@ public class MergeConflictResolver {
         private boolean inMemoryOnly;
         private ResolutionVerifier verifier;
         private TypeContext typeContext;
+        private ComparisonPolicy whitespacePolicy = ComparisonPolicy.DEFAULT;
 
         /**
          * Name of the branch whose history is being resolved, used as the
@@ -136,6 +149,18 @@ public class MergeConflictResolver {
         return this;
     }
 
+    /**
+     * The comparison policy this run resolves under (plan step 4.10), so an offered answer is composed under the
+     * same policy the caller detected and will report under.
+     *
+     * <p>Default {@link ComparisonPolicy#DEFAULT}, the strictest: a caller that never says otherwise gets the
+     * comparison that treats whitespace as content, and one that chooses a lenient policy says so once, here.
+     */
+    public Builder setWhitespacePolicy(ComparisonPolicy whitespacePolicy) {
+        this.whitespacePolicy = whitespacePolicy == null ? ComparisonPolicy.DEFAULT : whitespacePolicy;
+        return this;
+    }
+
     public Builder setVerifier(ResolutionVerifier verifier) {
             this.verifier = verifier;
             return this;
@@ -186,7 +211,8 @@ public class MergeConflictResolver {
                 inMemoryOnly,
                 verifier == null ? ResolutionVerifier.structural() : verifier,
                 typeContext,
-                proposer
+                proposer,
+                whitespacePolicy
             );
         }
 
@@ -250,7 +276,8 @@ public class MergeConflictResolver {
                           boolean inMemoryOnly,
                           ResolutionVerifier verifier,
                           TypeContext typeContext) {
-        this(branchName, historyPath, resolvers, detector, inMemoryOnly, verifier, typeContext, null);
+        this(branchName, historyPath, resolvers, detector, inMemoryOnly, verifier, typeContext, null,
+            ComparisonPolicy.DEFAULT);
     }
 
     MergeConflictResolver(String branchName, Path historyPath,
@@ -259,7 +286,8 @@ public class MergeConflictResolver {
                           boolean inMemoryOnly,
                           ResolutionVerifier verifier,
                           TypeContext typeContext,
-                          ConflictProposer proposer) {
+                          ConflictProposer proposer,
+                          ComparisonPolicy whitespacePolicy) {
         this.branchName = branchName == null ? "unknown" : branchName;
         this.historyPath = historyPath;
         this.resolvers = ConflictResolvers.sortByPriority(resolvers);
@@ -271,6 +299,7 @@ public class MergeConflictResolver {
         this.verifier = verifier;
         this.typeContext = typeContext;
         this.proposer = proposer;
+        this.whitespacePolicy = whitespacePolicy == null ? ComparisonPolicy.DEFAULT : whitespacePolicy;
     }
 
     /**
@@ -402,8 +431,8 @@ public class MergeConflictResolver {
      * upstream's own order — and the retry produces a suggestion whose provenance names the lenient policy, so a
      * reviewer can refuse one without refusing the other.
      */
-    private static ConflictResolution greedyOffer(Conflict conflict, ConflictResolution resolution,
-                                                  ConflictResolver resolver) {
+    private ConflictResolution greedyOffer(Conflict conflict, ConflictResolution resolution,
+                                            ConflictResolver resolver) {
         if (resolution.getKind() != ConflictResolution.ResolutionKind.MANUAL) {
             return resolution;
         }
@@ -417,7 +446,7 @@ public class MergeConflictResolver {
         // level the pass is merely capable of — `TEXT_INTRALINE` when the answer needed composition inside a line,
         // `TEXT_LOCAL` when the line comparison alone reached it (plan step 4.11's declaration half, in the
         // producer form: the level is recorded per answer, not declared per resolver).
-        MergeResolve.Result tier = MergeResolve.resolve(ours, base, theirs, ComparisonPolicy.DEFAULT);
+        MergeResolve.Result tier = MergeResolve.resolve(ours, base, theirs, whitespacePolicy);
         if (tier.resolved()) {
             return offer(conflict, resolution, resolver, tier.mergedText(),
                 tier.wordLevel() ? AnalysisLevel.TEXT_INTRALINE : AnalysisLevel.TEXT_LOCAL,
@@ -430,7 +459,7 @@ public class MergeConflictResolver {
         // Then the greedy pass, which is willing to trade: it applies both sides' deletions unconditionally, so its
         // answer is PLAUSIBLE rather than a proof, and it is offered with that trade in its warnings.
         Optional<Suggestion> offered = GreedyMergeSuggestion.withWhitespaceRetry(
-            base, ours, theirs, ComparisonPolicy.DEFAULT);
+            base, ours, theirs, whitespacePolicy);
         if (offered.isEmpty()) {
             return resolution;
         }
@@ -800,10 +829,11 @@ public class MergeConflictResolver {
         private final List<ConflictResolution> resolutions;
         private final String branchName;
         private final List<ConflictState> states;
+        private final ComparisonPolicy whitespacePolicy;
 
         MergeReport(String filePath, List<Conflict> conflicts,
                     List<ConflictResolution> resolutions, String branchName) {
-            this(filePath, conflicts, resolutions, branchName, List.of());
+            this(filePath, conflicts, resolutions, branchName, List.of(), ComparisonPolicy.DEFAULT);
         }
 
         /**
@@ -821,15 +851,34 @@ public class MergeConflictResolver {
         MergeReport(String filePath, List<Conflict> conflicts,
                     List<ConflictResolution> resolutions, String branchName,
                     List<ConflictState> states) {
+            this(filePath, conflicts, resolutions, branchName, states, ComparisonPolicy.DEFAULT);
+        }
+
+        /**
+         * The full form, carrying the comparison policy the report was produced under.
+         *
+         * <p>At file level rather than only per conflict, because the case that needs it most is the one with NO
+         * conflicts: under a lenient policy a whitespace-only block is not a conflict at all, and "clean" would
+         * otherwise read the same whether the file agreed or the comparison ignored what differed (plan step 4.10).
+         */
+        MergeReport(String filePath, List<Conflict> conflicts,
+                    List<ConflictResolution> resolutions, String branchName,
+                    List<ConflictState> states, ComparisonPolicy whitespacePolicy) {
             this.filePath = filePath;
             this.conflicts = Collections.unmodifiableList(new ArrayList<>(conflicts));
             this.resolutions = Collections.unmodifiableList(new ArrayList<>(resolutions));
             this.branchName = branchName;
             this.states = Collections.unmodifiableList(new ArrayList<>(states));
+            this.whitespacePolicy = whitespacePolicy == null ? ComparisonPolicy.DEFAULT : whitespacePolicy;
         }
 
         public String getFilePath() {
             return filePath;
+        }
+
+        /** The comparison policy this report was produced under; never {@code null}. */
+        public ComparisonPolicy getWhitespacePolicy() {
+            return whitespacePolicy;
         }
 
         public List<Conflict> getConflicts() {

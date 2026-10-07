@@ -2,6 +2,8 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -100,6 +102,13 @@ public final class MergeReportWriter {
         json.append("      \"filePath\": ").append(quote(report.getFilePath())).append(",\n");
         json.append("      \"branchName\": ").append(quote(report.getBranchName())).append(",\n");
         json.append("      \"clean\": ").append(report.isClean()).append(",\n");
+        // The policy at FILE level as well as per conflict, and the measurement is what asked for it: under
+        // `IGNORE_WHITESPACES` the whitespace-only vector has NO conflicts at all — the policy working, not the file
+        // being trivially clean — so a report that said only "clean" would make "nothing to decide" and "the
+        // comparison ignored what differed" read the same. The per-conflict key cannot carry that case, because the
+        // case is precisely the one with no conflicts in it.
+        json.append("      \"whitespacePolicy\": ")
+            .append(quote(policyOf(report).name())).append(",\n");
         json.append("      \"summary\": ").append(quote(report.summarize())).append(",\n");
         // conflicts and resolutions are INDEX-PARALLEL: resolutions[i] answers conflicts[i], because the report's
 
@@ -187,6 +196,13 @@ public final class MergeReportWriter {
                         resolution.getBranch1Code(), resolution.getBranch2Code()).toFileName()))
                 .append(",\n");
             json.append("          \"sides\": ").append(sidesJson(resolution)).append(",\n");
+            // The comparison policy the decision was reached under (plan step 4.10's second remainder). A reviewer
+            // reading an answer that ignored whitespace, or that trimmed it, is reading a DIFFERENT answer from the
+            // one a strict comparison would have produced - and the policy is the only thing that says which. It is
+            // written per conflict because the policy is a property of the run that produced that resolution, and a
+            // report whose answers were composed under two policies would be lying if it named one.
+            json.append("          \"whitespacePolicy\": ")
+                .append(quote(resolution.getWhitespacePolicy().name())).append(",\n");
             json.append("          \"suggestion\": ").append(suggestionJson(resolution)).append(",\n");
             // And ALL of them, in the order the producers offered them, because more than one producer can answer
             // one conflict (plan step 4.17): the first element is the same answer `suggestion` carries, so a
@@ -232,6 +248,22 @@ public final class MergeReportWriter {
             json.append(suggestionJson(all.get(index)));
         }
         return json.append(']').toString();
+    }
+
+    /**
+     * The policy a report was produced under: the first resolution's, or the default when there are none.
+     *
+     * <p>A report with no resolutions has no conflict to read a policy from — which is exactly the case the file-level
+     * key exists for — so the caller's policy is carried on the report itself rather than inferred from an answer that
+     * does not exist.
+     */
+    private static ComparisonPolicy policyOf(MergeConflictResolver.MergeReport report) {
+        for (ConflictResolution resolution : report.getResolutions()) {
+            if (resolution != null) {
+                return resolution.getWhitespacePolicy();
+            }
+        }
+        return report.getWhitespacePolicy();
     }
 
     private static String suggestionJson(ConflictResolution resolution) {

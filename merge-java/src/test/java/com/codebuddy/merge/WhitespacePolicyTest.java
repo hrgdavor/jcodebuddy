@@ -118,6 +118,41 @@ class WhitespacePolicyTest {
             "and it is not reported as a recognised conflict: " + underIgnore);
     }
 
+    // ------------------------------------------------------------------ the report names the policy
+
+    @Test
+    @DisplayName("the report names the policy, per conflict and at file level")
+    void theReportNamesThePolicy() throws IOException {
+        // Step 4.10's second remainder, and the reason it matters: an answer reached under a lenient policy is a
+        // DIFFERENT answer from the one a strict comparison would have produced, and the policy is the only thing in
+        // the report that says which was read. Without it a reviewer reads a decision whose basis is invisible, which
+        // is the same failure the suggestion channel's `provenance` exists to prevent.
+        //
+        // TWO levels are asserted, because the measurement showed the per-conflict key cannot carry the case that
+        // needs it most: under IGNORE_WHITESPACES this vector has NO conflicts at all — the policy working, not the
+        // file being trivially clean — so there is no conflict entry to name a policy in.
+        Path strict = write(WHITESPACE_ONLY_CONFLICT);
+        Path strictReport = tempDir.resolve("strict-report.json");
+        toolFor(strict, ComparisonPolicy.DEFAULT).reportPath(strictReport).run();
+        String strictJson = Files.readString(strictReport, StandardCharsets.UTF_8);
+
+        assertTrue(strictJson.contains("\"whitespacePolicy\": \"DEFAULT\""),
+            "a decision reached under the strict comparison must say so beside the decision: " + strictJson);
+        assertFalse(strictJson.contains("IGNORE_WHITESPACES"),
+            "and must not claim the lenient policy it did not use: " + strictJson);
+
+        Path ignoring = write(WHITESPACE_ONLY_CONFLICT);
+        Path ignoreReport = tempDir.resolve("ignore-report.json");
+        toolFor(ignoring, ComparisonPolicy.IGNORE_WHITESPACES).reportPath(ignoreReport).run();
+        String ignoreJson = Files.readString(ignoreReport, StandardCharsets.UTF_8);
+
+        assertTrue(ignoreJson.contains("\"conflicts\": 0"),
+            "the lenient policy finds nothing to decide here, which is the policy working: " + ignoreJson);
+        assertTrue(ignoreJson.contains("\"whitespacePolicy\": \"IGNORE_WHITESPACES\""),
+            "and the FILE must still say which comparison found it clean — otherwise 'nothing to decide' and 'the "
+                + "comparison ignored what differed' read the same: " + ignoreJson);
+    }
+
     @Test
     @DisplayName("the comparison itself is policy-aware, which is what the wiring rests on")
     void theComparisonIsPolicyAware() {

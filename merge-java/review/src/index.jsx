@@ -308,6 +308,17 @@ const SHAPE = {
   CONFLICT: 'both sides changed it'
 }
 
+/**
+ * How the comparison treated whitespace, in the page's words (plan step 4.10).
+ *
+ * <p>Only the lenient policies need a phrase: `DEFAULT` is what a reader assumes when nothing is said, so saying it
+ * would add a line to every card and train the reader to skip the line that matters.
+ */
+const POLICY = {
+  TRIM_WHITESPACES: 'ignoring line edges',
+  IGNORE_WHITESPACES: 'ignoring whitespace'
+}
+
 function Resolution({ resolution, filePath, conflict }) {
   const region = resolution.region
   return (
@@ -327,6 +338,13 @@ function Resolution({ resolution, filePath, conflict }) {
             ? ` · evidence: ${EVIDENCE[resolution.analysisLevel] ?? resolution.analysisLevel}`
             : ''}
           {resolution.verification ? ` · verified: ${resolution.verification}` : ''}
+          {/* The comparison policy, shown only when it was LENIENT (plan step 4.10). A decision reached while
+              ignoring whitespace is a different answer from the strict one, so a reviewer reading it must know —
+              and under the strict default there is nothing to say, which is why this is not on every card: a fact
+              shown everywhere stops being read. The wording is the page's (DEC-027). */}
+          {resolution.whitespacePolicy && resolution.whitespacePolicy !== 'DEFAULT'
+            ? ` · compared ${POLICY[resolution.whitespacePolicy] ?? resolution.whitespacePolicy}`
+            : ''}
           {region ? ` · lines ${region.startLine}–${region.endLine}` : ''}
           {resolution.sticky ? ' · sticky (a recorded decision)' : ''}
           {resolution.independentlyApplicable === false ? ' · not independently applicable' : ''}

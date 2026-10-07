@@ -584,7 +584,7 @@ public final class MergeFileTool {
             TieredResolution.Result tiered = TieredResolution.resolve(
                 detected, block.markerRegion(), resolver.getResolvers(),
                 (index, conflict) -> reattached(resolver.resolve(detected.get(index)),
-                    conflicts.get(index)));
+                    conflicts.get(index), whitespace));
             List<ConflictResolution> resolutions = tiered.claims();
             // A conflict another claim settled has no claim of its own - nothing was asked about it - so it
             // is absent from everything a reader or a fixture sees.
@@ -666,7 +666,8 @@ public final class MergeFileTool {
             MergeConflictResolver.MergeReport report = new MergeConflictResolver.MergeReport(reportedPath,
 
 
-                reportedConflicts, reportedResolutions, branchName, reportedStates);
+                reportedConflicts, reportedResolutions, branchName, reportedStates,
+                builder.whitespacePolicy());
 
 
             MergeReportWriter.write(builder.reportPath, List.of(report), summaryFor(builder, report, outcomes));
@@ -945,8 +946,18 @@ public final class MergeFileTool {
      * there. So the region is restated from the conflict that carries the block's own file region — the same
      * fact the stamp exists for, applied at the boundary where it belongs rather than before resolution.
      */
-    private static ConflictResolution reattached(ConflictResolution resolution, Conflict placed) {
-        return resolution == null ? null : resolution.withRegion(placed.getRegion());
+    private static ConflictResolution reattached(ConflictResolution resolution, Conflict placed,
+                                                 ComparisonPolicy policy) {
+        if (resolution == null) {
+            return null;
+        }
+        return resolution.withRegion(placed.getRegion())
+            // And the run's comparison policy, beside the region, for the same reason: an answer reached under
+            // `IGNORE_WHITESPACES` is a DIFFERENT answer from the one a strict comparison would have produced, and
+            // the report is where a reviewer learns which was read (plan step 4.10). Stamped here rather than inside
+            // the resolver because the policy is a property of the RUN - the same resolver called by a different
+            // caller compares strictly - so it belongs with the boundary facts, not with the answer's content.
+            .withWhitespacePolicy(policy == null ? ComparisonPolicy.TRIM_WHITESPACES : policy);
     }
 
     /**
@@ -1392,11 +1403,17 @@ public final class MergeFileTool {
         boolean inMemory = builder.inMemoryOnly != null
             ? builder.inMemoryOnly
             : !findings.repositoryFound() && builder.historyPath == null;
-        Path history = historyPathFor(builder, findings, branchName);        return new MergeConflictResolver.Builder()
+        Path history = historyPathFor(builder, findings, branchName);
+        return new MergeConflictResolver.Builder()
             .setBranchName(branchName)
             .setHistoryPath(history)
             .setInMemoryOnly(inMemory)
             .setTypeContext(typeContext)
+            // The run's own policy reaches the resolver, so an answer it OFFERS is composed under the same
+            // comparison the detection and the report describe (plan step 4.10). Before this, a run under
+            // IGNORE_WHITESPACES composed its offers under DEFAULT - two comparisons of the same three sides,
+            // one in the answer and one in the report, and nothing said which was which.
+            .setWhitespacePolicy(builder.whitespacePolicy())
             .build();
     }
 

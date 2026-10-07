@@ -505,6 +505,18 @@ public final class ConflictResolution {
     /**
      * Return a copy of this resolution bound to a region.
      */
+    /**
+     * Return a copy of this resolution carrying the comparison policy the run was made under.
+     *
+     * <p>Stamped at the boundary rather than set by each resolver, because the policy is a property of the RUN: the
+     * same resolver called by a different caller compares strictly, so the answer itself does not know it. The report
+     * needs it because an answer reached under a lenient policy is a different answer from the strict one, and the
+     * policy is what says which a reviewer is reading (plan step 4.10).
+     */
+    public ConflictResolution withWhitespacePolicy(ComparisonPolicy newPolicy) {
+        return copyOf(this).whitespacePolicy(newPolicy).build();
+    }
+
     public ConflictResolution withRegion(Region newRegion) {
         return new Builder(this).region(newRegion).build();
     }
