@@ -490,25 +490,44 @@ public class ConflictDetectionService {
     }
 
     /**
-     * True when the line, compared without surrounding whitespace, survives
-     * unchanged in both branches.
+     * True when the line survives unchanged in both branches, compared under a policy.
      *
-     * <p>A blank line counts as kept: whitespace churn is not a structural change.
+     * <p>A blank line counts as kept, because whitespace churn is not a structural change — that much was
+     * already true and stays true under every policy.
+     *
+     * <p><b>What the policy changes.</b> Under {@link ComparisonPolicy#TRIM_WHITESPACES} a re-indented
+     * line still counts as kept, which is the behaviour this method had when it called {@code trim()}
+     * unconditionally and is therefore the default. Under
+     * {@link ComparisonPolicy#IGNORE_WHITESPACES} a line whose interior whitespace was respaced also
+     * counts as kept, which matters for a region question like this one: the caller is asking "did both
+     * branches keep this line", and under that policy a respaced line *is* the line. The two differ
+     * exactly where the policies do.
      */
-    static boolean keptByBothBranches(String line, String branch1Code, String branch2Code) {
-        String trimmed = line == null ? "" : line.trim();
-        if (trimmed.isEmpty()) {
+    static boolean keptByBothBranches(String line, String branch1Code, String branch2Code,
+                                      ComparisonPolicy policy) {
+        ComparisonPolicy effective = policy == null
+            ? ComparisonPolicy.TRIM_WHITESPACES
+            : policy;
+        String normalised = line == null ? "" : effective.normaliseLine(line);
+        if (normalised.isEmpty()) {
             return true;
         }
-        return containsLine(branch1Code, trimmed) && containsLine(branch2Code, trimmed);
+        return containsLine(branch1Code, normalised, effective)
+            && containsLine(branch2Code, normalised, effective);
     }
 
-    private static boolean containsLine(String code, String trimmedLine) {
+    /** True when the line survives unchanged in both branches, compared by trimming its edges. */
+    static boolean keptByBothBranches(String line, String branch1Code, String branch2Code) {
+        return keptByBothBranches(line, branch1Code, branch2Code,
+            ComparisonPolicy.TRIM_WHITESPACES);
+    }
+
+    private static boolean containsLine(String code, String normalisedLine, ComparisonPolicy policy) {
         if (code == null) {
             return false;
         }
         for (String line : code.split("\n")) {
-            if (line.trim().equals(trimmedLine)) {
+            if (policy.normaliseLine(line).equals(normalisedLine)) {
                 return true;
             }
         }
