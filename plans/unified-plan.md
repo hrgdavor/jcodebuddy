@@ -3606,6 +3606,158 @@ of thing to everyone downstream, and **a new suggestion source adds a producer a
 
 ---
 
+#### 4C — hierarchical resolution: a confident answer closes its region (steps 4.18–4.20)
+
+> **Why a second lettered subsection.** The same reason as 4B: renumbering is forbidden, and this is a
+> phase-sized block of merge-java work that follows 4.6 and depends on it. Steps 4.18–4.20 belong to
+> Phase 4 and sit here for the same cause 4.7–4.17 do.
+
+**The instruction this block exists for**, given by the maintainer on 2026-10-07:
+
+> "the change resolution must be hierarchical in a way where some may resolve confidently, and those
+> blocks are then not tested by other merges. For example structural that knows two branches added one
+> or more whole methods in same location should clear any conflicts they cover and do not need to be
+> analyzed by text resolver, same goes for imports resolver, if it has success, then there is no need
+> for lower tier to touch that part of the file"
+
+**The design is [`merge-java/docs/HIERARCHICAL_RESOLUTION.md`](../merge-java/docs/HIERARCHICAL_RESOLUTION.md)
+and the decision is [`DEC-046`](../doc-hipster-entity/architecture/decisions/DEC-046.md).** Read both
+before starting 4.18. In one paragraph: **the tier of a claim is the `AnalysisLevel` the resolution
+records** (not a second scale); tiers run strongest first; a confident `AUTO` claim **closes the span
+its own evidence explains**, and a closed span is never offered to a lower tier; closure is per line,
+so a claim over part of a block settles that part and leaves the rest open; and DEC-045's `outranking`
+survives one level down, deciding only between claims **at the same tier** about a region that is
+**still open**.
+
+**What this adds, and what it does not.** It adds no new taxonomy and no new permission: detectors
+keep emitting, `ResolutionVerifier` keeps gating, and a `REVIEW` or `MANUAL` claim closes nothing, so
+[`DESIGN_NEVER_AUTO_RESOLVED.md`](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md) is untouched. What
+changes is that a settled span is **removed from what the later tiers are asked about** — which is
+both less work and fewer false objections.
+
+**Three costs of the shape being replaced**, all measured in the current code and argued in DEC-046's
+Context: a text-level objection to an already-settled span is still produced and only then overruled
+(so the winner must satisfy `accountsFor` against a claim that need never have existed); `outranks`
+requires `coversBlock`, so an answer that settles part of a block becomes `LEFT_PARTIAL_RESOLUTION`
+and the whole block — including the part already right — goes to a human; and `residualSubsumed`
+removes a claim before arbitration, so "cleared" and "never raised" read identically.
+
+**Ordering.** 4.18 gates 4.19 and 4.20. 4.18 is deliberately behaviour-neutral — the ledger exists and
+nothing closes — so the invariant test is what lands first and the two closing steps are judged against
+it. 4.20 needs 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`), which is
+why it comes after the port's SAFE half rather than beside it. **4C is independent of 4.11–4.17** and
+may be landed before, after or between them; where the ordering matters it is stated per step.
+
+| Step | What                                                                                        | Who   | Size |
+| ---- | ------------------------------------------------------------------------------------------- | ----- | ---- |
+| 4.18 | The claim ledger: tiers from the recorded level, open lines, and the partition invariant    | agent | S–M  |
+| 4.19 | Closure: a claim clears the span its evidence explains, and the cleared tier is named       | agent | M    |
+| 4.20 | Partial closure and composition — applied spans beside markers, and the outcome vocabulary  | agent | M    |
+
+### 4.18 — The claim ledger: tiers, open lines, and the invariant that comes first
+**Who:** agent · **Size:** S–M
+
+**Do:**
+
+1. **Write the partition invariant as a test before the ledger exists.** This is step 4.9's lesson
+   (`rangesAreOrderedAndNonEmpty` was written before the builder was trusted, and it is what localised
+   the plumbing defects that cost that step its time):
+
+   > every line of a block is accounted for exactly once — applied by exactly one closed claim, or
+   > open (offered to a lower tier and, in the end, left to a human with markers).
+
+   Plus its companion: **a closed span is explained by the claim that closed it**, under one of the
+   three ways `HIERARCHICAL_RESOLUTION.md` § 3 names (recognised span, kept lines, owned domain), and
+   **no closure is unnamed in the report**. The tests are over the ledger's own data, so they run
+   without a resolver set and without a fixture.
+2. **The ledger, and nothing else.** A `ClaimLedger` over one block's base lines holds, per line,
+   whether the line is open and which claims touch it. Tiers come from `ConflictResolution.getAnalysisLevel()`
+   — the recorded level — and never from a resolver's declared maximum or from a new enum. Claims are
+   offered to a tier's still-open lines in descending level order; at this step every claim is recorded
+   and **nothing is closed**, so the ledger is inert and the module's behaviour is unchanged.
+3. **Make the existing order visible in one place.** `ConflictDetectionService.detect`'s ten calls and
+   `ConflictResolvers`' registry are the order today; the ledger's construction reads the claims it is
+   given and sorts them, so the ordering is a method on the decision path a reader can follow
+   ([`DEC-019`](../doc-hipster-entity/architecture/decisions/DEC-019.md)) rather than a table consulted
+   at runtime.
+4. **Say what an unknown region does**: `Region.unknown()` closes nothing and is never opened — it
+   spans no lines, so it cannot be accounted for by the partition and is reported as unattributed
+   exactly as it is today.
+
+**Gate:** `MODULE` for `merge-java` green, with the invariant test present and **proved to fail** on a
+deliberately dropped line and on a doubly-closed span; a test that the ledger's tier order is strictly
+descending by recorded level and that a resolver's declared maximum is never used as a tier; and the
+existing suite unchanged, because nothing closes yet.
+
+**Done when:** the invariant and the ledger exist, the module behaves exactly as before, and the next
+two steps have something to be judged against.
+
+### 4.19 — Closure: a confident claim clears its span, and the cleared tier is named
+**Who:** agent · **Size:** M
+
+**Do:**
+
+1. **Close on explanation, never on coverage.** A claim closes a span only where one of § 3's three
+   ways holds, and the check is made against the claim's **own** evidence: the declarations it
+   recognised, the lines its applied text keeps, or the block it owns. A claim that can establish none
+   of the three closes nothing and is arbitrated exactly as it is today. **`AUTO` closes; `DEFERRED`
+   closes at the top of the order because a recorded human decision is a decision; `REVIEW` and
+   `MANUAL` close nothing** — so the hierarchy can never promote an answer into application.
+2. **A closed span is not offered to a lower tier.** Detection still emits; the ledger decides what is
+   still asked. Concretely, the two acceptance cases from the instruction: (a) two branches adding
+   whole methods at the same place — `MEMBER_ADD` recognises the declarations and closes their spans,
+   and the `API_INCOMPATIBILITY` objection to those lines is **never produced**; (b) a successful
+   import resolution — `ImportConflictResolver` closes the import block, and neither the residual nor
+   a text-level claim is asked about it.
+3. **Name every closure in the report.** The span and the claim that closed it, beside the existing
+   `analysisLevel` and `warnings` keys, so a reviewer can tell a tier that had nothing to say from a
+   tier that was cleared. The wording stays the page's (DEC-027).
+4. **Keep `outranking` for what the hierarchy cannot separate.** Two claims at the same recorded level
+   about one still-open region go through DEC-045's rule unchanged, including "equal evidence decides
+   nothing". This is a narrowing of its blast radius, not a replacement.
+
+**Gate:** `MODULE` for `merge-java` green, with: both acceptance cases showing the lower-tier claim was
+not produced, asserted on the ledger rather than on the outcome text; a **negative control** where a
+claim whose evidence explains only part of the span closes nothing and the block is left as it is
+today; a `REVIEW` claim proved unable to close anything; a `DEFERRED` claim proved to close at the top
+of the order; and the existing `MergeFileToolTest` and step-4.6 arbitration tests unchanged.
+
+**Done when:** a higher tier's confident answer removes its span from the lower tiers' work, and a
+reviewer reading the report can see the tier that was cleared and the claim that cleared it.
+
+### 4.20 — Partial closure: applied spans beside markers, and the outcome the enum was missing
+**Who:** agent · **Size:** M
+
+**Do:**
+
+1. **Compose the block from closed spans and open lines.** Where a claim closes base lines 10–20 of a
+   10–40 block, the result is the applied text for 10–20 and conflict markers for 21–40. The
+   composition uses 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`) —
+   range building is what it is for — rather than a second splicer.
+2. **Retire `LEFT_PARTIAL_RESOLUTION` as a dead end.** Today an automatic answer that does not cover
+   the whole block leaves the whole block for a human. That outcome exists because the tool could not
+   express "applied in part"; once it can, the shape that produced it resolves, and the outcome stays
+   only for an answer that leaves *nothing* settled.
+3. **Grow the outcome vocabulary where a new result shape exists** (the maintainer's 2026-10-07
+   instruction that the outcome enum is to grow). "Some spans applied, the rest left open" is a result
+   the tool has never been able to report and is not any existing outcome; it gets a value of its own
+   rather than overloading `APPLIED_AUTO`. An outcome the enum can no longer produce is **removed,
+   not left as a synonym**.
+4. **The partition still holds at the file level**, and the invariant test now runs over composed
+   output as well as over the ledger: every block line reaches the output exactly once, applied or as
+   a marked open line, and no closed span is applied twice.
+
+**Gate:** `MODULE` for `merge-java` green, with a fixture block whose two halves are settled by
+different tiers, showing the applied half in the output and markers on the open half; the file-level
+partition invariant; a test that the new outcome is reported for exactly this shape; and the compiled
+result of the fixture **compiling** — an applied half and a marked half are not a reason for the file
+to stop being Java elsewhere.
+
+**Done when:** a mixed block comes out with the part the tool understood applied and only the genuinely
+open lines marked, and the outcome says which of the two it was.
+
+---
+
 ## 9. Phase 5 — webview: close the suite
 
 > **Every UI step in this phase builds on `jsx6`** (rule § 2.9, [`AGENTS.md` § 2](../AGENTS.md)): no UI is
@@ -3698,6 +3850,13 @@ caller-supplied entry separates the two type levels; a type change records which
 `MergeFileToolTest` — 28 tests, including `strongerEvidenceOutranksWeakerObjection` and
 `equalEvidenceOutranksNothing`. Decision record:
 [`DEC-045`](../doc-hipster-entity/architecture/decisions/DEC-045.md).
+
+**Companion, and the next thing in this area: § 4C (steps 4.18–4.20).** This step says how claims are
+*compared*; the instruction of 2026-10-07 says they must not all be *produced* in the first place. The
+scale built here is the order § 4C runs in — a claim's tier is the level it records — and
+`outranking` survives there for the one case the hierarchy cannot separate: two claims at the same
+recorded level about a region that is still open. Read [`DEC-046`](../doc-hipster-entity/architecture/decisions/DEC-046.md)
+before extending this step's rule.
 
 ### 5.1 — Phase 6: headless parity as a build gate
 **Who:** agent · **Size:** M
@@ -4493,6 +4652,9 @@ start)
 | 4.15 | Move the answers we already compute onto the suggestion channel                           | agent              | M    | `[ ]`                                                                                       |
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard              | agent              | M    | `[ ]`                                                                                       |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports         | agent              | M    | `[ ]`                                                                                       |
+| 4.18 | Hierarchical resolution: claim ledger, tier order, partition invariant                    | agent              | S–M  | `[ ]` — behaviour-neutral by design: the ledger lands and nothing closes yet                |
+| 4.19 | Hierarchical resolution: a confident claim clears its span, and the cleared tier is named | agent              | M    | `[ ]` — the acceptance cases are the instruction's two examples (two whole-method additions, the import block) |
+| 4.20 | Hierarchical resolution: partial closure, composed output, and the grown outcome enum     | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied spans beside markers                 |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                         | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                         | agent + maintainer | S    | `[ ]`                                                                                       |
 | 5.3  | ACP go/no-go spike                                                                        | human              | S    | `[ ]`                                                                                       |
