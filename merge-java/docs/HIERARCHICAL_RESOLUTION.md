@@ -1,4 +1,4 @@
-# Hierarchical resolution — a confident answer closes its region
+# Hierarchical resolution — a reliable answer resolves its region and removes the conflict
 
 > **Status:** design, agreed with the maintainer on 2026-10-07. The decision is
 > [`DEC-046`](../../doc-hipster-entity/architecture/decisions/DEC-046.md); the work is plan steps
@@ -21,10 +21,13 @@
 Three things are asked for, and they are separable:
 
 1. **An order.** Resolvers are ranked, and a higher rank runs first.
-2. **Closure.** A confident answer *settles a span of the file*, and that span is closed: lower tiers
-   are not consulted about it, and an objection inside it is cleared rather than arbitrated.
+2. **Removal, not merely arbitration.** A confident answer *settles a region of the file*: the conflict
+   is marked resolved and **removed from the working set**, so a lower tier never sees it and never
+   produces an objection to it. A lower tier that is merely overruled has still done the work and still
+   put a claim in the report — which is not what "do not want lower level resolver to even see conflict"
+   asks for.
 3. **No wasted work.** "do not need to be analyzed by text resolver" — the lower tier's analysis of a
-   closed span does not happen at all.
+   settled region does not happen at all, because the region is no longer in the set it is handed.
 
 The two examples are the acceptance cases: **two branches adding whole methods at the same place**
 (settled by structure, where a line comparison sees only "both sides replaced this region"), and a
@@ -77,58 +80,132 @@ maximum it declares. `MemberAddConflictResolver` is the working example: it decl
 records `STRUCTURE` when it could only compare method names. A second scale would have to be kept in
 step with this one by hand, and the two would disagree the first time a resolver's basis changed.
 
-**Tiers run strongest first.** The pass is ordered by the tier a claim declares it can reach, so the
-answer most likely to settle a span is asked first and the cheapest, least-informed answer is asked
-last.
+**Tiers run strongest first.** The pass is ordered by the tier a claim records, so the answer most
+likely to settle a span is asked first and the cheapest, least-informed answer is asked last.
 
-**A claim closes the span its own evidence explains.** That is the safety half, and it is deliberately
-not "the span it covers" — coverage alone would let a guess close a region. A claim may close a span
-only when one of these holds:
+### 3.1 A resolved conflict leaves the working set — it is not outranked
 
-| Way to close        | The evidence                                                                                      | Example                                                                       |
+The refinement the maintainer gave on 2026-10-07, and it is a change of kind rather than of degree:
+
+> "we need to refine rankings, I do not want lower level resolver to even see conflict if structural
+> knows reliably how to resolve, and if resolution spans whole merge conflict region it should be
+> removed marked as resolved and not touched by textual resolvers"
+
+`Outranked` and `resolved` are different states, and conflating them is what the current code does. An
+outranked claim still **exists**: it was produced, it is in the report, it is one of the claims
+`accountsFor` had to reconcile, and a lower-tier resolver spent its time on it. A resolved conflict
+**stops existing**: it leaves the working set, no lower tier is offered it, and no claim about it is
+produced.
+
+So the pass operates on a **working set of live conflicts**, each carrying a state:
+
+| State      | Meaning                                                                    | What a lower tier does with it                                       |
+| ---------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `OPEN`     | No claim has settled it; it is offered to the tiers below in order         | It is asked about it                                                 |
+| `RESOLVED` | A reliable claim spans **the whole conflict region**                       | **Nothing** — it is gone from the working set, and the region is reported as resolved rather than as contested |
+| `PARTIAL`  | A reliable claim spans **part** of the region; the rest is still contested | It is asked about the **open remainder only**, never the closed span |
+
+**Whole-region span means the conflict is removed.** When a reliable claim covers an entire merge
+conflict region, the block is resolved: it is applied, marked resolved, and no textual resolver is
+consulted about it. The lower tiers are not merely overruled — they are **not run**, and their
+objections are never constructed. That is what the instruction asks for, and it is strictly stronger
+than `outranking`, which requires all claims to exist first.
+
+`RESOLVED` is a **state of the working set, not a promise about the text**: the claim that removed the
+conflict is still an `AUTO` resolution that `ResolutionVerifier` gates exactly as it is today. Removal
+is about who gets asked, and never about skipping a check.
+
+**`PARTIAL` is where the remainder is protected.** Closing a span and keeping the rest open is the
+case that today becomes `LEFT_PARTIAL_RESOLUTION` — the whole block, including the settled part, goes
+to a human. Under this design the closed span is applied and only the open remainder is contested. A
+claim spanning the whole region takes the `RESOLVED` path instead, so the two are decided by one
+comparison and not by two rules that can disagree.
+
+### 3.2 What "reliably" means, and how a rank is refined
+
+The instruction says *"if structural knows **reliably** how to resolve"*, so reliability has to be a
+property the code can check — not a reputation a resolver carries. A resolution is **reliable over a
+region** when all three hold:
+
+1. **It may be applied** — it is `AUTO` (or `DEFERRED`, a recorded human decision). A `REVIEW` or
+   `MANUAL` answer is never reliable over anything, whatever its level.
+2. **It explains every line of the region** — under one of § 3.3's three ways. Coverage is not
+   explanation: a claim whose region merely happens to span the block, without evidence for what is in
+   it, is not reliable and removes nothing.
+3. **It places the region in the file** — its region is known (`Region.unknown()` spans no lines and
+   therefore explains nothing).
+
+A resolver that *declines* is the third case in the same vocabulary: declining is how a resolver says
+it is not reliable here, and it costs nothing — `MemberAddConflictResolver` declines a shared signature
+rather than guessing, and `TypeChangeConflictResolver` declines rather than answer from a table it
+cannot justify. **A rank is therefore earned per region, from the resolution's own record**, and this
+is the refinement the instruction asks for in the ranking itself:
+
+| Refinement                                                                                     | What it replaces                          | Why |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------- | --- |
+| The rank is the **recorded** level, per resolution                                             | The resolver's declared maximum           | `MEMBER_ADD` reaches `PROJECT_TYPES` with a classpath and `STRUCTURE` without one; the same resolver is two different ranks in two runs |
+| A rank **entitles** a resolver to be asked earlier — it does not entitle it to remove anything | Treating a higher level as authority      | Only the reliability check removes a conflict; a high level with evidence for nothing removes nothing |
+| Reliability is checked **per region and per claim**                                            | A per-resolution or per-resolver property | The same resolver can be reliable over the members it recognised and unreliable over the lines around them |
+| `RESOLVED` and `outranked` are **different states**                                            | One arbitration outcome                   | Outranked means "produced and overruled"; resolved means "never produced" — and only the second satisfies "do not want lower level resolver to even see conflict" |
+
+### 3.3 What a claim may close: explained, never merely covered
+
+**A claim explains the span its own evidence accounts for.** That is the safety half, and it is
+deliberately not "the span it covers" — coverage alone would let a guess remove a conflict. A claim
+explains a span only when one of these holds:
+
+| Way to explain      | The evidence                                                                                      | Example                                                                       |
 | ------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | **Recognised span** | The resolver recognised the declarations forming the span, so it knows what is in it line by line | `MEMBER_ADD` recognised two additions; the span is exactly those declarations |
 | **Kept lines**      | The applied text keeps every line of both sides in that span                                      | `KEEP_BOTH`/`MERGE_SAFE` over two additions                                   |
 | **Owned domain**    | The span is the resolver's own domain and the resolver is authoritative there                     | The import block, for `ImportConflictResolver`                                |
 
-A claim that can establish none of the three **closes nothing** — it is still a claim, and it still
-goes to `outranking` as before. Nothing is closed on a guess, and an unknown region (`Region.unknown()`)
-closes nothing by construction, because it spans no lines.
+A claim that can establish none of the three **removes nothing and closes nothing** — it is still a
+claim, and it still goes to `outranking` as before. Nothing is settled on a guess, and an unknown
+region (`Region.unknown()`) closes nothing by construction, because it spans no lines.
 
-**Closure is per line, and partial closure is the normal case.** The ledger holds lines, not blocks:
-a claim over base lines 10–20 inside a 10–40 block closes 10–20 and leaves 21–40 open. The block's
-output is then **composed** — the applied text for the closed lines, the conflict markers for the
-open ones. This is what retires `LEFT_PARTIAL_RESOLUTION` as a dead end, and it is why 4.9's line-range
-machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`) is this design's enabling layer rather
-than a parallel port: composing a file out of settled ranges is exactly what it does.
+**Closure is per line, so a partial answer is useful rather than discarded.** The ledger holds lines,
+not blocks: a claim over base lines 10–20 inside a 10–40 block closes 10–20 and leaves 21–40 open. The
+block's output is then **composed** — the applied text for the closed lines, the conflict markers for
+the open ones. This is what retires `LEFT_PARTIAL_RESOLUTION` as a dead end, and it is why 4.9's
+line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`) is this design's enabling layer
+rather than a parallel port: composing a file out of settled ranges is exactly what it does.
 
 **Only an `AUTO` claim closes anything.** `REVIEW`, `MANUAL` and an unresolved block close nothing —
 so the hierarchy can never promote an answer into application, and
 [`DESIGN_NEVER_AUTO_RESOLVED.md`](../DESIGN_NEVER_AUTO_RESOLVED.md) is untouched. A `DEFERRED` claim is
 a recorded *human* decision, so it does close, and it closes at the top of the order.
 
-**Arbitration survives, one level down.** Hierarchical closure decides *who is asked*; `outranking`
-(DEC-045) decides *who wins when two claims at the same tier are asked about one open region*. The two
-are not alternatives and neither replaces the other:
+### 3.4 Arbitration survives, one level down
+
+Hierarchical resolution decides *who is asked*; `outranking` (DEC-045) decides *who wins when two
+claims at the same tier are asked about one still-open region*. The two are not alternatives and
+neither replaces the other:
 
 ```
+live = every conflict detection produced            # each with its own region
 for tier, strongest first:
-    for each resolver at this tier, over the still-open regions only:
-        claim = resolve(...)
-        if claim is AUTO and its evidence explains span S:
-            close S                    # lower tiers will not see S
-            audit("closed S by <resolver> at <level>")
-        else:
-            offer claim to the open regions it touches
-for each open region with several claims:  outranking(...)   # DEC-045, unchanged
-for each region still open:                markers + fix paths
+    for each resolver at this tier:
+        for each conflict in live whose region this resolver can see:
+            claim = resolve(conflict)
+            if claim is reliable over conflict.region:      # § 3.2
+                apply(claim); state(conflict) = RESOLVED
+                live.remove(conflict)                       # lower tiers never see it
+                audit("resolved <region> by <resolver> at <level>")
+            else if claim is reliable over a span of it:
+                apply(claim) over that span; state = PARTIAL
+                conflict.region = remainder                 # only the remainder is offered
+            else:
+                record claim against the still-open region
+for each region with several claims:  outranking(...)        # DEC-045, unchanged
+for each region still open:           markers + fix paths
 ```
 
-**Every closure is reported.** The report names the span and the claim that closed it, in the same
-spirit as `outranking`'s "Outranked on this block by stronger evidence (…)" sentence: a reviewer must
-be able to see *that a tier was cleared and by what*, not merely that the block came out applied.
-The clearing claim's own audit line is the record; a block whose closed spans account for all of its
-lines has no markers left and reads as an ordinary automatic result.
+**Every state change is reported.** The report names the region, the state it reached and the claim
+that reached it — `resolved` by which resolver at which level, or `partial` with the remainder that
+stayed open. Without it, "this tier had nothing to say" and "this tier was never asked" read the same,
+which is precisely the confusion `residualSubsumed` creates today. A block whose every region reached
+`RESOLVED` has no markers left and reads as an ordinary automatic result.
 
 ## 4. The invariant, written before the mechanism
 
@@ -141,8 +218,13 @@ invariant is a test that exists before the ledger does:
 
 Its companion:
 
-> **A closed span is explained by the claim that closed it**, under one of § 3's three ways; and
-> **no closure happens without being named in the report**.
+> **A closed span is explained by the claim that closed it**, under one of § 3.3's three ways.
+
+And the one the refinement adds, which is the requirement in testable form:
+
+> **A conflict marked `RESOLVED` is never offered to a lower tier**, and no claim about it is
+> produced; **a conflict marked `PARTIAL` is offered only its open remainder**; and **no state change
+> happens without being named in the report**.
 
 Written as tests over the ledger's own data, these are cheap to check and they fail loudly on the
 defect that matters. This is the same technique that paid off in step 4.9 (`rangesAreOrderedAndNonEmpty`
@@ -154,39 +236,42 @@ plumbing defects — not algorithmic ones — are what this module's history say
 - **It is the machinery § 5.6's parity gate needs.** A vector upstream resolves and we escalate is a
   failure; "we escalated it because our text pass was never asked about a span structure had already
   settled" is exactly the kind of failure the gate must not paper over — either the structure claim is
-  right, and the vector was ours all along, or it is wrong and the closure rule is what catches it.
+  right, and the vector was ours all along, or it is wrong and the reliability rule is what catches it.
 - **It is where 4.10's deferred variant lands.** The typed-change count in `JETBRAINS_PORT.md` § 11.5
-  needs the ported differ wired in as a classifier (4.12) *and* a pass that knows which spans are still
+  needs the ported differ wired in as a classifier (4.12) *and* a pass that knows which regions are still
   its business (4.18–4.20). Both halves are named.
-- **A `SUGGESTION` closes nothing.** The suggestion channel is a separate axis: a suggestion is an
-  answer offered to a person, so by construction it is not a claim that settles a span. When 4.14–4.17
+- **A `SUGGESTION` removes nothing.** The suggestion channel is a separate axis: a suggestion is an
+  answer offered to a person, so by construction it is not a claim that settles a region. When 4.14–4.17
   land, a suggestion is produced *beside* the open region, never in place of it.
 
-## 6. Ordering, and what each tier can close
+## 6. Ordering, and what each tier can settle
 
 The tiers below are the level a resolution **records**. A resolver whose basis varies appears twice,
-which is the point: `MEMBER_ADD` comparing resolved signatures closes more confidently than one
+which is the point: `MEMBER_ADD` comparing resolved signatures is reliable more often than one
 comparing method names, and the ledger uses the record, not the declaration.
 
-| Tier (recorded level) | Claims that can reach it today                                                                  | What it may close                                                     | What it may never close                                                                |
-| --------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `PROJECT_TYPES`       | `TypeChange`, `OverloadAdd`, `MemberAdd` (with project classpath)                               | A span it recognised structurally and compared on resolved signatures | Anything outside the members it recognised                                             |
-| `PLATFORM_TYPES`      | `TypeChange`, `OverloadAdd`, `MemberAdd` (platform classpath)                                   | Same, on platform-resolved signatures                                 | A question about a project type — that is unresolved, not answered                     |
-| `STRUCTURE`           | `StructuralChange`, `MemberAdd` (names only)                                                    | Member spans it recognised                                            | A body it did not parse                                                                |
-| `TEXT_FILE`           | `Import`, `ConstantAdd`                                                                         | The import block, the constant block — its own domain                 | Lines outside that block                                                               |
-| `TEXT_LOCAL`          | `ApiIncompatibility`, `PackageChange`, `Rename`, `MethodBodyChange`, `CommentAdd`, the residual | Nothing, in practice                                                  | It is the tier that gets *cleared*; it closes only by keeping every line of both sides |
+| Tier (recorded level) | Claims that can reach it today                                                                  | What it may settle                                                    | What it may never settle                                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `PROJECT_TYPES`       | `TypeChange`, `OverloadAdd`, `MemberAdd` (with project classpath)                               | A span it recognised structurally and compared on resolved signatures | Anything outside the members it recognised                                              |
+| `PLATFORM_TYPES`      | `TypeChange`, `OverloadAdd`, `MemberAdd` (platform classpath)                                   | Same, on platform-resolved signatures                                 | A question about a project type — that is unresolved, not answered                      |
+| `STRUCTURE`           | `StructuralChange`, `MemberAdd` (names only)                                                    | Member spans it recognised                                            | A body it did not parse                                                                 |
+| `TEXT_FILE`           | `Import`, `ConstantAdd`                                                                         | The import block, the constant block — its own domain                 | Lines outside that block                                                                |
+| `TEXT_LOCAL`          | `ApiIncompatibility`, `PackageChange`, `Rename`, `MethodBodyChange`, `CommentAdd`, the residual | Nothing, in practice                                                  | It is the tier that gets *removed*; it settles only by keeping every line of both sides |
 
 Read the table as the answer to "who is asked, in what order, and what may they settle": the two
 examples in § 1 are the `STRUCTURE`/`PROJECT_TYPES` row (two member additions) and the `TEXT_FILE` row
-(the import block). A tier with no resolver that reaches it (`TEXT_INTRALINE`, step 4.11) closes
+(the import block). A tier with no resolver that reaches it (`TEXT_INTRALINE`, step 4.11) settles
 nothing and costs nothing — the hierarchy degrades to today's behaviour wherever it has nothing to
 say, which is what makes it safe to land in three slices.
 
 ## 7. Non-goals
 
 - **Not a rewrite of detection.** The detectors and their order stay; what changes is that a settled
-  span is removed from what the later ones are asked about.
-- **Not a relaxation of the never-auto list.** Closure suppresses a *lower-tier objection*; it never
-  turns a `REVIEW` or `MANUAL` into an application.
+  region is removed from what the later ones are asked about.
+- **Not a relaxation of the never-auto list.** Removal suppresses a *lower-tier objection*; it never
+  turns a `REVIEW` or `MANUAL` into an application, and a claim that needs a person removes nothing.
 - **Not a second ranking.** `AnalysisLevel` is the order. If a future resolver needs a different rank
   from its evidence, that is a signal its evidence is being mis-recorded, not a signal for a new enum.
+- **Not a promise about the text.** `RESOLVED` says *who was not asked*, and nothing more: the applied
+  answer still goes through `ResolutionVerifier`, and a resolution that fails verification is
+  downgraded exactly as it is today.

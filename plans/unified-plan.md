@@ -3606,13 +3606,14 @@ of thing to everyone downstream, and **a new suggestion source adds a producer a
 
 ---
 
-#### 4C — hierarchical resolution: a confident answer closes its region (steps 4.18–4.20)
+#### 4C — hierarchical resolution: a confident answer resolves its region and removes the conflict (steps 4.18–4.20)
 
 > **Why a second lettered subsection.** The same reason as 4B: renumbering is forbidden, and this is a
 > phase-sized block of merge-java work that follows 4.6 and depends on it. Steps 4.18–4.20 belong to
 > Phase 4 and sit here for the same cause 4.7–4.17 do.
 
-**The instruction this block exists for**, given by the maintainer on 2026-10-07:
+**The instruction this block exists for**, given by the maintainer on 2026-10-07, and sharpened by them
+the same day:
 
 > "the change resolution must be hierarchical in a way where some may resolve confidently, and those
 > blocks are then not tested by other merges. For example structural that knows two branches added one
@@ -3620,20 +3621,35 @@ of thing to everyone downstream, and **a new suggestion source adds a producer a
 > analyzed by text resolver, same goes for imports resolver, if it has success, then there is no need
 > for lower tier to touch that part of the file"
 
+> "we need to refine rankings, I do not want lower level resolver to even see conflict if structural
+> knows reliably how to resolve, and if resolution spans whole merge conflict region it should be
+> removed marked as resolved and not touched by textual resolvers"
+
 **The design is [`merge-java/docs/HIERARCHICAL_RESOLUTION.md`](../merge-java/docs/HIERARCHICAL_RESOLUTION.md)
-and the decision is [`DEC-046`](../doc-hipster-entity/architecture/decisions/DEC-046.md).** Read both
-before starting 4.18. In one paragraph: **the tier of a claim is the `AnalysisLevel` the resolution
-records** (not a second scale); tiers run strongest first; a confident `AUTO` claim **closes the span
-its own evidence explains**, and a closed span is never offered to a lower tier; closure is per line,
-so a claim over part of a block settles that part and leaves the rest open; and DEC-045's `outranking`
-survives one level down, deciding only between claims **at the same tier** about a region that is
-**still open**.
+and the decision is [`DEC-046`](../doc-hipster-entity/architecture/decisions/DEC-046.md)** (its
+amendment is the second quote above). Read both before starting 4.18. In one paragraph: **the tier of a
+claim is the `AnalysisLevel` the resolution records** (not a second scale); tiers run strongest first;
+a claim that is **reliable over a region** — it may be applied, it *explains* every line of the region,
+and the region is known — resolves that region, and a region spanning a **whole** conflict region
+**removes the conflict from the working set**, so the lower tier is not asked and no objection to it is
+ever constructed; a claim reliable over only **part** of a region applies that part and leaves the
+**open remainder** to the tiers below; and DEC-045's `outranking` survives one level down, deciding only
+between claims **at the same tier** about a region that is **still open**.
+
+**`resolved` is not `outranked`, and the difference is the requirement.** An outranked claim still
+exists — it was produced, it is in the report, and the lower tier spent its time on it. A resolved
+conflict stops existing. The pass therefore operates on a working set of live conflicts in one of three
+states (`OPEN`, `RESOLVED`, `PARTIAL`) rather than on claims that are all produced and then arbitrated.
+**A rank entitles a resolver to be asked earlier; it never entitles it to remove anything** — only the
+reliability check does that.
 
 **What this adds, and what it does not.** It adds no new taxonomy and no new permission: detectors
-keep emitting, `ResolutionVerifier` keeps gating, and a `REVIEW` or `MANUAL` claim closes nothing, so
-[`DESIGN_NEVER_AUTO_RESOLVED.md`](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md) is untouched. What
-changes is that a settled span is **removed from what the later tiers are asked about** — which is
-both less work and fewer false objections.
+keep emitting, `ResolutionVerifier` keeps gating, and a `REVIEW` or `MANUAL` claim resolves nothing, so
+[`DESIGN_NEVER_AUTO_RESOLVED.md`](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md) is untouched. `RESOLVED`
+says who was **not asked**, never that a check was skipped: a resolution that fails verification is
+downgraded exactly as it is today. What changes is that a settled region is **removed from what the
+later tiers are handed** — which is both less work and fewer false objections, and it is the difference
+between a resolver that was overruled and a resolver that was never called.
 
 **Three costs of the shape being replaced**, all measured in the current code and argued in DEC-046's
 Context: a text-level objection to an already-settled span is still produced and only then overruled
@@ -3642,96 +3658,109 @@ requires `coversBlock`, so an answer that settles part of a block becomes `LEFT_
 and the whole block — including the part already right — goes to a human; and `residualSubsumed`
 removes a claim before arbitration, so "cleared" and "never raised" read identically.
 
-**Ordering.** 4.18 gates 4.19 and 4.20. 4.18 is deliberately behaviour-neutral — the ledger exists and
-nothing closes — so the invariant test is what lands first and the two closing steps are judged against
-it. 4.20 needs 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`), which is
-why it comes after the port's SAFE half rather than beside it. **4C is independent of 4.11–4.17** and
-may be landed before, after or between them; where the ordering matters it is stated per step.
+**Ordering.** 4.18 gates 4.19 and 4.20. 4.18 is deliberately behaviour-neutral — the working set exists
+and nothing is removed — so the invariant test is what lands first and the two removing steps are judged
+against it. 4.20 needs 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`),
+which is why it comes after the port's SAFE half rather than beside it. **4C is independent of
+4.11–4.17** and may be landed before, after or between them; where the ordering matters it is stated per
+step.
 
-| Step | What                                                                                        | Who   | Size |
-| ---- | ------------------------------------------------------------------------------------------- | ----- | ---- |
-| 4.18 | The claim ledger: tiers from the recorded level, open lines, and the partition invariant    | agent | S–M  |
-| 4.19 | Closure: a claim clears the span its evidence explains, and the cleared tier is named       | agent | M    |
-| 4.20 | Partial closure and composition — applied spans beside markers, and the outcome vocabulary  | agent | M    |
+| Step | What                                                                                          | Who   | Size |
+| ---- | --------------------------------------------------------------------------------------------- | ----- | ---- |
+| 4.18 | The working set: tiers from the recorded level, the three conflict states, and the partition invariant | agent | S–M |
+| 4.19 | Reliability and removal: a reliable claim spanning a whole region resolves it, and the lower tier is never asked | agent | M |
+| 4.20 | Partial resolution and composition — applied spans beside markers, and the outcome vocabulary | agent | M    |
 
-### 4.18 — The claim ledger: tiers, open lines, and the invariant that comes first
+### 4.18 — The working set: tiers, the three states, and the invariant that comes first
 **Who:** agent · **Size:** S–M
 
 **Do:**
 
-1. **Write the partition invariant as a test before the ledger exists.** This is step 4.9's lesson
+1. **Write the partition invariant as a test before the working set exists.** This is step 4.9's lesson
    (`rangesAreOrderedAndNonEmpty` was written before the builder was trusted, and it is what localised
    the plumbing defects that cost that step its time):
 
-   > every line of a block is accounted for exactly once — applied by exactly one closed claim, or
+   > every line of a block is accounted for exactly once — applied by exactly one resolved claim, or
    > open (offered to a lower tier and, in the end, left to a human with markers).
 
-   Plus its companion: **a closed span is explained by the claim that closed it**, under one of the
-   three ways `HIERARCHICAL_RESOLUTION.md` § 3 names (recognised span, kept lines, owned domain), and
-   **no closure is unnamed in the report**. The tests are over the ledger's own data, so they run
-   without a resolver set and without a fixture.
-2. **The ledger, and nothing else.** A `ClaimLedger` over one block's base lines holds, per line,
-   whether the line is open and which claims touch it. Tiers come from `ConflictResolution.getAnalysisLevel()`
-   — the recorded level — and never from a resolver's declared maximum or from a new enum. Claims are
-   offered to a tier's still-open lines in descending level order; at this step every claim is recorded
-   and **nothing is closed**, so the ledger is inert and the module's behaviour is unchanged.
+   Plus its two companions: **a resolved region is explained by the claim that resolved it**, under one
+   of the three ways `HIERARCHICAL_RESOLUTION.md` § 3.3 names (recognised span, kept lines, owned
+   domain); and **a conflict marked `RESOLVED` is never offered to a lower tier, while a conflict marked
+   `PARTIAL` is offered only its open remainder**. The tests are over the working set's own data, so they
+   run without a resolver set and without a fixture.
+2. **The working set, and nothing else.** A `ResolutionPass` (name it for what it holds — a set of live
+   conflicts, not a table of lines) carries, per block, each detected conflict and its state: `OPEN`,
+   `RESOLVED` or `PARTIAL`, with `RESOLVED`/`PARTIAL` naming the claim and the region. Tiers come from
+   `ConflictResolution.getAnalysisLevel()` — the recorded level — and never from a resolver's declared
+   maximum or from a new enum. Conflicts are offered to a tier in descending level order; at this step
+   every conflict stays `OPEN` and every claim is recorded, so **nothing is removed** and the module's
+   behaviour is unchanged.
 3. **Make the existing order visible in one place.** `ConflictDetectionService.detect`'s ten calls and
-   `ConflictResolvers`' registry are the order today; the ledger's construction reads the claims it is
-   given and sorts them, so the ordering is a method on the decision path a reader can follow
-   ([`DEC-019`](../doc-hipster-entity/architecture/decisions/DEC-019.md)) rather than a table consulted
-   at runtime.
-4. **Say what an unknown region does**: `Region.unknown()` closes nothing and is never opened — it
+   `ConflictResolvers`' registry are the order today; the pass is a method on the decision path a reader
+   can follow ([`DEC-019`](../doc-hipster-entity/architecture/decisions/DEC-019.md)) rather than a table
+   consulted at runtime.
+4. **Say what an unknown region does**: `Region.unknown()` resolves nothing and is never removed — it
    spans no lines, so it cannot be accounted for by the partition and is reported as unattributed
    exactly as it is today.
 
 **Gate:** `MODULE` for `merge-java` green, with the invariant test present and **proved to fail** on a
-deliberately dropped line and on a doubly-closed span; a test that the ledger's tier order is strictly
-descending by recorded level and that a resolver's declared maximum is never used as a tier; and the
-existing suite unchanged, because nothing closes yet.
+deliberately dropped line and on a doubly-resolved region; a test that a `RESOLVED` conflict is absent
+from what the next tier is handed and that a `PARTIAL` one is handed only its remainder; a test that the
+tier order is strictly descending by recorded level and that a resolver's declared maximum is never used
+as a tier; and the existing suite unchanged, because nothing is removed yet.
 
-**Done when:** the invariant and the ledger exist, the module behaves exactly as before, and the next
-two steps have something to be judged against.
+**Done when:** the invariant and the working set exist, the module behaves exactly as before, and the
+next two steps have something to be judged against.
 
-### 4.19 — Closure: a confident claim clears its span, and the cleared tier is named
+### 4.19 — Reliability and removal: a resolved region takes the conflict out of the lower tiers' hands
 **Who:** agent · **Size:** M
 
 **Do:**
 
-1. **Close on explanation, never on coverage.** A claim closes a span only where one of § 3's three
-   ways holds, and the check is made against the claim's **own** evidence: the declarations it
-   recognised, the lines its applied text keeps, or the block it owns. A claim that can establish none
-   of the three closes nothing and is arbitrated exactly as it is today. **`AUTO` closes; `DEFERRED`
-   closes at the top of the order because a recorded human decision is a decision; `REVIEW` and
-   `MANUAL` close nothing** — so the hierarchy can never promote an answer into application.
-2. **A closed span is not offered to a lower tier.** Detection still emits; the ledger decides what is
-   still asked. Concretely, the two acceptance cases from the instruction: (a) two branches adding
-   whole methods at the same place — `MEMBER_ADD` recognises the declarations and closes their spans,
-   and the `API_INCOMPATIBILITY` objection to those lines is **never produced**; (b) a successful
-   import resolution — `ImportConflictResolver` closes the import block, and neither the residual nor
-   a text-level claim is asked about it.
-3. **Name every closure in the report.** The span and the claim that closed it, beside the existing
-   `analysisLevel` and `warnings` keys, so a reviewer can tell a tier that had nothing to say from a
-   tier that was cleared. The wording stays the page's (DEC-027).
-4. **Keep `outranking` for what the hierarchy cannot separate.** Two claims at the same recorded level
+1. **Decide removal on explanation, never on coverage.** A claim resolves a region only where one of
+   § 3.3's three ways holds, and the check is made against the claim's **own** evidence: the declarations
+   it recognised, the lines its applied text keeps, or the block it owns. A claim that can establish none
+   of the three resolves nothing and is arbitrated exactly as it is today. **`AUTO` resolves; `DEFERRED`
+   resolves at the top of the order because a recorded human decision is a decision; `REVIEW` and
+   `MANUAL` resolve nothing** — so the hierarchy can never promote an answer into application.
+2. **Implement reliability as the one predicate the whole design rests on** (`HIERARCHICAL_RESOLUTION.md`
+   § 3.2): the claim may be applied, it explains every line of the region, and the region is known. A
+   rank entitles a resolver to be asked **earlier**; it never entitles it to remove anything. Declining
+   stays the same vocabulary — the resolver saying it is not reliable here — so a resolver that declines
+   removes nothing and needs no new mechanism.
+3. **A conflict the claim spans completely leaves the working set.** Detection still emits; the pass
+   decides what the lower tier is **handed**. The two acceptance cases from the instruction are the
+   tests: (a) two branches adding whole methods at the same place — `MEMBER_ADD` recognises the
+   declarations, the region is marked `RESOLVED`, and the `API_INCOMPATIBILITY` objection to those lines
+   is **never produced**, asserted by the resolver not being called rather than by the outcome text;
+   (b) a successful import resolution — `ImportConflictResolver` resolves the import region, and neither
+   the residual nor a text-level claim is asked about it.
+4. **Report the state of every conflict.** `open`, `resolved` (with the claim and its level) or
+   `partial` (with the remainder that stayed open), beside the existing `analysisLevel` and `warnings`
+   keys — because a removed conflict leaves no other trace, and "this tier had nothing to say" must not
+   read like "this tier was never asked". The wording stays the page's (DEC-027).
+5. **Keep `outranking` for what the hierarchy cannot separate.** Two claims at the same recorded level
    about one still-open region go through DEC-045's rule unchanged, including "equal evidence decides
    nothing". This is a narrowing of its blast radius, not a replacement.
 
-**Gate:** `MODULE` for `merge-java` green, with: both acceptance cases showing the lower-tier claim was
-not produced, asserted on the ledger rather than on the outcome text; a **negative control** where a
-claim whose evidence explains only part of the span closes nothing and the block is left as it is
-today; a `REVIEW` claim proved unable to close anything; a `DEFERRED` claim proved to close at the top
-of the order; and the existing `MergeFileToolTest` and step-4.6 arbitration tests unchanged.
+**Gate:** `MODULE` for `merge-java` green, with: both acceptance cases showing the lower-tier resolver
+was **not called**, asserted on the pass rather than on the outcome text; a **negative control** where a
+claim whose evidence explains only part of the region removes nothing and the block is left as it is
+today; a `REVIEW` claim proved unable to remove anything; a `DEFERRED` claim proved to resolve at the top
+of the order; a test that a removed conflict still went through `ResolutionVerifier` and is downgraded
+when it fails; and the existing `MergeFileToolTest` and step-4.6 arbitration tests unchanged.
 
-**Done when:** a higher tier's confident answer removes its span from the lower tiers' work, and a
-reviewer reading the report can see the tier that was cleared and the claim that cleared it.
+**Done when:** a higher tier's reliable answer takes its region out of the lower tiers' hands — the
+lower resolver is never called about it — and a reviewer reading the report can see the state each
+conflict reached and the claim that reached it.
 
-### 4.20 — Partial closure: applied spans beside markers, and the outcome the enum was missing
+### 4.20 — Partial resolution: applied spans beside markers, and the outcome the enum was missing
 **Who:** agent · **Size:** M
 
 **Do:**
 
-1. **Compose the block from closed spans and open lines.** Where a claim closes base lines 10–20 of a
-   10–40 block, the result is the applied text for 10–20 and conflict markers for 21–40. The
+1. **Compose the block from resolved regions and open lines.** Where a claim resolves base lines 10–20
+   of a 10–40 block, the result is the applied text for 10–20 and conflict markers for 21–40. The
    composition uses 4.9's line-range machinery (`MergeRange`, `MergeRangeBuilder`, `MergeChange`) —
    range building is what it is for — rather than a second splicer.
 2. **Retire `LEFT_PARTIAL_RESOLUTION` as a dead end.** Today an automatic answer that does not cover
@@ -3744,12 +3773,12 @@ reviewer reading the report can see the tier that was cleared and the claim that
    rather than overloading `APPLIED_AUTO`. An outcome the enum can no longer produce is **removed,
    not left as a synonym**.
 4. **The partition still holds at the file level**, and the invariant test now runs over composed
-   output as well as over the ledger: every block line reaches the output exactly once, applied or as
-   a marked open line, and no closed span is applied twice.
+   output as well as over the pass: every block line reaches the output exactly once, applied or as a
+   marked open line, and no resolved region is applied twice.
 
 **Gate:** `MODULE` for `merge-java` green, with a fixture block whose two halves are settled by
 different tiers, showing the applied half in the output and markers on the open half; the file-level
-partition invariant; a test that the new outcome is reported for exactly this shape; and the compiled
+partition invariant; a test that the new outcome is reported for exactly this shape; and the composed
 result of the fixture **compiling** — an applied half and a marked half are not a reason for the file
 to stop being Java elsewhere.
 
@@ -4593,95 +4622,95 @@ a decision that is not made** — deliberately unscheduled, with the decision na
 it is not the same as `[~]`, which waits on something outside the plan, nor as `[ ]`, which is ready to
 start)
 
-| Step | What                                                                                      | Who                | Size | State                                                                                       |
-| ---- | ----------------------------------------------------------------------------------------- | ------------------ | ---- | ------------------------------------------------------------------------------------------- |
-| 0.1  | Commit the EEnumSet overlap JMH delivery                                                  | agent              | S    | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer)                                    |
-| 0.2  | Commit the stale-document corrections                                                     | agent              | S    | `[x]` (landed as `ff0dc49`)                                                                 |
-| 1.1  | Honour `enabled: false` (DEC-018 / DEC-021 § 6)                                           | agent              | M    | `[x]`                                                                                       |
-| 1.2  | `MetadataProvider.parse` (DEC-W008)                                                       | agent              | M    | `[x]`                                                                                       |
-| 1.3  | `WatchMetadataProvider` over the watch cache                                              | agent              | M    | `[x]`                                                                                       |
-| 1.4  | Test the MCP tool surface                                                                 | agent              | S    | `[x]`                                                                                       |
-| 2.1  | metadata-arena unit tests                                                                 | agent              | M    | `[x]`                                                                                       |
-| 2.2  | metadata-arena JMH benchmarks (or close as not needed)                                    | agent              | S–M  | `[x]`                                                                                       |
-| 2.3  | Decision-grade arena run + the backend decision                                           | agent              | S    | `[x]`                                                                                       |
-| 3.0a | Settle the engine decision's open points (DEC-037, ADR first)                             | agent + maintainer | S–M  | `[x]` — DEC-037 `Accepted`, DEC-038 created                                                 |
-| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index                      | agent              | M    | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
-| 3.0c | The cache: what is cached, and what invalidates it                                        | agent              | M    | `[x]` — closed as answered by 3.0g, which is where DEC-037 put it: one freshness contract instead of a cache per module, plus the mapping below |
-| 3.0d | One implementation of `TypeResolver` over the index                                       | agent              | M    | `[x]` — `IndexTypeResolver` projects a row (kind, fields with their types, relations) and answers `null` for an unknown name; the seam grew `kind` + `relations`, because a generator without them has to read the file |
-| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                              | agent              | M    | `[x]` (shape-defining) — **part one landed**: the index could not answer a factory (`default` vs abstract, parameter names, `@Circular`); the generator rewrite is what remains |
-| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037)            | agent              | L    | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
-| 3.0g | Freshness: the watch loop, its events and its invalidation                                | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
-| 3.0h | Search: the queries every consumer asks                                                   | agent              | M    | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
-| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine                                         | agent              | M    | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
-| 3.0j | Move the remaining consumers onto the engine                                              | agent              | L    | `[x]` — closed 2026-10-07 by checking each named consumer: `jcodebuddy-meta` parses through the engine's `SourceReader`, the passes are the base cache's caller, the watch tools moved with 3.0n's rename, and the renderers and sidecar were measured to have no private path |
-| 3.0k | Grow the recorded gate to cover the engine's contract                                     | agent              | S    | `[x]`                                                                                       |
-| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                                | agent              | S    | `[x]` — `jcodebuddy-generated`: three types, no compile dependency, package unchanged (no import churn); named in `GATE_MODULES` so its 49 tests keep running |
-| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                     | agent              | M    | `[x]` — also the package (`hr.hrg.jcodebuddy.meta.*`) and the MCP sibling; no class, method or wire shape moved; the sweep's module list caught the stale name |
-| 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038)                    | agent              | L    | `[x]` — `class SourceSplicer` → one file (the engine's); no POM depends on `jwa-builder*`; the three docs that named a splicer without its home now say it; 329 tests green over the affected modules |
-| 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
-| 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2)     | agent              | M    | `[x]`                                                                                       |
-| 3.0q | Merge what 3.0p found worth keeping, delete the rest                                      | agent              | M–L  | `[x]` (content decided by 3.0p)                                                             |
-| 3.0r | The index grows members and annotations (DEC-029 format change)                           | agent              | M    | `[x]` — `members` always emitted, closed kind vocabulary, member types/modifiers/annotations; `NotCovered` deleted, so the last unanswerable question is answered |
-| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace         | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
-| 3.0t | The model keeps what a consumer could ask (DEC-040)                                       | agent              | M    | `[x]` — **part one landed**: the relation's written text (D2's fix), loose generic matching, and the D4 contract test over the records; `permits`, `throws`, enum constants, initialisers, has-a-body and the imports sidecar remain |
-| 3.1  | The hipster-ioc ADR                                                                       | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
-| 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                      | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |
-| 3.3  | Make the hipster-ioc generator runnable and documented                                    | agent              | M    | `[x]` (prototype)                                                                           |
-| 3.4  | The `@Circular` two-phase form                                                            | agent              | ?    | `[TBD]` — waits on how a lazily-resolved dependency is spelled                              |
-| 3.5  | `init*` methods in creation order                                                         | agent              | S    | `[TBD]` — waits on the initialisation seam                                                  |
-| 3.6  | Region markers above the thresholds                                                       | agent              | S    | `[TBD]` — waits on the generated layout                                                     |
-| 3.7  | Cross-context `dependencies()` / `ChildContext` creation                                  | agent              | M    | `[TBD]` — waits on context-to-context creation                                              |
-| 3.8  | The dependency-graph report page                                                          | agent              | M    | `[TBD]` — waits on the graph model being settled                                            |
-| 3.9  | Drive the generator from the dev-time pass and watch mode                                 | agent              | M    | `[TBD]` — waits on 7.8 and the shape                                                        |
-| 3.10 | Retire `hipster-ioc-test`'s hand-written context                                          | agent              | S–M  | `[TBD]` — waits on DEC-036 being `Accepted`                                                 |
-| 3.11 | Editor-agnostic graph navigation + embedded host                                          | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
-| 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                       | agent              | S–M  | `[x]`                                                                                       |
-| 4.2  | merge-java Phase 13 step 1 — review render                                                | agent              | M    | `[x]`                                                                                       |
-| 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                            | agent              | M    | `[x]`                                                                                       |
-| 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                                 | agent              | M    | `[x]`                                                                                       |
-| 4.5  | Residual structural conflict should not veto a partly-overlapping block                   | agent              | S–M  | `[x]`                                                                                       |
-| 4.6  | Quality level: evidence scale and claim arbitration                                       | agent              | L    | `[x]`                                                                                       |
-| 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                | agent              | S    | `[x]` — the pin is verified against a real checkout (`verify-jetbrains-sources.js` exit 0), the `@derived` header is enforced by `JetBrainsAttributionTest` and was shown to fail on a real file, and the three-tier skeleton exists with the pin in one home |
-| 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                   | agent              | L    | `[x]` — 14 vectors from `LineComparisonUtilTest`; the differ is an **LCS table, not Myers**, a deviation decided on measurement and recorded in `JETBRAINS_PORT.md` § 3.2; tier isolation enforced |
-| 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals             | agent              | L    | `[x]` — `MergeRange`, `MergeType`, `MergeRangeUtil`, `MergeRangeBuilder` and `MergeResolve`; **C1, C2 and C6 all tested** (`modifyDeleteShape` is the named C2 guard, cross-referencing `DESIGN_NEVER_AUTO_RESOLVED.md` § 2, with a control proving an insertion is not a deletion); **`MergeTierScopeTest` asserts the greedy pass, `DiffConfig` and the whitespace retry are absent**, in code rather than in a comment. Two upstream vectors are kept as **expected refusals** because they need word-level composition (4.14–4.15) — a named limit, not a gap |
-| 4.10 | JetBrains port: whitespace policy as a caller-visible option                              | agent              | M    | `[~]` — **functionally complete; one criterion variant is deferred to 4.12 and named** — the flag, the wiring and the acceptance pair are in: `--whitespace=default | trim | ignore` on `MergeFileTool` (an unknown name is refused, not defaulted); the policy reaches the residual questions and region attribution; `ConflictResolution` records it; `WhitespacePolicyTest` (7 tests) pins the pair. **A limit was found by writing the pair and is recorded, not hidden:** `§ 11.5`'s *five well-typed changes* need the ported differ wired into detection as the classifier — **4.12's job** — because this module detects by domain shape and treats line divergence as the residual, while upstream derives shape from the diff. **Still open:** the policy in the merge report JSON, and the typed-change count (4.12) |
-| 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                       | agent              | S    | `[ ]`                                                                                       |
-| 4.12 | JetBrains port: the conflict shape, ported onto detection                                 | agent              | M    | `[ ]`                                                                                       |
-| 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test             | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
-| 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`       | agent              | M    | `[ ]`                                                                                       |
-| 4.15 | Move the answers we already compute onto the suggestion channel                           | agent              | M    | `[ ]`                                                                                       |
-| 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard              | agent              | M    | `[ ]`                                                                                       |
-| 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports         | agent              | M    | `[ ]`                                                                                       |
-| 4.18 | Hierarchical resolution: claim ledger, tier order, partition invariant                    | agent              | S–M  | `[ ]` — behaviour-neutral by design: the ledger lands and nothing closes yet                |
-| 4.19 | Hierarchical resolution: a confident claim clears its span, and the cleared tier is named | agent              | M    | `[ ]` — the acceptance cases are the instruction's two examples (two whole-method additions, the import block) |
-| 4.20 | Hierarchical resolution: partial closure, composed output, and the grown outcome enum     | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied spans beside markers                 |
-| 5.1  | webview Phase 6 — headless parity as a build gate                                         | agent              | M    | `[ ]`                                                                                       |
-| 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                         | agent + maintainer | S    | `[ ]`                                                                                       |
-| 5.3  | ACP go/no-go spike                                                                        | human              | S    | `[ ]`                                                                                       |
-| 5.4  | Eclipse Phase 5 — p2 update site (after Q2)                                               | agent              | M    | `[ ]`                                                                                       |
-| 6.1  | `FieldAnnotation` exposure in view enums                                                  | agent              | M    | `[ ]`                                                                                       |
-| 6.2  | Deep tracking: generator wiring 6.5 + patch applier                                       | agent              | L    | `[ ]`                                                                                       |
-| 6.3  | Decide advisory → hard rule enforcement                                                   | agent + maintainer | M    | `[ ]`                                                                                       |
-| 6.4  | Type divergence analyzer + converter manifest (DEC-006)                                   | agent              | L    | `[ ]`                                                                                       |
-| 6.5  | Projection/DTO marker pattern (DEC-003/DEC-007)                                           | agent              | L    | `[ ]`                                                                                       |
-| 7.1  | jwa-sidecar reads the client's indentation                                                | agent              | S    | `[ ]`                                                                                       |
-| 7.2  | Agent web UI remote-jump front-end                                                        | agent              | S    | `[ ]`                                                                                       |
-| 7.3  | `View1Builder.merge` + proxy merge                                                        | agent              | M    | `[ ]`                                                                                       |
-| 7.4  | Documentation front door + cross-references                                               | agent              | S    | `[ ]`                                                                                       |
-| 7.5  | Agent OpenRewrite tool prototype                                                          | agent              | M    | `[ ]`                                                                                       |
-| 7.6  | Decide the three `todo.java_watch2.md` remainders                                         | agent + maintainer | S    | `[ ]`                                                                                       |
-| 7.7  | Manual-mode CLI for DEC-W008 (`metadata parse`)                                           | agent              | S    | `[ ]`                                                                                       |
-| 7.8  | Two kinds of generator: file-scoped and project-scoped                                    | agent              | M    | `[x]`                                                                                       |
-| 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                            | agent              | S–M  | `[x]`                                                                                       |
-| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)                  | agent              | M    | `[ ]`                                                                                       |
-| 8.1  | JetBrains maintainer questions + IDE observations                                         | human              | —    | `[ ]`                                                                                       |
-| 8.2  | Eclipse observations, then Q2                                                             | human              | —    | `[ ]`                                                                                       |
-| 8.3  | Agent IDE hooks                                                                           | human decides      | —    | `[ ]`                                                                                       |
-| 8.4  | Zed ACP run                                                                               | human              | —    | `[ ]`                                                                                       |
-| 9.1  | Coverage check                                                                            | agent              | S    | `[ ]`                                                                                       |
-| 9.2  | Archive the superseded plans                                                              | agent              | S    | `[x]`                                                                                       |
-| 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                               | agent              | S    | `[x]`                                                                                       |
-| 9.4  | Retire the per-plan open lists                                                            | agent              | S    | `[ ]`                                                                                       |
-| 9.5  | Full sweep (gate + links + examples)                                                      | agent              | S    | `[ ]`                                                                                       |
-| 9.6  | Close the books                                                                           | agent              | S    | `[ ]`                                                                                       |
-| 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering | agent              | M    | `[x]`                                                                                       |
+| Step | What                                                                                            | Who                | Size | State                                                                                       |
+| ---- | ----------------------------------------------------------------------------------------------- | ------------------ | ---- | ------------------------------------------------------------------------------------------- |
+| 0.1  | Commit the EEnumSet overlap JMH delivery                                                        | agent              | S    | `[x]` (landed as `ff0dc49`, with 0.2, by the maintainer)                                    |
+| 0.2  | Commit the stale-document corrections                                                           | agent              | S    | `[x]` (landed as `ff0dc49`)                                                                 |
+| 1.1  | Honour `enabled: false` (DEC-018 / DEC-021 § 6)                                                 | agent              | M    | `[x]`                                                                                       |
+| 1.2  | `MetadataProvider.parse` (DEC-W008)                                                             | agent              | M    | `[x]`                                                                                       |
+| 1.3  | `WatchMetadataProvider` over the watch cache                                                    | agent              | M    | `[x]`                                                                                       |
+| 1.4  | Test the MCP tool surface                                                                       | agent              | S    | `[x]`                                                                                       |
+| 2.1  | metadata-arena unit tests                                                                       | agent              | M    | `[x]`                                                                                       |
+| 2.2  | metadata-arena JMH benchmarks (or close as not needed)                                          | agent              | S–M  | `[x]`                                                                                       |
+| 2.3  | Decision-grade arena run + the backend decision                                                 | agent              | S    | `[x]`                                                                                       |
+| 3.0a | Settle the engine decision's open points (DEC-037, ADR first)                                   | agent + maintainer | S–M  | `[x]` — DEC-037 `Accepted`, DEC-038 created                                                 |
+| 3.0b | Class relations (supertypes/interfaces + reverse) in the class index                            | agent              | M    | `[x]` — engine's `TypeRelation` + row `relations` (always emitted), `subtypesOf`; 6 tests; names stay as written, resolution is 3.0h |
+| 3.0c | The cache: what is cached, and what invalidates it                                              | agent              | M    | `[x]` — closed as answered by 3.0g, which is where DEC-037 put it: one freshness contract instead of a cache per module, plus the mapping below |
+| 3.0d | One implementation of `TypeResolver` over the index                                             | agent              | M    | `[x]` — `IndexTypeResolver` projects a row (kind, fields with their types, relations) and answers `null` for an unknown name; the seam grew `kind` + `relations`, because a generator without them has to read the file |
+| 3.0e | Move hipster-ioc onto the metadata contract (parses nothing)                                    | agent              | M    | `[x]` (shape-defining) — **part one landed**: the index could not answer a factory (`default` vs abstract, parameter names, `@Circular`); the generator rewrite is what remains |
+| 3.0f | The engine's skeleton in `jcodebuddy-core`, and the model it carries (DEC-037)                  | agent              | L    | `[x]` — 3.0f-1 classification, 3.0f-2 move + six inversions, 3.0f-3 answer contract, 3.0f-4 pass unchanged; members and relations are 3.0b's |
+| 3.0g | Freshness: the watch loop, its events and its invalidation                                      | agent              | L    | `[x]` — `engine.fresh`: host reports, engine interprets; dependents from 3.0b relations; SAFE/STALE/UNKNOWN; 8 tests incl. DEC-038's "no watcher" made mechanical |
+| 3.0h | Search: the queries every consumer asks                                                         | agent              | M    | `[x]` — `engine.query.MetadataQuery` over a set of indexes: FQN/kind/modifier/package/path + relations both ways, name resolution, `NotCovered` for members (3.0r); annotations answered, added 2026-10-02; 6 tests |
+| 3.0i | Dissolve `jcodebuddy-codegen-api` into the engine                                               | agent              | M    | `[x]` — five types split into `engine.query` + `engine.codegen`, module deleted, consumers re-pointed; also fixed the migration sweep's blind spots (a rename had silently dropped 21 sources) |
+| 3.0j | Move the remaining consumers onto the engine                                                    | agent              | L    | `[x]` — closed 2026-10-07 by checking each named consumer: `jcodebuddy-meta` parses through the engine's `SourceReader`, the passes are the base cache's caller, the watch tools moved with 3.0n's rename, and the renderers and sidecar were measured to have no private path |
+| 3.0k | Grow the recorded gate to cover the engine's contract                                           | agent              | S    | `[x]`                                                                                       |
+| 3.0l | Extract the marker leaf out of `jcodebuddy-core` (DEC-038)                                      | agent              | S    | `[x]` — `jcodebuddy-generated`: three types, no compile dependency, package unchanged (no import churn); named in `GATE_MODULES` so its 49 tests keep running |
+| 3.0m | `metadata-server` becomes `jcodebuddy-meta` (DEC-038)                                           | agent              | M    | `[x]` — also the package (`hr.hrg.jcodebuddy.meta.*`) and the MCP sibling; no class, method or wire shape moved; the sweep's module list caught the stale name |
+| 3.0n | Absorb `jwa-builder*` and collapse the duplicate splice path (DEC-038)                          | agent              | L    | `[x]` — `class SourceSplicer` → one file (the engine's); no POM depends on `jwa-builder*`; the three docs that named a splicer without its home now say it; 329 tests green over the affected modules |
+| 3.0o | Group the reactor's modules: `watch/`, `hipster-entity/`, `jcodebuddy/`, `hipster-ioc/`, `webview/` (DEC-039) | agent | M   | `[x]` — `merge-java`, `project-automation` and the doc trees wait on "others to be decided" |
+| 3.0p | Audit the five earlier sidecar attempts against today's webview (DEC-039 amendment 2)           | agent              | M    | `[x]`                                                                                       |
+| 3.0q | Merge what 3.0p found worth keeping, delete the rest                                            | agent              | M–L  | `[x]` (content decided by 3.0p)                                                             |
+| 3.0r | The index grows members and annotations (DEC-029 format change)                                 | agent              | M    | `[x]` — `members` always emitted, closed kind vocabulary, member types/modifiers/annotations; `NotCovered` deleted, so the last unanswerable question is answered |
+| 3.0s | `java-watch*` standalone: no Jackson, no OpenRewrite, nothing from this workspace               | agent              | M    | `[x]` — 17 → 0: SPI deleted, sample rewritten, and the agent moved to `jcodebuddy/` and renamed `jcodebuddy-agent` (it was JCodeBuddy's server in the watcher's group) |
+| 3.0t | The model keeps what a consumer could ask (DEC-040)                                             | agent              | M    | `[x]` — **part one landed**: the relation's written text (D2's fix), loose generic matching, and the D4 contract test over the records; `permits`, `throws`, enum constants, initialisers, has-a-body and the imports sidecar remain |
+| 3.1  | The hipster-ioc ADR                                                                             | agent              | S    | `[x]` (prototype: DEC-036 is `Trial`)                                                       |
+| 3.2  | `CodeGenerator<GeneratedContext>` + dependency graph                                            | agent              | L    | `[x]` (prototype: the emitted shape is provisional)                                         |
+| 3.3  | Make the hipster-ioc generator runnable and documented                                          | agent              | M    | `[x]` (prototype)                                                                           |
+| 3.4  | The `@Circular` two-phase form                                                                  | agent              | ?    | `[TBD]` — waits on how a lazily-resolved dependency is spelled                              |
+| 3.5  | `init*` methods in creation order                                                               | agent              | S    | `[TBD]` — waits on the initialisation seam                                                  |
+| 3.6  | Region markers above the thresholds                                                             | agent              | S    | `[TBD]` — waits on the generated layout                                                     |
+| 3.7  | Cross-context `dependencies()` / `ChildContext` creation                                        | agent              | M    | `[TBD]` — waits on context-to-context creation                                              |
+| 3.8  | The dependency-graph report page                                                                | agent              | M    | `[TBD]` — waits on the graph model being settled                                            |
+| 3.9  | Drive the generator from the dev-time pass and watch mode                                       | agent              | M    | `[TBD]` — waits on 7.8 and the shape                                                        |
+| 3.10 | Retire `hipster-ioc-test`'s hand-written context                                                | agent              | S–M  | `[TBD]` — waits on DEC-036 being `Accepted`                                                 |
+| 3.11 | Editor-agnostic graph navigation + embedded host                                                | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
+| 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                             | agent              | S–M  | `[x]`                                                                                       |
+| 4.2  | merge-java Phase 13 step 1 — review render                                                      | agent              | M    | `[x]`                                                                                       |
+| 4.3  | merge-java Phase 13 step 2 — action display + sticky decisions                                  | agent              | M    | `[x]`                                                                                       |
+| 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                                       | agent              | M    | `[x]`                                                                                       |
+| 4.5  | Residual structural conflict should not veto a partly-overlapping block                         | agent              | S–M  | `[x]`                                                                                       |
+| 4.6  | Quality level: evidence scale and claim arbitration                                             | agent              | L    | `[x]`                                                                                       |
+| 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                      | agent              | S    | `[x]` — the pin is verified against a real checkout (`verify-jetbrains-sources.js` exit 0), the `@derived` header is enforced by `JetBrainsAttributionTest` and was shown to fail on a real file, and the three-tier skeleton exists with the pin in one home |
+| 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                         | agent              | L    | `[x]` — 14 vectors from `LineComparisonUtilTest`; the differ is an **LCS table, not Myers**, a deviation decided on measurement and recorded in `JETBRAINS_PORT.md` § 3.2; tier isolation enforced |
+| 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals                   | agent              | L    | `[x]` — `MergeRange`, `MergeType`, `MergeRangeUtil`, `MergeRangeBuilder` and `MergeResolve`; **C1, C2 and C6 all tested** (`modifyDeleteShape` is the named C2 guard, cross-referencing `DESIGN_NEVER_AUTO_RESOLVED.md` § 2, with a control proving an insertion is not a deletion); **`MergeTierScopeTest` asserts the greedy pass, `DiffConfig` and the whitespace retry are absent**, in code rather than in a comment. Two upstream vectors are kept as **expected refusals** because they need word-level composition (4.14–4.15) — a named limit, not a gap |
+| 4.10 | JetBrains port: whitespace policy as a caller-visible option                                    | agent              | M    | `[~]` — **functionally complete; one criterion variant is deferred to 4.12 and named** — the flag, the wiring and the acceptance pair are in: `--whitespace=default | trim | ignore` on `MergeFileTool` (an unknown name is refused, not defaulted); the policy reaches the residual questions and region attribution; `ConflictResolution` records it; `WhitespacePolicyTest` (7 tests) pins the pair. **A limit was found by writing the pair and is recorded, not hidden:** `§ 11.5`'s *five well-typed changes* need the ported differ wired into detection as the classifier — **4.12's job** — because this module detects by domain shape and treats line divergence as the residual, while upstream derives shape from the diff. **Still open:** the policy in the merge report JSON, and the typed-change count (4.12) |
+| 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                             | agent              | S    | `[ ]`                                                                                       |
+| 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[ ]`                                                                                       |
+| 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
+| 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[ ]`                                                                                       |
+| 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[ ]`                                                                                       |
+| 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
+| 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
+| 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[ ]` — behaviour-neutral by design: the pass lands and nothing is removed yet              |
+| 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[ ]` — the acceptance cases are the instruction's two examples (two whole-method additions, the import block), asserted by the lower resolver not being called |
+| 4.20 | Hierarchical resolution: partial resolution, composed output, and the grown outcome enum        | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied regions beside markers               |
+| 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
+| 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |
+| 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |
+| 5.4  | Eclipse Phase 5 — p2 update site (after Q2)                                                     | agent              | M    | `[ ]`                                                                                       |
+| 6.1  | `FieldAnnotation` exposure in view enums                                                        | agent              | M    | `[ ]`                                                                                       |
+| 6.2  | Deep tracking: generator wiring 6.5 + patch applier                                             | agent              | L    | `[ ]`                                                                                       |
+| 6.3  | Decide advisory → hard rule enforcement                                                         | agent + maintainer | M    | `[ ]`                                                                                       |
+| 6.4  | Type divergence analyzer + converter manifest (DEC-006)                                         | agent              | L    | `[ ]`                                                                                       |
+| 6.5  | Projection/DTO marker pattern (DEC-003/DEC-007)                                                 | agent              | L    | `[ ]`                                                                                       |
+| 7.1  | jwa-sidecar reads the client's indentation                                                      | agent              | S    | `[ ]`                                                                                       |
+| 7.2  | Agent web UI remote-jump front-end                                                              | agent              | S    | `[ ]`                                                                                       |
+| 7.3  | `View1Builder.merge` + proxy merge                                                              | agent              | M    | `[ ]`                                                                                       |
+| 7.4  | Documentation front door + cross-references                                                     | agent              | S    | `[ ]`                                                                                       |
+| 7.5  | Agent OpenRewrite tool prototype                                                                | agent              | M    | `[ ]`                                                                                       |
+| 7.6  | Decide the three `todo.java_watch2.md` remainders                                               | agent + maintainer | S    | `[ ]`                                                                                       |
+| 7.7  | Manual-mode CLI for DEC-W008 (`metadata parse`)                                                 | agent              | S    | `[ ]`                                                                                       |
+| 7.8  | Two kinds of generator: file-scoped and project-scoped                                          | agent              | M    | `[x]`                                                                                       |
+| 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                                  | agent              | S–M  | `[x]`                                                                                       |
+| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)                        | agent              | M    | `[ ]`                                                                                       |
+| 8.1  | JetBrains maintainer questions + IDE observations                                               | human              | —    | `[ ]`                                                                                       |
+| 8.2  | Eclipse observations, then Q2                                                                   | human              | —    | `[ ]`                                                                                       |
+| 8.3  | Agent IDE hooks                                                                                 | human decides      | —    | `[ ]`                                                                                       |
+| 8.4  | Zed ACP run                                                                                     | human              | —    | `[ ]`                                                                                       |
+| 9.1  | Coverage check                                                                                  | agent              | S    | `[ ]`                                                                                       |
+| 9.2  | Archive the superseded plans                                                                    | agent              | S    | `[x]`                                                                                       |
+| 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                                     | agent              | S    | `[x]`                                                                                       |
+| 9.4  | Retire the per-plan open lists                                                                  | agent              | S    | `[ ]`                                                                                       |
+| 9.5  | Full sweep (gate + links + examples)                                                            | agent              | S    | `[ ]`                                                                                       |
+| 9.6  | Close the books                                                                                 | agent              | S    | `[ ]`                                                                                       |
+| 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering       | agent              | M    | `[x]`                                                                                       |
