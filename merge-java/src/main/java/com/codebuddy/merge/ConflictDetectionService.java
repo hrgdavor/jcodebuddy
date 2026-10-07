@@ -229,11 +229,28 @@ public class ConflictDetectionService {
      * residual conflict exists.
      */
     private static Set<String> residualLines(String baseCode, String branch1Code, String branch2Code) {
-        Set<String> branch1Lines = normalisedLines(branch1Code);
-        Set<String> branch2Lines = normalisedLines(branch2Code);
+        return residualLines(baseCode, branch1Code, branch2Code, ComparisonPolicy.TRIM_WHITESPACES);
+    }
+
+    /**
+     * The lines of the base that neither branch preserved, compared under a policy.
+     *
+     * <p>The policy reaches every comparison this method makes — the base's own normalisation and the two
+     * branch lookups — because a residual computed under one policy and looked up under another would
+     * report a line as lost when the other policy says it was kept. Under
+     * {@link ComparisonPolicy#IGNORE_WHITESPACES} a base line that both branches merely respaced is not
+     * residual, which is the point of step 4.10: whitespace churn stops looking like a rewrite.
+     */
+    private static Set<String> residualLines(String baseCode, String branch1Code, String branch2Code,
+                                             ComparisonPolicy policy) {
+        ComparisonPolicy effective = policy == null
+            ? ComparisonPolicy.TRIM_WHITESPACES
+            : policy;
+        Set<String> branch1Lines = normalisedLines(branch1Code, effective);
+        Set<String> branch2Lines = normalisedLines(branch2Code, effective);
 
         Set<String> residual = new LinkedHashSet<>();
-        for (String line : normalisedLines(baseCode)) {
+        for (String line : normalisedLines(baseCode, effective)) {
             if (isDeclarative(line) || isMemberHeader(line)) {
                 // Declarations and member headers are the business of the
                 // targeted detectors; a member whose body changed is reported by
