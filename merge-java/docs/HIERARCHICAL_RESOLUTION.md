@@ -138,15 +138,36 @@ region** when all three hold:
 A resolver that *declines* is the third case in the same vocabulary: declining is how a resolver says
 it is not reliable here, and it costs nothing — `MemberAddConflictResolver` declines a shared signature
 rather than guessing, and `TypeChangeConflictResolver` declines rather than answer from a table it
-cannot justify. **A rank is therefore earned per region, from the resolution's own record**, and this
-is the refinement the instruction asks for in the ranking itself:
+cannot justify. This is the refinement the instruction asks for in the ranking itself:
 
-| Refinement                                                                                     | What it replaces                          | Why |
-| ---------------------------------------------------------------------------------------------- | ----------------------------------------- | --- |
-| The rank is the **recorded** level, per resolution                                             | The resolver's declared maximum           | `MEMBER_ADD` reaches `PROJECT_TYPES` with a classpath and `STRUCTURE` without one; the same resolver is two different ranks in two runs |
-| A rank **entitles** a resolver to be asked earlier — it does not entitle it to remove anything | Treating a higher level as authority      | Only the reliability check removes a conflict; a high level with evidence for nothing removes nothing |
-| Reliability is checked **per region and per claim**                                            | A per-resolution or per-resolver property | The same resolver can be reliable over the members it recognised and unreliable over the lines around them |
-| `RESOLVED` and `outranked` are **different states**                                            | One arbitration outcome                   | Outranked means "produced and overruled"; resolved means "never produced" — and only the second satisfies "do not want lower level resolver to even see conflict" |
+| Refinement                                                                                     | What it replaces                              | Why |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------- | --- |
+| What a claim may **settle** comes from the level the resolution **records**, per resolution    | Treating a resolver's reputation as authority | `MEMBER_ADD` records `PROJECT_TYPES` with a classpath and `STRUCTURE` without one; the same resolver is two different claims in two runs |
+| What **order** the pass runs in comes from the level each resolver **declares**                | Nothing — this is new, and see below          | A tier can only be skipped *before* it runs, and a record does not exist until the resolver has been called |
+| A rank **entitles** a resolver to be asked earlier — it does not entitle it to remove anything | Treating a higher level as authority          | Only the reliability check removes a conflict; a high level with evidence for nothing removes nothing |
+| Reliability is checked **per region and per claim**                                            | A per-resolution or per-resolver property     | The same resolver can be reliable over the members it recognised and unreliable over the lines around them |
+| `RESOLVED` and `outranked` are **different states**                                            | One arbitration outcome                       | Outranked means "produced and overruled"; resolved means "never produced" — and only the second satisfies "do not want lower level resolver to even see conflict" |
+
+**The run order cannot come from the record — a finding from implementing step 4.18.** The first version
+of this section said the two were one thing, that a resolver's declared maximum was never a tier. That is
+impossible, and the reason is structural rather than a matter of taste: *a tier can only be skipped
+before it runs if it is known before it runs*, and a recorded level does not exist until the resolver has
+been called. Deriving the order from the record means calling every resolver — which is exactly the
+behaviour the requirement removes.
+
+So the two facts are kept apart, and they stay on the same scale:
+
+- **the declaration decides who is asked, in what order** — `ConflictResolvers.inTierOrder`, descending
+  by `maxAnalysisLevel()`, the order a reader can follow in one place;
+- **the record decides what the answer is worth** — what a claim may settle, what the report says, and
+  what same-tier arbitration compares.
+
+The declaration is safe in that role for two reasons, and both are already enforced rather than
+promised: a resolution may never record a level **above** its resolver's declaration (`AnalysisLevelTest`
+asserts it), so the declaration is an upper bound and never an overclaim; and a declaration settles
+nothing by itself, because removal needs the reliability check. A resolver therefore cannot buy
+authority by declaring a high level — it can only buy being asked early, and its answer is judged on
+what it recorded and what it explained.
 
 ### 3.3 What a claim may close: explained, never merely covered
 

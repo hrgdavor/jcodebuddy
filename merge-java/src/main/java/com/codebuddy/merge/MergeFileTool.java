@@ -844,11 +844,13 @@ public final class MergeFileTool {
      * <p>Both must be known: an unknown region covers nothing, so a conflict that cannot
      * be located keeps the residual's veto rather than dropping it on missing
      * information.
+     *
+     * <p>Delegates to {@link Region#covers(Region)}, which is the one definition of the question. This
+     * method remains because it reads as the rule rather than as a property of a value, and because
+     * {@link #residualSubsumed} and {@link #accountsFor} are written in those terms.
      */
     static boolean coversRegion(Region outer, Region inner) {
-        return outer.isKnown() && inner.isKnown()
-            && outer.startLine() <= inner.startLine()
-            && outer.endLine() >= inner.endLine();
+        return outer != null && outer.covers(inner);
     }
 
     /**

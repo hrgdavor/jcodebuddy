@@ -3667,7 +3667,7 @@ step.
 
 | Step | What                                                                                          | Who   | Size |
 | ---- | --------------------------------------------------------------------------------------------- | ----- | ---- |
-| 4.18 | The working set: tiers from the recorded level, the three conflict states, and the partition invariant | agent | S–M |
+| 4.18 | The working set: the three conflict states, the tier order, and the partition invariant       | agent | S–M  |
 | 4.19 | Reliability and removal: a reliable claim spanning a whole region resolves it, and the lower tier is never asked | agent | M |
 | 4.20 | Partial resolution and composition — applied spans beside markers, and the outcome vocabulary | agent | M    |
 
@@ -3690,27 +3690,67 @@ step.
    run without a resolver set and without a fixture.
 2. **The working set, and nothing else.** A `ResolutionPass` (name it for what it holds — a set of live
    conflicts, not a table of lines) carries, per block, each detected conflict and its state: `OPEN`,
-   `RESOLVED` or `PARTIAL`, with `RESOLVED`/`PARTIAL` naming the claim and the region. Tiers come from
-   `ConflictResolution.getAnalysisLevel()` — the recorded level — and never from a resolver's declared
-   maximum or from a new enum. Conflicts are offered to a tier in descending level order; at this step
-   every conflict stays `OPEN` and every claim is recorded, so **nothing is removed** and the module's
-   behaviour is unchanged.
+   `RESOLVED` or `PARTIAL`, with `RESOLVED`/`PARTIAL` naming the claim and the region. **The run order
+   comes from the level each resolver declares** (`ConflictResolvers.inTierOrder`, descending by
+   `maxAnalysisLevel()`), because a tier can only be skipped *before* it runs and a recorded level does
+   not exist until the resolver has been called; **what a claim may settle comes from the level it
+   records**, which is the refinement DEC-046 clause 13 makes. Conflicts are offered to a tier in that
+   order; at this step every conflict stays `OPEN` and every claim is recorded, so **nothing is
+   removed** and the module's behaviour is unchanged.
 3. **Make the existing order visible in one place.** `ConflictDetectionService.detect`'s ten calls and
    `ConflictResolvers`' registry are the order today; the pass is a method on the decision path a reader
    can follow ([`DEC-019`](../doc-hipster-entity/architecture/decisions/DEC-019.md)) rather than a table
    consulted at runtime.
 4. **Say what an unknown region does**: `Region.unknown()` resolves nothing and is never removed — it
    spans no lines, so it cannot be accounted for by the partition and is reported as unattributed
-   exactly as it is today.
+   exactly as it is today. A conflict that merely cannot be placed is **not** a dropped line; a conflict
+   marked settled *without* a location is the defect, and the report says which it is.
 
 **Gate:** `MODULE` for `merge-java` green, with the invariant test present and **proved to fail** on a
 deliberately dropped line and on a doubly-resolved region; a test that a `RESOLVED` conflict is absent
 from what the next tier is handed and that a `PARTIAL` one is handed only its remainder; a test that the
-tier order is strictly descending by recorded level and that a resolver's declared maximum is never used
-as a tier; and the existing suite unchanged, because nothing is removed yet.
+run order is descending by **declared** level and ignores `priority()`, keeping registration order within
+a tier; a test that the **recorded** level stays a separate fact (the same resolver records two levels in
+two runs, and a record below a declaration is expressible); and the existing suite unchanged, because
+nothing is removed yet.
 
 **Done when:** the invariant and the working set exist, the module behaves exactly as before, and the
 next two steps have something to be judged against.
+
+**Done 2026-10-07 — the states, the invariant and the tier order, with no behaviour change.**
+
+- **The invariant has teeth, and finding out how took the step's one real decision.** "Every line is
+  accounted for exactly once" is trivial to state in a form that cannot fail: call any line with no
+  settled span "open", and nothing can ever be dropped. So the check is made against the region a
+  conflict **started** with — settled spans plus the open remainder must be exactly that region — which
+  makes a line neither half carries an expressible, detectable defect. `ResolutionPass.withPartial`
+  therefore takes **both** halves rather than the remainder alone: a state that could not represent the
+  mistake could not detect it either. Likewise `withResolved` records an unplaceable span instead of
+  refusing it, so `Region.unknown()` marked as settled is reported rather than made unsayable.
+- **`PartitionReport` reports defects rather than a boolean** — dropped lines, lines settled twice,
+  spans outside the block, spans with no location — because "which line" is the only useful thing to know
+  about a dropped line, and a bare `false` sends the reader back to the spans to find out.
+- **A finding from implementing it, and the design text was wrong: the run order cannot come from the
+  record.** A tier can only be skipped *before* it runs, and a recorded level does not exist until the
+  resolver has been called — so ordering the pass by the record means calling every resolver, which is
+  the behaviour § 4C exists to remove. The two facts are therefore kept apart on one scale: the
+  **declaration** orders the pass (`ConflictResolvers.inTierOrder`), and the **record** decides what a
+  claim is worth. The declaration is safe in that role because a resolution may never record above it
+  (already asserted) and because a declaration settles nothing by itself. Corrected in
+  [`HIERARCHICAL_RESOLUTION.md` § 3.2](../merge-java/docs/HIERARCHICAL_RESOLUTION.md) and
+  [`DEC-046` clause 13](../doc-hipster-entity/architecture/decisions/DEC-046.md).
+- **`Region.covers(Region)` became the one definition of coverage**, with `MergeFileTool.coversRegion`
+  delegating to it. The outranking rule and the partition ask the same question about different pairs of
+  regions, and answering it twice is how the two answers would drift.
+
+**Gate so far:** `ResolutionPassTest` — 13 tests: the fresh pass is entirely open; a block may be larger
+than the union of its conflicts' regions without that being a defect; a resolved conflict is absent from
+`live()`; a partial one keeps only the remainder; a dropped line reports lines 13 and 14; a line settled
+twice reports the overlap; a span outside the block reports; an unknown region marked settled reports as
+unplaced while an unknown region merely open does **not**; the run order is by declared level and ignores
+`priority()`; registration order holds within a tier; the shipped resolvers are ordered strongest to
+weakest with none dropped; and the declaration/record split is expressible. `merge-java` — **806 tests,
+0 failures, 0 errors** with the build cache off.
 
 ### 4.19 — Reliability and removal: a resolved region takes the conflict out of the lower tiers' hands
 **Who:** agent · **Size:** M
@@ -4681,7 +4721,7 @@ start)
 | 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[ ]`                                                                                       |
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
-| 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[ ]` — behaviour-neutral by design: the pass lands and nothing is removed yet              |
+| 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
 | 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[ ]` — the acceptance cases are the instruction's two examples (two whole-method additions, the import block), asserted by the lower resolver not being called |
 | 4.20 | Hierarchical resolution: partial resolution, composed output, and the grown outcome enum        | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied regions beside markers               |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |

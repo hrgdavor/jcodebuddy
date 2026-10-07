@@ -65,6 +65,42 @@ public final class ConflictResolvers {
     }
 
     /**
+     * Order resolvers by the {@link AnalysisLevel} each one <b>declares</b> it can reach, strongest
+     * first, keeping the given order within a tier.
+     *
+     * <h2>Why the declaration orders the pass, while the record decides what a claim may do</h2>
+     *
+     * <p>Hierarchical resolution (plan § 4C, DEC-046) runs the strongest tier first so that a lower
+     * tier can be skipped entirely once a region is settled — and a tier can only be skipped
+     * <b>before</b> it runs if it is known before it runs. A level recorded on a resolution does not
+     * exist until the resolver has been called, so the <em>run order</em> is necessarily built from the
+     * strongest level each resolver <b>declares</b> ({@link ConflictResolver#maxAnalysisLevel()}).
+     *
+     * <p>The declaration is not a licence, and the two facts stay apart in the direction that matters:
+     *
+     * <ul>
+     *   <li>a resolution may never record a level <em>above</em> its resolver's declaration, which
+     *       {@code AnalysisLevelTest} already asserts — so the declaration is an upper bound, never an
+     *       overclaim;</li>
+     *   <li>what a claim may <b>settle</b> is decided from the level it actually recorded plus the
+     *       reliability check, never from the declaration — a resolver that reaches
+     *       {@link AnalysisLevel#STRUCTURE} without a classpath is asked at its declared tier and
+     *       settles only what its recorded evidence explains.</li>
+     * </ul>
+     *
+     * <p>So: the declaration decides who is asked, in what order; the record decides what the answer is
+     * worth. A resolver that does not declare a level has declared {@link AnalysisLevel#TEXT_LOCAL}, the
+     * weakest, and is asked last.
+     */
+    public static List<ConflictResolver> inTierOrder(List<ConflictResolver> resolvers) {
+        List<ConflictResolver> sorted = new ArrayList<>(resolvers);
+        sorted.sort(Comparator
+            .comparingInt((ConflictResolver resolver) -> resolver.maxAnalysisLevel().strength())
+            .reversed());
+        return List.copyOf(sorted);
+    }
+
+    /**
      * Index resolvers by the conflict type they claim.
      *
      * @throws IllegalStateException when two resolvers claim the same type, so a

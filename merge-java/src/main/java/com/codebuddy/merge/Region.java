@@ -73,6 +73,25 @@ public record Region(int startLine, int endLine) {
     }
 
     /**
+     * True when this region spans every line of {@code inner}.
+     *
+     * <p>Both must be known: an unknown region covers nothing and is covered by nothing, so a caller
+     * deciding what is safe to apply checks {@link #isKnown()} rather than reading a {@code false} here
+     * as "disjoint". A {@code null} {@code inner} is not covered.
+     *
+     * <p>This is the single definition of coverage. It is the test behind
+     * {@link MergeFileTool}'s "the winner's region covers the claim's" half of the outranking rule, and
+     * behind {@link ResolutionPass}'s insistence that a settled span lies inside the block it belongs
+     * to — the two ask the same question about different pairs of regions, and answering it twice is how
+     * the two answers would drift.
+     */
+    public boolean covers(Region inner) {
+        return isKnown() && inner != null && inner.isKnown()
+            && startLine <= inner.startLine()
+            && endLine >= inner.endLine();
+    }
+
+    /**
      * The single line region containing a line.
      */
     public static Region line(int lineNumber) {
