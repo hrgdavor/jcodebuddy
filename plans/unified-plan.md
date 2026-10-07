@@ -5221,6 +5221,28 @@ changing class is a change to DEC-027's amendment, never a quiet drift.
 
 **Done when:** the answer to "can we build this page with jsx6/nodditor?" is written down with evidence,
 and a missing capability has an owner (the library, or a decision) instead of a silent workaround in a page.
+**Done 2026-10-08 — the assessment is written, and it names the commit it read.**
+
+- **The deliverable is [`doc/jsx6-capability-assessment.md`](../doc/jsx6-capability-assessment.md)**, covering all
+  four page classes the step names (the minimal vanilla page, the interactive review page, the project-structure
+  navigation page, and the diagram/relations layer), each with its requirements taken from the page's own code or
+  the step that schedules it, the capability check, and a verdict.
+- **The commit read is `a584e7a`** (2026-10-02, *"document usage"*) — the checkout step 7.9 set up — and the
+  assessment cites **source**, not READMEs, wherever a capability is claimed: `libs/virtual-scroll/src/virtual-scroll.js`
+  for the fixed-height rule, `apps/nodditor/src/canvasLineLayer.js` and `libs/line-render/index.js` for the relation
+  layer, `libs/editor-monaco/editor.worker.js` for the editor, `libs/popover/index.js` for popovers. Where a finding
+  rests on a README alone the document says so, which is why the *navigation* page's verdict is marked prospective:
+  the page is scheduled, not built.
+- **One substantive limitation, classified minor, and it is an implementation fact rather than a documentation
+  one**: `virtual-scroll` requires **fixed-height rows** (`itemHeight` places row *i* and computes the visible
+  window by dividing by it), while the review page's cards differ in height per conflict. It is **minor** because
+  that page does not need virtualisation at merge-report sizes; if it ever does, the fix belongs upstream in the
+  library rather than in a page-specific workaround. **No critical gap is claimed, so no decision about an additional
+  library is requested** — which is itself the answer the `Done when` line asks for.
+- **Two operational findings from the checkout are carried into the document** because this repository has paid for
+  both: headless Chrome needs unrestricted file access (so *"the page is blank"* can be a sandbox fact, and the
+  checkout's screenshot-plus-calibration technique is the check), and a PowerShell `2>&1 | …` pipeline fakes a
+  non-zero exit while a redirect re-encodes text files.
 
 ---
 
@@ -5611,7 +5633,7 @@ start)
 | 7.7  | Manual-mode CLI for DEC-W008 (`metadata parse`)                                                 | agent              | S    | `[ ]`                                                                                       |
 | 7.8  | Two kinds of generator: file-scoped and project-scoped                                          | agent              | M    | `[x]`                                                                                       |
 | 7.9  | Set up the `jsx6` checkout every UI is built from (rule § 2.9)                                  | agent              | S–M  | `[x]`                                                                                       |
-| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)                        | agent              | M    | `[ ]`                                                                                       |
+| 7.10 | What `jsx6` and `nodditor` can and cannot do for our pages (report gaps)                        | agent              | M    | `[x]` — **the assessment is [`doc/jsx6-capability-assessment.md`](../doc/jsx6-capability-assessment.md)**, written against the checkout at **`a584e7a`** and citing source rather than READMEs where a capability is claimed. All four page classes are covered: the vanilla minimal page (**not applicable by decision**, and DEC-027's amendment keeps it framework-free), the interactive review page (**sufficient** — the base stack covers its state and interactions; Monaco exists and is unused), the navigation page (**sufficient, prospective** — it is scheduled, not built, and the document says so), and the relations layer (**sufficient** — nodditor's node/connector/zoom-pan/undo sources, plus `line-render` for shapes and connectors). **One limitation, classified minor**: `virtual-scroll` requires fixed-height rows, so the review page's variable-height cards cannot use it — unnecessary at merge-report sizes, and the fix would belong upstream. **No critical gap, so no additional-library decision is requested**, which is the answer the step's `Done when` asks for; two operational findings (headless-Chrome sandbox needs, and the PowerShell traps) are carried in the document. |
 | 8.1  | JetBrains maintainer questions + IDE observations                                               | human              | —    | `[ ]`                                                                                       |
 | 8.2  | Eclipse observations, then Q2                                                                   | human              | —    | `[ ]`                                                                                       |
 | 8.3  | Agent IDE hooks                                                                                 | human decides      | —    | `[ ]`                                                                                       |
