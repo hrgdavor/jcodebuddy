@@ -61,6 +61,86 @@ class PortMetricTest {
     }
 
     @Test
+    @DisplayName("the word-level corpus: residuals the line pass cannot reach, and what the tool can now say")
+    void theWordLevelCorpus() {
+        // The measurement the word-level half owes, and the one the round that landed it could not make: the
+        // type-keyed corpus has no word-level residual, so its numbers could not move. These three blocks are
+        // residuals whose answer needs composition INSIDE a line. TWO are composable — the sides deleted DIFFERENT
+        // words, leaving the words neither touched — and the third is NOT, because both sides edited the same
+        // token, which is R6 one granularity down and must stay a refusal.
+        //
+        // All three are typed STRUCTURAL_CHANGE, which carries `Handling.MANUAL`, so nothing decides them and the
+        // offer path runs - which is exactly the path the level was wired into.
+        List<Conflict> wordLevel = List.of(
+            wordLevelResidual("int total = a + b + c;", "int total = b + c;", "int total = a + b;"),
+            wordLevelResidual("return format(\"%s-%s\", first, last);",
+                "return format(\"%s\", first);", "return format(\"%s-%s\", first, middle);"),
+            wordLevelResidual("if (value != null && value.isValid()) {",
+                "if (value.isValid()) {", "if (value != null) {"));
+
+        // The one that must stay refused, and why: both sides edited the same token, so no combination of their
+        // words is a function of the inputs.
+        String mustRefuse = "return format(\"%s-%s\", first, last);";
+
+        MergeConflictResolver resolver = new MergeConflictResolver.Builder()
+            .setBranchName("word-level-census")
+            .setInMemoryOnly(true)
+            .setResolvers(ConflictResolvers.defaultResolvers())
+            .setTypeContext(TestTypeContexts.jdk())
+            .build();
+
+        int offered = 0;
+        int resolvedAtWordLevel = 0;
+        List<String> refused = new ArrayList<>();
+        List<String> wrongLevel = new ArrayList<>();
+        List<String> answers = new ArrayList<>();
+
+        for (Conflict conflict : wordLevel) {
+            ConflictResolution resolution = resolver.resolve(conflict);
+            if (resolution.getKind() == ConflictResolution.ResolutionKind.SUGGESTION
+                && resolution.getSuggestion() != null) {
+                offered++;
+                if (resolution.getSuggestion().analysisLevel() == AnalysisLevel.TEXT_INTRALINE) {
+                    resolvedAtWordLevel++;
+                } else {
+                    wrongLevel.add(conflict.getDescription() + " -> "
+                        + resolution.getSuggestion().analysisLevel());
+                }
+                answers.add(conflict.getDescription() + " -> "
+                    + resolution.getSuggestion().code().strip().replace("\n", "\\n"));
+            } else {
+                refused.add(conflict.getDescription() + " -> " + resolution.getKind());
+            }
+        }
+
+        System.out.println("WORD-LEVEL-METRIC: " + wordLevel.size()
+            + " residuals the line pass cannot reach, " + offered + " offered as suggestions ("
+            + resolvedAtWordLevel + " at TEXT_INTRALINE), " + refused.size() + " refused");
+        answers.forEach(answer -> System.out.println("  " + answer));
+
+        // Exactly one refusal, and it is the overlapping edit rather than a composable one: offering it would be
+        // inventing a relationship between two edits that touch the same token.
+        assertEquals(1, refused.size(),
+            "exactly the overlapping residual must stay refused:\n  - " + String.join("\n  - ", refused)
+                + "\n  offered: " + String.join("; ", answers));
+        assertTrue(refused.get(0).startsWith(mustRefuse),
+            "and the refusal must be the overlap case, not a composable one: " + refused.get(0));
+        assertTrue(wrongLevel.isEmpty(),
+            "an answer reached by reading words must say so, or the level is decoration:\n  - "
+                + String.join("\n  - ", wrongLevel));
+        assertEquals(offered, resolvedAtWordLevel,
+            "every answer offered here needed the word comparison, so every one records TEXT_INTRALINE");
+        assertEquals(wordLevel.size(), offered + refused.size(),
+            "a residual that was neither offered nor refused is one the metric cannot see");
+    }
+
+    /** A residual whose two sides differ only in which words they removed. */
+    private static Conflict wordLevelResidual(String base, String ours, String theirs) {
+        return new Conflict(ConflictType.STRUCTURAL_CHANGE, "A.java", base,
+            base + "\n", ours + "\n", theirs + "\n");
+    }
+
+    @Test
     @DisplayName("the census: what the resolver decided for every sample, and how much was left to a person")
     void theCensus() {
         MergeConflictResolver resolver = new MergeConflictResolver.Builder()
