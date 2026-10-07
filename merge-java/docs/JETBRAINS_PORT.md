@@ -331,6 +331,13 @@ The tiers matter: everything up to and including `merge` is **independently test
 model at all**, which is exactly how upstream's tests are written and what makes their vectors
 portable.
 
+**Built by step 4.7, as the package skeleton:** `jetbrains/package-info.java` (the tier map and the
+isolation rule), `jetbrains/text/package-info.java`, `jetbrains/merge/package-info.java`, and
+`jetbrains/JetBrainsProvenance.java` (the pinned revision, in one place — § 7a). The skeleton is
+documentation-plus-constants on purpose: each package doc states what its tier may and may not know, and
+`JetBrainsAttributionTest` walks it, so the attribution convention is enforced **before** the first
+algorithm exists rather than retrofitted after — which is how a first file comes to be un-attributed.
+
 ### 6.2 `MergeRangeUtil.getMergeType` — the conflict taxonomy
 
 The whole decision table is emptiness and equality, which is why it ports cleanly. With `L`, `B`, `R`
@@ -474,6 +481,61 @@ nobody watching. So the port is bounded by three rules, each of which is a test:
 boundary — resolved symbols on both sides, additive/substitutive distinguished with evidence, a loud
 failure mode — is not met by a word-level text comparison, and a word-level comparison is what this
 port adds.
+
+---
+
+## 7a. The derived-file header, as built
+
+Step 4.7 established the header here rather than describing one, so this is the format every file under
+`com.codebuddy.merge.jetbrains` opens with. It is four `//` lines above the `package` declaration:
+
+```java
+// Licensed under the Apache License 2.0; see <relative path>/THIRD_PARTY_NOTICES.md — Copyright (C) JetBrains s.r.o.
+// Derived from JetBrains/intellij-community at commit 9f5f034237b2f5ccdec336f1749b3e0bd1b1f7c5 (<upstream path>).
+// @derived Translated from Kotlin to Java, reduced to the algorithm, and stripped of the IntelliJ Platform dependency.
+// {enabled:true, blockMarker: "implicit"} <what the file is>
+```
+
+Each line does one job, and each is required in order:
+
+| Line | Obligation it discharges                                                  |
+| ---- | ------------------------------------------------------------------------- |
+| 1    | Apache 2.0 § 4(c) — the licence and the copyright notice are **retained** |
+| 2    | The **citation**: which upstream file, at which revision. A path without a revision is not reproducible, and a revision without a path cannot be checked |
+| 3    | Apache 2.0 § 4(b) — a prominent notice that the file **was changed**. The one-line "changed by" statement follows the marker |
+| 4    | DEC-021's file marker and JSON5 config, per root `AGENTS.md` § 1. Here it is honest: the file *is* generated in the sense of being derived, and a parser reading this marker is told so |
+
+**Two deliberate departures from the obvious reading of DEC-021**, both worth recording because a
+reviewer will otherwise ask:
+
+- **Line 4 is not `@generated file <generator-fqn>`.** DEC-021 describes whole-file emitters — a
+  generator that owns the file and can regenerate it. Nothing here regenerates these files: they are
+  hand-translated once and reviewed. Claiming a generator FQN would be a false statement about how to
+  maintain the file, which is exactly the kind of marker rot DEC-035 exists to prevent. The
+  `@derived` marker is the honest one, and it carries the "changed by" statement the licence requires.
+- **The second line's parenthetical is the upstream path**, and it is what
+  `scripts/verify-jetbrains-sources.js` reads. A file whose upstream path does not exist at the pinned
+  revision fails that check — so the citation is verified against the real repository rather than against
+  itself.
+
+**The one file that is not a translation** carries `@derived none` instead of a path:
+`JetBrainsProvenance.java` is this module's own record of the pin. The marker is explicit rather than
+implied by an absent path, because an absent path is otherwise indistinguishable from an omission, and
+the attribution test asserts both halves — a file with `@derived none` must name **no** upstream path,
+and every other derived file must name exactly one.
+
+### What enforces it
+
+| Check                                 | Where            | What it proves                                                                              |
+| ------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- |
+| `JetBrainsAttributionTest`            | the build        | Every derived file has the four fragments in order; its cited revision is the pin; the notices list it; the pin appears in this document and in `THIRD_PARTY_NOTICES.md` |
+| `scripts/verify-jetbrains-sources.js` | run deliberately | The citation is **true** — each cited path exists at the pinned revision in a real checkout |
+
+The split is the repository's usual one for anything network-shaped: the build asserts the citation is
+**complete and self-consistent**, and a separate script asserts it is **true**, because a build that
+reaches the network is a build that fails when the network does. The attribution test is not vacuous —
+it fails if the package walk finds no files at all, which is the failure mode of a guard that silently
+stops guarding.
 
 ---
 
@@ -711,3 +773,16 @@ Pin verification:
 git -C .tmp/jb-ic rev-parse HEAD
 # 9f5f034237b2f5ccdec336f1749b3e0bd1b1f7c5
 ```
+
+And the check that turns this into a verified citation rather than a comment — it confirms the checkout
+is at the pin and that every upstream path a derived file names exists there (step 4.7's second half):
+
+```bash
+bun merge-java/scripts/verify-jetbrains-sources.js          # defaults to .tmp/jb-ic
+bun merge-java/scripts/verify-jetbrains-sources.js <dir>    # or an explicit checkout
+```
+
+Exit 0 means the citation is true; exit 1 means a path or the revision does not check out; exit 2 means
+nothing could be verified (no checkout, no git, no declared paths) — reported as a failure to verify
+rather than as a pass, because a check that did not run is not a check that succeeded. The pin itself is
+read from `JetBrainsProvenance.PINNED_COMMIT`, so the script has no second copy of it to drift.

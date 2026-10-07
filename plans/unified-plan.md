@@ -225,7 +225,7 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 | the `.kilo` metadata-arena plan                                                   | steps 2.1–2.2                     | **done** — closed into steps 2.1, 2.2                                                              |
 | the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md), and [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) | steps 3.0a–3.0k (the one metadata engine in `jcodebuddy-core`, then moving this generator onto it **as one consumer**); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | **partly done** — done: 3.0a, 3.0b, 3.0c, 3.0d, 3.0e, 3.0f, 3.0g, 3.0h, 3.0i, 3.0j, 3.0k, 3.0n, 3.1, 3.2, 3.3; still open: 3.10, 3.11, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9 |
 | [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md)       | steps 4.1–4.4                     | **partly done** — done: 4.1; still open: 4.2, 4.3, 4.4                                             |
-| the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): the classification of every upstream resolution step, then the **SAFE** half — sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, upstream's test vectors | **new** — nothing of it is implemented; the analysis (8 steps, 7 checks) is done and is the reference |
+| the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): the classification of every upstream resolution step, then the **SAFE** half — sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, upstream's test vectors | **partly done** — done: 4.7 (the verified pin, the `@derived` header and the three-tier skeleton); open: 4.8–4.13 |
 | the general suggestion channel, asked for 2026-10-07 — designed in [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md) | steps 4.14–4.17: a first-class `SUGGESTION` resolution that carries a concrete answer and is never applied on its own; the answers the module **already computes but hides behind a refusal**; the page's Accept/Edit/Reject; rejection memory; and the **SUGGESTION** half of the JetBrains port as its first producer | **new** — and deliberately **not** JetBrains-specific: a future producer should add a producer and touch nothing else |
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **still open** — every step this row scheduled is unticked in § Progress (5.1, 5.2, 5.3)           |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **still open** — every step this row scheduled is unticked in § Progress (5.4, 8.2)                |
@@ -3083,6 +3083,50 @@ the upstream repository at the pinned commit reproduces the file list in
 **Done when:** a reader can reproduce the source material, and every derived file says where it came from
 and what was changed.
 
+**Done 2026-10-07 — the pin, the attribution and the skeleton, before the first algorithm exists.**
+
+- **The upstream checkout is verified, not asserted.** `.tmp/jb-ic` is at the pinned commit
+  `9f5f0342…` (2026-10-07) with exactly the four sparse-checkout paths § 12 names, so the reproduction
+  commands in this plan produce what is on disk rather than something merely similar.
+- **The header format is built here, not described** — four `//` lines above the `package` declaration,
+  and [`JETBRAINS_PORT.md` § 7a](../merge-java/docs/JETBRAINS_PORT.md) is now the reference for it. Two
+  departures from the obvious reading of DEC-021 are recorded there, because both would otherwise be
+  read as mistakes: the file marker is `@derived`, **not** `@generated file <generator-fqn>`, since
+  nothing regenerates these files and claiming a generator FQN would be a false statement about how to
+  maintain them; and the second line's parenthetical is the upstream path, which is what the verifier
+  reads.
+- **`@derived none` is a real case, not a gap.** `JetBrainsProvenance.java` is this module's own record
+  of the pin rather than a translation, so it names no upstream path. The marker is explicit because an
+  absent path is otherwise indistinguishable from an omission — and the test asserts both halves, so a
+  file carrying the marker **and** a path fails too.
+- **The pin has one home.** `JetBrainsProvenance.PINNED_COMMIT` is read by the verifier; the two Markdown
+  documents that cannot read a Java constant carry it literally, and `JetBrainsAttributionTest` fails if
+  either loses it. A citation that lives in several files drifts, and one with *different* hashes is
+  worse than one with none — it looks checked.
+- **Two guarantees, split where the network is.** `JetBrainsAttributionTest` (in the build) proves the
+  citation is **complete and self-consistent**; `scripts/verify-jetbrains-sources.js` (run deliberately)
+  proves it is **true** — every cited path exists at the pinned revision in a real checkout. A build that
+  reaches the network is a build that fails when the network does, so the second is not in the gate. The
+  script exits 2 when it could not verify anything, because a check that did not run is not a check that
+  passed.
+- **The gate's "fails when a header is removed, demonstrated once by hand" was done on a real file**, not
+  only on a fixture: the `@derived` line was removed from `merge/package-info.java` and the suite failed
+  with `does not contain '@derived'` naming that file, then the file was restored byte-identically. The
+  rule's own tests (`theRuleCanFail`, `noticesMustListEveryDerivedFile`) keep that property afterwards.
+- **Two defects in the rule were found by running it**, which is why it is a test rather than a promise:
+  the header contract had baked the commit hash into a required fragment, so a file citing a *different*
+  revision was reported as missing a line — the failure named the wrong defect, and the two checks are
+  now separate; and the failure message called `Path.relativize` on a temporary directory, which throws
+  on Windows because the roots differ, so the rule could not report a problem in its own tests at all.
+
+**Gate:** ✅ `MODULE` for `merge-java` — **754 tests, 0 failures, 0 errors** with the build cache off,
+`JetBrainsAttributionTest` **4 tests** among them; the attribution test shown to fail on a real file and
+then restored; ✅ `bun merge-java/scripts/verify-jetbrains-sources.js` → **exit 0**, `upstream sources
+verified`, 2 declared paths confirmed against the pinned checkout; `LINKS` green.
+
+**Done when:** met — a reader can reproduce the source material, and every derived file says where it came
+from and what was changed.
+
 ### 4.8 — The text tier: line and word comparison, and the whitespace policies
 **Who:** agent · **Size:** L
 
@@ -4363,7 +4407,7 @@ start)
 | 4.4  | merge-java Phase 13 step 3 — LLM proposer behind the gate                                 | agent              | M    | `[x]`                                                                                       |
 | 4.5  | Residual structural conflict should not veto a partly-overlapping block                   | agent              | S–M  | `[x]`                                                                                       |
 | 4.6  | Quality level: evidence scale and claim arbitration                                       | agent              | L    | `[x]`                                                                                       |
-| 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                | agent              | S    | `[ ]`                                                                                       |
+| 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                | agent              | S    | `[x]` — the pin is verified against a real checkout (`verify-jetbrains-sources.js` exit 0), the `@derived` header is enforced by `JetBrainsAttributionTest` and was shown to fail on a real file, and the three-tier skeleton exists with the pin in one home |
 | 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                   | agent              | L    | `[ ]`                                                                                       |
 | 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals             | agent              | L    | `[ ]`                                                                                       |
 | 4.10 | JetBrains port: whitespace policy as a caller-visible option                              | agent              | M    | `[ ]`                                                                                       |
