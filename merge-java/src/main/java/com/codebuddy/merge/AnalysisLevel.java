@@ -28,6 +28,9 @@ package com.codebuddy.merge;
  *       at this level cannot see that the same code appears elsewhere, that a member already exists,
  *       or what any type is. It is the weakest evidence there is, and a resolver that reads nothing
  *       else must say so rather than sound confident.</li>
+ *   <li>{@link #TEXT_INTRALINE} — a change located <em>within</em> a line: a word- or character-level
+ *       three-way comparison, which can say which part of a line moved rather than only that the lines
+ *       differ. Still nothing outside the block, which is what keeps it below {@code TEXT_FILE}.</li>
  *   <li>{@link #TEXT_FILE} — a text region of the file beyond the conflicting lines: the import block,
  *       the constant block, the package declaration, the declared names. Still text — no type is
  *       resolved and no member is modelled — but the answer is placed in the file rather than in the
@@ -64,17 +67,34 @@ public enum AnalysisLevel {
     /** The block's own text: line sets, a single parsed line. Nothing outside the block. */
     TEXT_LOCAL(1),
 
+    /**
+     * A change <b>located within a line</b>: a word- or character-level comparison of the three sides, which can
+     * say <em>where</em> inside a line the branches differ.
+     *
+     * <p>Strictly stronger than {@link #TEXT_LOCAL}, because a line set can only say "this line is not the one
+     * the other branch has", while a word-level comparison can say which part of it moved — and that is what makes
+     * a composed answer possible at all where a line comparison gives up. Strictly weaker than
+     * {@link #TEXT_FILE}, because it still reads <b>nothing outside the block</b>: it knows the shape of the
+     * change and nothing about the file around it, no import block, no constant block, no declaration that
+     * happens to live three lines further up.
+     *
+     * <p>It has no earlier placement in this scale because the scale is ordered by what an answer was
+     * <em>checked against</em>, and "within the line" is a strictly larger question than "the line as a whole"
+     * and a strictly smaller one than "a region of the file" (plan step 4.11).
+     */
+    TEXT_INTRALINE(2),
+
     /** Text of a region of the file beyond the hunk: imports, constants, package, declared names. */
-    TEXT_FILE(2),
+    TEXT_FILE(3),
 
     /** Java structure recognised: declarations, member sets, parameter lists, body statements. */
-    STRUCTURE(3),
+    STRUCTURE(4),
 
     /** The language's and the JDK's semantics, or types resolved against the platform alone. */
-    PLATFORM_TYPES(4),
+    PLATFORM_TYPES(5),
 
     /** Types resolved by javac against a classpath carrying the project's own entries. */
-    PROJECT_TYPES(5);
+    PROJECT_TYPES(6);
 
     /**
      * Position on the scale, stated per constant rather than taken from the declaration order.

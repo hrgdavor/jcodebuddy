@@ -231,12 +231,17 @@ public final class BlockSplice {
      *
      * <p>{@link TextLines} lines <b>carry their terminators</b> — the type exists so that splitting and joining
      * are inverses — so appending a newline of our own would double every line break and quietly reformat the
-     * whole block. A line that somehow lacks one gets it, because a joined block whose last line has no
-     * terminator would swallow the next.
+     * whole block. The same convention has a second half: a text that **ends** with a terminator leaves an empty
+     * final line so that joining reproduces it, and that empty line is the absence of a line rather than a line —
+     * emitting it would add a trailing blank line the inputs never had. A real blank line is {@code "\n"} and not
+     * empty, which is what makes "an empty line contributes nothing" exactly right.
      */
     private static void append(StringBuilder text, List<String> lines, int from, int to) {
         for (int line = from; line < to && line < lines.size(); line++) {
             String value = lines.get(line);
+            if (value.isEmpty()) {
+                continue;
+            }
             text.append(value);
             if (!value.endsWith("\n")) {
                 text.append('\n');

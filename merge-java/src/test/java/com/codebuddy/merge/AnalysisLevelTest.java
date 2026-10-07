@@ -30,6 +30,13 @@ class AnalysisLevelTest {
         assertTrue(AnalysisLevel.PLATFORM_TYPES.isStrongerThan(AnalysisLevel.STRUCTURE));
         assertTrue(AnalysisLevel.STRUCTURE.isStrongerThan(AnalysisLevel.TEXT_FILE));
         assertTrue(AnalysisLevel.TEXT_FILE.isStrongerThan(AnalysisLevel.TEXT_LOCAL));
+        // Plan step 4.11's level, and it is asserted in BOTH directions: a word-level comparison says more than a
+        // line set and less than anything that reads outside the block. One direction alone would leave it free to
+        // drift on the other side, which is where a "better" answer would quietly become a licence.
+        assertTrue(AnalysisLevel.TEXT_INTRALINE.isStrongerThan(AnalysisLevel.TEXT_LOCAL));
+        assertTrue(AnalysisLevel.TEXT_FILE.isStrongerThan(AnalysisLevel.TEXT_INTRALINE));
+        assertFalse(AnalysisLevel.TEXT_LOCAL.isStrongerThan(AnalysisLevel.TEXT_INTRALINE));
+        assertFalse(AnalysisLevel.TEXT_INTRALINE.isStrongerThan(AnalysisLevel.TEXT_FILE));
 
         // Strictness is the whole point: two analyses of the same strength disagreeing is the case a
         // human settles, so a level must not outrank its own equal.
