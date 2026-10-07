@@ -1,6 +1,6 @@
 # JWA Sidecar: the LSP transport of the webview product
 
-This guide explains how to create and configure addon modules (like `jwa-builder`) for the Java Watch Agent (JWA) Sidecar.
+This guide explains how to create and configure addon modules (like `jcodebuddy-builder`) for the Java Watch Agent (JWA) Sidecar.
 
 The sidecar lives under `webview/` because it is the same product as the two IDE plugins: it shows a page's
 request to the editor, over LSP instead of over a webview. It is also the transport that reaches an editor with
@@ -16,14 +16,14 @@ This module contains only the markers (annotations, interfaces) that the user ne
 
 - **Dependencies**: Zero or extremely minimal.
 - **Target**: The user project's `compile` classpath.
-- **Example**: `jwa-builder-api` contains the `@GenerateBuilder` annotation.
+- **Example**: `jcodebuddy-builder-api` contains the `@GenerateBuilder` annotation.
 
 ### 2. The Worker Module (Implementation)
 This module contains the heavy logic, source parsing, and transformation engines.
 
 - **Dependencies**: Heavy libraries (e.g., `rewrite-java` + its version-specific parser, `Jackson`).
 - **Target**: Only the **Sidecar's runtime**.
-- **Example**: `jwa-builder` contains the `BuilderTransformationEngine`.
+- **Example**: `jcodebuddy-builder` contains the `BuilderTransformationEngine`.
 
 ---
 
@@ -43,7 +43,7 @@ its HTTP surface:
 | `SidecarAppJumpServiceTest` | the jump endpoint's authorization, over a real socket                                   |
 | `SidecarCodeActionTest`     | when "Sync Builder" is offered, and that picking it reaches the editor                  |
 
-The behaviour it drives still lives in the worker modules (`jwa-builder`'s `RecordBuilderProcessorTest`,
+The behaviour it drives still lives in the worker modules (`jcodebuddy-builder`'s `RecordBuilderProcessorTest`,
 `RecordBuilderFormattingTest` and `ClassMemberProcessorTest`); what the sidecar's own test covers is the part
 that had no coverage and was wrong — that the HTTP surface refuses an uninvited caller.
 
@@ -100,11 +100,11 @@ Maven's dependency management handles sub-modules as distinct units. By separati
 
 ## Reference Implementation
 
-The `jwa-builder` project in this repository serves as the reference implementation for this pattern.
+The `jcodebuddy-builder` project in this repository serves as the reference implementation for this pattern.
 Its modules stayed at the repository root when the sidecar moved under `webview/`, so these links go up
 two levels:
-- [jwa-builder-api](../../jcodebuddy/jcodebuddy-builder-api/pom.xml)
-- [jwa-builder](../../jcodebuddy/jcodebuddy-builder/pom.xml)
+- [jcodebuddy-builder-api](../../jcodebuddy/jcodebuddy-builder-api/pom.xml)
+- [jcodebuddy-builder](../../jcodebuddy/jcodebuddy-builder/pom.xml)
 
 ## Development Workflow
 

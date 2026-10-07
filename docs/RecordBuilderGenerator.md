@@ -1,6 +1,6 @@
 # Record builder generation
 
-How `jwa-builder` completes a Java record with a fluent builder — meaning
+How `jcodebuddy-builder` completes a Java record with a fluent builder — meaning
 `@GenerateBuilder` on a record, a pass over the file, and a
 `User.builder().name("Alice").build()` at the call site afterwards.
 
@@ -101,7 +101,7 @@ record's own indent), which is what `RecordBuilderFormattingTest` pins.
 | ----------------------------- | ---------------------------------------------------------------- |
 | `RecordBuilderProcessor`      | Which record in the text is the target, and what it declares: `target(source, line)` (nearest record within five lines of the caret, else the first), `recordOnLine(source, line)` (exact line, for a code action), `annotatedRecords(source)` (`@GenerateBuilder` records with their name lines), `Component` (a component's declared type and name), `complete(recordText, recordName, components)`. |
 | `LineLookup`                  | The one fact the tree cannot supply: **positions**, from javac's line map. `spanOf(source, simpleName)` gives the record's `Span` (start/end offset, name line, start/end line). |
-| `SourceSplicer`               | The text: `withBuilder(source, recordName, components, indent)`. |
+| `RecordBuilderEmitter`        | The text: `withBuilder(source, recordName, components, indent)`. The class carries the emitter's own rendering **and** splices it through the engine's `SourceSplicer` primitives; step 3.0n collapsed the second `SourceSplicer` it used to be. |
 | `BuilderTransformationEngine` | The editor-facing entry point: `generate(uri, source, line)` returns a `TransformationResult` carrying the `CodeEdit` a sidecar or agent applies. |
 | `ClassMemberProcessor`        | The sibling operation on plain classes — `withAccessors`, `withBuilder`, `withConstructors` over a `Target` built by `target(source, line)`. |
 
@@ -140,7 +140,7 @@ public record User(String name, int age) { }
 public record User(String name, int age) { }
 ```
 
-The marker lives in the lightweight `jwa-builder-api` module, so a project that
+The marker lives in the lightweight `jcodebuddy-builder-api` module, so a project that
 only wants the annotations never pulls in the transformation engine — see
 [`jwa-sidecar/README.md`](../webview/jwa-sidecar/README.md) for the two-module pattern.
 
@@ -178,7 +178,7 @@ grouping, indentation relative to the record, byte-preservation) and
 
 - [`doc_knowledge/code.graph.md`](../doc_knowledge/code.graph.md) — reading,
   querying and splicing source, and why positions come from javac.
-- [`README.java_watch_2.md`](../README.java_watch_2.md) — where `jwa-builder`
+- [`README.java_watch_2.md`](../README.java_watch_2.md) — where `jcodebuddy-builder`
   sits in the Java Watch ecosystem.
 - [`jwa-sidecar/README.md`](../webview/jwa-sidecar/README.md) — the `-api` /
   implementation split, and how the sidecar loads a worker module.
