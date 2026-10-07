@@ -77,7 +77,8 @@ class JetBrainsParityGateTest {
      * Transcribe an upstream vector's text.
      *
      * <p>{@code JETBRAINS_PORT.md} § 11 says "`_` is a line separator", and that is the whole rule: {@code x_y} is
-     * two lines and {@code x} is one, with <b>no trailing newline</b> unless the vector writes one ({@code x_}).
+     * two lines and {@code x} is one, with <b>no trailing newline</b> unless the vector writes one ({@code x_}), and
+     * an empty field is empty text.
      *
      * <p>This helper used to append {@code "\n"} to every vector, which invented a line on all three sides and — on
      * the vectors where the three sides end differently — put an insertion one base line later than the benchmark
@@ -89,54 +90,102 @@ class JetBrainsParityGateTest {
         return text.replace("_", "\n");
     }
 
-    /** The ranges the benchmark reports for a change-type vector (§ 11.1's `expected` column). */
-    private static final List<ChangeVector> CHANGE_VECTORS = List.of(
-        new ChangeVector("testChangeTypes: empty sides", "§ 11.1", "", "", "", List.of()),
-        new ChangeVector("testChangeTypes: modified right", "§ 11.1", "x", "x", "y",
-            List.of(MergeType.modified(false, true))),
-        new ChangeVector("testChangeTypes: modified both", "§ 11.1", "x", "y", "x",
-            List.of(MergeType.modified(true, true))),
-        new ChangeVector("testChangeTypes: inserted left and right", "§ 11.1", "x_Y", "Y", "Y_z",
-            List.of(MergeType.inserted(true, false), MergeType.inserted(false, true))),
-        new ChangeVector("testChangeTypes: deleted left and right", "§ 11.1", "Y_z", "x_Y_z", "x_Y",
-            List.of(MergeType.deleted(true, false), MergeType.deleted(false, true))),
-        new ChangeVector("testChangeTypes: deleted both", "§ 11.1", "X_Z", "X_y_Z", "X_Z",
-            List.of(MergeType.deleted(true, true))),
-        new ChangeVector("testChangeTypes: inserted both", "§ 11.1", "X_y_Z", "X_Z", "X_y_Z",
-            List.of(MergeType.inserted(true, true))),
-        new ChangeVector("testChangeTypes: conflict both", "§ 11.1", "x", "y", "z",
-            List.of(MergeType.conflict(false))),
-        new ChangeVector("testChangeTypes: conflict at the front", "§ 11.1", "z_Y", "x_Y", "Y",
-            List.of(MergeType.conflict(false))),
-        new ChangeVector("testChangeTypes: conflict with an insertion", "§ 11.1", "z_Y", "x_Y", "k_x_Y",
-            List.of(MergeType.conflict(false))),
-        new ChangeVector("testChangeTypes: conflict at the back", "§ 11.1", "x_Y", "Y", "z_Y",
-            List.of(MergeType.conflict(false))),
-        new ChangeVector("testChangeTypes: conflict with a trailing insertion", "§ 11.1", "x_Y", "Y", "z_x_Y",
-            List.of(MergeType.conflict(false))),
-        new ChangeVector("testChangeTypes: conflict around a base insertion", "§ 11.1", "x_Y", "x_z_Y", "z_Y",
-            List.of(MergeType.conflict(false))),
-        new ChangeVector("testLastLine: both delete the last line", "§ 11.1", "x", "x_", "x",
-            List.of(MergeType.deleted(true, true))),
-        new ChangeVector("testLastLine: right deletes the last line", "§ 11.1", "x_", "x_", "x",
-            List.of(MergeType.deleted(false, true))),
-        new ChangeVector("testLastLine: right modifies the last line", "§ 11.1", "x_", "x_", "x_y",
-            List.of(MergeType.modified(false, true))),
-        new ChangeVector("testLastLine: conflict over the last line", "§ 11.1", "x", "x_", "x_y",
-            List.of(MergeType.conflict(false))),
-        new ChangeVector("testLastLine: conflict over a removed last line", "§ 11.1", "x_", "x", "x_y",
-            List.of(MergeType.conflict(false))));
+    // ------------------------------------------------------------------ the vectors, read from disk
 
     /**
-     * The word-level resolve vectors (§ 11.2) — the benchmark's most valuable set, and the one where our own pass
-     * is expected to differ on two rows.
+     * The benchmark's vectors, read from {@code src/test/resources/parity/}.
+     *
+     * <p>They live on disk rather than in this file because a vector set is data: it is transcribed from upstream,
+     * it is meant to be extended as more of upstream's cases are taken, and a reviewer should be able to see the
+     * table without reading Java. The gate is the only consumer, so the disk copy is the single source of truth
+     * rather than a second copy of a table that also exists in code — which is the failure mode a fixture set
+     * invites.
+     *
+     * <p><b>Why these are not {@code THREE_WAY_FIXTURES} cases,</b> since the plan said they would be: that layout
+     * holds three <b>complete, compilable</b> Java files, because a fragment "cannot express a change" and type
+     * attribution needs a plausible source path. These vectors are text-fragment ranges with expected <em>kinds</em>
+     * — they exercise the ported text machinery rather than a {@link ConflictType}, and a whole-file fixture cannot
+     * state {@code y z | x y z | x y}. Forcing them in would break the rule that makes those fixtures trustworthy.
      */
-    private static final List<ResolveVector> RESOLVE_VECTORS = List.of(
-        new ResolveVector("testResolve: both sides deleted around y", "§ 11.2", "y z", "x y z", "x y", "y"),
-        new ResolveVector("testResolve: two independent conflicts", "§ 11.2",
-            "y z_Y_x y", "x y z_Y_x y z", "x y_Y_y z", "y_Y_y"),
-        new ResolveVector("testResolve: left applied by hand, then right resolved", "§ 11.2",
-            "y z_Y_x y", "x y z_Y_x y z", "x y_Y_y z", "y z_Y_y"));
+    private static List<String> vectorLines(String resource) {
+        try (java.io.InputStream stream = JetBrainsParityGateTest.class.getResourceAsStream(resource)) {
+            if (stream == null) {
+                throw new IllegalStateException("missing vector file on the classpath: " + resource);
+            }
+            return new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).lines()
+                .filter(line -> !line.isBlank() && !line.trim().startsWith("#"))
+                .map(String::strip)
+                .toList();
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("cannot read " + resource, failure);
+        }
+    }
+
+    /** Split a vector line into its fields, keeping empty ones (an empty field is empty text). */
+    private static String[] fields(String line) {
+        String[] parts = line.split("\\|", -1);
+        for (int index = 0; index < parts.length; index++) {
+            parts[index] = parts[index].trim();
+        }
+        return parts;
+    }
+
+    /** The expected shapes: `NONE`, or `KIND:leftChanged:rightChanged` joined by `;`. */
+    private static List<MergeType> parseTypes(String encoded) {
+        if (encoded.equals("NONE")) {
+            return List.of();
+        }
+        List<MergeType> types = new ArrayList<>();
+        for (String one : encoded.split(";")) {
+            String[] parts = one.split(":");
+            boolean left = parts[1].equals("1");
+            boolean right = parts[2].equals("1");
+            types.add(switch (parts[0]) {
+                case "INSERTED" -> MergeType.inserted(left, right);
+                case "DELETED" -> MergeType.deleted(left, right);
+                case "MODIFIED" -> MergeType.modified(left, right);
+                case "CONFLICT" -> {
+                    // The benchmark's conflict rows all say "both", and a conflict with one side changed would be a
+                    // different statement; refusing to guess keeps this parser honest.
+                    if (!left || !right) {
+                        throw new IllegalArgumentException("a CONFLICT vector must be both sides: " + one);
+                    }
+                    yield MergeType.conflict(false);
+                }
+                default -> throw new IllegalArgumentException("unknown kind in " + one);
+            });
+        }
+        return List.copyOf(types);
+    }
+
+    private static final List<ChangeVector> CHANGE_VECTORS = loadChangeVectors();
+
+    private static final List<ResolveVector> RESOLVE_VECTORS = loadResolveVectors();
+
+    private static List<ChangeVector> loadChangeVectors() {
+        List<ChangeVector> vectors = new ArrayList<>();
+        for (String line : vectorLines("/parity/jetbrains-change-types.txt")) {
+            String[] parts = fields(line);
+            if (parts.length != 6) {
+                throw new IllegalStateException("a change-type vector needs 6 fields: " + line);
+            }
+            vectors.add(new ChangeVector(parts[0], parts[1], parts[2], parts[3], parts[4],
+                parseTypes(parts[5])));
+        }
+        return List.copyOf(vectors);
+    }
+
+    private static List<ResolveVector> loadResolveVectors() {
+        List<ResolveVector> vectors = new ArrayList<>();
+        for (String line : vectorLines("/parity/jetbrains-resolve.txt")) {
+            String[] parts = fields(line);
+            if (parts.length != 6) {
+                throw new IllegalStateException("a resolve vector needs 6 fields: " + line);
+            }
+            vectors.add(new ResolveVector(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]));
+        }
+        return List.copyOf(vectors);
+    }
 
     /**
      * Vectors where we deliberately differ, each with its argument in one sentence.

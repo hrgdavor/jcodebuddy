@@ -47,6 +47,19 @@
                 <include>../../webview/conformance</include>
                 <!-- The cache's own configuration: changing what is hashed must invalidate, not silently reuse. -->
                 <include>../../.mvn/maven-build-cache-config.xml</include>
+                <!-- A module's OWN DOCUMENTATION, because its tests read it, and a doc Maven cannot see is a cache
+                     entry that answers for a build which never saw it. `merge-java`'s `JetBrainsAttributionTest`
+                     reads `docs/JETBRAINS_PORT.md` off disk to assert the pinned commit is recorded, and
+                     `ResolverDocsTest` reads `docs/resolvers/**` to keep them in sync with their fixtures.
+                     Measured 2026-10-07: editing that document left the module's checksum at 4e68997fff321f21 and
+                     the build was restored from cache, which is exactly the gap this entry closes. The
+                     extension's 1.2.0 schema rejected an `<input><project>` block (it fails the whole build with
+                     "xml config is not valid"), so these are listed here, where the file already keeps the paths a
+                     module's tests read from outside itself. -->
+                <include>docs</include>
+                <include>../../merge-java/docs</include>
+                <include>AGENTS.md</include>
+                <include>../../merge-java/AGENTS.md</include>
             </includes>
         </global>
     </input>

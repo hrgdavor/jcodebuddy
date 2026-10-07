@@ -1,0 +1,36 @@
+# JetBrains change-type vectors, transcribed from MergeTest.kt via JETBRAINS_PORT.md 11.1
+#
+# WHY THIS FILE IS NOT A THREE_WAY_FIXTURES CASE, and the reason is that document's own rule 1:
+# a fixture there is three COMPLETE, compilable Java files, because "a fragment cannot express a
+# change" and type attribution needs a plausible source path. These vectors are text-fragment
+# ranges with expected KINDS - they are about the ported text machinery (MergeRangeBuilder +
+# MergeRangeUtil.getMergeType), not about a Java conflict type, and a whole-file fixture cannot
+# state `y z | x y z | x y`. Forcing them into that layout would break the rule that makes those
+# fixtures trustworthy, so they live here and JetBrainsParityGateTest reads them.
+#
+# Format, one vector per line, `|`-separated:
+#   name | citation | left | base | right | expected
+# `_` is a line separator, exactly as upstream writes it (so `x` is one line and `x_` is two).
+# `expected` is `NONE` for no change, or a `;`-separated list of KIND:leftChanged:rightChanged,
+# where the kinds are INSERTED, DELETED, MODIFIED and CONFLICT (1 = that side changed, 0 = it did not).
+#
+# The gate grades OUR classifier against this table and fails on any disagreement, so a line here
+# is the benchmark's statement rather than ours - edit it only against upstream's source.
+testChangeTypes: empty sides                  | 11.1 |  |  |  | NONE
+testChangeTypes: modified right               | 11.1 | x | x | y | MODIFIED:0:1
+testChangeTypes: modified both                | 11.1 | x | y | x | MODIFIED:1:1
+testChangeTypes: inserted left and right      | 11.1 | x_Y | Y | Y_z | INSERTED:1:0;INSERTED:0:1
+testChangeTypes: deleted left and right       | 11.1 | Y_z | x_Y_z | x_Y | DELETED:1:0;DELETED:0:1
+testChangeTypes: deleted both                 | 11.1 | X_Z | X_y_Z | X_Z | DELETED:1:1
+testChangeTypes: inserted both                | 11.1 | X_y_Z | X_Z | X_y_Z | INSERTED:1:1
+testChangeTypes: conflict both                | 11.1 | x | y | z | CONFLICT:1:1
+testChangeTypes: conflict at the front        | 11.1 | z_Y | x_Y | Y | CONFLICT:1:1
+testChangeTypes: conflict with an insertion   | 11.1 | z_Y | x_Y | k_x_Y | CONFLICT:1:1
+testChangeTypes: conflict at the back         | 11.1 | x_Y | Y | z_Y | CONFLICT:1:1
+testChangeTypes: conflict with a trailing insertion | 11.1 | x_Y | Y | z_x_Y | CONFLICT:1:1
+testChangeTypes: conflict around a base insertion   | 11.1 | x_Y | x_z_Y | z_Y | CONFLICT:1:1
+testLastLine: both delete the last line       | 11.1 | x | x_ | x | DELETED:1:1
+testLastLine: right deletes the last line     | 11.1 | x_ | x_ | x | DELETED:0:1
+testLastLine: right modifies the last line    | 11.1 | x_ | x_ | x_y | MODIFIED:0:1
+testLastLine: conflict over the last line     | 11.1 | x | x_ | x_y | CONFLICT:1:1
+testLastLine: conflict over a removed last line | 11.1 | x_ | x | x_y | CONFLICT:1:1

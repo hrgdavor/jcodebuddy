@@ -674,6 +674,18 @@ document; text is lowercase words for readability). These become
 `src/test/resources/fixtures/jetbrains-*` following `THREE_WAY_FIXTURES.md`, so the existing
 `ThreeWayFixture` harness runs them unchanged.
 
+> **Corrected 2026-10-07.** They cannot, and the reason is that document's own first rule. A
+> `THREE_WAY_FIXTURES` case is three **complete, compilable** Java files, because "a fragment cannot
+> express a change" and type attribution needs a plausible source path. The vectors below are
+> text-fragment ranges with expected **kinds**: they exercise the ported text machinery
+> (`MergeRangeBuilder` + `MergeRangeUtil.getMergeType` + `MergeResolve`), not a `ConflictType`, and a
+> whole-file fixture cannot state `y z | x y z | x y`. Forcing them into that layout would have broken
+> the rule that makes those fixtures trustworthy — so they live in
+> `merge-java/src/test/resources/parity/jetbrains-change-types.txt` and `jetbrains-resolve.txt`, as a
+> data set with its own documented format, read by `JetBrainsParityGateTest` as the single source of
+> truth. § 11.3 and § 11.4 are the rows that *are* whole-file cases, and they are the ones a
+> `ThreeWayFixture` could carry.
+
 ### 11.1 Change-type vectors (`testChangeTypes`, `testLastLine`)
 
 Format: `left | base | right` → expected shape(s).

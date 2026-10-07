@@ -1,0 +1,18 @@
+# JetBrains word-level resolve vectors, transcribed from MergeTest.kt via JETBRAINS_PORT.md 11.2
+#
+# Same reasoning as jetbrains-change-types.txt: these are text-fragment vectors for the ported
+# resolve pass, not whole-file THREE_WAY_FIXTURES cases.
+#
+# Format, one vector per line, `|`-separated:
+#   name | citation | left | base | right | expected content
+# `_` is a line separator as upstream writes it. `expected content` is `-` when the benchmark
+# refuses the vector outright.
+#
+# These are the rows where we are BELOW the benchmark rather than equal to it: all three need
+# composition INSIDE a conflict region, which our line-level pass refuses by design, so they are
+# recorded as named exceptions in the gate with that argument. The gate prints the count on every
+# run - "0/3 resolved to the benchmark's text, 3 declined under a recorded exception" - so the gap
+# is a visible number rather than a sentence in a document.
+testResolve: both sides deleted around y            | 11.2 | y z | x y z | x y | y
+testResolve: two independent conflicts              | 11.2 | y z_Y_x y | x y z_Y_x y z | x y_Y_y z | y_Y_y
+testResolve: left applied by hand, then right resolved | 11.2 | y z_Y_x y | x y z_Y_x y z | x y_Y_y z | y z_Y_y

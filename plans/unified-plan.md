@@ -3033,7 +3033,7 @@ verifies a suggestion *as if* it were automatic.
 | 4.10 | Whitespace policy as a caller-visible option, threaded through detection and resolution     | agent | M    |
 | 4.11 | `AnalysisLevel` gains the intra-line evidence level                                         | agent | S    |
 | 4.12 | The conflict **shape** ported onto detection, beside the existing domain taxonomy           | agent | M    |
-| 4.13 | Upstream vectors, the parity gate, and the randomized property test                         | agent | M    | `[~]` — **gate**: § 11.1 change types `18/18` (0 recorded defects), § 11.2 resolve vectors `0/3 resolved, 3 declined under a recorded exception, 0 regressions`, plus an outcome-level family (*every benchmark conflict, we refuse*) and § 11.4 **with its control**. **Two defects found and fixed**: a range's side extent recorded only the side's *changed* lines (we applied `Y` where the benchmark needs a person, dropping a line each branch kept), and — found by the new seeded property test in 2000 cases where no vector could — `MergeRangeBuilder`'s absorb loops leaving ranges overlapping when the second loop extended the base extent. **Also open:** the on-disk `jetbrains-*` fixtures (§ 11.1–11.5), § 11.3's remaining-change counts, the invalidating-edit row, and the § 10.3/§ 10.2 numbers |
+| 4.13 | Upstream vectors, the parity gate, and the randomized property test                         | agent | M    | `[~]` — **gate**: § 11.1 `18/18` (0 recorded defects), § 11.2 `0/3 resolved, 3 declined, 0 regressions`, an outcome-level family, and § 11.4 **with its control**. Vectors now live **on disk** (`src/test/resources/parity/*.txt`) and the gate reads them; **they cannot be `THREE_WAY_FIXTURES` cases** (that layout is complete compilable files — a fragment cannot express a change), so § 11 of the port doc carries the correction. **Three defects found and fixed**: a range's extent recorded only changed lines; `MergeRangeBuilder`'s sequential absorb loops overlapping ranges (found by the seeded property in 2000 cases); and a **cache-input gap** — a doc the tests read was outside the checksum, now included. **Also open:** the § 11.3/§ 11.4 whole-file fixtures, § 11.3's remaining-change counts, the invalidating-edit row, and the § 10.3/§ 10.2 numbers |
 | 4.14 | The suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`     | agent | M    |
 | 4.15 | Move the resolvers that already compute an answer onto the channel                          | agent | M    |
 | 4.16 | The page and the decisions contract: Accept / Edit / Reject, and the bulk-accept guard      | agent | M    |
@@ -3565,6 +3565,31 @@ immediately.**
 - Metrics after the fix: `PARITY-METRIC: change types 18/18 … 0 REGRESSION(S)`;
   `PARITY-METRIC: resolve vectors 0/3 resolved to the benchmark's text, 3 declined under a recorded exception, 0
   REGRESSION(S)`; `PROPERTY-METRIC: 2000 cases …, 0 invariant violation(s)`; **890 tests**, 0 failures.
+**Added 2026-10-07 (round 31) — the vectors are on disk, and the layout the plan assumed is the wrong one.**
+
+- **The vector sets now live on disk as data**, in `merge-java/src/test/resources/parity/`: `jetbrains-change-types.txt`
+  (§ 11.1, 18 vectors) and `jetbrains-resolve.txt` (§ 11.2, 3), each with its own documented format and its
+  transcription provenance in the header. `JetBrainsParityGateTest` **reads them** rather than holding a second copy
+  in code, so the table a reviewer reads is the table the gate grades — a fixture set that exists twice is the
+  failure mode it invites.
+- **The plan said they would become `THREE_WAY_FIXTURES.md` cases, and they cannot.** That document's rule 1 is that
+  a fixture is three **complete, compilable** Java files — "a fragment cannot express a change", and type
+  attribution needs a plausible source path. These vectors are text-fragment ranges with expected **kinds**: they
+  exercise the ported text machinery (`MergeRangeBuilder`, `MergeRangeUtil.getMergeType`, `MergeResolve`), not a
+  `ConflictType`, and a whole-file fixture cannot state `y z | x y z | x y`. Forcing them in would have broken the
+  rule that makes those fixtures trustworthy, so `JETBRAINS_PORT.md` § 11 now carries the correction and points at
+  the two files. **§ 11.3 and § 11.4 are the rows that genuinely are whole-file cases**, and they are what a
+  `ThreeWayFixture` can carry — that is where the remaining fixture work belongs.
+- **A cache-input gap was found while doing it, and closed.** Editing `merge-java/docs/JETBRAINS_PORT.md` left the
+  module's checksum at `4e68997fff321f21` and the build was **restored from cache** — yet
+  `JetBrainsAttributionTest` reads that document off disk to assert the pinned commit is recorded. That is exactly
+  the hazard `AGENTS.md` § 2 names ("a document a test asserts against"), and the documented fix is to list the
+  path: `.mvn/maven-build-cache-config.xml` now includes `docs`, `AGENTS.md`, and their `../../merge-java/…`
+  counterparts, in the same dual form the existing `scripts` entries use. **Evidence:** the checksum went
+  `4e68997fff321f21` → `ce9523ebab02de1b` → `520bca04c0e40863` across the doc edits where it previously did not
+  move at all, and the run no longer restores from cache. The extension's 1.2.0 schema **rejects** an
+  `<input><project>` block — it fails the whole build with "xml config is not valid or not available" — which is
+  why the entries are in the global list, noted in the file.
 **Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
   `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its
   remaining-change counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the
@@ -3639,6 +3664,31 @@ immediately.**
 - Metrics after the fix: `PARITY-METRIC: change types 18/18 … 0 REGRESSION(S)`;
   `PARITY-METRIC: resolve vectors 0/3 resolved to the benchmark's text, 3 declined under a recorded exception, 0
   REGRESSION(S)`; `PROPERTY-METRIC: 2000 cases …, 0 invariant violation(s)`; **890 tests**, 0 failures.
+**Added 2026-10-07 (round 31) — the vectors are on disk, and the layout the plan assumed is the wrong one.**
+
+- **The vector sets now live on disk as data**, in `merge-java/src/test/resources/parity/`: `jetbrains-change-types.txt`
+  (§ 11.1, 18 vectors) and `jetbrains-resolve.txt` (§ 11.2, 3), each with its own documented format and its
+  transcription provenance in the header. `JetBrainsParityGateTest` **reads them** rather than holding a second copy
+  in code, so the table a reviewer reads is the table the gate grades — a fixture set that exists twice is the
+  failure mode it invites.
+- **The plan said they would become `THREE_WAY_FIXTURES.md` cases, and they cannot.** That document's rule 1 is that
+  a fixture is three **complete, compilable** Java files — "a fragment cannot express a change", and type
+  attribution needs a plausible source path. These vectors are text-fragment ranges with expected **kinds**: they
+  exercise the ported text machinery (`MergeRangeBuilder`, `MergeRangeUtil.getMergeType`, `MergeResolve`), not a
+  `ConflictType`, and a whole-file fixture cannot state `y z | x y z | x y`. Forcing them in would have broken the
+  rule that makes those fixtures trustworthy, so `JETBRAINS_PORT.md` § 11 now carries the correction and points at
+  the two files. **§ 11.3 and § 11.4 are the rows that genuinely are whole-file cases**, and they are what a
+  `ThreeWayFixture` can carry — that is where the remaining fixture work belongs.
+- **A cache-input gap was found while doing it, and closed.** Editing `merge-java/docs/JETBRAINS_PORT.md` left the
+  module's checksum at `4e68997fff321f21` and the build was **restored from cache** — yet
+  `JetBrainsAttributionTest` reads that document off disk to assert the pinned commit is recorded. That is exactly
+  the hazard `AGENTS.md` § 2 names ("a document a test asserts against"), and the documented fix is to list the
+  path: `.mvn/maven-build-cache-config.xml` now includes `docs`, `AGENTS.md`, and their `../../merge-java/…`
+  counterparts, in the same dual form the existing `scripts` entries use. **Evidence:** the checksum went
+  `4e68997fff321f21` → `ce9523ebab02de1b` → `520bca04c0e40863` across the doc edits where it previously did not
+  move at all, and the run no longer restores from cache. The extension's 1.2.0 schema **rejects** an
+  `<input><project>` block — it fails the whole build with "xml config is not valid or not available" — which is
+  why the entries are in the global list, noted in the file.
 **Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
 `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its remaining-change
 counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the invalidating-edit row, the
