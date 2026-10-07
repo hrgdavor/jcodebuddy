@@ -45,14 +45,41 @@ export function decisionFor(filePath, resolution, choice, conflict) {
   }
 }
 
-/** The whole document: what `DecisionRecorder --decisions` is pointed at. */
-export function buildDecisions({ branchName, accepted }) {
+/**
+ * The whole document: what `DecisionRecorder --decisions` is pointed at.
+ *
+ * <p>{@code rejected} is a refusal, recorded rather than merely "not accepted". The difference matters on the
+ * second run: a suggestion a reviewer refused and which comes back is the channel making the tool worse, and
+ * the suppression that fixes it keys on `(signature, provenance)` — a rejection of a text-comparison answer is
+ * not a rejection of a future structural one (SUGGESTIONS.md § 5 rule 4). This step records the refusal; the
+ * recorder is what acts on it.
+ */
+export function buildDecisions({ branchName, accepted, rejected }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     branchName: branchName || '',
     decisions: (accepted ?? []).map(({ filePath, resolution, conflict, resolvedCode, explanation }) =>
       decisionFor(filePath, resolution, { resolvedCode, explanation }, conflict),
     ),
+    rejected: (rejected ?? []).map(({ filePath, resolution, conflict }) =>
+      rejectionFor(filePath, resolution, conflict),
+    ),
+  }
+}
+
+/**
+ * One refusal, in the shape the recorder reads: the conflict it is about and **who** produced the answer, so
+ * suppression can be per provenance.
+ */
+export function rejectionFor(filePath, resolution, conflict) {
+  const suggestion = suggestionOf(resolution)
+  return {
+    signature: conflict?.signature ?? resolution?.signature ?? '',
+    type: resolution?.type,
+    filePath,
+    // The provenance is what makes the refusal specific: refusing "the word-level comparison" must not refuse a
+    // structural answer for the same conflict later.
+    provenance: suggestion?.provenance ?? resolution?.kind ?? 'unknown',
   }
 }
 
@@ -113,11 +140,54 @@ export function decisionKey(filePath, resolution, conflict) {
 }
 
 /**
+ * The suggestion a resolution carries, or `null` (plan step 4.16).
+ *
+ * <p>A suggestion is an answer the tool worked out and offers: it is never applied on its own, and it carries
+ * the provenance and the verifier's verdict that a person needs in order to judge it. Kept here beside the other
+ * resolution readers so the page reads one vocabulary rather than reaching into the JSON itself.
+ */
+export function suggestionOf(resolution) {
+  const suggestion = resolution?.suggestion
+  return suggestion && typeof suggestion === 'object' ? suggestion : null
+}
+
+/**
+ * The code a reviewer should see in the editor for a resolution: the suggestion's answer when there is one, else
+ * the resolution's own result.
+ *
+ * <p>The suggestion's code is the proposed result, which is why it wins here — and why a resolution carrying one
+ * has an <em>empty</em> `resolvedCode`, so the text exists in exactly one place.
+ */
+export function proposedCodeFor(resolution) {
+  const suggestion = suggestionOf(resolution)
+  if (suggestion) {
+    return suggestion.code ?? ''
+  }
+  return resolution?.resolvedCode ?? ''
+}
+
+/**
+ * Whether "apply all resolved" may accept a resolution on the reviewer's behalf.
+ *
+ * <p><b>Automatic resolutions only.</b> A reviewer accepting a suggestion is making a judgement about code they
+ * have read, and no bulk action can stand in for that; a `REVIEW` is the tool asking for a nod rather than
+ * answering, so it is not swept up either.
+ *
+ * <p>The rule is on the KIND rather than on whether a field happens to hold text, and the distinction is not
+ * academic: the previous version accepted anything whose `resolvedCode` was non-empty, which quietly included
+ * review resolutions and contradicted this file's own documentation. A guard that holds because a field is empty
+ * is not a guard — it holds until somebody fills the field.
+ */
+export function isBulkAcceptable(resolution) {
+  return resolution?.kind === 'AUTO' && isResolved(resolution)
+}
+
+/**
  * Every resolution in a report that already has an answer, as entries ready to accept.
  *
  * <p>This is what the "Apply all resolved" button adds, and it is deliberately the *narrow* reading: blocks the
- * engine refused, and blocks it left for a human, are not accepted silently. A reviewer can still accept those one
- * at a time, with an edit.</p>
+ * engine refused, blocks it left for a human, and every suggestion are not accepted silently. A reviewer can
+ * still accept those one at a time, with an edit.</p>
  */
 export function acceptAllResolved(files) {
   const accepted = []
@@ -125,7 +195,7 @@ export function acceptAllResolved(files) {
     const conflicts = file.conflicts ?? []
     // Index-parallel with resolutions, which is how a resolution is tied to the conflict it answers.
     ;(file.resolutions ?? []).forEach((resolution, index) => {
-      if (!isResolved(resolution)) {
+      if (!isBulkAcceptable(resolution)) {
         return
       }
       accepted.push({

@@ -3641,6 +3641,48 @@ matters. `MODULE` for `merge-java` green for the report half.
 
 **Done when:** a person can take the tool's answer in one action, and cannot take it by accident.
 
+**Done 2026-10-07 — the report carries it, the page shows it, and the bulk guard is explicit.**
+
+- **The report writes the suggestion as an object with its basis**, not the code alone: `code`,
+  `explanation`, `provenance`, `analysisLevel`, `confidence`, `warnings`, `verification` **and its detail**, or
+  `null` when there is none so a renderer can tell "no suggestion" from an empty one. Two `MergeReportWriterTest`
+  cases pin it, including the detail — a reviewer deciding whether to trust an answer needs to know what the
+  verifier said, not only that something was said.
+- **A real defect the step found in the page.** `Actions` prefilled its editor from `resolution.resolvedCode`,
+  which step 4.15 deliberately empties on a suggestion — so a reviewer would have been shown an **empty editor**
+  and told to write the code the tool had already worked out. It now prefills from `proposedCodeFor`, the
+  suggestion's code when there is one, and the whole 4.15 change becomes visible in one line of the diff.
+- **The basis is rendered beside the answer**, and the note for a block with an offer now says so instead of
+  "No answer yet": `blocks.js` exposes `suggestionFor(block)` with provenance, confidence, level and verdict,
+  including `failed` and the verifier's reason. Those facts are the difference between an offer a reviewer can
+  judge and a code block that invites blind acceptance.
+- **The bulk guard is now on the KIND, and the old one was not a guard at all.** `acceptAllResolved` filtered on
+  `isResolved` — "does a field happen to hold text" — which quietly included `REVIEW` resolutions and
+  **contradicted this file's own javadoc**. `isBulkAcceptable` is `kind === 'AUTO' && isResolved`, so a
+  suggestion (and a review) is never swept up, and the rule holds for the right reason rather than because a
+  field is empty. The negative half is asserted: bulk accept takes the automatic answer and skips the suggestion
+  in the same file.
+- **A distinction the page needed and the fixtures pinned**: *"has an answer"* is not *"may be accepted in
+  bulk"*. `blocks.js` keeps counting a block's decided entries by `isResolved` — a replayed decision **is** an
+  answer — while the bulk action uses `isBulkAcceptable`. Two questions, two predicates, and the existing block
+  tests are what showed the difference.
+- **Reject is recorded, not merely "not accepted".** The page keeps a rejection list and exports it as
+  `rejected: [{ signature, type, filePath, provenance }]` — refusal is per **provenance**, because refusing a
+  text-comparison answer must not refuse a structural one later. Step 4.17 is what suppresses on it; recording
+  it starts here, and accepting the same conflict retracts the refusal (a conflict cannot be both).
+
+**A clause of this step has no counterpart, and it is worth saying rather than inventing one.** The plan asked
+for the bulk rule "in `review/src/decisions.js` and in the CLI, and both get a test". There is **no CLI bulk
+action**: `DecisionRecorder` records the explicit decisions a reviewer exported (`--decisions`, `--history`,
+`--branch`) and has no "accept everything" mode, so there is nothing there to guard. The guard exists where the
+bulk action exists — the page's pure module, used by its one "Apply all resolved" button — and the CLI's
+protection is structural instead: it can only record what a person's decision file says.
+
+**Gate:** `bun test` in `merge-java/review` — **22 pass, 0 fail**, including a suggestion rendering with its
+provenance and verdict, the proposed result being the suggestion, and bulk accept skipping a suggestion while
+taking every `AUTO`; the page builds. `merge-java verify` — **856 tests, 0 failures, 0 errors** with the build
+cache off.
+
 ### 4.17 — Rejection memory, and `ConflictProposer` as one provenance
 **Who:** agent · **Size:** M
 
@@ -5028,7 +5070,7 @@ start)
 | 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
 | 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
 | 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[x]` — one rule in the orchestrator converts a `REVIEW` carrying code into a `SUGGESTION` carrying **that same text** (provenance = the resolver's name, level = what it recorded, `resolvedCode` cleared so the text lives in one place). **Measured: 3 of 7 sampled review paths were computing an answer and hiding it**, asserted by comparing the suggestion against a direct resolver call, and printed by the test. Nothing promoted; three existing assertions changed, each the step's own point |
-| 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
+| 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[x]` — the report carries the suggestion with its basis and verdict detail; the page prefills from `proposedCodeFor` (**a real defect: it read `resolvedCode`, which 4.15 empties, so a suggestion showed an empty editor**), renders provenance/confidence/level/verdict, and exports rejections per provenance. **The bulk guard was not a guard**: it filtered on "a field holds text", which quietly included `REVIEW` and contradicted its own javadoc — it is now `kind === 'AUTO'`. **A clause has no counterpart**: there is no CLI bulk action to guard, and that is recorded rather than invented |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
 | 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in and the instruction's first example now works end to end**: `TieredResolution` + `Reliability` + `explainedSpan`, and a settled conflict is never offered to the resolver below. Four findings came from tests, all corrected in the design: the kept-lines check must judge the *settled* conflict; removal follows the hierarchy's direction (else `equalEvidenceOutranksNothing` became `APPLIED_AUTO`); an insertion has no base lines so an unplaceable conflict is judged over its block; and the report's region stamp must not be applied before resolution (else `IMPORT_ADD` settled an unrelated `COMMENT_ADD`). **Still open:** the per-conflict state as a report key (4.20 changes that shape), `DEFERRED` settling at its resolver's tier, an import-vs-`TEXT_LOCAL` fixture, and the open question of whether the catch-all residual should declare `STRUCTURE` at all |

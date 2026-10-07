@@ -10,7 +10,7 @@
  * Kept out of the component because this is a rule about the data, and rules about data belong where they can be
  * tested without a DOM.
  */
-import { isResolved } from './decisions.js'
+import { isResolved, proposedCodeFor, suggestionOf } from './decisions.js'
 
 /** A block's identity: its lines in the file, or one group for resolutions the report could not locate. */
 export function blockKey(region) {
@@ -40,6 +40,9 @@ export function blocksOf(file) {
   })
 
   return [...groups.values()].map((group) => {
+    // "Has an answer", which is deliberately not the same question as "may a bulk accept take it" (that one is
+    // `isBulkAcceptable`, and it is AUTO-only): the page's count describes what is on screen, while the guard
+    // describes what may be accepted without a person reading it.
     const decided = group.entries.filter((entry) => isResolved(entry.resolution)).length
     return {
       ...group,
@@ -52,6 +55,38 @@ export function blocksOf(file) {
       severalConflicts: group.entries.length > 1,
     }
   })
+}
+
+/**
+ * A block's offered answer, or `null` when none of its resolutions carries one (plan step 4.16).
+ *
+ * <p>The page shows this as the **proposed result**, prefilled in the editor with its provenance and the
+ * verifier's verdict beside it — so a reviewer reads what the tool worked out and what it rests on, then accepts,
+ * edits or refuses it. Nothing here applies anything: the code is a proposal until a decision file says
+ * otherwise.
+ *
+ * <p>Shaped for display rather than passed through raw, because the page needs the three facts that make a
+ * suggestion judgeable — who produced it, how strong its basis was, and what verification said — and a renderer
+ * that had to pick them out of a nested object would be the place they got dropped.
+ */
+export function suggestionFor(block) {
+  for (const entry of block?.entries ?? []) {
+    const suggestion = suggestionOf(entry.resolution)
+    if (suggestion) {
+      return {
+        code: proposedCodeFor(entry.resolution),
+        explanation: suggestion.explanation ?? '',
+        provenance: suggestion.provenance ?? 'unknown',
+        confidence: suggestion.confidence ?? 'PLAUSIBLE',
+        analysisLevel: suggestion.analysisLevel ?? '',
+        verification: suggestion.verification ?? 'NOT_RUN',
+        verificationDetail: suggestion.verificationDetail ?? '',
+        /** A failed verification labels the suggestion; it never hides it (SUGGESTIONS.md § 5 rule 2). */
+        failed: suggestion.verification === 'FAILED',
+      }
+    }
+  }
+  return null
 }
 
 /** Every block of every file in a report. */
@@ -74,7 +109,11 @@ export function blockNote(block) {
     )
   }
   if (block.undecided > 0) {
-    return 'No answer yet: pick a fix path, or write the code you want, and accept it.'
+    // An offered answer is not "no answer yet", and saying so would be the page telling a reviewer to write code
+    // the tool has already worked out (plan step 4.16).
+    return suggestionFor(block)
+      ? 'The tool worked out an answer — read it with its provenance, then accept it, edit it, or reject it.'
+      : 'No answer yet: pick a fix path, or write the code you want, and accept it.'
   }
   return 'Resolved — what you accepted is what gets applied.'
 }

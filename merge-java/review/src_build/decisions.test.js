@@ -20,8 +20,11 @@ import {
   codeForOption,
   fixPathOptions,
   isActionable,
+  isBulkAcceptable,
   isResolved,
   mergeAccepted,
+  proposedCodeFor,
+  suggestionOf,
   toJson,
 } from '../src/decisions.js'
 
@@ -260,4 +263,58 @@ test('a fix path that carries code prefills the choice that applies it', () => {
   assert.equal(codeForOption(resolution, 'apply branch 1'), '')
   assert.equal(codeForOption(resolution, 'not an option'), '')
   assert.equal(codeForOption({}, 'anything'), '')
+})
+
+/** A resolution carrying a suggestion, shaped the way step 4.15's report writes one. */
+const suggested = {
+  type: 'METHOD_BODY_CHANGE',
+  kind: 'SUGGESTION',
+  signature: 'method_body_change-def456',
+  // Empty on purpose: the text lives in the suggestion, so a field other code reads as "the applicable answer"
+  // cannot hold code the tool is forbidden to apply.
+  resolvedCode: '',
+  sides: { base: 'run();', branch1: 'audit();', branch2: 'charge();' },
+  suggestion: {
+    code: 'audit();\ncharge();',
+    explanation: 'The two statements do not interact, so both can run.',
+    provenance: 'MethodBodyChange',
+    analysisLevel: 'TEXT_LOCAL',
+    confidence: 'PLAUSIBLE',
+    verification: 'PASSED',
+    verificationDetail: '',
+    warnings: [],
+  },
+}
+
+test('a suggestion is an answer offered, and bulk accept never takes one', () => {
+  // The negative half is the assertion that matters: "apply all resolved" applies AUTO resolutions only, because
+  // accepting a suggestion is a judgement about code a person has read (SUGGESTIONS.md § 5 rule 1).
+  assert.ok(!isBulkAcceptable(suggested), 'a suggestion is never bulk-accepted')
+  assert.ok(isBulkAcceptable({ kind: 'AUTO', resolvedCode: 'import a;' }), 'an AUTO answer still is')
+  assert.ok(
+    !isBulkAcceptable({ kind: 'REVIEW', resolvedCode: 'import a;' }),
+    'and a REVIEW is the tool asking for a nod, not answering',
+  )
+
+  const accepted = acceptAllResolved([
+    {
+      filePath: 'A.java',
+      resolutions: [
+        { type: 'IMPORT_ADD', kind: 'AUTO', signature: 's1', resolvedCode: 'import a;' },
+        suggested,
+      ],
+    },
+  ])
+
+  assert.equal(accepted.length, 1, 'bulk accept takes the automatic answer and skips the suggestion')
+  assert.equal(accepted[0].resolvedCode, 'import a;')
+})
+
+test('the proposed result is the suggestion, and the page can read its basis', () => {
+  assert.equal(proposedCodeFor(suggested), 'audit();\ncharge();')
+  assert.equal(proposedCodeFor({ resolvedCode: 'plain' }), 'plain', 'and falls back to the resolution')
+  assert.equal(proposedCodeFor({}), '')
+  assert.equal(suggestionOf(suggested).provenance, 'MethodBodyChange')
+  assert.equal(suggestionOf({}), null)
+  assert.equal(suggestionOf(null), null)
 })

@@ -151,6 +151,56 @@ class MergeReportWriterTest {
         assertTrue(json.contains("\"region\": null"), json);
     }
 
+    @Test
+    @DisplayName("a suggestion reaches the page with the basis it must be judged on")
+    void writesTheSuggestionWithItsBasis() throws IOException {
+        // Step 4.16: the page renders a suggestion as the proposed result, so the report has to carry it — and
+        // carry more than the code. "The word-level comparison produced this" and "a model proposed this" deserve
+        // different amounts of trust, and a suggestion whose basis is invisible invites blind acceptance.
+        Suggestion suggestion = new Suggestion("void run() {\n    audit();\n}\n",
+            "The two edits do not interact.", "MethodBodyChange", AnalysisLevel.TEXT_LOCAL,
+            List.of("the body was not parsed"), ConflictResolution.Verification.FAILED,
+            "dangling parenthesis", Suggestion.Confidence.PLAUSIBLE);
+        ConflictResolution offered = ConflictResolution.builder()
+            .filePath("A.java")
+            .type(ConflictType.METHOD_BODY_CHANGE)
+            .kind(ConflictResolution.ResolutionKind.SUGGESTION)
+            .resolutionStrategy(ConflictResolution.ResolutionStrategy.MERGE_SAFE)
+            .suggestion(suggestion)
+            .explanation("An answer is offered.")
+            .build();
+        MergeConflictResolver.MergeReport report = new MergeConflictResolver.MergeReport(
+            "A.java", List.of(), List.of(offered), "feature");
+
+        String json = MergeReportWriter.toJson(List.of(report),
+            MergeBatch.using(MergeConflictResolver.create(TestTypeContexts.jdk())).summarize());
+
+        assertTrue(json.contains("\"suggestion\": {"), json);
+        assertTrue(json.contains("\"provenance\": \"MethodBodyChange\""), json);
+        assertTrue(json.contains("\"confidence\": \"PLAUSIBLE\""), json);
+        assertTrue(json.contains("\"verification\": \"FAILED\""), json);
+        assertTrue(json.contains("\"verificationDetail\": \"dangling parenthesis\""), json);
+        assertTrue(json.contains("\"warnings\": [\"the body was not parsed\"]"), json);
+    }
+
+    @Test
+    @DisplayName("a resolution with no suggestion says so rather than inventing an empty one")
+    void writesNoSuggestionAsNull() {
+        ConflictResolution plain = ConflictResolution.builder()
+            .filePath("A.java")
+            .type(ConflictType.IMPORT_ADD)
+            .kind(ConflictResolution.ResolutionKind.AUTO)
+            .resolvedCode("import a;")
+            .build();
+        MergeConflictResolver.MergeReport report = new MergeConflictResolver.MergeReport(
+            "A.java", List.of(), List.of(plain), "feature");
+
+        String json = MergeReportWriter.toJson(List.of(report),
+            MergeBatch.using(MergeConflictResolver.create(TestTypeContexts.jdk())).summarize());
+
+        assertTrue(json.contains("\"suggestion\": null"), json);
+    }
+
     // -------------------------------------------------------------- renderer
 
     private static boolean bunAvailable() {

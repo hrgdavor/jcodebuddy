@@ -12,7 +12,7 @@
  */
 import { test } from 'bun:test'
 import assert from 'node:assert/strict'
-import { blockKey, blockLabel, blockNote, blocksByFile, blocksOf } from '../src/blocks.js'
+import { blockKey, blockLabel, blockNote, blocksByFile, blocksOf, suggestionFor } from '../src/blocks.js'
 import { MANUAL_MARKER } from '../src/decisions.js'
 
 /** The block of the sample repository, as the report carries it after the region is stamped. */
@@ -113,4 +113,56 @@ test('every file of a report keeps its own blocks', () => {
   assert.equal(grouped[0].blocks.length, 1)
   assert.equal(grouped[1].filePath, 'Other.java')
   assert.equal(grouped[1].blocks.length, 0, 'a clean file has no blocks to read')
+})
+
+test('a block with an offered answer says so, and carries the basis it must be judged on', () => {
+  // Step 4.16: the page shows the suggestion as the proposed result, with who produced it and what verification
+  // said. Those facts are the difference between an offer a reviewer can judge and a code block that invites blind
+  // acceptance, so they belong to the view model rather than being something the renderer digs out.
+  const block = blocksOf({
+    conflicts: [{ type: 'METHOD_BODY_CHANGE', signature: 's', region: { startLine: 4, endLine: 9 } }],
+    resolutions: [
+      {
+        type: 'METHOD_BODY_CHANGE',
+        kind: 'SUGGESTION',
+        signature: 's',
+        // Empty on purpose: step 4.15 keeps the text in the suggestion, so no field holds code the tool may not
+        // apply.
+        resolvedCode: '',
+        region: { startLine: 4, endLine: 9 },
+        suggestion: {
+          code: 'audit();\ncharge();',
+          explanation: 'The two statements do not interact.',
+          provenance: 'MethodBodyChange',
+          analysisLevel: 'TEXT_LOCAL',
+          confidence: 'PLAUSIBLE',
+          verification: 'FAILED',
+          verificationDetail: 'dangling parenthesis',
+        },
+      },
+    ],
+  })[0]
+
+  const suggestion = suggestionFor(block)
+
+  assert.equal(suggestion.code, 'audit();\ncharge();')
+  assert.equal(suggestion.provenance, 'MethodBodyChange')
+  assert.equal(suggestion.confidence, 'PLAUSIBLE')
+  assert.equal(suggestion.verification, 'FAILED')
+  assert.ok(suggestion.failed, 'a failed verdict labels the suggestion rather than hiding it')
+  assert.equal(suggestion.verificationDetail, 'dangling parenthesis', 'with the reason a reviewer needs')
+  assert.equal(block.decided, 0, 'and an offered answer is not a decision')
+  assert.match(blockNote(block), /worked out an answer/)
+})
+
+test('a block with no suggestion offers nothing, and says what to do instead', () => {
+  const block = blocksOf({
+    conflicts: [{ type: 'VARIABLE_RENAME', signature: 's', region: { startLine: 2, endLine: 2 } }],
+    resolutions: [
+      { type: 'VARIABLE_RENAME', kind: 'MANUAL', resolvedCode: MANUAL_MARKER, region: { startLine: 2, endLine: 2 } },
+    ],
+  })[0]
+
+  assert.equal(suggestionFor(block), null)
+  assert.match(blockNote(block), /No answer yet/)
 })

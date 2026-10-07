@@ -10,6 +10,9 @@ import {
   codeForOption,
   isActionable,
   mergeAccepted,
+  proposedCodeFor,
+  rejectionFor,
+  suggestionOf,
   toJson,
 } from './decisions.js'
 import { blockLabel, blockNote, blocksOf } from './blocks.js'
@@ -41,6 +44,25 @@ const percent = (part, whole) => (whole === 0 ? 0 : Math.round((part / whole) * 
  */
 const $accepted = signal([])
 
+/**
+ * The suggestions a reviewer has refused (plan step 4.16).
+ *
+ * A refusal is recorded rather than left as "not accepted", because the two are different facts: "not accepted
+ * yet" is a page state, while "I read this and it is wrong" is a judgement the next merge must not ask for
+ * again. Step 4.17 is what acts on it; recording it starts here.
+ */
+const $rejected = signal([])
+
+/** Record a refusal, replacing any earlier refusal of the same conflict. */
+function reject(filePath, resolution, conflict) {
+  const entry = rejectionFor(filePath, resolution, conflict)
+  const key = decisionKey(filePath, resolution, conflict)
+  // Accepting and refusing are the same action on the same conflict, so refusing also retracts an acceptance:
+  // a conflict cannot be both.
+  $accepted($accepted().filter((existing) => decisionKey(existing.filePath, existing.resolution) !== key))
+  $rejected([...$rejected().filter((existing) => `${existing.filePath}::${existing.signature}` !== key), entry])
+}
+
 /** Hand the payload to the browser as a download. The one write a `file://` page can perform. */
 function downloadDecisions(payload) {
   const url = URL.createObjectURL(new Blob([toJson(payload)], { type: 'application/json' }))
@@ -58,8 +80,12 @@ function downloadDecisions(payload) {
  */
 function Actions({ filePath, resolution, conflict }) {
   const options = fixPathOptions(resolution)
+  const suggestion = suggestionOf(resolution)
   const $choice = signal('keep')
-  const $code = signal(resolution.resolvedCode || '')
+  // Prefilled from the PROPOSED result, which is the suggestion when there is one. Reading `resolvedCode` alone
+  // was a real defect once step 4.15 moved the answers onto the channel: that field is deliberately empty on a
+  // suggestion, so a reviewer was shown an empty editor and told to write code the tool had already worked out.
+  const $code = signal(proposedCodeFor(resolution))
 
   const accept = () => {
     const chosen = $choice()
@@ -93,6 +119,27 @@ function Actions({ filePath, resolution, conflict }) {
         your decision{' '}
         {accepted() ? <span class="badge">accepted — export to apply</span> : null}
       </div>
+      {suggestion ? (
+        // The basis beside the answer, not only in the JSON. A suggestion whose provenance is invisible is one
+        // that invites blind acceptance, and "the word-level comparison produced this" and "a model proposed
+        // this" deserve different amounts of trust from the person reading them (SUGGESTIONS.md § 3).
+        <div class={`suggestion${suggestion.failed ? ' failed' : ''}`}>
+          <span class="badge">{suggestion.confidence}</span>
+          <span class="provenance">proposed by {suggestion.provenance}</span>
+          <span class="evidence">evidence: {suggestion.analysisLevel || 'not recorded'}</span>
+          {suggestion.failed ? (
+            <span class="verdict">
+              verification failed: {suggestion.verificationDetail || 'no detail'}
+            </span>
+          ) : (
+            <span class="verdict">verification: {suggestion.verification}</span>
+          )}
+        </div>
+      ) : null}
+      {suggestion ? (
+        // Prefilled above; this is the editable copy the reviewer accepts as it stands or changes.
+        <div class="label">the proposed result — accept it, edit it, or reject it</div>
+      ) : null}
       {options.length ? (
         <select
           onchange={(event) => {
@@ -123,6 +170,14 @@ function Actions({ filePath, resolution, conflict }) {
       </textarea>
       <div>
         <button onclick={accept}>Accept</button>
+        {suggestion ? (
+          // An explicit refusal, recorded rather than merely "not accepted": a suggestion that comes back after
+          // being rejected is the channel making the tool worse, and the recorder suppresses it per
+          // (signature, provenance) on the next run (SUGGESTIONS.md § 5 rule 4).
+          <button class="reject" onclick={() => reject(filePath, resolution, conflict)}>
+            Reject
+          </button>
+        ) : null}
         <span class="note">{options.length ? 'the choice is recorded with the code above' : ''}</span>
       </div>
     </div>
@@ -367,7 +422,11 @@ function ExportBar({ branchName }) {
         Apply all resolved ({resolvable})
       </button>
       <button
-        onclick={() => downloadDecisions(buildDecisions({ branchName, accepted: $accepted() }))}
+        onclick={() =>
+            downloadDecisions(
+              buildDecisions({ branchName, accepted: $accepted(), rejected: $rejected() }),
+            )
+          }
         disabled={() => $accepted().length === 0}
       >
         Download decisions.json

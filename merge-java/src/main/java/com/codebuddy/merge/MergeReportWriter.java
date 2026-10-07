@@ -184,6 +184,7 @@ public final class MergeReportWriter {
                         resolution.getBranch1Code(), resolution.getBranch2Code()).toFileName()))
                 .append(",\n");
             json.append("          \"sides\": ").append(sidesJson(resolution)).append(",\n");
+            json.append("          \"suggestion\": ").append(suggestionJson(resolution)).append(",\n");
             json.append("          \"fixPaths\": ").append(fixPathsJson(resolution)).append('\n');
             json.append("        }");
             if (index < resolutions.size() - 1) {
@@ -192,6 +193,37 @@ public final class MergeReportWriter {
             json.append('\n');
         }
         return json.append("      ]").toString();
+    }
+
+    /**
+     * The suggestion a resolution carries, or {@code null} (plan step 4.16).
+     *
+     * <p>Written as an object rather than flattened onto the resolution, because it is a different kind of thing
+     * with its own provenance: the page renders it as <em>the proposed result</em> with its basis beside it, and
+     * "the word-level comparison produced this" and "a model proposed this" deserve different amounts of trust
+     * from the person reading them. A suggestion whose basis is invisible invites blind acceptance, which is why
+     * {@code provenance} and {@code confidence} travel with the code rather than only the code.
+     *
+     * <p>{@code null} when there is none, so a renderer distinguishes "no suggestion" from an empty one.
+     */
+    private static String suggestionJson(ConflictResolution resolution) {
+        Suggestion suggestion = resolution.getSuggestion();
+        if (suggestion == null) {
+            return "null";
+        }
+        return new StringBuilder("{")
+            .append("\"code\": ").append(quote(suggestion.code()))
+            .append(", \"explanation\": ").append(quote(suggestion.explanation()))
+            .append(", \"provenance\": ").append(quote(suggestion.provenance()))
+            .append(", \"analysisLevel\": ").append(quote(suggestion.analysisLevel().name()))
+            .append(", \"confidence\": ").append(quote(suggestion.confidence().name()))
+            .append(", \"warnings\": ").append(stringListJson(suggestion.warnings()))
+            // Both the verdict and its detail: a reviewer deciding whether to trust an answer needs to know what
+            // the verifier said about it, not only that something was said.
+            .append(", \"verification\": ").append(quote(suggestion.verification().name()))
+            .append(", \"verificationDetail\": ").append(quote(suggestion.verificationDetail()))
+            .append('}')
+            .toString();
     }
 
     /**
