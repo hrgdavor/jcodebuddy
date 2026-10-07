@@ -32,9 +32,21 @@ package:
 ```
 hipster-ioc/hipster-ioc-test/src/test/java/hr/hrg/hipster/ioc/test/
 ├── CtxMain.java          the context interface — the user's source of truth
-├── CtxMainModule.java    package-private, holds `default ObjectMapper buildMapper()`
 └── CtxMainImpl.java      generated: fields, creation in dependency order, accessors
 ```
+
+> **The hand-written `CtxMainModule.java` is gone (plan step 3.0e part two, and step 3.10 records it).** This
+> listing used to show it between the interface and the generated class, which contradicted the note above: the
+> module that held `default ObjectMapper buildMapper()` was the last hand-written wiring in the module, and the
+> generator now emits the creation line instead. A reader following this tree would have looked for a file that is
+> not there — which is what step 3.10 was scheduled to clear.
+
+**The acceptance for that migration is reproducible in two commands**, and it is the check DEC-036 was waiting for:
+`bun scripts/ioc-gen.js` must exit 0 with no divergence reported, and `git status` must then be **clean** — meaning
+the committed `<Context>Impl` is byte-identical to what today's generator emits from the interface. Divergences are
+reported rather than fatal (DEC-022), so the clean tree is the assertion, not the exit code.  Measured 2026-10-08:
+exit 0, no divergence, clean tree, and the module compiles (`hipster-ioc-test` carries no tests of its own — it is a
+test-support module — so the generator run *is* its evidence).
 
 The generated class **implements the interface directly** — no proxy, no reflective lookup, no
 name-to-bean registry — so a reader with a stock IDE follows `ctx.mapper()` to the field that holds it

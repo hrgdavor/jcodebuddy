@@ -2578,6 +2578,26 @@ one hand-maintained thing for another.
 > context. Both conditions the step lists are now met: DEC-036 is `Trial`→`Accepted` as 3.0e's rewrite lands, and
 > 3.0a–3.0e are real (the engine answers, the generator stops reading files).
 
+**Done 2026-10-08 — and the work was the *acceptance*, not the retirement.**
+
+- **The hand-written pair was already gone**, and the commit says so: `997feaa` — *"3.0e part two: the ioc generator
+  reads the model, and the last hand-written wiring is gone"*. `CtxMainModule.java` no longer exists anywhere in the
+  tree, and `CtxMain` survives as the `@HipsterContext` **interface** the generator reads. So this step's remaining
+  obligation was the one its own text names: **the migration is DEC-036's acceptance test**, and an acceptance that
+  was never run is a claim.
+- **The acceptance was run, and it is the strongest form of it**: `bun scripts/ioc-gen.js` reports
+  `contexts read: 1`, `implementations: 0 written`, `refused: 0`, exit 0 — the generator **recognised its own
+  committed output as canonical and rewrote nothing** (DEC-020's cooperative recognition), with the tree clean
+  afterwards. `git status` clean *is* the assertion, because a divergence is reported rather than fatal (DEC-022), so
+  the exit code alone would not prove it.
+- **`hipster-ioc-test` carries no tests of its own** (`Tests run: 0`, `BUILD SUCCESS` — it is a test-support module
+  with no module depending on it), so the generator run is its evidence rather than a test suite. Recorded because
+  "the module's tests are green" would have been a misleading way to say it.
+- **A documentation defect was found on the way and fixed**: `hipster-ioc-tooling/README.md` listed
+  `CtxMainModule.java` **in its tree** while the note directly above that tree said the hand-written wiring is gone.
+  A reader following the listing would have looked for a file that does not exist — which is exactly the drift this
+  step was scheduled to clear. The listing is corrected, and the README now states the two-command acceptance
+  (`bun scripts/ioc-gen.js`, then a clean `git status`) so the next person can reproduce it instead of trusting it.
 ### 3.11 — Editor-agnostic graph navigation, and the embedded host
 **Who:** human decides · **Size:** unknown
 
@@ -5469,7 +5489,7 @@ start)
 | 3.7  | Cross-context `dependencies()` / `ChildContext` creation                                        | agent              | M    | `[TBD]` — waits on context-to-context creation                                              |
 | 3.8  | The dependency-graph report page                                                                | agent              | M    | `[TBD]` — waits on the graph model being settled                                            |
 | 3.9  | Drive the generator from the dev-time pass and watch mode                                       | agent              | M    | `[TBD]` — waits on 7.8 and the shape                                                        |
-| 3.10 | Retire `hipster-ioc-test`'s hand-written context                                                | agent              | S–M  | `[TBD]` — waits on DEC-036 being `Accepted`                                                 |
+| 3.10 | Retire `hipster-ioc-test`'s hand-written context                                                | agent              | S–M  | `[x]` — **the retirement was already done** (`997feaa`, step 3.0e part two: `CtxMainModule.java` is gone, `CtxMain` survives as the `@HipsterContext` interface), so this step's work was its **acceptance**, which is now run and recorded: `bun scripts/ioc-gen.js` reports `contexts read: 1`, `implementations: 0 written`, `refused: 0`, exit 0 — the generator recognised its own committed output as canonical and rewrote nothing — with the tree clean afterwards, which *is* the assertion because a divergence is reported rather than fatal (DEC-022). `hipster-ioc-test` has **no tests of its own** (`Tests run: 0`; no module depends on it), so the generator run is its evidence. **A documentation defect was fixed with it**: `hipster-ioc-tooling/README.md` listed `CtxMainModule.java` in its tree while the note above the tree said the hand-written wiring is gone. |
 | 3.11 | Editor-agnostic graph navigation + embedded host                                                | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
 | 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                             | agent              | S–M  | `[x]`                                                                                       |
 | 4.2  | merge-java Phase 13 step 1 — review render                                                      | agent              | M    | `[x]`                                                                                       |
