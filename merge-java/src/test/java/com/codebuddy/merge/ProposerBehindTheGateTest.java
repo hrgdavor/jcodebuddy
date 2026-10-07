@@ -84,6 +84,72 @@ class ProposerBehindTheGateTest {
     }
 
     @Test
+    @DisplayName("the proposal is also a suggestion: same single call, its own provenance and verdict")
+    void aProposalIsAlsoASuggestion() {
+        // Plan step 4.17 and SUGGESTIONS.md § 7: the proposer becomes ONE PROVENANCE OF THE CHANNEL, and the fix path
+        // it always was stays as the route to accepting it. The assertions above keep their subject; these are what
+        // the subject moved TO, and the two coexist rather than replacing each other.
+        String proposed = "class Ledger {\n    private final NavigableSet<String> entries = new TreeSet<>();\n}\n";
+        ConflictResolution resolution = resolverWith(conflict -> Optional.of(
+            new ConflictProposer.Proposal(proposed, "the wider type accepts every value either side wrote")))
+            .resolve(structural());
+
+        Assertions.assertTrue(resolution.hasSuggestion(),
+            "the proposal must be on the channel, not only among the fix paths");
+        Suggestion offered = resolution.getSuggestions().stream()
+            .filter(suggestion -> suggestion.provenance().contains("proposer"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("no proposer suggestion among "
+                + resolution.getSuggestions().stream().map(Suggestion::provenance).toList()));
+
+        Assertions.assertEquals(proposed, offered.code(), "the proposed result is the suggestion's code");
+        Assertions.assertEquals(Suggestion.Confidence.PLAUSIBLE, offered.confidence(),
+            "a model's reading of the inputs is plausible rather than mechanically forced");
+        Assertions.assertEquals(AnalysisLevel.TEXT_LOCAL, offered.analysisLevel(),
+            "the tool can vouch for nothing about what a model READ, so the level is the weakest there is - "
+                + "claiming STRUCTURE because the text looks structural would assert a reading nobody verified");
+        Assertions.assertEquals(ConflictResolution.Verification.PASSED, offered.verification(),
+            "and the gate's verdict travels on the suggestion, which is the channel's uniform field");
+
+        // The escalation still stands: being on the channel is not being applied (DESIGN_NEVER_AUTO_RESOLVED.md).
+        Assertions.assertEquals(ConflictResolution.ResolutionKind.MANUAL, resolution.getKind(),
+            "a suggestion is information: the decision stays a person's");
+        Assertions.assertNotEquals(proposed, resolution.getResolvedCode());
+    }
+
+    @Test
+    @DisplayName("two producers, two suggestions: the tool's own answer stays primary")
+    void theToolsAnswerStaysPrimary() {
+        // The case the single-slot channel could not express: a resolver's composed answer AND a model's proposal for
+        // one conflict. The order is the promise - the first suggestion is the one the tool worked out, and the
+        // model's sits beside it as the alternative rather than displacing it.
+        String proposed = "class Ledger {\n    private final NavigableSet<String> entries = new TreeSet<>();\n}\n";
+        MergeConflictResolver resolver = new MergeConflictResolver.Builder()
+            .setBranchName("feature")
+            .setHistoryPath(tempDir.resolve("feature"))
+            .setInMemoryOnly(true)
+            .setTypeContext(TestTypeContexts.jdk())
+            .setResolvers(java.util.List.of(new MethodBodyChangeConflictResolver()))
+            .setProposer(conflict -> Optional.of(
+                new ConflictProposer.Proposal(proposed, "the wider type accepts every value either side wrote")))
+            .build();
+
+        // A body conflict the ported pass composes at word level, so the tool HAS an answer of its own.
+        Conflict both = new Conflict(ConflictType.METHOD_BODY_CHANGE, "Ledger.java", "both edited one line",
+            "int total = a + b + c;\n", "int total = b + c;\n", "int total = a + b;\n");
+        ConflictResolution resolution = resolver.resolve(both);
+
+        Assertions.assertTrue(resolution.hasSeveralSuggestions(),
+            "both producers answered, so both answers must be on the channel: "
+                + resolution.getSuggestions().stream().map(Suggestion::provenance).toList());
+        Assertions.assertEquals(AnalysisLevel.TEXT_INTRALINE, resolution.getSuggestion().analysisLevel(),
+            "the primary is the tool's own composed answer, recorded at the level it earned");
+        Assertions.assertTrue(resolution.getSuggestions().get(1).provenance().contains("proposer"),
+            "and the model's proposal is the alternative beside it: "
+                + resolution.getSuggestions().get(1).provenance());
+    }
+
+    @Test
     @DisplayName("a proposal the gate refuses is refused, and says so where a reviewer reads it")
     void aRefusedProposalIsRefused() {
         // Unbalanced: the structural gate refuses this, which is the case the Gate names.

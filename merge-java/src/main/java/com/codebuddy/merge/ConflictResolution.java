@@ -167,7 +167,7 @@ public final class ConflictResolution {
     private final Region explainedSpan;
 
     /**
-     * The suggestion this resolution carries, or {@code null} when it carries none.
+     * The suggestions this resolution carries, <b>in the order they were produced</b>; empty when it carries none.
      *
      * <p><b>A field of its own, and that is the structural guarantee rather than a style choice.</b> The
      * property that makes the proposer seam safe is that the code attaching a proposal cannot reach the
@@ -176,8 +176,17 @@ public final class ConflictResolution {
      * does, and this class exposes no setter. A suggestion is information; applying it is a decision somebody
      * else makes, and the only way it becomes an application is a resolution built elsewhere
      * ({@link Builder#suggestion(Suggestion)} on a resolution that is already {@link ResolutionKind#AUTO}).
+     *
+     * <h2>Why a list, when the channel started with one</h2>
+     *
+     * <p>There is more than one producer of an offered answer — a resolver that computed one, the ported pass,
+     * and a model behind the proposer seam — and with a single slot the second producer's answer had nowhere to
+     * go except the fix paths, which are objections rather than answers. The list is the expansion plan step 4.17
+     * names, and it is deliberately <b>ordered</b>: {@link #getSuggestion()} is the first, so every consumer that
+     * predates the list (the report's `suggestion` key, the page's acceptance path, the verifier) keeps working
+     * unchanged, while a consumer that wants all of them asks for all of them.
      */
-    private final Suggestion suggestion;
+    private final List<Suggestion> suggestions;
 
     private ConflictResolution(Builder builder) {
         this.filePath = builder.filePath == null ? "<unknown>" : builder.filePath;
@@ -210,22 +219,36 @@ public final class ConflictResolution {
         this.explainedSpan = builder.explainedSpan == null
             ? Region.unknown()
             : builder.explainedSpan;
-        this.suggestion = builder.suggestion;
+        this.suggestions = List.copyOf(builder.suggestions);
     }
 
     /**
-     * The suggestion this resolution carries, or {@code null}.
+     * The <b>primary</b> suggestion this resolution carries, or {@code null}: the first one produced.
      *
      * <p>Read-only by construction: see the field's own note on why the channel cannot reach the resolution's
      * code or kind.
+     *
+     * <p>It is a view of {@link #getSuggestions()}'s first element rather than a field of its own, so the two can
+     * never disagree — a consumer that predates the list and a consumer that reads all of them see the same answer
+     * first.
      */
     public Suggestion getSuggestion() {
-        return suggestion;
+        return suggestions.isEmpty() ? null : suggestions.get(0);
     }
 
-    /** True when this resolution offers an answer rather than deciding one. */
+    /** Every suggestion this resolution carries, in the order the producers offered them; empty when none. */
+    public List<Suggestion> getSuggestions() {
+        return suggestions;
+    }
+
+    /** True when this resolution offers at least one answer rather than deciding one. */
     public boolean hasSuggestion() {
-        return suggestion != null;
+        return !suggestions.isEmpty();
+    }
+
+    /** True when more than one producer offered an answer for this conflict, which the report shows side by side. */
+    public boolean hasSeveralSuggestions() {
+        return suggestions.size() > 1;
     }
 
     /**
@@ -518,7 +541,7 @@ public final class ConflictResolution {
         private AnalysisLevel analysisLevel;
         private ComparisonPolicy whitespacePolicy;
         private Region explainedSpan;
-        private Suggestion suggestion;
+        private final List<Suggestion> suggestions = new java.util.ArrayList<>();
         private final List<String> warnings = new ArrayList<>();
 
         Builder() {
@@ -548,7 +571,8 @@ public final class ConflictResolution {
             this.analysisLevel = source.analysisLevel;
             this.whitespacePolicy = source.whitespacePolicy;
             this.explainedSpan = source.explainedSpan;
-            this.suggestion = source.suggestion;
+            this.suggestions.clear();
+            this.suggestions.addAll(source.suggestions);
             this.warnings.addAll(source.warnings);
         }
 
@@ -706,7 +730,36 @@ public final class ConflictResolution {
          * never this channel.
          */
         public Builder suggestion(Suggestion suggestion) {
-            this.suggestion = suggestion;
+            this.suggestions.clear();
+            if (suggestion != null) {
+                this.suggestions.add(suggestion);
+            }
+            return this;
+        }
+
+        /**
+         * Attach <b>another</b> suggestion, keeping the ones already there: an answer from a second producer.
+         *
+         * <p>Order is meaning: {@link ConflictResolution#getSuggestion()} is the first one attached, so a producer
+         * that wants to be the primary attaches first, and one that offers an alternative to an existing answer
+         * attaches after it. The list is a list rather than a replacement because two producers answering the same
+         * conflict is the case plan step 4.17 exists for — a resolver's composed answer and a model's proposal are
+         * both answers, and with one slot the second had nowhere to go but the fix paths, which are objections
+         * rather than answers.
+         */
+        public Builder addSuggestion(Suggestion suggestion) {
+            if (suggestion != null) {
+                this.suggestions.add(suggestion);
+            }
+            return this;
+        }
+
+        /** Attach several at once, in the order given. The first becomes the primary. */
+        public Builder suggestions(List<Suggestion> suggestions) {
+            this.suggestions.clear();
+            if (suggestions != null) {
+                this.suggestions.addAll(suggestions);
+            }
             return this;
         }
 

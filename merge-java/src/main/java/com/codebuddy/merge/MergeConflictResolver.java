@@ -326,17 +326,25 @@ public class MergeConflictResolver {
         }
 
 
-        // Plan step 4.4: an escalated conflict can also be handed to a proposer, and its answer joins the fix
-        // paths and NOTHING else. Both escalation paths are covered - a conflict no resolver claimed, and one a
-        // resolver escalated (STRUCTURAL_CHANGE and API_INCOMPATIBILITY always escalate) - and only those two, so
-        // an automatic or already-replayed resolution is never second-guessed by an advisor.
+        // Plan step 4.4: an escalated conflict can also be handed to a proposer. Both escalation paths are covered -
+        // a conflict no resolver claimed, and one a resolver escalated (STRUCTURAL_CHANGE and API_INCOMPATIBILITY
+        // always escalate) - and only those two, so an automatic or already-replayed resolution is never
+        // second-guessed by an advisor.
+        //
+        // Plan step 4.17: the proposal is now TWO things from ONE call - the fix path it always was, and a
+        // suggestion on the channel (SUGGESTIONS.md § 7: the proposer becomes one provenance of the channel). The
+        // suggestion is attached *after* the tool's own offers below, so the tool's answer stays primary and the
+        // model's is the alternative; and the proposer is called once, because calling an advisor twice to describe
+        // one proposal would be a worse promise than any it makes about its answers.
+        Suggestion proposedAnswer = null;
         if (resolution.getKind() == ConflictResolution.ResolutionKind.MANUAL
             || resolution.getKind() == ConflictResolution.ResolutionKind.REVIEW) {
-            Optional<FixPath> proposed = proposedOption(conflict);
-            if (proposed.isPresent()) {
+            Optional<ProposerOutcome> outcome = proposalFor(conflict);
+            if (outcome.isPresent()) {
                 List<FixPath> options = new ArrayList<>(resolution.getAlternativePaths());
-                options.add(proposed.get());
+                options.add(outcome.get().path());
                 resolution = ConflictResolution.copyOf(resolution).alternativePaths(options).build();
+                proposedAnswer = outcome.get().suggestion();
             }
         }
 
@@ -354,6 +362,16 @@ public class MergeConflictResolver {
         // resolver that decided something, and it produces a suggestion rather than an application because its
         // deletion handling is a trade rather than a proof (JETBRAINS_PORT.md section 5.2).
         resolution = greedyOffer(conflict, resolution, resolver);
+
+        // Plan step 4.17, the other half of the proposer: its answer joins the channel as a SECOND suggestion when
+        // the tool has one of its own, and as the primary when it has none. Attaching here rather than above is what
+        // makes the order meaningful — the tool's own composed answer is the first thing a reviewer reads, and a
+        // model's proposal sits beside it as the alternative, labelled with its own provenance and its own
+        // verification verdict. Before the channel held a list, this answer had nowhere to go but the fix paths,
+        // which are objections rather than answers (SUGGESTIONS.md § 7).
+        if (proposedAnswer != null) {
+            resolution = ConflictResolution.copyOf(resolution).addSuggestion(proposedAnswer).build();
+        }
 
         // WS3: nothing is applied without passing the verification gate.
         resolution = verifier.apply(conflict, resolution);
@@ -665,7 +683,37 @@ public class MergeConflictResolver {
      * human. The verdict then travels into the fix path, so a reviewer reads what the gate said before deciding,
      * and a refused proposal is labelled as refused rather than quietly dropped.</p>
      */
-    private Optional<FixPath> proposedOption(Conflict conflict) {
+    /**
+     * One proposer call, and its two artefacts: the fix path a proposal has always been, and the
+     * {@link Suggestion} it now also becomes (plan step 4.17, {@code SUGGESTIONS.md} § 7).
+     *
+     * <p>The suggestion's <b>level is `TEXT_LOCAL` and that is deliberate rather than incidental</b>: the tool can
+     * vouch for nothing about what a model read, so the recorded level is the weakest reading there is rather than
+     * an assumed stronger one. A proposal that recorded `STRUCTURE` because its text looks structural would be
+     * claiming a reading nobody verified, and `Reliability` would then be asked a question about authority nobody
+     * answered.
+     *
+     * <p>Its <b>confidence is `PLAUSIBLE`</b> for the same reason a resolver's composed answer is: useful to look at
+     * first, and not mechanically forced by the inputs.
+     *
+     * <p>The verification verdict is carried on the suggestion, which is what {@code SUGGESTIONS.md} § 7 asks for:
+     * the gate's answer moves out of a fix path's {@code impact} text beginning "NOT verified" and into the
+     * channel's uniform field, so a page renders a refused proposal and a refused pass answer the same way.
+     *
+     * @param path       the fix path as before (a refusal to change a decision, or the route to accepting one)
+     * @param suggestion the same proposal on the channel, or {@code null} when the proposer failed rather than
+     *                   answered — a failure is an objection with no answer, and the channel carries answers
+     */
+    private record ProposerOutcome(FixPath path, Suggestion suggestion) {
+    }
+
+    /**
+     * Ask the proposer once, and describe what it produced.
+     *
+     * <p>Empty when there is no proposer or it had nothing to say; a path with a {@code null} suggestion when it
+     * <b>failed</b> (an objection, and the fix path says what happened, as it always did).
+     */
+    private Optional<ProposerOutcome> proposalFor(Conflict conflict) {
         if (proposer == null) {
             return Optional.empty();
         }
@@ -675,13 +723,13 @@ public class MergeConflictResolver {
         } catch (RuntimeException failure) {
             // An advisor's failure must not change a decision: the escalation stands, and the fix path says what
             // happened instead of pretending the proposer had nothing to say.
-            return Optional.of(FixPath.builder()
+            return Optional.of(new ProposerOutcome(FixPath.builder()
                 .conflictType(conflict.getType())
                 .description("A proposal was requested and the proposer failed")
                 .options("Decide this conflict yourself, or fix the proposer")
                 .justification(String.valueOf(failure.getMessage()))
                 .impact("Nothing was applied: a proposer cannot change what this tool decides.")
-                .build());
+                .build(), null));
         }
         if (proposed.isEmpty()) {
             return Optional.empty();
@@ -695,7 +743,7 @@ public class MergeConflictResolver {
             .build();
         ConflictResolution verified = verifier.apply(conflict, candidate);
         boolean passed = verified.getVerification() == ConflictResolution.Verification.PASSED;
-        return Optional.of(FixPath.builder()
+        FixPath path = FixPath.builder()
             .conflictType(conflict.getType())
             .description(passed
                 ? "Use the proposed answer"
@@ -708,7 +756,24 @@ public class MergeConflictResolver {
             .impact(passed
                 ? "Verified: the gate found no structural fault. Applying it is still your decision."
                 : "NOT verified: " + verified.getExplanation())
-            .build());
+            .build();
+        Suggestion suggestion = new Suggestion(
+            proposal.resolvedCode(),
+            proposal.explanation(),
+            // Who produced it, in the words a reviewer reads: not a resolver, not a pass, but a model.
+            "proposer",
+            // The weakest reading: see this record's javadoc for why a proposal may not claim more.
+            AnalysisLevel.TEXT_LOCAL,
+            verified.getWarnings(),
+            verified.getVerification(),
+            verified.getExplanation(),
+            Suggestion.Confidence.PLAUSIBLE);
+        return Optional.of(new ProposerOutcome(path, suggestion));
+    }
+
+    /** The retired single-purpose form, kept only for the tests that still call it by name. */
+    private Optional<FixPath> proposedOption(Conflict conflict) {
+        return proposalFor(conflict).map(ProposerOutcome::path);
     }
 
     private List<FixPath> manualOptions(Conflict conflict, ConflictResolver resolver) {

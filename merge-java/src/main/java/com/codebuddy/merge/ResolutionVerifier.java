@@ -2,6 +2,7 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import java.util.List;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
@@ -84,16 +85,22 @@ public interface ResolutionVerifier {
             // automatic one would - and a failure is written into the suggestion rather than hiding it,
             // because a person may still want to see what was proposed and repair it. This is the treatment
             // ProposerBehindTheGateTest already demands of a refused proposal.
-            if (resolution.getSuggestion() == null) {
+            if (!resolution.hasSuggestion()) {
                 return resolution;
             }
+            // EVERY offer gets the floor, not only the primary one: with more than one producer answering one
+            // conflict (step 4.17), verifying the first and leaving the rest unlabelled would put an unchecked
+            // answer in front of a reviewer beside a checked one, which is worse than showing neither.
             Result verdict = verify(conflict, resolution);
             if (verdict == null) {
                 verdict = Result.skipped("verifier returned no result");
             }
+            List<Suggestion> labelled = new java.util.ArrayList<>(resolution.getSuggestions().size());
+            for (Suggestion suggestion : resolution.getSuggestions()) {
+                labelled.add(suggestion.withVerification(verdict.status(), verdict.detail()));
+            }
             return ConflictResolution.copyOf(resolution)
-                .suggestion(resolution.getSuggestion()
-                    .withVerification(verdict.status(), verdict.detail()))
+                .suggestions(labelled)
                 .build();
         }
         if (resolution.getKind() != ConflictResolution.ResolutionKind.AUTO) {

@@ -188,6 +188,13 @@ public final class MergeReportWriter {
                 .append(",\n");
             json.append("          \"sides\": ").append(sidesJson(resolution)).append(",\n");
             json.append("          \"suggestion\": ").append(suggestionJson(resolution)).append(",\n");
+            // And ALL of them, in the order the producers offered them, because more than one producer can answer
+            // one conflict (plan step 4.17): the first element is the same answer `suggestion` carries, so a
+            // consumer that predates this key and one that reads it see the same primary, and only the second
+            // learns that an alternative exists. Additive on purpose — replacing `suggestion` would break the page
+            // and the decisions export for a capability they do not need to know about yet.
+            json.append("          \"suggestions\": ")
+                .append(suggestionsJson(resolution)).append(",\n");
             json.append("          \"fixPaths\": ").append(fixPathsJson(resolution)).append('\n');
             json.append("        }");
             if (index < resolutions.size() - 1) {
@@ -209,8 +216,29 @@ public final class MergeReportWriter {
      *
      * <p>{@code null} when there is none, so a renderer distinguishes "no suggestion" from an empty one.
      */
+    /**
+     * Every suggestion a resolution carries, as a JSON array; {@code []} when there are none.
+     *
+     * <p>One renderer for one suggestion, used by both keys, so the two cannot describe the same answer differently:
+     * {@code suggestions[0]} and {@code suggestion} are the same object by construction.
+     */
+    private static String suggestionsJson(ConflictResolution resolution) {
+        StringBuilder json = new StringBuilder("[");
+        List<Suggestion> all = resolution.getSuggestions();
+        for (int index = 0; index < all.size(); index++) {
+            if (index > 0) {
+                json.append(", ");
+            }
+            json.append(suggestionJson(all.get(index)));
+        }
+        return json.append(']').toString();
+    }
+
     private static String suggestionJson(ConflictResolution resolution) {
-        Suggestion suggestion = resolution.getSuggestion();
+        return suggestionJson(resolution.getSuggestion());
+    }
+
+    private static String suggestionJson(Suggestion suggestion) {
         if (suggestion == null) {
             return "null";
         }
