@@ -146,10 +146,12 @@ class PortMetricTest {
         int aboveStructure = byLevel.entrySet().stream()
             .filter(entry -> entry.getKey().isAtLeast(AnalysisLevel.STRUCTURE))
             .mapToInt(Map.Entry::getValue).sum();
-        // Row 6's claim is that a resolution reaches PROJECT_TYPES against a project classpath. The corpus resolves
-        // types against the JDK only, so if that level never appears here the row's measurement is EMPTY - which by
-        // § 10.2's own rule means the claim is dropped rather than reworded, and this test reports it as unmet
-        // instead of asserting a capability the corpus cannot show.
+        // Row 6's claim — "the resolved code compiles against the project classpath and the level is
+        // PROJECT_TYPES" — cannot appear in THIS corpus, because every sample here is resolved against the JDK. That is
+        // a fact about the corpus and not about the module, and the difference matters: this measurement reported the
+        // row as unmet once, which was a **scope error** rather than a finding. `ProjectTypesLevelTest` measures it
+        // where the claim lives — on a resolution, with a control at `PLATFORM_TYPES` — and the print below says which
+        // of the two situations this corpus is in instead of pronouncing on the row.
         boolean projectTypesReached = byLevel.containsKey(AnalysisLevel.PROJECT_TYPES);
 
         System.out.println("BEYOND-PARITY rows measured from the corpus:"
@@ -157,7 +159,9 @@ class PortMetricTest {
             + "\n  row 1 (a claim above the shape's four words): " + aboveStructure
             + " answer(s) at STRUCTURE or above"
             + "\n  row 6 (PROJECT_TYPES against a project classpath): "
-            + (projectTypesReached ? "MET in this corpus" : "UNMET - the corpus resolves against the JDK only")
+            + (projectTypesReached
+                ? "MET in this corpus"
+                : "not measurable from this corpus (JDK-only); measured by ProjectTypesLevelTest instead")
             + "\n  claims with no level recorded: " + claimsWithoutLevel);
 
         assertTrue(claimsWithoutLevel == 0,
@@ -166,6 +170,7 @@ class PortMetricTest {
         assertTrue(aboveStructure > 0,
             "row 1's claim needs at least one answer read above the text levels: " + byLevel);
     }
+
     @Test
     @DisplayName("the word-level corpus: residuals the line pass cannot reach, and what the tool can now say")
     void theWordLevelCorpus() {
