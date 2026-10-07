@@ -225,7 +225,8 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 | the `.kilo` metadata-arena plan                                                   | steps 2.1–2.2                     | **done** — closed into steps 2.1, 2.2                                                              |
 | the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md), and [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) | steps 3.0a–3.0k (the one metadata engine in `jcodebuddy-core`, then moving this generator onto it **as one consumer**); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | **partly done** — done: 3.0a, 3.0b, 3.0c, 3.0d, 3.0e, 3.0f, 3.0g, 3.0h, 3.0i, 3.0k, 3.1, 3.2, 3.3; still open: 3.0j, 3.10, 3.11, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9 |
 | [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md)       | steps 4.1–4.4                     | **partly done** — done: 4.1; still open: 4.2, 4.3, 4.4                                             |
-| the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, and upstream's test vectors | **new** — nothing of it is implemented; the plan is the only record |
+| the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): the classification of every upstream resolution step, then the **SAFE** half — sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, upstream's test vectors | **new** — nothing of it is implemented; the analysis (8 steps, 7 checks) is done and is the reference |
+| the general suggestion channel, asked for 2026-10-07 — designed in [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md) | steps 4.14–4.17: a first-class `SUGGESTION` resolution that carries a concrete answer and is never applied on its own; the answers the module **already computes but hides behind a refusal**; the page's Accept/Edit/Reject; rejection memory; and the **SUGGESTION** half of the JetBrains port as its first producer | **new** — and deliberately **not** JetBrains-specific: a future producer should add a producer and touch nothing else |
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **still open** — every step this row scheduled is unticked in § Progress (5.1, 5.2, 5.3)           |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **still open** — every step this row scheduled is unticked in § Progress (5.4, 8.2)                |
 | [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5                     | **still open** — every step this row scheduled is unticked in § Progress (6.1, 6.2, 6.3, 6.4, 6.5) |
@@ -2943,37 +2944,89 @@ build itself needs, not a result of this change.
 
 ---
 
-#### 4B — the JetBrains port: steps 4.7–4.13
+#### 4B — the JetBrains port: steps 4.7–4.17
 
 > **Why this is a lettered subsection and not `## Phase 9`.** Phases 0–8 and the `9.x` cleanup are already
 > numbered, and the cleanup's own steps are cited by number across this file. Renumbering them to make room
 > would break those references for a labelling gain, which [`§ 1`](#1-how-to-work-this-file)'s
 > "renumber nothing" rule does not ask for. The JetBrains work is nonetheless a **phase-sized block of
-> merge-java work** and is written as one; the title says so. Steps 4.7–4.13 are new and belong to Phase 4,
+> merge-java work** and is written as one; the title says so. Steps 4.7–4.17 are new and belong to Phase 4,
 > placed here rather than beside 4.1–4.5 because they follow 4.5/4.6 and depend on both.
 
-This is the **port of JetBrains' merge and diff engine** into `merge-java`, asked for on 2026-10-07. The
-whole of the extracted research — every upstream path, licence obligation, algorithm, decision rule and
-test vector — is in
+**This is not a port of an algorithm, and it must not be done as one.** The maintainer's instruction of
+2026-10-07 was explicit: *"I do not want a naive port, I want analysis of the code that looks for more
+useful resolution steps and resolution checks. We want to port safe merge results as such and open
+suggestions as new type of resolution that needs user attention but still helps."*
+
+So the work has **three parts, in this order**, and the order is the design:
+
+1. **Analyse, and classify every upstream resolution step and check** as **SAFE** (the answer is a
+   function of the inputs — apply it) or **SUGGESTION** (the answer is plausible and useful — offer it,
+   never apply it). Done: [`JETBRAINS_PORT.md` § 5](../merge-java/docs/JETBRAINS_PORT.md) classifies
+   eight resolution steps (R1–R8) and seven checks (C1–C7), with the guard named `file:line` and a reason
+   per row. **A step that cannot be confidently classified is not ported yet** — that rule is what keeps
+   [`DESIGN_NEVER_AUTO_RESOLVED.md`](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md) true while taking
+   everything upstream offers.
+2. **Port the SAFE half as such** — steps 4.8–4.13. These land as `AUTO` resolutions behind the existing
+   `ResolutionVerifier`.
+3. **Build the suggestion channel and move the SUGGESTION half onto it** — steps 4.14–4.17. The channel
+   is a **general mechanism**, not a JetBrains feature: it is designed in
+   [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md), and JetBrains' word-level
+   passes are its first producer rather than its definition.
+
+**The finding that makes part 3 necessary is in part 1.** The module already computes useful answers and
+then **hides them behind a refusal**: `MethodBodyChangeConflictResolver` builds a combined method body
+(line 87) and stores it in `resolvedCode` on a `REVIEW`, while `MergeFileTool.decide` returns
+`LEFT_REVIEW` with a `null` replacement — so the file keeps its markers and the answer never reaches the
+reviewer as *the* proposed result. The tool did the work and then threw it away. Part 3 fixes the
+**presentation**, not the decision: none of those answers becomes automatic.
+
+**The ambition, in the maintainer's words (2026-10-07):** *"this tool must be better than JetBrains,
+JetBrains is the benchmark of minimum that has to be achieved where we overlap with JetBrains."* So the
+port has a **floor and a point**, and the plan keeps them apart:
+
+- **The floor is overlap parity, and it is a build gate** —
+  [`JETBRAINS_PORT.md` § 5.5–5.6](../merge-java/docs/JETBRAINS_PORT.md), built in step 4.13. § 5.5 defines
+  the overlap (intra-line and line-level three-way **text** merge — every R and C row). Where upstream
+  resolves a case and we escalate it, we are worse, and a port that added machinery while leaving such a
+  case escalated would have failed while looking like progress. § 5.5 also names the three places parity
+  would be a **regression** (member-level recognition, `PROJECT_TYPES` claims, the verifier) because the
+  floor must not lower the ceiling we already have.
+- **The point is exceeding it where we already can** —
+  [`§ 10.2`](../merge-java/docs/JETBRAINS_PORT.md) lists six capabilities we have and upstream does not
+  (`AnalysisLevel` arbitration, `ResolutionVerifier`, twelve domain `ConflictType`s, signature-keyed
+  replay, the suggestion channel, project-classpath type resolution), each tied to an overlap case it must
+  **win with a measurement**. A row whose measurement does not beat the shape-only answer is **removed**,
+  not reworded.
+
+The full reference for parts 1 and 2 — every upstream path, licence obligation, algorithm, decision rule
+and test vector — is in
 [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md). **Read it before starting
-4.7; it is the reference these steps are written against, and it corrects three inaccuracies in the
-original instruction** (the test path is `tests/testSrc/`, not `test/`; the algorithms live in
-`platform/util/diff`, not `diff-impl`; the engine is Kotlin, not Java).
+4.7.** It corrects three inaccuracies in the original instruction (the test path is `tests/testSrc/`, not
+`test/`; the algorithms live in `platform/util/diff`, not `diff-impl`; the engine is Kotlin, not Java)
+and it records that upstream performs **no validation of resolved text at all** — its safety story is a
+human in an editor (check C7), whereas ours is `ResolutionVerifier`, which is why the suggestion channel
+verifies a suggestion *as if* it were automatic.
 
 | Step | What                                                                                        | Who   | Size |
 | ---- | ------------------------------------------------------------------------------------------- | ----- | ---- |
 | 4.7  | Sources, licence and the pinned upstream checkout                                           | agent | S    |
 | 4.8  | The text tier: line + word Myers diff, and the whitespace policies                          | agent | L    |
-| 4.9  | The merge tier: range building and the two word-level auto-resolve passes                   | agent | L    |
+| 4.9  | The merge tier — **SAFE** results only: range building, the simple pass, and the refusals   | agent | L    |
 | 4.10 | Whitespace policy as a caller-visible option, threaded through detection and resolution     | agent | M    |
 | 4.11 | `AnalysisLevel` gains the intra-line evidence level                                         | agent | S    |
 | 4.12 | The conflict **shape** ported onto detection, beside the existing domain taxonomy           | agent | M    |
-| 4.13 | Upstream test vectors, plus the randomized property test                                    | agent | M    |
+| 4.13 | Upstream vectors, **the parity gate**, and the randomized property test                     | agent | M    |
+| 4.14 | The suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`     | agent | M    |
+| 4.15 | Move the resolvers that already compute an answer onto the channel                          | agent | M    |
+| 4.16 | The page and the decisions contract: Accept / Edit / Reject, and the bulk-accept guard      | agent | M    |
+| 4.17 | Rejection memory, and `ConflictProposer` as one provenance                                  | agent | M    |
 
-**Ordering.** 4.7 gates everything. Within the rest: 4.8 → 4.9 → 4.10 are a chain; 4.11 and 4.12 depend
-on 4.9; 4.13 is last because it measures the whole port. 4.12 is the step that makes the tool
-*measurably* better on non-overlapping changes, and 4.9 is the step that makes it better on
-non-overlapping changes *within one line*.
+**Ordering.** 4.7 gates everything. 4.8 → 4.9 → 4.10 are a chain; 4.11 and 4.12 depend on 4.9; 4.13
+measures parts 1–2. **4.14 depends on nothing but the existing model** and may be started at any point
+after 4.7 — it is deliberately first in part 3 so that a channel whose contract is settled is what gets
+rendered, rather than a channel being discovered while it is being rendered. 4.15 and 4.17 both feed
+4.16, and 4.13's graded analysis is what gives 4.17's `confidence` and `provenance` something true to say.
 
 ### 4.7 — Sources, licence and the pinned upstream checkout
 **Who:** agent · **Size:** S
@@ -2987,7 +3040,7 @@ of someone else's source.
 1. **Recreate the checkout at the pinned commit.** The commands, and the one non-obvious failure mode
    (`--no-checkout` plus `sparse-checkout set` leaves an *empty working tree* until an explicit
    `checkout`), are in
-   [`JETBRAINS_PORT.md` § 11](../merge-java/docs/JETBRAINS_PORT.md). It lives under `.tmp/` — gitignored
+   [`§ 12`](../merge-java/docs/JETBRAINS_PORT.md). It lives under `.tmp/` — gitignored
    scratch per root `AGENTS.md` § 2 — and is **never a build input**. Record the commit hash the port was
    read at (`9f5f0342…`, 2026-10-07) in the port document; a moving `master` is not a citation.
 2. **Write `merge-java/THIRD_PARTY_NOTICES.md`** carrying: the Apache 2.0 text or a pointer to it, the
@@ -3001,7 +3054,7 @@ of someone else's source.
    without it — the same enforcement shape `GeneratorGuardTest` uses, because an attribution rule that is
    only written down is the rule that rots.
 4. **Confirm the package skeleton and the three tiers** named in
-   [`JETBRAINS_PORT.md` § 5.1](../merge-java/docs/JETBRAINS_PORT.md) — `text`, `merge`, adapter — including
+   [`§ 6.1`](../merge-java/docs/JETBRAINS_PORT.md) — `text`, `merge`, adapter — including
    the tier property that makes the vectors portable: everything up to `merge` must compile and test with
    **no reference to `Conflict`, `ConflictResolution` or any other type of this module**.
 
@@ -3023,7 +3076,7 @@ below the line. JetBrains' first pass is a line diff and its second pass is a wo
 blocks; this step builds both.
 
 **Do:** implement the `com.codebuddy.merge.jetbrains.text` tier described in
-[`JETBRAINS_PORT.md` § 5.1](../merge-java/docs/JETBRAINS_PORT.md):
+[`JETBRAINS_PORT.md` § 6.1](../merge-java/docs/JETBRAINS_PORT.md):
 
 - `ComparisonPolicy` — `DEFAULT`, `TRIM_WHITESPACES`, `IGNORE_WHITESPACES`
   ([upstream: `ComparisonPolicy.kt`](../merge-java/docs/JETBRAINS_PORT.md)). Semantics per
@@ -3049,48 +3102,62 @@ merge model.
 
 **Done when:** "what changed, and where, and down to which word" is a question the module can answer.
 
-### 4.9 — The merge tier: range building and the two word-level resolve passes
+### 4.9 — The merge tier, SAFE half only: range building, the simple pass, and the refusals
 **Who:** agent · **Size:** L
 
-This is the core prize, and the step that removes the class of false conflict we are worst at: two
-branches editing **different words of the same line** are, to us, one line-level conflict escalated to a
-human.
+This is where the classification is enforced, and it is deliberately **narrower than a port of the
+upstream algorithm**. Read [`JETBRAINS_PORT.md` § 5](../merge-java/docs/JETBRAINS_PORT.md) first: it
+classifies eight upstream resolution steps (R1–R8) and seven checks (C1–C7). This step takes the rows
+marked **SAFE**; the rows marked **SUGGESTION** belong to step 4.14's channel and are wired in 4.15.
+
+The prize is the false conflict we are worst at: two branches editing **different words of one line**
+are, to us, one line-level conflict escalated to a human.
 
 **Do:** implement `com.codebuddy.merge.jetbrains.merge` per
-[`JETBRAINS_PORT.md` § 5.2–5.4](../merge-java/docs/JETBRAINS_PORT.md):
+[`JETBRAINS_PORT.md` § 6.2–6.3 and § 6.5](../merge-java/docs/JETBRAINS_PORT.md) — **R1, R5, R7, R8 and
+checks C1, C2, C4, C6**:
 
 1. **`MergeRange` + `MergeRangeUtil.getMergeType`** — the emptiness × equality decision table
-   transcribed as [`§ 5.2`](../merge-java/docs/JETBRAINS_PORT.md)'s table, including the two rules we are
-   missing: a conflict is resolvable **only when both sides are non-empty**, and the
-   both-sides-inserted case is a **refusal**, because two different insertions at one point have no
-   correct order. Honour `trueEquality`: when sides are policy-equal but not byte-equal the type is still
-   `MODIFIED` and **both** sides report as changed.
-2. **`MergeResolveUtil.tryResolve`** — the `SimpleHelper` walk of
-   [`§ 5.3`](../merge-java/docs/JETBRAINS_PORT.md), **with its whitespace retry**: run with `DEFAULT`, and
-   on a refusal run again with `IGNORE_WHITESPACES`.
-3. **`MergeResolveUtil.tryGreedyResolve`** — the `GreedyHelper` of
-   [`§ 5.4`](../merge-java/docs/JETBRAINS_PORT.md), with its deletion-applying behaviour and its
-   equal-insertions-append-the-shorter rule. **The choice of strategy is a parameter, never a global**
-   ([`§ 7`](../merge-java/docs/JETBRAINS_PORT.md)), and the chosen strategy is recorded on the resolution.
-4. **The boundary rules of [`§ 6`](../merge-java/docs/JETBRAINS_PORT.md), as tests, not as comments.**
-   Upstream may trade correctness for resolve-rate because a person reviews and undoes every result; our
-   resolutions can be written to disk with nobody watching, so:
-   - a pass result whose inputs had **any deletion on either side** is at most `REVIEW`, never `AUTO`;
-   - a pass that succeeded **only** under `IGNORE_WHITESPACES` carries a warning naming the policy,
-     because the result is not byte-identical to either input;
-   - a modify/delete-shaped block is never auto-resolved — upstream encodes this twice, and we take both,
-     as a **cross-check** on `DESIGN_NEVER_AUTO_RESOLVED.md` § 2 rather than a new rule.
+   transcribed as [`§ 6.2`](../merge-java/docs/JETBRAINS_PORT.md)'s table, including the two rules we are
+   missing: a conflict is resolvable **only when both sides are non-empty** (check C1), and the
+   both-sides-inserted case is a **refusal** (step R6), because two different insertions at one point
+   have no correct order. Honour `trueEquality`: when sides are policy-equal but not byte-equal the type
+   is still `MODIFIED` and **both** sides report as changed.
+2. **`MergeResolveUtil.tryResolve` (R1) — the simple pass only.** The `SimpleHelper` walk of
+   [`§ 6.3`](../merge-java/docs/JETBRAINS_PORT.md), whose every appended region is chosen by
+   *is-unchanged*, *only-left-changed*, or *only-right-changed*, and which refuses outright when both
+   sides changed differently. **That refusal (R6) is the model and lands first**, with its vector: a pass
+   that cannot prove an answer must return nothing rather than a guess.
+3. **Range building (R7) and the ignored-change re-emission (R8)** — `buildSimple` /
+   `FairMergeBuilder`, and `IgnoringChangeBuilder`'s sub-changes. R8 is **required, not optional**: it is
+   what makes a whitespace-ignoring merge still *show* the whitespace difference instead of silently
+   normalising formatting.
+4. **`ComparisonMergeUtil`'s region-order invariants (check C6)** as an asserted property over the range
+   list — not as inline `check(...)` calls, but as the invariant step 4.13's generator tests.
+5. **R1's carve-out, recorded rather than implicit (check C7).** Where the result is policy-equal but not
+   byte-equal to either input, the resolution **says so**: a warning naming the policy, and the
+   `AnalysisLevel` it actually reached. Upstream records nothing here because a human is watching; we may
+   write the file, so an unrecorded formatting difference is exactly the invisible change to prevent.
 
-**`DESIGN_NEVER_AUTO_RESOLVED.md` is not relaxed by this step.** Say so in the step's commit message, and
-add the test that proves it: the three boundary rules above, each with a vector that would fail if the
-rule were dropped.
+**Explicitly NOT in this step — and say so in its commit message.** `tryGreedyResolve` (R3) and its
+unconditional deletion application (R4), and the `IGNORE_WHITESPACES` **retry** (R2), are classified
+**SUGGESTION** in [`§ 5.1`](../merge-java/docs/JETBRAINS_PORT.md) because their result is useful but not
+mechanically forced. Porting them here as `AUTO` would be the naive port the maintainer rejected. They
+are built in 4.14–4.15 and consumed by the channel.
 
-**Gate:** `MODULE` for `merge-java` green, with `MergeResolveUtilTest`'s vectors ported
-([`§ 5.3`-`5.4`](../merge-java/docs/JETBRAINS_PORT.md)), the three boundary tests, and a test that the
-greedy strategy is reachable only through the parameter.
+**`DESIGN_NEVER_AUTO_RESOLVED.md` is not relaxed by this step.** The commit message says so, and the
+tests prove it: check C1 and the modify/delete guard (C2) each get a vector that fails if the rule is
+dropped, and C2 is written as a **named** guard with a comment naming the corresponding rule in
+[`DESIGN_NEVER_AUTO_RESOLVED.md` § 2](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md) — upstream encodes it
+independently, and the two being the same rule is worth making visible rather than coincidental.
 
-**Done when:** a conflict inside a single line is resolved when the edits do not interfere, and refused
-with a reason when they do.
+**Gate:** `MODULE` for `merge-java` green, with `MergeResolveUtilTest`'s simple-pass vectors ported
+([`§ 11.2`](../merge-java/docs/JETBRAINS_PORT.md)), the C1/C2/C6 tests, and a test asserting that the
+greedy strategy and the whitespace retry are **not reachable** from this step's API — the negative test is
+what keeps the classification honest.
+
+**Done when:** a conflict inside a single line is resolved when the edits provably do not interfere, and
+refused with a reason when they do.
 
 ### 4.10 — Whitespace policy as a caller-visible option
 **Who:** agent · **Size:** M
@@ -3177,41 +3244,229 @@ no shape can turn a `MANUAL` resolution into an applied one.
 **Done when:** the report says what kind of change a conflict is as well as what domain it is in, and the
 decision uses it where it makes an answer mechanical.
 
-### 4.13 — Upstream test vectors, and the randomized property test
+### 4.13 — Upstream vectors, the parity gate, and the randomized property test
 **Who:** agent · **Size:** M
 
-The instruction asked for JetBrains' test cases to be integrated, and this is that step.
-[`§ 10`](../merge-java/docs/JETBRAINS_PORT.md) transcribes the vectors; this step lands them and adds
-the one property worth taking from the randomized suites.
+The instruction asked for JetBrains' test cases to be integrated, and this is how they earn their place:
+**they are the benchmark, and the benchmark is a build gate.** The maintainer's rule of 2026-10-07 —
+*"this tool must be better than JetBrains, JetBrains is the benchmark of minimum that has to be achieved
+where we overlap with JetBrains"* — is [`JETBRAINS_PORT.md` § 5.5](../merge-java/docs/JETBRAINS_PORT.md),
+and § 5.6 states the gate. **Read both before writing a line of this step**, because this is the step
+where "we are at least as good as the benchmark" stops being a sentence and becomes a test result.
+
+The distinction that makes this step matter: the failure it prevents is **invisible**. A port that
+resolves *more* cases than before but still escalates one that upstream resolves looks like an
+improvement in every commit message and every dashboard. Only a gate catches it.
 
 **Do:**
 
-1. **Land the four vector sets as fixtures.** `§ 10.1` change types, `§ 10.2` word-level resolves,
-   `§ 10.3` non-conflicting auto-apply with its remaining-change counts, `§ 10.5` the whitespace pair —
+1. **Land the four vector sets as fixtures.** `§ 11.1` change types, `§ 11.2` word-level resolves,
+   `§ 11.3` non-conflicting auto-apply with its remaining-change counts, `§ 11.5` the whitespace pair —
    as `src/test/resources/fixtures/jetbrains-*` in the `THREE_WAY_FIXTURES.md` layout, so the existing
    `ThreeWayFixture` harness runs them without a new loader. Note that the upstream `_` is a line
-   separator and that `§ 10.2`'s resolve vectors carry **expected content**, not just a verdict.
-2. **Land the refusal vectors too** (`§ 10.4`), including the **control** row. The control is the point:
+   separator and that `§ 11.2`'s resolve vectors carry **expected content**, not just a verdict.
+2. **Land the refusal vectors too** (`§ 11.4`), including the **control** row. The control is the point:
    it proves the refusal comes from the conflict *type* and not from the text, and a port that took only
    the two refusal rows would pass while being wrong.
-3. **Re-express the randomized property, do not port its harness.** `MergeAutoTest` checks that after any
+3. **Build the parity gate itself** ([`§ 5.6`](../merge-java/docs/JETBRAINS_PORT.md)) — the minimum bar
+   for calling this port done, and a separate test from the vector fixtures so its failure message can
+   name the vector and the direction of the regression. Grade **three** outcomes per vector, not one:
+   upstream *auto-resolved to text X* → we must resolve **to the same text X** ("resolved something" is
+   not parity); upstream *refused* → we must refuse; upstream *invalidating edit makes it unresolvable* →
+   we must become unresolvable. **Fail on any regression, in either direction:**
+   - upstream resolves, we escalate → **failure** (we are worse than the floor);
+   - upstream refuses, we apply automatically → **failure of the more serious kind**, a
+     `DESIGN_NEVER_AUTO_RESOLVED.md` breach wearing a port's clothes.
+
+   The **only** permitted exception is a case where our `ResolutionVerifier` or `AnalysisLevel`
+   arbitration *deliberately* declines something upstream's editor-and-undo model accepts. Such a case is
+   listed **by name** in the test with its argument, so the difference is a recorded decision rather than
+   a silent regression — and an exception that cannot be argued in one sentence is a bug in the port, not
+   an exception.
+4. **Re-express the randomized property, do not port its harness.** `MergeAutoTest` checks that after any
    sequence of apply / ignore / resolve / edit, the change ranges stay ordered and undo restores the prior
    state. Its harness is bound to `ApplicationManager`, `Disposable` and the editor undo stack
    ([`§ 3.4`](../merge-java/docs/JETBRAINS_PORT.md)), so port the **property** over our plain-text API with
    a **seeded** generator — a failing run must be reproducible, which a `System.currentTimeMillis()` seed
    (upstream's choice) does not give.
-4. **Produce the before/after number.** [`§ 9`](../merge-java/docs/JETBRAINS_PORT.md) names the target:
-   conflicts escalated to a human, and blocks left `LEFT_MANUAL`, must both fall; and **zero new
-   incorrect applications** against `DESIGN_NEVER_AUTO_RESOLVED.md`. Measure it over the ported vectors
-   plus this module's own fixtures, and put the counts in the commit message. A port claimed to be an
-   improvement without that number is an assertion, not evidence.
+5. **Measure both halves, not just the floor.** [`§ 10.3`](../merge-java/docs/JETBRAINS_PORT.md) names
+   four numbers: the parity ratio with its exception list; *conflicts escalated to a human* and *blocks
+   left `LEFT_MANUAL`* (both must fall, with **zero** new incorrect applications); and the § 10.2
+   beyond-parity rows, each against the shape-only answer it must beat. Put all of them in the commit
+   message. A claim of **parity** without the gate is the specific assertion this document exists to
+   prevent, and a claim of being **better** without a § 10.2 measurement is the other one.
 
-**Gate:** `MODULE` for `merge-java` green with every vector from `§ 10` executing; the seeded property
-test green and shown to fail on a deliberately broken ordering invariant; the before/after counts in the
-commit message; `LINKS` green for the new documents.
+**Gate:** `MODULE` for `merge-java` green with every vector from `§ 11` executing; **the parity gate green,
+with its ratio and its named exceptions in the test output and the commit message**; the seeded property
+test green and shown to fail on a deliberately broken ordering invariant; the § 10.3 numbers in the commit
+message; `LINKS` green for the new documents.
 
-**Done when:** the improvement is a measured result over upstream's own cases, and no excluded case
-became automatic.
+**Done when:** "at least as good as JetBrains where we overlap" is a test result with a floor under it,
+and the § 10.2 rows are measured rather than asserted.
+
+### 4.14 — The suggestion channel: a resolution kind for an answer that needs a person
+**Who:** agent · **Size:** M
+
+**The general mechanism the whole port exists to feed, and the part with the longest life.** The design
+is [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md) — **read it first**; this step
+builds its § 3 value and § 4 plumbing, and nothing in it is JetBrains-specific.
+
+A **suggestion** is a concrete result the tool worked out, delivered to a person as the thing to look at
+first, which the tool **never applies on its own**. It is defined by four checkable properties
+([`SUGGESTIONS.md` § 2](../merge-java/docs/SUGGESTIONS.md)): it carries code; it is not applied by
+default; it records why it was produced and on what evidence; and both accepting *and refusing* it are
+one action.
+
+**Why it is a new kind and not "make `REVIEW` carry code"** — the reasoning is
+[`SUGGESTIONS.md` § 2](../merge-java/docs/SUGGESTIONS.md), and the short form is that the two need
+different rules for application, for bulk actions and for reporting, so sharing a kind would force each
+of those to become a subtype check. That is exactly the hidden distinction this module keeps turning
+into an explicit one.
+
+**Do:**
+
+1. **`Suggestion`** — the record of [`SUGGESTIONS.md` § 3](../merge-java/docs/SUGGESTIONS.md): `code`,
+   `explanation`, `provenance`, `analysisLevel`, `warnings`, `verification`, `confidence`
+   (`PROVEN` / `PLAUSIBLE`). It is a **standalone value**, so a producer does not have to invent a
+   `ConflictResolution` to offer one — which is what makes the channel open to sources that are not
+   resolvers at all.
+2. **`ResolutionKind.SUGGESTION`**, carrying the suggestion. `SUGGESTION` is **never** applied by the
+   tool: `MergeFileTool.decide` returns a new `Outcome.LEFT_SUGGESTION` (markers kept) unless a caller
+   has explicitly accepted that suggestion.
+3. **`Outcome.APPLIED_SUGGESTION`**, distinct from `APPLIED_AUTO` — a run's report must be able to say
+   *"three blocks were decided by the tool, two from your accepted suggestions, one still open"*, and one
+   merged "applied" count would claim credit the tool has not earned.
+4. **`ResolutionVerifier` runs on a suggestion as if it were automatic.** This is the load-bearing half
+   of check C7 in [`§ 6]](../merge-java/docs/JETBRAINS_PORT.md): upstream validates
+   nothing and relies on a human in an editor; we have a verifier, and today it skips every non-`AUTO`
+   resolution ("only an automatic resolution carries the promise that is being verified"). A suggestion
+   is not verified in order to be suppressed — a failing verdict **labels** it and it is still shown,
+   which is the treatment `ProposerBehindTheGateTest` already demands of a refused proposal.
+5. **The structural guarantee, generalised.** `ConflictProposer`'s "cannot reach the resolution" is a
+   property of the code shape, not a promise; it must hold for every producer of a suggestion. The
+   suggestion lives in its own field and the resolution's `resolvedCode` and `kind` are not writable from
+   the channel. A test asserts it for the channel, not for one implementation.
+
+**Not in this step:** the producers (4.15, 4.17) and the page (4.16). This step is testable with **no UI
+and no JetBrains code at all**, which is why it is first: a channel whose contract is settled is much
+easier to render than one being discovered while it is rendered.
+
+**Gate:** `MODULE` for `merge-java` green, with three tests that encode the boundary directly:
+a suggestion is never applied by `MergeFileTool` without an explicit acceptance; a suggestion that fails
+verification is still present and marked as failed; and no code path from the suggestion channel can
+write the resolution's `resolvedCode` or `kind`.
+
+**Done when:** the module can carry "here is an answer, it is yours to accept or refuse" as a first-class
+outcome, and a new producer can offer one without touching `ConflictType`, `ConflictResolvers` or the
+page — the generality test in [`SUGGESTIONS.md` § 8](../merge-java/docs/SUGGESTIONS.md).
+
+### 4.15 — Move the answers we already compute onto the channel
+**Who:** agent · **Size:** M
+
+The finding that justifies the whole part: **the module computes useful answers and hides them behind a
+refusal.** Measured in the current tree:
+
+| Resolver                           | What it computes                                                             | What happens today |
+| ---------------------------------- | ---------------------------------------------------------------------------- | ------------------ |
+| [`MethodBodyChangeConflictResolver`](../merge-java/src/main/java/com/codebuddy/merge/MethodBodyChangeConflictResolver.java) line 87 | A combined method body from two branches' disjoint edits, with the reasoning | Stored in `resolvedCode` on a `REVIEW`; `MergeFileTool.decide` returns `LEFT_REVIEW` with a `null` replacement, so the answer never reaches a reviewer as *the* proposed result |
+| the same resolver, lines 57 and 66 | "both branches made the same edit" / "they changed the same statement"       | Same               |
+| [`ImportConflictResolver`](../merge-java/src/main/java/com/codebuddy/merge/ImportConflictResolver.java) lines 129, 157 | A union of two import sets | Same |
+| `ConstantAddConflictResolver`, `TypeChangeConflictResolver`, `OverloadAddConflictResolver`, `RenameConflictResolver`, `PackageChangeConflictResolver` | Each computes a `resolvedCode` on its review path | Same |
+
+**Do:** each of those review paths becomes a **suggestion** carrying the code it already builds, at the
+`AnalysisLevel` it actually reached, with its provenance naming the resolver. The `REVIEW` kind stays for
+resolutions whose payload is genuinely **fix paths with no answer** — the distinction
+[`SUGGESTIONS.md` § 2](../merge-java/docs/SUGGESTIONS.md) draws. Where a resolver has both (an answer and
+alternatives), it becomes a suggestion **with** its fix paths, not one or the other.
+
+**The decision does not change.** These answers were `REVIEW` because none of them is provably right —
+two individually-correct body edits can compose into behaviour nobody intended
+([`DESIGN_NEVER_AUTO_RESOLVED.md` § 5.1](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md)). This step changes
+the **presentation** and adds the acceptance path; it does not promote a single one of them. The commit
+message says so and the tests pin it: every block these resolvers own keeps its markers until a decision
+arrives.
+
+**Gate:** `MODULE` for `merge-java` green, with: a test per moved resolver that its suggestion carries the
+code the resolver computed (not a re-derivation), and a test that a run over the sample fixtures leaves
+every such block marked and reports `LEFT_SUGGESTION` rather than `LEFT_REVIEW` — with the **count of
+blocks that now have an answer to offer** in the commit message, which is
+[`JETBRAINS_PORT.md` § 10](../merge-java/docs/JETBRAINS_PORT.md)'s first suggestion-side metric.
+
+**Done when:** work the tool has already done reaches the person who needs it.
+
+### 4.16 — The page and the decisions contract: Accept, Edit, Reject
+**Who:** agent · **Size:** M
+
+A suggestion nobody can act on is a log line. This step makes acceptance one action on the surface the
+module already ships — the `review/` jsx6 page (steps 4.2–4.3) — without changing the round trip it
+established: the page collects a decision, a CLI records it, the next merge replays it. A suggestion
+rides that path rather than adding a second one, which is what keeps the page standalone (no host, no
+port, no network — the maintainer's rule).
+
+**Do:**
+
+1. **The report carries the suggestion.** `MergeReportWriter` writes `code`, `explanation`, `provenance`,
+   `analysisLevel`, `verification` and `confidence` per suggestion, so the page renders it from the same
+   JSON it already reads.
+2. **The page renders a suggestion as the proposed result** — prefilled, in the existing editable result
+   field, with its provenance and verification verdict beside it — and offers **Accept**, **Edit** (accept
+   a modified version) and **Reject**. Accepting is one action; editing is the existing editor.
+3. **The provenance is shown, not just stored.** "The word-level comparison produced this" and "a model
+   proposed this" deserve different amounts of trust from the person reading them
+   ([`SUGGESTIONS.md` § 3](../merge-java/docs/SUGGESTIONS.md)); a suggestion whose basis is invisible is a
+   suggestion that invites blind acceptance.
+4. **The bulk-accept guard, in the pure module and asserted.** "Apply all resolved" applies `AUTO`
+   resolutions **only**. A reviewer accepting a suggestion is judging code they have read, and no bulk
+   action can stand in for that. The rule belongs in `review/src/decisions.js` (testable with no DOM,
+   like the existing bulk rule) and in the CLI, and both get a test — a guard implemented in only one of
+   two places is the failure this rule exists to prevent.
+
+**Gate:** `bun test` in [`merge-java/review`](../merge-java/review) green, with: a suggestion renders with
+its provenance and verdict; accept and reject both produce a valid `decisions.json`; and **bulk accept
+skips a suggestion while still accepting every `AUTO`** — the negative half is the assertion that
+matters. `MODULE` for `merge-java` green for the report half.
+
+**Done when:** a person can take the tool's answer in one action, and cannot take it by accident.
+
+### 4.17 — Rejection memory, and `ConflictProposer` as one provenance
+**Who:** agent · **Size:** M
+
+Two things that turn the channel from a feature into a mechanism, and both are about what happens the
+**second** time.
+
+**Do:**
+
+1. **Declining is recorded, or the suggestion is noise.** If a reviewer rejects a suggestion and the next
+   merge offers it again, the channel has made the tool worse. A rejection is recorded against the
+   conflict **signature** — the mechanism `BranchConflictStore` and `DecisionRecorder` already use — and
+   suppresses that suggestion on later runs. Suppression is per **`(signature, provenance)`**, because
+   rejecting a text-comparison answer is not rejecting a future structural one
+   ([`SUGGESTIONS.md` § 5](../merge-java/docs/SUGGESTIONS.md), rule 4). This is the rule most likely to be
+   skipped, and skipping it is the difference between helpful and nagging.
+2. **`ConflictProposer` becomes one provenance of the channel.** It already has the right boundary and the
+   right gate; it is expressed as one more fix path only because no suggestion channel existed. On this
+   design its output is the concrete proposed result the page prefills, its verification verdict becomes
+   the channel's uniform field instead of `impact` text beginning `NOT verified`, and its
+   cannot-reach-the-resolution property becomes the channel's general guarantee (4.14 item 5).
+   `ProposerBehindTheGateTest`'s five assertions are kept with their subject changed from "a fix path" to
+   "a suggestion". **A model still cannot decide**, and
+   [`DESIGN_NEVER_AUTO_RESOLVED.md`](../merge-java/DESIGN_NEVER_AUTO_RESOLVED.md)'s proposer section is
+   unchanged.
+3. **The SUGGESTION half of the JetBrains port lands here.** `tryGreedyResolve` (R3), its unconditional
+   deletion application (R4) and the `IGNORE_WHITESPACES` retry (R2) — classified **SUGGESTION** in
+   [`JETBRAINS_PORT.md` § 5.1](../merge-java/docs/JETBRAINS_PORT.md) and deliberately left out of 4.9 —
+   become producers on the channel, with `confidence` `PLAUSIBLE` and their provenance naming the pass and
+   the comparison policy that produced them. The strategy and policy are **parameters, never globals**
+   ([`§ 8`](../merge-java/docs/JETBRAINS_PORT.md)), and each is recorded on the suggestion.
+
+**Gate:** `MODULE` for `merge-java` green, with: a rejected suggestion is not offered again for the same
+`(signature, provenance)` while a different provenance still is; the three SUGGESTION-class ports each
+produce a suggestion with `PLAUSIBLE` confidence and are **not** reachable as `AUTO`; and the proposer's
+existing five assertions still pass against the channel. `bun test` in `merge-java/review` green.
+
+**Done when:** the channel learns from refusal, a model's proposal and a word-level pass are the same kind
+of thing to everyone downstream, and **a new suggestion source adds a producer and touches nothing else**
+— the generality test in [`SUGGESTIONS.md` § 8](../merge-java/docs/SUGGESTIONS.md).
 
 ---
 
@@ -4093,11 +4348,15 @@ start)
 | 4.6  | Quality level: evidence scale and claim arbitration                                       | agent              | L    | `[x]`                                                                                       |
 | 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                | agent              | S    | `[ ]`                                                                                       |
 | 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                   | agent              | L    | `[ ]`                                                                                       |
-| 4.9  | JetBrains port: merge tier — range building and the two word-level resolve passes         | agent              | L    | `[ ]`                                                                                       |
+| 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals             | agent              | L    | `[ ]`                                                                                       |
 | 4.10 | JetBrains port: whitespace policy as a caller-visible option                              | agent              | M    | `[ ]`                                                                                       |
 | 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                       | agent              | S    | `[ ]`                                                                                       |
 | 4.12 | JetBrains port: the conflict shape, ported onto detection                                 | agent              | M    | `[ ]`                                                                                       |
-| 4.13 | JetBrains port: upstream test vectors + the randomized property test                      | agent              | M    | `[ ]`                                                                                       |
+| 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test             | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
+| 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`       | agent              | M    | `[ ]`                                                                                       |
+| 4.15 | Move the answers we already compute onto the suggestion channel                           | agent              | M    | `[ ]`                                                                                       |
+| 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard              | agent              | M    | `[ ]`                                                                                       |
+| 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports         | agent              | M    | `[ ]`                                                                                       |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                         | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                         | agent + maintainer | S    | `[ ]`                                                                                       |
 | 5.3  | ACP go/no-go spike                                                                        | human              | S    | `[ ]`                                                                                       |

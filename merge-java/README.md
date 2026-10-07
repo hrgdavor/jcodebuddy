@@ -403,7 +403,8 @@ proposing (never applying) a solution. Planned as Phase 13 in
 | [docs/CONFLICT_FILE_TOOL.md](docs/CONFLICT_FILE_TOOL.md)           | **`MergeFileTool`**: fixing a marker-carrying file, and the private fixture loop that turns what stays broken into a new resolver |
 | [docs/LLM_PROPOSER.md](docs/LLM_PROPOSER.md)                       | **A proposer behind the gate**: an optional advisor whose answer is one more fix path        |
 | [docs/THREE_WAY_FIXTURES.md](docs/THREE_WAY_FIXTURES.md)           | How to add a merge case as real source files, and why                                        |
-| [docs/JETBRAINS_PORT.md](docs/JETBRAINS_PORT.md)                   | **The JetBrains port**: the Apache-2.0 sources, the algorithms worth taking, the boundary they must respect, and the test vectors — plan steps 4.7–4.13 |
+| [docs/JETBRAINS_PORT.md](docs/JETBRAINS_PORT.md)                   | **The JetBrains port**: the Apache-2.0 sources, every resolution step classified SAFE vs SUGGESTION, the boundary they must respect, and the test vectors — plan steps 4.7–4.17 |
+| [docs/SUGGESTIONS.md](docs/SUGGESTIONS.md)                         | **Open suggestions**: a `SUGGESTION` resolution carries a concrete answer a person can accept, edit or refuse — never applied on its own. The general channel, not a JetBrains feature |
 | [docs/WHAT_IS_BASE.md](docs/WHAT_IS_BASE.md)                       | **What `base` means**: the last-synced upstream state, not Git's merge base                  |
 | [VERSION_MAINTENANCE.md](VERSION_MAINTENANCE.md)                   | **The half-yearly version-update obligation**: what to bump, how to verify, and the traps    |
 | [DESIGN_NEVER_AUTO_RESOLVED.md](DESIGN_NEVER_AUTO_RESOLVED.md)     | Why three conflict kinds stay manual                                                         |
