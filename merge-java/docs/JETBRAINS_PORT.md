@@ -683,8 +683,24 @@ document; text is lowercase words for readability). These become
 > the rule that makes those fixtures trustworthy — so they live in
 > `merge-java/src/test/resources/parity/jetbrains-change-types.txt` and `jetbrains-resolve.txt`, as a
 > data set with its own documented format, read by `JetBrainsParityGateTest` as the single source of
-> truth. § 11.3 and § 11.4 are the rows that *are* whole-file cases, and they are the ones a
-> `ThreeWayFixture` could carry.
+> truth.
+>
+> **And the other sets do not fit either, which is worth stating rather than leaving as a hope.** An
+> earlier version of this note said § 11.3 and § 11.4 were the whole-file cases a `ThreeWayFixture`
+> could carry. Neither is:
+>
+> - **§ 11.4 is upstream's FILE-level conflict type** (`DELETED_MODIFIED` / `MODIFIED_DELETED`, via
+>   `MergeConflictModel.isModifyDeleteFileConflict`): one branch deleted the *file* and the other modified
+>   it. This module has no file-level conflict type at all — it has conflict *blocks*, and its version of
+>   the rule is the range-level modify/delete guard, asserted in the gate together with the control that
+>   proves the refusal comes from the type. Three files cannot express a file that is not there.
+> - **§ 11.3 counts "remaining changes" per side** (`BASE` → 1, `LEFT` → 3, `RIGHT` → 2), a quantity in
+>   upstream's document-and-range model. Our surface counts **open conflicts after a run**, which is a
+>   different measurement; asserting equality between the two would be inventing a correspondence.
+>
+> So the honest state is that the byte-level vectors stay a data set, and the file-level sets need a
+> decision about what their analogue in this module *is* — not a fixture written to make this sentence
+> true. The gate grades what this module actually decides, and prints its numbers on every run.
 
 ### 11.1 Change-type vectors (`testChangeTypes`, `testLastLine`)
 

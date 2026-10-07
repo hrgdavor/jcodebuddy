@@ -15,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -394,6 +395,56 @@ class JetBrainsParityGateTest {
         assertFalse(oneSidedDeletion.refused(),
             "a deletion only one side made is a non-conflicting change, and § 11.3 requires us to apply it");
         assertEquals("", oneSidedDeletion.mergedText());
+    }
+
+    @Test
+    @DisplayName("the invalidating edit: an edit to the result makes the recorded answer inapplicable")
+    void theInvalidatingEdit() {
+        // Section 11.2's SECOND table, and the row the port document says matters most for us: upstream resolves
+        // `y z | x y z | x y` to `y`, and then replacing result line 2 with `U` makes `canResolveConflict()` false.
+        // The rule is that **resolvability is a property of the current output, not of the original inputs** — an
+        // answer computed against text a person has since edited is an answer to a question nobody is asking.
+        //
+        // Our expression of it is the signature: the conflict's sides are part of it, so an edit to a block changes
+        // the signature and a decision recorded under the old one cannot match. That is what makes a replayed
+        // decision safe, and asserting the mechanism is the honest test of the rule — it is about the identity of the
+        // thing the answer was computed for, not about a file.
+        Conflict original = ConflictFixtures.sample(ConflictType.METHOD_BODY_CHANGE);
+
+        assertEquals(ConflictSignature.of(original),
+            ConflictSignature.of(ConflictFixtures.sample(ConflictType.METHOD_BODY_CHANGE)),
+            "the same conflict has the same signature: a decision recorded for it can be found again");
+
+        // The edit: one line of OUR side changed, which is exactly upstream's "replace result line 2 with U".
+        Conflict edited = new Conflict(original.getType(), original.getFilePath(), original.getDescription(),
+            original.getBaseCode(), original.getBranch1Code().replace("\n", "\n// edited by a person\n"),
+            original.getBranch2Code());
+        assertNotEquals(ConflictSignature.of(original), ConflictSignature.of(edited),
+            "an edited block is a different conflict, so the recorded answer no longer applies");
+        assertNotEquals(ConflictSignature.of(original).toFileName(),
+            ConflictSignature.of(edited).toFileName(),
+            "and the difference reaches the name a decision is filed under, which is what a replay looks up");
+
+        // THE GAP, found by writing this test and pinned rather than papered over: the BASE is NOT part of the
+        // signature, so a conflict whose upstream side moved — a rebase, a different merge base — keeps the same
+        // signature and a recorded answer still matches it.
+        //
+        // Why it matters: the sides decide the *text*, but the base decides how the change is READ (`ConflictShape`,
+        // the modify/delete rule, whether "both sides inserted" is even true). An answer recorded before a rebase can
+        // therefore be replayed under a description that no longer holds.
+        //
+        // Why it is NOT silently "fixed" here: adding the base would invalidate every recorded decision whenever the
+        // base moves, which is a policy about when a person's past decision stops counting — the maintainer's call,
+        // with a real trade on both sides (a rebase of an unrelated part of the file should not throw away an answer;
+        // a base that genuinely changed under the conflict probably should). This assertion is the pin: if the
+        // decision goes the other way it flips to `assertNotEquals`, and this comment becomes the record.
+        Conflict rebased = new Conflict(original.getType(), original.getFilePath(), original.getDescription(),
+            original.getBaseCode() + "\n    // upstream moved on\n", original.getBranch1Code(),
+            original.getBranch2Code());
+        assertEquals(ConflictSignature.of(original), ConflictSignature.of(rebased),
+            "OPEN QUESTION for the maintainer: the base is not in the signature, so a rebase does not invalidate a"
+                + " recorded answer. Flipping this to assertNotEquals is the change, and it wants its own commit"
+                + " with that decision recorded");
     }
 
     /**

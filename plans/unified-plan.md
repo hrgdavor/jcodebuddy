@@ -3590,13 +3590,38 @@ immediately.**
   move at all, and the run no longer restores from cache. The extension's 1.2.0 schema **rejects** an
   `<input><project>` block — it fails the whole build with "xml config is not valid or not available" — which is
   why the entries are in the global list, noted in the file.
+**Added 2026-10-07 (round 32) — the invalidating edit, and an open question about the signature.**
+
+- **§ 11.2's second table is asserted.** The rule is that *resolvability is a property of the current output, not
+  of the original inputs*: upstream resolves the vector and then, once a person replaces a result line, the answer
+  is no longer resolvable. Our expression of it is the **signature**, and `theInvalidatingEdit` asserts both halves
+  that hold today — the same conflict has the same signature, and an edit to either **side** changes it, including
+  the file name a recorded decision is looked up by.
+- **It found a gap, and the gap is a policy question rather than a bug to fix quietly.** The base is **not** part
+  of `ConflictSignature`, so a conflict whose upstream side moved — a rebase, a different merge base — keeps the
+  same signature and a recorded answer still matches it. That matters because the sides decide the *text* but the
+  base decides how the change is **read** (`ConflictShape`, the modify/delete rule, whether "both sides inserted"
+  is even true), so an answer recorded before a rebase can be replayed under a description that no longer holds.
+  Adding the base would invalidate every recorded decision whenever the base moves, which is a policy about **when
+  a person's past decision stops counting** — the maintainer's call, with a real trade on both sides (a rebase of
+  an unrelated part of the file should not throw an answer away; a base that changed under the conflict probably
+  should). **The test pins today's behaviour with the question written into its message**, so taking the decision
+  flips one assertion rather than being rediscovered. **This is a question for the maintainer, not a blocker:** the
+  work continues, and the gate is honest about which way it currently leans.
+- **Corrected a claim I made in the previous round's own correction.** I wrote that § 11.3 and § 11.4 were the
+  whole-file rows a `ThreeWayFixture` could carry. Neither is, and the port doc now says why: **§ 11.4 is
+  upstream's file-level conflict type** (`DELETED_MODIFIED`), and this module has no file-level conflict type at
+  all — it has conflict *blocks*, with the rule expressed at range level; **§ 11.3 counts remaining changes per
+  side**, a quantity from upstream's document model, while our surface counts **open conflicts after a run**. A
+  fixture written to make the earlier sentence true would have been a correspondence invented rather than
+  measured.
 **Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
   `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its
   remaining-change counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the
   invalidating-edit row, the seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 /
   § 10.2 numbers. **`MergeRange`'s extent coordinates** is the first item of that list, because the gate says so.
 
-**Gate so far:** `merge-java verify` — **890 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
+**Gate so far:** `merge-java verify` — **891 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
 with the build cache **on**; `LINKS` green.
 
 **Fixed 2026-10-07, and the gate proves it: the serious defect is gone and 18/18 change types now agree.**
@@ -3689,6 +3714,31 @@ immediately.**
   move at all, and the run no longer restores from cache. The extension's 1.2.0 schema **rejects** an
   `<input><project>` block — it fails the whole build with "xml config is not valid or not available" — which is
   why the entries are in the global list, noted in the file.
+**Added 2026-10-07 (round 32) — the invalidating edit, and an open question about the signature.**
+
+- **§ 11.2's second table is asserted.** The rule is that *resolvability is a property of the current output, not
+  of the original inputs*: upstream resolves the vector and then, once a person replaces a result line, the answer
+  is no longer resolvable. Our expression of it is the **signature**, and `theInvalidatingEdit` asserts both halves
+  that hold today — the same conflict has the same signature, and an edit to either **side** changes it, including
+  the file name a recorded decision is looked up by.
+- **It found a gap, and the gap is a policy question rather than a bug to fix quietly.** The base is **not** part
+  of `ConflictSignature`, so a conflict whose upstream side moved — a rebase, a different merge base — keeps the
+  same signature and a recorded answer still matches it. That matters because the sides decide the *text* but the
+  base decides how the change is **read** (`ConflictShape`, the modify/delete rule, whether "both sides inserted"
+  is even true), so an answer recorded before a rebase can be replayed under a description that no longer holds.
+  Adding the base would invalidate every recorded decision whenever the base moves, which is a policy about **when
+  a person's past decision stops counting** — the maintainer's call, with a real trade on both sides (a rebase of
+  an unrelated part of the file should not throw an answer away; a base that changed under the conflict probably
+  should). **The test pins today's behaviour with the question written into its message**, so taking the decision
+  flips one assertion rather than being rediscovered. **This is a question for the maintainer, not a blocker:** the
+  work continues, and the gate is honest about which way it currently leans.
+- **Corrected a claim I made in the previous round's own correction.** I wrote that § 11.3 and § 11.4 were the
+  whole-file rows a `ThreeWayFixture` could carry. Neither is, and the port doc now says why: **§ 11.4 is
+  upstream's file-level conflict type** (`DELETED_MODIFIED`), and this module has no file-level conflict type at
+  all — it has conflict *blocks*, with the rule expressed at range level; **§ 11.3 counts remaining changes per
+  side**, a quantity from upstream's document model, while our surface counts **open conflicts after a run**. A
+  fixture written to make the earlier sentence true would have been a correspondence invented rather than
+  measured.
 **Still open in this step:** the fixtures on disk in the `THREE_WAY_FIXTURES.md` layout (`§ 11.1`–`§ 11.5` as
 `src/test/resources/fixtures/jetbrains-*`, § 11.3's non-conflicting auto-apply vectors and its remaining-change
 counts, § 11.4's refusal rows with their control, and § 11.5's whitespace pair), the invalidating-edit row, the
