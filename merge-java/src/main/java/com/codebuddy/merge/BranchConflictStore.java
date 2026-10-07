@@ -2,6 +2,9 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -13,10 +16,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
@@ -43,6 +48,9 @@ import java.util.stream.Stream;
  * applied to code it was not made for.
  */
 public class BranchConflictStore {
+
+    /** Reads and writes the one sidecar that is not a decision: the refusals (plan step 4.17). */
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
      * Create an instance-scoped store that never touches disk and shares nothing
@@ -87,6 +95,15 @@ public class BranchConflictStore {
     public static final String DECISIONS_DIR = "decisions";
 
     /**
+     * The one file in the decisions directory that is not a decision (plan step 4.17).
+     *
+     * <p>Refusals live beside the decisions because they are the opposite kind of fact — a decision says what to
+     * apply, a refusal says what not to offer — and keeping them in one file rather than one per refusal means a
+     * malformed refusal can only lose the refusals, never a decision that would otherwise be replayed.
+     */
+    public static final String REJECTIONS_FILE = "rejected.json";
+
+    /**
      * Branch name used when a caller never said which branch it is resolving.
      * Decisions for this sentinel are held in memory only: writing them would
      * scatter files under a meaningless directory and could replay a decision in
@@ -99,6 +116,14 @@ public class BranchConflictStore {
     private final Path decisionsDir;
     private final boolean inMemoryOnly;
     private final Map<ConflictSignature, ConflictResolution> decisions;
+    /**
+     * Refused suggestions, keyed by signature file name and then provenance (plan step 4.17).
+     *
+     * <p>Keyed by the <em>file name</em> rather than by {@link ConflictSignature} because that is the only form
+     * that survives a round trip: a decision file carries the signature's fields back, while a refusal needs
+     * nothing but the key the decision was stored under.
+     */
+    private final Map<String, Set<String>> rejections = new LinkedHashMap<>();
     private final List<String> loadDiagnostics = new ArrayList<>();
 
     /**
@@ -206,6 +231,62 @@ public class BranchConflictStore {
         if (shouldPersist()) {
             persist(signature, stored);
         }
+    }
+
+    /**
+     * Record that a reviewer refused a suggestion, so the same one is not offered again (plan step 4.17).
+     *
+     * <p>Keyed by <b>(signature, provenance)</b> and not by signature alone: refusing a text-comparison answer is
+     * not refusing a future structural one for the same conflict, and a channel that cannot tell the two apart
+     * would suppress answers a reviewer never saw.
+     *
+     * <p>Stored beside the decisions rather than inside them, because it is the opposite kind of fact: a decision
+     * says what to apply, and this says what not to offer.
+     */
+    public void recordRejection(Conflict conflict, String provenance) {
+        Objects.requireNonNull(conflict, "conflict");
+        recordRejection(ConflictSignature.of(conflict).toFileName(), provenance);
+    }
+
+    /**
+     * The same, keyed by the signature <em>as it was written</em>.
+     *
+     * <p>This is the form the recorder uses, and the reason is worth stating: a decision needs the conflict's
+     * sides so it can be replayed, while a refusal needs only the key — and the page's refusal entry therefore
+     * carries the signature it showed the reviewer and no sides. Rebuilding the signature from an empty conflict
+     * would file the refusal under a different name than the one the resolver computes, and the suppression would
+     * silently never match: a refusal that cannot be found again is worse than no refusal, because it looks like
+     * it worked.
+     */
+    public void recordRejection(String signatureFile, String provenance) {
+        if (signatureFile == null || signatureFile.isBlank() || provenance == null || provenance.isBlank()) {
+            return;
+        }
+        rejections.computeIfAbsent(signatureFile, ignored -> new LinkedHashSet<>()).add(provenance);
+        if (shouldPersist()) {
+            persistRejections();
+        }
+    }
+
+    /** True when this exact answer, from this exact provenance, was refused for this conflict. */
+    public boolean isRejected(Conflict conflict, String provenance) {
+        return conflict != null && provenance != null
+            && rejections.getOrDefault(ConflictSignature.of(conflict).toFileName(), Set.of())
+                .contains(provenance);
+    }
+
+    /** How many conflicts carry at least one refusal; the report's second suggestion-side metric. */
+    public int rejectedConflictCount() {
+        return (int) rejections.values().stream().filter(provenances -> !provenances.isEmpty()).count();
+    }
+
+    /** The provenances refused for one conflict, for diagnostics. */
+    public Set<String> rejectedProvenances(ConflictSignature signature) {
+        if (signature == null) {
+            return Set.of();
+        }
+        return Collections.unmodifiableSet(
+            rejections.getOrDefault(signature.toFileName(), Set.of()));
     }
 
     /**
@@ -325,7 +406,9 @@ public class BranchConflictStore {
             return;
         }
         try (Stream<Path> files = Files.list(decisionsDir)) {
-            files.filter(path -> path.toString().endsWith(".json")).forEach(path -> {
+            files.filter(path -> path.toString().endsWith(".json"))
+                .filter(path -> !REJECTIONS_FILE.equals(path.getFileName().toString()))
+                .forEach(path -> {
                 try {
                     DecisionFile.read(Files.readString(path, StandardCharsets.UTF_8))
                         .ifPresentOrElse(
@@ -341,6 +424,57 @@ public class BranchConflictStore {
             });
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read history at " + decisionsDir, e);
+        }
+        loadRejections();
+    }
+
+    /**
+     * Read the refusals (plan step 4.17).
+     *
+     * <p>A refusal list that cannot be read is reported and skipped rather than failing the merge: the failure
+     * mode of losing it is that a refused suggestion is offered once more, which is mild, while refusing to merge
+     * would not be.
+     */
+    private void loadRejections() {
+        Path source = decisionsDir.resolve(REJECTIONS_FILE);
+        if (!Files.isRegularFile(source)) {
+            return;
+        }
+        try {
+            JsonNode document = MAPPER.readTree(Files.readString(source, StandardCharsets.UTF_8));
+            for (JsonNode entry : document.path("rejected")) {
+                String signature = entry.path("signature").asString("");
+                String provenance = entry.path("provenance").asString("");
+                if (!signature.isEmpty() && !provenance.isEmpty()) {
+                    rejections.computeIfAbsent(signature, ignored -> new LinkedHashSet<>()).add(provenance);
+                }
+            }
+        } catch (IOException | RuntimeException ex) {
+            loadDiagnostics.add("ignored " + REJECTIONS_FILE + ": " + ex.getMessage());
+        }
+    }
+
+    /** Write every refusal, replacing the file: refusals only accumulate, and last-writer-wins is correct. */
+    private void persistRejections() {
+        try {
+            Files.createDirectories(decisionsDir);
+            List<Map<String, String>> entries = new ArrayList<>();
+            rejections.forEach((signature, provenances) -> provenances.forEach(provenance -> {
+                Map<String, String> entry = new LinkedHashMap<>();
+                entry.put("signature", signature);
+                entry.put("provenance", provenance);
+                entries.add(entry);
+            }));
+            Map<String, Object> document = new LinkedHashMap<>();
+            document.put("schemaVersion", SCHEMA_VERSION);
+            document.put("rejected", entries);
+            Path target = decisionsDir.resolve(REJECTIONS_FILE);
+            Path temp = decisionsDir.resolve(REJECTIONS_FILE + ".tmp");
+            Files.writeString(temp, MAPPER.writeValueAsString(document), StandardCharsets.UTF_8);
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not persist the refused suggestions", e);
         }
     }
 

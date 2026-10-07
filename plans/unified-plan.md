@@ -3723,6 +3723,35 @@ existing five assertions still pass against the channel. `bun test` in `merge-ja
 of thing to everyone downstream, and **a new suggestion source adds a producer and touches nothing else**
 — the generality test in [`SUGGESTIONS.md` § 8](../merge-java/docs/SUGGESTIONS.md).
 
+**Started 2026-10-07 — the refusal half is in; the proposer and the ports are not.**
+
+- **Refusal is remembered, which the design calls the rule most likely to be skipped.** `BranchConflictStore`
+  keeps a `rejections` map keyed by signature and then provenance, persisted as **one sidecar**
+  (`decisions/rejected.json`) beside the decisions — deliberately not one file per refusal, so a malformed
+  refusal can only lose refusals, never a decision that would otherwise be replayed. `DecisionRecorder` reads
+  the page's `rejected` array and files each one; `MergeConflictResolver` stops offering an answer whose
+  `(signature, provenance)` was refused, **drops its code** (keeping it would put the refused text back in front
+  of the reviewer through the editor, which is the nagging the refusal exists to stop), and says so in the
+  explanation rather than leaving a silent gap.
+- **The invisible half, and the one that would have looked like it worked.** The page's refusal entry carries the
+  signature it showed the reviewer and **no sides**, so rebuilding the signature from the sides — which is what a
+  *decision* requires, because a decision has to be replayable — would have filed the refusal under a name the
+  resolver never computes. Suppression would then silently never match, and a refusal nobody can find again
+  looks exactly like a refusal that worked. The store therefore takes the key **as written**, and
+  `theRefusalIsFiledUnderTheKeyTheResolverComputes` asserts the two agree. The recorder also refuses a
+  provenance-less refusal rather than storing it: an unnamed refusal would suppress the *next* producer's answer
+  for the same conflict, which is the nagging problem inverted.
+- **Gate so far:** `RejectionMemoryTest` — 5 tests: a refused answer is not offered again and says why; a
+  different provenance is still offered; the key the recorder files equals the key the resolver computes; the
+  refusal survives a write/read round trip; and a provenance-less refusal is rejected with a reported reason
+  instead of suppressing everything. `merge-java verify` — **861 tests, 0 failures, 0 errors** with the build
+  cache off.
+- **Still open in this step:** `ConflictProposer` as one provenance (item 2 — its answer becomes a suggestion
+  rather than only a fix path, which changes step 4.4's "joins the fix paths and NOTHING else" boundary, with
+  `ProposerBehindTheGateTest`'s five assertions moving subject), and the three SUGGESTION-class JetBrains ports
+  (item 3 — `tryGreedyResolve` R3, its unconditional deletion application R4 and the `IGNORE_WHITESPACES` retry
+  R2, which need the greedy pass that step 4.9 deliberately left out and `MergeTierScopeTest` asserts is absent).
+
 ---
 
 #### 4C — hierarchical resolution: a confident answer resolves its region and removes the conflict (steps 4.18–4.22)
@@ -5071,7 +5100,7 @@ start)
 | 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
 | 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[x]` — one rule in the orchestrator converts a `REVIEW` carrying code into a `SUGGESTION` carrying **that same text** (provenance = the resolver's name, level = what it recorded, `resolvedCode` cleared so the text lives in one place). **Measured: 3 of 7 sampled review paths were computing an answer and hiding it**, asserted by comparing the suggestion against a direct resolver call, and printed by the test. Nothing promoted; three existing assertions changed, each the step's own point |
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[x]` — the report carries the suggestion with its basis and verdict detail; the page prefills from `proposedCodeFor` (**a real defect: it read `resolvedCode`, which 4.15 empties, so a suggestion showed an empty editor**), renders provenance/confidence/level/verdict, and exports rejections per provenance. **The bulk guard was not a guard**: it filtered on "a field holds text", which quietly included `REVIEW` and contradicted its own javadoc — it is now `kind === 'AUTO'`. **A clause has no counterpart**: there is no CLI bulk action to guard, and that is recorded rather than invented |
-| 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
+| 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[~]` — **refusal memory is in** (a `rejections` sidecar keyed by signature + provenance, read from the page's export, suppressing that answer and dropping its code). **The invisible half is the one that would have looked like it worked**: the page's refusal carries no sides, so the recorder must file the key **as written** — rebuilding it from sides would file it under a name the resolver never computes and suppression would silently never match. **Still open:** the proposer as a provenance (changes 4.4's boundary) and the three SUGGESTION-class ports (need the greedy pass 4.9 left out) |
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
 | 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in and the instruction's first example now works end to end**: `TieredResolution` + `Reliability` + `explainedSpan`, and a settled conflict is never offered to the resolver below. Four findings came from tests, all corrected in the design: the kept-lines check must judge the *settled* conflict; removal follows the hierarchy's direction (else `equalEvidenceOutranksNothing` became `APPLIED_AUTO`); an insertion has no base lines so an unplaceable conflict is judged over its block; and the report's region stamp must not be applied before resolution (else `IMPORT_ADD` settled an unrelated `COMMENT_ADD`). **Still open:** the per-conflict state as a report key (4.20 changes that shape), `DEFERRED` settling at its resolver's tier, an import-vs-`TEXT_LOCAL` fixture, and the open question of whether the catch-all residual should declare `STRUCTURE` at all |
 | 4.20 | Hierarchical resolution: the state of every conflict in the report                              | agent              | S    | `[x]` — a `state` key per conflict (`RESOLVED`/`OPEN`/`PARTIAL`), aligned with the **conflicts** because a settled one has no resolution of its own and appeared nowhere before; `HierarchicalAcceptanceTest` asserts both states separately |

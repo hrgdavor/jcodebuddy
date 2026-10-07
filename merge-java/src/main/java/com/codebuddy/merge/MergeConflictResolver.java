@@ -344,7 +344,7 @@ public class MergeConflictResolver {
         // Plan step 4.15: work the tool has already done must not be hidden behind a refusal. A REVIEW that
         // carries code is an answer being offered, not an objection, so it travels as a suggestion - and it
         // travels *after* the proposer above so that a proposer's option stays among its alternatives.
-        resolution = asSuggestion(resolution, resolver);
+        resolution = asSuggestion(conflict, resolution, resolver);
 
         // WS3: nothing is applied without passing the verification gate.
         resolution = verifier.apply(conflict, resolution);
@@ -377,7 +377,8 @@ public class MergeConflictResolver {
      * suggestion. Keeping a copy in a field that other code reads as "the applicable answer" would leave a
      * trap — the next reader would find code on a resolution that the tool is forbidden to apply.
      */
-    private static ConflictResolution asSuggestion(ConflictResolution resolution, ConflictResolver resolver) {
+    private ConflictResolution asSuggestion(Conflict conflict, ConflictResolution resolution,
+                                            ConflictResolver resolver) {
         if (resolution.getKind() != ConflictResolution.ResolutionKind.REVIEW
             || resolution.getResolvedCode().isBlank()
             || resolution.hasSuggestion()) {
@@ -385,10 +386,22 @@ public class MergeConflictResolver {
             // payload is genuinely fix paths with no answer (SUGGESTIONS.md § 2).
             return resolution;
         }
+        String provenance = resolver == null ? "unknown" : resolver.name();
+        if (historyStore.isRejected(conflict, provenance)) {
+            // A refusal is remembered, or the channel is noise (SUGGESTIONS.md § 5 rule 4). The answer is not
+            // offered again, and the code is dropped rather than left in `resolvedCode`: keeping it would put the
+            // refused text back in front of the reviewer through the editor, which is the nagging the refusal
+            // exists to stop. What remains is the objection and its options, which is what a REVIEW is for.
+            return ConflictResolution.copyOf(resolution)
+                .resolvedCode("")
+                .explanation(resolution.getExplanation()
+                    + " [this answer was refused on an earlier run, so it is not offered again]")
+                .build();
+        }
         Suggestion suggestion = new Suggestion(
             resolution.getResolvedCode(),
             resolution.getExplanation(),
-            resolver == null ? "unknown" : resolver.name(),
+            provenance,
             resolution.getAnalysisLevel(),
             resolution.getWarnings(),
             ConflictResolution.Verification.NOT_RUN,

@@ -49,14 +49,14 @@ public final class DecisionRecorder {
      * @param recorded how many decisions reached the store
      * @param problems what could not be recorded, each naming the reason (never silently dropped)
      */
-    public record Result(int recorded, List<String> problems) {
+    public record Result(int recorded, int rejected, List<String> problems) {
 
         public Result {
             problems = List.copyOf(problems);
         }
 
         public boolean isEmpty() {
-            return recorded == 0;
+            return recorded == 0 && rejected == 0;
         }
 
         public String describe() {
@@ -105,7 +105,40 @@ public final class DecisionRecorder {
                 problems.add(problem);
             }
         }
-        return new Result(recorded, problems);
+        int refused = 0;
+        for (JsonNode rejection : document.path("rejected")) {
+            String problem = recordRejection(store, rejection);
+            if (problem == null) {
+                refused++;
+            } else {
+                problems.add(problem);
+            }
+        }
+        return new Result(recorded, refused, problems);
+    }
+
+    /**
+     * Record one refusal, so the next run does not offer that answer again (plan step 4.17).
+     *
+     * <p>The provenance is part of the key and must be matchable, which is why an empty one is refused rather
+     * than stored: a refusal that cannot say <em>which</em> answer was refused would suppress the next producer's
+     * answer for the same conflict, which is the nagging problem inverted.
+     */
+    private static String recordRejection(BranchConflictStore store, JsonNode rejection) {
+        String signature = rejection.path("signature").asString("");
+        String filePath = rejection.path("filePath").asString("<unknown>");
+        String provenance = rejection.path("provenance").asString("");
+        if (signature.isBlank()) {
+            return "a refusal with no signature cannot say which conflict it is about" + at(filePath);
+        }
+        if (provenance.isBlank()) {
+            return "a refusal with no provenance cannot say which answer was refused" + at(filePath);
+        }
+        // Keyed by the signature the page showed, and the sides are not needed: a refusal is about an answer
+        // rather than about reproducing a conflict, so rebuilding the key from sides the entry does not carry
+        // would file it under a name the resolver never computes.
+        store.recordRejection(signature, provenance);
+        return null;
     }
 
     /** @return a problem description, or {@code null} when the decision was recorded */
