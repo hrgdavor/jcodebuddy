@@ -48,28 +48,38 @@ class MergeResolveTest {
 
     @Test
     @DisplayName("both sides deleting the SAME lines is not a disagreement, but the pass must not guess")
-    void bothSidesDeletingTheSameLines() {
-        // up: left "y z", base "x y z", right "x y" -> "y". Upstream's SimpleHelper resolves this because
-        // it compares at the WORD level, where the surviving "y" is one word and the deletions around it
-        // are separate fragments.
+    void bothSidesDeletingAroundAWordComposes() {
+        // up: left "y z", base "x y z", right "x y" -> "y". Upstream's SimpleHelper resolves this because it
+        // compares at the WORD level, where the surviving "y" is one word and the deletions around it are separate
+        // fragments.
         //
-        // **This pass refuses it, and that limit is deliberate and named.** Composing it needs word-level
-        // composition, which is the SUGGESTION-class pass of JETBRAINS_PORT.md section 5.1 that lands on
-        // the suggestion channel in 4.14-4.15 — not here. Refusing is the conservative answer and it is
-        // reported rather than hidden: the vector is kept, marked as an expected refusal, so raising this
-        // pass to word granularity is a change with a test to update rather than an accident.
+        // **This pass resolves it now, and the test changed with the capability** — which is what the old comment
+        // promised it would be: a change with a test to update rather than an accident. Step 4.11's remainder landed
+        // the word-level half (WordLevelMerge, in this tier because it is ported machinery), and this vector is its
+        // acceptance case. The refusal has not gone away, it has moved one granularity down: two different words
+        // inserted at one point still refuse.
         MergeResolve.Result result = resolve("y z", "x y z", "x y");
-        assertTrue(result.refused(),
-            "line-level composition cannot prove this; it needs the word-level pass");
+        assertFalse(result.refused(), "the word-level half composes this, as the benchmark does");
+        assertEquals("y", result.mergedText().strip(),
+            "and to the benchmark's own answer: the word both sides kept");
     }
 
     @Test
-    @DisplayName("two independent conflicts need word-level composition, so this pass refuses them")
-    void twoIndependentConflictsNeedTheWordLevelPass() {
-        // up: left "y z_Y_x y", base "x y z_Y_x y z", right "x y_Y_y z" -> "y_Y_y". The same limit as
-        // above: the answer is a word-level composition, which belongs to the suggestion pass.
+    @DisplayName("two independent conflicts compose at word level, one line at a time")
+    void twoIndependentConflictsComposeAtWordLevel() {
+        // up: left "y z_Y_x y", base "x y z_Y_x y z", right "x y_Y_y z" -> "y_Y_y". Two lines, each the case
+        // above: the answer is a word-level composition, and the pass reaches it now — for BOTH lines, which is what
+        // makes this vector worth keeping as well as the one-line case. Composing only the first line would leave the
+        // result one line short, and the assertion is on the whole text for that reason.
         MergeResolve.Result result = resolve("y z_Y_x y", "x y z_Y_x y z", "x y_Y_y z");
-        assertTrue(result.refused(), "this needs word-level composition, not this pass");
+        assertFalse(result.refused(), "the word-level half composes this too");
+        // Stripped, so the assertion is about the composed text rather than about which terminator the last line
+        // happened to keep: the benchmark states content, and the `_` in its notation is a separator. THREE lines,
+        // not two — `y_Y_y` is "y", "Y", "y", and the middle one is the line neither side touched, so it must
+        // survive between the two composed ones. (The assertion that got this wrong was mine, not the pass's: it
+        // expected two lines and the pass produced the untouched Y where the benchmark puts it.)
+        assertEquals("y\nY\ny", result.mergedText().strip(),
+            "the benchmark's own answer for this vector, both lines resolved and the untouched one kept");
     }
 
     @Test

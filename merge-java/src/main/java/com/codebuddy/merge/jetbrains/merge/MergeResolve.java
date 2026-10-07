@@ -8,6 +8,7 @@ import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
 import com.codebuddy.merge.jetbrains.text.TextLines;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The simple resolve pass: compose the three sides, or refuse.
@@ -114,12 +115,26 @@ public final class MergeResolve {
                 String leftPart = leftLines.text(range.start1(), range.end1());
                 String rightPart = rightLines.text(range.start3(), range.end3());
                 if (!leftPart.equals(rightPart)) {
-                    // Two intentions, and nothing in the text says which to keep. Refused rather than
-                    // answered with a marker, because a marker is output this pass invented.
-                    return new Result(null, effective, false);
+                    // Before refusing: the two sides may disagree only about WHICH PART of a line changed, which a
+                    // line comparison cannot see and a word comparison can. This is the SAFE half of the port's
+                    // word-level machinery (JETBRAINS_PORT.md 11.2, 6.5) - the benchmark's most valuable resolve
+                    // vectors are exactly this case, and refusing them was our only place below the floor.
+                    //
+                    // It composes or it refuses, and a refusal here is the same refusal as before: nothing about
+                    // this path can turn a disagreement into an answer, because the word pass refuses whenever both
+                    // sides inserted different words at one point (R6, one granularity down).
+                    Optional<String> atWordLevel = WordLevelMerge.compose(
+                        baseLines.text(range.start2(), range.end2()), leftPart, rightPart, effective);
+                    if (atWordLevel.isEmpty()) {
+                        // Two intentions, and nothing in the text says which to keep. Refused rather than
+                        // answered with a marker, because a marker is output this pass invented.
+                        return new Result(null, effective, false);
+                    }
+                    out.append(atWordLevel.get());
+                } else {
+                    // The same change on both sides, so either one is the answer.
+                    out.append(leftPart);
                 }
-                // The same change on both sides, so either one is the answer.
-                out.append(leftPart);
             } else if (leftChanged) {
                 out.append(leftLines.text(range.start1(), range.end1()));
             } else if (rightChanged) {

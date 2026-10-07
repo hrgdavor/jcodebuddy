@@ -64,6 +64,29 @@ public final class TextCompare {
     }
 
     /**
+     * The tokens of one line, in order, each with its own text.
+     *
+     * <p>Exposed because a word-level three-way composition needs the tokens themselves rather than the character
+     * offsets {@link #compareWords} reports — and because the token boundary rule (a word is a run of letters, digits
+     * or underscores; everything else is a one-character token) must exist in <b>one</b> place. A second tokenizer
+     * written beside this one would agree with it until the day it did not, and the disagreement would show up as a
+     * composed line that quietly differs from the comparison that justified it.
+     *
+     * <p>The line's terminator is not a token: it belongs to the line, not to its content.
+     *
+     * @param line   the line, with or without a terminator
+     * @param policy how the tokens are read; it decides which tokens <em>match</em>, not how they are cut
+     */
+    public static List<String> tokens(String line, ComparisonPolicy policy) {
+        ComparisonPolicy effective = policy == null ? ComparisonPolicy.DEFAULT : policy;
+        List<String> texts = new ArrayList<>();
+        for (Token token : tokenize(strip(line), effective)) {
+            texts.add(token.text());
+        }
+        return texts;
+    }
+
+    /**
      * Compare one pair of lines by word.
      *
      * <p>Only meaningful for a pair the line pass reported as changed; on equal lines it returns nothing,
