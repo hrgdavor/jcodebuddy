@@ -3615,6 +3615,32 @@ immediately.**
   side**, a quantity from upstream's document model, while our surface counts **open conflicts after a run**. A
   fixture written to make the earlier sentence true would have been a correspondence invented rather than
   measured.
+**Added 2026-10-08 (round 38) — the § 10.2 rows measured, and the one the measurement refuses.**
+
+- **Row 2 measured, with its control** (`theVerifierRowIsMeasured`): a **deliberately corrupted** automatic answer
+  becomes `REVIEW` with verification `FAILED` and the reason appended to its explanation, while the same conflict
+  with a balanced answer stays `AUTO`/`PASSED`. The control is what makes the first half evidence rather than a
+  statement about the fixture. § 10.2's own words for this row are *"the measurement is the guard firing"*, and this
+  is the guard firing on purpose.
+- **Row 3 measured** (`theRowByRowMeasurement`): the corpus's claims record `{TEXT_LOCAL=4, TEXT_FILE=2,
+  STRUCTURE=1, PLATFORM_TYPES=1}` across strategies `{KEEP_BOTH=4, MERGE_SAFE=3, PREFER_BRANCH2=1}` — four levels
+  and three strategies where a shape-only engine has four words and no strategy at all. The test also asserts the
+  thing that would quietly undo the row: **no claim records an absent level**, because a claim with no level *is*
+  the shape-only answer.
+- **Row 1 already measured** (round 33): `MEMBER_ADD` resolves `AUTO` at `STRUCTURE` where the text-only answer for
+  the same input **refuses**. Row 4 (signature-keyed replay, including a remembered refusal) is measured by
+  `MergeFileToolTest`'s recorded-decision test and `RejectionMemoryTest`'s round trip. Row 5's first half is the
+  census's `offered 3`; its second half needs an accept action that does not exist yet.
+- **Row 6 is UNMET, and § 10.2 says what to do about that.** *"Type resolution against a project classpath:
+  the resolved code compiles against the project classpath and the level is `PROJECT_TYPES`"* — the corpus resolves
+  types against the **JDK only**, so `PROJECT_TYPES` never appears and the print says so on every run. The row is a
+  capability the module has (`TypeContext` + javac) with **no fixture that exercises it at that level**, which by
+  § 10.2's own rule means the claim is dropped rather than reworded: it stays in the document as **unmet pending a
+  project-classpath corpus**, and the honest next step is a fixture with two project types rather than a sentence.
+  This is the first § 10.2 row that measurement has taken away, which is what the rule was written for.
+- **915 tests**, every other metric held: `18/18` change types, `2/3` resolve + 1 recorded defect + 0 regressions,
+  the census unchanged, the word-level corpus `2 offered at TEXT_INTRALINE, 1 refused`,
+  `PROPERTY 2000 cases, 0 violations`.
 **Added 2026-10-08 (round 37) — the word-level residual corpus, so the capability is a number rather than a claim.**
 
 - **The measurement round 36 owed is in `PortMetricTest.theWordLevelCorpus`**, printing on every run:
@@ -3661,7 +3687,7 @@ immediately.**
   invalidating-edit row, the seeded property test (§ 10.3's reproducibility requirement), and the § 10.3 /
   § 10.2 numbers. **`MergeRange`'s extent coordinates** is the first item of that list, because the gate says so.
 
-**Gate so far:** `merge-java verify` — **913 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
+**Gate so far:** `merge-java verify` — **915 tests, 0 failures, 0 errors** (a clean run; see the count caveat below),
 with the build cache **on**; `LINKS` green.
 
 **Fixed 2026-10-07, and the gate proves it: the serious defect is gone and 18/18 change types now agree.**
@@ -5466,7 +5492,7 @@ start)
 | 4.10 | JetBrains port: whitespace policy as a caller-visible option                                    | agent              | M    | `[~]` — **functionally complete; one criterion variant is deferred to 4.12 and named** — the flag, the wiring and the acceptance pair are in: `--whitespace=default | trim | ignore` on `MergeFileTool` (an unknown name is refused, not defaulted); the policy reaches the residual questions and region attribution; `ConflictResolution` records it; `WhitespacePolicyTest` (7 tests) pins the pair. **A limit was found by writing the pair and is recorded, not hidden:** `§ 11.5`'s *five well-typed changes* need the ported differ wired into detection as the classifier — **4.12's job** — because this module detects by domain shape and treats line divergence as the residual, while upstream derives shape from the diff. **Still open:** the policy in the merge report JSON, and the typed-change count (4.12) |
 | 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                             | agent              | S    | `[~]` — **the level exists and is ordered in both directions** (`TEXT_INTRALINE(2)`, with every other number shifted and no meaning changed). **Nothing reaches it yet, and that is the honest state**: the greedy producer ported in 4.17 compares whole lines, so it records `TEXT_LOCAL` and warns "not word by word" — claiming the intra-line level would be the overclaim the level exists to make visible. Reaching it needs the word-level half of the port (§ 6.5–6.6), and the step's "let 4.9's resolvers declare it" has no counterpart because the port produced no intra-line resolver |
 | 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[x]` — **`ConflictShape` computed by the ported classifier**, which makes it `MergeRangeUtil.getMergeType`'s first caller in this module; `ConflictType` unchanged, the report writes `shape` per conflict and the page renders it in its own words. **A copy helper that dropped the shape would have lost it silently** — `MergeFileTool` re-stamps regions, so `withRegion`/`withFilePath`/`withTypeContext` carry it and a test asserts it. The merge-range rule (an unchanged side has the **base's** lines, not the range's empty extent) appeared a **third** time, here costing "every one-sided change reads as a conflict". **One clause named as not met:** the decision does not yet *use* the shape — the 4.5/4.6 fixtures are unchanged and green, and the measurement that would justify the general fix belongs with 4.13 |
-| 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[~]` — **gate**: § 11.1 `18/18` (0 defects), § 11.2 `2/3` + 1 **recorded defect** (upstream's input is a post-hand-edit document — state we do not carry), 0 regressions. **Landed**: the word-level half with the level recorded per answer (`TEXT_INTRALINE` vs `TEXT_LOCAL`); the **word-level residual corpus** (`2 offered at TEXT_INTRALINE, 1 refused` — the refused one is the overlapping-edit R6 case); § 11.4 at block level with its control; the invalidating edit; § 10.3 numbers. **Open:** may a shape override a declared handling / does an additive one-sided change get a type (control measured `LEFT_UNCLASSIFIED`, `type null`), *blocks accepted in one action*, and the remaining § 10.2 rows. |  |
+| 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[~]` — **gate**: § 11.1 `18/18`, § 11.2 `2/3` + 1 recorded defect + 0 regressions; word-level corpus `2 offered at TEXT_INTRALINE, 1 refused`. **§ 10.2 rows**: row 1 measured (`MEMBER_ADD` → `AUTO` at `STRUCTURE` where text-only refuses), **row 2 measured with its control** (corrupted AUTO → `REVIEW`+`FAILED`; balanced control stays `AUTO`/`PASSED`), row 3 measured (`{TEXT_LOCAL=4, TEXT_FILE=2, STRUCTURE=1, PLATFORM_TYPES=1}`, 3 strategies), row 4 by existing tests, row 5 half (offered `3`; *accepted in one action* needs an action), and **row 6 UNMET** — `PROJECT_TYPES` never appears because the corpus resolves against the JDK only, so by § 10.2's rule the claim is dropped pending a project-classpath fixture. **Open:** that fixture, the shape/classification question (control measured `LEFT_UNCLASSIFIED`, `type null`), *blocks accepted in one action*. |  |
 | 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
 | 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[x]` — one rule in the orchestrator converts a `REVIEW` carrying code into a `SUGGESTION` carrying **that same text** (provenance = the resolver's name, level = what it recorded, `resolvedCode` cleared so the text lives in one place). **Measured: 3 of 7 sampled review paths were computing an answer and hiding it**, asserted by comparing the suggestion against a direct resolver call, and printed by the test. Nothing promoted; three existing assertions changed, each the step's own point |
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[x]` — the report carries the suggestion with its basis and verdict detail; the page prefills from `proposedCodeFor` (**a real defect: it read `resolvedCode`, which 4.15 empties, so a suggestion showed an empty editor**), renders provenance/confidence/level/verdict, and exports rejections per provenance. **The bulk guard was not a guard**: it filtered on "a field holds text", which quietly included `REVIEW` and contradicted its own javadoc — it is now `kind === 'AUTO'`. **A clause has no counterpart**: there is no CLI bulk action to guard, and that is recorded rather than invented |

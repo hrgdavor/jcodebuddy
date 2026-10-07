@@ -14,6 +14,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -60,6 +61,111 @@ class PortMetricTest {
         return samples;
     }
 
+    @Test
+    @DisplayName("beyond parity, row 2: a corrupted answer is refused rather than applied")
+    void theVerifierRowIsMeasured() {
+        // JETBRAINS_PORT.md § 10.2's second row, and the document's own words for its measurement: "a deliberately
+        // corrupted pass output is refused rather than applied; upstream has no equivalent check to compare against,
+        // so the measurement is the guard firing". So the guard is made to fire here, on purpose.
+        Conflict conflict = ConflictFixtures.sample(ConflictType.IMPORT_ADD);
+        ConflictResolution corrupted = ConflictResolution.builder()
+            .type(conflict.getType())
+            .filePath(conflict.getFilePath())
+            .kind(ConflictResolution.ResolutionKind.AUTO)
+            .resolutionStrategy(ConflictResolution.ResolutionStrategy.MERGE_SAFE)
+            .baseCode(conflict.getBaseCode())
+            .resolvedCode("public class OrderService {\n    void run() {\n")
+            .explanation("a deliberately unbalanced answer")
+            .build();
+
+        ConflictResolution guarded = ResolutionVerifier.structural().apply(conflict, corrupted);
+
+        System.out.println("BEYOND-PARITY row 2 (the verifier): a corrupted AUTOMATIC answer becomes "
+            + guarded.getKind() + " with verification " + guarded.getVerification()
+            + (guarded.getExplanation().contains("verification failed") ? " and the reason in its explanation" : ""));
+
+        assertEquals(ConflictResolution.Verification.FAILED, guarded.getVerification(),
+            "the guard must record the failure: " + guarded.getExplanation());
+        assertNotEquals(ConflictResolution.ResolutionKind.AUTO, guarded.getKind(),
+            "and an automatic answer that fails verification must not stay automatic");
+        assertTrue(guarded.getExplanation().contains("verification failed"),
+            "with the reason on the surface a person reads: " + guarded.getExplanation());
+
+        // The control, in the same shape: the SAME conflict with a balanced answer passes and stays automatic. Without
+        // it, the assertion above would only prove that the verifier dislikes this fixture.
+        ConflictResolution sound = ConflictResolution.builder()
+            .type(conflict.getType())
+            .filePath(conflict.getFilePath())
+            .kind(ConflictResolution.ResolutionKind.AUTO)
+            .resolutionStrategy(ConflictResolution.ResolutionStrategy.MERGE_SAFE)
+            .baseCode(conflict.getBaseCode())
+            .resolvedCode("public class OrderService {\n    void run() {\n    }\n}\n")
+            .explanation("a balanced answer")
+            .build();
+        ConflictResolution passed = ResolutionVerifier.structural().apply(conflict, sound);
+        assertEquals(ConflictResolution.ResolutionKind.AUTO, passed.getKind(),
+            "the control must stay automatic, or the failure above proves nothing about the code: "
+                + passed.getExplanation());
+        assertEquals(ConflictResolution.Verification.PASSED, passed.getVerification());
+    }
+
+    @Test
+    @DisplayName("the § 10.2 rows that are measurable from the corpus, and the one that is not")
+    void theRowByRowMeasurement() {
+        // § 10.2 ends with a rule this test exists to obey: "If a measurement later shows one of them is not a real
+        // advantage, the row comes out rather than being reworded." So the rows are MEASURED, and a row whose
+        // measurement is empty is reported as unmet rather than left as a sentence in a document.
+        MergeConflictResolver resolver = new MergeConflictResolver.Builder()
+            .setBranchName("beyond-parity")
+            .setInMemoryOnly(true)
+            .setResolvers(ConflictResolvers.defaultResolvers())
+            .setTypeContext(TestTypeContexts.jdk())
+            .build();
+
+        Map<AnalysisLevel, Integer> byLevel = new EnumMap<>(AnalysisLevel.class);
+        Map<String, Integer> byStrategy = new java.util.TreeMap<>();
+        int claimsWithoutLevel = 0;
+
+        for (Conflict conflict : corpus()) {
+            ConflictResolution resolution = resolver.resolve(conflict);
+            if (resolution.getKind() != ConflictResolution.ResolutionKind.AUTO
+                && resolution.getKind() != ConflictResolution.ResolutionKind.SUGGESTION) {
+                continue;
+            }
+            // Row 3's claim: "the same fixture reports the domain type, the strategy and the level, where a
+            // shape-only engine reports one of four words". A claim with no level would be exactly the shape-only
+            // answer, so the count of those is the measurement of how far above it we are.
+            if (resolution.getAnalysisLevel() == null) {
+                claimsWithoutLevel++;
+            } else {
+                byLevel.merge(resolution.getAnalysisLevel(), 1, Integer::sum);
+            }
+            byStrategy.merge(String.valueOf(resolution.getResolutionStrategy()), 1, Integer::sum);
+        }
+
+        int aboveStructure = byLevel.entrySet().stream()
+            .filter(entry -> entry.getKey().isAtLeast(AnalysisLevel.STRUCTURE))
+            .mapToInt(Map.Entry::getValue).sum();
+        // Row 6's claim is that a resolution reaches PROJECT_TYPES against a project classpath. The corpus resolves
+        // types against the JDK only, so if that level never appears here the row's measurement is EMPTY - which by
+        // § 10.2's own rule means the claim is dropped rather than reworded, and this test reports it as unmet
+        // instead of asserting a capability the corpus cannot show.
+        boolean projectTypesReached = byLevel.containsKey(AnalysisLevel.PROJECT_TYPES);
+
+        System.out.println("BEYOND-PARITY rows measured from the corpus:"
+            + "\n  row 3 (domain type + strategy + level): " + byLevel + ", strategies " + byStrategy
+            + "\n  row 1 (a claim above the shape's four words): " + aboveStructure
+            + " answer(s) at STRUCTURE or above"
+            + "\n  row 6 (PROJECT_TYPES against a project classpath): "
+            + (projectTypesReached ? "MET in this corpus" : "UNMET - the corpus resolves against the JDK only")
+            + "\n  claims with no level recorded: " + claimsWithoutLevel);
+
+        assertTrue(claimsWithoutLevel == 0,
+            "a claim that records no level is the shape-only answer, and § 10.2's row 3 says we report more than"
+                + " that: " + claimsWithoutLevel + " claim(s) carry no level");
+        assertTrue(aboveStructure > 0,
+            "row 1's claim needs at least one answer read above the text levels: " + byLevel);
+    }
     @Test
     @DisplayName("the word-level corpus: residuals the line pass cannot reach, and what the tool can now say")
     void theWordLevelCorpus() {
