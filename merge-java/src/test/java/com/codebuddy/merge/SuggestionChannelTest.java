@@ -188,6 +188,60 @@ class SuggestionChannelTest {
         assertFalse(resolution.isVerifiedAuto(), "and it is never an automatic answer");
     }
 
+    @Test
+    @DisplayName("every review path's own answer reaches the channel unchanged, not re-derived")
+    void everyComputedAnswerReachesTheChannelUnchanged() {
+        // Step 4.15's property, and the reason it is asserted per resolver rather than once: the module already
+        // computed these answers and threw them away at the surface, so what must hold now is that the
+        // suggestion carries *that* text — compared here against what the resolver returns when called
+        // directly, which is the only way to tell "moved" from "re-derived".
+        List<ConflictType> types = List.of(ConflictType.METHOD_BODY_CHANGE, ConflictType.IMPORT_ADD,
+            ConflictType.CONSTANT_ADD, ConflictType.OVERLOAD_ADD, ConflictType.VARIABLE_RENAME,
+            ConflictType.PACKAGE_CHANGE, ConflictType.TYPE_CHANGE);
+        MergeConflictResolver orchestrator = new MergeConflictResolver.Builder()
+            .setBranchName("suggestion-test")
+            .setInMemoryOnly(true)
+            .setResolvers(ConflictResolvers.defaultResolvers())
+            // OverloadAdd declares that it cannot degrade without a classpath, so the set cannot be built
+            // without one. The JDK-only context is enough for this question: the property being asserted is
+            // that an answer the resolver computed is *moved*, not that any particular answer is right.
+            .setTypeContext(TestTypeContexts.jdk())
+            .build();
+
+        int moved = 0;
+        for (ConflictType type : types) {
+            Conflict conflict = ConflictFixtures.sample(type);
+            ConflictResolver direct = ConflictResolvers.find(
+                ConflictResolvers.defaultResolvers(), type).orElseThrow();
+            ConflictResolution computed = direct.resolve(conflict);
+            if (computed == null || computed.getResolvedCode().isBlank()
+                || computed.getKind() != ResolutionKind.REVIEW) {
+                // Either this sample is not one of the paths that computes an answer, or the answer it computed
+                // is one the tool may apply - and an automatic answer was never hidden behind anything, so
+                // there is nothing to move.
+                continue;
+            }
+            moved++;
+            ConflictResolution through = orchestrator.resolve(conflict);
+
+            assertEquals(ResolutionKind.SUGGESTION, through.getKind(),
+                type + " computes an answer and must offer it rather than storing and dropping it: "
+                    + through.getExplanation());
+            assertNotNull(through.getSuggestion(), type.toString());
+            assertEquals(computed.getResolvedCode(), through.getSuggestion().code(),
+                type + ": the suggestion carries the resolver's own text, not a re-derivation");
+            assertEquals(direct.name(), through.getSuggestion().provenance(),
+                type + ": and it names who produced it");
+            assertTrue(through.getResolvedCode().isEmpty(),
+                type + ": the text lives in exactly one place, so no field holds code the tool may not apply");
+        }
+
+        System.out.println("SUGGESTION-METRIC: " + moved
+            + " resolver review path(s) now carry an answer to a reviewer");
+        assertTrue(moved >= 3,
+            "the step's claim is that several review paths already compute an answer; measured " + moved);
+    }
+
     private static Conflict conflictFor() {
         return new Conflict(ConflictType.IMPORT_ADD, "OrderService.java", "sample",
             "import java.util.List;\n", "import java.math.BigDecimal;\n", "import java.time.Instant;\n");

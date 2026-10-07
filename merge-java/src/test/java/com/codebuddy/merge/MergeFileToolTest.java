@@ -528,21 +528,23 @@ class MergeFileToolTest {
     }
 
     @Test
-    @DisplayName("a review resolution leaves the block marked and fixtured")
+    @DisplayName("an answer the resolver computed is offered as a suggestion, and the block is fixtured")
     void reviewResolutionLeavesTheBlock() throws IOException {
         Path file = write("OrderService.java", STRUCTURAL_CONFLICT_FILE);
+        String computed = "        total = computeTotal();   // our wording confirmed";
         MergeConflictResolver stubbed = resolverWith(new StubResolver(
             ConflictType.STRUCTURAL_CHANGE, ResolutionKind.REVIEW, ResolutionStrategy.MERGE_SAFE,
-            "        total = computeTotal();   // our wording confirmed",
-            "Kept our statement; a human should confirm."));
+            computed, "Kept our statement; a human should confirm."));
 
         Result result = toolFor(file).resolver(stubbed).applyFixes(true).run();
 
         MergeFileTool.BlockOutcome outcome = result.outcomes().get(0);
-        assertEquals(Outcome.LEFT_REVIEW, outcome.outcome());
+        // Step 4.15: this used to be LEFT_REVIEW and the computed code was thrown away at the surface. It is
+        // the same non-decision - the markers stay - with the answer now in the reviewer's hands.
+        assertEquals(Outcome.LEFT_SUGGESTION, outcome.outcome(), outcome.explanation());
         assertEquals(ConflictType.STRUCTURAL_CHANGE, outcome.type());
-        assertTrue(read(file).contains("<<<<<<<"));
-        assertNotNull(outcome.fixtureCase());
+        assertTrue(read(file).contains("<<<<<<<"), "nothing was applied: " + read(file));
+        assertNotNull(outcome.fixtureCase(), "and the block's case is still prepared for whoever picks it up");
     }
 
     @Test
@@ -764,7 +766,8 @@ class MergeFileToolTest {
             "and the residual it is subsumed by no longer decides the block: " + decidedReport);
         assertFalse(escalatedReport.contains("is a widening of"),
             "without it both declarations are Unknown, so nothing is decided: " + escalatedReport);
-        assertTrue(escalatedReport.contains("[TYPE_CHANGE/REVIEW]"), escalatedReport);
+        assertTrue(escalatedReport.contains("[TYPE_CHANGE/SUGGESTION]"),
+            "the widening it computed is offered now rather than stored and dropped: " + escalatedReport);
 
         // The residual STRUCTURAL_CHANGE is still emitted alongside the recognised
         // conflict (by design - a residual that replaced the recognised conflicts once

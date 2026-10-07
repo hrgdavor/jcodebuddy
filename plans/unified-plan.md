@@ -3574,6 +3574,39 @@ blocks that now have an answer to offer** in the commit message, which is
 
 **Done when:** work the tool has already done reaches the person who needs it.
 
+**Done 2026-10-07 — measured: 3 of 7 sampled review paths were computing an answer and hiding it.**
+
+- **One rule, in the orchestrator, rather than twelve edits in the resolvers.** `MergeConflictResolver`
+  converts a `REVIEW` that carries code into a `SUGGESTION` carrying **that same text**, with the resolver's
+  own name as provenance and the level the resolution recorded. The conversion belongs where the outcome is
+  decided, because that is what was wrong: the resolvers were computing the right answer and the *surface* was
+  dropping it. Doing it per resolver would be twelve chances to forget, and would put a presentation decision
+  inside the code that is answering a question. It runs **after** the proposer block, so a proposer's option
+  stays among the suggestion's alternatives.
+- **`resolvedCode` is cleared on the way**, so the text lives in exactly one place. Keeping a copy in a field
+  other code reads as "the applicable answer" would leave a trap: the next reader would find code on a
+  resolution the tool is forbidden to apply.
+- **The count, which is the step's own metric.**
+  `SuggestionChannelTest.everyComputedAnswerReachesTheChannelUnchanged` walks the shared sample fixtures, asks
+  each resolver **directly** for the answer it computes, and requires the suggestion to carry *that* text — the
+  only way to tell "moved" from "re-derived". It measures **3** of the seven sampled paths as review-with-an-
+  answer; the rest either compute nothing or compute an answer the tool may apply, and an automatic answer was
+  never hidden behind anything. The test prints the number, so the metric is re-measurable rather than a claim
+  in a document.
+- **Nothing is promoted, and the tests pin it.** Every block these resolvers own keeps its markers. The commit
+  changed exactly three existing assertions, and each is the step's own point:
+  `reviewResolutionLeavesTheBlock` (`LEFT_REVIEW` → `LEFT_SUGGESTION`), `doesNotPersistReviewResolution` (the
+  kind, while the two properties it is about — not replayable, not recorded — are unchanged), and
+  `classpathDecidesProjectTypes` (`[TYPE_CHANGE/REVIEW]` → `[TYPE_CHANGE/SUGGESTION]`).
+- **A decision in 4.14 was wrong, and this step is where it showed.** That step said no fixture is prepared for
+  a suggestion because "the suggestion *is* the artifact". The failing test showed the cost: the fixture is the
+  case a person or an agent picks an unresolved block up from, and an answer without the case removes the
+  workflow that consumes unresolved blocks. A suggestion is fixtured like every other left outcome.
+
+**Gate:** `SuggestionChannelTest` — 4 tests: the three boundaries plus the per-resolver property above, with a
+`SUGGESTION-METRIC` line in its output. `merge-java verify` — **854 tests, 0 failures, 0 errors** with the build
+cache off.
+
 ### 4.16 — The page and the decisions contract: Accept, Edit, Reject
 **Who:** agent · **Size:** M
 
@@ -4994,7 +5027,7 @@ start)
 | 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[ ]`                                                                                       |
 | 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[ ]` — the gate is the FLOOR: a vector JetBrains resolves and we do not is a regression    |
 | 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
-| 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[ ]`                                                                                       |
+| 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[x]` — one rule in the orchestrator converts a `REVIEW` carrying code into a `SUGGESTION` carrying **that same text** (provenance = the resolver's name, level = what it recorded, `resolvedCode` cleared so the text lives in one place). **Measured: 3 of 7 sampled review paths were computing an answer and hiding it**, asserted by comparing the suggestion against a direct resolver call, and printed by the test. Nothing promoted; three existing assertions changed, each the step's own point |
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |

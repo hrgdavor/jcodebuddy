@@ -789,10 +789,12 @@ public final class MergeFileTool {
                 case MANUAL -> new BlockDecision(Outcome.LEFT_MANUAL, type,
                     resolution.getExplanation(), null, true, resolutions);
                 // A suggestion is never applied here, and there is no flag that makes it be: the markers stay
-                // and the answer is shown. No fixture is prepared either - the suggestion *is* the artifact a
-                // person works from, and preparing a second copy of it would be noise (plan step 4.14).
+                // and the answer is shown. The block *is* fixtured like every other left block, which corrects
+                // an earlier reading of this: the suggestion is the answer, but the fixture is the case a
+                // person or an agent picks the block up from, and offering one without the other would remove
+                // the workflow that consumes unresolved blocks.
                 case SUGGESTION -> new BlockDecision(Outcome.LEFT_SUGGESTION, type,
-                    resolution.getExplanation(), null, false, resolutions);
+                    resolution.getExplanation(), null, true, resolutions);
             };
         }
 

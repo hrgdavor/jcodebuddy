@@ -279,19 +279,26 @@ class MergeConflictResolverTest {
     }
 
     @Test
-    @DisplayName("a conflict needing review is re-decided on the next update")
+    @DisplayName("an offered answer is re-decided on the next update rather than remembered")
     void doesNotPersistReviewResolution() {
-        // METHOD_BODY_CHANGE is a REVIEW type: stickyByDefault() is false, so the
-        // judgement is made afresh next time rather than replayed blindly.
+        // METHOD_BODY_CHANGE is a REVIEW type: stickyByDefault() is false, so the judgement is made afresh next
+        // time rather than replayed blindly.
+        //
+        // Step 4.15 moved the answer this resolver computes onto the suggestion channel, so the kind is now
+        // SUGGESTION while the two properties the test is really about are unchanged: it is not replayable and
+        // it is not recorded. That is exactly the distinction the channel adds — an answer offered is not a
+        // decision taken, and only a decision may become policy.
         MergeConflictResolver resolver = resolver();
         Conflict conflict = ConflictFixtures.sample(ConflictType.METHOD_BODY_CHANGE);
         ConflictResolution resolution = resolver.resolve(conflict);
 
-        assertEquals(ConflictResolution.ResolutionKind.REVIEW, resolution.getKind());
+        assertEquals(ConflictResolution.ResolutionKind.SUGGESTION, resolution.getKind(),
+            resolution.getExplanation());
+        assertNotNull(resolution.getSuggestion(), "and it carries the answer the resolver computed");
         assertFalse(resolution.isReplayable(),
             "a syntactic merge of two edits must not become permanent policy");
         assertEquals(0, resolver.getHistoryStore().size(),
-            "a REVIEW resolution must not be recorded for replay");
+            "an offered answer must not be recorded for replay");
     }
 
     // ------------------------------------------------------------- reports

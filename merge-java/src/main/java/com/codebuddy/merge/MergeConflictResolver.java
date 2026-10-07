@@ -341,6 +341,11 @@ public class MergeConflictResolver {
         // resolution may be applied independently of the others.
         resolution = resolution.withRegion(conflict.getRegion());
 
+        // Plan step 4.15: work the tool has already done must not be hidden behind a refusal. A REVIEW that
+        // carries code is an answer being offered, not an objection, so it travels as a suggestion - and it
+        // travels *after* the proposer above so that a proposer's option stays among its alternatives.
+        resolution = asSuggestion(resolution, resolver);
+
         // WS3: nothing is applied without passing the verification gate.
         resolution = verifier.apply(conflict, resolution);
 
@@ -348,6 +353,52 @@ public class MergeConflictResolver {
             historyStore.record(conflict, resolution);
         }
         return resolution;
+    }
+
+    /**
+     * Turn a review resolution that carries an answer into a suggestion carrying that same answer.
+     *
+     * <h2>Why this is one rule here rather than twelve edits in the resolvers</h2>
+     *
+     * <p>Every review path in the module already computes its answer — a combined method body from two
+     * branches' disjoint edits, a union of two import sets, a widened type — stores it in {@code resolvedCode}
+     * and then escalates. The answer was therefore <em>thrown away at the surface</em>: {@link MergeFileTool}
+     * returned {@code LEFT_REVIEW} with a null replacement, so a reviewer never saw it as the proposed result.
+     * The conversion belongs where the outcome is decided, because that is what was wrong; doing it in each
+     * resolver would be twelve chances to forget, and would put the presentation decision inside the code that
+     * is supposed to be answering a question.
+     *
+     * <p><b>The decision does not change, and that is the point of the step.</b> These answers are
+     * {@code REVIEW} because none of them is provably right — two individually-correct body edits can compose
+     * into behaviour nobody intended — and a suggestion is not applied by the tool either. What changes is that
+     * a person is shown the answer instead of being told to write one.
+     *
+     * <p>{@code resolvedCode} is <b>cleared</b> on the way, so the text lives in exactly one place: the
+     * suggestion. Keeping a copy in a field that other code reads as "the applicable answer" would leave a
+     * trap — the next reader would find code on a resolution that the tool is forbidden to apply.
+     */
+    private static ConflictResolution asSuggestion(ConflictResolution resolution, ConflictResolver resolver) {
+        if (resolution.getKind() != ConflictResolution.ResolutionKind.REVIEW
+            || resolution.getResolvedCode().isBlank()
+            || resolution.hasSuggestion()) {
+            // No answer to offer, or one is already attached: the REVIEW kind stays for a resolution whose
+            // payload is genuinely fix paths with no answer (SUGGESTIONS.md § 2).
+            return resolution;
+        }
+        Suggestion suggestion = new Suggestion(
+            resolution.getResolvedCode(),
+            resolution.getExplanation(),
+            resolver == null ? "unknown" : resolver.name(),
+            resolution.getAnalysisLevel(),
+            resolution.getWarnings(),
+            ConflictResolution.Verification.NOT_RUN,
+            "",
+            Suggestion.Confidence.PLAUSIBLE);
+        return ConflictResolution.copyOf(resolution)
+            .kind(ConflictResolution.ResolutionKind.SUGGESTION)
+            .suggestion(suggestion)
+            .resolvedCode("")
+            .build();
     }
 
     /**
