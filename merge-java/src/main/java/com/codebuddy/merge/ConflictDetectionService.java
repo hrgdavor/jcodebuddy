@@ -2,6 +2,8 @@
 // {enabled:true, blockMarker: "implicit"}
 package com.codebuddy.merge;
 
+import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -257,18 +259,39 @@ public class ConflictDetectionService {
         return line.endsWith("{") || line.equals("}") || line.equals("};");
     }
 
-    private static Set<String> normalisedLines(String code) {
+    /**
+     * The lines of a text, normalised under a policy and stripped of blanks.
+     *
+     * <p><b>Why this takes the policy rather than calling {@code trim()}.</b> This primitive used to be
+     * {@code line.trim()} unconditionally, which is a third thing that is neither of the two policies the
+     * text tier distinguishes: trimming ignores a line's <em>edges</em>, while the set-membership shape
+     * here also matches a line anywhere in the file, and neither of those is "ignore whitespace inside the
+     * line". Threading the policy makes the operation the caller's choice, which is step 4.10.
+     *
+     * <p>The caller that passes nothing gets {@link ComparisonPolicy#TRIM_WHITESPACES}, because that is
+     * exactly what {@code trim()} did — so this is a refactor with no behaviour change until a caller asks
+     * for one, which is what makes it safe to land on its own.
+     */
+    static Set<String> normalisedLines(String code, ComparisonPolicy policy) {
+        ComparisonPolicy effective = policy == null
+            ? ComparisonPolicy.TRIM_WHITESPACES
+            : policy;
         Set<String> lines = new LinkedHashSet<>();
         if (code == null) {
             return lines;
         }
         for (String line : code.split("\n")) {
-            String trimmed = line.trim();
-            if (!trimmed.isEmpty()) {
-                lines.add(trimmed);
+            String normalised = effective.normaliseLine(line);
+            if (!normalised.isEmpty()) {
+                lines.add(normalised);
             }
         }
         return lines;
+    }
+
+    /** The lines of a text, normalised by trimming their edges. */
+    static Set<String> normalisedLines(String code) {
+        return normalisedLines(code, ComparisonPolicy.TRIM_WHITESPACES);
     }
 
     /**
