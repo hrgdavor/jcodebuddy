@@ -552,7 +552,8 @@ public final class MergeFileTool {
             // report can name it, and that stamp would make every conflict appear to cover every other.
             TieredResolution.Result tiered = TieredResolution.resolve(
                 detected, block.markerRegion(), resolver.getResolvers(),
-                (index, conflict) -> resolver.resolve(conflicts.get(index)));
+                (index, conflict) -> reattached(resolver.resolve(detected.get(index)),
+                    conflicts.get(index)));
             List<ConflictResolution> resolutions = tiered.claims();
             // A conflict another claim settled has no claim of its own - nothing was asked about it - so it
             // is absent from everything a reader or a fixture sees.
@@ -861,6 +862,23 @@ public final class MergeFileTool {
         return only != null
             && only.getKind() == ConflictResolution.ResolutionKind.AUTO
             && coversBlock(only, block);
+    }
+
+    /**
+     * A resolution whose region is restated in the file's coordinates, for the report.
+     *
+     * <p>The resolver is handed the <b>detector's</b> conflict, whose region is block-relative and therefore
+     * the region it actually recognised — that is the region an explained span has to be, and handing it the
+     * stamped conflict instead made every resolver that declares a span appear to explain its whole block.
+     * Measured: with the stamp, {@code ImportConflictResolver} settled an unrelated {@code COMMENT_ADD}
+     * conflict in the same block, which is the stamped-region trap {@code outranking}'s own note describes.
+     *
+     * <p>The report, though, is read against the file, and a block-relative line number would be wrong
+     * there. So the region is restated from the conflict that carries the block's own file region — the same
+     * fact the stamp exists for, applied at the boundary where it belongs rather than before resolution.
+     */
+    private static ConflictResolution reattached(ConflictResolution resolution, Conflict placed) {
+        return resolution == null ? null : resolution.withRegion(placed.getRegion());
     }
 
     /**

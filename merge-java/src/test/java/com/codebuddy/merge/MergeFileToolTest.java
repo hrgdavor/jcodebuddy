@@ -963,7 +963,7 @@ class MergeFileToolTest {
             """;
 
     @Test
-    @DisplayName("an insertion at an empty base is applied, and the text-level objection is outranked")
+    @DisplayName("an insertion at an empty base is applied, and the text tier is never asked")
     void insertionAtAnEmptyBaseIsApplied() throws IOException {
         Path file = write("Inserted.java", EMPTY_BASE_INSERTION_FILE);
 
@@ -979,10 +979,19 @@ class MergeFileToolTest {
         assertTrue(compiles(applied, tempDir), applied);
 
         // The API check reads the first public declaration of each side as text and calls this a
-        // changed contract; recognising the two members is what answers that, and the explanation says
-        // so rather than leaving a reviewer to guess why a manual objection was passed over.
-        assertTrue(result.outcomes().get(0).explanation().contains("Outranked on this block"),
+        // changed contract; recognising the two members is what answers that.
+        //
+        // Step 4.19 changed what happens to that objection, and this is the instruction's own first
+        // example: an insertion into an *empty* base has no base lines, so every base-line question about
+        // it is unanswerable and the conflict is judged over its block instead. The text tier is then
+        // **cleared** - the resolver that would have raised the objection is never called - rather than
+        // asked and overruled. Before this step the same block applied, and the report said "Outranked on
+        // this block": the same decision, reached by doing the weaker work first and discarding it.
+        assertTrue(result.outcomes().get(0).explanation().contains("never asked"),
             result.outcomes().get(0).explanation());
+        assertTrue(result.outcomes().get(0).explanation().contains("API_INCOMPATIBILITY"),
+            "and the claim that was not asked is named by type: "
+                + result.outcomes().get(0).explanation());
     }
 
     @Test

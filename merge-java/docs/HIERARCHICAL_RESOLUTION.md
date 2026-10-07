@@ -195,6 +195,27 @@ them. A claim settling **its own** conflict is deliberately exempt — a resolve
 while declaring `PROJECT_TYPES` is still the authority on the question it was asked, and its own answer
 needs no permission from the scale.
 
+### 3.2b Two more, found by driving the instruction's own example end to end
+
+Both came out of `HierarchicalAcceptanceTest`, which runs the real resolvers over the instruction's first
+example rather than a controlled claim source — and the first one is why that test exists.
+
+**3. An insertion has no base lines, so a conflict that cannot be placed is judged over its block.** `Region`
+is a range of *base* lines. For a `diff3` hunk whose base section is present but **empty** — two branches
+adding a whole method in the same place, which is the instruction's own example — every base-line question
+returns unknown, because there are no base lines to point at. Measured before the fix: the block applied and
+the report read *"Outranked on this block by stronger evidence (PLATFORM_TYPES)"* — the text tier was
+**asked**. The block is the coordinate system that can represent an insertion, and it is the region the
+instruction names; the claim must still explain it, and still be at or above the settled conflict's tier.
+
+**4. A resolver must be handed the region it actually recognised.** The stamp that restates a conflict's
+region in the file's coordinates exists so a report read against the file has correct line numbers — and it
+was being applied *before* resolution. Every resolver that declares an explained span therefore appeared to
+explain its whole block, and the measurement is blunt: `ImportConflictResolver` settled an unrelated
+`COMMENT_ADD` conflict in the same block. Handing the resolver the detector's conflict (block-relative, the
+region it really recognised) and restating the region at the report boundary fixed it. **The stamp is a
+presentation fact, and applying it to the input of a decision is how a presentation fact becomes a decision.**
+
 ### 3.3 What a claim may close: explained, never merely covered
 
 **A claim explains the span its own evidence accounts for.** That is the safety half, and it is

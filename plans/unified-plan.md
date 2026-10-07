@@ -3853,6 +3853,28 @@ amendment.**
   its restricted resolver set owns no `STRUCTURAL_CHANGE` resolver, and the removal path appears only where
   the module's full resolver set is in play.
 
+**Then the instruction's own example was driven end to end, and it did not work.** `HierarchicalAcceptanceTest`
+runs the real resolvers over two branches adding a whole method in the same place, and the first measurement
+was: the block applied, and the report read *"Outranked on this block by stronger evidence
+(PLATFORM_TYPES)"* — the text tier **was** asked. Two more findings, both in `HIERARCHICAL_RESOLUTION.md`
+§ 3.2b and DEC-046's third amendment:
+
+- **An insertion has no base lines, so a conflict that cannot be placed is judged over its block.** `Region`
+  is a range of *base* lines, and the instruction's example is a `diff3` hunk whose base section is present
+  but **empty** — so every base-line question about it is unanswerable by construction, and the removal rule
+  could never fire. The block is the coordinate system that can represent an insertion, and it is the region
+  the instruction itself names. The claim must still explain it (explained span covering the block, or the
+  applied text keeping every line of the settled conflict's two sides) and still be at or above its tier, and
+  nothing here reads region *coverage* — so this is not the stamped-region trap the arbitration rule warns
+  about. With it, the acceptance test passes and the text tier is **cleared**.
+- **A resolver must be handed the region it actually recognised.** The stamp that restates a conflict's region
+  in file coordinates exists for the report, and it was being applied *before* resolution — so every resolver
+  declaring an explained span appeared to explain its **whole block**, and `ImportConflictResolver` settled an
+  unrelated `COMMENT_ADD` conflict (`multipleAutomaticResolutionsLeaveTheBlock` caught it, coming out
+  `LEFT_PARTIAL_RESOLUTION` instead of `LEFT_MULTIPLE_AUTOMATIC`). Fix: hand the resolver the detector's
+  conflict and restate the region at the report boundary. **The stamp is a presentation fact; applying it to
+  the input of a decision is how a presentation fact becomes a decision.**
+
 **Still outstanding, and named rather than implied:**
 
 - **The per-conflict `resolved`/`partial` state is in the block's explanation, not yet a report key** of its
@@ -3863,10 +3885,13 @@ amendment.**
   moving it truly to the top means enumerating recorded decisions before the pass asks anything, which is a
   separate change. What holds today is the part that matters: a recorded human decision is reliable, it
   settles, and no lower tier touches the conflict afterwards.
-- **The acceptance cases are proven with the mechanism's own stubs, not end-to-end with the real
-  resolvers.** `TieredResolutionTest` asserts on `ClaimSource`, which is what makes "never asked" checkable;
-  whether `MEMBER_ADD`'s and `IMPORT_ADD`'s regions actually cover their neighbours' in a real fixture
-  depends on region attribution and is not yet asserted.
+- **The second example — imports — is served by a different mechanism, and that is worth knowing.**
+  `StructuralChangeConflictResolver` declares `STRUCTURE`, which sits **above** `ImportConflictResolver`'s
+  `TEXT_FILE`, so the residual is asked *before* the import resolver and cannot be settled by it; what stops
+  the residual vetoing the import block is `residualSubsumed` (step 4.5). "No lower tier touches the import
+  block" therefore holds for the `TEXT_LOCAL` conflicts, and the residual is a separate question: whether a
+  catch-all that never decides anything should declare the weakest level instead of `STRUCTURE` is a decision
+  for the maintainer, not a change to make quietly. No import-vs-`TEXT_LOCAL` end-to-end fixture exists yet.
 - **A failed `ResolutionVerifier` run keeps a claim out of the hierarchy by construction**: verification
   runs inside `MergeConflictResolver.resolve`, a failure downgrades the answer to `REVIEW`, and a `REVIEW`
   claim settles nothing (`aReviewAnswerSettlesNothing`). That composition is asserted; a verifier fixture is
@@ -3877,8 +3902,12 @@ source is asked about one conflict and never about the settled one), the tier or
 (a claim that explains nothing settles nothing and both tiers are asked), `REVIEW` settling nothing, the
 weaker-tier bound **as the defect it was**, self-settlement under the bound, an unowned type being neither
 settled nor forgotten, and a declining tier being asked exactly once. `ReliabilityTest` — 13 tests whose
-negative cases are the point. And `MergeFileToolTest`'s 31 tests unchanged. `merge-java` — **827 tests, 0
-failures, 0 errors** with the build cache off.
+negative cases are the point. `HierarchicalAcceptanceTest` — the instruction's first example end to end with
+the real resolvers: both methods kept, the block applied, and the text tier **cleared** rather than overruled.
+And `MergeFileToolTest` — 31 tests, of which **one assertion changed and it had to**: the empty-base insertion
+now reports "never asked" instead of "Outranked on this block", which is the improvement itself. Every other
+step-4.6 arbitration test is untouched. `merge-java` — **828 tests, 0 failures, 0 errors** with the build cache
+off.
 
 ### 4.20 — Partial resolution: applied spans beside markers, and the outcome the enum was missing
 **Who:** agent · **Size:** M
@@ -4808,7 +4837,7 @@ start)
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[ ]`                                                                                       |
 | 4.17 | Suggestion rejection memory, proposer as a provenance, the SUGGESTION-class ports               | agent              | M    | `[ ]`                                                                                       |
 | 4.18 | Hierarchical resolution: working set, conflict states, partition invariant                      | agent              | S–M  | `[x]` — behaviour-neutral as designed: `ConflictState`, `ResolutionPass` and `Region.covers`, invariant proved to fail on a dropped line and on a doubly-settled one; **the run order had to come from the declaration, not the record** (DEC-046 clause 13) |
-| 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in**: `TieredResolution` walks the tiers and a settled conflict is never offered to the resolver below (asserted on the claim source, not on the outcome). `ConflictResolution.explainedSpan` + `Reliability` + `AbstractConflictResolver.explainedSpanFor` (overridden by `MEMBER_ADD` and `IMPORT_ADD`) + `removalNote`. **Two bounds were added because tests found them**: the kept-lines check must judge the *settled* conflict's sides, and removal follows the hierarchy's direction — without which `equalEvidenceOutranksNothing` became `APPLIED_AUTO`. **Still open:** the per-conflict state as a report key (4.20 changes that shape anyway), `DEFERRED` settling at its resolver's tier rather than before every tier, and the end-to-end acceptance fixture with the real resolvers |
+| 4.19 | Hierarchical resolution: reliability, and a resolved region the lower tier is never asked about | agent              | M    | `[~]` — **the behaviour change is in and the instruction's first example now works end to end**: `TieredResolution` + `Reliability` + `explainedSpan`, and a settled conflict is never offered to the resolver below. Four findings came from tests, all corrected in the design: the kept-lines check must judge the *settled* conflict; removal follows the hierarchy's direction (else `equalEvidenceOutranksNothing` became `APPLIED_AUTO`); an insertion has no base lines so an unplaceable conflict is judged over its block; and the report's region stamp must not be applied before resolution (else `IMPORT_ADD` settled an unrelated `COMMENT_ADD`). **Still open:** the per-conflict state as a report key (4.20 changes that shape), `DEFERRED` settling at its resolver's tier, an import-vs-`TEXT_LOCAL` fixture, and the open question of whether the catch-all residual should declare `STRUCTURE` at all |
 | 4.20 | Hierarchical resolution: partial resolution, composed output, and the grown outcome enum        | agent              | M    | `[ ]` — needs 4.9's range machinery to compose applied regions beside markers               |
 | 5.1  | webview Phase 6 — headless parity as a build gate                                               | agent              | M    | `[ ]`                                                                                       |
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[ ]`                                                                                       |

@@ -142,7 +142,7 @@ public final class TieredResolution {
                 if (claim == null) {
                     continue;
                 }
-                pass = settle(pass, detected, claims, removals, declaredTiers, index, claim);
+                pass = settle(pass, detected, claims, removals, declaredTiers, block, index, claim);
             }
         }
 
@@ -206,9 +206,9 @@ public final class TieredResolution {
     private static ResolutionPass settle(ResolutionPass pass, List<Conflict> detected,
                                          List<ConflictResolution> claims, List<Removal> removals,
                                          Map<ConflictType, AnalysisLevel> declaredTiers,
-                                         int index, ConflictResolution claim) {
+                                         Region block, int index, ConflictResolution claim) {
         AnalysisLevel tier = claim.getAnalysisLevel();
-        if (Reliability.of(claim, detected.get(index)).isReliable()) {
+        if (Reliability.of(claim, placed(detected.get(index), block)).isReliable()) {
             // The answer to the question this resolver was asked. It is settled regardless of the tier
             // bound below, because a resolver is the authority on its own conflict and needs no permission
             // from the scale to have answered it.
@@ -227,13 +227,44 @@ public final class TieredResolution {
                 // therefore leaves its unowned conflicts exactly where today's code leaves them.
                 continue;
             }
-            Region otherRegion = otherConflict.getRegion();
-            if (!Reliability.of(claim, otherConflict).isReliable()) {
+            Conflict subject = placed(otherConflict, block);
+            if (!Reliability.of(claim, subject).isReliable()) {
                 continue;
             }
             pass = pass.withResolved(other, claim);
-            removals.add(new Removal(other, otherConflict.getType(), otherRegion, claim, tier));
+            removals.add(new Removal(other, otherConflict.getType(), subject.getRegion(), claim, tier));
         }
         return pass;
+    }
+
+    /**
+     * The conflict as the pass must judge it, placed at its block when the detector could not place it.
+     *
+     * <h2>Why a conflict with no region is judged over its block</h2>
+     *
+     * <p>A {@link Region} is a range of <b>base</b> lines, and an insertion has none: for a {@code diff3} hunk
+     * whose base section is present but <em>empty</em> — two branches adding a whole method in the same place
+     * — every base-line question returns {@link Region#unknown()}, because there are no base lines to point
+     * at. Measured on the instruction's own first example before this method existed, the block applied but
+     * the report read <em>"Outranked on this block by stronger evidence (PLATFORM_TYPES)"</em>: the text tier
+     * <b>was</b> asked, and that is the outcome step 4.19 exists to remove.
+     *
+     * <p>The block is the coordinate system that <em>can</em> represent an insertion, and it is the region the
+     * instruction names — <em>"if resolution spans whole merge conflict region"</em>. It is also the region the
+     * resolver already believes it is answering: a resolver is handed the conflict stamped with its block's
+     * region, which is why {@link MemberAddConflictResolver}'s explained span comes out as the block and the
+     * pass was the only party still looking at an unknown region.
+     *
+     * <p>This does not make settlement free, and it is not the stamped-region trap that
+     * {@code outranking} warns about. The claim must still be applicable, still explain what is in front of
+     * it — its explained span covering the block, or its applied text keeping every line of the settled
+     * conflict's two sides — and still be at or above the settled conflict's tier. The stamp would make
+     * <em>coverage</em> true for every pair; nothing here reads coverage.
+     */
+    private static Conflict placed(Conflict conflict, Region block) {
+        if (conflict.getRegion().isKnown() || !block.isKnown()) {
+            return conflict;
+        }
+        return conflict.withRegion(block);
     }
 }
