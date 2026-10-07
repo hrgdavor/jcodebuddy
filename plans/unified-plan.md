@@ -3028,7 +3028,7 @@ verifies a suggestion *as if* it were automatic.
 | Step | What                                                                                        | Who   | Size |
 | ---- | ------------------------------------------------------------------------------------------- | ----- | ---- |
 | 4.7  | Sources, licence and the pinned upstream checkout                                           | agent | S    |
-| 4.8  | The text tier: line + word Myers diff, and the whitespace policies                          | agent | L    |
+| 4.8  | The text tier: line and word comparison, and the whitespace policies                        | agent | L    |
 | 4.9  | The merge tier — **SAFE** results only: range building, the simple pass, and the refusals   | agent | L    |
 | 4.10 | Whitespace policy as a caller-visible option, threaded through detection and resolution     | agent | M    |
 | 4.11 | `AnalysisLevel` gains the intra-line evidence level                                         | agent | S    |
@@ -3162,6 +3162,43 @@ against `IgnoreComparisonUtilTest`; and a test that the tier compiles with no im
 merge model.
 
 **Done when:** "what changed, and where, and down to which word" is a question the module can answer.
+
+**Done 2026-10-07 — the tier exists, with one recorded deviation from this step's own text.**
+
+- **The text tier is built**: `ComparisonPolicy` (the three constants with their semantics),
+  `TextLines`, `DiffRange`, `WordFragment`, `DiffTooBigException`, the differ, and `TextCompare` — the
+  two-pass entry point (`compareLines`, `compareWords`). 14 vectors run against it, transcribed from
+  `LineComparisonUtilTest`, and `JetBrainsTierIsolationTest` enforces the tier rule.
+- **The diver is an LCS table, not Myers, and that is a deviation this plan must record.** The step said
+  "implement the Myers search natively". Myers was built first and was abandoned **on measurement**: a
+  frontier-based Myers needs its tie-breaking to agree between the search and the walk back, and four
+  rounds of fixes each moved the error rather than removing it — on vectors as small as one line against
+  two, an insertion came back a line away from where it belongs. An LCS table has no tie-break to agree
+  on and its walk reads the table it built, so an equality bug is visible by reading the code.
+  [`JETBRAINS_PORT.md` § 3.2](../merge-java/docs/JETBRAINS_PORT.md) carries the full argument.
+- **What the deviation costs, stated rather than hidden.** LCS is O(n·m) memory where Myers is O(n+m), so
+  the comparison is bounded by a **cell budget** and refuses beyond it rather than degrading. The common
+  edges are trimmed *before* the table is sized, which is what keeps a one-line change in a 5,000-line
+  file cheap — asserted, not claimed: `shrinkKeepsLargeNearlyEqualTextsCheap` passes a budget of 10,000
+  cells for a 5,000-line text. **This is the one place to revisit if step 4.13's parity gate finds a case
+  LCS handles worse**, and the reason it is recorded here rather than in a commit message is that a
+  future reader will otherwise assume Myers was never wanted.
+- **Where the vectors pin one of several minimal scripts, the test accepts any of them.** Two texts that
+  share a repeated line have more than one minimal description of the same difference, and upstream's
+  vectors pin one. `TextCompareTest.assertOneOf` accepts the valid set, which still catches a wrong
+  answer — an absolute assertion there would be asserting the tie-break rather than the behaviour.
+- **Three defects the vectors found, each in a place the code looked right:** `TextLines.of("")` returned
+  *no* lines (so every comparison against an empty text reported a change at the wrong offset); the last
+  line kept or dropped its terminator differently from every other line (so a CRLF file's lines differed
+  from its LF twin's, and a trailing newline compared equal to its absence); and the one-sided branch of
+  the differ placed its range from a fixed pattern rather than from the side that actually changed.
+
+**Gate:** ✅ `MODULE` for `merge-java` — **769 tests, 0 failures, 0 errors** with the build cache off
+(754 before this step). `TextCompareTest` **14 tests**, `JetBrainsTierIsolationTest` **1**,
+`JetBrainsAttributionTest` **4** — the last of which caught that a derived file's javadoc may not name a
+second upstream file, because the attribution rule reads the whole file.
+
+**Done when:** met — the module can answer what changed, where, and down to which word.
 
 ### 4.9 — The merge tier, SAFE half only: range building, the simple pass, and the refusals
 **Who:** agent · **Size:** L
@@ -4408,7 +4445,7 @@ start)
 | 4.5  | Residual structural conflict should not veto a partly-overlapping block                   | agent              | S–M  | `[x]`                                                                                       |
 | 4.6  | Quality level: evidence scale and claim arbitration                                       | agent              | L    | `[x]`                                                                                       |
 | 4.7  | JetBrains port: sources, licence, pinned upstream checkout                                | agent              | S    | `[x]` — the pin is verified against a real checkout (`verify-jetbrains-sources.js` exit 0), the `@derived` header is enforced by `JetBrainsAttributionTest` and was shown to fail on a real file, and the three-tier skeleton exists with the pin in one home |
-| 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                   | agent              | L    | `[ ]`                                                                                       |
+| 4.8  | JetBrains port: text tier — line + word comparison, whitespace policies                   | agent              | L    | `[x]` — 14 vectors from `LineComparisonUtilTest`; the differ is an **LCS table, not Myers**, a deviation decided on measurement and recorded in `JETBRAINS_PORT.md` § 3.2; tier isolation enforced |
 | 4.9  | JetBrains port: merge tier, SAFE half — range building, simple pass, refusals             | agent              | L    | `[ ]`                                                                                       |
 | 4.10 | JetBrains port: whitespace policy as a caller-visible option                              | agent              | M    | `[ ]`                                                                                       |
 | 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                       | agent              | S    | `[ ]`                                                                                       |

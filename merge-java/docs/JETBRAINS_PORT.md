@@ -84,10 +84,33 @@ Paths are relative to the repository root; `util/` = `platform/util/diff/src/com
 
 **Note on `By*Rt.kt`.** These are large and are wired to IntelliJ's `DiffConfig`, `Range`,
 `DiffFragment`, `FairDiffIterable` and cancellation model. Translating them wholesale would import a
-framework, not an algorithm. Steps 4.8–4.9 therefore implement **the smallest Myers differ this module
-needs** (line pass, then word pass over changed blocks) in native Java, and take from `ByWordRt` its
-**word-boundary rule and policy handling** rather than its class structure. That is a deliberate
+framework, not an algorithm. Step 4.8 therefore implements **the smallest differ this module needs** (line
+pass, then word pass over changed blocks) in native Java, and takes from `ByWordRt` its **word-boundary
+rule and policy handling** rather than its class structure. That is a deliberate
 narrowing; it is recorded so nobody assumes it was an oversight.
+
+> **The differ is an LCS table, not Myers — decided during step 4.8, after measurement.** The plan said
+> Myers, and Myers was built first. It is not what shipped, and the reason is a fact about *this* use
+> rather than a preference: a frontier-based Myers search needs its tie-breaking to agree between the
+> search and the walk back, and every disagreement produces output that still looks like a diff — ranges,
+> in order, describing *a* difference — while placing a change a line away from the real one. Measured:
+> four rounds of fixes each moved the error rather than removing it, on vectors as small as one line
+> against two. A longest-common-subsequence table has no tie-break to agree on, the walk reads the same
+> table it built, and its invariant is checkable by reading the code.
+>
+> **The trade, stated plainly:** LCS is O(n·m) in memory where Myers is O(n+m), so the comparison is
+> **bounded by a cell budget** (4 million cells by default — a 2,000-line fully-rewritten region) and
+> **refuses** beyond it rather than degrading. For a merge tool that is the right way round: the input is
+> one conflict hunk, not a repository, the common edges are trimmed before the table is sized, and a diff
+> that is provably the difference beats one that is faster and occasionally off by a line. § 5.6's parity
+> gate is where a case LCS handles worse would surface, and the class javadoc says the same thing where
+> the next reader will be.
+>
+> **Consequence for the vectors:** where two texts share a repeated line, more than one minimal script
+> exists and they are all correct. The ported tests therefore accept any *minimal* description of a
+> difference where upstream's vectors pin one — see `TextCompareTest.assertOneOf`, which still catches a
+> wrong answer, and the note there on why asserting one split would assert the tie-break instead of the
+> behaviour.
 
 ### 3.3 The model layer (read for its decision rules, not for its code)
 
