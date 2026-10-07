@@ -66,6 +66,37 @@ class AnalysisLevelTest {
     }
 
     @Test
+    @DisplayName("the intra-line level has a producer: words when they were needed, line sets when they were not")
+    void theIntraLineLevelIsRecordedOnlyWhenWordsWereRead() {
+        // Plan step 4.11's declaration half, asserted on the resolver that can now reach the level — and asserted in
+        // BOTH directions, because a level is a claim about what was read and one direction alone would let the
+        // declaration become a licence.
+        MethodBodyChangeConflictResolver resolver = new MethodBodyChangeConflictResolver();
+
+        // The words case: both sides edited one statement line, each deleting a different word, so the words neither
+        // removed are the answer. A statement-set comparison can only say "the same statement changed twice".
+        Conflict atWordLevel = new Conflict(ConflictType.METHOD_BODY_CHANGE, "A.java", "sample",
+            "int total = a + b + c;\n", "int total = b + c;\n", "int total = a + b;\n");
+        ConflictResolution fromWords = resolver.resolve(atWordLevel);
+        assertEquals(AnalysisLevel.TEXT_INTRALINE, fromWords.getAnalysisLevel(),
+            "the answer needed the word comparison, and the record says so: " + fromWords.getExplanation());
+        assertFalse(fromWords.getResolvedCode().isBlank(),
+            "and it carries the composition: " + fromWords.getResolvedCode());
+        assertTrue(resolver.maxAnalysisLevel().isAtLeast(fromWords.getAnalysisLevel()),
+            "the declaration must cover the record: " + resolver.maxAnalysisLevel());
+
+        // The fall-back case: the pass refuses (two different insertions at one point), so the statement-set answer
+        // stands — and it records the LINE level, because that is all it read. Recording TEXT_INTRALINE here would be
+        // claiming a comparison that never happened.
+        Conflict notComposable = new Conflict(ConflictType.METHOD_BODY_CHANGE, "A.java", "sample",
+            "int total = computeTotal();\n", "int total = computeGrand();\n", "int total = computeNet();\n");
+        ConflictResolution fellBack = resolver.resolve(notComposable);
+        assertEquals(AnalysisLevel.TEXT_LOCAL, fellBack.getAnalysisLevel(),
+            "a resolution that fell back to line sets records TEXT_LOCAL, not TEXT_INTRALINE: "
+                + fellBack.getExplanation());
+    }
+
+    @Test
     @DisplayName("a conflict that never decides objects from its resolver's own basis")
     void undecidedConflictsObjectFromTheirOwnBasis() {
         // The two resolvers that never resolve anything: how easily their objection is outranked is

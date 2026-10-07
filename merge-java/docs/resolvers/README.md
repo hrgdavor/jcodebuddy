@@ -17,7 +17,7 @@ in registration order:
 | `CommentAddConflictResolver`         | `COMMENT_ADD`         | AUTO              | TEXT_LOCAL    | no     | [comment-add-conflict-resolver](comment-add-conflict-resolver/README.md)                 |
 | `ConstantAddConflictResolver`        | `CONSTANT_ADD`        | AUTO              | TEXT_FILE     | no     | [constant-add-conflict-resolver](constant-add-conflict-resolver/README.md)               |
 | `OverloadAddConflictResolver`        | `OVERLOAD_ADD`        | AUTO              | PROJECT_TYPES | no     | [overload-add-conflict-resolver](overload-add-conflict-resolver/README.md)               |
-| `MethodBodyChangeConflictResolver`   | `METHOD_BODY_CHANGE`  | REVIEW            | TEXT_LOCAL    | no     | [method-body-change-conflict-resolver](method-body-change-conflict-resolver/README.md)   |
+| `MethodBodyChangeConflictResolver`   | `METHOD_BODY_CHANGE`  | REVIEW            | TEXT_INTRALINE | no     | [method-body-change-conflict-resolver](method-body-change-conflict-resolver/README.md)   |
 | `TypeChangeConflictResolver`         | `TYPE_CHANGE`         | REVIEW            | PROJECT_TYPES | no     | [type-change-conflict-resolver](type-change-conflict-resolver/README.md)                 |
 | `RenameConflictResolver`             | `VARIABLE_RENAME`     | STICKY            | TEXT_LOCAL    | yes    | [rename-conflict-resolver](rename-conflict-resolver/README.md)                           |
 | `PackageChangeConflictResolver`      | `PACKAGE_CHANGE`      | STICKY            | TEXT_LOCAL    | yes    | [package-change-conflict-resolver](package-change-conflict-resolver/README.md)           |

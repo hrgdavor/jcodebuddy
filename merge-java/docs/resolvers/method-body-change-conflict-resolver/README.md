@@ -17,7 +17,8 @@ sticky.
    lines that are not comments; `import` and `package` lines are excluded
    because they belong to their own conflict types (counting them would make a
    pure import conflict look like a body edit as well).
-2. If either side has no statements, decline.
+2. If either side has no statements, decline **from the statement-set path** and fall through to the intra-line
+   path below, which returns `null` when the ported pass refuses — the same outcome this step used to produce.
 3. Compute what each branch changed against the base statements, and intersect
    the two change sets:
    - **Identical edits** (both branches changed exactly the same statements the
@@ -34,6 +35,24 @@ sticky.
 
 Every outcome is `REVIEW`: even a mechanically clean combination of two
 individually-correct edits is not guaranteed to be correct together.
+
+## The intra-line path, and why the declared level is `TEXT_INTRALINE`
+
+When the statement sets cannot express the answer, the resolver now asks the **ported resolve pass**
+(`MergeResolve`, `JETBRAINS_PORT.md` § 11.2) and offers what it composes — still as `REVIEW`, so nothing is
+applied by the tool:
+
+- **two branches deleting different words of one line** composes to the words neither touched. A statement-set
+  comparison sees one changed statement on each side and can only call it a disagreement; the word comparison can
+  say *which part* differs, and the answer is then mechanical. This is the benchmark's own most valuable resolve
+  vector, and it is why the declaration rose from `TEXT_LOCAL` to **`TEXT_INTRALINE`**;
+- **two different insertions at one point** still refuse, one granularity down from the same rule that refuses them
+  at line level — a composed answer there would be inventing an order nobody chose.
+
+The **recorded** level says which reading produced the answer: `TEXT_INTRALINE` when the word comparison was
+needed, `TEXT_LOCAL` when the line comparison alone reached it. The declaration is an upper bound, never a claim
+per answer — `AnalysisLevelTest` asserts that no resolution records a level above its resolver's declaration, and
+the resolver records the finer level only when the pass reports that it needed the finer comparison.
 
 ## The canonical sample
 
