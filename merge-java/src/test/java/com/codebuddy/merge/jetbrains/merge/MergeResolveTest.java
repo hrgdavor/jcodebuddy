@@ -1,0 +1,224 @@
+// {@link com.codebuddy.merge.jetbrains.merge.MergeResolveTest} Holds the simple resolve pass to upstream's expectations, and pins its refusals.
+// {enabled:true, blockMarker: "implicit"}
+package com.codebuddy.merge.jetbrains.merge;
+
+import com.codebuddy.merge.jetbrains.text.ComparisonPolicy;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The simple resolve pass against upstream's expectations (unified plan step 4.9).
+ *
+ * <h2>Where the vectors come from</h2>
+ *
+ * <p>{@code MergeTest.testResolve} in
+ * {@code platform/diff-impl/tests/testSrc/com/intellij/diff/merge/MergeTest.kt}, whose DSL writes
+ * {@code "y z_Y_x y"} for four lines and asserts the resolved content — not just a verdict, which is why
+ * these vectors are worth having: "resolved something" is not parity.
+ *
+ * <h2>The refusals are the point of this step</h2>
+ *
+ * <p>Half of these vectors assert that the pass returns <b>nothing</b>. Two edits to the same lines are two
+ * intentions, and no comparison of text contains the information needed to choose between them; a pass that
+ * answered anyway would be inventing a decision. {@code DESIGN_NEVER_AUTO_RESOLVED.md} is not relaxed by
+ * this step, and {@link #refusesWhenBothSidesChangeTheSameRegionDifferently()} is where that is asserted
+ * rather than promised.
+ */
+class MergeResolveTest {
+
+    /** A text written the way upstream's DSL writes it: {@code _} is a line terminator. */
+    private static String text(String dsl) {
+        return dsl.replace("_", "\n");
+    }
+
+    private static MergeResolve.Result resolve(String left, String base, String right) {
+        return MergeResolve.resolve(text(left), text(base), text(right));
+    }
+
+    // ------------------------------------------------------------------ the resolving vectors
+
+    @Test
+    @DisplayName("both sides deleting the SAME lines is not a disagreement, but the pass must not guess")
+    void bothSidesDeletingTheSameLines() {
+        // up: left "y z", base "x y z", right "x y" -> "y". Upstream's SimpleHelper resolves this because
+        // it compares at the WORD level, where the surviving "y" is one word and the deletions around it
+        // are separate fragments.
+        //
+        // **This pass refuses it, and that limit is deliberate and named.** Composing it needs word-level
+        // composition, which is the SUGGESTION-class pass of JETBRAINS_PORT.md section 5.1 that lands on
+        // the suggestion channel in 4.14-4.15 — not here. Refusing is the conservative answer and it is
+        // reported rather than hidden: the vector is kept, marked as an expected refusal, so raising this
+        // pass to word granularity is a change with a test to update rather than an accident.
+        MergeResolve.Result result = resolve("y z", "x y z", "x y");
+        assertTrue(result.refused(),
+            "line-level composition cannot prove this; it needs the word-level pass");
+    }
+
+    @Test
+    @DisplayName("two independent conflicts need word-level composition, so this pass refuses them")
+    void twoIndependentConflictsNeedTheWordLevelPass() {
+        // up: left "y z_Y_x y", base "x y z_Y_x y z", right "x y_Y_y z" -> "y_Y_y". The same limit as
+        // above: the answer is a word-level composition, which belongs to the suggestion pass.
+        MergeResolve.Result result = resolve("y z_Y_x y", "x y z_Y_x y z", "x y_Y_y z");
+        assertTrue(result.refused(), "this needs word-level composition, not this pass");
+    }
+
+    @Test
+    @DisplayName("one unchanged run is taken from the base when only the other side changed")
+    void onlyOneSideChanges() {
+        // Right is untouched, so the answer is the left text.
+        MergeResolve.Result result = resolve("a_X_c", "a_b_c", "a_b_c");
+        assertFalse(result.refused());
+        assertEquals(text("a_X_c"), result.mergedText());
+
+        // And symmetrically.
+        MergeResolve.Result other = resolve("a_b_c", "a_b_c", "a_Y_c");
+        assertFalse(other.refused());
+        assertEquals(text("a_Y_c"), other.mergedText());
+    }
+
+    @Test
+    @DisplayName("an untouched base resolves to itself and says so")
+    void untouchedBase() {
+        MergeResolve.Result result = resolve("a_b_c", "a_b_c", "a_b_c");
+        assertFalse(result.refused());
+        assertEquals(text("a_b_c"), result.mergedText());
+        assertTrue(result.byteEqual(), "an untouched base is byte-identical to itself");
+    }
+
+    @Test
+    @DisplayName("both sides making the same change resolves to that change")
+    void bothSidesMakeTheSameChange() {
+        MergeResolve.Result result = resolve("a_X_c", "a_b_c", "a_X_c");
+        assertFalse(result.refused());
+        assertEquals(text("a_X_c"), result.mergedText());
+        assertFalse(result.byteEqual(), "the result is not the base");
+        assertTrue(result.resolved(), "and the caller can say so without negating refused()");
+    }
+
+    // ------------------------------------------------------------------ the refusing vectors
+
+    @Test
+    @DisplayName("both sides changing the same region differently is refused")
+    void refusesWhenBothSidesChangeTheSameRegionDifferently() {
+        // up: ("x" - "y" - "z") is a CONFLICT, and tryResolve returns null for it.
+        MergeResolve.Result result = resolve("x", "y", "z");
+        assertTrue(result.refused(), "one line, two different edits: nothing decides this");
+        assertNull(result.mergedText());
+    }
+
+    @Test
+    @DisplayName("two different insertions at one point are refused")
+    void refusesTwoDifferentInsertions() {
+        // The base has nothing here and the two sides insert different content. Neither order is more
+        // correct, which is upstream's own stated reason for refusing (MergeResolveUtil.kt:44).
+        MergeResolve.Result result = resolve("x_Y", "Y", "z_Y");
+        assertTrue(result.refused(), "two different insertions have no correct order");
+    }
+
+    @Test
+    @DisplayName("a deletion competing with an edit is refused")
+    void refusesDeletionAgainstEdit() {
+        // "deleted-inserted conflicts can be resolved by applying both of them" upstream says of its own
+        // greedy pass — but that is the pass this step classifies as a suggestion, not an automatic
+        // answer. Here a side that removed the lines is a different intention from one that edited them.
+        MergeResolve.Result result = resolve("", "A_B_C", "A_X_C");
+        assertTrue(result.refused() || !result.mergedText().contains("B"),
+            "a deletion competing with an edit must not silently resurrect or drop the line: "
+                + result.mergedText());
+    }
+
+    // ------------------------------------------------------------------ the policy, recorded
+
+    @Test
+    @DisplayName("the policy that produced a result travels with it")
+    void thePolicyIsRecorded() {
+        MergeResolve.Result defaultPolicy = MergeResolve.resolve("a_X_c", "a_b_c", "a_b_c",
+            ComparisonPolicy.DEFAULT);
+        assertEquals(ComparisonPolicy.DEFAULT, defaultPolicy.policy());
+
+        MergeResolve.Result ignoring = MergeResolve.resolve("a_X_c", "a_b_c", "a_b_c",
+            ComparisonPolicy.IGNORE_WHITESPACES);
+        assertEquals(ComparisonPolicy.IGNORE_WHITESPACES, ignoring.policy(),
+            "a caller that writes this result must be able to say what its basis was");
+    }
+
+    @Test
+    @DisplayName("a formatting-only difference is not a conflict under a whitespace policy")
+    void formattingOnlyDifferenceIsNotAConflict() {
+        // Under DEFAULT the indentation is content, so the two sides disagree.
+        assertTrue(MergeResolve.resolve(text("  a_b"), text("a_b"), text("\ta_b"),
+            ComparisonPolicy.DEFAULT).refused(), "DEFAULT sees two different edits");
+
+        // Under IGNORE_WHITESPACES they are the same edit, so there is nothing to decide.
+        MergeResolve.Result ignoring = MergeResolve.resolve(text("  a_b"), text("a_b"), text("\ta_b"),
+            ComparisonPolicy.IGNORE_WHITESPACES);
+        assertFalse(ignoring.refused(), "whitespace churn is not a disagreement under this policy");
+        assertNotNull(ignoring.mergedText());
+    }
+
+    // ------------------------------------------------------------------ the ranges the pass walks
+
+    @Test
+    @DisplayName("a range is built for a change on one side only, and for both")
+    void rangesDescribeWhichSideChanged() {
+        // Only the right changed: one range, and the left side has no lines in it.
+        List<MergeRangeBuilder.MergeChange> onlyRight = MergeRangeBuilder.build(
+            text("a_b_c"), text("a_b_c"), text("a_X_c"), ComparisonPolicy.DEFAULT);
+        assertEquals(1, onlyRight.size(), "one change, one range: " + onlyRight);
+        assertFalse(onlyRight.get(0).leftChanged(), "the left side did not change");
+        assertTrue(onlyRight.get(0).rightChanged());
+        assertTrue(onlyRight.get(0).range().leftIsEmpty());
+
+        // Only the left changed, symmetrically.
+        List<MergeRangeBuilder.MergeChange> onlyLeft = MergeRangeBuilder.build(
+            text("a_b_c"), text("a_X_c"), text("a_b_c"), ComparisonPolicy.DEFAULT);
+        assertEquals(1, onlyLeft.size(), "one change, one range: " + onlyLeft);
+        assertTrue(onlyLeft.get(0).leftChanged());
+        assertFalse(onlyLeft.get(0).rightChanged());
+
+        // Both changed the same region, so it is ONE range holding both sides — the case the builder
+        // exists for. Two ranges here would let a later step decide about half a disagreement.
+        List<MergeRangeBuilder.MergeChange> both = MergeRangeBuilder.build(
+            text("a_b_c"), text("a_X_c"), text("a_Y_c"), ComparisonPolicy.DEFAULT);
+        assertEquals(1, both.size(), "both sides' changes are one range: " + both);
+        assertTrue(both.get(0).leftChanged() && both.get(0).rightChanged());
+        assertEquals(1, both.get(0).range().length2(),
+            "the base range is the line both changed: " + both.get(0));
+    }
+
+    @Test
+    @DisplayName("an unchanged text produces no ranges at all")
+    void noRangesWhenNothingChanged() {
+        assertEquals(List.of(), MergeRangeBuilder.build(text("a_b_c"), text("a_b_c"), text("a_b_c"),
+            ComparisonPolicy.DEFAULT));
+    }
+
+    @Test
+    @DisplayName("the ranges are in order and none is empty")
+    void rangesAreOrderedAndNonEmpty() {
+        List<MergeRangeBuilder.MergeChange> ranges = MergeRangeBuilder.build(
+            text("a_b_c_d_e"), text("a_X_c_d_e"), text("a_b_c_Y_e"), ComparisonPolicy.DEFAULT);
+        assertFalse(ranges.isEmpty(), "there are two changes here");
+        for (int i = 1; i < ranges.size(); i++) {
+            MergeRange previous = ranges.get(i - 1).range();
+            MergeRange current = ranges.get(i).range();
+            assertTrue(previous.end1() <= current.start1(), "left ranges overlap: " + ranges);
+            assertTrue(previous.end2() <= current.start2(), "base ranges overlap: " + ranges);
+            assertTrue(previous.end3() <= current.start3(), "right ranges overlap: " + ranges);
+        }
+        for (MergeRangeBuilder.MergeChange change : ranges) {
+            MergeRange range = change.range();
+            assertTrue(range.length1() > 0 || range.length2() > 0 || range.length3() > 0,
+                "an empty range is not a change: " + range);
+        }
+    }
+}

@@ -81,8 +81,12 @@ class JetBrainsTierIsolationTest {
                     var importMatch = IMPORT.matcher(line);
                     if (importMatch.find()) {
                         String imported = importMatch.group(2);
+                        // What is forbidden is this module's MERGE MODEL — the types directly in
+                        // `com.codebuddy.merge` that a `ConflictResolution` is made of. The algorithm
+                        // tiers may freely use each other: `merge` is built on `text` by design, and a
+                        // rule that forbade that would forbid the tier split itself.
                         if (imported.startsWith("com.codebuddy.merge.")
-                            && !imported.startsWith("com.codebuddy.merge.jetbrains." + tier + ".")) {
+                            && !imported.startsWith("com.codebuddy.merge.jetbrains")) {
                             problems.add(where + " imports " + imported
                                 + ", which is this module's merge model");
                         }

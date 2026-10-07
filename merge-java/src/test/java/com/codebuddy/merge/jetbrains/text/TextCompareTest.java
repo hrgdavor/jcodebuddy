@@ -276,12 +276,20 @@ class TextCompareTest {
         assertEquals(2, TextLines.of("x\n").size());
         assertEquals("", TextLines.of("x\n").line(1));
 
-        // CRLF is a separator, not content: a CRLF text and its LF twin have the same lines.
-        assertEquals(TextLines.of("x\ny\n").lines(), TextLines.of("x\r\ny\r\n").lines());
+        // The split and the join are exact inverses, which is what a merge needs: it composes text by
+        // appending whole lines, so a line that had lost its terminator would run into the next one.
+        assertEquals("x\ny\n", TextLines.of("x\ny\n").text());
+        assertEquals("x", TextLines.of("x").text());
         assertEquals(1, TextLines.of("").size());
+        assertEquals("x\n", TextLines.of("x\n").line(0), "a line carries its terminator");
 
-        // A terminator is not part of a line's content, so "x" and "x\n" have the same first line.
-        assertEquals("x", TextLines.of("x\n").line(0));
+        // A CRLF line and its LF twin are equal once compared, because a terminator is not content. The
+        // raw lines differ -- one carries "\\r\\n" -- and that is the point of normalising rather than
+        // slicing the terminator off at split time.
+        assertEquals(TextLines.of("x\ny\n").lines().size(), TextLines.of("x\r\ny\r\n").lines().size());
+        assertEquals(TextLines.of("x\ny\n").normalised(0, ComparisonPolicy.DEFAULT),
+            TextLines.of("x\r\ny\r\n").normalised(0, ComparisonPolicy.DEFAULT));
+        assertEquals("x", ComparisonPolicy.stripTerminator(TextLines.of("x\n").line(0)));
         assertEquals(ComparisonPolicy.stripTerminator("x\r\n"), "x");
         assertEquals(ComparisonPolicy.stripTerminator("x"), "x");
     }
