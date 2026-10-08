@@ -37,12 +37,17 @@ public class WatchAgent {
         globalRegistry.register(new AccessorGenerator("setters", false, true));
         globalRegistry.register(new AccessorGenerator("accessors", true, true));
         globalRegistry.register(new ConstructorGenerator());
+        // Plan step 7.5: the OpenRewrite-based tool prototype, registered so it appears in the menu. It is
+        // configured from .watch_agent.conf (renameFrom/renameTo); with nothing configured it is applicable to
+        // nothing, which is the honest state of a toolset entry that names a tool but gives it no work.
+        globalRegistry.register(new RenameMemberTool(config.getRenameFrom(), config.getRenameTo()));
         if (config.getToolSets().isEmpty()) {
             AgentConfig.ToolSet defaultSet = new AgentConfig.ToolSet();
             defaultSet.setName("java");
             defaultSet.setInclude(List.of("src/main/java/**/*", "src/main/resources/**/*"));
             defaultSet.setTools(
-                    List.of("hello", "builder", "getters", "setters", "accessors", "constructor", "record_builder"));
+                    List.of("hello", "builder", "getters", "setters", "accessors", "constructor", "record_builder",
+                            "rename"));
             config.getToolSets().add(defaultSet);
             System.out.println("No toolsets defined, added default 'java' toolset.");
         }

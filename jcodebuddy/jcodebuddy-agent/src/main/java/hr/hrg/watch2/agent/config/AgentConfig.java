@@ -17,6 +17,16 @@ public class AgentConfig {
     private String webPassword;
     private boolean applyFirst = false;
 
+    /**
+     * The rename recipe of plan step 7.5, as {@code <from>}, {@code <to>} — the pair the agent's "rename" tool
+     * applies to every file its toolsets match.
+     *
+     * <p>Absent by default, and that is a real state rather than a missing default: a rename is a project decision,
+     * so a tool that guessed one would rewrite identifiers nobody asked it to touch.
+     */
+    private String renameFrom;
+    private String renameTo;
+
     public boolean isApplyFirst() {
         return applyFirst;
     }
@@ -31,6 +41,22 @@ public class AgentConfig {
 
     public void setToolSets(List<ToolSet> toolSets) {
         this.toolSets = toolSets;
+    }
+
+    public String getRenameFrom() {
+        return renameFrom;
+    }
+
+    public void setRenameFrom(String renameFrom) {
+        this.renameFrom = renameFrom;
+    }
+
+    public String getRenameTo() {
+        return renameTo;
+    }
+
+    public void setRenameTo(String renameTo) {
+        this.renameTo = renameTo;
     }
 
     public String getEditorCommand() {
