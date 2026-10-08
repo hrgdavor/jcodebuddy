@@ -5003,6 +5003,13 @@ DEC-024 and the tree turns it into work with names, owners and a template to mir
 Doing it before writing code is deliberate: the two halves are independent, and knowing which one is missing a template
 is the difference between a day and an afternoon.
 
+**The decision this step needed is [`DEC-048`](../doc-hipster-entity/architecture/decisions/DEC-048.md)** (accepted
+2026-10-08, registered in the decisions index): it fixes the emitted deep index's shape and settles the applier's
+dispatch — **generated per view** (`<View>PatchApplier`, beside the `<View>Write` it writes through, dispatching on the
+field name with typed setter calls and recursing into a nested view's own applier), rather than a generic reflective
+applier that DEC-019 forbids or an SPI whose only client would be generated code. The scope below is what that decision
+leaves to implement.
+
 **What already exists, verified rather than assumed:**
 
 - The **runtime half** (DEC-024 D4, pull): `ViewChangeTracking.changesDeep()` (default `shallowPaths()`, overridable by
