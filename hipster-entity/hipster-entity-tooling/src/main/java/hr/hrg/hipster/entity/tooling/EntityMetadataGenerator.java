@@ -1271,8 +1271,50 @@ public class EntityMetadataGenerator {
         DivergenceReporter divergences = new DivergenceReporter();
         try {
             generate(sourceRoot, outputDir, javaOutputRoot, divergences);
+            // DEC-006 (accepted 2026-10-08, plan step 6.4): a missing converter for an incompatible pair is a
+            // CONTRACT-class finding, so a STRICT pass fails on it — through the policy machinery step 6.3 built
+            // rather than a second failure mechanism. Checked after the pass because a mapper requirement is
+            // discovered by resolving views, which is what the pass does.
+            failOnContractDivergences(divergences);
         } finally {
             reportDivergences(divergences);
+        }
+    }
+
+    /**
+     * The divergence kinds that make the generated model <strong>wrong</strong> rather than untidy — DEC-006 (accepted
+     * 2026-10-08) for the mapper's missing converter, and the same split step 6.3 gave the entity rules a
+     * {@code Nature} for.
+     *
+     * <p>A divergence is normally a report: it is printed, counted and the pass continues, which is why the example's
+     * committed run reports three to five of them and still succeeds. These kinds are different in <em>what they mean</em>
+     * rather than in how loud they are: a source/target pair the mapper cannot convert means the mapped view does not
+     * exist as code, so a pass that claims to enforce the contract must not stay green. The list is deliberately short
+     * and named: widening the classification is how a kind becomes fatal, and the amendment to DEC-006 says why this one
+     * is.</p>
+     */
+    private static final java.util.List<String> CONTRACT_DIVERGENCE_KINDS = java.util.List.of(
+            "mapper_type_incompatible");
+
+    /**
+     * Fails a {@code STRICT} pass when a contract-class divergence was reported, reported as the same
+     * {@link ValidationFailedException} the entity rules raise so a caller has one failure to catch.
+     */
+    private static void failOnContractDivergences(DivergenceReporter divergences)
+            throws ValidationFailedException {
+        if (validationPolicy != Policy.STRICT) {
+            return;
+        }
+        java.util.List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue> issues =
+                new java.util.ArrayList<>();
+        for (String kind : CONTRACT_DIVERGENCE_KINDS) {
+            for (String entry : divergences.ofKind(kind)) {
+                issues.add(new hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue(
+                        hr.hrg.hipster.entity.tooling.validation.EntityRule.Nature.CONTRACT, null, entry));
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new ValidationFailedException(issues);
         }
     }
 
