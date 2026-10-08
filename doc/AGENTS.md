@@ -76,6 +76,16 @@ Two things it does **not** cover, both measured rather than assumed:
   `GeneratedTrackingBuilderContractTest.classpath`) now add each module's `target/*.jar` as well as its
   `target/classes`, which is why a run with four modules restored and `hipster-entity-tooling` rebuilding ends with
   all 468 of its tests passing. Any new test that compiles against a sibling module by path must do the same.
+  **The same thing bites a hand-run JVM, which is worth knowing before debugging a classpath.** A probe that builds
+  its classpath by globbing every `*/target/classes` — the natural thing to write — silently **omits every
+  cache-restored module**, and the symptom is a `NoClassDefFoundError` for a class that plainly exists in the tree
+  (measured 2026-10-08: `hipster-entity-api/target/` held only its jar, so `hr.hrg.hipster.entity.api.GenLevel` "did
+  not exist"). Either put the `target/*.jar` files on the path too, or — better — take the classpath from the
+  repository's own `classpathFrom` / `scripts/gen.js`, which is built by Maven and therefore correct. And check which
+  `java` you are running before anything else: on a stock Windows box here `java` on `PATH` is **Java 8** (class file
+  52.0) while every class under `target/` is Java 25 (69.0), which reports as
+  `UnsupportedClassVersionError … only recognizes class file versions up to 52.0`. Use the launcher or the JDK 25
+  explicitly; [`scripts/lib/toolchain.js`](../scripts/lib/toolchain.js) resolves it (`resolveJdk25()`).
 - **A run that produces nothing must not populate the cache.** A `mvn … validate` run stores an entry per module with
   a near-empty output tree, and a later build that hits it compiles against a module with no classes — reported as
   `cannot find symbol` on sources that compile perfectly. Populate with `package` (what the fast path uses), and

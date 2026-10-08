@@ -5152,6 +5152,16 @@ item without running the whole pass.
   because the goal ran per module and the last module's output won the file. Take the classpath from the repository's own
   `classpathFrom` / `scripts/gen.js` path, or reproduce the case as a test — which is how every hypothesis above was
   settled, and is the cheaper instrument.
+- **The probe was then attempted properly, and it answered a different question — worth recording so nobody repeats
+  it.** With every reactor `target/classes` on the path, the run first failed as **Java 8** (`UnsupportedClassVersionError
+  … up to 52.0`: `java` on `PATH` here is Java 8 while `target/` holds Java 25) and then as
+  `NoClassDefFoundError: hr.hrg.hipster.entity.api.GenLevel` — a class that plainly exists in the tree.
+  **`hipster-entity-api/target/` contains only its JAR and no `target/classes`**: the module was **cache-restored**, which
+  is exactly the restore behaviour step 9.8 documented, now seen from a new angle — a hand-built classpath that globs
+  `*/target/classes` silently omits every restored module. Both traps are now in `doc/AGENTS.md`'s cache section, and
+  they are why this probe is not a viable instrument here: **use `classpathFrom` or a test.** One useful negative
+  result came with it — the restored `hipster-entity-api` jar **does** contain `FieldAnnotation.class`, so the 6.1
+  artifact is built correctly and Maven-based runs have no problem with it.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
