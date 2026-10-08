@@ -4998,6 +4998,71 @@ finding about which generator path can see an annotation at all.**
 [DEC-024](../doc-hipster-entity/architecture/decisions/DEC-024.md)'s runtime half landed; the delivery
 note says the **generator** wiring (task 6.5) and a patch applier are not part of it.
 
+**Scoped 2026-10-08 — what exists, and the two halves that do not.** The step's own text was one paragraph; reading
+DEC-024 and the tree turns it into work with names, owners and a template to mirror, which is what this section is for.
+Doing it before writing code is deliberate: the two halves are independent, and knowing which one is missing a template
+is the difference between a day and an afternoon.
+
+**What already exists, verified rather than assumed:**
+
+- The **runtime half** (DEC-024 D4, pull): `ViewChangeTracking.changesDeep()` (default `shallowPaths()`, overridable by
+  any materialization that can see into its own fields), `ViewChangeTracking.shallowPaths()`,
+  `ViewChangeTracking.nestedTrackers()` (default `Map.of()`, documented as *"exposed as a method rather than a field so
+  a **generated builder** can answer it from its own typed fields"*), `ChangePath` (`field`, `listIndex`, `next`), and
+  the array materialization `EntityUpdateTrackingArray.changesDeep()`/`nestedTrackers()` with its `instanceof`
+  value-level discovery (DEC-024 § 4 explains why the untyped path must do that). Exercised by
+  `DeepChangeTrackingTest` and `CollectionDeepTrackingTest` against the hand-written fixture.
+- The **emission half** (DEC-024 § 5): `EntityJacksonDeepChangeSerializer` **and** `EntityJacksonChangeSerializer` both
+  exist in `hipster-entity-jackson`, reached through `EntityJacksonMapper`, so nothing new is needed to *produce* the
+  nested RFC-6902-like document.
+
+**Half 1 — the generator wiring (task 6.5). DEC-024's own words:** *"a generated tracking builder must detect that a
+field's declared type — including a generic collection of them — is itself a trackable `@View` type and emit the deep
+index, rather than the array path's value-level discovery."*
+
+- **Owner:** `ViewTrackingBuilderGenerator` (it emits `<View>BuilderTracking`).
+- **What to emit**, for a field whose declared type — or whose `List<…>` element type — is a trackable `@View`:
+  `nestedTrackers()` returning `Map<Integer, ViewChangeTracking<?, ?>>` keyed by that field's **ordinal**, from the
+  builder's own typed field; and the `changesDeep()` override that walks the shallow paths and extends each nested
+  field through the child's own `changesDeep()`, wrapping it as `new ChangePath(field, -1, childPath)` and reporting
+  `ChangePath.of(field)` when a reassigned child shows none. **Template to mirror:** `EntityUpdateTrackingArray`'s two
+  methods (array path, `instanceof` discovery) — the generated builder answers the same questions from types, which is
+  the whole point of the task and why `nestedTrackers()`'s javadoc names the generated builder.
+- **Not in this half:** polymorphic roots (DEC-024's third follow-up: a discriminated family member needs the same
+  wiring; not exercised by the record) and the collection-level tracker bookkeeping if it turns out to need runtime
+  support rather than emission — **decide that by reading `EntityUpdateTrackingArray`'s collection pass first**, and
+  record the decision either way.
+
+**Half 2 — a patch applier. DEC-024's own words:** *"Applying the deep document — including the collection operations —
+is a separate, testable piece."*
+
+- **Owner:** `hipster-entity-jackson`, beside the two serializers it is the inverse of.
+- **Shape:** consume the document `EntityJacksonDeepChangeSerializer` emits — a list of operations carrying a `path`
+  array (field names, with an integer at a collection level) and the leaf's `current` value, **no `previous` anywhere**
+  (the tracker keeps none, DEC-012) — and apply it to a target view/builder: resolve each path element by **field
+  name**, descend through a collection level by index, and set the leaf through the typed writer. A field the view does
+  not have is **skipped, never resolved through a `HashMap`** (DEC-016), and the positional fallback (`"fallback":
+  true`) is respected rather than silently treated as identity matching.
+- **Settle this first, because it decides where the code lives**: *how does the applier write a leaf without
+  reflection?* DEC-019 forbids a `Map<String, Method>`-style dispatch, and the generated `Write` interface's setters are
+  **typed methods** (`Write firstName(String value)`), not a set-by-name call — so a generic applier cannot simply
+  invoke one. The three shapes to weigh: (a) **generated** per view, beside the `<View>Write` interface it already
+  emits, so the dispatch is the same direct-call switch as `forName`; (b) **generic over the field enum's name mapper**
+  plus a generated setter switch reached through the existing metadata; (c) generic with a `ViewWriter`-shaped SPI that
+  each generated view implements (the shape `DEC-019` accepts for transport routing: a direct call the IDE can
+  navigate to). The reviewer's question for whichever is chosen: *with only the committed sources and a stock IDE, can
+  a reader follow the patch from the document to the field it sets?*
+- **Testable piece means a test that does not need the generator**: hand-write a document, apply it, assert the target
+  view's values and that an unknown field was skipped rather than guessed.
+
+**Gate, made observable:** a **generated** view (not the hand-written fixture) exposed the deep path end to end —
+`changesDeep()` from the generated builder returning a nested `ChangePath` after a child-only edit — the emitted
+document round-tripping through the applier, and `GATE` green.
+
+**Remainder, precisely:** (1) the emission described in half 1, including the decision about the collection pass; and
+(2) the applier in half 2 with its round-trip test. Each is independently committable, which is how this step should be
+taken.
+
 **Gate:** a generated view exposes the deep-tracking path end to end, the RFC-6902-like patch can be
 applied, and `GATE` is green.
 
