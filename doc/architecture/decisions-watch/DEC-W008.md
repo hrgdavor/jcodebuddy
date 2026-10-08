@@ -56,9 +56,18 @@
 > 3. **The parsing is OpenRewrite's, not JavaParser's.** The migration removed JavaParser from the
 >    repository entirely (DEC-030); every sentence below that names it describes the state before
 >    2026-09-22.
-> 4. **The manual-mode CLI is not implemented.** `jcodebuddy metadata parse <file>` does not exist; the RPC
+> 4. ~~**The manual-mode CLI is not implemented.** `jcodebuddy metadata parse <file>` does not exist; the RPC
 >    and MCP routes above are the manual-mode path today. The CLI stays open work, scheduled in
->    [`plans/unified-plan.md`](../../../plans/unified-plan.md).
+>    [`plans/unified-plan.md`](../../../plans/unified-plan.md).~~ **Closed 2026-10-08 (plan step 7.7) — it
+>    exists.** The command is `bun scripts/jcodebuddy.js metadata parse <file>`: a Bun launcher (rule § 2 —
+>    JavaScript script, Maven build step, never a `.cmd`) resolves JDK 25 through `scripts/lib/toolchain.js`,
+>    compiles `project-automation` with its dependencies, exports the classpath once into `.tmp/`, and runs
+>    `hr.hrg.jcodebuddy.automation.cli.MetadataCli`, which calls `IndexMetadataProvider.parseSource` — the
+>    no-cache path this decision names — and prints the `CacheEntry` as one line of JSON. Exit `0` on success,
+>    `2` for a usage error or an unreadable file, and nothing on stdout in that case so a caller piping the
+>    output cannot mistake an error for metadata. It was verified against a source file in a directory with **no
+>    `.jcodebuddy/`**, and the test asserts that none was created, that the JSON equals the RPC's `parseFile`
+>    result field for field, and that a missing file exits `2`.
 >
 > The status stays **Proposed**: P1 (cache write-back), P1/P2 (`get` falling back to `parse`) and P2+ are
 > still unbuilt, and a decision whose later phases have no code is not Accepted.
@@ -103,6 +112,32 @@ The returned `CacheEntry` MUST contain:
 A CLI entry point `jcodebuddy metadata parse <file>` MUST invoke `MetadataProvider.parse` directly and emit the resulting `SourceMetadata` (or a serialized representation) to stdout. This command MUST work in a fresh checkout with no daemon, no cache folder, and no prior `scan` invocation.
 
 The CLI module owning this command SHOULD be `project-automation`, since it already hosts `MetadataAnalysisRunner` and `InMemoryMetadataCacheProvider`.
+
+**Implemented 2026-10-08 (plan step 7.7).** `project-automation` owns
+`hr.hrg.jcodebuddy.automation.cli.MetadataCli`, and the entry point a person types is
+
+```sh
+bun scripts/jcodebuddy.js metadata parse src/main/java/demo/Person.java
+```
+
+Four choices are worth recording, because each could have gone the other way:
+
+- **The script is Bun JavaScript and the build step is Maven** (rule § 2), so there is no `.cmd` and no `.sh`.
+  The launcher mirrors [`scripts/gen.js`](../../../scripts/gen.js): one
+  `-pl project-automation -am compile dependency:build-classpath` invocation, then
+  `java -cp <target/classes><delimiter><exported dependencies>`. `mvn exec:java` is deliberately **not** used,
+  for the two measured reasons that file records (a direct goal runs on every module in the reactor, and it
+  resolves a `provided` dependency from `~/.m2` instead of the reactor). Nothing is packaged and nothing is
+  installed, so this works in a checkout nobody has built.
+- **The output is the bare `CacheEntry` on one line**, not a JSON-RPC envelope: a CLI's caller wants the entry,
+  and the round-trip requirement is satisfied by *equality of the answer* rather than by copying the transport.
+  `MetadataCliTest` asserts that equality against a real `parseFile` dispatch, field for field.
+- **Exit codes are part of the contract**: `0` with the entry, `2` for a usage error or a file that cannot be
+  read, and **nothing on stdout** in the failure case, so `... parse f | jq` cannot silently read an error
+  message as metadata.
+- **It writes nothing.** No `.jcodebuddy/`, no cache, no index — asserted by the test rather than promised,
+  because a manual-mode command that quietly starts a scan would satisfy the output requirement while
+  violating the one this section exists for.
 
 ### Dependency-free tool path
 
@@ -159,7 +194,10 @@ Persisting `CacheEntry` records by hash to `.cache/<hash>.fury` and maintaining 
 ### Follow-up
 
 - Define the MCP `parse_file` parameter shape and request/response schema.
-- Choose the CLI module and packaging for the `jcodebuddy metadata parse` command.
+- ~~Choose the CLI module and packaging for the `jcodebuddy metadata parse` command.~~ **Settled 2026-10-08 (plan
+  step 7.7)**: the module is `project-automation`, as this decision's *SHOULD* proposed, and the packaging is a
+  Bun launcher plus `java -cp` over `target/classes` — **no jar and no install**, so the command works in a
+  checkout nobody has built. See § *Manual-mode CLI* for the invocation and the four choices it records.
 - Determine whether `hipster-entity-tooling` is added as a `metadata-server` dependency or whether `parse` lives in `project-automation`.
 
 ## Out of scope

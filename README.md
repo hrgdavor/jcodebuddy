@@ -96,11 +96,18 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 | `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop)                         |
 | `scripts/run-demo.js`                         | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
 | `scripts/entity-html/index.js`                | render the HTML entity index from the JSON a pass wrote (DEC-027); `--module <dir>` for another module |
+| `scripts/jcodebuddy.js`                       | the `jcodebuddy` command line: `bun scripts/jcodebuddy.js metadata parse <file>` prints one file's metadata as one line of JSON, with no daemon, no cache folder and no prior `scan` — DEC-W008's manual-mode path (plan step 7.7). Exit `0` with the entry, `2` with the reason on stderr |
 
 Every one of them is a **Bun** script — run them as `bun scripts/mvn-jdk25.js`, and so on. They were batch and
 shell files until 2026-09-26; `AGENTS.md` § 2 requires Bun JavaScript for anything an agent writes to run or check
 something, because a check that only runs in one shell on one OS is invisible wiring for the workflow. One
 implementation also cannot drift from itself, which is the other reason: see the note on `GateContractTest` below.
+
+`scripts/jcodebuddy.js` is the newest and the smallest of them, and it is worth one sentence about *why it builds*: it
+resolves JDK 25, compiles `project-automation` with its dependencies and runs the command from `target/classes`, so it
+works in a checkout nobody has built, and it needs no jar and no `mvn install`. It cannot be invoked as a bare
+`jcodebuddy` without putting it on `PATH` yourself, which is deliberate: this repository ships scripts, not installed
+commands.
 
 ### The gate, and the fast path — two commands, on purpose
 
