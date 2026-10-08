@@ -1,22 +1,33 @@
 # Documentation Separation Plan
 
-> **Status 2026-10-01 — delivered, with two items still open.**
+> **Status 2026-10-08 — delivered, all items closed.**
 >
-> Items 1–11 of the [Suggested Execution Order](#suggested-execution-order) below are **done**, under the
+> Items 1–13 of the [Suggested Execution Order](#suggested-execution-order) below are **done**, under the
 > paths this repository ended up with: the user documentation lives in [`user/`](user/README.md) (not the
 > plan's `doc/user/`) and the implementation half in [`architecture/`](architecture/README.md).
 > `field-lookup-guide.md` was relocated to `architecture/` as item 1 asked, and every pattern doc the plan
 > lists exists — plus `jdbc-row-adapter.md`, `ordinal-array-contract.md`, `deep-change-tracking.md` and
 > `field-enum-compaction.md`, which the plan did not anticipate.
 >
-> **Still open — the two items nothing has delivered:**
+> **Items 12–13 are closed too (plan step 7.4, 2026-10-08).**
 >
-> - **Item 12, restructure the root [`README.md`](../README.md).** It is now a JCodeBuddy project
->   overview (vision, `proto/`, the gate) and links **no** user guide: a reader cannot reach
->   `getting-started.md` or `why-hipster-entity.md` from the front page.
-> - **Item 13, cross-reference links from the architecture docs back into the user docs.**
+> - **Item 12 — the front door in the root [`README.md`](../README.md).** It now opens with a **Where to start**
+>   section that routes the two audiences apart: a **user** goes to
+>   [`user/why-hipster-entity.md`](user/why-hipster-entity.md) and then [`user/getting-started.md`](user/getting-started.md)
+>   (or [`getting-started-new-project.md`](user/getting-started-new-project.md)), with the guide indexed in
+>   [`user/README.md`](user/README.md), recipes under [`user/patterns/`](user/patterns/README.md) and answers in
+>   [`user/faq.md`](user/faq.md); a **contributor** is sent to [`architecture/README.md`](architecture/README.md),
+>   [`architecture/TOC.md`](architecture/TOC.md) and [`architecture/DECISIONS.md`](architecture/DECISIONS.md).
+> - **Item 13 — the reverse cross-references.** Measured before the change: **2 of the 11** non-decision architecture
+>   documents linked back into the user half ([architecture/README.md](architecture/README.md) and
+>   [architecture/materialization-levels.md](architecture/materialization-levels.md)). The line was then added to the
+>   **navigation surface** — [`architecture/TOC.md`](architecture/TOC.md),
+>   [`architecture/DECISIONS.md`](architecture/DECISIONS.md), [`architecture/ADR-GUIDE.md`](architecture/ADR-GUIDE.md)
+>   and [`architecture/naming-conventions.md`](architecture/naming-conventions.md) — rather than to all nine, because
+>   the rest are measurement records and implementation guides a newcomer does not land on first, and a pointer
+>   repeated everywhere is read nowhere.
 >
-> Both are scheduled in [`plans/unified-plan.md`](../plans/unified-plan.md). The **Current State** and
+> Both were scheduled in [`plans/unified-plan.md`](../plans/unified-plan.md). The **Current State** and
 > **Proposed Structure** sections below describe the July-2026 tree (`doc/user/`, `doc/architecture/`),
 > which the `doc-hipster-entity/` split has since moved — read them as the plan's starting point, not as
 > today's layout.

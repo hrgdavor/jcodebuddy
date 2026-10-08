@@ -2,6 +2,10 @@
 
 **See [decisions/README.md](decisions/README.md)** for the complete index of architecture decisions.
 
+> **New to hipster-entity?** The user guide is the other half of this documentation: start at
+> [`../user/README.md`](../user/README.md) for onboarding, concepts and recipes. What follows here is the
+> architecture an implementer or a contributor needs.
+
 Architecture decisions are organized individually in the [decisions](decisions/) folder for better maintainability and discovery.
 
 ## Quick reference

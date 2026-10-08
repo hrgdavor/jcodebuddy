@@ -10,6 +10,24 @@ To ensure a seamless developer experience, the framework integrates **real-time 
 
 Code generators should to work together, sharing state and context to produce code structures in cooperation with the developer, and ideally common things should work their way into a core library, so generators do not depend on each other and are as standalone as possible.
 
+## Where to start
+
+Two audiences read this repository, and neither should have to guess which half is theirs
+([`doc-separation-plan.md`](doc-hipster-entity/doc-separation-plan.md) items 12–13):
+
+- **Using hipster-entity in a project** — begin with
+  [`doc-hipster-entity/user/why-hipster-entity.md`](doc-hipster-entity/user/why-hipster-entity.md) for what it buys
+  you, then [`getting-started.md`](doc-hipster-entity/user/getting-started.md) for the first fifteen minutes, or
+  [`getting-started-new-project.md`](doc-hipster-entity/user/getting-started-new-project.md) to add it to an
+  existing build. The guide is indexed in [`user/README.md`](doc-hipster-entity/user/README.md), with recipes under
+  [`user/patterns/`](doc-hipster-entity/user/patterns/README.md) (builders, CRUD views, Jackson, JDBC, deep change
+  tracking) and answers in [`user/faq.md`](doc-hipster-entity/user/faq.md).
+- **Working on JCodeBuddy itself** — the architecture half is
+  [`doc-hipster-entity/architecture/README.md`](doc-hipster-entity/architecture/README.md), its table of contents is
+  [`architecture/TOC.md`](doc-hipster-entity/architecture/TOC.md), and the decisions that govern a change are indexed
+  in [`architecture/DECISIONS.md`](doc-hipster-entity/architecture/DECISIONS.md). The rules an agent or a contributor
+  must follow are in [`AGENTS.md`](AGENTS.md) and [`doc/AGENTS.md`](doc/AGENTS.md).
+
 ## Project Scope & Current State
 
 JCodeBuddy is designed as a **project automation and boilerplate generation** engine for Java. Its primary purpose is to eliminate repetitive coding tasks by generating and synchronizing code structures based on project configuration.

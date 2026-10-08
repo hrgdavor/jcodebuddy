@@ -1,5 +1,9 @@
 # Naming conventions for hipster-entity
 
+> **New to hipster-entity?** The user guide is the other half of this documentation: start at
+> [`../user/README.md`](../user/README.md) for onboarding, concepts and recipes. What follows here is the
+> architecture an implementer or a contributor needs.
+
 This document records naming conventions for entity/view/model shapes and runtime artifacts.
 It is a reference for generator and runtime engineers, as well as consumers of the API.
 

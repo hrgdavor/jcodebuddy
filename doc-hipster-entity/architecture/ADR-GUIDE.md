@@ -2,6 +2,10 @@
 
 This guide explains when to create or update an Architecture Decision Record (ADR) in this repository and how ADRs relate to the other documentation folders.
 
+> **New to hipster-entity?** The user guide is the other half of this documentation: start at
+> [`../user/README.md`](../user/README.md) for onboarding, concepts and recipes. What follows here is the
+> architecture an implementer or a contributor needs.
+
 ## What an ADR is
 
 An ADR is a short record of an important technical decision.
