@@ -1870,12 +1870,17 @@ public class EntityMetadataGenerator {
                         // view without them is already reported by ViewBuilderGenerator.reportMissingSetters.
                         // The view's own source is passed so the applier emits an arm only for the setters that
                         // interface DECLARES — a writable field it omits gets a `missing_setter` report instead of a
-                        // call that would not compile.
+                        // call that would not compile. The view names are what let it tell a NESTED VIEW (whose leaves
+                        // it hands to the child's own applier, with a writer the caller supplies) from a type it
+                        // simply cannot convert: `trackableTypes` holds the views at a tracking level and
+                        // `nonTrackableViewNames` the rest, so their union is every view this pass generated.
+                        java.util.Set<String> viewNames = new java.util.LinkedHashSet<>(trackableTypes.keySet());
+                        viewNames.addAll(nonTrackableViewNames);
                         ViewPatchApplierGenerator.generate(javaOutputRoot, viewPackage, view,
                                 view.sourcePath() == null || view.sourcePath().isBlank()
                                         ? null
                                         : sourceRoot.resolve(view.sourcePath()),
-                                ViewPatchApplierGenerator.writableOf(ordinalProperties), divergences);
+                                ViewPatchApplierGenerator.writableOf(ordinalProperties), viewNames, divergences);
                     }
                     if (wantsTrackingBuilder) {
                         ViewTrackingBuilderGenerator.generate(javaOutputRoot, viewPackage, view,

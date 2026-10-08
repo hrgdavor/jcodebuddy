@@ -152,4 +152,83 @@ class GeneratedPatchApplierTest {
         CompileHarness.compileOrFail(CompileHarness.findRepoRoot(), "patch-applier-partial",
                 CompileHarness.javaSourcesUnder(root), List.of());
     }
+
+    /**
+     * The nested case, in the shape DEC-048 § 5 chose: a <b>caller-supplied writer resolver</b>.
+     *
+     * <p>Nothing generated implements {@code Write}, and {@code toBuilder()} yields a builder that does not, so an
+     * applier cannot reach inside a child view on its own. The generated {@code Children} interface is where the caller
+     * says how a nested writer is obtained, and the child's own applier does the writing — which is what keeps the
+     * recursion typed and navigable rather than a name lookup.</p>
+     */
+    @Test
+    void aNestedViewIsAppliedThroughACallerSuppliedWriterAndCompiles() throws Exception {
+        Path root = tempDir.resolve("nested");
+        Path pkg = root.resolve("patch/hr");
+        Files.createDirectories(pkg);
+        Files.writeString(pkg.resolve("Thing.java"), MARKER);
+        Files.writeString(pkg.resolve("Address.java"), """
+                package patch.hr;
+                import hr.hrg.hipster.entity.api.GenLevel;
+                import hr.hrg.hipster.entity.api.View;
+                import hr.hrg.hipster.entity.api.ViewWriter;
+                @View(gen = GenLevel.BUILDER_ALL)
+                public interface Address extends Thing {
+                    String city();
+                    interface Write extends Address, ViewWriter {
+                        Write city(String value);
+                    }
+                }
+                """);
+        Files.writeString(pkg.resolve("PersonSummary.java"), """
+                package patch.hr;
+                import hr.hrg.hipster.entity.api.GenLevel;
+                import hr.hrg.hipster.entity.api.View;
+                import hr.hrg.hipster.entity.api.ViewWriter;
+                import java.util.List;
+                @View(gen = GenLevel.BUILDER_ALL)
+                public interface PersonSummary extends Thing {
+                    String firstName();
+                    Address address();
+                    List<Address> previousAddresses();
+                    interface Write extends PersonSummary, ViewWriter {
+                        Write firstName(String value);
+                        Write address(Address value);
+                        Write previousAddresses(List<Address> value);
+                    }
+                }
+                """);
+
+        DivergenceReporter divergences = new DivergenceReporter();
+        EntityMetadataGenerator.setGeneratePatchAppliers(true);
+        try {
+            EntityMetadataGenerator.generate(root, root, root, divergences);
+        } finally {
+            EntityMetadataGenerator.setGeneratePatchAppliers(false);
+        }
+        String emitted = Files.readString(pkg.resolve("PersonSummaryPatchApplier.java"));
+
+        Assertions.assertTrue(emitted.contains("public interface Children {"),
+                "the resolver is where the caller says how a nested writer is obtained (DEC-048 § 5):\n" + emitted);
+        Assertions.assertTrue(emitted.contains("Write address();"),
+                "and it is TYPED on the child's own Write, so the recursion stays navigable:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("AddressPatchApplier.apply(childDocument(delta, 1), child)"),
+                "the nested operation is handed to the child's own applier with the child's field name first in the "
+                        + "path:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("no_child_writer: address"),
+                "and a caller that supplies none gets a report rather than silence:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("Write previousAddresses(int index);"),
+                "a COLLECTION nested field resolves per element, so an addition at the end is not confused with a "
+                        + "document member (DEC-024 § 3):\n" + emitted);
+        Assertions.assertTrue(emitted.contains("childDocument(entry, 2)"),
+                "and its paths carry the element index, so the child's field name is one deeper:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("return apply(document, target, null);"),
+                "the two-argument overload is the no-nested-writer case:\n" + emitted);
+
+        // The child's own applier must exist too, and both must compile — the check that makes the resolver real.
+        Assertions.assertTrue(Files.exists(pkg.resolve("AddressPatchApplier.java")),
+                "the child view got its own applier: " + Files.walk(root).toList());
+        CompileHarness.compileOrFail(CompileHarness.findRepoRoot(), "patch-applier-nested",
+                CompileHarness.javaSourcesUnder(root), List.of());
+    }
 }
