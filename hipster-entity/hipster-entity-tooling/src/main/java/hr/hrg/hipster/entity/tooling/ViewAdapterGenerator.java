@@ -105,8 +105,13 @@ public final class ViewAdapterGenerator {
      *
      * <p>The diagnostic's {@code location} is the file's simple type name, which is what a reader needs to
      * find it: the two files this emitter writes differ only in that suffix.</p>
+     *
+     * <p>Package-private rather than private because {@link ViewPatchApplierGenerator} writes its generated class the
+     * same way — a whole-file emission that is <em>not</em> reconciled member by member. Two copies of this rule would
+     * be two answers to "is this file frozen", which is the kind of second implementation DEC-018's freeze marker does
+     * not survive.</p>
      */
-    private static void writeUnlessFrozen(Path file, String canonical, DivergenceReporter divergences)
+    static void writeUnlessFrozen(Path file, String canonical, DivergenceReporter divergences)
             throws IOException {
         if (!CooperativeCodegen.isFrozen(file)) {
             Files.writeString(file, canonical);

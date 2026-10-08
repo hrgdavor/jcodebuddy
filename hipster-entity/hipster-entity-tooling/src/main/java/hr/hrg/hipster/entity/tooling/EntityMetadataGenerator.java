@@ -64,7 +64,7 @@ public class EntityMetadataGenerator {
     /** Every CLI flag this build understands; {@code --version} prints it. */
     public static final List<String> SUPPORTED_FLAGS = List.of(
             "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper", "--merge",
-            "--adapters", "--run-record", "--force", "--version");
+            "--adapters", "--patch-appliers", "--run-record", "--force", "--version");
 
     /**
      * The flags every documented invocation of this generator passes.
@@ -519,6 +519,15 @@ public class EntityMetadataGenerator {
     private static boolean generateAdapters = false;
 
     /**
+     * Whether to emit {@code <View>PatchApplier} — the inverse of the deep change serializer (DEC-048 § 2).
+     *
+     * <p><strong>Off by default, and for a module-boundary reason</strong> rather than maturity: the document is JSON,
+     * so the emitted class imports {@code tools.jackson.databind.JsonNode}, and generating it for every project would
+     * put a Jackson dependency into code the project never asked for. Enabled with {@code --patch-appliers}.</p>
+     */
+    private static boolean generatePatchAppliers = false;
+
+    /**
      * Enables or disables generated JDBC adapters ({@code --adapters}).
      *
      * <p>The flag exists so tests and a manual run can exercise the draft; production projects are
@@ -526,6 +535,16 @@ public class EntityMetadataGenerator {
      */
     public static void setGenerateAdapters(boolean enabled) {
         generateAdapters = enabled;
+    }
+
+    /** Enables or disables generated deep-change patch appliers ({@code --patch-appliers}). */
+    public static void setGeneratePatchAppliers(boolean enabled) {
+        generatePatchAppliers = enabled;
+    }
+
+    /** Whether this pass emits patch appliers ({@code --patch-appliers}). */
+    public static boolean isGeneratePatchAppliers() {
+        return generatePatchAppliers;
     }
 
     /** Whether SQL generation is currently opted in (its own flag, never a default). */
@@ -806,6 +825,8 @@ public class EntityMetadataGenerator {
                         packages.add(pkg.trim());
                     }
                 }
+            } else if ("--patch-appliers".equals(arg)) {
+                generatePatchAppliers = true;
             } else if ("--adapters".equals(arg)) {
                 generateAdapters = true;
             } else if ("--validate".equals(arg)) {
@@ -907,6 +928,7 @@ public class EntityMetadataGenerator {
             setMapperRequests(List.of());
             setMergeRequests(List.of());
             setGenerateAdapters(false);
+            setGeneratePatchAppliers(false);
         }
     }
 
@@ -942,6 +964,7 @@ public class EntityMetadataGenerator {
         record.put("packages", packages);
         record.put("mappers", mappers);
         record.put("adapters", generateAdapters);
+        record.put("patchAppliers", generatePatchAppliers);
         record.put("validate", validationPolicy.name());
         record.put("args", List.of(args));
         if (failure == null) {
@@ -1833,6 +1856,20 @@ public class EntityMetadataGenerator {
                         // there and has to be announced here (DEC-018/DEC-021 § 6).
                         ViewAdapterGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
                                 divergences);
+                    }
+                    if (generatePatchAppliers
+                            && (view.gen() == GenLevel.BUILDER
+                                    || view.gen() == GenLevel.BUILDER_TRACKED
+                                    || view.gen() == GenLevel.BUILDER_ALL)) {
+                        // The inverse of the deep change serializer (DEC-048 section 2): a direct-call switch over
+                        // the view's own writable fields, so a patch operation reaches a typed setter an IDE can
+                        // navigate to. Off unless --patch-appliers asked for it, because the document is JSON. A
+                        // builder level is REQUIRED because the applier writes through the view's own `Write`
+                        // interface, which the developer declares (the example's `PersonSummary.Write` is the live
+                        // case): emitting one for a view with no setters would emit code that cannot compile, and a
+                        // view without them is already reported by ViewBuilderGenerator.reportMissingSetters.
+                        ViewPatchApplierGenerator.generate(javaOutputRoot, viewPackage, view,
+                                ViewPatchApplierGenerator.writableOf(ordinalProperties), divergences);
                     }
                     if (wantsTrackingBuilder) {
                         ViewTrackingBuilderGenerator.generate(javaOutputRoot, viewPackage, view,
