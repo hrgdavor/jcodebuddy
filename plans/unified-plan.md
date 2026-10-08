@@ -5987,6 +5987,50 @@ answer is right for the files Maven cannot see as well as for the ones it can.
 
 ---
 
+**Done 2026-10-08 — the examination found the include list was under-covering, not merely unverified, and the fix
+is now a check rather than an assumption.**
+
+- **Item 1 — what the extension actually checksums**, from the measurements this repository has accumulated and from
+  this step: a module **together with its whole dependency closure**; **not** a command-line `-Dtest=` filter (the
+  same key as a full run, which is how a narrowed run can poison a full one); **not** `-D` system properties; a
+  restore leaves the jar and **no** `target/classes`; and a run that produces nothing (`validate`) must not populate
+  an entry. All of that is in [`doc/AGENTS.md`](../doc/AGENTS.md), which is where a reader needs it.
+- **Item 2 — the assumed list was verified, and it did not hold.** A global include is resolved against **each
+  module's own basedir**, so a repository-relative path needs `../` repeated once per directory level. The list
+  held a bare form and a `../../` form, which covered the root and the 24 depth-2 modules — and left
+  **`project-automation` (depth 1, and in the recorded gate set) and the three depth-3 modules
+  (`webview/core/webviewd`, `webview/core/webview-core`, `webview/eclipse/webview-eclipse`) resolving NOTHING**. A
+  change under `scripts/` was therefore **invisible** to them: a cache entry could answer a build that never saw it,
+  which is the F-47 failure this repository has a scar for. The list now carries a form per depth **that exists**
+  (24 entries over depths 0–3), and one entry was deleted because it hashed nothing at all:
+  `../../merge-java/AGENTS.md` names a file that is not in the tree.
+- **Item 3 — the answer for inputs Maven cannot see: extend and verify, not fold a hash.**
+  `${maven.multiModuleProjectDirectory}` would be depth-free and is the better answer *if* it interpolates in this
+  extension's config schema — that is unverified, and an entry that silently resolves nowhere is worse than a
+  complete list for the depths that exist, so the relative forms are used and a **new depth is caught by the
+  checker** instead of by a silent gap. The POM-property mechanism the maintainer named is **not needed here**: it
+  is for an input whose *path* cannot be named, and every input this repository has can be named.
+- **Item 4 — both sibling-compiling harnesses were re-checked and both accept a restored build**:
+  `CompileHarness.generatedSourceClasspath` and `GeneratedTrackingBuilderContractTest.classpath` contribute each
+  module's `target/*.jar` **as well as** its `target/classes`, the second with the restore behaviour in its own
+  javadoc. That is also what makes the four-module cache exclusion in `.mvn/maven.config` a **removal candidate** —
+  recorded in the config itself, with the one experiment that would decide it (a full gate run with the exclusion
+  gone) left unrun on purpose, because relaxing the build's correctness without that run is the trade this step
+  exists to refuse.
+- **Item 5 — the verdict is written down, and the superstition is deleted**:
+  [`doc/AGENTS.md`](../doc/AGENTS.md) now states what is covered, what is not, the depth rule and the checker; the
+  config's own header no longer says the list is unverified or points at step 9.7 for an examination that is 9.8.
+- **`bun scripts/check-cache-inputs.js` is the artifact that keeps this true** — a Bun script (rule § 2), walking the
+  repository the way git sees it (`scripts/lib/file-walk/`), failing when an entry resolves for no module **or** a
+  module resolves no entry, and printing coverage per depth so a failure names the depth that is uncovered. It is
+  the answer to the step's own `Done when` line: *"if I change file X, which modules rebuild?"*
+- **Measured**: the checker reports **30 modules, 24 includes, 0 dead entries, 0 blind modules** across depths 0–3;
+  the **recorded gate passes with the cache on** and did a real rebuild of every module (tooling 14:19,
+  `project-automation` 28.9 s) because the config is itself an input; `LINKS` green.
+- **One thing this step did not do, named rather than implied**: it did not remove the four-module cache exclusion,
+  and it did not prove that `${maven.multiModuleProjectDirectory}` interpolates. Both are recorded with the
+  experiment that would settle each, in the file that owns them.
+
 ## Progress
 
 Legend: `[ ]` open · `[x]` done · `[~]` blocked (say why) · `[-]` dropped (say why) · `[TBD]` **waits on
@@ -6089,4 +6133,4 @@ start)
 | 9.5  | Full sweep (gate + links + examples)                                                            | agent              | S    | `[x]` — **all four checks green in one sweep.** `GATE` (`bun scripts/mvn-jdk25.js`, whole reactor) **BUILD SUCCESS** — a fully **cached** run (every module under 0.5 s), which is the correct verdict here rather than a lucky one: measured from `.mvn/maven-build-cache-config.xml`, the global includes are `scripts`, `webview/conformance`, the config, `docs`, `merge-java/docs` and the two `AGENTS.md`, so `plans/`, the todo files and the plan documents this round moved and retired **are not inputs to any module** — what the run proves is that no module input changed, and the last **executed** full gate (round 56, `MetadataCliTest` inside it) is green with nothing having touched an input since. `LINKS`: `check-repo-links.mjs` **280 files, all resolve**; `webview/check-links.mjs` **31 files / 242 links, all resolve**. `EXAMPLES`: `npm run check:examples` **exit 0**, every marker matching. **Two findings recorded for the final step**: the cache config's comment still calls the cache-validation step "9.7" while the plan calls it **9.8**, and **9.8 has no § Progress row at all** (so the one step reserved as the final validation could never be ticked). |
 | 9.6  | Close the books                                                                                 | agent              | S    | `[x]` — **items 1–3 re-done for the table as it stands; item 4 still deferred with its named trigger.** § Progress is ticked from **dated records in each step's own body**: four rows (**3.4–3.7**) said `[TBD] — waits on …` while their bodies read **"Done 2026-10-03"** and named the shape they had demanded, so they are ticked, and 3.8, 3.9 and 3.11 stay `[TBD]` — now accurately rather than by inheritance. **Step 9.8 had no row at all**: a § 9.8 section with no line in this table, so the step reserved as the final validation could never be ticked; it has one now, found by running 9.5. `plans/README.md` carries the same numbers as the plan (**74 of 92** done, 18 not), and both are **derived from the table and written back** — an earlier attempt in this step logged four ticks it never wrote into the file, which is precisely the failure this step exists for, so it is recorded rather than tidied away. **The plan stays** where it is: 18 steps are not done, so it is a live document, and that reason is written into it. **Item 4** stays deferred because the "scheduled in `plans/unified-plan.md`" pointers are the index *to* a live schedule; the trigger to remove them is the plan being closed or archived. |
 | 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering       | agent              | M    | `[x]`                                                                                       |
-| 9.8  | Validate what the build cache checksums, and add what it misses                                 | agent              | M    | `[ ]` — **the row this step never had.** It was found missing while running 9.5: the plan has a § 9.8 with its own section, and no row in this table, so the one step reserved as the final validation could never be ticked. The section itself records that its subject is unverified by design ("that list is not verified and is not meant to be"). |
+| 9.8  | Validate what the build cache checksums, and add what it misses                                 | agent              | M    | `[x]` — **the include list was under-covering, and the fix is now a check.** Verified: a global include resolves against **each module's own basedir**, so the old bare + `../../` pair covered the root and the 24 depth-2 modules while **`project-automation` (depth 1) and the three depth-3 modules resolved NOTHING** — blind to every `scripts/` change, the F-47 failure. The list now carries a form per depth **that exists** (24 entries, depths 0–3) and one dead entry (`../../merge-java/AGENTS.md`, a file not in the tree) is deleted. `${maven.multiModuleProjectDirectory}` would be depth-free but is unverified here, so **a new depth is caught by `bun scripts/check-cache-inputs.js`** — the artifact that answers "if I change file X, which modules rebuild?" and fails on a dead entry or a blind module. Item 4: both sibling-compiling harnesses accept `target/*.jar` as well as `target/classes`, which makes the four-module cache exclusion a **removal candidate** (recorded in the config with the experiment that decides it, deliberately unrun). Item 5: the verdict is in `doc/AGENTS.md` and the config header's stale step reference and unverified-list claim are gone. **Measured**: checker 30 modules / 24 includes / 0 dead / 0 blind across depths 0–3; **recorded gate passes with the cache on** (a real full rebuild, tooling 14:19); `LINKS` green. |

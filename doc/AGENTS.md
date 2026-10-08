@@ -81,10 +81,30 @@ Two things it does **not** cover, both measured rather than assumed:
   `cannot find symbol` on sources that compile perfectly. Populate with `package` (what the fast path uses), and
   reach for `rm -rf ~/.m2/build-cache` whenever entries look wrong; it is a cache, and deleting it costs only time.
 
-The inputs the cache cannot see are listed, **by assumption**, in `.mvn/maven-build-cache-config.xml`
-(`input/global/includes`: the Bun tools under `scripts/` and the shared vectors under `webview/conformance/`). That
-list is not verified and is not meant to be: the final plan step (9.8) is where the checksum gets examined, together
-with the question of whether an input Maven cannot see needs a hash folded into a POM property to participate.
+The inputs the cache cannot see are listed in `.mvn/maven-build-cache-config.xml` (`input/global/includes`: the Bun
+tools under `scripts/`, the shared vectors under `webview/conformance/`, the config itself, and the documents and
+`AGENTS.md` files a module's tests read off disk). **Examination closed 2026-10-08 (plan step 9.8), and it found the
+list was under-covering rather than merely unverified** — measured by `bun scripts/check-cache-inputs.js`, which is now
+the check that keeps it true and the answer to *"if I change file X, which modules rebuild?"*:
+
+- **A global include is resolved against each module's own basedir**, so a repository-relative path needs `../`
+  repeated once per directory level. The list held a bare form and a `../../` form, which covered the root and the
+  24 depth-2 modules — while **`project-automation` (depth 1, and in the recorded gate set) and the three depth-3
+  modules (`webview/core/webviewd`, `webview/core/webview-core`, `webview/eclipse/webview-eclipse`) resolved
+  NOTHING**, so a change under `scripts/` was invisible to them: a cache entry could answer a build that never saw it,
+  which is the F-47 failure this repository already has a scar for. The list now carries a form per depth **that
+  exists**, and the checker fails when an entry resolves for no module or a module resolves no entry.
+- **One entry was dead**: `../../merge-java/AGENTS.md` names a file that is not in the tree, so it hashed nothing.
+  Removed — an entry that resolves nowhere is worse than no entry, because it reads as coverage.
+- **`${maven.multiModuleProjectDirectory}` would be depth-free and is the better answer if it interpolates here**;
+  that is unverified, and an entry that silently resolves nowhere is worse than a complete list for the depths that
+  exist, so the relative forms are used and a new depth is caught by the checker rather than by a silent gap.
+- **What the checksum demonstrably does and does not cover**, from measurements on this reactor: a module plus its
+  whole dependency closure; **not** a command-line `-Dtest=` filter (the same key as a full run); **not** `-D` system
+  properties; and a restore leaves the jar with **no** `target/classes`, which is why the two harnesses that compile
+  against a sibling module by path accept each module's `target/*.jar` as well as its `target/classes`. No hash needs
+  folding into a POM property while the include list is verified: that mechanism is for a file whose *path* cannot be
+  named, and every input here can.
 
 **JCodeBuddy-only.** A driver project has its own build and its own commands; the gate is this
 repository's, and no command in the root README's table builds anything under `proto/`.
