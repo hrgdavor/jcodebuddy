@@ -102,4 +102,40 @@ class FieldAnnotationExposureTest {
         Assertions.assertEquals(1, overrides,
                 "exactly one constant carries annotations, so exactly one override is emitted: " + generated);
     }
+
+    /**
+     * The example's exact scenario, which is what step 6.1's example half actually needs: an enum that <b>already
+     * exists</b> without the override, and a pass that runs after a constraint was added to the accessor.
+     *
+     * <p>A committed generated file is never a blank slate — the pass meets its own previous output, and DEC-020's
+     * cooperative reconciliation decides what it may change. If the override is not added here, annotating the example
+     * cannot work however fresh the inputs are, which is why this test exists rather than another round of reading.</p>
+     */
+    @Test
+    void aSecondPassAddsTheOverrideToAnEnumThatAlreadyExists() throws Exception {
+        Path root = tempDir.resolve("tree");
+        Path pkg = root.resolve("annot/hr");
+        Files.createDirectories(pkg);
+        Files.writeString(pkg.resolve("PersonEntity.java"), ENTITY);
+        // Pass 1: no constraint anywhere, so the enum is written the way the committed example is.
+        Files.writeString(pkg.resolve("PersonSummary.java"), VIEW.replaceAll("\\s*@jakarta\\.validation[^\\n]*\\n", "\n"));
+        DivergenceReporter first = new DivergenceReporter();
+        EntityMetadataGenerator.generate(root, root, root, first);
+
+        Path enumFile = root.resolve("annot/hr/PersonSummary_.java");
+        Assertions.assertTrue(Files.exists(enumFile), "the first pass must write the enum: " + first.entries());
+        String before = Files.readString(enumFile);
+        Assertions.assertFalse(before.contains("annotations()"), "the fixture must start without the override");
+
+        // Pass 2: the constraint is added to the accessor, exactly as it would be in the example's source.
+        Files.writeString(pkg.resolve("PersonSummary.java"), VIEW);
+        DivergenceReporter second = new DivergenceReporter();
+        EntityMetadataGenerator.generate(root, root, root, second);
+
+        String after = Files.readString(enumFile);
+        Assertions.assertTrue(after.contains("FieldAnnotation(\"jakarta.validation.constraints.NotNull\", \"\")"),
+                "a pass that meets its own enum must ADD the override the source now determines (DEC-020 reconciliation; "
+                        + "the source is the authority for a view-declared accessor, maintainer, 2026-10-08). "
+                        + "divergences: " + second.entries() + "\n" + after);
+    }
 }

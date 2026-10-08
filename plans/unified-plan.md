@@ -5121,6 +5121,24 @@ item without running the whole pass.
   and the only caller of the reader). A view-declared accessor therefore reaches the emitter with its constraint on
   the source path and without it on the JSON path, which is the same asymmetry the step was opened for — so the
   next slice is to make **one** of those two the authority and have the other stop being a second answer.
+- **Settled by the maintainer on 2026-10-08**: *the source path is the authority for a view-declared accessor*, and
+  where **classes** are involved the metadata prefers the **full class name** — the rule DEC-047 already applied to
+  `FieldAnnotation.type`, now binding the metadata generally (an annotation type, a class-valued annotation argument,
+  any class reference a consumer reads).
+- **Three hypotheses about the example were then tested and eliminated**, which is the useful part of this record —
+  the cause is **still unidentified**, and none of these is it: **"the CLI reads constraints from the metadata JSON"**
+  (eliminated: `fromJson`, the method that builds `Property` objects from the JSON, has **no production caller** — every
+  call site is a test); **"the emitter or the source path drops it"** (eliminated: `FieldAnnotationExposureTest` emits
+  the override on the ordinary source path); and **"the cooperative reconciliation preserves the existing constant
+  body"** (eliminated by a **new test** that asserts the exact example scenario — pass 1 writes the enum with no
+  override, the constraint is then added to the accessor, pass 2 must add it — and it **passes**; it stays as a guard
+  whatever the eventual cause is).
+- **What that leaves, and the next probe.** The example differs from every passing fixture in what *runs* it:
+  `bun scripts/gen.js` drives it through the **agent**, which keeps its own per-file cache
+  (`hr.hrg.watch2.agent.core.MetadataCache`, ledger `checksum \t lastModified \t path`) whose reuse rule compares
+  **last-modified alone** — the cheap tier the maintainer described. If that comparison is coarser than the edit, or
+  reads a time recorded before it, the pass reuses a parse of the *pre-annotation* file, which produces exactly what was
+  observed: 16 content changes reported by the class index, and the enum untouched. That is the next thing to measure.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
