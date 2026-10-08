@@ -1,27 +1,18 @@
-
-> **Status 2026-10-01 — two items, one open and one delivered.** Kept as the list it is; the live
-> schedule is [`plans/unified-plan.md`](plans/unified-plan.md).
+> **Status 2026-10-08 — closed, and this file is no longer a work list.** Every item is done; the schedule it fed is
+> [`plans/unified-plan.md`](plans/unified-plan.md), and steps 7.3 and 7.4 closed the last two. It is kept rather than
+> deleted so the links to it keep resolving and the history stays readable — but nothing here is open, and a new item
+> belongs in the plan, not in this file.
 
 ## Mapper utility functionalities:
 
 - [x] `View1Builder.merge(View2 other)` — merge fields with identical name and type
-      — **done** in plan step 7.3: `ViewMergeGenerator` plus the `--merge <host>:<partner>` request, on both
-      the untracked builder and the tracking proxy, with a DEC-022 diagnostic for a name-only match
-  - Proxy version of such merge
-
-  **Open, and nothing has started it:** no `merge(` method exists in `hipster-entity/hipster-entity-core/src/main/java`
-  or `hipster-entity/hipster-entity-example/src/main/java`. The related mapper work that *did* land is
-  `ViewMapperGenerator` (a statically dispatched `static <Target> map(<Source>)`), which is a
-  different shape — source→target conversion, not a builder-to-builder merge. Scheduled as step 7.3 of
-  [`plans/unified-plan.md`](plans/unified-plan.md).
+      — **done** in plan step 7.3: `ViewMergeGenerator` plus the `--merge <host>:<partner>` request, with a DEC-022
+      diagnostic for a name-only match.
+- [x] The proxy version of that merge — **done in the same step**: the tracking builder carries the same
+      `merge(ViewN other)`, decided through the same `ViewMergeGenerator`, so the two merge the same fields.
 
 ## separation/layering of docs for lib users vs lib devs
 
-- [x] Separate end-user documentation (focusing on use cases) from implementation details, as well as
-  some of the conventions users need not initially know deeply about.
-
-  **Delivered** by [`doc-hipster-entity/doc-separation-plan.md`](doc-hipster-entity/doc-separation-plan.md):
-  the user guide is [`doc-hipster-entity/user/`](doc-hipster-entity/user/README.md), the implementation
-  half is [`doc-hipster-entity/architecture/`](doc-hipster-entity/architecture/README.md). Two items of
-  that plan are still open (the root README front door and the reverse cross-references) and are its
-  own banner's business, not this list's.
+- [x] Separate end-user documentation (focusing on use cases) from implementation details, as well as some of the
+      conventions users need not initially know deeply about. — **delivered**, and the two items that plan left open
+      (the root README front door and the reverse cross-references into the user guide) were closed by **step 7.4**.

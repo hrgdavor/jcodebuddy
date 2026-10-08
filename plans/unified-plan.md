@@ -5703,6 +5703,42 @@ The lists that this plan absorbed must stop reading as live work:
 **Gate:** no document in the repository lists an open item that is not in this plan's table or in
 `proto/`.
 
+**Done 2026-10-08 — the absorbed lists are records now, and the gate was verified by a repository-wide scan.**
+
+- **The two todo files became records that name the plan.** [`todo.hipster-entity.md`](../todo.hipster-entity.md)
+  was **reduced** to a closed record: its status line now says it is no longer a work list, the proxy-merge
+  sub-item is ticked (step 7.3 delivered it on the tracking builder too), and the prose that still claimed the
+  merge was *"open, and nothing has started it"* is gone — that paragraph had survived the very step that closed
+  it. [`todo.java_watch2.md`](../todo.java_watch2.md) keeps its per-item reasons (they are the 7.6 decisions) and
+  now names the live schedule. Both files are **kept rather than deleted**, which the step allows and which also
+  keeps every link to them resolving; the step's intent — that they stop reading as live work — is met by the
+  status lines.
+- **The sidecar's "Future Refinement" is resolved, not pending.** Its heading says so, and its status blockquote —
+  which still claimed *"both items below are genuinely unstarted"* — now records what closed each one (7.1 for the
+  client indentation, 9.1b for the "more tools" item it struck). The item bodies keep their reasons, so the section
+  reads as the record of a decision rather than a queue.
+- **The roadmap tracker is annotated row by row**, because nothing could be ticked: all five work rows map to steps
+  6.1, 6.3 (twice — the two rows ask the one "should the conventions be enforceable" question), 6.4 and 6.5, and the
+  sixth row is **dropped by decision in its own words** ("Not a gap, a recorded scope decision"). A tracker whose
+  rows outlive their work is the defect this plan exists to fix, and the fix here is that each row now names the
+  step that closes it.
+- **The jetbrains plan needed nothing**: [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md)
+  already carries an **Implementation record** section and no open boxes, which is exactly the outcome 9.4 asks
+  for — worth stating, because the step named it as work and the work had already been done by whoever wrote that
+  record.
+- **The gate was checked, not asserted.** A repository-wide scan (Markdown outside `proto/`, `archive/`, `.tmp/` and
+  `target/`) leaves **eight** documents with unchecked boxes after these edits, and every one is either a **reader
+  instruction** — `field-lookup-guide.md` ("Implementing field-name-to-ordinal dispatch"), `deep-change-tracking.md`,
+  `ordinal-array-contract.md`, `ADDING_A_RESOLVER.md` ("The three steps"), `THREE_WAY_FIXTURES.md` (what a fixture
+  must contain when you add one) and `page-authoring.md` ("the shapes, the skeleton, the checks") — or
+  **historical-with-a-banner**: `plans/rewrite-migration/`'s plan states in its own banner that its deliverable
+  boxes "are unchecked and stay that way", because they track the plan as written rather than today's tree. None of
+  the eight lists project work that this plan's table does not account for, which is what the gate asks.
+- **The pattern this round and the two before it found, worth carrying forward**: the *work* was never the stale
+  part — the trackers were. § 3's column, three checkboxes in two plans, a roadmap row set and a sidecar status line
+  had all fallen behind steps that were long finished. Anything that duplicates a status is a thing that can drift,
+  and this plan's own § Progress table is the one copy that is kept true by the gate.
+
 ### 9.5 — The full sweep
 **Who:** agent · **Size:** S
 
@@ -5993,7 +6029,7 @@ start)
 | 9.1b | Two open items nothing scheduled                                                                | agent              | S    | `[x]` — **both struck with a reason, in the document that carried each.** The sidecar's "add more tools (toString/equals generator)" is struck because the sidecar owns the **host** half (LSP, `/jump`, `/applyEdit`) while a member-rewriting generator is a **tool** that belongs in the agent's `ToolRegistry` — so if wanted it is one new `ActionTool` modelled on `RenameMemberTool`, not work on this plan. The agent's "lightweight hooks for IntelliJ and VS Code" is struck because it is **delivered**: `webview/webview-jetbrains` and `webview/webview-vscode` exist (the extension's buffer edit is asserted by its own nine tests), and 7.2 now reaches the editors through `webviewd` and the sidecar. Both were **checked against the tree first** — the host modules exist, no toString/equals generator does — and § 3's annotation names this step in the past tense with the reasons. **Gate**: both documents show a struck item with its reason, and the four scheduled documents that carried open boxes (`jwa-sidecar`, `jcodebuddy-agent`, `todo.hipster-entity`, `todo.java_watch2`) are at **zero** open boxes; `LINKS` green. |
 | 9.2  | Archive the superseded plans                                                                    | agent              | S    | `[x]`                                                                                       |
 | 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                                     | agent              | S    | `[x]`                                                                                       |
-| 9.4  | Retire the per-plan open lists                                                                  | agent              | S    | `[ ]`                                                                                       |
+| 9.4  | Retire the per-plan open lists                                                                  | agent              | S    | `[x]` — **the absorbed lists are records now.** `todo.hipster-entity.md` was reduced to a closed record (its "open, and nothing has started it" prose about the merge had outlived step 7.3, and the proxy sub-item is ticked) and `todo.java_watch2.md` keeps its 7.6 reasons with the live schedule named; both are **kept rather than deleted** so links resolve. The sidecar's "Future Refinement" heading and status line now say **resolved** (7.1 and 9.1b), with the item bodies kept as the record of the decision. The roadmap tracker is **annotated per row** — nothing could be ticked (all five work rows map to 6.1/6.3 twice/6.4/6.5 and the sixth is dropped by decision in its own words). The jetbrains plan needed **nothing**: it already carries an Implementation record and no open boxes. **Gate verified by a repository-wide scan**: eight documents still hold unchecked boxes and every one is a **reader instruction** (how to add a resolver, what a fixture must contain, what a page must do, the field-dispatch and ordinal-array guides) or **historical-with-a-banner** (`plans/rewrite-migration/`, whose own banner says those boxes stay unchecked) — none lists project work this plan does not account for. `LINKS` green. |
 | 9.5  | Full sweep (gate + links + examples)                                                            | agent              | S    | `[ ]`                                                                                       |
 | 9.6  | Close the books                                                                                 | agent              | S    | `[ ]`                                                                                       |
 | 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering       | agent              | M    | `[x]`                                                                                       |

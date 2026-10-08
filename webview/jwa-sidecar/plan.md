@@ -77,14 +77,12 @@ The sidecar is the LSP transport of the webview product, so it moved from the re
 Navigation now reports an outcome instead of assuming success, which is what lets the HTTP caller answer 404 for
 a file that does not exist rather than a cheerful "ok". See [`../PLAN-webview-suite.md`](../PLAN-webview-suite.md).
 
-## Future Refinement
+## Future Refinement — both items resolved (2026-10-08)
 
-> **Status 2026-10-01 — these two boxes are the only open work in this plan.** Phases 1–4 are
-> complete (Phase 4 on 2026-09-25), and both items below are genuinely unstarted: a grep for
-> `tabSize` / `insertSpaces` / `formatting` across `webview/jwa-sidecar` finds nothing, so the
-> indentation the client configured is not read — the generator's indent stays the constructor
-> argument `jwa-builder` takes, defaulted to 4 spaces. Scheduled as step 7.1 of
-> [`../../plans/unified-plan.md`](../../plans/unified-plan.md).
+> **Status 2026-10-08 — nothing here is open.** Both items were resolved in
+> [`plans/unified-plan.md`](../../plans/unified-plan.md): the client's indentation is read (step 7.1) and the
+> "more tools" item was struck because this plan owns the host half rather than the tool registry (step 9.1b).
+> The section is kept as the record of what was asked and what was decided — it is **not** a work list.
 
 - [x] Handle indentation configuration from client properly (currently defaulted to 4 spaces)
       — **done** in plan step 7.1: `ClientFormatting` reads `tabSize`/`insertSpaces` from

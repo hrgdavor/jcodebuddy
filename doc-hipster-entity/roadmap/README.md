@@ -17,15 +17,22 @@ as open with no note that the split is deliberately deferred (plan.dsflash § 4.
 - [ ] Core entity interface contract (marker interface, per-package semantics) — the contract and its
   validator rule (`view_does_not_derive_from_marker`, `marker_declares_domain_method`) landed; what
   remains is deciding whether the conventions should be enforceable rather than advisory
+  **-> closed in step 6.3** (the "advisory rules -> hard failures" decision, below)
 - [ ] View interface hierarchy rules (summary/details/update patterns) — same: the naming rule is
   implemented and reported, not yet a hard failure in the example's build (`--validate`, not
   `--validate=STRICT`)
+  **-> closed in step 6.3**: the same decision — its wording is exactly "should these be enforceable rather
+  than advisory", which is one question, not two
 - [ ] Type divergence analyzer + converter manifest generation
+  **-> closed in step 6.4**
 - [ ] Projection + DTO marker pattern for SQL/NoSQL direct JSON output
+  **-> closed in step 6.5**
 - [ ] Annotation metadata exposure in generated view enums (FieldAnnotation)
+  **-> closed in step 6.1**
 - [ ] API/core module responsibility split enforced by generator — **deliberately deferred**: S3/X1 keep
   the tracking contract in `hipster-entity-core` for this release, so a generated tracking builder
   depends on `core` (plan.dsflash § 4.4). Not a gap, a recorded scope decision.
+  **-> dropped by decision, not pending** (its own words: "Not a gap, a recorded scope decision")
 - [x] **Generated view-to-view mappers landed** — `ViewMapperGenerator` emits a
   statically-dispatched `static <Target> map(<Source>)` into the target's package, requested with
   `--mapper <Src>:<Tgt>[:<ClassName>]`, with a widening-only conversion table, a `null` plus a

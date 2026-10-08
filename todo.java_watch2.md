@@ -3,7 +3,8 @@
 > **Status 2026-10-08 — every item is resolved: done, scheduled, or struck through with a reason.** The two
 > "Immediate Priority" items were closed by plan steps 7.2 and 7.1 after this list was last reconciled, and the
 > three open "Future Plans"/"Zig Integration" items were decided with the maintainer in step 7.6. Nothing here
-> stays silently unchecked, which is that step's gate.
+> stays silently unchecked, which is that step's gate. **This is a record, not a work list**: the live schedule
+> is [`plans/unified-plan.md`](plans/unified-plan.md), and a new item belongs there.
 
 ## Immediate Priority
 - [x] Implement Remote Jump Front-end: Update Agent Web UI to send GET /jump requests to Sidecar.
