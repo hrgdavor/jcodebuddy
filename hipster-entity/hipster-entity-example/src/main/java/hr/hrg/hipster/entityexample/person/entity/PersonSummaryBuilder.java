@@ -4,6 +4,7 @@ package hr.hrg.hipster.entityexample.person.entity;
 
 import java.util.List;
 import java.util.Map;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * A mutable copy of a {@link PersonSummary}. Setters exist only for
@@ -17,6 +18,7 @@ public final class PersonSummaryBuilder {
     private String lastName;
     private Integer age;
     private String departmentName;
+    @NotNull
     private Map<String,List<Long>> metadata;
 
     /** Copies every field from a source view. */

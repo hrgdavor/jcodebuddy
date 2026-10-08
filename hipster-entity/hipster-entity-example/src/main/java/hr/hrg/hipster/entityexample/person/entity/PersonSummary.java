@@ -19,6 +19,7 @@ public interface PersonSummary extends Person {
     @FieldSource(kind = FieldKind.JOINED, relation = "department.name")
     String departmentName();
 
+    @jakarta.validation.constraints.NotNull
     Map<String, List<Long>> metadata();
 
     // generated boilerplate, for better dev experience

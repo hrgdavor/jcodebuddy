@@ -162,7 +162,7 @@ class MigrationCompletenessTest {
             for (JavaSyntaxCheck.AnnotationPosition annotation : check.annotations()) {
                 annotations++;
                 String line = at(lines, annotation.line());
-                if (!line.contains("@" + annotation.simpleName())) {
+                if (!carriesAnnotation(line, annotation.simpleName())) {
                     wrongAnnotationLines.add(where + ":" + annotation.line() + " names @"
                             + annotation.simpleName() + " but reads: " + line);
                 }
@@ -256,6 +256,24 @@ class MigrationCompletenessTest {
             return "<out of range>";
         }
         return lines[oneBasedLine - 1].trim();
+    }
+
+    /**
+     * Whether the line spells this annotation — bare ({@code @NotNull}) or qualified
+     * ({@code @jakarta.validation.constraints.NotNull}).
+     *
+     * <p>Both are the annotation. The qualified spelling is the one the metadata carries (DEC-047 § 1: the annotation's
+     * qualified name, so a consumer needs no import table), and this check's question is whether the recorded position
+     * lands on a line that names what it claims — which it does either way. Requiring the bare spelling made a
+     * correctly-recorded position look wrong, which is the failure this comment exists to prevent recurring.</p>
+     */
+    private static boolean carriesAnnotation(String line, String simpleName) {
+        if (simpleName == null || simpleName.isEmpty() || "<out of range>".equals(line)) {
+            return false;
+        }
+        return java.util.regex.Pattern
+                .compile("@(?:[A-Za-z_$][\\w$]*\\.)*" + java.util.regex.Pattern.quote(simpleName) + "\\b")
+                .matcher(line).find();
     }
 
     /** Whether the line carries {@code name} as a whole identifier, not as someone else's use of it. */

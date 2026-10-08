@@ -8,6 +8,7 @@ import hr.hrg.hipster.entity.core.EEnumSetBuilder64;
 import hr.hrg.hipster.entity.core.ViewChangeTracking;
 import java.util.List;
 import java.util.Map;
+import jakarta.validation.constraints.NotNull;
 
 /**
  * A mutable copy of a {@link PersonSummary} that records which fields were
@@ -31,6 +32,7 @@ public class PersonSummaryBuilderTracking implements ViewChangeTracking<PersonSu
     String lastName;
     Integer age;
     String departmentName;
+    @NotNull
     Map<String,List<Long>> metadata;
 
     /** Builds the tracking state from a baseline view (§ 8.6/3.16). */

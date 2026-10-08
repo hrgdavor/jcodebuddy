@@ -72,6 +72,13 @@ public enum PersonSummary_ implements FieldDef {
         public String column() {
             return "metadata";
         }
+
+        @Override()
+        public java.util.List<hr.hrg.hipster.entity.api.FieldAnnotation> annotations() {
+            return java.util.List.of(
+                    new hr.hrg.hipster.entity.api.FieldAnnotation("jakarta.validation.constraints.NotNull", "")
+            );
+        }
     }
     ;
 

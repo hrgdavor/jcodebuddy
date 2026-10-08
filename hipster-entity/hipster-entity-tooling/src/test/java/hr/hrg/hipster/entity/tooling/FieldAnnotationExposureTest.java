@@ -13,6 +13,10 @@ import java.util.List;
  * A field's annotations exposed as metadata on the generated view enum — DEC-047, the implementation half of plan step
  * 6.1.
  *
+ * <p>Every entry point is covered here, because the step's long hunt was about <em>which</em> one ran: the API
+ * ({@code generate}), the API meeting its own previous output (a second pass), and the CLI's own {@code main} with the
+ * flags the repository's launcher uses. {@link FieldAnnotationExampleShapeTest} covers the shapes the example has.
+ *
  * <p>Three properties, and the third matters as much as the first two:
  *
  * <ul>

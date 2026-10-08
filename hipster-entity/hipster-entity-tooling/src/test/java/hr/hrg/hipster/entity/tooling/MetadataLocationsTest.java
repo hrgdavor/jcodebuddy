@@ -159,8 +159,11 @@ class MetadataLocationsTest {
                 "the accessor's own line, not the declaration start");
         Assertions.assertEquals(16, age.lineAt(view.id(), "annotation"),
                 "and the @FieldSource line above it, which is a different line");
-        Assertions.assertEquals(30, age.lineAt(record.id(), "record-component"),
-                "the component of the nested record");
+        Assertions.assertEquals(31, age.lineAt(record.id(), "record-component"),
+                "the component of the nested record — one line below where it was before step 6.1, because the example's"
+                        + " `metadata()` accessor gained the `@NotNull` line that carries the constraint this step"
+                        + " exposes (DEC-047). The two assertions above are unaffected: they are for an accessor that"
+                        + " sits above it");
         Assertions.assertTrue(age.lineAt(fieldEnum.id(), "enum-constant") > 0, "the ledger constant");
         Assertions.assertTrue(age.lineAt(fieldEnum.id(), "name-slot") > 0, "the forName arm");
 

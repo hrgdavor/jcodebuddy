@@ -47,6 +47,18 @@
             <artifactId>hipster-entity-tooling</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- DEC-047 (plan step 6.1): the example demonstrates annotation metadata, and a constraint annotation has to
+             COMPILE for that — both on the accessor it is written on and on the generated members, which re-emit it.
+             Nothing needs the API at runtime: the generated enum carries the facts as text. `provided` mirrors the
+             tooling's own scope, because a consuming project adds Bean Validation itself, at the version it already
+             uses, and this example is a consuming project. Pinned to 3.0.2 because the local repository holds it, so
+             `mvn -o` keeps working. -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <version>3.0.2</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>
