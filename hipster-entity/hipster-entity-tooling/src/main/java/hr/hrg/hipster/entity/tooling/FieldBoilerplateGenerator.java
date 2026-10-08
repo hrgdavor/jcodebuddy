@@ -2,6 +2,7 @@ package hr.hrg.hipster.entity.tooling;
 
 import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
 
+import hr.hrg.hipster.entity.tooling.meta.FieldConstraint;
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker;
 
@@ -875,7 +876,45 @@ public final class FieldBoilerplateGenerator {
         if (tombstoned) {
             overrides.add(override("boolean", "retired", "true"));
         }
+        // DEC-047 (plan step 6.1): the field's annotations, as metadata on the constant. Emitted ONLY when there is
+        // something to carry, which is what keeps the change additive: `FieldDef.annotations()` defaults to an empty
+        // list, so a field with no annotations produces byte-identical output to before, and a reader asks one method
+        // on the constant it already has.
+        if (!prop.constraints().isEmpty()) {
+            overrides.add(annotationsOverride(prop.constraints()));
+        }
         return overrides;
+    }
+
+    /**
+     * The {@code annotations()} override for a constant whose accessor carries at least one annotation (DEC-047).
+     *
+     * <p>The annotations are the ones the model already holds — {@code ValidationGenerator.constraintsOn} reads the
+     * validation annotations off the accessor and <b>deliberately drops every other annotation</b>, because the
+     * generator cannot know an arbitrary annotation's semantics. So this exposes exactly what the repository knows,
+     * in declaration order, and the record it builds ({@code type} + raw {@code arguments}) is general enough to carry
+     * a wider set the day that reading is widened — the shape is not the constraint's.
+     *
+     * <p>Fully-qualified names, like the rest of this file's output: the enum's import list is generated elsewhere,
+     * and an annotation name that resolves through it would make this override depend on a second emitter's choices.
+     */
+    private String annotationsOverride(List<FieldConstraint> constraints) {
+        String nl = System.lineSeparator();
+        StringBuilder source = new StringBuilder();
+        source.append("        @Override()").append(nl)
+                .append("        public java.util.List<hr.hrg.hipster.entity.api.FieldAnnotation> annotations() {")
+                .append(nl)
+                .append("            return java.util.List.of(").append(nl);
+        for (int index = 0; index < constraints.size(); index++) {
+            FieldConstraint constraint = constraints.get(index);
+            source.append("                    new hr.hrg.hipster.entity.api.FieldAnnotation(")
+                    .append(stringLiteral(constraint.qualifiedName())).append(", ")
+                    .append(stringLiteral(constraint.arguments())).append(")")
+                    .append(index + 1 < constraints.size() ? "," : "")
+                    .append(nl);
+        }
+        source.append("            );").append(nl).append("        }");
+        return source.toString();
     }
 
     /**

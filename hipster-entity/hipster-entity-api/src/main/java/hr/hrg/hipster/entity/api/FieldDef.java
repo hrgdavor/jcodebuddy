@@ -113,4 +113,23 @@ public interface FieldDef {
     default boolean retired() {
         return false;
     }
+
+    /**
+     * The annotations the field's accessor carries, as metadata (DEC-047, plan step 6.1).
+     *
+     * <p>A factory that fills a view from XML, JSON or a database row needs the constraints the developer wrote on
+     * the accessor — {@code @NotNull}, {@code @Size(min = 1, max = 64)} — and this is where it reads them: the
+     * generated enum constant carries them, so the facts are committed Java an IDE can navigate to rather than a
+     * reflective scan or a second read of the interface source.
+     *
+     * <p>The default returns an empty list, which is what makes the change additive: a field with no annotations —
+     * and every enum generated before this method existed — answers without a line of emitted code. The generator
+     * writes an override <b>only</b> for a constant whose field carries at least one annotation, in declaration
+     * order.
+     *
+     * @return the field's annotations, in the order they were declared, never {@code null}
+     */
+    default java.util.List<FieldAnnotation> annotations() {
+        return java.util.List.of();
+    }
 }

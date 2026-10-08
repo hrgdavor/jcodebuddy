@@ -528,6 +528,8 @@ generated declaration findable from the view.
 | `META`                     | fixed constant on `View_`                           | static field on the field enum, which already links to the view                |
 | `forName`                  | fixed method on `View_`                             | declared on the field enum                                                     |
 | `NAME_MAPPER`              | fixed constant on `View_`                           | declared on the field enum                                                     |
+| `annotations()`            | fixed method on `View_`, overriding `FieldDef`      | `@Override` on the emitted method (DEC-047): the API method's name is the contract, so an IDE rename of it **breaks the generated file's compilation** rather than letting the metadata drift — refactor-sensitive by construction, and the strongest row in this table |
+| `FieldAnnotation` values   | the accessor's own annotations, as qualified name + source text | the value is the *annotation's* name, not a Java identifier this generator derived: renaming the constraint class is a library change, and the emitted string is the metadata a factory reads (DEC-047) |
 
 Rule of thumb: **if the name is `<View>` plus a suffix, or a fixed
 member of a generated class that the header already links to the view, it

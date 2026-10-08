@@ -4937,6 +4937,52 @@ DEC-022 naming-contract table entry comes with it.
 **Gate:** `GATE` green, the generated example carries the annotations, and the tracker row says what
 landed.
 
+**Part done 2026-10-08 — DEC-047, the API, the emitter and its tests are in; the EXAMPLE half is blocked on a
+finding about which generator path can see an annotation at all.**
+
+- **The ADR came first, as the charter requires for a step that changes generated output**:
+  [`DEC-047`](../doc-hipster-entity/architecture/decisions/DEC-047.md) decides the shape —
+  `FieldAnnotation(String type, String arguments)` in `hipster-entity-api`, a **default**
+  `FieldDef.annotations()`, and an override emitted only where a field carries something. Registering it exposed a
+  second defect and fixed it: **the decisions index stopped at DEC-041** while DEC-042…046 exist on disk and are
+  referenced by the plan and by `merge-java`'s docs, so the five most recent decisions were missing from the index a
+  reader consults. All six rows (042–047) are in the table now, built from each ADR's own headers.
+- **Implemented and verified**: the `FieldAnnotation` record (qualified name + the raw argument text, because the
+  semantics of `@Size(min = 1, max = 64)` belong to the validation provider and not to this generator);
+  `FieldDef.annotations()` defaulting to an empty list, so **every existing generated enum compiles unchanged**; and
+  `FieldBoilerplateGenerator` emitting the override — in declaration order, `@Override`-annotated, spliced as text —
+  **only** for a field that has annotations. `FieldAnnotationExposureTest` asserts all three properties: the
+  metadata with its qualified names and raw arguments, the declaration order, and **exactly one** override for a view
+  with one annotated field. The DEC-022 naming-contract table in the tooling README gained the row: `annotations()`
+  is wired by `@Override`, so renaming the API method **breaks the generated file's compilation** rather than
+  letting the metadata drift — the strongest form that table has, and the row says so.
+- **The finding that keeps this step open, and it is worth more than the rest of it.**
+  `EntityMetadataGenerator`'s CLI path builds its properties from the **metadata JSON**
+  (`viewNode.path("properties")` → `propNode.path("constraints")`), while the `generate(...)` API path that the tests
+  use parses the **source**. So the two paths disagree about a freshly written annotation: the source path emits the
+  new `annotations()` override, and the CLI path cannot, because its input JSON does not carry the constraint yet.
+  `ExampleRegenerationTest` is the guard that made this visible — annotating one example accessor made the committed
+  enums differ from a source-based generation — and it is also why the example is currently **unannotated**: keeping
+  the tree green was worth more than a demonstration that would have asserted a difference nobody can regenerate.
+- **Remainder, precisely**: (1) find and run the **source → metadata JSON** pass (the CLI is the JSON → java half; the
+  example's JSON in the checkout is dated 2026-09-26 and the subtree is derived/ignored), (2) annotate one example
+  accessor, (3) regenerate so its enum constant carries `annotations()`, (4) confirm
+  `ExampleRegenerationTest` is a byte-identical no-op again, and only then (5) is the step's gate met — "`GATE` green,
+  the generated example carries the annotations".
+- **A misleading diagnostic, named and not fixed**: `bun scripts/gen.js` reports any late failure with the
+  *"a failure naming GeneratorPreflight means…"* hint, while its own log showed the preflight **ok**, the generation
+  successful and the HTML index at *"301 links verified, 0 rejected, 0 stale"*. The failing step was the last one, and
+  the hint sent the reader after the tooling version instead — the kind of advice that costs an hour.
+- **Measured**: `FieldAnnotationExposureTest` **3 tests** and `ExampleRegenerationTest` **9 tests** green together
+  (12, BUILD SUCCESS) on a run that executed them, and the **recorded `GATE`** (`bun scripts/mvn-jdk25.js`,
+  whole reactor) is **BUILD SUCCESS** with a real 13:42 rebuild of `hipster-entity-tooling`.
+- **The gate failed once, on my own ADR, and the failure is worth recording because it is a defect class this
+  repository tests for**: DEC-047 linked `DEC-030` as `DEC-030.md`, while that decision's file is
+  `DEC-030-openrewrite-source-representation.md`. `check-repo-links.mjs` was green — the link is relative and the
+  *file it names does not exist* — which is exactly what
+  `DocConformanceTest.theDocumentationIndexesPointAtFilesThatExist` exists to catch ("a docs index that links to a
+  missing file costs a reader a dead end"). One line, and the link checker alone would never have found it.
+
 ### 6.2 — Deep change tracking: the generator wiring (task 6.5) and a patch applier
 **Who:** agent · **Size:** L
 
@@ -6106,7 +6152,7 @@ start)
 | 5.2  | Record the webview Q3/Q5 answers (Q2 by delivery)                                               | agent + maintainer | S    | `[x]` — **closed 2026-10-08 by the maintainer's answers.** **Q2** ("which hosts are in scope for the write verbs") is answered by delivery — every host has them, and the Reactor ships the JetBrains plugin, the Eclipse view, the VS Code extension and `webviewd`. **Q3** (do the JetBrains and VS Code plugins become proxying adapters, or keep their in-process implementations and share only the core?) is answered: **keep the in-process implementations and share only the core.** The reason is what each host is for — a buffer edit that lands unsaved in the editor's own undo stack needs to be in the editor's process, and a proxy hop would trade that away for a uniformity the shared core already provides. **Q5** was answered earlier (3.0p/3.0q merged the two capabilities worth keeping and deleted the five client directories). Nothing here is left open, which is this step's whole content. |
 | 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |
 | 5.4  | Eclipse Phase 5 — p2 update site (after Q2)                                                     | agent              | M    | `[x]` — **closed 2026-10-08 by Q2's answer: `dropins/` is acceptable, so the p2 update site is optional and stays last.** The step was gated on that answer ("**Do not start this before Q2 is answered**"), and the answer makes its Do either optional or unnecessary rather than pending: the Eclipse host already works headlessly with its own tests, and a Tycho p2 build is packaging rather than capability. If a release ever needs an update site, the shape the step describes (a feature + `category.xml` in a **separate Maven profile**, so the offline test loop keeps working) is where to start — recorded here so the option is not lost by closing the row. |
-| 6.1  | `FieldAnnotation` exposure in view enums                                                        | agent              | M    | `[~]` — **shape decided 2026-10-08, implementation open.** The maintainer chose the item's own description: **`FieldAnnotation` exposure as annotations carried as metadata on the generated view-enum constant.** That is what makes an XML/JSON factory able to see a field's constraints without re-reading the interface. Since it changes generated output, this step owes an **ADR first** (charter: a step that needs an ADR gets the ADR first) and then the generator change plus the DEC-022 naming-contract table entry. **Remainder, precisely**: the ADR, the emitter change, the example's regenerated enum, and the naming-contract entry. |
+| 6.1  | `FieldAnnotation` exposure in view enums                                                        | agent              | M    | `[~]` — **DEC-047, the API, the emitter and its tests are in; the EXAMPLE half is blocked on a real finding.** The ADR came first (it changes generated output) and deciding it exposed a second defect that is now fixed: **the decisions index stopped at DEC-041**, so DEC-042–046 were unregistered; all six rows are in. Implemented: `FieldAnnotation(type, arguments)` in `hipster-entity-api`, `FieldDef.annotations()` as a **default** (so every existing enum compiles unchanged), and the emitter writing the override **only** for a field that carries annotations, in declaration order — `FieldAnnotationExposureTest` (3 tests) asserts the metadata, the order and exactly one override; the DEC-022 naming-contract table gained the row (wired by `@Override`, so an API rename breaks the build rather than drifting). **The blocker is a real asymmetry, not a puzzle**: the CLI path of `EntityMetadataGenerator` builds properties from the **metadata JSON** (`propNode.path("constraints")`) while the `generate(...)` path the tests use parses the **source**, so a freshly written annotation reaches the emitter on one path and not the other; `ExampleRegenerationTest` caught it by making the committed example differ from a source-based generation, which is why the example is currently unannotated — a green tree beat a demonstration nobody could regenerate. **Remainder**: run the source → metadata-JSON pass, annotate one example accessor, regenerate so its constant carries `annotations()`, and confirm `ExampleRegenerationTest` is a no-op again. **Measured**: 12 tests green (3 + 9) on a run that executed them; `GATE` recorded in the record above. |
 | 6.2  | Deep tracking: generator wiring 6.5 + patch applier                                             | agent              | L    | `[ ]`                                                                                       |
 | 6.3  | Decide advisory → hard rule enforcement                                                         | agent + maintainer | M    | `[~]` — **enforcement decided 2026-10-08, the example's build change open.** Per rule: the **core entity interface contract becomes STRICT** (it is a correctness boundary — a view that does not derive from the marker is wrong, not merely untidy), while the **view hierarchy naming rule stays advisory** (`--validate` reports it), because a naming preference is a style choice rather than a boundary, and a build that fails on taste is a build people work around. **Remainder, precisely**: record the decision where the validator's rules live, make the example run `--validate=STRICT` for the contract rule only, and note in DEC-036 (or the validator's own documentation) that the naming rule is deliberately not fatal. |
 | 6.4  | Type divergence analyzer + converter manifest (DEC-006)                                         | agent              | L    | `[ ]`                                                                                       |
