@@ -320,7 +320,7 @@ class ResolverExtensionTest {
 
         var index = ConflictResolvers.index(extended);
 
-        assertEquals(ConflictType.values().length, index.size(),
+        assertEquals(ConflictResolvers.resolvableTypes().size(), index.size(),
             "replacing a resolver in place must keep the registry complete");
         assertSame(AdditiveMethodBodyResolver.class,
             index.get(ConflictType.METHOD_BODY_CHANGE).getClass());

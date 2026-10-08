@@ -13,6 +13,17 @@ package com.codebuddy.merge;
 public enum ConflictType {
 
     /**
+     * The sides differ and no detector claimed the block — the case that used to carry a {@code null} type.
+     *
+     * <p>Naming it is the maintainer's decision of 2026-10-09 (plan step 4.19), and the reason is what a null could not
+     * do: it meant "unknown", "not asked" and "no tier reached it" at once, so nothing could select these blocks and no
+     * report could print what they were. The block is still handed to a human ({@link Handling#MANUAL}) — naming it
+     * promotes it into the classification, it does not make it resolvable — and the name says which tier was reached
+     * last and declined, so a reader learns what is left rather than being told that nothing happened.</p>
+     */
+    UNCLASSIFIED_TEXT(Handling.MANUAL),
+
+    /**
      * Both branches add imports. Additive, so the union is correct.
      * Auto-resolvable.
      */

@@ -515,7 +515,12 @@ class MergeFileToolTest {
 
         MergeFileTool.BlockOutcome outcome = result.outcomes().get(0);
         assertEquals(Outcome.LEFT_UNCLASSIFIED, outcome.outcome());
-        assertNull(outcome.type());
+        // Since plan step 4.19's decision (2026-10-09) the case is NAMED rather than left with a null type: a null meant
+        // "unknown", "not asked" and "no tier reached it" at once, so nothing could select these blocks and no report
+        // could print what they were. The name is the lower tier that was reached last and declined, and the block is
+        // still handed to a human — the outcome is unchanged, which is what the assertion above keeps.
+        assertEquals(ConflictType.UNCLASSIFIED_TEXT, outcome.type(),
+            "the unclassified case carries its own type now: " + outcome.type());
         assertTrue(read(file).contains("<<<<<<<"));
 
         Path caseDir = outcome.fixtureCase();
@@ -523,7 +528,9 @@ class MergeFileToolTest {
         assertTrue(caseDir.getFileName().toString().contains("unclassified"),
             caseDir.getFileName().toString());
         String conflictJson = read(caseDir.resolve("conflict.json"));
-        assertTrue(conflictJson.contains("\"conflictType\": \"UNCLASSIFIED\""));
+        // Named since plan step 4.19's decision (2026-10-09): the fixture records the type a classifier can select,
+        // instead of the string "UNCLASSIFIED" that stood in for a null.
+        assertTrue(conflictJson.contains("\"conflictType\": \"UNCLASSIFIED_TEXT\""), conflictJson);
         assertTrue(conflictJson.contains("\"resolutions\": []"));
     }
 

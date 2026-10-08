@@ -132,12 +132,35 @@ public final class ConflictResolvers {
     }
 
     /**
+     * The conflict types a resolver can own: every type except {@link ConflictType#UNCLASSIFIED_TEXT}.
+     *
+     * <p>That one is the <em>absence of a claim</em> — the case where the sides differ and no detector recognised the
+     * block — so a registry that demanded a resolver for it would demand that something claim what nothing can. It is
+     * the one type excluded, and deliberately not "every type a human must confirm": {@code STRUCTURAL_CHANGE} and
+     * {@code API_INCOMPATIBILITY} are also handed to a human and both <em>have</em> resolvers, because a resolver can
+     * produce an answer a person confirms. Reading the distinction as the handling was wrong when this was written, and
+     * the count assertions in the tests said so.</p>
+     */
+    public static Set<ConflictType> resolvableTypes() {
+        Set<ConflictType> types = new TreeSet<>(Comparator.comparing(Enum::name));
+        for (ConflictType type : ConflictType.values()) {
+            if (type != ConflictType.UNCLASSIFIED_TEXT) {
+                types.add(type);
+            }
+        }
+        return types;
+    }
+
+    /**
      * Conflict types with no registered resolver. Expected to be empty; a test
      * asserts it so a newly added type cannot be forgotten.
+     *
+     * <p>Measured over {@link #resolvableTypes()}, so the invariant stays as strong as it can be: a forgotten resolver
+     * still fails it, and the one type that cannot have an owner does not pretend to.</p>
      */
     public static Set<ConflictType> unhandledTypes(List<ConflictResolver> resolvers) {
         Set<ConflictType> unhandled = new TreeSet<>(Comparator.comparing(Enum::name));
-        for (ConflictType type : ConflictType.values()) {
+        for (ConflictType type : resolvableTypes()) {
             if (find(resolvers, type).isEmpty()) {
                 unhandled.add(type);
             }

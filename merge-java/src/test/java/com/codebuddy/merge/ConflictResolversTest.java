@@ -46,12 +46,14 @@ class ConflictResolversTest {
         Map<ConflictType, ConflictResolver> index =
             ConflictResolvers.index(ConflictResolvers.defaultResolvers());
 
-        assertEquals(ConflictType.values().length, index.size(),
+        assertEquals(ConflictResolvers.resolvableTypes().size(), index.size(),
             "each conflict type must have exactly one owner");
     }
 
     @ParameterizedTest
-    @EnumSource(ConflictType.class)
+    // Over the types a resolver can OWN: the unclassified case is the absence of a claim, so a registry test that
+    // demanded an owner for it would assert something that cannot be true (plan step 4.19).
+    @EnumSource(value = ConflictType.class, names = "UNCLASSIFIED_TEXT", mode = EnumSource.Mode.EXCLUDE)
     @DisplayName("the registry resolves every conflict type")
     void registryResolvesEachType(ConflictType type) {
         ConflictResolver resolver =
@@ -67,7 +69,7 @@ class ConflictResolversTest {
         List<ConflictResolver> resolvers = ConflictResolvers.defaultResolvers();
 
         assertNotNull(resolvers);
-        assertEquals(ConflictType.values().length, resolvers.size(),
+        assertEquals(ConflictResolvers.resolvableTypes().size(), resolvers.size(),
             "one resolver per conflict type, was " + resolvers.size());
         assertTrue(resolvers.stream().allMatch(resolver -> resolver != null));
     }
@@ -108,7 +110,7 @@ class ConflictResolversTest {
     @Test
     @DisplayName("unhandledTypes reports every type when nothing is registered")
     void unhandledTypesReportsAll() {
-        assertEquals(ConflictType.values().length,
+        assertEquals(ConflictResolvers.resolvableTypes().size(),
             ConflictResolvers.unhandledTypes(List.of()).size());
     }
 

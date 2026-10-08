@@ -119,11 +119,20 @@ final class ConflictFixtures {
             case STRUCTURAL_CHANGE -> "both branches restructured the same member";
             case API_INCOMPATIBILITY -> "the public contract differs";
             case MEMBER_ADD -> "both branches added a distinct member";
+            // Named by plan step 4.19's decision (2026-10-09): the case that used to carry a null type. It is what
+            // remains when detection finds nothing, which is why it is described rather than detected.
+            case UNCLASSIFIED_TEXT -> "the sides differ and no detector recognised the block";
         };
     }
 
     static String baseCode(ConflictType type) {
         return switch (type) {
+            // No fixture base exists for the unclassified case, and the throw is the honest answer rather than an
+            // empty string: it is not a DETECTED type (it is what is left when detection finds nothing), so a test that
+            // asks for its base has asked the wrong question and should be told so.
+            case UNCLASSIFIED_TEXT -> throw new IllegalArgumentException(
+                "UNCLASSIFIED_TEXT is not a detected type: it is what remains when detection finds nothing, so it has "
+                    + "no fixture base");
             case IMPORT_ADD -> IMPORT_ADD_BASE;
             case COMMENT_ADD -> COMMENT_ADD_BASE;
             case CONSTANT_ADD -> CONSTANT_ADD_BASE;
@@ -140,6 +149,9 @@ final class ConflictFixtures {
 
     static String branch1Code(ConflictType type) {
         return switch (type) {
+            case UNCLASSIFIED_TEXT -> throw new IllegalArgumentException(
+                "UNCLASSIFIED_TEXT is not a detected type: it is what remains when detection finds nothing, so it has "
+                    + "no branch-1 fixture");
             case IMPORT_ADD -> IMPORT_ADD_BRANCH1;
             case COMMENT_ADD -> COMMENT_ADD_BRANCH1;
             case CONSTANT_ADD -> CONSTANT_ADD_BRANCH1;
@@ -156,6 +168,9 @@ final class ConflictFixtures {
 
     static String branch2Code(ConflictType type) {
         return switch (type) {
+            case UNCLASSIFIED_TEXT -> throw new IllegalArgumentException(
+                "UNCLASSIFIED_TEXT is not a detected type: it is what remains when detection finds nothing, so it has "
+                    + "no branch-2 fixture");
             case IMPORT_ADD -> IMPORT_ADD_BRANCH2;
             case COMMENT_ADD -> COMMENT_ADD_BRANCH2;
             case CONSTANT_ADD -> CONSTANT_ADD_BRANCH2;

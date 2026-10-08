@@ -805,7 +805,7 @@ public final class MergeFileTool {
                     "Both sides of the block are identical, so either one is the answer.",
                     block.ours(), false, resolutions);
             }
-            return new BlockDecision(Outcome.LEFT_UNCLASSIFIED, null,
+            return new BlockDecision(Outcome.LEFT_UNCLASSIFIED, ConflictType.UNCLASSIFIED_TEXT,
                 "The sides differ but detection recognised no conflict type; the block needs "
                     + "a resolver that understands this shape.",
                 null, true, resolutions);
@@ -1571,6 +1571,16 @@ public final class MergeFileTool {
                 + " re-verification needs the type the case was prepared with");
         }
         ConflictType type = ConflictType.valueOf(typeName);
+        if (!ConflictResolvers.resolvableTypes().contains(type)) {
+            // The same notion the resolver registry uses, so the two cannot drift: a type NO RESOLVER CAN OWN cannot be
+            // re-verified against a candidate resolver. Before plan step 4.19's decision (2026-10-09) this guard tested
+            // for a null type and for the string "UNCLASSIFIED"; the type is recorded under its own name now, and the
+            // first version of this check refused EVERY type a human must confirm — which broke re-verification for
+            // structural conflicts, a case where a resolver does produce an answer a person confirms. The blank/legacy
+            // check above stays for manifests written before the change.
+            throw new IllegalStateException(caseDir + " does not record a usable conflict type;"
+                + " re-verification needs the type the case was prepared with");
+        }
         String filePath = Optional.ofNullable(readStringField(manifest, "filePath"))
             .orElse("Conflicted.java");
 

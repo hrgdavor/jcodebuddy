@@ -183,7 +183,10 @@ class ConflictDetectionServiceTest {
     @Test
     @DisplayName("every detected conflict is actioned by a registered resolver")
     void everyDetectedConflictIsActioned() {
-        Set<ConflictType> detected = java.util.Arrays.stream(ConflictType.values())
+        // Over the types a resolver can own: the unclassified case is what remains when detection finds NOTHING, so it
+        // is neither produced by the detector nor owned by a resolver, and asking for its fixture would ask for a source
+        // that cannot exist (plan step 4.19).
+        Set<ConflictType> detected = ConflictResolvers.resolvableTypes().stream()
             .filter(type -> !detector.detect(FILE,
                 ConflictFixtures.baseCode(type),
                 ConflictFixtures.branch1Code(type),

@@ -142,8 +142,10 @@ class DeletionConflictTest {
         assertEquals(MergeFileTool.Outcome.LEFT_UNCLASSIFIED, outcome.outcome(),
             "measured today: no type claims a block where only one side changed: " + outcome.outcome()
                 + " / type " + outcome.type());
-        assertTrue(outcome.type() == null || outcome.type() == ConflictType.STRUCTURAL_CHANGE,
-            "whatever it is typed as, it is not resolved: " + outcome.type());
+        assertTrue(outcome.type() == null || outcome.type() == ConflictType.STRUCTURAL_CHANGE
+                || outcome.type() == ConflictType.UNCLASSIFIED_TEXT,
+            "whatever it is typed as, it is not resolved — and since plan step 4.19's decision the unclassified case"
+                + " carries its own name rather than a null: " + outcome.type());
 
         // The evidence, from the same input: the change is one-sided, which is what makes the divergence a decision
         // to take rather than a mystery. Both sides are read from the file's block, so the shape is computed on
