@@ -138,4 +138,39 @@ class FieldAnnotationExposureTest {
                         + "the source is the authority for a view-declared accessor, maintainer, 2026-10-08). "
                         + "divergences: " + second.entries() + "\n" + after);
     }
+
+    /**
+     * The CLI's own entry point, with the flags the repository's launcher uses — the one difference left between every
+     * passing test and the example.
+     *
+     * <p>Reading the code showed `main` calls the same `generate` overload the tests do, so the flight recorder for
+     * this step's mystery is not the pipeline but the <b>flags</b>: `--java-out`, `--packages` and `--validate`, the
+     * last of which runs the entity rules through {@code runValidation} before any write. A test is the right
+     * instrument because it already has a correct classpath — the hand-run attempt died on a cache-restored module
+     * with no {@code target/classes} and on the Java 8 on {@code PATH} (both now in {@code doc/AGENTS.md}).</p>
+     */
+    @Test
+    void theCliEntryPointAddsTheOverrideToo() throws Exception {
+        Path root = tempDir.resolve("cli");
+        Path src = root.resolve("src");
+        Path pkg = src.resolve("annot/hr");
+        Files.createDirectories(pkg);
+        Files.writeString(pkg.resolve("PersonEntity.java"), ENTITY);
+        Files.writeString(pkg.resolve("PersonSummary.java"), VIEW);
+        Path meta = root.resolve("meta");
+        Files.createDirectories(meta);
+
+        EntityMetadataGenerator.main(new String[] {
+                src.toString(), meta.toString(),
+                "--java-out", src.toString(),
+                "--packages", "annot.hr",
+                "--validate",
+        });
+
+        Path enumFile = pkg.resolve("PersonSummary_.java");
+        Assertions.assertTrue(Files.exists(enumFile), "the CLI must write the field enum: " + Files.walk(root).toList());
+        String emitted = Files.readString(enumFile);
+        Assertions.assertTrue(emitted.contains("FieldAnnotation(\"jakarta.validation.constraints.NotNull\", \"\")"),
+                "the CLI's own entry point must emit the override, since the example is generated through it:\n" + emitted);
+    }
 }

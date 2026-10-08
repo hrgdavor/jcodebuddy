@@ -5162,6 +5162,22 @@ item without running the whole pass.
   they are why this probe is not a viable instrument here: **use `classpathFrom` or a test.** One useful negative
   result came with it — the restored `hipster-entity-api` jar **does** contain `FieldAnnotation.class`, so the 6.1
   artifact is built correctly and Maven-based runs have no problem with it.
+- **The instrument that worked, and what it settled (2026-10-08, later).** A **test** drives the CLI's own entry point
+  — `EntityMetadataGenerator.main` with `--java-out`, `--packages` and `--validate`, the flags `scripts/gen.js` uses —
+  and it **passes**: the CLI path emits the override exactly like the `generate(...)` API. So **"the CLI write path
+  drops it" is eliminated too**, and with it every code-path hypothesis this step could name. Three further
+  measurements narrowed what is left: (1) the example's stale `<Marker>.metadata.json` is **neither read nor written**
+  by that invocation — moving the whole directory aside and re-running changed nothing and produced no new file, so
+  staleness is not the mechanism either; (2) `bun scripts/gen.js` exits 1 because the **entity-html renderer** returns
+  non-zero *after printing a successful link check* — its own step, not the generator's, which is why the generator's
+  log always looks healthy and the command still "fails"; (3) the example also needs `jakarta.validation-api`
+  (`provided`) in its POM for the annotation to **compile** — that was the very first failure, and the two edits must
+  be applied together.
+- **What remains unexplored about the example, in order of suspicion**: it is `@View(gen = GenLevel.BUILDER_ALL)` (every
+  passing fixture uses the default level), it **extends another view** (`Person`) rather than a plain marker, and it
+  carries a nested `record Record` and a nested `interface Write`. Those three are the difference the next attempt
+  should reproduce **in a test** — the instrument that has settled every question here — rather than in the example,
+  where a red `ExampleRegenerationTest` is the only feedback.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
