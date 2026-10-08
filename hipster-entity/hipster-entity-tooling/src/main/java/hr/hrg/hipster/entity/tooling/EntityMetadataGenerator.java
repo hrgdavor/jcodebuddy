@@ -1494,11 +1494,34 @@ public class EntityMetadataGenerator {
             throws IOException {
         activeDivergences = divergences;
         parsedCompilationUnits.clear();
+        typeDivergences.clear();
         try {
             generateInternal(sourceRoot, outputDir, javaOutputRoot, divergences);
         } finally {
             activeDivergences = null;
         }
+    }
+
+    /**
+     * Every source/target type pair this pass resolved, in the order it resolved them — DEC-006 (accepted 2026-10-08,
+     * plan step 6.4).
+     *
+     * <p>Collected per pass, because converter <em>coverage</em> is a property of one pass's mapping: the list is what
+     * the converter manifest is rendered from, and what a caller can assert without parsing the divergence report's
+     * prose. Entries carry both outcomes — a pair that needed no converter is coverage too (see
+     * {@link hr.hrg.hipster.entity.tooling.meta.TypeDivergence}).</p>
+     */
+    private static final java.util.List<hr.hrg.hipster.entity.tooling.meta.TypeDivergence> typeDivergences =
+            new java.util.ArrayList<>();
+
+    /** The pairs this pass resolved, in order; empty until a pass that has mapper requests resolves them. */
+    public static java.util.List<hr.hrg.hipster.entity.tooling.meta.TypeDivergence> typeDivergences() {
+        return java.util.List.copyOf(typeDivergences);
+    }
+
+    /** Records one resolved pair; called by the mapper generator, which is the only place that resolves them. */
+    static void noteTypeDivergence(hr.hrg.hipster.entity.tooling.meta.TypeDivergence divergence) {
+        typeDivergences.add(divergence);
     }
 
     private static void generateInternal(Path sourceRoot, Path outputDir, Path javaOutputRoot,

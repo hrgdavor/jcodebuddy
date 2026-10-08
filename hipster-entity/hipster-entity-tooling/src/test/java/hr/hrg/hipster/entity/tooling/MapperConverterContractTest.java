@@ -109,4 +109,56 @@ class MapperConverterContractTest {
             reset();
         }
     }
+
+    @Test
+    void theResolvedPairsAreRecordedAsDataWithBothOutcomes() throws Exception {
+        // An incompatible pair: Integer -> String, the fixture above.
+        Path incompatible = tree("typed-bad");
+        Path outBad = incompatible.resolve("out");
+        Files.createDirectories(outBad);
+        map();
+        try {
+            EntityMetadataGenerator.generate(incompatible, outBad, outBad, new DivergenceReporter());
+            java.util.List<hr.hrg.hipster.entity.tooling.meta.TypeDivergence> recorded =
+                    EntityMetadataGenerator.typeDivergences();
+            var amount = recorded.stream().filter(pair -> pair.location().endsWith(".amount")).findFirst()
+                    .orElseThrow(() -> new AssertionError("no pair for `amount`: " + recorded));
+            Assertions.assertEquals("Integer -> String", amount.pair(),
+                    "named as the pair, not only as a message: " + recorded);
+            Assertions.assertTrue(amount.converterRequired(),
+                    "and flagged as needing a converter, which is what the manifest is rendered from: " + recorded);
+            Assertions.assertTrue(amount.render().contains("converter required"),
+                    "with a rendering a manifest can carry: " + amount.render());
+            // The inherited `id` is a pair too, and an identical type needs nothing: coverage is both answers.
+            Assertions.assertTrue(recorded.stream().anyMatch(pair -> !pair.converterRequired()),
+                    "a pair that needs no converter is recorded as well: " + recorded);
+        } finally {
+            reset();
+        }
+
+        // A pair that needs no converter: a primitive that widens. `[converted as-is]` is coverage too, which is why
+        // both outcomes are recorded rather than only the failures.
+        Path widening = tempDir.resolve("typed-good");
+        Path pkg = widening.resolve("conv/hr");
+        Files.createDirectories(pkg);
+        Files.writeString(pkg.resolve("Thing.java"), MARKER);
+        Files.writeString(pkg.resolve("SourceView.java"), SOURCE.replace("Integer amount()", "int amount()"));
+        Files.writeString(pkg.resolve("TargetView.java"), TARGET.replace("String amount()", "long amount()"));
+        Path outGood = widening.resolve("out");
+        Files.createDirectories(outGood);
+        map();
+        try {
+            EntityMetadataGenerator.generate(widening, outGood, outGood, new DivergenceReporter());
+            java.util.List<hr.hrg.hipster.entity.tooling.meta.TypeDivergence> recorded =
+                    EntityMetadataGenerator.typeDivergences();
+            var amount = recorded.stream().filter(pair -> pair.location().endsWith(".amount")).findFirst()
+                    .orElseThrow(() -> new AssertionError("no pair for `amount`: " + recorded));
+            Assertions.assertEquals("int -> long", amount.pair(),
+                    "a widening primitive is a pair too: " + recorded);
+            Assertions.assertFalse(amount.converterRequired(),
+                    "and it needs no converter — DEC-006's third criterion, recorded as data: " + recorded);
+        } finally {
+            reset();
+        }
+    }
 }

@@ -171,14 +171,23 @@ public final class ViewMapperGenerator {
             if (conversion == null) {
                 arguments.add("null");
                 unmapped.add(component.name());
+                String reason = "no provably safe conversion from the source type to the target type";
+                // DEC-006 (step 6.4): the pair is recorded as DATA as well as reported as a message, because converter
+                // coverage is a question about a set of pairs — the manifest is rendered from these, and a caller can
+                // assert the classification without parsing the report's prose.
+                EntityMetadataGenerator.noteTypeDivergence(new hr.hrg.hipster.entity.tooling.meta.TypeDivergence(
+                        sourceField.type(), component.type(), location + "." + component.name(), true, reason));
                 divergences.report("mapper_type_incompatible", location + "." + component.name(),
-                        "no provably safe conversion from the source type to the target type",
+                        reason,
                         sourceField.type(), component.type(),
                         "the field is left unmapped (a literal null), never a lossy cast");
                 continue;
             }
             arguments.add(conversion.replace("$", "src." + component.name() + "()"));
             mapped.add(component.name());
+            EntityMetadataGenerator.noteTypeDivergence(new hr.hrg.hipster.entity.tooling.meta.TypeDivergence(
+                    sourceField.type(), component.type(), location + "." + component.name(), false,
+                    "the mapper converts this pair as it stands"));
         }
 
         // The other direction: a source field the target cannot receive. Nothing is emitted — there is
@@ -224,7 +233,25 @@ public final class ViewMapperGenerator {
             return "$";
         }
         if (targetPrimitive) {
-            return null;
+            // A primitive TARGET is not rejected outright: a primitive-to-primitive WIDENING is implicit in Java and has
+            // no nullability question to answer, because neither side can be null. Rejecting it would report a pair that
+            // needs nothing — and since DEC-006's criterion 2 (step 6.4) made this finding fail a STRICT pass, the cost
+            // of that over-breadth stopped being a noisy log line and became a broken build for a legitimate mapping.
+            // (Measured 2026-10-08: `int -> long` was reported as `mapper_type_incompatible` before this.)
+            if (!sourcePrimitive) {
+                // A REFERENCE source into a primitive target is still rejected, and for the original reason: the source
+                // may legitimately hold null (S4), and an unboxing would turn that into an NPE the compiler cannot flag.
+                return null;
+            }
+            return switch (sourceErased + "->" + targetErased) {
+                case "byte->short", "byte->int", "byte->long", "byte->float", "byte->double",
+                     "short->int", "short->long", "short->float", "short->double",
+                     "char->int", "char->long", "char->float", "char->double",
+                     "int->long", "int->float", "int->double",
+                     "long->float", "long->double",
+                     "float->double" -> "$";
+                default -> null;
+            };
         }
         if (sourcePrimitive) {
             // A primitive widens implicitly into a wider reference parameter (Java boxes and widens in
