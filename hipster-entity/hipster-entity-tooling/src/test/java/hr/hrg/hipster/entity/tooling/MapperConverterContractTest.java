@@ -161,4 +161,41 @@ class MapperConverterContractTest {
             reset();
         }
     }
+
+    @Test
+    void theManifestIsWrittenIntoTheTrackedConfDirectory() throws Exception {
+        // The pass is given an output dir inside a module's `.jcodebuddy/`, which is how the launcher invokes it: the
+        // manifest belongs in the TRACKED `conf/` beside it, not in the derived `metadata/` it is written from.
+        Path root = tempDir.resolve("manifest");
+        Path pkg = root.resolve("conv/hr");
+        Files.createDirectories(pkg);
+        Files.writeString(pkg.resolve("Thing.java"), MARKER);
+        Files.writeString(pkg.resolve("SourceView.java"), SOURCE);
+        Files.writeString(pkg.resolve("TargetView.java"), TARGET);
+        Path jcodebuddy = root.resolve(".jcodebuddy");
+        Path out = jcodebuddy.resolve("metadata/entity");
+        Files.createDirectories(out);
+
+        map();
+        try {
+            // Generated .java goes to the source root (as the launcher does); only the metadata JSON goes under
+            // `.jcodebuddy/`, and the guard that enforces that is the reason this test's third argument is not `out`.
+            EntityMetadataGenerator.generate(root, out, root, new DivergenceReporter());
+
+            Path manifest = jcodebuddy.resolve("conf/converters.json");
+            Assertions.assertTrue(Files.exists(manifest),
+                    "the manifest is generated AND committed, which is why it goes in the tracked conf/: "
+                            + Files.walk(jcodebuddy).toList());
+            String text = Files.readString(manifest);
+            Assertions.assertTrue(text.contains("\"source\": \"Integer\", \"target\": \"String\""),
+                    "carrying the pair that needs a converter:\n" + text);
+            Assertions.assertTrue(text.contains("\"converterRequired\": true"),
+                    "and the flag a reviewer scans for:\n" + text);
+            Assertions.assertTrue(text.contains("\"generate\": ")
+                            || text.contains("\"pairs\": "),
+                    "with the counts that make a diff meaningful:\n" + text);
+        } finally {
+            reset();
+        }
+    }
 }

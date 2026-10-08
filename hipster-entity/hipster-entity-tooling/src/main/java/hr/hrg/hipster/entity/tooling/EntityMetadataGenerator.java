@@ -1497,9 +1497,83 @@ public class EntityMetadataGenerator {
         typeDivergences.clear();
         try {
             generateInternal(sourceRoot, outputDir, javaOutputRoot, divergences);
+            writeConverterManifest(outputDir);
         } finally {
             activeDivergences = null;
         }
+    }
+
+    /**
+     * Writes the converter manifest — DEC-006 (accepted 2026-10-08), plan step 6.4 — into the module's
+     * <strong>tracked</strong> {@code .jcodebuddy/conf/}.
+     *
+     * <p>Where it goes is a rule rather than taste: DEC-026 puts every pass output in the derived, ignored
+     * {@code metadata/}, but this step's gate asks for a manifest that is <em>generated <b>and committed</b></em>, and
+     * {@code conf/} is the one per-module subtree that is tracked precisely because its contents must survive a clone.
+     * A manifest records which converter requirements a project's mapping has, which is a fact about the project that a
+     * reviewer should see in a diff — a converter that disappears because a field's type changed is exactly the change
+     * this file exists to make visible.</p>
+     *
+     * <p><strong>Nothing is written when nothing was resolved</strong>, so a module with no mapper requests gains no
+     * empty file on every pass — the common case costs nothing, and the file's presence means "this project maps views
+     * and here is what that costs".</p>
+     */
+    private static void writeConverterManifest(Path outputDir) throws IOException {
+        if (typeDivergences.isEmpty() || outputDir == null) {
+            return;
+        }
+        Path jcodebuddy = null;
+        for (Path at = outputDir.toAbsolutePath(); at != null; at = at.getParent()) {
+            if (at.getFileName() != null && ".jcodebuddy".equals(at.getFileName().toString())) {
+                jcodebuddy = at;
+                break;
+            }
+        }
+        if (jcodebuddy == null) {
+            // An output directory outside a module's `.jcodebuddy/` is a caller's own layout: a manifest has no home
+            // there, and inventing one would put a tracked-looking file in a directory nobody tracks.
+            return;
+        }
+        Path conf = jcodebuddy.resolve("conf");
+        Files.createDirectories(conf);
+        Files.writeString(conf.resolve("converters.json"), renderConverterManifest());
+    }
+
+    /**
+     * The manifest's text: the document format DEC-026's readers already expect, with the pair list plus the counts a
+     * reviewer scans first.
+     *
+     * <p>Ordered as the pass resolved the pairs, so a diff shows what changed rather than reshuffling.</p>
+     */
+    private static String renderConverterManifest() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("  \"generator\": \"").append(EntityMetadataGenerator.class.getName()).append("\",\n");
+        long required = typeDivergences.stream()
+                .filter(hr.hrg.hipster.entity.tooling.meta.TypeDivergence::converterRequired).count();
+        sb.append("  \"pairs\": ").append(typeDivergences.size()).append(",\n");
+        sb.append("  \"convertersRequired\": ").append(required).append(",\n");
+        sb.append("  \"resolved\": [\n");
+        for (int i = 0; i < typeDivergences.size(); i++) {
+            var pair = typeDivergences.get(i);
+            sb.append("    {\"source\": \"").append(jsonEscape(pair.sourceType()))
+                    .append("\", \"target\": \"").append(jsonEscape(pair.targetType()))
+                    .append("\", \"location\": \"").append(jsonEscape(pair.location()))
+                    .append("\", \"converterRequired\": ").append(pair.converterRequired())
+                    .append(", \"reason\": \"").append(jsonEscape(pair.reason())).append("\"}")
+                    .append(i + 1 < typeDivergences.size() ? "," : "").append("\n");
+        }
+        sb.append("  ]\n");
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    /** A JSON string's body, so a type or a reason cannot break the manifest this class writes by hand. */
+    private static String jsonEscape(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     /**
