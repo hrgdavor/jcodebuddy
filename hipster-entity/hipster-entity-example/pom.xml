@@ -149,6 +149,12 @@
                                      passes the STRICT mode (or runs the `validate` subcommand) and the
                                      pass then refuses to write until the issues are fixed. -->
                                 <argument>--validate</argument>
+                                <!-- Plan step 6.5: the read-projection pass (DEC-003/DEC-007) is OPT-IN, and this
+                                     example opts in because it is where the pattern is demonstrated. Both halves
+                                     are needed: this flag enables the emitter, and `PersonDto`'s own
+                                     `@View(dto = true)` marker selects the one view it applies to. A project that
+                                     never passes the flag receives no Jackson-importing writer for any view. -->
+                                <argument>--dto-projections</argument>
                                 <!-- The run record: what this pass ran with, next to the entity JSON in
                                      the metadata tree. Machine-readable, ignored by git, and the only
                                      place "which generator revision produced this tree" survives the

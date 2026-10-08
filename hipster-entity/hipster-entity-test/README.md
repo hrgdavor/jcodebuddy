@@ -77,10 +77,10 @@ Concretely:
 
 ## Running the tests
 
-The recorded command is the JDK-25 wrapper, which includes this module:
+The recorded command is the JDK-25 gate, which includes this module:
 
-```bat
-scripts\mvn-jdk25.cmd
+```bash
+bun scripts/mvn-jdk25.js
 ```
 
 That expands to

@@ -14,15 +14,15 @@ recorded by the pass rather than reconstructed here. The page itself is unchange
 the spelling of a file reference changed, and the table that reference resolves through.
 
 ```
-scripts\entity-html.cmd                  # the example module, default paths
-bun run scripts/entity-html/index.js     # the same thing, without the wrapper
-bun test                                 # from scripts/: the renderer's own tests
+bun scripts/entity-html/index.js          # the example module, default paths
+bun scripts/entity-html/index.js --module <dir>   # another converted module
+bun test                                  # from scripts/: the renderer's own tests
 ```
 
 ## Where the output goes
 
 `<module>/.jcodebuddy/metadata/entity/index.html` — beside the JSON it renders (DEC-026's derived,
-git-ignored `metadata/` subtree). `scripts\gen.cmd` renders it as the last step of a generation
+git-ignored `metadata/` subtree). `bun scripts/gen.js` renders it as the last step of a generation
 pass. A machine without Bun prints a skip line and the pass still succeeds; a page whose link check
 fails makes the pass fail, because a link to the wrong line is worse than no link.
 

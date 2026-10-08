@@ -28,12 +28,12 @@ generated source — they never regenerate it.
 A pass is run on demand, or continuously in watch mode, with:
 
 ```
-scripts\gen.cmd            regenerate
-scripts\gen.cmd with-tests regenerate and run the entity test set
-scripts\gen.cmd watch      regenerate on every save (Ctrl+C to stop)
+bun scripts/gen.js            regenerate
+bun scripts/gen.js with-tests regenerate and run the entity test set
+bun scripts/gen.js watch      regenerate on every save (Ctrl+C to stop)
 ```
 
-`scripts\gen.cmd` compiles the tooling in the reactor, exports the classpath
+`bun scripts/gen.js` compiles the tooling in the reactor, exports the classpath
 Maven resolved for those modules (`dependency:build-classpath`), and runs the
 generator with `java -cp`. It needs **no `mvn install` and builds no jar**. See
 [`codebuddy.md`](codebuddy.md) § 3 for why `mvn exec:java` is not used.
@@ -53,6 +53,8 @@ The generator's flag surface is unchanged, wherever it is invoked from:
 --packages              hr.hrg.hipster.entityexample.person.entity,
                         hr.hrg.hipster.entityexample.paymentMethod.entity
 --validate              run the entity rules before writing; print and continue
+--dto-projections       also emit <View>Json for views marked @View(dto = true)
+                        (DEC-003/DEC-007 read projections; see § "Read projections" below)
 --run-record            .jcodebuddy/metadata/entity/generation.json
 ```
 
@@ -69,14 +71,14 @@ flag table.
 runtime scope, which excludes `provided` dependencies — and the tooling is `provided` so it never
 becomes a transitive runtime dependency of an application (`AGENTS.md` § 2). Without
 `<classpathScope>compile</classpathScope>` the generator is not on the exec classpath at all.
-(`scripts\gen.cmd` does not use `exec:java`, so this does not apply to it.)
+(`bun scripts/gen.js` does not use `exec:java`, so this does not apply to it.)
 
 **Turning generation off** is no longer a thing you do: generation never runs during a build, and the
 old `-Djcodebuddy.entity.codegen.skip=true` property has been removed along with the lifecycle
 bindings it skipped. Compile, and the committed output is used as-is:
 
 ```
-scripts\mvn-jdk25.cmd -o -pl hipster-entity-example -am compile
+bun scripts/mvn-jdk25.js -o -pl hipster-entity-example -am compile
 ```
 
 **Generation is fail-safe about the example.** `ExampleRegenerationTest` copies the committed tree into
@@ -88,7 +90,7 @@ Regenerate and commit in the same change when that test goes red.
 ## Reading the module as a page
 
 ```
-scripts\entity-html.cmd
+bun scripts/entity-html/index.js
 ```
 
 renders `.jcodebuddy/metadata/entity/index.html` from the metadata JSON the last pass wrote: every
@@ -99,15 +101,38 @@ IntelliJ with the plugin's WebView Explorer tool window (right-click the file in
 **Open in WebView Explorer**).
 
 The page is Bun JavaScript reading the JSON; the Java generator does not emit HTML, and every link it
-writes is verified against the file and line it points at (DEC-027). `scripts\gen.cmd` renders it as
+writes is verified against the file and line it points at (DEC-027). `bun scripts/gen.js` renders it as
 the last step of a pass — [`codebuddy.md`](codebuddy.md) § 3.10 has the details, and
 [`.jcodebuddy/context/entity-html-index.md`](.jcodebuddy/context/entity-html-index.md) records what
 this module expects it to show.
 
+## Read projections (DEC-003 / DEC-007)
+
+`PersonDto` is the worked example of the projection + DTO marker pattern (plan step 6.5): a read
+contract for a SQL or NoSQL query result whose purpose is to reach JSON without building the entity.
+It carries `@View(dto = true)`, and the committed
+[`PersonDtoJson`](src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonDtoJson.java) is what
+the generator emits for it: one compiled field write per field, on the view's own accessors —
+
+```java
+gen.writeNumberProperty("id", source.id());
+gen.writeStringProperty("firstName", source.firstName());
+```
+
+— so there is no reflection and, unlike every other generated serializer here, **no positional array**
+in between. The ordinal serializers walk `ViewReader.get(ordinal)`, which a SQL row or a Mongo document
+is not; this path goes straight from the result to the response.
+
+Two conditions enable it, and neither alone emits anything: the pass carries `--dto-projections` (it is
+in this module's generator invocation, and in the POM's `exec:java@hipster-entity-generate`), **and** the
+view carries the marker. A project that never passes the flag receives no Jackson-importing writer for
+any view; a view with no marker gains nothing from the flag. The marker is an annotation attribute
+rather than a name suffix so a rename refactor cannot silently change whether a view is a projection.
+
 ## Running the demo
 
 ```
-scripts\run-demo.cmd
+bun scripts/run-demo.js
 ```
 
 It builds and runs `hr.hrg.hipster.entityexample.person.PersonDemo`, which prints six sections:

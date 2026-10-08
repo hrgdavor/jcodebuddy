@@ -17,6 +17,10 @@ import java.util.List;
  *                           {@code GenLevelResolver} has run)
  * @param discriminatorField polymorphic discriminator field name, {@code ""} when absent
  * @param addons             simple names of addon interfaces, in declaration order
+ * @param dto                whether the view carries the read-projection marker
+ *                           ({@code @View(dto = true)}, DEC-003/DEC-007). Read only by the opt-in
+ *                           projection pass; every other emitter is unaffected by it, which is why it
+ *                           is a separate component rather than a value folded into {@code gen}
  * @param properties         the view's own declared field accessors, in declaration order
  * @param lineNumber         source line of the declaration, {@code -1} when unknown
  * @param sourcePath         the file that declares this view, <strong>relative to the module
@@ -42,6 +46,7 @@ public record ViewMeta(
         GenLevel gen,
         String discriminatorField,
         List<String> addons,
+        boolean dto,
         List<Property> properties,
         int lineNumber,
         String sourcePath,
@@ -62,14 +67,14 @@ public record ViewMeta(
 
     /** Back-compatible convenience for callers that only have a name and properties. */
     public ViewMeta(String name, List<String> extendsTypes, List<Property> properties, int lineNumber) {
-        this(name, extendsTypes, GenLevel.META, "", List.of(), properties, lineNumber, null,
+        this(name, extendsTypes, GenLevel.META, "", List.of(), false, properties, lineNumber, null,
                 List.of(), List.of());
     }
 
     /** Back-compatible convenience for callers that predate the source path. */
     public ViewMeta(String name, List<String> extendsTypes, GenLevel gen, String discriminatorField,
                     List<String> addons, List<Property> properties, int lineNumber) {
-        this(name, extendsTypes, gen, discriminatorField, addons, properties, lineNumber, null,
+        this(name, extendsTypes, gen, discriminatorField, addons, false, properties, lineNumber, null,
                 List.of(), List.of());
     }
 
@@ -81,7 +86,18 @@ public record ViewMeta(
      */
     public ViewMeta(String name, List<String> extendsTypes, GenLevel gen, String discriminatorField,
                     List<String> addons, List<Property> properties, int lineNumber, String sourcePath) {
-        this(name, extendsTypes, gen, discriminatorField, addons, properties, lineNumber, sourcePath,
+        this(name, extendsTypes, gen, discriminatorField, addons, false, properties, lineNumber, sourcePath,
+                List.of(), List.of());
+    }
+
+    /**
+     * The discovery result carrying the DTO marker, for the marker loop that has just read
+     * {@code @View(dto = …)} and has no artifact inventory yet.
+     */
+    public ViewMeta(String name, List<String> extendsTypes, GenLevel gen, String discriminatorField,
+                    List<String> addons, boolean dto, List<Property> properties, int lineNumber,
+                    String sourcePath) {
+        this(name, extendsTypes, gen, discriminatorField, addons, dto, properties, lineNumber, sourcePath,
                 List.of(), List.of());
     }
 
@@ -90,12 +106,12 @@ public record ViewMeta(
      *
      * <p>The artifact inventory and the location map can only be built <em>after</em> the emitters have
      * run for this view — the files must exist before they can be read back — while the view itself is
-     * discovered before any of them run. Re-listing the other eight components at the call site would
+     * discovered before any of them run. Re-listing the other nine components at the call site would
      * mean a new component added to this record breaks the one place that assembles the final
      * {@code views} list, so the copy lives here beside the record it copies.</p>
      */
     public ViewMeta withDetails(List<ArtifactMeta> artifacts, List<ViewFieldMeta> fields) {
-        return new ViewMeta(name, extendsTypes, gen, discriminatorField, addons, properties, lineNumber,
+        return new ViewMeta(name, extendsTypes, gen, discriminatorField, addons, dto, properties, lineNumber,
                 sourcePath, artifacts, fields);
     }
 

@@ -64,7 +64,7 @@ public class EntityMetadataGenerator {
     /** Every CLI flag this build understands; {@code --version} prints it. */
     public static final List<String> SUPPORTED_FLAGS = List.of(
             "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper", "--merge",
-            "--adapters", "--patch-appliers", "--run-record", "--force", "--version");
+            "--adapters", "--patch-appliers", "--dto-projections", "--run-record", "--force", "--version");
 
     /**
      * The flags every documented invocation of this generator passes.
@@ -258,6 +258,10 @@ public class EntityMetadataGenerator {
             for (JsonNode addon : viewNode.path("addons")) {
                 addons.add(addon.asText());
             }
+            // The projection marker rides the metadata JSON so a consumer reading only the metadata (a
+            // report, a second generator) can tell a DTO view from a materialization target without
+            // re-parsing the source. Absent means false, exactly as it does in the annotation.
+            boolean dto = viewNode.path("dto").asBoolean(false);
             int viewLineNumber = viewNode.path("lineNumber").asInt(-1);
 
             List<Property> properties = new ArrayList<>();
@@ -329,7 +333,7 @@ public class EntityMetadataGenerator {
                         at));
             }
 
-            views.add(new ViewMeta(viewName, extendsTypes, gen, discriminatorField, addons, properties,
+            views.add(new ViewMeta(viewName, extendsTypes, gen, discriminatorField, addons, dto, properties,
                     viewLineNumber, sourcePath(viewNode, "file", fqnToPath, legacyIdToPath, "sourcePath"),
                     artifacts, fields));
         }
@@ -528,6 +532,20 @@ public class EntityMetadataGenerator {
     private static boolean generatePatchAppliers = false;
 
     /**
+     * Whether to emit {@code <View>Json} — the direct JSON writer for a read projection (DEC-003/DEC-007).
+     *
+     * <p><strong>Two conditions, and neither alone emits anything</strong>: the pass must carry
+     * {@code --dto-projections} <em>and</em> the view must carry the marker
+     * ({@code @View(dto = true)}). The flag is what makes the feature opt-in — the emitted class
+     * imports Jackson, and generating it for every project would put that dependency into code the
+     * project never asked for, which is the same module-boundary reason
+     * {@link #generatePatchAppliers} is opt-in. The marker is what keeps one project's pass from
+     * writing a writer for every view in it: the projection is a <em>chosen</em> read contract, not a
+     * by-product of being a view.</p>
+     */
+    private static boolean generateDtoProjections = false;
+
+    /**
      * Enables or disables generated JDBC adapters ({@code --adapters}).
      *
      * <p>The flag exists so tests and a manual run can exercise the draft; production projects are
@@ -542,6 +560,11 @@ public class EntityMetadataGenerator {
         generatePatchAppliers = enabled;
     }
 
+    /** Enables or disables generated read-projection JSON writers ({@code --dto-projections}). */
+    public static void setGenerateDtoProjections(boolean enabled) {
+        generateDtoProjections = enabled;
+    }
+
     /** Whether this pass emits patch appliers ({@code --patch-appliers}). */
     public static boolean isGeneratePatchAppliers() {
         return generatePatchAppliers;
@@ -550,6 +573,11 @@ public class EntityMetadataGenerator {
     /** Whether SQL generation is currently opted in (its own flag, never a default). */
     public static boolean isGenerateAdapters() {
         return generateAdapters;
+    }
+
+    /** Whether this pass emits read-projection JSON writers ({@code --dto-projections}). */
+    public static boolean isGenerateDtoProjections() {
+        return generateDtoProjections;
     }
 
     /**
@@ -829,6 +857,8 @@ public class EntityMetadataGenerator {
                 generatePatchAppliers = true;
             } else if ("--adapters".equals(arg)) {
                 generateAdapters = true;
+            } else if ("--dto-projections".equals(arg)) {
+                generateDtoProjections = true;
             } else if ("--validate".equals(arg)) {
                 validationPolicy = Policy.REPORT;
             } else if (arg.startsWith("--validate=")) {
@@ -965,6 +995,7 @@ public class EntityMetadataGenerator {
         record.put("mappers", mappers);
         record.put("adapters", generateAdapters);
         record.put("patchAppliers", generatePatchAppliers);
+        record.put("dtoProjections", generateDtoProjections);
         record.put("validate", validationPolicy.name());
         record.put("args", List.of(args));
         if (failure == null) {
@@ -989,6 +1020,8 @@ public class EntityMetadataGenerator {
         System.err.println("Flags:");
         System.err.println("  --packages <a.b,c.d>  generate only for views in these packages (indexing is unaffected)");
         System.err.println("  --adapters            [DRAFT/EXPLORATION, opt-in] also emit the positional JDBC adapters and binders.");
+        System.err.println("  --dto-projections     [opt-in] also emit <View>Json for every view marked @View(dto = true):");
+        System.err.println("                        a direct-call writer to a caller-owned JsonGenerator (DEC-003/DEC-007).");
         System.err.println("  --java-out <dir>      write generated .java here instead of <output-dir>");
         System.err.println("  --mapper <Src>:<Tgt>[:<ClassName>]");
         System.err.println("                        also emit a statically-dispatched mapper between two views");
@@ -1887,6 +1920,7 @@ public class EntityMetadataGenerator {
                                 i.view() == null ? GenLevel.META : i.view().gen(),
                                 i.view() == null ? "" : i.view().discriminatorField(),
                                 i.view() == null ? List.of() : i.view().addons(),
+                                i.view() != null && i.view().dto(),
                                 i.properties(), i.lineNumber(), i.sourcePath()))
                         .collect(Collectors.toList());
 
@@ -1985,6 +2019,16 @@ public class EntityMetadataGenerator {
                     generateViewPropertyEnum(javaOutputRoot, viewPackage, view, fullProperties,
                             creatorBody, divergences, viewInfo, interfaceMap);
 
+                    if (generateDtoProjections && view.dto()) {
+                        // The read-projection writer (DEC-003/DEC-007, plan step 6.5): both halves are
+                        // required — the pass opt-in and the view's own marker — so a project that never
+                        // asks gains no Jackson dependency, and a marked view in a pass that did not ask
+                        // stays untouched. The writer takes the DEVELOPER's view interface and calls its
+                        // accessors, so no positional array is built on the way to JSON: that is the
+                        // whole point, since a SQL row or a Mongo document is not a ViewReader.
+                        ViewJsonGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
+                                divergences);
+                    }
                     if (generateAdapters) {
                         // DRAFT / EXPLORATION, and opt-in only: reached exclusively through
                         // `--adapters`. Generated adapters are ordinary committed Java in the view's
@@ -2778,7 +2822,11 @@ public class EntityMetadataGenerator {
                 .collect(Collectors.toList());
 
         GenLevelResolver.Resolved resolved = GenLevelResolver.resolve(attributes.gen(), decl, fieldNames);
-        return new ViewAttributes(resolved.level(), attributes.discriminatorField(), attributes.addons());
+        // `dto` is carried through verbatim: it is not a generation level, so nothing resolves it, and
+        // dropping it here is what a reader would notice last — the view would simply behave as if it
+        // carried no marker, and the projection pass would emit nothing for it.
+        return new ViewAttributes(resolved.level(), attributes.discriminatorField(), attributes.addons(),
+                attributes.dto());
     }
 
     /**
@@ -3256,6 +3304,7 @@ public class EntityMetadataGenerator {
             sb.append("      \"addons\": [");
             sb.append(view.addons().stream().map(EntityMetadataGenerator::escapeJson).map(s -> "\"" + s + "\"").collect(Collectors.joining(", ")));
             sb.append("],\n");
+            appendJsonField(sb, "dto", view.dto(), true, 6);
             sb.append("      \"properties\": [\n");
             for (int j = 0; j < view.properties().size(); j++) {
                 Property prop = view.properties().get(j);

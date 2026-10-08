@@ -101,6 +101,7 @@ public final class ViewAnnotationReader {
         GenLevel gen = GenLevel.DEFAULT;
         String discriminatorField = "";
         List<String> addons = new ArrayList<>();
+        boolean dto = false;
 
         for (Expression argument : view.getArguments()) {
             if (argument instanceof J.Empty) {
@@ -115,12 +116,13 @@ public final class ViewAnnotationReader {
                 case "gen" -> gen = parseGenLevel(value, diagnostics);
                 case "discriminatorField" -> discriminatorField = parseStringLiteral(value);
                 case "addons" -> addons.addAll(parseAddonNames(value, diagnostics));
+                case "dto" -> dto = parseBooleanLiteral(value, diagnostics);
                 default -> diagnostics.add("unknown_view_attribute: @" + name
                         + " is not a member of @View and is ignored");
             }
         }
 
-        return new Parsed(new ViewAttributes(gen, discriminatorField, addons), diagnostics);
+        return new Parsed(new ViewAttributes(gen, discriminatorField, addons, dto), diagnostics);
     }
 
     /** Whether the annotation's arguments are named attributes rather than one bare member. */
@@ -187,6 +189,25 @@ public final class ViewAnnotationReader {
             return text;
         }
         return value.toString();
+    }
+
+    /**
+     * The value of a {@code boolean} annotation member.
+     *
+     * <p>The LST holds a boolean literal as a {@link J.Literal} whose {@code JavaType.Primitive} is
+     * {@code BOOLEAN}, so the value arrives as a {@link Boolean}. Anything else — a constant
+     * reference (even {@code Boolean.TRUE}, which javac would fold but the tree does not), a
+     * parenthesised expression — is reported rather than guessed. The fall-back is {@code false},
+     * which is the attribute's own default, so a form the reader cannot see leaves the view exactly
+     * where it would be without the marker.</p>
+     */
+    private static boolean parseBooleanLiteral(Expression value, List<String> diagnostics) {
+        if (value instanceof J.Literal literal && literal.getValue() instanceof Boolean flag) {
+            return flag;
+        }
+        diagnostics.add("unresolved_view_attribute: '" + value
+                + "' is not a boolean literal; @View(dto) falls back to false");
+        return false;
     }
 
     /**

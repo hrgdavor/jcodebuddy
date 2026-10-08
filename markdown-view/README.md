@@ -88,13 +88,13 @@ returns a target only when it can point at something real:
 | `` `src/main/java/.../PersonSummary.java` ``                     | that file, line 1                                                |
 | `` `PersonSummary` `` — a type the class index knows             | its declaring file and **its declaration line**                  |
 | `[the builder](src/main/java/.../PersonSummaryBuilder.java#L48)` | that file, line 48                                               |
-| `` `scripts/gen.cmd` `` or `` `../AGENTS.md` ``                  | the file, resolved against the module **or** the repository root |
+| `` `scripts/gen.js` `` or `` `../AGENTS.md` ``                   | the file, resolved against the module **or** the repository root |
 | `` `.java` ``, `` `src/main/java/…` ``, `` `some_prose_word` ``  | **nothing** — left as plain text                                 |
 
 That last row is the rule that matters: **resolve or leave alone**. A document generator that linkifies
 everything path-shaped produces a page of links that look right and go nowhere, which is worse than plain
 text. The two-root search (module first, then repository) is what lets a module document reference
-`scripts/gen.cmd` without knowing how deep it is; the class index search is what lets prose name a *class*
+`scripts/gen.js` without knowing how deep it is; the class index search is what lets prose name a *class*
 without a path at all.
 
 `classIndexFrom` reads `.jcodebuddy/index/classes.json` (DEC-029). A missing index is not an error — the

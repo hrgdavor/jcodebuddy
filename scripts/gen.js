@@ -43,12 +43,25 @@ import { buildGateArgs, splitPropertyAdvice } from './lib/gate.js';
 import { delimiter, envWith, repoRoot, resolveJdk25, resolveMaven, run } from './lib/toolchain.js';
 
 const REPO = repoRoot();
-const EXAMPLE = join(REPO, 'hipster-entity-example');
+/**
+ * The example module's directory, **module-relative**, and the path the HTML renderer is given.
+ *
+ * <p>It carries the group folder (`hipster-entity/…`) because step 3.0o moved the modules into them, and
+ * both consumers of this constant resolve it against the repository root: Maven's `dependency:build-classpath`
+ * output is prepended by a path under here, and `scripts/entity-html/index.js` resolves `--module` the same
+ * way. A bare `hipster-entity-example` — what this line said before the move — silently resolved to a
+ * directory that does not exist, which is how this script ended up reporting a `GeneratorPreflight` failure
+ * while the real error was Maven refusing an unknown `-pl` selector.</p>
+ */
+const EXAMPLE_PATH = 'hipster-entity/hipster-entity-example';
+const EXAMPLE = join(REPO, EXAMPLE_PATH);
 const AGENT_STATE = join(EXAMPLE, '.jcodebuddy', 'agent-state');
 const PACKAGES = 'hr.hrg.hipster.entityexample.person.entity,'
   + 'hr.hrg.hipster.entityexample.paymentMethod.entity';
 const SOURCE_ROOT = join(EXAMPLE, 'src', 'main', 'java');
 const METADATA_DIR = join(EXAMPLE, '.jcodebuddy', 'metadata', 'entity');
+/** The tooling module's directory, for the same reason as {@link EXAMPLE_PATH}. */
+const TOOLING = join(REPO, 'hipster-entity', 'hipster-entity-tooling');
 
 /** The lines worth showing after a pass; the full log stays on disk. */
 const REPORT_KEYS = [
@@ -126,7 +139,7 @@ function report(logPath, status) {
     console.error('[gen] A failure naming GeneratorPreflight means the tooling being run is older than this '
       + 'invocation, so it would ignore --java-out and write generated .java into the metadata directory. '
       + 'Re-run; if it persists, the local repository copy is being resolved instead of the reactor: compile '
-      + 'with `bun scripts/mvn-jdk25.js -o -pl hipster-entity-tooling -am compile`.');
+      + 'with `bun scripts/mvn-jdk25.js -o -pl :hipster-entity-tooling -am compile`.');
   }
   return status;
 }
@@ -137,7 +150,7 @@ function htmlIndex(logPath) {
   // That case is gone: this script *is* Bun, so the renderer's exit status is the only outcome left.
   // A page that renders but cannot verify a link IS fatal: a link to the wrong line is worse than no link.
   return step('bun', ['run', join(REPO, 'scripts', 'entity-html', 'index.js'),
-    '--module', 'hipster-entity-example'], { logPath });
+    '--module', EXAMPLE_PATH], { logPath });
 }
 
 function main() {
@@ -165,7 +178,7 @@ function main() {
     // would run against a previous classpath. Its own log and its own file, so a watch session and a one-shot
     // pass can run at the same time without truncating each other's log.
     rmSync(classpathFile, { force: true });
-    const exportStatus = step(maven.command, ['-o', '-pl', 'project-automation', '-am', 'compile',
+    const exportStatus = step(maven.command, ['-o', '-pl', ':project-automation', '-am', 'compile',
       'dependency:build-classpath', `-Dmdep.outputFile=${classpathFile}`], { logPath, env });
     if (exportStatus !== 0) {
       console.error(`[gen] could not build the watch classpath; see ${logPath}`);
@@ -203,7 +216,8 @@ function main() {
   // --- the side-car pass -------------------------------------------------------------------------
   const classpathFile = join(AGENT_STATE, 'gen-classpath.txt');
   rmSync(classpathFile, { force: true });
-  const exportStatus = step(maven.command, ['-o', '-pl', 'hipster-entity-tooling,hipster-entity-example',
+  const exportStatus = step(maven.command, ['-o', '-pl',
+    ':hipster-entity-tooling,:hipster-entity-example',
     '-am', 'compile', 'dependency:build-classpath', `-Dmdep.outputFile=${classpathFile}`], { logPath, env });
   if (exportStatus !== 0) {
     return report(logPath, exportStatus);
@@ -211,7 +225,7 @@ function main() {
 
   let classpath;
   try {
-    classpath = classpathFrom(classpathFile, join(REPO, 'hipster-entity-tooling'));
+    classpath = classpathFrom(classpathFile, TOOLING);
   } catch (error) {
     console.error(`[gen] ${error.message}`);
     return report(logPath, 1);
@@ -228,8 +242,13 @@ function main() {
   // misapplied) and never on the CONVENTION ones (the view hierarchy naming rule, the Auditable package layout),
   // which are reported as `[advisory]` and cannot fail a pass in any policy. The example is clean of both today, so
   // this changes no output — it makes a future contract violation the build's problem rather than a log line.
+  // `--dto-projections` since plan step 6.5: the example demonstrates DEC-003/DEC-007's read-projection
+  // pattern, and `PersonDto` carries the `@View(dto = true)` marker. Both halves are required — the flag
+  // enables the emitter, the marker selects the view — so this line adds one committed class
+  // (`PersonDtoJson`) and leaves every unmarked view exactly as it was.
   status = step(jdk.java, ['-cp', classpath, 'hr.hrg.hipster.entity.tooling.EntityMetadataGenerator',
     SOURCE_ROOT, METADATA_DIR, '--java-out', SOURCE_ROOT, '--packages', PACKAGES, '--validate=STRICT',
+    '--dto-projections',
     '--run-record', join(METADATA_DIR, 'generation.json')], { logPath, env });
   if (status !== 0) {
     return report(logPath, status);

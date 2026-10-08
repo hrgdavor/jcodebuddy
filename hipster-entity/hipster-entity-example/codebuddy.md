@@ -50,19 +50,19 @@ there is no annotation processing and no compile hook: `mvn compile`,
 `mvn package` and `mvn test` compile the committed generated source and do
 nothing else. A pass is started by a person or a script — § 3 is how.
 
-| Part                                                                                        | Lives in                                                              | Wired here by                                                                                   | What it does for this module                                                    |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Entity generator** — `hr.hrg.hipster.entity.tooling.EntityMetadataGenerator`              | `hipster-entity-tooling`                                              | `scripts\gen.cmd` (primary), or the POM's phase-less `exec:java` goal `hipster-entity-generate` | parses the hand-written view interfaces and **rewrites 15 generator-owned `.java` files in place under `src/main/java`** — the main output — then writes the entity metadata JSON into `.jcodebuddy/metadata/entity/`, plus `generation.json` through `--run-record` (§ 0, § 5) |
-| **Tooling preflight** — `hr.hrg.hipster.entity.tooling.GeneratorPreflight`                  | `hipster-entity-tooling`                                              | `scripts\gen.cmd` runs it before every pass; also the phase-less `exec:java` goal `hipster-entity-preflight` | refuses to start a pass when the tooling on the classpath is too old to understand the flags the pass passes. An old tooling silently treats `--java-out` as a positional argument and writes generated Java into the metadata directory; this turns that into a loud failure before anything is written. See § 6.1 |
-| **Generation filter** — `--packages …`                                                      | tooling CLI flag                                                      | POM argument, used by `gen.cmd` and the goal                                                    | restricts *generation* to `…person.entity` and `…paymentMethod.entity`; indexing is still whole-tree, so cross-package supertypes and addons resolve. `example/`, `person/iface`, `person/record` therefore stay hand-written |
-| **`--java-out <dir>`**                                                                      | tooling CLI flag                                                      | POM argument (`src/main/java`)                                                                  | generated Java goes back next to the view it belongs to, not into the `.jcodebuddy/` metadata directory. This is what makes the generated source **committed** — DEC-019 / `AGENTS.md` § 1 |
-| **Entity rules validator** — `--validate` (bare = `REPORT`)                                 | `hipster-entity-tooling` → `…tooling.validation.EntityRulesValidator` | POM argument                                                                                    | runs the registered rules (`MarkerEntityRule`, `ViewInterfaceRule`, `ViewAnnotationRule`, `AuditableRule`, `EntityFieldEnumOrderRule`) *before* writing, prints every issue, and continues. A clean example prints `Validation: no issues in …` |
-| **Divergence reporter** — DEC-022 shape `kind, location, cause, current, canonical, action` | `…tooling.DivergenceReporter`                                         | every pass                                                                                      | explains what the pass did or declined to do. A clean pass over this module prints **3 informational** lines (`addon_field_collision` ×2, `nested_record_reused`) — that is the steady state, not a defect |
-| **Cooperative codegen** — DEC-020 (recognise by shape, preserve user edits) + DEC-021 (the two-line class-file header) | tooling emitters                           | every generated file here                                                                       | the header line 1 (`// {@link …}`) is what makes generated classes reachable from the view in a stock IDE; the JSON5 line 2 carries `enabled` (set `false` to freeze a file) and `entityFieldEnum:true` (marks an R1 ledger) |
-| **R1 field-enum ledger** — DEC-023                                                          | tooling + `…tooling.validation.EnumConstantOrderChecker`              | every `*_.java`                                                                                 | the constant list is an append-only ordinal layout; the new constant is appended, a removed field is tombstoned, never reordered |
-| **`.jcodebuddy/` marker + layout** — DEC-026                                                | this module                                                           | the directory itself                                                                            | the module's auxiliary metadata root: the entity model JSON that tooling consumers read, the watch/project indexes and checksum caches, human notes, and scratch. **Never generated source** — see § 0 |
-| **Runtime half** — `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`    | separate modules                                                      | `pom.xml` `<dependencies>` (compile scope)                                                      | what the generated code compiles against. These are **not** dev-time: they ship |
-| **Live watcher** — `EntityRegenerationWatcher`                                              | `project-automation`                                                  | `scripts\gen.cmd watch` (§ 3.5)                                                                 | the dev-time loop that regenerates on save. It takes the same flags; `project-automation` is not a dependency of this module, and the watch classpath is exported separately |
+| Part                                                                                        | Lives in                                                              | Wired here by                                                                                      | What it does for this module                                                    |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Entity generator** — `hr.hrg.hipster.entity.tooling.EntityMetadataGenerator`              | `hipster-entity-tooling`                                              | `bun scripts/gen.js` (primary), or the POM's phase-less `exec:java` goal `hipster-entity-generate` | parses the hand-written view interfaces and **rewrites 15 generator-owned `.java` files in place under `src/main/java`** — the main output — then writes the entity metadata JSON into `.jcodebuddy/metadata/entity/`, plus `generation.json` through `--run-record` (§ 0, § 5) |
+| **Tooling preflight** — `hr.hrg.hipster.entity.tooling.GeneratorPreflight`                  | `hipster-entity-tooling`                                              | `bun scripts/gen.js` runs it before every pass; also the phase-less `exec:java` goal `hipster-entity-preflight` | refuses to start a pass when the tooling on the classpath is too old to understand the flags the pass passes. An old tooling silently treats `--java-out` as a positional argument and writes generated Java into the metadata directory; this turns that into a loud failure before anything is written. See § 6.1 |
+| **Generation filter** — `--packages …`                                                      | tooling CLI flag                                                      | POM argument, used by `bun scripts/gen.js` and the goal                                            | restricts *generation* to `…person.entity` and `…paymentMethod.entity`; indexing is still whole-tree, so cross-package supertypes and addons resolve. `example/`, `person/iface`, `person/record` therefore stay hand-written |
+| **`--java-out <dir>`**                                                                      | tooling CLI flag                                                      | POM argument (`src/main/java`)                                                                     | generated Java goes back next to the view it belongs to, not into the `.jcodebuddy/` metadata directory. This is what makes the generated source **committed** — DEC-019 / `AGENTS.md` § 1 |
+| **Entity rules validator** — `--validate` (bare = `REPORT`)                                 | `hipster-entity-tooling` → `…tooling.validation.EntityRulesValidator` | POM argument                                                                                       | runs the registered rules (`MarkerEntityRule`, `ViewInterfaceRule`, `ViewAnnotationRule`, `AuditableRule`, `EntityFieldEnumOrderRule`) *before* writing, prints every issue, and continues. A clean example prints `Validation: no issues in …` |
+| **Divergence reporter** — DEC-022 shape `kind, location, cause, current, canonical, action` | `…tooling.DivergenceReporter`                                         | every pass                                                                                         | explains what the pass did or declined to do. A clean pass over this module prints **3 informational** lines (`addon_field_collision` ×2, `nested_record_reused`) — that is the steady state, not a defect |
+| **Cooperative codegen** — DEC-020 (recognise by shape, preserve user edits) + DEC-021 (the two-line class-file header) | tooling emitters                           | every generated file here                                                                          | the header line 1 (`// {@link …}`) is what makes generated classes reachable from the view in a stock IDE; the JSON5 line 2 carries `enabled` (set `false` to freeze a file) and `entityFieldEnum:true` (marks an R1 ledger) |
+| **R1 field-enum ledger** — DEC-023                                                          | tooling + `…tooling.validation.EnumConstantOrderChecker`              | every `*_.java`                                                                                    | the constant list is an append-only ordinal layout; the new constant is appended, a removed field is tombstoned, never reordered |
+| **`.jcodebuddy/` marker + layout** — DEC-026                                                | this module                                                           | the directory itself                                                                               | the module's auxiliary metadata root: the entity model JSON that tooling consumers read, the watch/project indexes and checksum caches, human notes, and scratch. **Never generated source** — see § 0 |
+| **Runtime half** — `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`    | separate modules                                                      | `pom.xml` `<dependencies>` (compile scope)                                                         | what the generated code compiles against. These are **not** dev-time: they ship |
+| **Live watcher** — `EntityRegenerationWatcher`                                              | `project-automation`                                                  | `bun scripts/gen.js watch` (§ 3.5)                                                                 | the dev-time loop that regenerates on save. It takes the same flags; `project-automation` is not a dependency of this module, and the watch classpath is exported separately |
 
 **Deliberately *not* used here**, so that a reader does not go looking:
 
@@ -86,7 +86,7 @@ The hand-written consumers worth looking at, which exercise the generated API:
 | JDK 25 | `C:\Program Files\Java\jdk-25` | `JCODEBUDDY_JDK25` |
 | Maven  | `D:\programs\mvn\bin\mvn.cmd`  | `JCODEBUDDY_MVN`   |
 
-Both are consumed by [`../scripts/mvn-jdk25.cmd`](../../scripts/mvn-jdk25.js), which
+Both are consumed by [`scripts/mvn-jdk25.js`](../../scripts/mvn-jdk25.js), which
 sets `JAVA_HOME` for the Maven JVM. **JDK 25 is required on both JVMs** — the root
 POM pins `maven.compiler.release=25`, and `.mvn/jvm.config` cannot select a JDK.
 
@@ -102,19 +102,19 @@ ordinary build and the generator are two separate things:
 - **the build** compiles this module and runs its tests; it never regenerates
   anything (verified: a plain `mvn compile` does not invoke the generator at all);
 - **a pass** rewrites the generated source; you start it yourself, once with
-  `scripts\gen.cmd`, or continuously with `scripts\gen.cmd watch`.
+  `bun scripts/gen.js`, or continuously with `bun scripts/gen.js watch`.
 
-A pass needs **no `mvn install` and builds no jar**: `scripts\gen.cmd` compiles
+A pass needs **no `mvn install` and builds no jar**: `bun scripts/gen.js` compiles
 the tooling in the reactor and asks Maven for the classpath the reactor itself
 resolved (see § 6.5 for why the obvious `mvn exec:java` cannot do this).
 
 ### How it gets triggered — only the first layer is required
 
-| Layer                                           | What it is                                                                  | Needed?                                                          |
-| ----------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **The pass** — `scripts\gen.cmd`, § 3.1         | the generator, run when you ask                                             | **Required.** This is the whole tool.                            |
-| **Watch mode** — `scripts\gen.cmd watch`, § 3.5 | that same pass, driven by a file watcher, so it regenerates after each save | Optional; the normal development loop. Still just the generator. |
-| **Sidecar / LSP**                               | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings | **A user-friendliness expansion only.** Nothing here needs one, and none is wired up for this generator today. |
+| Layer                                              | What it is                                                                  | Needed?                                                          |
+| -------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **The pass** — `bun scripts/gen.js`, § 3.1         | the generator, run when you ask                                             | **Required.** This is the whole tool.                            |
+| **Watch mode** — `bun scripts/gen.js watch`, § 3.5 | that same pass, driven by a file watcher, so it regenerates after each save | Optional; the normal development loop. Still just the generator. |
+| **Sidecar / LSP**                                  | IDE integration *on top of* watch mode: in-editor diagnostics, code actions, hover for the class-file header, divergence warnings | **A user-friendliness expansion only.** Nothing here needs one, and none is wired up for this generator today. |
 
 The boundary between the last two rows is the point worth remembering: **watch
 mode belongs to JCodeBuddy, not to a sidecar.** A sidecar consumes what watch mode
@@ -123,7 +123,7 @@ already produces; it never replaces it, and removing it leaves the tool complete
 ### 3.1 Regenerate — the one command
 
 ```bat
-scripts\gen.cmd
+bun scripts/gen.js
 ```
 
 The recommended entry point, and the one to reach for by default. It compiles the
@@ -140,7 +140,7 @@ metadata JSON, and leaves `git status` clean when nothing changed.
 ### 3.2 Regenerate *and* verify
 
 ```bat
-scripts\gen.cmd with-tests
+bun scripts/gen.js with-tests
 ```
 
 Regenerates, then runs the entity test set. The test that matters for the
@@ -151,7 +151,7 @@ is **regenerate and commit**, not "adjust the test" (§ 4.3).
 ### 3.3 Verify only that regeneration is byte-identical
 
 ```bat
-scripts\mvn-jdk25.cmd hipster-entity test "-Dtest=ExampleRegenerationTest" "-Dsurefire.failIfNoSpecifiedTests=false"
+bun scripts/mvn-jdk25.js hipster-entity test "-Dtest=ExampleRegenerationTest" "-Dsurefire.failIfNoSpecifiedTests=false"
 ```
 
 9 tests, ~5 s. The fastest answer to "did my change to a view break the generated
@@ -161,7 +161,7 @@ tree?", and it does **not** regenerate. Run from PowerShell it needs the
 ### 3.4 The recorded gate — test only, and it no longer regenerates
 
 ```bat
-scripts\mvn-jdk25.cmd
+bun scripts/mvn-jdk25.js
 ```
 
 `mvn -o -pl <the recorded module set> -am clean test`. This is the gate: it
@@ -173,7 +173,7 @@ generator.
 ### 3.5 Live watch — regenerate on every save
 
 ```bat
-scripts\gen.cmd watch
+bun scripts/gen.js watch
 ```
 
 Regenerates now, then keeps watching `src/main/java` and regenerates after each
@@ -188,7 +188,7 @@ the watcher never feeds on its own output. The default metadata directory (its
 this module's `.jcodebuddy/metadata/entity`.
 
 `project-automation` is **not** a dependency of this module, and its classpath is
-exported separately by `gen.cmd watch`, so a build here never depends on it.
+exported separately by `bun scripts/gen.js watch`, so a build here never depends on it.
 
 ### 3.6 Compile without regenerating
 
@@ -196,7 +196,7 @@ There is nothing to switch off any more: generation never runs on a build. A pla
 compile is all you need.
 
 ```bat
-scripts\mvn-jdk25.cmd -o -pl hipster-entity-example -am compile
+bun scripts/mvn-jdk25.js -o -pl hipster-entity-example -am compile
 ```
 
 (The old `-Djcodebuddy.entity.codegen.skip=true` property existed only to skip
@@ -205,7 +205,7 @@ lifecycle-bound executions and has been removed with them.)
 ### 3.7 Ask which generator is on the classpath
 
 ```bat
-scripts\gen.cmd
+bun scripts/gen.js
 ```
 
 Every pass prints its identity as its first output — name, revision, and **where
@@ -214,17 +214,17 @@ its classes came from** — so the pass log already answers "which tooling ran?"
 
 A path under `~/.m2` means the local repository's copy is being used rather than
 the working tree; `…/hipster-entity/hipster-entity-tooling/target/classes` is the reactor's own
-output, which is what `scripts\gen.cmd` always produces. To ask the question
+output, which is what `bun scripts/gen.js` always produces. To ask the question
 without generating anything, run the generator with `--version` on the exported
 classpath (see § 3.8).
 
 ### 3.8 Hand-run the generator CLI with an exported classpath
 
 When you want to see the generator's own output in your terminal, or pass a flag
-that `gen.cmd` does not, export the classpath once and call it directly:
+that `bun scripts/gen.js` does not, export the classpath once and call it directly:
 
 ```bat
-scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling -am compile dependency:build-classpath "-Dmdep.outputFile=hipster-entity-example\.jcodebuddy\agent-state\gen-classpath.txt"
+bun scripts/mvn-jdk25.js -o -pl hipster-entity-tooling -am compile dependency:build-classpath "-Dmdep.outputFile=hipster-entity-example\.jcodebuddy\agent-state\gen-classpath.txt"
 ```
 
 then
@@ -241,7 +241,7 @@ java -cp "hipster-entity-tooling\target\classes;%CP%" ^
      --run-record hipster-entity-example\.jcodebuddy\metadata\entity\generation.json
 ```
 
-Verified: same flag surface as the POM goal and `gen.cmd`, same output — generated
+Verified: same flag surface as the POM goal and `bun scripts/gen.js`, same output — generated
 `.java` back into `src/main/java`, JSON only in the metadata directory. Note the
 `hipster-entity-tooling\target\classes` prefix: `dependency:build-classpath`
 lists a module's *dependencies*, not its own output. Do **not** hand-build the
@@ -255,18 +255,18 @@ files).
 
 `cmd.exe` splits an **unquoted** batch argument at `=` and `.` *before* a `.cmd`
 file sees it, so an unquoted `-Dtest=SomeTest` reaches the script as two tokens
-(`-Dtest`, `SomeTest`). `mvn-jdk25.cmd` therefore **refuses to run** (exit 2) on
+(`-Dtest`, `SomeTest`). `mvn-jdk25.js` therefore **refuses to run** (exit 2) on
 any `-D` token without an `=` rather than silently dropping the `-pl` list and
 building the whole reactor. Consequences:
 
 - quote the property at the call site: `"-DskipTests=true"`;
 - always give boolean properties an explicit value;
-- from PowerShell, wrap the whole thing: `cmd /c 'scripts\mvn-jdk25.cmd hipster-entity test "-Dtest=X" "-Dsurefire.failIfNoSpecifiedTests=false"'`.
+- from PowerShell, wrap the whole thing: `cmd /c 'bun scripts/mvn-jdk25.js hipster-entity test "-Dtest=X" "-Dsurefire.failIfNoSpecifiedTests=false"'`.
 
 ### 3.10 The HTML entity index — read the module from inside the IDE
 
 ```bat
-scripts\gen.cmd
+bun scripts/gen.js
 ```
 
 A pass now ends by rendering `.jcodebuddy\metadata\entity\index.html`, and that is the file to open:
@@ -279,8 +279,8 @@ and the `@FieldSource` line for a `DERIVED`/`JOINED` field.
 To render it on its own, without a generation pass:
 
 ```bat
-scripts\entity-html.cmd                              render with the default paths
-scripts\entity-html.cmd --module <dir>               another converted module
+bun scripts/entity-html/index.js                              render with the default paths
+bun scripts/entity-html/index.js --module <dir>               another converted module
 bun run scripts/entity-html/index.js --help          the renderer's own flag surface
 bun test                                             renderer tests, from scripts\
 ```
@@ -525,13 +525,13 @@ is real.
 
 ```powershell
 Remove-Item hipster-entity-example\.jcodebuddy\metadata\entity\*.metadata.json
-scripts\gen.cmd
+bun scripts/gen.js
 ```
 
 Verified end to end: with the three files deleted, a pass recreates all three, two
 consecutive passes produce **byte-identical** JSON (checked by hash), and
 `git status` stays clean. Note that only a **pass** recreates them: the recorded
-gate (`scripts\mvn-jdk25.cmd`) compiles and tests, and no longer regenerates
+gate (`bun scripts/mvn-jdk25.js`) compiles and tests, and no longer regenerates
 anything, because nothing is bound to the lifecycle any more (§ 3.4). A pass that
 *cannot* regenerate — a classpath pointing at an older tooling — fails instead of
 pretending (§ 6.1), so "the files are missing and the build is green" is no longer
@@ -563,7 +563,7 @@ pass passes `--run-record`:
 
 The `classpath` field is the answer to "which tooling produced this tree?":
 `…/hipster-entity/hipster-entity-tooling/target/classes/` is the working tree's own output, while a
-path under `~/.m2` means the local repository's copy was used. `scripts\gen.cmd`
+path under `~/.m2` means the local repository's copy was used. `bun scripts/gen.js`
 always produces the former.
 
 It is the machine-readable answer to "what generated this tree, with which tooling,
@@ -606,8 +606,8 @@ stay.
 
 | Guard                                                     | Where                                             | What it catches |
 | --------------------------------------------------------- | ------------------------------------------------- | --------------- |
-| `GeneratorPreflight` — run by `scripts\gen.cmd` before every pass, and available as the phase-less `exec:java` goal `hipster-entity-preflight` | `hipster-entity-tooling` | a tooling too old for the flags the pass passes. The class does **not exist** in an old build, so the run fails **on the missing class, before anything is written**. A flag could not do this job: an old tooling does not know it and swallows it as another positional argument |
-| `EntityMetadataGenerator.rejectJavaOutputUnderJcodebuddy` | the tooling, before the first write of every pass | the write itself — at every entry point: the CLI, `scripts\gen.cmd`, the POM's `exec:java` goal, and `EntityRegenerationWatcher` |
+| `GeneratorPreflight` — run by `bun scripts/gen.js` before every pass, and available as the phase-less `exec:java` goal `hipster-entity-preflight` | `hipster-entity-tooling` | a tooling too old for the flags the pass passes. The class does **not exist** in an old build, so the run fails **on the missing class, before anything is written**. A flag could not do this job: an old tooling does not know it and swallows it as another positional argument |
+| `EntityMetadataGenerator.rejectJavaOutputUnderJcodebuddy` | the tooling, before the first write of every pass | the write itself — at every entry point: the CLI, `bun scripts/gen.js`, the POM's `exec:java` goal, and `EntityRegenerationWatcher` |
 
 **What you see now** (measured, with the same outdated `~/.m2` jar that produced the
 original trap, invoking the explicit exec goal):
@@ -622,7 +622,7 @@ java.lang.ClassNotFoundException: hr.hrg.hipster.entity.tooling.GeneratorPreflig
 from the working tree instead:
 
 ```bat
-scripts\gen.cmd
+bun scripts/gen.js
 ```
 
 **Why there is no lifecycle phase any more.** `generate-sources` was the phase used
@@ -637,9 +637,9 @@ writes it runs beside the build rather than inside it.
 
 ### 6.2 Running a pass
 
-Use `scripts\gen.cmd` (§ 3.1): it always works, needs no `mvn install`, builds no
-jar, and prints what the pass did. `scripts\gen.cmd with-tests` adds the test set,
-`scripts\gen.cmd watch` runs it live. If you ran an old broken pass before this was
+Use `bun scripts/gen.js` (§ 3.1): it always works, needs no `mvn install`, builds no
+jar, and prints what the pass did. `bun scripts/gen.js with-tests` adds the test set,
+`bun scripts/gen.js watch` runs it live. If you ran an old broken pass before this was
 guarded, remove its debris with
 `Remove-Item -Recurse hipster-entity-example\.jcodebuddy\metadata\entity\hr`.
 
@@ -654,7 +654,7 @@ keeps such a file ignored even if the metadata subtree is opted in as a contract
 
 ### 6.3 Classpath scope is load-bearing in the exec-goal form
 
-This applies to the **explicit `exec:java` goal**, not to `scripts\gen.cmd` (which
+This applies to the **explicit `exec:java` goal**, not to `bun scripts/gen.js` (which
 never uses `exec:java` — § 6.5).
 
 `exec:java` defaults to the *runtime* classpath scope, which excludes `provided`
@@ -669,9 +669,9 @@ Both executions therefore carry it.
 See § 3.9. The shortcut's behaviour (refuse rather than degrade) is right; the
 ergonomics from PowerShell are not, and this one is **not** fixed.
 `cmd /c '… "-Dx=y" …'` is the workaround. A `.ps1` companion to
-`scripts\mvn-jdk25.cmd` is the obvious next step.
+`bun scripts/mvn-jdk25.js` is the obvious next step.
 
-### 6.5 Why `scripts\gen.cmd` does not use `mvn exec:java`
+### 6.5 Why `bun scripts/gen.js` does not use `mvn exec:java`
 
 Maven's `exec:java` looks like the obvious way to run the generator, and it is the
 wrong tool for a pass in a multi-module reactor. Two reasons, both measured:
@@ -690,11 +690,11 @@ wrong tool for a pass in a multi-module reactor. Two reasons, both measured:
 Maven's official answer for "use the reactor's classes without `install`" is
 [`dependency:build-classpath`](https://maven.apache.org/plugins/maven-dependency-plugin/build-classpath-mojo.html),
 which maps a reactor dependency to that module's `target/classes` directory. That is
-what `scripts\gen.cmd` uses, and it is why the pass needs **no jar and no
+what `bun scripts/gen.js` uses, and it is why the pass needs **no jar and no
 `mvn install`**:
 
 ```bat
-scripts\mvn-jdk25.cmd -o -pl hipster-entity-tooling,hipster-entity-example -am compile ^
+bun scripts/mvn-jdk25.js -o -pl hipster-entity-tooling,hipster-entity-example -am compile ^
     dependency:build-classpath "-Dmdep.outputFile=<abs path>"
 java -cp "hipster-entity-tooling\target\classes;<the exported classpath>" ^
      hr.hrg.hipster.entity.tooling.EntityMetadataGenerator <args…>
@@ -706,7 +706,7 @@ Two details worth knowing if you write your own invocation:
   runs per module and a relative path is resolved against each module's base
   directory;
 - the exported file lists a module's **dependencies**, not its own output, so the
-  entry point's own `target/classes` has to be prepended (both `gen.cmd` paths do
+  entry point's own `target/classes` has to be prepended (both `bun scripts/gen.js` paths do
   this).
 
 Because the compile step is incremental, a re-run after an edit costs one
@@ -722,7 +722,7 @@ compiled, the `java -cp` command alone is the whole pass (§ 3.8).
   `hr.hrg.hipster.entity.paymentMethod`; the code lives in
   `hr.hrg.hipster.entityexample.paymentMethod`. Stale sample documentation, still open.
 - ~~"There is no single command that says 'regenerate and tell me what changed'"~~ —
-  `scripts\gen.cmd` prints the pass summary, and `generation.json` (§ 5.6) keeps it.
+  `bun scripts/gen.js` prints the pass summary, and `generation.json` (§ 5.6) keeps it.
 
 ---
 

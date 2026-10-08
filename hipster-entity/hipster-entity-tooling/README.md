@@ -32,14 +32,30 @@ members implied by the cumulative
 ladder (`DEFAULT < META < RECORD < WRITABLE < BUILDER < BUILDER_TRACKED
 < BUILDER_ALL`):
 
-| Output                                                                                  | Emitted by                        | Generator                      |
-| --------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------ |
-| `<View>_` field enum (implements `FieldDef`, with `ViewMeta`, `forName`, `NAME_MAPPER`) | `META` and above                  | `FieldBoilerplateGenerator`    |
-| `<View>Record` / the nested record                                                      | `RECORD` and above                | `ViewRecordGenerator`          |
-| the nested `Write` interface                                                            | `WRITABLE` and above              | — (declared in the view)       |
-| `<View>Builder`                                                                         | `BUILDER` and above               | `ViewBuilderGenerator`         |
-| `<View>BuilderTracking`                                                                 | `BUILDER_TRACKED` / `BUILDER_ALL` | `ViewTrackingBuilderGenerator` |
-| `<View>RowAdapter` + `<View>Binder` — **DRAFT / EXPLORATION, opt-in**                   | `--adapters` only                 | `ViewAdapterGenerator`         |
+| Output                                                                                  | Emitted by                                      | Generator                      |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------ |
+| `<View>_` field enum (implements `FieldDef`, with `ViewMeta`, `forName`, `NAME_MAPPER`) | `META` and above                                | `FieldBoilerplateGenerator`    |
+| `<View>Record` / the nested record                                                      | `RECORD` and above                              | `ViewRecordGenerator`          |
+| the nested `Write` interface                                                            | `WRITABLE` and above                            | — (declared in the view)       |
+| `<View>Builder`                                                                         | `BUILDER` and above                             | `ViewBuilderGenerator`         |
+| `<View>BuilderTracking`                                                                 | `BUILDER_TRACKED` / `BUILDER_ALL`               | `ViewTrackingBuilderGenerator` |
+| `<View>RowAdapter` + `<View>Binder` — **DRAFT / EXPLORATION, opt-in**                   | `--adapters` only                               | `ViewAdapterGenerator`         |
+| `<View>Json` — direct JSON writer for a read projection                                 | `--dto-projections` **and** `@View(dto = true)` | `ViewJsonGenerator`            |
+
+`<View>Json` is the read-projection half of DEC-003/DEC-007 (plan step 6.5): it writes the view's
+own accessors straight into a caller-owned `JsonGenerator` — `gen.writeNumberProperty("id",
+source.id())` per field — so nothing reflects and, unlike the ordinal serializers, no positional array
+is built on the way to JSON. That is the point: a SQL row or a Mongo document is not a `ViewReader`,
+and materializing one into a `ViewReader` first is the cost a projection exists to avoid. A composite
+field goes through the caller's codec (`writePOJOProperty`), because the JSON shape of a collection is
+the caller's `ObjectMapper`'s decision.
+
+> **Status: opt-in, twice.** The emitter runs only when the pass carries `--dto-projections` **and**
+> the view carries `@View(dto = true)`; either half alone emits nothing, so a project that never asks
+> receives no class that imports Jackson, and a marked view in a default pass gains nothing.
+> `ViewJsonGeneratorTest` pins both halves, the emitted shape, that it compiles, and that the document
+> it writes is the one the view's own field enum describes. `hipster-entity-example`'s `PersonDto` (and
+> its committed `PersonDtoJson`) is the worked example.
 
 Adapters give you
 `<View>RowAdapter.fromResultSet(ResultSet, ViewMeta)` and
@@ -259,8 +275,8 @@ kept reproducible.
 
 ```text
 java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir> [--packages a.b,c.d] [--adapters]
-                                    [--java-out <dir>] [--mapper <Src>:<Tgt>[:<ClassName>]] [--validate[=MODE]]
-                                    [--run-record <file>] [--version]
+                                    [--dto-projections] [--java-out <dir>] [--mapper <Src>:<Tgt>[:<ClassName>]]
+                                    [--validate[=MODE]] [--run-record <file>] [--version]
 ```
 
 | Flag                                 | Meaning |
@@ -269,6 +285,7 @@ java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir>
 | *(positional 2)*                     | the output directory for the metadata JSON, one `<Marker>.metadata.json` per entity. It **must not be under a `.jcodebuddy/` directory** when generated Java would land there — see the layout guard below |
 | `--packages a.b,c.d`                 | restrict **generation** to these packages. It does **not** restrict indexing: every source file under the root is still parsed, so cross-package supertypes and addons stay resolvable. Omitting the flag generates everything (the historical behaviour) |
 | `--adapters`                         | **[DRAFT/EXPLORATION, opt-in]** also emit `<View>RowAdapter` / `<View>Binder` next to each view. Off unless given; no other flag, property or profile enables it |
+| `--dto-projections`                  | **[opt-in]** also emit `<View>Json` — the direct JSON writer for a **read projection** (DEC-003/DEC-007) — but only for views marked `@View(dto = true)`. Both halves are required: the flag enables the emitter, the marker selects the view. Off unless given, so no project receives a Jackson-importing class it did not ask for |
 | `--java-out <dir>`                   | write generated `.java` there instead of into the positional output directory. A pass passes it so committed source is regenerated **in place** while the metadata JSON stays in `.jcodebuddy/metadata/entity` — `bun scripts/gen.js`, the module POM's explicit `exec:java` goal, and a hand run all do |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two **views**. Repeatable. Defaults: class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
 | `--validate[=OFF\|REPORT\|STRICT]`   | run the entity rules over the source root **before** writing anything. Bare `--validate` means `REPORT`: print every issue and continue. `STRICT` refuses to write until they are fixed, so a violating tree is never half-regenerated. `OFF` is the default for a library caller, so introducing validation cannot change an unrelated build. Warnings (the R1 `allowReorder` escape hatch) do not fail a pass unless `STRICT` |
@@ -516,19 +533,19 @@ generated declaration findable from the view.
 
 ### Refactor-sensitive: derived from `<View>`
 
-| Emitted name               | Derivation                                          | IDE contract                                                                   |
-| -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `View_` (the field enum)   | `<View>` + `_`                                      | DEC-021 header `{@link <view-fqn>}`; the enum is the package-mate of the view  |
-| `ViewBuilder`              | `<View>` + `Builder`                                | DEC-021 header `{@link <view-fqn>}`                                            |
-| `ViewBuilderTracking`      | `<View>` + `BuilderTracking`                        | DEC-021 header `{@link <view-fqn>}`                                            |
-| `ViewRecord`               | `<View>` + `Record` (or the nested `record Record`) | DEC-021 header `{@link <view-fqn>}`                                            |
-| `Write` (nested interface) | fixed member name on the view                       | declared in the view itself; the IDE sees the declaration                      |
-| `toBuilder()`              | fixed method name on the view                       | declared on the view (or emitted as a `default`); the IDE sees the declaration |
-| `toBuilderTracking()`      | fixed method name on the view                       | declared on the view (or emitted as a `default`); the IDE sees the declaration |
-| `META`                     | fixed constant on `View_`                           | static field on the field enum, which already links to the view                |
-| `forName`                  | fixed method on `View_`                             | declared on the field enum                                                     |
-| `NAME_MAPPER`              | fixed constant on `View_`                           | declared on the field enum                                                     |
-| `annotations()`            | fixed method on `View_`, overriding `FieldDef`      | `@Override` on the emitted method (DEC-047): the API method's name is the contract, so an IDE rename of it **breaks the generated file's compilation** rather than letting the metadata drift — refactor-sensitive by construction, and the strongest row in this table |
+| Emitted name               | Derivation                                                      | IDE contract                                                                   |
+| -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `View_` (the field enum)   | `<View>` + `_`                                                  | DEC-021 header `{@link <view-fqn>}`; the enum is the package-mate of the view  |
+| `ViewBuilder`              | `<View>` + `Builder`                                            | DEC-021 header `{@link <view-fqn>}`                                            |
+| `ViewBuilderTracking`      | `<View>` + `BuilderTracking`                                    | DEC-021 header `{@link <view-fqn>}`                                            |
+| `ViewRecord`               | `<View>` + `Record` (or the nested `record Record`)             | DEC-021 header `{@link <view-fqn>}`                                            |
+| `Write` (nested interface) | fixed member name on the view                                   | declared in the view itself; the IDE sees the declaration                      |
+| `toBuilder()`              | fixed method name on the view                                   | declared on the view (or emitted as a `default`); the IDE sees the declaration |
+| `toBuilderTracking()`      | fixed method name on the view                                   | declared on the view (or emitted as a `default`); the IDE sees the declaration |
+| `META`                     | fixed constant on `View_`                                       | static field on the field enum, which already links to the view                |
+| `forName`                  | fixed method on `View_`                                         | declared on the field enum                                                     |
+| `NAME_MAPPER`              | fixed constant on `View_`                                       | declared on the field enum                                                     |
+| `annotations()`            | fixed method on `View_`, overriding `FieldDef`                  | `@Override` on the emitted method (DEC-047): the API method's name is the contract, so an IDE rename of it **breaks the generated file's compilation** rather than letting the metadata drift — refactor-sensitive by construction, and the strongest row in this table |
 | `FieldAnnotation` values   | the accessor's own annotations, as qualified name + source text | the value is the *annotation's* name, not a Java identifier this generator derived: renaming the constraint class is a library change, and the emitted string is the metadata a factory reads (DEC-047) |
 
 Rule of thumb: **if the name is `<View>` plus a suffix, or a fixed
