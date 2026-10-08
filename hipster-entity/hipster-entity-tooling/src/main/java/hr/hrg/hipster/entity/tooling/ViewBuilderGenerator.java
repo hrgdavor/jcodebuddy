@@ -76,6 +76,22 @@ public final class ViewBuilderGenerator {
     public static Result generate(Path outputRoot, String packageName, ViewMeta view,
                                   List<Property> allProperties, boolean nestedRecord,
                                   DivergenceReporter divergences) throws IOException {
+        return generate(outputRoot, packageName, view, allProperties, nestedRecord, List.of(), divergences);
+    }
+
+    /**
+     * As above, with the views this builder can {@code merge} from (plan step 7.3).
+     *
+     * <p>The partners are decided by the caller — {@code EntityMetadataGenerator}'s {@code --merge} requests —
+     * because a builder cannot know which other views exist. Each partner contributes one
+     * {@code merge(ViewN other)} method, emitted through {@link ViewMergeGenerator} so the untracked builder and the
+     * proxy variant copy exactly the same fields with exactly the same diagnostics; the two differ in what their
+     * setters <em>do</em>, not in which fields are shared.
+     */
+    public static Result generate(Path outputRoot, String packageName, ViewMeta view,
+                                  List<Property> allProperties, boolean nestedRecord,
+                                  List<ViewMergeGenerator.Partner> partners,
+                                  DivergenceReporter divergences) throws IOException {
         Path packageDir = packageName == null || packageName.isBlank()
                 ? outputRoot
                 : outputRoot.resolve(packageName.replace('.', '/'));
@@ -97,7 +113,8 @@ public final class ViewBuilderGenerator {
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         CooperativeCodegen.Reconciled reconciled = CooperativeCodegen.reconcileMembers(
                 builderFile, builderClass,
-                source(packageName, view, allProperties, writable, builderClass, nestedRecord),
+                source(packageName, view, allProperties, writable, builderClass, nestedRecord,
+                        mergePlans(view, allProperties, partners, divergences, builderClass)),
                 CooperativeCodegen.Reconciliation.ALL, retired);
         if (divergences != null) {
             divergences.addAll(reconciled.divergences());
@@ -156,8 +173,29 @@ public final class ViewBuilderGenerator {
         }
     }
 
+    /**
+     * What each partner's merge would copy, decided once so both builder variants agree.
+     *
+     * <p>Deciding here rather than inside {@code source(...)} keeps the diagnostics in one place: a mismatch is
+     * reported once per builder that is actually emitted, which is twice for a view generated at
+     * {@code BUILDER_ALL} — and {@link DivergenceReporter} de-duplicates by identity, so the reader sees one entry.
+     */
+    private static List<ViewMergeGenerator.Plan> mergePlans(ViewMeta view, List<Property> allProperties,
+                                                            List<ViewMergeGenerator.Partner> partners,
+                                                            DivergenceReporter divergences, String builderClass) {
+        if (partners == null || partners.isEmpty()) {
+            return List.of();
+        }
+        List<ViewMergeGenerator.Plan> plans = new java.util.ArrayList<>();
+        for (ViewMergeGenerator.Partner partner : partners) {
+            plans.add(ViewMergeGenerator.plan(builderClass, view.name(), allProperties, partner, divergences));
+        }
+        return plans;
+    }
+
     private static String source(String packageName, ViewMeta view, List<Property> allProperties,
-                                 List<Property> writable, String builderClass, boolean nestedRecord) {
+                                 List<Property> writable, String builderClass, boolean nestedRecord,
+                                 List<ViewMergeGenerator.Plan> mergePlans) {
         String viewName = view.name();
         StringBuilder sb = new StringBuilder();
 
@@ -243,6 +281,14 @@ public final class ViewBuilderGenerator {
             sb.append("        this.").append(property.name()).append(" = value;\n");
             sb.append("        return this;\n");
             sb.append("    }\n\n");
+        }
+
+        // Merges, after the setters they compose with (plan step 7.3). A merge is an ordinary member, so
+        // CooperativeCodegen's member-by-member reconciliation preserves a hand-edited one and reports an edit to a
+        // generated one — the same contract every other generated member here has.
+        for (ViewMergeGenerator.Plan mergePlan : mergePlans) {
+            sb.append(ViewMergeGenerator.method(builderClass, mergePlan));
+            sb.append('\n');
         }
 
         // Positional mutator: writable ordinals only.

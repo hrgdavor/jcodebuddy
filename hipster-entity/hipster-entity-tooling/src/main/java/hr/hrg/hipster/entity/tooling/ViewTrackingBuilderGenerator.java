@@ -98,6 +98,24 @@ public final class ViewTrackingBuilderGenerator {
                                   java.util.Set<String> nonTrackableViewNames,
                                   DivergenceReporter divergences)
             throws IOException {
+        return generate(outputRoot, packageName, view, allProperties, trackableTypes, nonTrackableViewNames,
+                List.of(), divergences);
+    }
+
+    /**
+     * As above, with the views this proxy builder can {@code merge} from (plan step 7.3, the proxy variant).
+     *
+     * <p>The partners are the same ones the untracked builder is given, and both decide through
+     * {@link ViewMergeGenerator}: a merge copies fields, and a tracked setter already records the change and notifies
+     * listeners, so the merge inherits the tracking behaviour by calling the setters rather than the fields.
+     */
+    public static Result generate(Path outputRoot, String packageName, ViewMeta view,
+                                  List<Property> allProperties,
+                                  java.util.Map<String, TrackableType> trackableTypes,
+                                  java.util.Set<String> nonTrackableViewNames,
+                                  List<ViewMergeGenerator.Partner> partners,
+                                  DivergenceReporter divergences)
+            throws IOException {
         Path packageDir = packageName == null || packageName.isBlank()
                 ? outputRoot
                 : outputRoot.resolve(packageName.replace('.', '/'));
@@ -120,7 +138,8 @@ public final class ViewTrackingBuilderGenerator {
         // edit to one it DOES produce is reported as generated_member_diverged.
         CooperativeCodegen.Reconciled reconciled = CooperativeCodegen.reconcileMembers(
                 builderFile, builderClass,
-                source(packageName, view, allProperties, writable, builderClass, nested),
+                source(packageName, view, allProperties, writable, builderClass, nested,
+                        mergePlans(view, allProperties, partners, divergences, builderClass)),
                 CooperativeCodegen.Reconciliation.ALL,
                 // A retired field's setter was emitted by an earlier revision and stopped on purpose
                 // (R1.4), so it must not be read as the developer's own and carried back.
@@ -253,8 +272,28 @@ public final class ViewTrackingBuilderGenerator {
         return arguments;
     }
 
+    /**
+     * What each partner's merge would copy (plan step 7.3), decided through the shared
+     * {@link ViewMergeGenerator} so the proxy variant and the untracked builder merge <b>the same fields</b> and
+     * report <b>the same diagnostics</b>. What differs between the two builders is what a setter <em>does</em>
+     * (this one records the change and notifies listeners); that is not something a merge should decide.
+     */
+    private static List<ViewMergeGenerator.Plan> mergePlans(ViewMeta view, List<Property> allProperties,
+                                                            List<ViewMergeGenerator.Partner> partners,
+                                                            DivergenceReporter divergences, String builderClass) {
+        if (partners == null || partners.isEmpty()) {
+            return List.of();
+        }
+        List<ViewMergeGenerator.Plan> plans = new java.util.ArrayList<>();
+        for (ViewMergeGenerator.Partner partner : partners) {
+            plans.add(ViewMergeGenerator.plan(builderClass, view.name(), allProperties, partner, divergences));
+        }
+        return plans;
+    }
+
     private static String source(String packageName, ViewMeta view, List<Property> allProperties,
-                                 List<Property> writable, String builderClass, List<Nested> nested) {
+                                 List<Property> writable, String builderClass, List<Nested> nested,
+                                 List<ViewMergeGenerator.Plan> mergePlans) {
         String viewName = view.name();
         String enumName = viewName + "_";
         String builderType = allProperties.size() <= 64 ? "EEnumSetBuilder64" : "EEnumSetBuilderLarge";
@@ -333,6 +372,14 @@ public final class ViewTrackingBuilderGenerator {
                     .append(property.name()).append("() { return ").append(property.name()).append("; }\n");
         }
         sb.append('\n');
+
+        // Merges, before the positional accessors (plan step 7.3, the proxy variant). They call the generated
+        // setters rather than the fields, so a merged field is tracked exactly like one set by hand — a merge that
+        // wrote the fields directly would leave `changedValues()` silent about a change it made.
+        for (ViewMergeGenerator.Plan mergePlan : mergePlans) {
+            sb.append(ViewMergeGenerator.method(builderClass, mergePlan));
+            sb.append('\n');
+        }
 
         // Positional access, matching the ordinal contract.
         //

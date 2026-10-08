@@ -63,7 +63,7 @@ public class EntityMetadataGenerator {
 
     /** Every CLI flag this build understands; {@code --version} prints it. */
     public static final List<String> SUPPORTED_FLAGS = List.of(
-            "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper",
+            "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper", "--merge",
             "--adapters", "--run-record", "--force", "--version");
 
     /**
@@ -549,6 +549,36 @@ public class EntityMetadataGenerator {
     }
 
     /**
+     * The requested builder merges ({@code --merge}), each {@code <hostView>:<partnerView>} (plan step 7.3).
+     *
+     * <p>The same shape as {@link #mapperRequests} and for the same reason: a merge is between two views a developer
+     * chose, and generating every pair would be noise. It is repeatable, and a host may name several partners — each
+     * one becomes its own {@code merge(ViewN other)} method on that host's builders (both the untracked builder and
+     * the tracking proxy, which share {@link ViewMergeGenerator} so they merge the same fields).
+     */
+    private static List<String> mergeRequests = new ArrayList<>();
+
+    /** Sets the requested builder merges ({@code --merge}). */
+    public static void setMergeRequests(List<String> requests) {
+        mergeRequests = requests == null ? new ArrayList<>() : new ArrayList<>(requests);
+    }
+
+    /**
+     * What a merge request needs in order to re-emit a view's builders (plan step 7.3).
+     *
+     * <p>Recorded per view as the pass emits it, because a merge needs <b>both</b> views and the partner may be
+     * resolved later in the same pass. Every field is one the builder emitters were given at that moment, so
+     * re-running them here cannot emit anything different from the first emission apart from the merge methods.
+     */
+    private record MergeModel(String packageName, ViewMeta view, List<Property> properties, boolean nestedRecord,
+                              java.util.Map<String, TrackableType> trackableTypes,
+                              java.util.Set<String> nonTrackableViewNames, boolean trackingBuilder) {
+    }
+
+    /** The per-view builder inputs of this pass, for {@link #generateRequestedMerges}. */
+    private static final java.util.Map<String, MergeModel> mergeModels = new java.util.LinkedHashMap<>();
+
+    /**
      * How the entity-rules validator participates in a generation pass (plan.dsflash § 6.3/1.13).
      *
      * <p>Task 1.13 says <em>"wire the validator into {@code EntityMetadataGenerator.generate(...)}:
@@ -717,9 +747,13 @@ public class EntityMetadataGenerator {
         // here with the rest: a `--force` pass followed by a normal one in the same JVM must not leave the
         // second one overwriting members the first was allowed to.
         CooperativeCodegen.setForce(false);
+        // Plan step 7.3: this pass's view inputs for --merge. Cleared here rather than at the end, so a pass that
+        // throws leaves nothing behind for the next one to merge against.
+        mergeModels.clear();
         List<String> positional = new ArrayList<>();
         List<String> packages = new ArrayList<>();
         List<String> mappers = new ArrayList<>();
+        List<String> merges = new ArrayList<>();
         Path javaOutputOverride = null;
         Path runRecord = null;
         long startedAt = System.currentTimeMillis();
@@ -762,6 +796,10 @@ public class EntityMetadataGenerator {
                 mappers.add(args[++i]);
             } else if (arg.startsWith("--mapper=")) {
                 mappers.add(arg.substring("--mapper=".length()));
+            } else if ("--merge".equals(arg) && i + 1 < args.length) {
+                merges.add(args[++i]);
+            } else if (arg.startsWith("--merge=")) {
+                merges.add(arg.substring("--merge=".length()));
             } else if ("--run-record".equals(arg) && i + 1 < args.length) {
                 // Opt-in, so a library caller and every test are unaffected: a record of what this
                 // pass ran with, in the same JSON metadata tree the rest of the tooling reads.
@@ -791,6 +829,7 @@ public class EntityMetadataGenerator {
         }
         setGenerationPackages(packages);
         setMapperRequests(mappers);
+        setMergeRequests(merges);
 
         if (positional.size() < 2) {
             printUsage();
@@ -837,6 +876,7 @@ public class EntityMetadataGenerator {
             strictWarnings = false;
             setGenerationPackages(List.of());
             setMapperRequests(List.of());
+            setMergeRequests(List.of());
             setGenerateAdapters(false);
         }
     }
@@ -1780,6 +1820,12 @@ public class EntityMetadataGenerator {
                         ViewBuilderGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
                                 nestedRecordUsable, divergences);
                     }
+                    // Plan step 7.3: keep what a merge request will need to re-emit this view's builders. A merge is
+                    // between two views, and the partner may be resolved after this one, so the pass records the
+                    // inputs now and applies the merges once every view is known - the same "after all views" shape
+                    // the mapper requests already use.
+                    mergeModels.put(view.name(), new MergeModel(viewPackage, view, ordinalProperties,
+                            nestedRecordUsable, trackableTypes, nonTrackableViewNames, wantsTrackingBuilder));
                     // § 8.2/G2 + § 8.6/3.17a: the two builder entry points are `default` methods on
                     // the VIEW interface — the one file the developer owns. The emitter recognises an
                     // existing method by shape and only writes when one is actually missing, so a
@@ -1852,6 +1898,10 @@ public class EntityMetadataGenerator {
         }
 
         generateRequestedMappers(javaOutputRoot, emittedViews, divergences);
+
+        // Plan step 7.3: the merges, once every view is resolved - a merge names two views, and the partner may be
+        // resolved after the host.
+        generateRequestedMerges(javaOutputRoot, divergences);
 
         // ── artifacts → index → documents (§ 4.5) ──────────────────────────────────────────────────
         // Every artifact now exists, so the index can be resolved over the complete set of files and
@@ -1966,6 +2016,84 @@ public class EntityMetadataGenerator {
                 System.out.println("Generated mapper " + result.className() + "." + result.methodName()
                         + " -> " + result.file());
             }
+        }
+    }
+
+    /**
+     * Apply every {@code --merge} request (plan step 7.3), after all views are resolved.
+     *
+     * <p>Each request is {@code <hostView>:<partnerView>}, and each one re-emits the <b>host's</b> builders with that
+     * partner attached — the untracked builder when the view's level includes one, and the tracking proxy when it
+     * includes tracking, both deciding through {@link ViewMergeGenerator} so they merge the same fields and report the
+     * same diagnostics. Re-emitting rather than patching is what keeps the result identical to a pass that knew the
+     * partners from the start: the emitters are deterministic and reconcile an existing file member by member, so a
+     * hand-edited member survives and an edited generated one is reported.
+     *
+     * <p>A host with several partners gets one method per partner, in the order the requests were given; the same
+     * partner named twice is emitted once, because two identical methods would not compile.
+     */
+    private static void generateRequestedMerges(Path javaOutputRoot, DivergenceReporter divergences)
+            throws IOException {
+        if (mergeRequests.isEmpty()) {
+            return;
+        }
+        java.util.Map<String, List<ViewMergeGenerator.Partner>> partnersByHost = new java.util.LinkedHashMap<>();
+        for (String request : mergeRequests) {
+            String[] parts = request.split(":");
+            if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                divergences.report("merge_request_malformed", request,
+                        "the request is not <hostView>:<partnerView>",
+                        request, "<HostView>:<PartnerView>",
+                        "rewrite the --merge flag");
+                continue;
+            }
+            String hostName = parts[0].trim();
+            String partnerName = parts[1].trim();
+            MergeModel host = mergeModels.get(hostName);
+            MergeModel partnerModel = mergeModels.get(partnerName);
+            if (host == null) {
+                divergences.report("merge_view_not_found", hostName,
+                        "no view of that name was resolved in this pass, so its builder cannot be merged",
+                        hostName, "a view with a builder", "check the name and the --packages filter");
+                continue;
+            }
+            if (partnerModel == null) {
+                divergences.report("merge_view_not_found", partnerName,
+                        "no view of that name was resolved in this pass, so it has nothing to merge from",
+                        partnerName, "a view with a builder", "check the name and the --packages filter");
+                continue;
+            }
+            String qualified = partnerModel.packageName() == null || partnerModel.packageName().isBlank()
+                    ? partnerModel.view().name()
+                    : partnerModel.packageName() + "." + partnerModel.view().name();
+            List<ViewMergeGenerator.Partner> partners = partnersByHost.computeIfAbsent(hostName,
+                    ignored -> new ArrayList<>());
+            ViewMergeGenerator.Partner newPartner = new ViewMergeGenerator.Partner(partnerModel.view().name(),
+                    qualified, partnerModel.properties());
+            boolean alreadyThere = partners.stream()
+                    .anyMatch(existing -> existing.simpleName().equals(newPartner.simpleName()));
+            if (!alreadyThere) {
+                partners.add(newPartner);
+            }
+        }
+        for (java.util.Map.Entry<String, List<ViewMergeGenerator.Partner>> entry : partnersByHost.entrySet()) {
+            MergeModel model = mergeModels.get(entry.getKey());
+            if (model == null) {
+                continue;
+            }
+            if (model.trackingBuilder()) {
+                ViewTrackingBuilderGenerator.generate(javaOutputRoot, model.packageName(), model.view(),
+                        model.properties(), model.trackableTypes(), model.nonTrackableViewNames(),
+                        entry.getValue(), divergences);
+            }
+            if (model.view().gen() == GenLevel.BUILDER
+                    || model.view().gen() == GenLevel.BUILDER_TRACKED
+                    || model.view().gen() == GenLevel.BUILDER_ALL) {
+                ViewBuilderGenerator.generate(javaOutputRoot, model.packageName(), model.view(),
+                        model.properties(), model.nestedRecord(), entry.getValue(), divergences);
+            }
+            System.out.println("Merged into " + entry.getKey() + "Builder: "
+                    + entry.getValue().stream().map(ViewMergeGenerator.Partner::simpleName).toList());
         }
     }
 
