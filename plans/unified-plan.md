@@ -5751,6 +5751,33 @@ node webview/check-links.mjs      # LINKS
 npm run check:examples            # EXAMPLES
 ```
 
+**Done 2026-10-08 — all four checks green, and the GATE's verdict is the correct one rather than a lucky one.**
+
+| Check      | Command                            | Result                                                       |
+| ---------- | ---------------------------------- | ------------------------------------------------------------ |
+| `GATE`     | `bun scripts/mvn-jdk25.js`         | **BUILD SUCCESS**, whole reactor                             |
+| `LINKS`    | `bun scripts/check-repo-links.mjs` | 280 Markdown files, **all relative links resolve**           |
+| `LINKS`    | `node webview/check-links.mjs`     | 31 files, 242 relative links, **all resolve**                |
+| `EXAMPLES` | `npm run check:examples`           | **exit 0** — every marker in `merge-java/docs/resolvers` and |
+  `materialization-levels.md` matches |
+
+- **The `GATE` run was fully restored from the build cache — every module reported in under 0.5 s — and that is the
+  correct verdict for this change set rather than a gap in the evidence.** It was checked, not assumed:
+  [`.mvn/maven-build-cache-config.xml`](../.mvn/maven-build-cache-config.xml)'s global includes are `scripts`,
+  `webview/conformance`, the config itself, `docs`, `merge-java/docs` and the two `AGENTS.md` files, so **`plans/`,
+  the two todo files, `doc-hipster-entity/roadmap/` and `webview/jwa-sidecar/plan.md` are not inputs to any module**
+  and a Markdown move cannot break a build. What the cached run proves is exactly that: the checksum matched, i.e.
+  no module input changed. The last **executed** full gate (round 56, 08:29, with `MetadataCliTest` running inside
+  it) is green, and nothing has touched a module input since.
+- **Two bookkeeping findings, both in the neighbourhood of the final step, recorded here because this sweep is where
+  they surfaced.** (1) The cache config's own comment points at *"the final plan step (9.7)"* for the checksum
+  examination, while the plan's cache-validation step is **9.8** — a stale step reference in a file that is itself a
+  cache input, so it is worth correcting when 9.8 runs. (2) **Step 9.8 has no § Progress row at all**, which means
+  the one step reserved as the final validation could never be ticked; 9.6's item 1 is where a missing row is
+  repaired, and this is the record that it is missing.
+- **No document was edited by this step** beyond its own record and row: 9.5 is a verification, and its deliverable
+  is the evidence above rather than a change.
+
 ### 9.6 — Close the books
 **Who:** agent · **Size:** S
 
@@ -6030,6 +6057,6 @@ start)
 | 9.2  | Archive the superseded plans                                                                    | agent              | S    | `[x]`                                                                                       |
 | 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                                     | agent              | S    | `[x]`                                                                                       |
 | 9.4  | Retire the per-plan open lists                                                                  | agent              | S    | `[x]` — **the absorbed lists are records now.** `todo.hipster-entity.md` was reduced to a closed record (its "open, and nothing has started it" prose about the merge had outlived step 7.3, and the proxy sub-item is ticked) and `todo.java_watch2.md` keeps its 7.6 reasons with the live schedule named; both are **kept rather than deleted** so links resolve. The sidecar's "Future Refinement" heading and status line now say **resolved** (7.1 and 9.1b), with the item bodies kept as the record of the decision. The roadmap tracker is **annotated per row** — nothing could be ticked (all five work rows map to 6.1/6.3 twice/6.4/6.5 and the sixth is dropped by decision in its own words). The jetbrains plan needed **nothing**: it already carries an Implementation record and no open boxes. **Gate verified by a repository-wide scan**: eight documents still hold unchecked boxes and every one is a **reader instruction** (how to add a resolver, what a fixture must contain, what a page must do, the field-dispatch and ordinal-array guides) or **historical-with-a-banner** (`plans/rewrite-migration/`, whose own banner says those boxes stay unchecked) — none lists project work this plan does not account for. `LINKS` green. |
-| 9.5  | Full sweep (gate + links + examples)                                                            | agent              | S    | `[ ]`                                                                                       |
+| 9.5  | Full sweep (gate + links + examples)                                                            | agent              | S    | `[x]` — **all four checks green in one sweep.** `GATE` (`bun scripts/mvn-jdk25.js`, whole reactor) **BUILD SUCCESS** — a fully **cached** run (every module under 0.5 s), which is the correct verdict here rather than a lucky one: measured from `.mvn/maven-build-cache-config.xml`, the global includes are `scripts`, `webview/conformance`, the config, `docs`, `merge-java/docs` and the two `AGENTS.md`, so `plans/`, the todo files and the plan documents this round moved and retired **are not inputs to any module** — what the run proves is that no module input changed, and the last **executed** full gate (round 56, `MetadataCliTest` inside it) is green with nothing having touched an input since. `LINKS`: `check-repo-links.mjs` **280 files, all resolve**; `webview/check-links.mjs` **31 files / 242 links, all resolve**. `EXAMPLES`: `npm run check:examples` **exit 0**, every marker matching. **Two findings recorded for the final step**: the cache config's comment still calls the cache-validation step "9.7" while the plan calls it **9.8**, and **9.8 has no § Progress row at all** (so the one step reserved as the final validation could never be ticked). |
 | 9.6  | Close the books                                                                                 | agent              | S    | `[ ]`                                                                                       |
 | 9.7  | Webview navigation from generated markdown: every location syntax, and markdown rendering       | agent              | M    | `[x]`                                                                                       |
