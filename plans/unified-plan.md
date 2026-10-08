@@ -5286,6 +5286,26 @@ Open, and unimplemented: no `TypeDivergence` type and no converter manifest exis
 governing decision (`Proposed`); this step starts by either accepting it or amending it, since it fixes
 the diagnostics and the registry shape.
 
+**DEC-006 accepted 2026-10-08, after measuring it against the tree — and two of its three criteria are already met,**
+which narrows what this step has to build. The record now carries the evidence (an amendment section) and says what is
+left here rather than in a decision.
+
+- **Criterion 1, already met**: `mapper_type_incompatible` is reported by `ViewMapperGenerator` in DEC-022's format,
+  beside `merge_field_type_mismatch`, `type_mismatch`, `type_ambiguous`, `type_unresolved` and
+  `validation_constraint_type_mismatch` — a divergent pair is discoverable during generation today.
+- **Criterion 3, already met and more carefully than asked**: the same generator erases generics, accepts an `Object`
+  target, allows a widening primitive, and **rejects** a narrowing pair *because it would silently truncate on
+  overflow* (its own javadoc says so), so a boxing-only difference is not reported at all.
+- **Criterion 2, not met, and it is what this step is for**: a missing converter is reported as a **divergence**, and a
+  divergence does not fail a pass — `scripts/gen.js` prints them and continues, which is why the example's committed
+  run reports three to five and still succeeds. The amendment decides that a missing converter for an incompatible pair
+  is a **contract-class** finding, so it fails a pass through the **policy machinery step 6.3 built** (`Nature` per rule,
+  `STRICT` failing on `CONTRACT`) instead of through a second failure mechanism invented for it.
+- **What is left to build here, and nothing else from the record**: (a) a `TypeDivergence` value that names the
+  divergent pair and its converter requirement, so the finding is data rather than a message string; (b) the
+  **converter manifest**, generated and committed; (c) the contract-class wiring of (a), so missing coverage fails a
+  `STRICT` pass with the manifest as the actionable diagnostic.
+
 **Gate:** the analyzer reports divergence in DEC-022's format for the example module, the manifest is
 generated and committed, and `GATE` is green.
 

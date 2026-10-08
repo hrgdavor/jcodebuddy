@@ -25,7 +25,7 @@ This folder contains individual decision records for the JCodeBuddy project arch
 |                       | Notes: Needs metadata sufficiency and versioning policy                                            |          |            |
 | [DEC-005](DEC-005.md) | **Field-source semantics**                                                                         | Proposed | 2026-03-30 |
 |                       | Notes: Needs write-path rules and diagnostics                                                      |          |            |
-| [DEC-006](DEC-006.md) | **Build-time type divergence validation**                                                          | Proposed | 2026-03-30 |
+| [DEC-006](DEC-006.md) | **Build-time type divergence validation**                                                          | Accepted | 2026-03-30 |
 |                       | Notes: Needs converter registry and validation UX                                                  |          |            |
 | [DEC-007](DEC-007.md) | **Projection performance vs ergonomics**                                                           | Proposed | 2026-03-30 |
 |                       | Notes: Needs layered API examples and benchmarks                                                   |          |            |
