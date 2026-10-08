@@ -142,7 +142,10 @@ For complex refactorings and large-scale migrations, we propose integrating [Ope
 - [x] Build the **Companion HTML Interface** (Web dashboard).
 - [x] Implement **Inverse Navigation** (Jump to source and Clipboard integration).
 - [ ] Create lightweight hooks for IntelliJ and VS Code.
-- [ ] Prototype an OpenRewrite-based tool module.
+- [x] Prototype an OpenRewrite-based tool module.
+      — **done** in plan step 7.5: `tools/RenameMemberTool` reads through `SourceReader`, queries through
+      `TreeQueries` and splices text (DEC-030), registered in the agent's menu and asserted by
+      `RenameMemberToolTest` (which also covers its three refusals)
 
 > **Status 2026-10-01 — these two boxes are the only open items in this plan.** Phases 1–3 and the
 > first two Phase 4 items are done (the dashboard is

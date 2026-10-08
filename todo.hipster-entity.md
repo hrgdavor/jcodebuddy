@@ -4,7 +4,9 @@
 
 ## Mapper utility functionalities:
 
-- [ ] `View1Builder.merge(View2 other)` — merge fields with identical name and type
+- [x] `View1Builder.merge(View2 other)` — merge fields with identical name and type
+      — **done** in plan step 7.3: `ViewMergeGenerator` plus the `--merge <host>:<partner>` request, on both
+      the untracked builder and the tracking proxy, with a DEC-022 diagnostic for a name-only match
   - Proxy version of such merge
 
   **Open, and nothing has started it:** no `merge(` method exists in `hipster-entity/hipster-entity-core/src/main/java`

@@ -86,7 +86,9 @@ a file that does not exist rather than a cheerful "ok". See [`../PLAN-webview-su
 > argument `jwa-builder` takes, defaulted to 4 spaces. Scheduled as step 7.1 of
 > [`../../plans/unified-plan.md`](../../plans/unified-plan.md).
 
-- [ ] Handle indentation configuration from client properly (currently defaulted to 4 spaces).
+- [x] Handle indentation configuration from client properly (currently defaulted to 4 spaces)
+      — **done** in plan step 7.1: `ClientFormatting` reads `tabSize`/`insertSpaces` from
+      `workspace/didChangeConfiguration` and the code action builds its engine with that indent.
 - [ ] Add more tools (e.g., toString/equals generator) following the same surgical pattern.
 
 ### Integration

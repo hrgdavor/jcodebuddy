@@ -218,20 +218,20 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 
 | Document                                                                          | What it contributed here          | Its own state after this plan                                                                      |
 | --------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [`plans/enumset-overlap-jmh-plan.md`](enumset-overlap-jmh-plan.md)                | step 0.1 — land the finished work | **done** — closed into steps 0.1                                                                   |
-| the stale-document pass of 2026-10-01                                             | step 0.2 — commit it              | **done** — closed into steps 0.2                                                                   |
-| [`doc-hipster-entity/architecture/decisions/DEC-021.md`](../doc-hipster-entity/architecture/decisions/DEC-021.md) § 6 | step 1.1 — `enabled: false` | **done** — closed into steps 1.1                                     |
-| [`doc-hipster-entity/architecture/decisions/DEC-W008.md`](../doc/architecture/decisions-watch/DEC-W008.md), the `.kilo` metadata-server plan | steps 1.2–1.4 | **done** — closed into steps 1.2, 1.3, 1.4                  |
-| the `.kilo` metadata-arena plan                                                   | steps 2.1–2.2                     | **done** — closed into steps 2.1, 2.2                                                              |
-| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md), and [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) | steps 3.0a–3.0k (the one metadata engine in `jcodebuddy-core`, then moving this generator onto it **as one consumer**); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | **partly done** — done: 3.0a, 3.0b, 3.0c, 3.0d, 3.0e, 3.0f, 3.0g, 3.0h, 3.0i, 3.0j, 3.0k, 3.0n, 3.1, 3.2, 3.3; still open: 3.10, 3.11, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9 |
-| [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md)       | steps 4.1–4.4                     | **partly done** — done: 4.1; still open: 4.2, 4.3, 4.4                                             |
-| the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): the classification of every upstream resolution step, then the **SAFE** half — sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, upstream's test vectors | **partly done** — done: 4.7 (the verified pin, the `@derived` header and the three-tier skeleton); open: 4.8–4.13 |
-| the general suggestion channel, asked for 2026-10-07 — designed in [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md) | steps 4.14–4.17: a first-class `SUGGESTION` resolution that carries a concrete answer and is never applied on its own; the answers the module **already computes but hides behind a refusal**; the page's Accept/Edit/Reject; rejection memory; and the **SUGGESTION** half of the JetBrains port as its first producer | **new** — and deliberately **not** JetBrains-specific: a future producer should add a producer and touch nothing else |
-| [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **still open** — every step this row scheduled is unticked in § Progress (5.1, 5.2, 5.3)           |
-| [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **still open** — every step this row scheduled is unticked in § Progress (5.4, 8.2)                |
-| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5                     | **still open** — every step this row scheduled is unticked in § Progress (6.1, 6.2, 6.3, 6.4, 6.5) |
-| [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | **still open** — every step this row scheduled is unticked in § Progress (7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 8.1, 8.3) |
-| [`plans/rewrite-migration/`](rewrite-migration/README.md)                         | nothing — it is **complete**      | stays in place as the historical record (step 9.2)                                                 |
+| [`plans/enumset-overlap-jmh-plan.md`](enumset-overlap-jmh-plan.md)                | step 0.1 — land the finished work | **done** — closed into step 0.1, which is `[x]`                                                    |
+| the stale-document pass of 2026-10-01                                             | step 0.2 — commit it              | **done** — closed into step 0.2, which is `[x]`                                                    |
+| [`doc-hipster-entity/architecture/decisions/DEC-021.md`](../doc-hipster-entity/architecture/decisions/DEC-021.md) § 6 | step 1.1 — `enabled: false` | **done** — closed into step 1.1, which is `[x]`                      |
+| [`doc-hipster-entity/architecture/decisions/DEC-W008.md`](../doc/architecture/decisions-watch/DEC-W008.md), the `.kilo` metadata-server plan | steps 1.2–1.4 | **done** — steps 1.2–1.4 and 7.7 are all `[x]`; 7.7 (the manual-mode CLI) was the last item this row left open |
+| the `.kilo` metadata-arena plan                                                   | steps 2.1–2.2                     | **done** — closed into steps 2.1–2.2, both `[x]`                                                   |
+| the `.kilo` hipster-ioc-integration plan, [`hipster-ioc/doc/ROADMAP.md`](../hipster-ioc/doc/ROADMAP.md), and [DEC-037](../doc-hipster-entity/architecture/decisions/DEC-037.md) | steps 3.0a–3.0k (the one metadata engine in `jcodebuddy-core`, then moving this generator onto it **as one consumer**); steps 3.1–3.3 as a **prototype**; steps 3.4–3.11 are `[TBD]` until the shape is decided | **closed in step 3.11** — 3.0a–3.0t and 3.10 are `[x]`; 3.11 is the one item this row still owns (it is the maintainer’s), and 3.4–3.9 are `[TBD]` because they wait on other steps rather than on this plan |
+| [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md)       | steps 4.1–4.4                     | **done** — closed into steps 4.1–4.4, all four `[x]`                                               |
+| the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): the classification of every upstream resolution step, then the **SAFE** half — sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, upstream's test vectors | **closed in step 4.13** — 4.7–4.12 are `[x]`; 4.13 carries one named remainder (a reviewer accepting a block in one action) and the port’s vectors are the parity gate’s source of truth |
+| the general suggestion channel, asked for 2026-10-07 — designed in [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md) | steps 4.14–4.17: a first-class `SUGGESTION` resolution that carries a concrete answer and is never applied on its own; the answers the module **already computes but hides behind a refusal**; the page's Accept/Edit/Reject; rejection memory; and the **SUGGESTION** half of the JetBrains port as its first producer | **done** — closed into steps 4.14–4.17, all `[x]` (the channel, the report, the refusal memory and the proposer as one provenance) |
+| [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **closed in steps 5.2–5.3** — 5.1 is `[x]` (the headless parity test, extended and asserted to cover every verb); 5.2 is the maintainer’s decision and 5.3 is a person’s |
+| [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **closed in steps 5.4 and 8.2** — both are `[ ]`: 5.4 is the maintainer’s, 8.2 is a human observation on a real IDE |
+| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5                     | **closed in steps 6.1–6.5** — all `[ ]`: 6.1 and 6.3 are the maintainer’s decisions, 6.2/6.4/6.5 follow them in the phase, so none of them is unaccounted for |
+| [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | **done for steps 7.1–7.10** (all `[x]`, and 7.7–7.10 are newer than this row’s own range), with **8.1 and 8.3 closed in themselves** (human observations on a real IDE) and **the two items nothing else scheduled decided in step 9.1b** — the sidecar’s "add more tools" and the agent’s "lightweight hooks for IntelliJ and VS Code", the only two step 9.1’s coverage check found unaccounted for |
+| [`plans/rewrite-migration/`](rewrite-migration/README.md)                         | nothing — it is **complete**      | **done** — every step it contributed is `[x]`, and step 9.2 (archive) is `[x]` too, so the plan is a historical record rather than open work |
 
 ---
 
@@ -5548,6 +5548,62 @@ deletions below.
 **Gate:** the checklist in [§ 3](#3-what-this-plan-schedules) is annotated: every row either "closed into
 step N" or "done".
 
+**Done 2026-10-08 — every row of § 3 is annotated, and the two items nothing scheduled got a step.**
+
+- **The column already existed and was stale, which is the finding.** § 3's third column ("Its own state after
+  this plan") was written at some earlier point and had drifted badly: it said *"still open — every step this row
+  scheduled is unticked"* for the webview, eclipse, roadmap and sidecar rows, and **5.1, 7.1–7.6 and 7.7–7.10 are
+  now `[x]`**; it said the merge-java row was *"partly done — done: 4.1"* while 4.1–4.4 are all `[x]`; and the
+  suggestion-channel row carried a *status* ("new") where a disposition belonged while 4.14–4.17 are all `[x]`.
+  So the step was not writing an annotation — it was **correcting** one, which is a stronger result than the gate
+  asks for and the reason it was worth checking rather than trusting.
+- **Every disposition was derived from the § Progress markers, not from memory**: a scratch script read each
+  contributed step's marker out of the table and **asserted the value it expected before writing anything**, so a
+  stale reading would have thrown rather than produced a confident wrong sentence. Rows whose steps are still `[ ]`
+  are annotated **"closed in step N"** (which is what the gate asks: accounted for), and rows whose steps are all
+  `[x]` as **"done"**. The stale "partly done" and "still open" phrasings are gone.
+- **The roadmap row is the one that needed real work rather than bookkeeping**: it has **6** open items and step 6
+  has **5** steps, so a count mismatch had to be resolved item by item. Resolved: `FieldAnnotation` → 6.1; the core
+  entity interface contract **and** the view hierarchy rules → **6.3** (both are the one "advisory rules → hard
+  failures" decision, which is why two items map to one step); type divergence + converter manifest → 6.4; the
+  projection/DTO marker pattern → 6.5; and the API/core split is **explicitly deferred by its own text** ("Not a
+  gap, a recorded scope decision"), so it is accounted for as dropped rather than pending.
+- **Step 9.1's instruction for anything unaccounted for was followed literally**: exactly two items in the
+  scheduled documents had no step — the sidecar's *"Add more tools (e.g., toString/equals generator) following the
+  same surgical pattern"* and the agent's *"Create lightweight hooks for IntelliJ and VS Code"* — and they got
+  **step 9.1b** ("Two open items nothing scheduled"), placed by this check *before* the deletions below, which is
+  what the step demands. Both remain open boxes in their own documents, now each with a step that will decide them.
+- **Three checkboxes were stale-but-done and are ticked with what closed them**: the sidecar's indentation item
+  (7.1), the agent's OpenRewrite prototype item (7.5) and `todo.hipster-entity.md`'s merge item (7.3). This is the
+  same class of staleness the 7.6 round found in `todo.java_watch2.md`, which suggests the pattern worth watching:
+  **a checkbox in a source document is not updated by the step that does the work unless something makes it**.
+- **Gate**: every one of § 3's **14** rows now carries a disposition — "done" or "closed in step N" — and `LINKS`
+  is green. **Measured**: `bun scripts/check-repo-links.mjs` (280 files) resolves every link, including the ones
+  that moved between the annotation and its record.
+
+### 9.1b — Two open items nothing scheduled
+**Who:** agent · **Size:** S
+
+Step 9.1's coverage check found exactly two items in the source documents that no step accounts for, and its own
+instruction is that such an item "gets a step **before** the deletions below" — so this is that step, added by the
+check rather than after it:
+
+1. [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md) — *"Add more tools (e.g., toString/equals
+   generator) following the same surgical pattern."*
+2. [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md) — *"Create lightweight hooks
+   for IntelliJ and VS Code."*
+
+**Do:** decide each one **in the document that carries it**, so no open box is left without a disposition: either
+schedule it as a named step with its scope, or strike it through with the reason it is not wanted. A strike is a
+decision and must say what makes the item unnecessary or superseded — the two candidates are not obviously dead
+(the sidecar has three surfaces a fourth tool could serve, and the host story changed when DEC-039's amendment
+deleted the in-repo clients), which is exactly why they need deciding rather than deleting.
+
+**Gate:** both documents show either a schedule reference or a struck-through item with a reason, and step 9.1's
+§ 3 annotation for their rows names this step.
+
+**Done when:** no document this plan schedules still has an open box that nothing accounts for.
+
 ### 9.2 — Archive the superseded plans
 **Who:** agent · **Size:** S
 
@@ -5910,7 +5966,8 @@ start)
 | 8.2  | Eclipse observations, then Q2                                                                   | human              | —    | `[ ]`                                                                                       |
 | 8.3  | Agent IDE hooks                                                                                 | human decides      | —    | `[ ]`                                                                                       |
 | 8.4  | Zed ACP run                                                                                     | human              | —    | `[ ]`                                                                                       |
-| 9.1  | Coverage check                                                                                  | agent              | S    | `[ ]`                                                                                       |
+| 9.1  | Coverage check                                                                                  | agent              | S    | `[x]` — **§ 3 is annotated, and every row is derived from the marker its steps actually carry.** The third column already existed and was **stale** (it called the webview/eclipse/roadmap/sidecar rows "still open — every step unticked" while 5.1 and 7.1–7.10 are `[x]`, the merge-java row "partly done" while 4.1–4.4 are `[x]`, and gave the suggestion-channel row a status instead of a disposition while 4.14–4.17 are `[x]`), so the step corrected it rather than writing it. Every disposition was **read out of the § Progress table with the expected marker asserted before writing**; rows whose steps are open are "closed in step N" and rows whose steps are all done are "done". The roadmap row needed real work: **6 open items, 5 steps** — resolved item by item (FieldAnnotation → 6.1; the entity contract **and** the hierarchy rules → 6.3, one decision; divergence → 6.4; projection → 6.5; the API/core split explicitly deferred by its own text). Exactly **two** items had no step — the sidecar's "add more tools" and the agent's "lightweight hooks for IntelliJ and VS Code" — and got **step 9.1b** before the deletions, as the step requires. Three **stale-but-done** boxes were ticked with what closed them (sidecar indentation 7.1, agent OpenRewrite prototype 7.5, `todo.hipster-entity.md` merge 7.3). **Gate**: 14/14 rows annotated; `LINKS` green (280 files). |
+| 9.1b | Two open items nothing scheduled                                                                | agent              | S    | `[ ]` — added **by** step 9.1's coverage check: the sidecar's "add more tools" item and the agent's "lightweight hooks for IntelliJ and VS Code" item are the only two the check found unaccounted for, and 9.1's instruction is that such an item gets a step before the deletions. Each is decided in the document that carries it. |
 | 9.2  | Archive the superseded plans                                                                    | agent              | S    | `[x]`                                                                                       |
 | 9.3  | Remove local scratch (`.kilo` plans, worktree, stray files)                                     | agent              | S    | `[x]`                                                                                       |
 | 9.4  | Retire the per-plan open lists                                                                  | agent              | S    | `[ ]`                                                                                       |
