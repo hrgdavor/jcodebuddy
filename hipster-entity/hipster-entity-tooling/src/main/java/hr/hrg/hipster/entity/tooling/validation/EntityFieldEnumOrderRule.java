@@ -38,7 +38,7 @@ public class EntityFieldEnumOrderRule implements EntityRule {
         // source (EntityRulesValidator, the --baseline CLI) use validateSource.
         EnumConstantOrderChecker.HeaderConfig header = EnumConstantOrderChecker.readHeader(cu);
         for (String diagnostic : header.diagnostics()) {
-            issues.add(new EntityRulesValidator.ValidationIssue(file, diagnostic));
+            issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file, diagnostic));
         }
     }
 
@@ -63,7 +63,7 @@ public class EntityFieldEnumOrderRule implements EntityRule {
         EnumConstantOrderChecker.HeaderConfig header =
                 EnumConstantOrderChecker.readHeader(read.unit());
         for (String diagnostic : header.diagnostics()) {
-            issues.add(new EntityRulesValidator.ValidationIssue(file, diagnostic));
+            issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file, diagnostic));
         }
 
         Map<String, EnumLedger> ledgers = EnumConstantOrderChecker.readLedgers(source);
@@ -72,12 +72,12 @@ public class EntityFieldEnumOrderRule implements EntityRule {
                 continue; // opt-in by absence: the checker must not flag unmarked enums
             }
             if (ledger.constants().isEmpty()) {
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         "empty_field_enum: marked enum " + ledger.qualifiedName() + " declares no constants"));
             }
             if (ledger.allowReorder()) {
                 // A warning, surfaced so the escape hatch cannot be left in by accident (R1.2).
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         "enum_reorder_allowed: " + ledger.qualifiedName()
                                 + " carries allowReorder:true; remove it once the layout is settled"));
             }
@@ -117,5 +117,14 @@ public class EntityFieldEnumOrderRule implements EntityRule {
                     .toList());
         }
         return violations;
+    }
+
+    /** {@inheritDoc}
+     *
+     * <p><b>CONTRACT</b> — the R1 append-only ledger: a reordered or emptied field enum breaks ordinals the stored data already carries.</p>
+     */
+    @Override
+    public Nature nature() {
+        return Nature.CONTRACT;
     }
 }

@@ -600,10 +600,19 @@ public class EntityMetadataGenerator {
      *   <li>{@link Policy#REPORT} — the rules run, every issue is printed once, and generation
      *       continues. This is what the example's invocation uses: it makes the validator's output
      *       part of every pass log, which is how a newly broken rule becomes visible.</li>
-     *   <li>{@link Policy#STRICT} — the rules run and the pass fails <em>before</em> any file is
-     *       written, so a violating tree is never half-regenerated. This is the mode an adopting project
-     *       gates its build with, and the mode the {@code validate} subcommand exits non-zero on.</li>
+     *   <li>{@link Policy#STRICT} — the rules run and a <strong>contract</strong> violation fails the pass
+     *       <em>before</em> any file is written, so a violating tree is never half-regenerated. This is the mode an
+     *       adopting project gates its build with (the example's own invocation in {@code scripts/gen.js} uses it), and
+     *       the mode the {@code validate} subcommand exits non-zero on.</li>
      * </ul>
+     *
+     * <p><strong>What STRICT does not fail on, decided per rule on 2026-10-08 (plan step 6.3).</strong> Each
+     * {@link hr.hrg.hipster.entity.tooling.validation.EntityRule} declares its
+     * {@link hr.hrg.hipster.entity.tooling.validation.EntityRule.Nature}: a {@code CONTRACT} rule's violation makes the
+     * generated model wrong and can fail a pass, while a {@code CONVENTION} rule's — the view hierarchy naming rule,
+     * the Auditable package convention — is <em>always reported and never fatal</em>, in every policy, because the
+     * framework must not dictate style and a build that fails on taste is a build people work around. The maintainer's
+     * words: enforce *"the core entity contract"*, leave *"the view hierarchy naming rule"* advisory.</p>
      *
      * <p>Validation is deliberately a policy rather than a hard failure: the rules encode naming and
      * package conventions that a project may legitimately not want, and a generator that refused to run
@@ -664,8 +673,12 @@ public class EntityMetadataGenerator {
                 + " (policy " + validationPolicy + ")");
         for (hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue issue : issues) {
             // One line per issue, `file :: message`, so the report is greppable in a build log and
-            // stable enough for the docs' own example to be checked against it.
-            System.out.println("  validation: " + sourceRoot.relativize(issue.file) + " :: " + issue.message);
+            // stable enough for the docs' own example to be checked against it. An issue from a
+            // CONVENTION rule says so, because a reader who sees it in a STRICT pass needs to know
+            // why the pass did not fail (plan step 6.3).
+            System.out.println("  validation: " + sourceRoot.relativize(issue.file) + " :: " + issue.message
+                    + (issue.nature == hr.hrg.hipster.entity.tooling.validation.EntityRule.Nature.CONVENTION
+                            ? " [advisory]" : ""));
         }
         // STRICT fails on a violation but not on a warning: `allowReorder` is an escape hatch a
         // project sets on purpose, and R1.3 says warnings go to stderr without failing, while
@@ -675,10 +688,26 @@ public class EntityMetadataGenerator {
         }
     }
 
-    /** The issues that fail a strict pass: every violation, plus warnings when the caller asked. */
+    /**
+     * The issues that fail a strict pass: a <strong>contract</strong> rule's violations, plus its warnings when the
+     * caller asked for them (plan step 6.3).
+     *
+     * <p>Two filters, two different questions, and keeping them apart is the decision this step records:</p>
+     * <ol>
+     *   <li><strong>Is this a rule whose violation makes the model wrong?</strong> Only a {@code CONTRACT} rule can
+     *       fail a pass. The view hierarchy naming rule and the Auditable package convention are advice a project may
+     *       take or leave, and they are <em>always reported and never fatal</em> — a build that fails on taste is a
+     *       build people work around.</li>
+     *   <li><strong>Is this particular issue one the caller promoted?</strong> Within a contract rule, the R1
+     *       {@code allowReorder} escape hatch is a deliberate, visible choice, so it needs {@code --strict} to become
+     *       fatal. That is a different question from whether the rule is a contract at all, which is why it is a
+     *       second filter rather than a second classification.</li>
+     * </ol>
+     */
     private static List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue>
             blockingIssues(List<hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator.ValidationIssue> issues) {
         return issues.stream()
+                .filter(issue -> issue.nature == hr.hrg.hipster.entity.tooling.validation.EntityRule.Nature.CONTRACT)
                 .filter(issue -> strictWarnings || !issue.isWarning())
                 .toList();
     }

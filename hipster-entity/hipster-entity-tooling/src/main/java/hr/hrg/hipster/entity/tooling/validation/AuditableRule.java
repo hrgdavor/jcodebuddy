@@ -32,9 +32,18 @@ public class AuditableRule implements EntityRule {
                 continue;
             }
             if (!pkg.startsWith("hr.hrg.hipster.entity")) {
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONVENTION, file,
                         "Auditable interface should be in an entity module or package: " + name));
             }
         }
+    }
+
+    /** {@inheritDoc}
+     *
+     * <p><b>CONVENTION</b> — the Auditable interface's module or package is a layout convention.</p>
+     */
+    @Override
+    public Nature nature() {
+        return Nature.CONVENTION;
     }
 }

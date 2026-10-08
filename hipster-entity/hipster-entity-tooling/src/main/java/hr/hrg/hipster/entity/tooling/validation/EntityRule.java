@@ -70,4 +70,30 @@ public interface EntityRule {
             validate(file, pkg.isEmpty() ? "<default>" : pkg, cu, issues);
         });
     }
+
+    /**
+     * What a violation of this rule <strong>means</strong>, which is what decides whether a strict pass fails on it
+     * (plan step 6.3; the maintainer's decision of 2026-10-08).
+     *
+     * <p>The distinction is not severity-as-taste, it is <em>what breaks</em>:</p>
+     * <ul>
+     *   <li>{@link #CONTRACT} — breaking the rule makes the generated model <strong>wrong</strong>: a marker that
+     *       declares domain methods is not a marker, and a field enum out of ledger order breaks the ordinals stored
+     *       data already carries. A {@code STRICT} pass fails on these <em>before</em> writing anything.</li>
+     *   <li>{@link #CONVENTION} — breaking the rule is a choice a project may legitimately make differently: a name, a
+     *       parent, a package. Those are <strong>always reported and never fatal</strong>, in every policy, because a
+     *       build that fails on taste is a build people work around.</li>
+     * </ul>
+     *
+     * <p>The maintainer named the two ends of this split — *"the core entity contract"* and *"the view hierarchy naming
+     * rule"* — and asked for it to be decided per rule; the same question ("does breaking it make the model wrong?")
+     * classifies the other three, and every rule states its own answer where a reader of that rule will see it.</p>
+     */
+    enum Nature {
+        CONTRACT,
+        CONVENTION
+    }
+
+    /** This rule's nature, declared by the rule itself so the decision lives where the rule does. */
+    Nature nature();
 }

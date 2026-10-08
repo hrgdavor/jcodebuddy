@@ -60,7 +60,7 @@ public class ViewAnnotationRule implements EntityRule {
             }
             String name = decl.getSimpleName();
             if (!TreeQueries.isKind(decl, J.ClassDeclaration.Kind.Type.Interface)) {
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         "@View can only be applied on interfaces: " + name));
                 continue;
             }
@@ -69,7 +69,7 @@ public class ViewAnnotationRule implements EntityRule {
                 // an addons declaration there does nothing.
                 ViewAnnotationReader.Parsed markerParsed = ViewAnnotationReader.parse(view);
                 if (!markerParsed.attributes().addons().isEmpty()) {
-                    issues.add(new EntityRulesValidator.ValidationIssue(file,
+                    issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                             "addon_on_non_view: @View(addons = …) on " + name
                                     + " has no effect because it is the package marker, not a view"));
                 }
@@ -79,7 +79,7 @@ public class ViewAnnotationRule implements EntityRule {
             ViewAnnotationReader.Parsed parsed = ViewAnnotationReader.parse(view);
             ViewAttributes attributes = parsed.attributes();
             for (String diagnostic : parsed.diagnostics()) {
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         diagnostic + " on " + name));
             }
 
@@ -87,21 +87,21 @@ public class ViewAnnotationRule implements EntityRule {
 
             GenLevelResolver.Resolved resolved = GenLevelResolver.resolve(attributes.gen(), decl, fieldNames);
             for (String diagnostic : resolved.diagnostics()) {
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         diagnostic + " on " + name));
             }
 
             // A tracking/builder level needs something to write. `id` alone is not enough: it is
             // the immutable identity on the array path.
             if (LEVELS_NEEDING_WRITABLE_FIELDS.contains(resolved.level()) && fieldNames.isEmpty()) {
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         resolved.level() + " requires at least one accessor on " + name));
             }
 
             // An addons declaration on a write/tracking surface is inert (G6: propagation is
             // per-view, and a surface is not a view).
             if (!attributes.addons().isEmpty() && isSurface(decl)) {
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         "addon_on_non_view: @View(addons = …) on " + name
                                 + " has no effect because that interface extends a write/tracking surface"));
             }
@@ -137,5 +137,14 @@ public class ViewAnnotationRule implements EntityRule {
 
     private static boolean isSurface(J.ClassDeclaration decl) {
         return TreeQueries.supertypeNames(decl).stream().anyMatch(SURFACE_TYPES::contains);
+    }
+
+    /** {@inheritDoc}
+     *
+     * <p><b>CONTRACT</b> — `@View` applied where it cannot work, or naming an addon that does not exist, is a model error rather than taste.</p>
+     */
+    @Override
+    public Nature nature() {
+        return Nature.CONTRACT;
     }
 }

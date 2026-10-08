@@ -223,8 +223,13 @@ function main() {
     return report(logPath, status);
   }
 
+  // `--validate=STRICT` since plan step 6.3, on the maintainer's decision of 2026-10-08: the example's build gates
+  // on the entity CONTRACT rules (a marker that declares domain methods, a field enum out of ledger order, `@View`
+  // misapplied) and never on the CONVENTION ones (the view hierarchy naming rule, the Auditable package layout),
+  // which are reported as `[advisory]` and cannot fail a pass in any policy. The example is clean of both today, so
+  // this changes no output — it makes a future contract violation the build's problem rather than a log line.
   status = step(jdk.java, ['-cp', classpath, 'hr.hrg.hipster.entity.tooling.EntityMetadataGenerator',
-    SOURCE_ROOT, METADATA_DIR, '--java-out', SOURCE_ROOT, '--packages', PACKAGES, '--validate',
+    SOURCE_ROOT, METADATA_DIR, '--java-out', SOURCE_ROOT, '--packages', PACKAGES, '--validate=STRICT',
     '--run-record', join(METADATA_DIR, 'generation.json')], { logPath, env });
   if (status !== 0) {
     return report(logPath, status);

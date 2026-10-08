@@ -30,7 +30,17 @@ public class EntityRulesValidator {
         public final Path file;
         public final String message;
 
-        public ValidationIssue(Path file, String message) {
+        /**
+         * The nature of the <strong>rule</strong> that produced this issue (plan step 6.3).
+         *
+         * <p>Carried on the issue rather than looked up from its message, because which rule a diagnostic came from is
+         * a fact about the check, not about its wording — and the wording is what a user reads. The policy decision is
+         * made from this: {@code CONTRACT} issues can fail a strict pass, {@code CONVENTION} issues never do.</p>
+         */
+        public final EntityRule.Nature nature;
+
+        public ValidationIssue(EntityRule.Nature nature, Path file, String message) {
+            this.nature = nature;
             this.file = file;
             this.message = message;
         }
@@ -92,8 +102,10 @@ public class EntityRulesValidator {
         List<ValidationIssue> issues = new ArrayList<>();
         Map<Path, J.CompilationUnit> units = new LinkedHashMap<>();
 
+        // The validator's own three issues are CONTRACT by the same test as the rules' (plan step 6.3): a pass
+        // that cannot read the tree must not pass a gate that claims to enforce the contract.
         if (!Files.exists(moduleRoot)) {
-            issues.add(new ValidationIssue(moduleRoot, "source root does not exist"));
+            issues.add(new ValidationIssue(EntityRule.Nature.CONTRACT, moduleRoot, "source root does not exist"));
             return issues;
         }
 
@@ -118,14 +130,14 @@ public class EntityRulesValidator {
                 // for a fresh file) cannot be reintroduced at a call site.
                 SourceReader.Read read = SourceReader.readText(source);
                 if (!read.readable()) {
-                    issues.add(new ValidationIssue(file, "source_not_parsed: the file could not be read "
+                    issues.add(new ValidationIssue(EntityRule.Nature.CONTRACT, file, "source_not_parsed: the file could not be read "
                             + "as Java at the configured language level; it was NOT treated as empty"));
                     continue;
                 }
                 units.put(file, read.unit());
                 readable.add(new SourceFilePair(file, source));
             } catch (IOException e) {
-                issues.add(new ValidationIssue(file, "IO error: " + e.getMessage()));
+                issues.add(new ValidationIssue(EntityRule.Nature.CONTRACT, file, "IO error: " + e.getMessage()));
             }
         }
 

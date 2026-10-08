@@ -117,7 +117,7 @@ public class ViewInterfaceRule implements EntityRule {
             // Named like a view, but nothing about it says "entity view": no annotation, and no
             // EntityBase anywhere in its chain. Either a marker is missing or the name is a
             // coincidence; the generator emits nothing either way, and silence is the worst answer.
-            issues.add(new EntityRulesValidator.ValidationIssue(file,
+            issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONVENTION, file,
                     "view_does_not_derive_from_marker: " + name + " is named like a view but neither "
                             + "reaches EntityBase nor carries @View, so the generator treats it as an "
                             + "ordinary interface and emits nothing for it. Derive it from the entity "
@@ -143,5 +143,14 @@ public class ViewInterfaceRule implements EntityRule {
 
     private static boolean isSurface(J.ClassDeclaration decl) {
         return TreeQueries.supertypeNames(decl).stream().anyMatch(SURFACE_TYPES::contains);
+    }
+
+    /** {@inheritDoc}
+     *
+     * <p><b>CONVENTION</b> — the view hierarchy naming rule — a name or a parent a project may legitimately choose differently.</p>
+     */
+    @Override
+    public Nature nature() {
+        return Nature.CONVENTION;
     }
 }

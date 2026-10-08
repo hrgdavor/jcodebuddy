@@ -74,10 +74,19 @@ public class MarkerEntityRule implements EntityRule {
                 if (TreeQueries.isDefaultMethod(method) || TreeQueries.isStaticMethod(method)) {
                     continue;
                 }
-                issues.add(new EntityRulesValidator.ValidationIssue(file,
+                issues.add(new EntityRulesValidator.ValidationIssue(Nature.CONTRACT, file,
                         "Entity marker interface should not declare domain methods: " + name
                                 + " declares " + method.getSimpleName() + "()"));
             }
         }
+    }
+
+    /** {@inheritDoc}
+     *
+     * <p><b>CONTRACT</b> — a marker that declares domain methods is not a marker: the generated model is wrong, not untidy.</p>
+     */
+    @Override
+    public Nature nature() {
+        return Nature.CONTRACT;
     }
 }
