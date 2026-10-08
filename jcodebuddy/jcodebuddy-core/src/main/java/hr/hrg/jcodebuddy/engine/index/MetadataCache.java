@@ -37,6 +37,7 @@ public final class MetadataCache {
 
     private final Path root;
     private int hits;
+    private int statHits;
     private int misses;
     private int written;
 
@@ -63,24 +64,28 @@ public final class MetadataCache {
      * counters: what a caller needs to know is how many parses were avoided, and a rebuild that reports hits equal
      * to its file count is the proof DEC-041's second criterion asks for.</p>
      *
+     * <p><strong>Cheapest first (plan step 6.6).</strong> The decision runs in tiers, because the expensive part is
+     * reading and hashing the <em>source</em> and the cheap part is a `stat`: the entry is read (a few kilobytes),
+     * and then</p>
+     *
+     * <ol>
+     *   <li>its recorded size and last-modified time are compared with the file's — equal means <em>reused</em>,
+     *       with no read of the source and no hash at all ({@link #statHits()});</li>
+     *   <li>otherwise the source is hashed and compared with the entry's checksum — equal means the file was
+     *       <em>touched, not changed</em>, and is reused (the entry's own time is refreshed on the next store);</li>
+     *   <li>otherwise the file changed, so this is a miss and the caller parses it.</li>
+     * </ol>
+     *
+     * <p>Before this, every entry lookup hashed every file on every pass, which is the one cost a warm rebuild was
+     * still paying in full. An entry written before the timestamp existed answers tier 1 {@code false} and is
+     * resolved by tier 2, so nothing has to be invalidated for this to take effect.</p>
+     *
      * @param problems the caller's diagnostic list, or {@code null} to ignore anomalies
      */
     public FileMetadata entryFor(String moduleRelativePath, Path sourceFile, List<String> problems) {
         Path entry = entryFile(moduleRelativePath);
         if (!Files.isRegularFile(entry)) {
             misses++;
-            return null;
-        }
-        String current;
-        try {
-            current = ContentHash.of(sourceFile);
-        } catch (IOException unreadable) {
-            // The file the entry claims to describe cannot be hashed, so nothing can be shown to be current.
-            misses++;
-            if (problems != null) {
-                problems.add("cannot hash " + sourceFile + " to decide whether its cached facts are current: "
-                        + unreadable.getMessage());
-            }
             return null;
         }
         FileMetadata stored;
@@ -94,12 +99,73 @@ public final class MetadataCache {
             }
             return null;
         }
-        if (stored == null || !stored.describes(current)) {
+        if (stored == null) {
             misses++;
             return null;
         }
+        // Tier 1: the filesystem says nothing moved, so the source is neither read nor hashed.
+        long currentSize;
+        long currentLastModified;
+        try {
+            currentSize = Files.size(sourceFile);
+            currentLastModified = Files.getLastModifiedTime(sourceFile).toMillis();
+        } catch (IOException unreadable) {
+            misses++;
+            if (problems != null) {
+                problems.add("cannot stat " + sourceFile + " to decide whether its cached facts are current: "
+                        + unreadable.getMessage());
+            }
+            return null;
+        }
+        if (stored.matchesStat(currentSize, currentLastModified)) {
+            hits++;
+            statHits++;
+            return stored;
+        }
+        // Tier 2: the stat moved (a touch, or an edit). A touch is not a change, so the hash decides.
+        String current;
+        try {
+            current = ContentHash.of(sourceFile);
+        } catch (IOException unreadable) {
+            // The file the entry claims to describe cannot be hashed, so nothing can be shown to be current.
+            misses++;
+            if (problems != null) {
+                problems.add("cannot hash " + sourceFile + " to decide whether its cached facts are current: "
+                        + unreadable.getMessage());
+            }
+            return null;
+        }
+        if (!stored.describes(current)) {
+            misses++;
+            return null;
+        }
+        // Tier 2 said yes: the hash is still right, so rewrite the entry with the stat just observed and the next
+        // pass answers in tier 1. This is what makes a touch cost one hash rather than one hash per pass, and what
+        // heals an entry written before the timestamp existed.
+        refresh(stored.withStat(currentSize, currentLastModified), problems);
         hits++;
         return stored;
+    }
+
+    /**
+     * Rewrites one entry with facts the caller has just confirmed, <strong>without</strong> counting it as a stored
+     * parse (plan step 6.6).
+     *
+     * <p>{@link #entriesWritten()} answers "how many files did this pass parse and store", which is a number tests
+     * assert exactly; a refresh is bookkeeping on an entry that was <em>not</em> parsed, so counting it there would
+     * make that number mean two things. Best-effort like {@link #store}: a failed refresh costs a hash next pass.</p>
+     */
+    private void refresh(FileMetadata entry, List<String> problems) {
+        Path file = entryFile(entry.path());
+        try {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, entry.toJson(), StandardCharsets.UTF_8);
+        } catch (IOException unwritable) {
+            if (problems != null) {
+                problems.add("the base entry for " + entry.path() + " could not be refreshed at " + file + " ("
+                        + unwritable.getMessage() + "), so it will be hashed again next pass");
+            }
+        }
     }
 
     /** Writes one entry, creating its directory. Best-effort by design: a failure costs a parse next time. */
@@ -146,8 +212,8 @@ public final class MetadataCache {
             return false;
         }
         FileMetadata entry = FileMetadata.of(moduleRelativePath, ContentHash.of(sourceFile),
-                Files.size(sourceFile), generated, ClassIndex.factsOf(read.unit(), source),
-                TreeQueries.importLines(read.unit()));
+                Files.size(sourceFile), Files.getLastModifiedTime(sourceFile).toMillis(), generated,
+                ClassIndex.factsOf(read.unit(), source), TreeQueries.importLines(read.unit()));
         store(entry, problems);
         index.absorb(entry);
         return false;
@@ -156,6 +222,18 @@ public final class MetadataCache {
     /** Files whose stored facts were reused — parses avoided, which is the number 3.0u's gate is about. */
     public int hits() {
         return hits;
+    }
+
+    /**
+     * Of the {@link #hits()}, how many were decided by a `stat` alone — no read of the source and no hash.
+     *
+     * <p>This is the counter plan step 6.6 is measured by: a warm rebuild over unchanged files should report this
+     * equal to its hit count, and a run where it is zero has hashed everything and gained nothing from the gate. It
+     * is reported separately from {@link #hits()} rather than as a percentage so a test can assert the exact case it
+     * means — "touched, not changed" is a hit in tier 2 and must <em>not</em> be counted here.</p>
+     */
+    public int statHits() {
+        return statHits;
     }
 
     /** Files that had to be read: no entry, an unreadable one, or one the file has moved past. */
@@ -171,6 +249,7 @@ public final class MetadataCache {
     /** Forgets the counters, not the entries — so one test can measure two passes over the same cache. */
     public void resetCounters() {
         hits = 0;
+        statHits = 0;
         misses = 0;
         written = 0;
     }

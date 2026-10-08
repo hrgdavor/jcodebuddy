@@ -36,8 +36,8 @@ class BaseLayerTest {
         J.CompilationUnit unit = SourceReader.readSourceText(source);
         Assertions.assertNotNull(unit, relative + " must parse");
         return FileMetadata.of(relative, ContentHash.of(root.resolve(relative)),
-                Files.size(root.resolve(relative)), generated,
-                ClassIndex.factsOf(unit, source), TreeQueries.importLines(unit));
+                Files.size(root.resolve(relative)), Files.getLastModifiedTime(root.resolve(relative)).toMillis(),
+                generated, ClassIndex.factsOf(unit, source), TreeQueries.importLines(unit));
     }
 
     @Test
@@ -247,7 +247,7 @@ class BaseLayerTest {
 
         Assertions.assertTrue(entry.describes(ContentHash.of(tree.resolve("a/b/Moving.java"))),
                 "the entry describes the file it was computed from");
-        Assertions.assertTrue(new FileMetadata("somewhere/else.java", entry.checksum(), 1, false, List.of(),
+        Assertions.assertTrue(new FileMetadata("somewhere/else.java", entry.checksum(), 1, -1L, false, List.of(),
                         List.of()).describes(entry.checksum()),
                 "and the question is the HASH it carries, not the path: the entry is about content identity, which "
                         + "is what lets a file be moved without its facts being recomputed");

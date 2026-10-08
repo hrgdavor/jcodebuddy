@@ -38,14 +38,25 @@ import hr.hrg.jcodebuddy.engine.MetadataJson;
  *                  other fact in it is about that file
  * @param checksum  the file's content checksum, in the same algorithm and normalisation the table uses
  * @param size      the file's size in bytes, as hashed
+ * @param lastModified the file's last-modified time in epoch milliseconds, as hashed, or {@code -1} when the entry
+ *                  predates this field — the first tier of the staleness gate (plan step 6.6), because a `stat` is
+ *                  cheap enough to run on every file of every pass while a hash is not
  * @param generated whether the file carries a DEC-021 generator header (a fact about the file's own text)
  * @param types     the declarations the file contains, in source order, as table rows
  * @param imports   the file's import lines as written, in order, empty when it writes none
  */
-public record FileMetadata(String path, String checksum, long size, boolean generated, List<ClassRecord> types,
-                           List<String> imports) {
+public record FileMetadata(String path, String checksum, long size, long lastModified, boolean generated,
+                           List<ClassRecord> types, List<String> imports) {
 
-    /** The format of an entry document, versioned separately from the class table: it evolves on its own. */
+    /**
+     * The format of an entry document, versioned separately from the class table: it evolves on its own.
+     *
+     * <p><strong>{@code lastModified} was added without bumping this</strong>, and that is deliberate (plan step
+     * 6.6): a new field whose absence has a defined meaning ({@code -1} = "unknown, so hash and decide") does not
+     * make an older entry unreadable, and the next {@link #toJson} backfills it. A bump would have invalidated every
+     * warm cache in every checkout to gain nothing, which is the trade a versioned format exists to make
+     * deliberately rather than reflexively.</p>
+     */
     public static final int ENTRY_FORMAT = 1;
 
     public FileMetadata {
@@ -61,7 +72,7 @@ public record FileMetadata(String path, String checksum, long size, boolean gene
      * <p>A convenience for the pass rather than a second extraction path: it only assembles what the caller
      * already read.</p>
      */
-    public static FileMetadata of(String path, String checksum, long size, boolean generated,
+    public static FileMetadata of(String path, String checksum, long size, long lastModified, boolean generated,
                                   List<TypeFacts> types, List<String> imports) {
         List<ClassRecord> rows = new ArrayList<>(types.size());
         for (TypeFacts type : types) {
@@ -69,7 +80,7 @@ public record FileMetadata(String path, String checksum, long size, boolean gene
                     type.line(), type.depth(), generated, checksum, null, size, type.relations(),
                     type.annotations(), type.members(), type.span(), type.permits()));
         }
-        return new FileMetadata(path, checksum, size, generated, rows, imports);
+        return new FileMetadata(path, checksum, size, lastModified, generated, rows, imports);
     }
 
     /**
@@ -80,6 +91,42 @@ public record FileMetadata(String path, String checksum, long size, boolean gene
      */
     public boolean describes(String currentChecksum) {
         return checksum != null && !checksum.isEmpty() && checksum.equals(currentChecksum);
+    }
+
+    /**
+     * The <strong>first tier</strong> of the staleness gate (plan step 6.6): may this entry be reused because the
+     * filesystem says nothing about the file moved?
+     *
+     * <p>Cheapest first, as the maintainer specified on 2026-10-08 — *"mtime and file size first as easily checkable
+     * for FS metadata and then hash as slowest check"*. A `stat` costs no read, so a whole repository's worth of
+     * them costs less than hashing one large file; a hash is therefore computed only when this returns
+     * {@code false}.</p>
+     *
+     * <p><strong>It is a shortcut to the same answer, never a weaker one.</strong> Size and mtime both matching means
+     * the file was not written to since the entry was stored; a file edited within the filesystem's timestamp
+     * resolution and left the same size is the one case this cannot see, and that case is why this tier is allowed to
+     * answer *reuse* only when {@link #parse} produced an entry that a hash had already authenticated once. An entry
+     * with no recorded time ({@code -1}, written before this field existed) answers {@code false} and takes the hash
+     * path, so a legacy entry is usable and backfills itself on the next store.</p>
+     *
+     * @param currentSize         the file's size now, from a `stat`
+     * @param currentLastModified the file's last-modified time now, in epoch milliseconds
+     */
+    public boolean matchesStat(long currentSize, long currentLastModified) {
+        return lastModified > 0 && size >= 0 && currentLastModified == lastModified && currentSize == size;
+    }
+
+    /**
+     * This entry with the file's current size and last-modified time — the self-healing half of the gate.
+     *
+     * <p>A tier-2 answer ("touched, not changed", or a legacy entry with no recorded time) proves the checksum is
+     * still right, so the entry may be rewritten with the stat that was just observed and the next pass answers in
+     * tier 1. Without this, a touched file — and every entry written before the timestamp existed — would be hashed
+     * on <em>every</em> pass forever: a silent, permanent cost with no symptom, which is exactly the kind of thing
+     * the gate exists to remove.</p>
+     */
+    public FileMetadata withStat(long currentSize, long currentLastModified) {
+        return new FileMetadata(path, checksum, currentSize, currentLastModified, generated, types, imports);
     }
 
     /**
@@ -94,6 +141,7 @@ public record FileMetadata(String path, String checksum, long size, boolean gene
         sb.append("  \"path\": \"").append(MetadataJson.escape(path)).append("\",\n");
         sb.append("  \"checksum\": \"").append(checksum).append("\",\n");
         sb.append("  \"size\": ").append(size).append(",\n");
+        sb.append("  \"lastModified\": ").append(lastModified).append(",\n");
         sb.append("  \"generated\": ").append(generated ? 1 : 0).append(",\n");
         sb.append("  \"imports\": [");
         for (int i = 0; i < imports.size(); i++) {
@@ -154,6 +202,7 @@ public record FileMetadata(String path, String checksum, long size, boolean gene
             imports.add(line.asText(""));
         }
         return new FileMetadata(root.path("path").asText(""), root.path("checksum").asText(""),
-                root.path("size").asLong(-1L), root.path("generated").asInt(0) == 1, types, imports);
+                root.path("size").asLong(-1L), root.path("lastModified").asLong(-1L),
+                root.path("generated").asInt(0) == 1, types, imports);
     }
 }
