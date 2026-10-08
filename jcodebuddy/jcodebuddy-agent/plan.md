@@ -141,7 +141,12 @@ For complex refactorings and large-scale migrations, we propose integrating [Ope
 ### Phase 4: User Interface & Connectivity
 - [x] Build the **Companion HTML Interface** (Web dashboard).
 - [x] Implement **Inverse Navigation** (Jump to source and Clipboard integration).
-- [ ] Create lightweight hooks for IntelliJ and VS Code.
+- [x] ~~Create lightweight hooks for IntelliJ and VS Code.~~ — **struck (plan step 9.1b) because it is
+      delivered**: the two hosts exist as [`webview/webview-jetbrains`](../../webview/webview-jetbrains) (the
+      `WebView Explorer` tool window) and [`webview/webview-vscode`](../../webview/webview-vscode) (the
+      extension, whose buffer edit — unsaved, in the editor's own undo stack — is asserted by its own nine
+      tests). The item was written before those modules landed, and its own plan's dashboard work (7.2) now
+      reaches the editors through `webviewd` and the sidecar rather than through a hook per editor.
 - [x] Prototype an OpenRewrite-based tool module.
       — **done** in plan step 7.5: `tools/RenameMemberTool` reads through `SourceReader`, queries through
       `TreeQueries` and splices text (DEC-030), registered in the agent's menu and asserted by

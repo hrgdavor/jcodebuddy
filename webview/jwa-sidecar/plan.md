@@ -89,7 +89,14 @@ a file that does not exist rather than a cheerful "ok". See [`../PLAN-webview-su
 - [x] Handle indentation configuration from client properly (currently defaulted to 4 spaces)
       — **done** in plan step 7.1: `ClientFormatting` reads `tabSize`/`insertSpaces` from
       `workspace/didChangeConfiguration` and the code action builds its engine with that indent.
-- [ ] Add more tools (e.g., toString/equals generator) following the same surgical pattern.
+- [x] ~~Add more tools (e.g., toString/equals generator) following the same surgical pattern.~~ — **struck
+      (plan step 9.1b), because this is the wrong home for it rather than a feature nobody wants.** This plan
+      owns the *host* half: the LSP surface, `/jump`, `/applyEdit` and the code action that hands a builder to
+      the client. A generator that rewrites members is a *tool*, and tools live in the agent's `ToolRegistry`
+      (`hello`, `builder`, `getters`, `setters`, `accessors`, `constructor`, `rename`), where the engine does
+      the editing. So the item needs no work here; if the generator is wanted, it is one new `ActionTool`
+      registered in `WatchAgent`, modelled on `RenameMemberTool` (step 7.5) — a "when wanted" improvement, not
+      open work on this plan.
 
 ### Integration
 `lsp4j` is already a dependency and `RecordBuilderProcessor` is wired into the LSP request handlers — this
