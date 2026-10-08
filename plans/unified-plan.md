@@ -5178,6 +5178,23 @@ item without running the whole pass.
   carries a nested `record Record` and a nested `interface Write`. Those three are the difference the next attempt
   should reproduce **in a test** — the instrument that has settled every question here — rather than in the example,
   where a red `ExampleRegenerationTest` is the only feedback.
+- **Those three candidates were turned into tests, and all three passed — so the shape is eliminated as well.**
+  `FieldAnnotationExampleShapeTest` generates five variants and asserts the override each time: the control (default
+  level, plain marker, no nested types), `@View(gen = GenLevel.BUILDER_ALL)`, extends another view, a nested `record`
+  plus `interface`, and the example's whole shape combined. **All five pass.** The one adjacent case the variants did
+  not cover — a parent declaring the same accessor, so the union might take the unannotated declaration — was checked
+  directly: `metadata()` is declared **only** in `PersonSummary`, so there is no redeclaration either.
+- **What that leaves is a contradiction, and it is what the next attempt must explain.** Every code path emits the
+  override in a test — the source path, the emitter, a second pass over an existing enum, the CLI's own `main`, and the
+  agent's cache (read, and correct) — and every shape difference reproduces it, yet the example's own CLI run **wrote no
+  file at all**: after it, `git status` showed only the two hand edits, while the run printed *"Writing generated java
+  to: …"*. `ExampleRegenerationTest` agrees with that reading: it **failed** when the example source carried the
+  annotation and **passes** when it does not, which is exactly what "the committed enum was never regenerated" means. So
+  the question is no longer what the emitter does; it is **why that one invocation writes nothing while the same entry
+  point writes the override in a test**. The instrument for it is a **manual CLI run with the reactor's `target/*.jar`
+  files on the classpath as well as every `target/classes`** (the trap recorded above and now in `doc/AGENTS.md`),
+  reading the generator's **own stdout** — the one view of that invocation nobody has seen yet, because every run so far
+  has been read through `gen.js`'s summary or a log the renderer's non-zero exit truncated.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
