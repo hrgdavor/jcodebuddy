@@ -1868,7 +1868,13 @@ public class EntityMetadataGenerator {
                         // interface, which the developer declares (the example's `PersonSummary.Write` is the live
                         // case): emitting one for a view with no setters would emit code that cannot compile, and a
                         // view without them is already reported by ViewBuilderGenerator.reportMissingSetters.
+                        // The view's own source is passed so the applier emits an arm only for the setters that
+                        // interface DECLARES — a writable field it omits gets a `missing_setter` report instead of a
+                        // call that would not compile.
                         ViewPatchApplierGenerator.generate(javaOutputRoot, viewPackage, view,
+                                view.sourcePath() == null || view.sourcePath().isBlank()
+                                        ? null
+                                        : sourceRoot.resolve(view.sourcePath()),
                                 ViewPatchApplierGenerator.writableOf(ordinalProperties), divergences);
                     }
                     if (wantsTrackingBuilder) {

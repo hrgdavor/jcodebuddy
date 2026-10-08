@@ -9,6 +9,8 @@ import java.util.List;
 
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
+import hr.hrg.jcodebuddy.engine.source.SourceReader;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
 
 /**
@@ -51,14 +53,20 @@ public final class ViewPatchApplierGenerator {
     public static final String CLASS_SUFFIX = "PatchApplier";
 
     /** Writes {@code <View>PatchApplier.java}, or leaves it alone and reports when its header froze it. */
-    public static void generate(Path javaOutputRoot, String packageName, ViewMeta view, List<Property> writable,
-                                DivergenceReporter divergences) throws IOException {
+    public static void generate(Path javaOutputRoot, String packageName, ViewMeta view, Path viewSource,
+                                List<Property> writable, DivergenceReporter divergences) throws IOException {
         Path packageDir = packageName == null || packageName.isBlank()
                 ? javaOutputRoot
                 : javaOutputRoot.resolve(packageName.replace('.', '/'));
         String className = view.name() + CLASS_SUFFIX;
         Path file = packageDir.resolve(className + ".java");
-        String canonical = source(packageName, view, className, writable);
+
+        // The setters the DEVELOPER declared, because the applier writes through the view's own `Write` interface and
+        // emitting a call for one that is not there produces code that cannot compile. `null` means "not known" (no
+        // source, or unreadable) and falls back to every writable field, which is what the tooling's own
+        // `missing_setter` report already covers.
+        java.util.Set<String> declared = declaredSetters(viewSource, view.name(), divergences);
+        String canonical = source(packageName, view, className, writable, declared);
 
         if (!Files.exists(file)) {
             Files.createDirectories(packageDir);
@@ -68,8 +76,43 @@ public final class ViewPatchApplierGenerator {
         ViewAdapterGenerator.writeUnlessFrozen(file, canonical, divergences);
     }
 
+    /**
+     * The one-parameter method names of the view's nested {@code Write} interface, or {@code null} when they cannot be
+     * read.
+     *
+     * <p>Read through {@link SourceReader}, the one place this repository decides whether a file is readable (F-34): an
+     * error-tolerant partial parse that missed the setters would emit an applier that cannot compile, which is the
+     * failure this method exists to prevent rather than cause.</p>
+     */
+    private static java.util.Set<String> declaredSetters(Path viewSource, String viewName,
+                                                         DivergenceReporter divergences) throws IOException {
+        if (viewSource == null || !Files.isRegularFile(viewSource)) {
+            return null;
+        }
+        SourceReader.Read read = SourceReader.read(viewSource);
+        if (!read.readable()) {
+            SourceReader.reportUnparseable(divergences, "source_not_parsed", viewName + CLASS_SUFFIX,
+                    "the view could not be read, so the setters its `Write` interface declares are unknown",
+                    "the applier was generated from every writable field");
+            return null;
+        }
+        for (org.openrewrite.java.tree.J.ClassDeclaration declaration : TreeQueries.interfaces(read.unit())) {
+            if ("Write".equals(declaration.getSimpleName())) {
+                java.util.Set<String> names = new java.util.LinkedHashSet<>();
+                for (org.openrewrite.java.tree.J.MethodDeclaration method : TreeQueries.methodsOf(declaration)) {
+                    if (TreeQueries.hasOneParameter(method)) {
+                        names.add(method.getSimpleName());
+                    }
+                }
+                return names;
+            }
+        }
+        return java.util.Set.of();
+    }
+
     /** The class's text, deterministic: the same view writes the same bytes. */
-    private static String source(String packageName, ViewMeta view, String className, List<Property> writable) {
+    private static String source(String packageName, ViewMeta view, String className, List<Property> writable,
+                                 java.util.Set<String> declaredSetters) {
         String nl = System.lineSeparator();
         StringBuilder sb = new StringBuilder();
         sb.append(header(view)).append(nl);
@@ -103,6 +146,16 @@ public final class ViewPatchApplierGenerator {
         sb.append("        for (java.util.Map.Entry<String, JsonNode> operation : document.properties()) {").append(nl);
         sb.append("            switch (operation.getKey()) {").append(nl);
         for (Property property : writable) {
+            if (declaredSetters != null && !declaredSetters.contains(property.name())) {
+                // Writable by the framework's rule, but the developer's `Write` interface declares no setter for it —
+                // so there is nothing to call. Reported rather than emitted, and reported in the same vocabulary the
+                // builder generator already uses for it (§ 8.7/3.20).
+                sb.append("                case \"").append(property.name()).append("\" -> report.add(")
+                        .append(stringLiteral("missing_setter: " + view.name() + ".Write declares no setter for "
+                                + property.name() + ", so this operation cannot be applied"))
+                        .append(");").append(nl);
+                continue;
+            }
             String conversion = conversion(property.type());
             if (conversion == null) {
                 // A writable field this applier cannot convert — a nested view, a collection, a date. It gets its own

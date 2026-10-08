@@ -118,4 +118,38 @@ class GeneratedPatchApplierTest {
                 "the flag is opt-in, because the emitted class imports Jackson's node type and must not appear in a "
                         + "project that never asked for it: " + Files.walk(root).toList());
     }
+
+    /**
+     * The applier writes through the developer's {@code Write}, so it may only emit an arm for a setter that interface
+     * <b>declares</b>. A writable field it omits gets a report — and the class still compiles, which is the property
+     * that matters: before this, the emitter called a setter that was not there and the generated file was broken.
+     */
+    @Test
+    void aWritableFieldTheWriteOmitsIsReportedAndTheClassStillCompiles() throws Exception {
+        Path root = tempDir.resolve("partial");
+        Path pkg = root.resolve("patch/hr");
+        Files.createDirectories(pkg);
+        Files.writeString(pkg.resolve("Thing.java"), MARKER);
+        // `age` is writable by the framework's rule but has no setter here: exactly the case that used to emit a call
+        // to a method that does not exist.
+        Files.writeString(pkg.resolve("PersonSummary.java"), VIEW.replace("    Write age(Integer value);\n", ""));
+
+        DivergenceReporter divergences = new DivergenceReporter();
+        EntityMetadataGenerator.setGeneratePatchAppliers(true);
+        try {
+            EntityMetadataGenerator.generate(root, root, root, divergences);
+        } finally {
+            EntityMetadataGenerator.setGeneratePatchAppliers(false);
+        }
+        String emitted = Files.readString(pkg.resolve("PersonSummaryPatchApplier.java"));
+
+        Assertions.assertTrue(emitted.contains("missing_setter: PersonSummary.Write declares no setter for age"),
+                "a writable field the Write interface omits is reported in the vocabulary the builder generator "
+                        + "already uses:\n" + emitted);
+        Assertions.assertFalse(emitted.contains("target.age("),
+                "and no call is emitted for a setter that does not exist:\n" + emitted);
+
+        CompileHarness.compileOrFail(CompileHarness.findRepoRoot(), "patch-applier-partial",
+                CompileHarness.javaSourcesUnder(root), List.of());
+    }
 }
