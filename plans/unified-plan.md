@@ -5109,7 +5109,18 @@ item without running the whole pass.
 - **Remainder, precisely**: (1) **the generator's refresh decision** — `EntityMetadataGenerator`'s `<Marker>.metadata.json`
   must be rewritten when a **view** changes, using this component, which is what step 6.1's example half waits on;
   (2) the **on-demand entry** (`jcodebuddy metadata stale` / `… rebuild --stale`); (3) the **watch-mode entry**;
-  (4) the whole-reactor `GATE` run (the engine's own suite is green).
+  (4) the whole-reactor `GATE` run — **now done**: `bun scripts/mvn-jdk25.js` over the whole reactor is **BUILD SUCCESS** (tooling 13:40 min, a real rebuild; `JCodeBuddy Core` rebuilt).
+- **Where the next slice starts, with the evidence rather than a hunch.** The metadata JSON write itself looks
+  **unconditional**: the loop over `pendingDocuments` in `EntityMetadataGenerator` (`for (EntityMeta entityMeta :
+  pendingDocuments)` → `Files.writeString(outputDir.resolve(entityMeta.entityName() + ".metadata.json"),
+  toJson(entityMeta, classIndex))`) sits after the index-summary `if (previousIndex != null)` and is not inside a
+  condition. So the JSON *was* being rewritten, and the constraint was missing from the **facts** rather than from
+  the write — and there are, again, **two paths that read constraints**:
+  `propNode.path("constraints")` (`EntityMetadataGenerator` ~line 264, building a `Property` from the **metadata
+  JSON**) and `ValidationGenerator.constraintsOn(method)` (~line 2349, building one from the **parsed accessor**,
+  and the only caller of the reader). A view-declared accessor therefore reaches the emitter with its constraint on
+  the source path and without it on the JSON path, which is the same asymmetry the step was opened for — so the
+  next slice is to make **one** of those two the authority and have the other stop being a second answer.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
