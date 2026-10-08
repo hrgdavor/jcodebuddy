@@ -30,26 +30,36 @@ class GeneratedPatchApplierTest {
             """;
 
     /**
-     * One convertible String, one convertible boxed number, and one type with no direct conversion — plus the
-     * <b>hand-written</b> {@code Write} interface the applier writes through, exactly as the example declares it.
-     * That interface is the developer's, which is why the emission requires a builder level: a view without setters
-     * would get an applier that cannot compile.
+     * One convertible String, one convertible boxed number, one format-stable JDK type, a type with no direct
+     * conversion, and a <b>date</b> — whose conversion is deliberately absent because its Jackson form depends on the
+     * caller's mapper — plus the <b>hand-written</b> {@code Write} interface the applier writes through, exactly as the
+     * example declares it. That interface is the developer's, which is why the emission requires a builder level: a view
+     * without setters would get an applier that cannot compile.
      */
     private static final String VIEW = """
             package patch.hr;
             import hr.hrg.hipster.entity.api.GenLevel;
             import hr.hrg.hipster.entity.api.View;
             import hr.hrg.hipster.entity.api.ViewWriter;
+            import java.math.BigDecimal;
+            import java.time.Instant;
             import java.util.Map;
+            import java.util.UUID;
             @View(gen = GenLevel.BUILDER_ALL)
             public interface PersonSummary extends Thing {
                 String firstName();
                 Integer age();
+                BigDecimal balance();
+                UUID reference();
+                Instant lastSeen();
                 Map<String, Long> counters();
                 interface Write extends PersonSummary, ViewWriter {
                     Write id(Long value);
                     Write firstName(String value);
                     Write age(Integer value);
+                    Write balance(BigDecimal value);
+                    Write reference(UUID value);
+                    Write lastSeen(Instant value);
                     Write counters(Map<String, Long> value);
                 }
             }
@@ -90,6 +100,14 @@ class GeneratedPatchApplierTest {
                 "the arm reads `current` and calls the TYPED setter:\n" + emitted);
         Assertions.assertTrue(emitted.contains("target.age(delta.path(\"current\").asInt())"),
                 "and converts per the declared type:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("target.balance(new java.math.BigDecimal(delta.path(\"current\").asText()))"),
+                "a format-stable JDK type is converted from its own textual form:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("target.reference(java.util.UUID.fromString(delta.path(\"current\").asText()))"),
+                "and so is a UUID, which Jackson always writes as a string:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("unsupported_type: lastSeen"),
+                "a date is REPORTED rather than guessed: its Jackson form depends on the caller's mapper (ISO text with "
+                        + "the JavaTime module, something else without), and a wrong guess fails at runtime, not at "
+                        + "compile time:\n" + emitted);
         Assertions.assertTrue(emitted.contains("unknown_field: "),
                 "a field the view does not have is reported, never resolved through a hash map (DEC-016):\n" + emitted);
         Assertions.assertTrue(emitted.contains("positional_fallback: "),

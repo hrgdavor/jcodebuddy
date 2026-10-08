@@ -357,9 +357,24 @@ public final class ViewPatchApplierGenerator {
     /**
      * The setter argument for one declared type, or {@code null} when this applier cannot convert it yet.
      *
-     * <p>Direct {@code JsonNode} accessors only: no object mapper, so the emitted class needs Jackson's node type and
-     * nothing else. A type that needs a mapper — a date, a nested view, a parameterized collection — is reported at
-     * runtime rather than converted wrongly, and adding one is a line here.</p>
+     * <p>Direct {@code JsonNode} accessors, plus the JDK types whose Jackson form is fixed by Jackson's own rules rather
+     * than by a mapper configuration this generator cannot see:</p>
+     *
+     * <ul>
+     *   <li>{@code BigDecimal}/{@code BigInteger} and {@code UUID} — a JSON number and a JSON string respectively,
+     *       always, so {@code new BigDecimal(node.asText())} and {@code UUID.fromString(node.asText())} are the value's
+     *       own textual form;</li>
+     *   <li>the primitives and {@code String}, through the accessors themselves.</li>
+     * </ul>
+     *
+     * <p><strong>Two conversions are deliberately absent, and they are different problems.</strong> A <em>date</em>
+     * ({@code Instant}, {@code LocalDate}) is written by Jackson as an ISO string only when the caller's mapper has the
+     * JavaTime module registered, and as something else when it does not ({@code EntityJacksonMapper} adds only its own
+     * view module, so the answer lives with the caller). Guessing wrong there fails at <em>runtime</em>, not at compile
+     * time — the worst kind — so the type is reported instead. An <em>enum</em> would be {@code valueOf(node.asText())},
+     * which is right by Jackson's default and wrong for any declared type that is not an enum: guessing from the type
+     * text would emit code that does not compile in someone else's project. Neither is a line here; both need the
+     * generator to be told, by the emitter's format contract or by the resolved type information respectively.</p>
      */
     private static String conversion(String declaredType) {
         String type = declaredType == null ? "" : declaredType.trim();
@@ -369,6 +384,12 @@ public final class ViewPatchApplierGenerator {
             case "Integer", "int", "java.lang.Integer" -> "{node}.asInt()";
             case "Boolean", "boolean", "java.lang.Boolean" -> "{node}.asBoolean()";
             case "Double", "double", "java.lang.Double" -> "{node}.asDouble()";
+            case "Float", "float", "java.lang.Float" -> "{node}.asFloat()";
+            case "Short", "short", "java.lang.Short" -> "{node}.asShort()";
+            case "Byte", "byte", "java.lang.Byte" -> "{node}.asByte()";
+            case "BigDecimal", "java.math.BigDecimal" -> "new java.math.BigDecimal({node}.asText())";
+            case "BigInteger", "java.math.BigInteger" -> "new java.math.BigInteger({node}.asText())";
+            case "UUID", "java.util.UUID" -> "java.util.UUID.fromString({node}.asText())";
             default -> null;
         };
     }
