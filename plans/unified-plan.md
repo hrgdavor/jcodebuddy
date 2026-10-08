@@ -5133,12 +5133,21 @@ item without running the whole pass.
   body"** (eliminated by a **new test** that asserts the exact example scenario — pass 1 writes the enum with no
   override, the constraint is then added to the accessor, pass 2 must add it — and it **passes**; it stays as a guard
   whatever the eventual cause is).
-- **What that leaves, and the next probe.** The example differs from every passing fixture in what *runs* it:
-  `bun scripts/gen.js` drives it through the **agent**, which keeps its own per-file cache
-  (`hr.hrg.watch2.agent.core.MetadataCache`, ledger `checksum \t lastModified \t path`) whose reuse rule compares
-  **last-modified alone** — the cheap tier the maintainer described. If that comparison is coarser than the edit, or
-  reads a time recorded before it, the pass reuses a parse of the *pre-annotation* file, which produces exactly what was
-  observed: 16 content changes reported by the class index, and the enum untouched. That is the next thing to measure.
+- **What that leaves, and the next probe — with one more guess eliminated by reading the code rather than trusting
+  it.** The first thought was that the **agent's** cache was the cause, since `bun scripts/gen.js` drives the example
+  through tooling that keeps its own ledger (`hr.hrg.watch2.agent.core.MetadataCache`, `checksum \t lastModified \t
+  path`). **It is not**: `hasChanged` implements exactly the tiers this step builds — same `lastModified`, then the
+  checksum — so it is correct, and reading it also confirms the design independently. **The real difference is the entry
+  point**: `gen.js`'s generator step is a **direct CLI run** (`java -cp … EntityMetadataGenerator <src> <meta>
+  --java-out <src> --packages … --validate`), while every passing test — including the new second-pass test — goes
+  through the `generate(...)` API. So the frontier is the **CLI's own write path** with its flags: which artifacts it
+  decides to write, and whether `--java-out` + `--validate` short-circuits the field enums when the metadata it reads
+  first is older than the source. That is a bounded question with the command in hand, not a hypothesis about a cache.
+  **One dead end to skip**: do not build that probe's classpath with a hand-rolled `dependency:build-classpath` export.
+  An ad-hoc export over this reactor produced a one-entry file and `NoClassDefFoundError` for `org.openrewrite.java.tree.J`,
+  because the goal ran per module and the last module's output won the file. Take the classpath from the repository's own
+  `classpathFrom` / `scripts/gen.js` path, or reproduce the case as a test — which is how every hypothesis above was
+  settled, and is the cheaper instrument.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
