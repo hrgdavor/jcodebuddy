@@ -5122,9 +5122,13 @@ item without running the whole pass.
   the source path and without it on the JSON path, which is the same asymmetry the step was opened for — so the
   next slice is to make **one** of those two the authority and have the other stop being a second answer.
 - **Settled by the maintainer on 2026-10-08**: *the source path is the authority for a view-declared accessor*, and
-  where **classes** are involved the metadata prefers the **full class name** — the rule DEC-047 already applied to
-  `FieldAnnotation.type`, now binding the metadata generally (an annotation type, a class-valued annotation argument,
-  any class reference a consumer reads).
+  where **classes** are involved the metadata prefers the **full class name**. **Only half of that second rule is
+  implemented today, and the record must not imply otherwise**: `FieldAnnotation.type` is already the qualified name
+  (`FieldConstraint.qualifiedName()`, DEC-047 § 1), while the **`arguments` text is carried verbatim** — so a
+  class-valued argument written with a simple name (`@ShapeOf(Rect.class)`) reaches a consumer as `Rect.class` and needs
+  the declaring file's imports to resolve. Resolving class references **inside** the argument text against the parsed
+  accessor's import table, and emitting them fully qualified, is a **named remainder** of this step rather than
+  something already true.
 - **Three hypotheses about the example were then tested and eliminated**, which is the useful part of this record —
   the cause is **still unidentified**, and none of these is it: **"the CLI reads constraints from the metadata JSON"**
   (eliminated: `fromJson`, the method that builds `Property` objects from the JSON, has **no production caller** — every
