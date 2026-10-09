@@ -1,6 +1,6 @@
 import { insert } from '@jsx6/jsx6'
 import { signal } from '@jsx6/signal'
-import { report, reportSource, isSample } from '../.generated/report.js'
+import { report, reportSource, isSample, repoRoot } from '../.generated/report.js'
 import {
   acceptAllResolved,
   buildDecisions,
@@ -13,9 +13,9 @@ import {
   proposedCodeFor,
   rejectionFor,
   suggestionOf,
-  toJson,
 } from './decisions.js'
 import { blockLabel, blockNote, blocksOf } from './blocks.js'
+import { isServed, saveDecisions } from './save.js'
 
 /**
  * The merge-java resolution review page (plan step 4.2), as a jsx6 app.
@@ -63,14 +63,16 @@ function reject(filePath, resolution, conflict) {
   $rejected([...$rejected().filter((existing) => `${existing.filePath}::${existing.signature}` !== key), entry])
 }
 
-/** Hand the payload to the browser as a download. The one write a `file://` page can perform. */
-function downloadDecisions(payload) {
-  const url = URL.createObjectURL(new Blob([toJson(payload)], { type: 'application/json' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileNameFor(payload.branchName)
-  link.click()
-  URL.revokeObjectURL(url)
+/**
+ * Deliver the payload by whichever transport this document has (plan step 4.13, deliverable 3): a POST when
+ * the page is served, the browser download when it is a `file://` document. The rule and its reasons live in
+ * `save.js`, which is testable without a DOM; this is only the call site, and it reports what happened because
+ * a reviewer whose decisions reached nothing must be told rather than left believing they were recorded.
+ */
+async function deliverDecisions(payload, $outcome) {
+  const result = await saveDecisions(payload, { fileName: fileNameFor(payload.branchName) })
+  $outcome(result.detail)
+  return result
 }
 
 /**
@@ -452,6 +454,10 @@ function ExportBar({ branchName }) {
   const count = $accepted().length
   // Static, and that is correct: what already has an answer does not change while the page is open.
   const resolvable = acceptAllResolved(report.files ?? []).length
+  // Where the payload goes, and what happened to it. A served page posts it; a `file://` page downloads it,
+  // because there is nothing to post to — and either way the reviewer is told which happened.
+  const $outcome = signal('')
+  const served = isServed()
   return (
     <div class="exportbar">
       <span>
@@ -462,23 +468,37 @@ function ExportBar({ branchName }) {
         Apply all resolved ({resolvable})
       </button>
       <button
-        onclick={() =>
-            downloadDecisions(
-              buildDecisions({ branchName, accepted: $accepted(), rejected: $rejected() }),
-            )
-          }
+        onclick={() => {
+          $outcome('')
+          void deliverDecisions(
+            buildDecisions({
+              branchName,
+              accepted: $accepted(),
+              rejected: $rejected(),
+              repoPath: repoRoot,
+            }),
+            $outcome,
+          )
+        }}
         disabled={() => $accepted().length === 0}
       >
-        Download decisions.json
+        {served ? 'Send decisions' : 'Download decisions.json'}
       </button>
       <button onclick={() => $accepted([])} disabled={() => $accepted().length === 0}>
         Clear
       </button>
-      <span class="note">
-        then: bun run merge-java/scripts/merge-report/review-file.js &lt;your file&gt; --apply-decisions
-        &lt;the downloaded json&gt; --branch {branchName || '<branch>'} — this page stays standalone: no host, no
-        server, nothing to start
-      </span>
+      {served ? (
+        <span class="note">
+          the server records them with DecisionRecorder; nothing is applied to a branch by this page
+        </span>
+      ) : (
+        <span class="note">
+          then: bun run merge-java/scripts/merge-report/review-file.js &lt;your file&gt; --apply-decisions
+          &lt;the downloaded json&gt; --branch {branchName || '<branch>'} — this page stays standalone: no host, no
+          server, nothing to start
+        </span>
+      )}
+      {$outcome ? <span class="export-outcome">{$outcome}</span> : null}
     </div>
   )
 }
