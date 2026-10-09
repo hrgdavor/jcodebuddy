@@ -1,0 +1,178 @@
+/**
+ * This page's own look. Geometry — the canvas, the block transform, the zoom controls, the marquee and
+ * the selection menu — comes from nodditor's shipped `nodditor.css`, which the build inlines ahead of
+ * this file. What is here is only what the library deliberately leaves to a host: the page frame, and
+ * the look of *our* blocks and connectors.
+ */
+
+:root {
+  --graph-bg: #f6f7f9;
+  --graph-panel: #ffffff;
+  --graph-line: #d3d7de;
+  --graph-text: #1f2430;
+  --graph-muted: #6b7280;
+  --graph-accent: #2f6feb;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--graph-bg);
+  color: var(--graph-text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.graph-root {
+  height: 100vh;
+}
+
+.graph-app {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+}
+
+.graph-sidebar {
+  grid-row: 1 / span 2;
+  background: var(--graph-panel);
+  border-right: 1px solid var(--graph-line);
+  padding: 16px 14px;
+  overflow: auto;
+}
+
+.graph-sidebar h1 {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+
+.graph-hint {
+  color: var(--graph-muted);
+  margin: 0 0 12px;
+}
+
+.graph-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.graph-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.graph-list-item:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.graph-stage {
+  position: relative;
+  min-height: 0;
+  /* nodditor pans and zooms inside this box, so it needs a definite size and its own containment. */
+  contain: strict;
+}
+
+.graph-stage > jsx6-nodditor {
+  position: absolute;
+  inset: 0;
+}
+
+.graph-status {
+  grid-column: 2;
+  border-top: 1px solid var(--graph-line);
+  background: var(--graph-panel);
+  color: var(--graph-muted);
+  padding: 6px 12px;
+}
+
+/* ------------------------------------------------------------------ our blocks */
+
+.graph-block {
+  min-width: 220px;
+  background: var(--graph-panel);
+  border: 1px solid var(--graph-line);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+  overflow: hidden;
+}
+
+.graph-block-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #eef1f6;
+  border-bottom: 1px solid var(--graph-line);
+  cursor: grab;
+}
+
+.graph-block-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.graph-block-subtitle {
+  padding: 4px 8px;
+  color: var(--graph-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--graph-line);
+}
+
+.graph-block-body {
+  padding: 6px 8px;
+}
+
+.graph-block-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.graph-block-row:hover {
+  background: #f1f5f9;
+}
+
+.graph-bean-type {
+  color: var(--graph-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.graph-block-empty {
+  color: var(--graph-muted);
+  font-style: italic;
+}
+
+/* A connector: nodditor discovers it by `ncid` and places the line from these custom properties, so
+   the offsets are the host's half of the contract. */
+.graph-port {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--graph-accent);
+  background: var(--graph-panel);
+  --offset-x: 0px;
+  --offset-y: 0px;
+}
+
+.graph-port-in {
+  --offset-x: -5px;
+}
+
+.graph-port-out {
+  --offset-x: 5px;
+}

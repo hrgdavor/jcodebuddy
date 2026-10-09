@@ -1,0 +1,71 @@
+/**
+ * The page's jsx6 markup.
+ *
+ * Both components are **function components** — a function that receives the props object and returns
+ * DOM — and that is a measured choice rather than a style. A `JsxW` subclass extends `HTMLElement`, so
+ * the JSX runtime's class path (`new tag(attr, children, parent)`) throws `Illegal constructor`: a
+ * plain `HTMLElement` may only be built through the element registry. Registering the class and using
+ * the tag name does not avoid it either — `document.createElement` refuses a custom element whose
+ * class sets attributes or children from its constructor, which is exactly what a template does. The
+ * function form is the one the stack's own docs open with, and it composes with the editor element
+ * (`jsx6-nodditor`, which nodditor registers itself) without touching that rule.
+ */
+import { signal } from '@jsx6/signal'
+
+/**
+ * The sidebar: one button per context.
+ *
+ * @param {{contexts: Array, onSelect: Function}} attr
+ */
+function Sidebar({ contexts, onSelect }) {
+  return (
+    <aside class="graph-sidebar">
+      <h1>hipster-ioc contexts</h1>
+      <p class="graph-hint">Choose a context to select it in the graph.</p>
+      <ul class="graph-list">
+        {(contexts ?? []).map((context) => (
+          <li>
+            <button
+              type="button"
+              class="graph-list-item"
+              title={context.id}
+              onclick={() => onSelect(context)}
+            >
+              {context.simpleName || context.id}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
+/**
+ * The page shell: sidebar, the editor element, and the status line.
+ *
+ * The editor arrives as a **node the caller built**, not as `<jsx6-nodditor …/>`. That is a measured
+ * consequence of the custom-element contract: the JSX runtime creates a string tag through
+ * `document.createElement(tag, options)`, and the options object makes the browser refuse the upgrade
+ * (`The result must not have attributes` / `must not have children`, because the element's constructor
+ * sets them). Building the element and inserting it as an existing node sidesteps the constructor-
+ * argument path entirely, and it is also what lets `main.js` hold the same reference it later hands the
+ * graph to — the order nodditor's host guide requires (render → inspect → wire).
+ *
+ * The status is a signal read as a child, so updating it rewrites one text node and leaves the rest of
+ * the page alone — the binding the stack's own example demonstrates, and it is published on `globalThis`
+ * because the page updates it after wiring the graph.
+ *
+ * @param {{contexts: Array, onSelect: Function, status: string, editor: Element}} attr
+ */
+export function GraphShell(attr) {
+  const status = signal(attr.status ?? 'loading contexts.json …')
+  globalThis.__HIPSTER_IOC_STATUS__ = status
+
+  return (
+    <div class="graph-app">
+      <Sidebar contexts={attr.contexts ?? []} onSelect={attr.onSelect ?? (() => {})} />
+      <main class="graph-stage">{attr.editor}</main>
+      <footer class="graph-status">{status}</footer>
+    </div>
+  )
+}

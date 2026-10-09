@@ -1,0 +1,6 @@
+# The page's own derived output never lands here: the built `graph.html` goes to the module's
+# `.jcodebuddy/metadata/hipster-ioc/` (DEC-026), and the bundle stages inside the jsx6 checkout's
+# `.tmp/`. What this file guards is the case of someone running `bun install` here — the jsx6 packages
+# resolve through the checkout, so nothing under `node_modules` is ever a source of truth for this page.
+node_modules/
+.tmp/
