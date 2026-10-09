@@ -64,14 +64,23 @@ function head(title, extra = '') {
 <style>${PAGE_STYLE}</style>${extra}`;
 }
 
-/** The page skeleton both modes share. */
-function page(title, body, scripts, { linkBase = '', bridgePort = DEFAULT_BRIDGE_PORT } = {}) {
+/**
+ * The page skeleton both modes share.
+ *
+ * `source` is the Markdown file this page shows, written to `data-source` — it is what a Ctrl+click on text
+ * opens, at the line that produced the text. It is a parameter here rather than a constant because a host in
+ * this mode reads the file itself: a JetBrains plugin loading a `.md` from the project tree knows an absolute
+ * path, and a host that pushes a different document (a save, or another file from the popup menu) updates the
+ * attribute. An absolute value is passed through unchanged; a relative one is resolved against
+ * `data-link-base`, exactly as a link target is.
+ */
+function page(title, body, scripts, { linkBase = '', bridgePort = DEFAULT_BRIDGE_PORT, source = '' } = {}) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 ${head(title)}
 </head>
-<body data-link-base="${linkBase}" data-bridge-port="${bridgePort}">
+<body data-link-base="${linkBase}" data-bridge-port="${bridgePort}" data-source="${String(source).replace(/"/g, '&quot;')}">
 <header class="top">
   <h1 id="view-title">${String(title ?? 'Markdown view').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c])}</h1>
   <p id="view-status">rendering…</p>
@@ -112,8 +121,11 @@ export async function buildMarkdownPage(options = {}) {
     title,
     moduleName: options.moduleName ?? null,
     indexJson: options.indexJson ?? null,
+    // What Ctrl+click on text opens. A host that loads a file itself (the JetBrains plugin, a manual render for
+    // a webview) passes an absolute path here; the value is echoed into `data-source` at every render.
+    source: options.source ?? null,
   };
-  const shared = { linkBase: options.linkBase ?? '', bridgePort: options.bridgePort };
+  const shared = { linkBase: options.linkBase ?? '', bridgePort: options.bridgePort, source: options.source ?? '' };
 
   if (mode === 'assets') {
     const base = String(options.assetBase ?? '.').replace(/\/+$/, '');

@@ -47,6 +47,16 @@ describe('the inlined page', () => {
     expect(html).toContain('__renderMarkdown');
   });
 
+  test('names the document it renders, so Ctrl+click on text can open it', async () => {
+    // The host mode exists so a JetBrains plugin (or any manual render for a webview) can show a file it read
+    // itself. Ctrl+click on a rendered sentence opens THAT file at the line the sentence came from, so the page
+    // has to carry the path — as `data-source` for the client, and as `source` in the view data so a host that
+    // pushes a different document updates it.
+    const html = await buildMarkdownPage({ mode: 'inlined', source: 'D:/proj/README.md', ...view });
+    expect(html).toContain('data-source="D:/proj/README.md"');
+    expect(html).toContain('"source":"D:/proj/README.md"');
+  });
+
   test('carries the view data, and the renderer reads it', async () => {
     const html = await buildMarkdownPage({ mode: 'inlined', ...view });
     expect(html).toContain('<script id="view-data" type="application/json">');

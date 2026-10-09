@@ -29,6 +29,15 @@ const REPO_ROOT = resolve(SCRIPT_DIR, '..');
 const MODULE = 'hipster-entity/hipster-entity-example';
 const MODULE_ROOT = join(REPO_ROOT, MODULE);
 
+/**
+ * Strip the source-line information, leaving the markup a test is about.
+ *
+ * Every block and every cross-line text run now carries a source line so Ctrl+click can open this document at
+ * it. A test that asserts the *shape* of the HTML should not have to spell that out — the attribute has its own
+ * tests below — and writing it into a dozen assertions would make each of them a test of two things at once.
+ */
+const withoutLines = (html) => String(html).replace(/ data-line="\d+"/g, '');
+
 /** One class index row, as a document would consult it. */
 function fixtureIndex() {
   const rows = new Map([
@@ -129,16 +138,71 @@ describe('the markdown renderer', () => {
 
   test('headings get stable anchors and are collected for the contents', () => {
     const { html, headings } = renderMarkdown('# One\n\n## Two Words\n\n### Three\n', context());
-    expect(html).toContain('<h1 id="one">One</h1>');
-    expect(html).toContain('<h2 id="two-words">Two Words</h2>');
+    expect(withoutLines(html)).toContain('<h1 id="one">One</h1>');
+    expect(withoutLines(html)).toContain('<h2 id="two-words">Two Words</h2>');
     expect(headings.map((heading) => heading.id)).toEqual(['one', 'two-words', 'three']);
     expect(slugify('DEC-029: the class index!')).toBe('dec-029-the-class-index');
   });
 
   test('a fenced code block is never inline-processed', () => {
     const { html } = renderMarkdown('```java\nString s = `not a code span`;\n```\n', context());
-    expect(html).toContain('<pre><code class="language-java">String s = `not a code span`;</code></pre>');
+    expect(withoutLines(html)).toContain('<pre><code class="language-java">String s = `not a code span`;</code></pre>');
     expect(html).not.toContain('<code>not a code span</code></pre>');
+  });
+
+  // ---- the source lines a Ctrl+click uses ------------------------------------------------------------
+  // The page is the third view of the same prose (source, IDE preview, this page), so a reader comparing them
+  // needs the line. These are the tests for that half; `withoutLines` above is what the shape tests use to
+  // ignore it.
+
+  test('every block carries the source line it started on', () => {
+    const { html } = renderMarkdown('# Title\n\nprose\n\n```\ncode\n```\n', context());
+    expect(html).toContain('<h1 id="title" data-line="1">');
+    expect(html).toContain('<p data-line="3">');
+    // The fence is line 5, and the block's attribute is the fence line rather than the first line of code.
+    expect(html).toContain('<pre data-line="5">');
+  });
+
+  test('a paragraph spanning several lines reports the line of the text a reader is looking at', () => {
+    // The two source lines are joined into one paragraph, and the joined text got a marker on each part. The
+    // first part is the block's own line, so it needs no span; the second must have its own, or every
+    // Ctrl+click in a wrapped paragraph would open the paragraph's first line.
+    const { html } = renderMarkdown('First part\nsecond part\n', context());
+    expect(html).toContain('<p data-line="1">First part ');
+    expect(html).toContain('<span data-line="2">second part</span>');
+  });
+
+  test('the line is the source line, not the rendered offset, when the document starts with blank lines', () => {
+    const { html } = renderMarkdown('\n\n\nreal text\n', context());
+    expect(html).toContain('<p data-line="4">');
+  });
+
+  test('a list item, a table row and a quoted line each report their own line', () => {
+    const list = renderMarkdown('intro\n\n- one\n- two\n', context()).html;
+    expect(list).toContain('<li data-line="3">');
+    expect(list).toContain('<li data-line="4">');
+
+    const table = renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |\n', context()).html;
+    expect(table).toContain('<table data-line="1">');
+    expect(table).toContain('<tr data-line="3">');
+
+    // A blockquote strips its markers and renders the body, so the body's own line numbering has to be shifted
+    // back onto the document's — without that, a quote at the end of a long document reports line 1.
+    const quote = renderMarkdown('a\n\n> quoted\n', context()).html;
+    expect(quote).toContain('<blockquote data-line="3">');
+    expect(quote).toContain('<p data-line="3">');
+  });
+
+  test('a line mark is never put on a link, so the two gestures stay separate', () => {
+    // Ctrl+click means "go to where this text came from"; a link already means a location, and one gesture with
+    // two answers is how a page becomes unpredictable. The link keeps its own data-open/data-line target.
+    const { html } = renderMarkdown('See `Person` here.\n', context());
+    const anchor = /<a [^>]*>/.exec(html)[0];
+    expect(anchor).toContain('data-open="src/main/java/a/b/Person.java"');
+    expect(anchor).toContain('data-line="14"');
+    // The text on either side of the link is wrapped, because it comes from the same line as the block and
+    // therefore needs no span — the guard is that no span wraps the anchor itself.
+    expect(html).not.toContain('<span data-line="1"><a');
   });
 
   test('a code span that names a type becomes a link, and one that does not stays code', () => {
@@ -150,49 +214,50 @@ describe('the markdown renderer', () => {
 
   test('a table renders with a header row and body rows', () => {
     const { html } = renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |\n', context());
-    expect(html).toContain('<table><thead><tr><th>a</th><th>b</th></tr></thead>');
-    expect(html).toContain('<tr><td>1</td><td>2</td></tr>');
+    expect(withoutLines(html)).toContain('<table><thead><tr><th>a</th><th>b</th></tr></thead>');
+    expect(withoutLines(html)).toContain('<tr><td>1</td><td>2</td></tr>');
   });
 
   test('lists, task items and blockquotes render', () => {
-    expect(renderMarkdown('- one\n- two\n', context()).html).toContain('<ul><li>one</li><li>two</li></ul>');
-    expect(renderMarkdown('1. one\n2. two\n', context()).html).toContain('<ol><li>one</li><li>two</li></ol>');
+    expect(withoutLines(renderMarkdown('- one\n- two\n', context()).html)).toContain('<ul><li>one</li><li>two</li></ul>');
+    expect(withoutLines(renderMarkdown('1. one\n2. two\n', context()).html)).toContain('<ol><li>one</li><li>two</li></ol>');
     expect(renderMarkdown('- [x] done\n- [ ] todo\n', context()).html)
       .toContain('<input type="checkbox" disabled checked>');
-    expect(renderMarkdown('> quoted\n', context()).html).toContain('<blockquote>');
+    expect(withoutLines(renderMarkdown('> quoted\n', context()).html)).toContain('<blockquote>');
   });
 
   // Nesting: the indent used to be read and then ignored, so every one of these came out as one flat list.
   test('a nested list stays nested, inside its parent item', () => {
-    expect(renderMarkdown('- one\n  - one-a\n  - one-b\n- two\n', context()).html)
+    expect(withoutLines(renderMarkdown('- one\n  - one-a\n  - one-b\n- two\n', context()).html))
       .toBe('<ul><li>one<ul><li>one-a</li><li>one-b</li></ul></li><li>two</li></ul>');
   });
 
   test('three levels deep, and back up again', () => {
-    expect(renderMarkdown('- a\n  - b\n    - c\n  - d\n- e\n', context()).html)
+    expect(withoutLines(renderMarkdown('- a\n  - b\n    - c\n  - d\n- e\n', context()).html))
       .toBe('<ul><li>a<ul><li>b<ul><li>c</li></ul></li><li>d</li></ul></li><li>e</li></ul>');
   });
 
   test('an ordered list nested in an unordered one is its own list', () => {
-    expect(renderMarkdown('- one\n  1. first\n  2. second\n- two\n', context()).html)
+    expect(withoutLines(renderMarkdown('- one\n  1. first\n  2. second\n- two\n', context()).html))
       .toBe('<ul><li>one<ol><li>first</li><li>second</li></ol></li><li>two</li></ul>');
   });
 
   test('a change of marker at the same level starts a sibling list, as CommonMark does', () => {
     // It used to break the block in two and render the second marker type as a list of its own — which for a nested
     // `1.` inside a `-` list meant the nesting was not merely lost, the list was split.
-    expect(renderMarkdown('- a\n- b\n1. c\n1. d\n', context()).html)
+    expect(withoutLines(renderMarkdown('- a\n- b\n1. c\n1. d\n', context()).html))
       .toBe('<ul><li>a</li><li>b</li></ul><ol><li>c</li><li>d</li></ol>');
   });
 
   test('a nested item carries its own checkbox, and its list says it contains tasks', () => {
     const { html } = renderMarkdown('- [ ] parent\n  - [x] child\n', context());
-    expect(html).toContain('<ul class="contains-task-list"><li><input type="checkbox" disabled> parent');
-    expect(html).toContain('<ul class="contains-task-list"><li><input type="checkbox" disabled checked> child');
+    const bare = withoutLines(html);
+    expect(bare).toContain('<ul class="contains-task-list"><li><input type="checkbox" disabled> parent');
+    expect(bare).toContain('<ul class="contains-task-list"><li><input type="checkbox" disabled checked> child');
   });
 
   test('a continuation line belongs to the item it is indented under', () => {
-    expect(renderMarkdown('- one\n  continues\n- two\n', context()).html)
+    expect(withoutLines(renderMarkdown('- one\n  continues\n- two\n', context()).html))
       .toBe('<ul><li>one continues</li><li>two</li></ul>');
   });
 
@@ -233,6 +298,41 @@ describe('the client script', () => {
 
   test('port 0 disables the HTTP fallback', () => {
     expect(openFileClientScript({ bridgePort: 0 })).toContain("|| '0'");
+  });
+
+  test('Ctrl+click on text opens this document, and leaves a link alone', () => {
+    const script = openFileClientScript({ bridgePort: 18881 });
+    // The gesture is Ctrl (or Cmd), and the page has to know which file it is rendering.
+    expect(script).toContain('event.ctrlKey');
+    expect(script).toContain('event.metaKey');
+    expect(script).toContain('data-source');
+    // A link already names a location, so the modifier must not claim it: `closest('[data-open]')` is checked
+    // first and returns before the text branch is reached.
+    const ctrlBranch = script.slice(script.indexOf('if (event.ctrlKey'));
+    expect(ctrlBranch.indexOf("closest('[data-open]')")).toBeLessThan(ctrlBranch.indexOf("closest('[data-line]')"));
+    // The text branch must not open when the page has no source to open.
+    expect(ctrlBranch).toContain('!own');
+  });
+
+  test('the source path is read when the click happens, not when the script loads', () => {
+    // The host mode builds the page with no document and sets `data-source` during its first render — after
+    // this script has run — so an attribute cached at load is empty exactly where the feature was asked for
+    // (the JetBrains plugin loading a Markdown file). A browser check caught that; this pins it.
+    const script = openFileClientScript({ bridgePort: 18881 });
+    expect(script).toContain('function sourcePath()');
+    expect(script).toContain("getAttribute('data-source')");
+    // No top-level capture of it, which is what the first version did.
+    expect(script).not.toMatch(/var SOURCE_PATH = document\.body\.getAttribute/);
+  });
+
+  test('text navigation reuses the same three-step ladder as a link', () => {
+    // One copy of the fallback: a second would be the copy that drifts, and it is the browser path
+    // (window.openFile absent) that nobody exercises. Counted on the CALLS, not on the identifiers — a mention
+    // in a comment is not a second implementation, and `navigator.clipboard` appears in both.
+    const script = openFileClientScript({ bridgePort: 18881 });
+    expect((script.match(/window\.openFile\(/g) ?? []).length).toBe(1);
+    expect((script.match(/'\/open\?filePath='/g) ?? []).length).toBe(1);
+    expect((script.match(/navigator\.clipboard\.writeText\(/g) ?? []).length).toBe(1);
   });
 
   test('escapes what must be escaped in an attribute', () => {
@@ -427,6 +527,6 @@ test('an inject-examples marker is a link to the file, and its block is still th
   expect(opened[0].target.fragment).toBe(null);
   expect(html).toContain('<a data-open="src/main/java/a/b/SomeFile.java">');
   // The inject half: the fenced block after it is still the included content, rendered as code.
-  expect(html).toContain('<pre>');
+  expect(withoutLines(html)).toContain('<pre>');
   expect(html).toContain('class SomeFile {');
 });

@@ -88,6 +88,13 @@ export async function renderCurrent() {
 
   const markdown = String(view.markdown ?? '');
   const directory = String(view.docDir ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
+  // Ctrl+click on text opens THIS document at the line the text came from, so the page has to name it. It is
+  // set on every render, not once at build time: a host that pushes another document (a save, or a different
+  // file from a popup menu) would otherwise leave Ctrl+click pointing at the file it opened first. `source` is
+  // the explicit spelling for a host that has an absolute path; `docPath` is what a caller that only knows the
+  // document's path in its own tree supplies.
+  const source = String(view.source ?? view.docPath ?? '');
+  document.body.setAttribute('data-source', source);
   // The link logic lives in link-context.js, where a test can call it: a browser-rendered page has no
   // data-open in its bytes, so nothing about a link can be checked by looking at the page.
   let links = 0;

@@ -10,6 +10,12 @@
  *
  * A page must never render a link that does nothing, which is why step 3 exists: a location the user can
  * paste into their IDE beats a dead link.
+ *
+ * **Ctrl+click on rendered text** opens *this document* at the line that produced that text (`data-line` on
+ * the body says which file that is). It is the same ladder, entered one step earlier — the reader is
+ * comparing the page with the source, and without this the only way back is to search for the sentence by
+ * hand. A click on a link is left alone whatever the modifier, because a link already means a location and
+ * two answers to one gesture is how a page becomes unpredictable.
  */
 
 /** Where the page thinks the IDE bridge is; overridden by `data-bridge-port` on `<body>`. */
@@ -50,6 +56,20 @@ export function openFileClientScript(options = {}) {
   var BRIDGE_PORT = parseInt(document.body.getAttribute('data-bridge-port') || '__PORT__', 10);
   var LINK_BASE = document.body.getAttribute('data-link-base') || '';
   var toast = null;
+
+  /**
+   * The document this page renders, read AT CLICK TIME rather than once at load.
+   *
+   * It has to be read here: in the host mode (markdown-view/page.js) the page is built with no document and the
+   * view data arrives afterwards, so page-client.js sets data-source during its first render - after this script
+   * has run. Caching the attribute at load made Ctrl+click silently do nothing in exactly the case this feature
+   * was requested for (a host loading a Markdown file, the JetBrains plugin among them), and a browser check is
+   * what caught it. Note the absence of backticks in this comment: it lives inside a String.raw template, where
+   * one would end the literal.
+   */
+  function sourcePath() {
+    return document.body.getAttribute('data-source') || '';
+  }
 
   function say(text) {
     if (!toast) {
@@ -93,10 +113,14 @@ export function openFileClientScript(options = {}) {
     return false;
   }
 
-  function open(link) {
-    var relative = link.getAttribute('data-open');
-    var line = parseInt(link.getAttribute('data-line') || '1', 10);
-    var member = link.getAttribute('data-member') || '';
+  /**
+   * Hand one location to the host, by whichever of the three transports this page has.
+   *
+   * Split out of the link handler so a Ctrl+click on text takes the SAME ladder: a second copy of these three
+   * steps is how a fallback drifts, and the copy that drifts is the one nobody tested (a browser, where
+   * window.openFile is absent).
+   */
+  function openAt(relative, line, member, what) {
     var target = absoluteTarget(relative) || relative;
 
     if (typeof window.openFile === 'function') {
@@ -127,7 +151,28 @@ export function openFileClientScript(options = {}) {
     say('No IDE bridge here. Location copied: ' + target + ':' + line);
   }
 
+  function open(link) {
+    var relative = link.getAttribute('data-open');
+    var line = parseInt(link.getAttribute('data-line') || '1', 10);
+    var member = link.getAttribute('data-member') || '';
+    openAt(relative, line, member, 'link');
+  }
+
   document.addEventListener('click', function (event) {
+    // Ctrl (or Cmd on a Mac) is the gesture for "go to where this came from". A link is left untouched
+    // whatever the modifier: a link already names a location, and the browser's own Ctrl+click on one should
+    // keep working.
+    if (event.ctrlKey || event.metaKey) {
+      var onLink = event.target.closest ? event.target.closest('[data-open]') : null;
+      if (onLink) { return; }
+      var line = event.target.closest ? event.target.closest('[data-line]') : null;
+      var own = sourcePath();
+      if (!line || !own) { return; }
+      event.preventDefault();
+      openAt(own, parseInt(line.getAttribute('data-line') || '1', 10), '',
+        'this document');
+      return;
+    }
     var link = event.target.closest ? event.target.closest('[data-open]') : null;
     if (!link) { return; }
     event.preventDefault();

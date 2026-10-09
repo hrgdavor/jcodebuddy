@@ -78,6 +78,17 @@ It also writes the bridge status into `#bridge-status`, so a reader can see *why
 do something. The full rules, including `data-link-base`, are in
 [`webview/kit/doc/contract.md`](../webview/kit/doc/contract.md) § 4–5.
 
+**Ctrl+click on rendered text** opens *this document* at the line that produced that text — the same ladder,
+entered one step earlier. The page names its own file in `data-source` on `<body>`, and every block reports its
+source line as `data-line`; a run of text from a different line than its block carries its own. It exists
+because the rendered page is the third view of the same prose (source, IDE preview, page), and without it the
+only way back to a line is to search for the sentence by hand.
+
+Two rules keep the two gestures from competing: **a click on a link is left alone whatever the modifier** (a
+link already names a location, and the browser's own Ctrl+click on one keeps working), and a **plain click on
+text does nothing**. Verified in a browser, not only in unit tests — Ctrl+click on text opened
+`…/README.md:4` while Ctrl+click on a link one line away recorded nothing.
+
 ### `render.js` — the document
 
 **The resolver is the interesting part.** Given the text of a link or a code span, `resolveTarget`
@@ -131,7 +142,9 @@ Three steps, in the order that keeps you honest:
    trace file).
 2. **Write `data-open` and `data-line`** on whatever element you like, and use
    `openFileClientScript()` from `open-file.js` inlined into your page. Do not link anything you cannot
-   resolve.
+   resolve. Set `data-source` on `<body>` to the document's own path and the same client gives you
+   **Ctrl+click on any text** back into the source, which costs nothing extra: the click handler is the same
+   one, entered by modifier instead of by `data-open`.
 3. **Verify before you ship.** Walk the links you emitted and check the file exists and, where you claim a
    member, that the line contains it. `verifyLinks` in `index.js` is 40 lines; copy it.
 

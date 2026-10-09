@@ -253,7 +253,7 @@ export function renderDocument(markdown, options) {
 <title>${escapeHtml(title)}</title>
 <style>${PAGE_STYLE}</style>
 </head>
-<body data-link-base="${escapeHtml(base)}" data-bridge-port="${escapeHtml(bridgePort)}">
+<body data-link-base="${escapeHtml(base)}" data-bridge-port="${escapeHtml(bridgePort)}" data-source="${escapeHtml(documentPath)}">
 <header class="top">
   <h1>${escapeHtml(title)} <span>&#183; ${escapeHtml(index.moduleName)}</span></h1>
   <div class="top-sub">

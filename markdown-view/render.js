@@ -262,10 +262,64 @@ export function renderInline(text, context) {
   return out;
 }
 
+/**
+ * Render a block's source lines **separately** and join them, so each line keeps its own line number.
+ *
+ * Doing it here rather than with an offset map is the whole trick: a run's line is then a fact about the input
+ * line it was handed, and nothing has to be measured. The first attempt mapped offsets into the joined text and
+ * passed its tests for a paragraph with inline markup while failing the common case — a plain paragraph is one
+ * run at offset zero, so every part of it reported the block's own line.
+ *
+ * @param {string[]} sourceLines the block's lines, in order
+ * @param {number} firstLine the source line the first entry came from
+ */
+function renderLines(sourceLines, context, firstLine) {
+  return sourceLines
+    .map((text, index) => renderInline(text, { ...context, line: firstLine + index, blockLine: firstLine }))
+    .join(' ');
+}
+
+/** `data-line` for a block element, so a click anywhere in it has a line even without a text span. */
+function lineAttribute(line) {
+  return line ? ` data-line="${line}"` : '';
+}
+
 /** Text with no inline markup left: escape it, keeping bare URLs visible. */
 function inlineText(text, context) {
-  return escapeHtml(text).replace(/\bhttps?:\/\/[^\s<)]+/g, (url) =>
+  const html = escapeHtml(text).replace(/\bhttps?:\/\/[^\s<)]+/g, (url) =>
     `<a href="${url}" title="${url}">${url}</a>`);
+  return withLine(html, context.line, context.blockLine);
+}
+
+/**
+ * Wrap a run of plain text in a `data-line` span, so **Ctrl+click on the text** can open this document at
+ * the line that produced it.
+ *
+ * The line is not decoration: a rendered page is the third view of the same prose (source, IDE preview,
+ * this page), and comparing them is how a writer checks a document. Without it the page is a dead end —
+ * the only way back to the source is to search for the sentence by hand.
+ *
+ * Two deliberate choices:
+ *
+ * - **Only text is wrapped.** A link already owns the click (`data-open`), and the contract's rule is that a
+ *   click on a link navigates to the link's target. Marking text keeps the two gestures from competing.
+ * - **A run on the enclosing block's own line is left as bare text**, so the markup stays as small as the
+ *   information it carries: a single-line paragraph gets the block's attribute rather than a span per word.
+ *
+ * This is why a block that spans source lines renders each line **separately** and joins the results: an
+ * offset map was the first attempt, and it silently failed on the common case — a paragraph with no inline
+ * markup is one run at offset zero, so the map reported the block's own line for all of it. Rendering each
+ * source line on its own removes the arithmetic, and a test pins the two-line case.
+ *
+ * @param {string} html the already-escaped text
+ * @param {number} line the source line this run came from
+ * @param {number|undefined} blockLine the enclosing block's own line
+ */
+function withLine(html, line, blockLine) {
+  if (!html.trim() || !line || line === blockLine) {
+    return html;
+  }
+  return `<span data-line="${line}">${html}</span>`;
 }
 
 /** How wide something is indented, counting a tab as four — enough to compare levels, which is all this needs. */
@@ -330,9 +384,18 @@ function renderListLevel(node, context) {
     }
     const task = child.text.startsWith('\u0000task:');
     open.tasks = open.tasks || task;
-    const inner = task ? renderTaskItem(child.text, context) : renderInline(child.text, context);
+    // A wrapped item is rendered as ONE run rather than per source line: a continuation line is appended to the
+    // item's text, so rendering the lines separately printed it twice. Per-line precision is kept where the
+    // reader actually compares prose with source — a paragraph (see `renderLines`) — and a wrapped bullet opens
+    // at its own first line, which is what the item is.
+    const body = task ? child.text.slice(child.text.indexOf('\u0000', 1) + 1) : child.text;
+    const itemLine = child.line ?? context.line;
+    const itemContext = { ...context, line: itemLine, blockLine: itemLine };
+    const inner = task
+      ? renderTaskItem(child.text, body, itemContext)
+      : renderInline(body, itemContext);
     const children = child.children.length > 0 ? renderListLevel(child, context) : '';
-    open.items.push(`<li>${inner}${children}</li>`);
+    open.items.push(`<li${lineAttribute(itemLine)}>${inner}${children}</li>`);
   }
   flush();
   return html;
@@ -381,10 +444,17 @@ export function slugify(text) {
 /**
  * Convert Markdown to HTML and collect the headings for a table of contents.
  *
+ * **Every block carries its source line** as `data-line`, and a run of text that came from a *different*
+ * line than its block carries its own. That is what makes Ctrl+click on a rendered sentence open this
+ * document at the line that produced it — see `withLine` for why links are excluded and why a same-line run
+ * is left bare.
+ *
  * @param {string} markdown
- * @param {{directory?: string, index?: ClassIndex, isOpenable?: Function, makeLink: Function}} context
+ * @param {{directory?: string, index?: ClassIndex, isOpenable?: Function, makeLink: Function, lineOffset?: number}} context
  *        `directory` is the document's directory **relative to the project root**, used to resolve
- *        relative links.
+ *        relative links. `lineOffset` is added to every reported line, and exists for the one caller that
+ *        renders a *slice* of a document: a blockquote strips its `>` markers and renders the body, so the
+ *        body's line 1 is the document's line N.
  * @returns {{html: string, headings: Array<{level: number, text: string, id: string}>}}
  */
 export function renderMarkdown(markdown, context) {
@@ -392,6 +462,7 @@ export function renderMarkdown(markdown, context) {
   const headings = [];
   const usedIds = new Set();
   const html = [];
+  const shift = Number(context.lineOffset) || 0;
   let i = 0;
 
   const heading = (text) => {
@@ -405,6 +476,8 @@ export function renderMarkdown(markdown, context) {
 
   while (i < lines.length) {
     const line = lines[i];
+    // The document line this block starts on, 1-based, plus any offset a caller imposed.
+    const start = i + 1 + shift;
 
     // Fenced code: emitted verbatim (escaped), never inline-processed.
     const fence = /^(\s*)(`{3,}|~{3,})\s*([\w+-]*)\s*$/.exec(line);
@@ -418,7 +491,7 @@ export function renderMarkdown(markdown, context) {
       }
       i++; // the closing fence
       const language = fence[3] ? ` class="language-${escapeHtml(fence[3])}"` : '';
-      html.push(`<pre><code${language}>${escapeHtml(body.join('\n'))}</code></pre>`);
+      html.push(`<pre${lineAttribute(start)}><code${language}>${escapeHtml(body.join('\n'))}</code></pre>`);
       continue;
     }
 
@@ -428,7 +501,7 @@ export function renderMarkdown(markdown, context) {
     }
 
     if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
-      html.push('<hr>');
+      html.push(`<hr${lineAttribute(start)}>`);
       i++;
       continue;
     }
@@ -439,7 +512,8 @@ export function renderMarkdown(markdown, context) {
       const text = headingMatch[2];
       const id = heading(text);
       headings.push({ level, text, id });
-      html.push(`<h${level} id="${id}">${renderInline(text, context)}</h${level}>`);
+      html.push(`<h${level} id="${id}"${lineAttribute(start)}>`
+        + `${renderInline(text, { ...context, line: start, blockLine: start })}</h${level}>`);
       i++;
       continue;
     }
@@ -452,17 +526,22 @@ export function renderMarkdown(markdown, context) {
         if (trimmed.endsWith(':')) return 'right';
         return '';
       });
-      const row = (text, tag) => {
+      // Each row and each cell reports its own line: a wide table read as one block would send every
+      // Ctrl+click to the header row.
+      const row = (text, tag, rowLine) => {
         const cells = splitRow(text);
-        return `<tr>${cells.map((cell, index) => {
+        return `<tr${lineAttribute(rowLine)}>${cells.map((cell, index) => {
           const style = align[index] ? ` style="text-align:${align[index]}"` : '';
-          return `<${tag}${style}>${renderInline(cell, context)}</${tag}>`;
+          return `<${tag}${style}>${renderInline(cell, { ...context, line: rowLine, blockLine: rowLine })}</${tag}>`;
         }).join('')}</tr>`;
       };
-      html.push(`<table><thead>${row(line, 'th')}</thead><tbody>`);
+      html.push(`<table${lineAttribute(start)}><thead>${row(line, 'th', start)}</thead><tbody>`);
+      const headerLine = start;
       i += 2;
+      let bodyLine = headerLine + 2;
       while (i < lines.length && lines[i].includes('|') && !/^\s*$/.test(lines[i])) {
-        html.push(row(lines[i], 'td'));
+        html.push(row(lines[i], 'td', bodyLine));
+        bodyLine++;
         i++;
       }
       html.push('</tbody></table>');
@@ -476,7 +555,10 @@ export function renderMarkdown(markdown, context) {
         body.push(lines[i].replace(/^\s*>\s?/, ''));
         i++;
       }
-      html.push(`<blockquote>${renderMarkdown(body.join('\n'), context).html}</blockquote>`);
+      // The body was stripped of its `>` markers, so its own line 1 is this block's line: the offset is what
+      // keeps a Ctrl+click inside a quote pointing at the quoted line rather than at the top of the document.
+      const inner = renderMarkdown(body.join('\n'), { ...context, lineOffset: start - 1 });
+      html.push(`<blockquote${lineAttribute(start)}>${inner.html}</blockquote>`);
       continue;
     }
 
@@ -503,6 +585,8 @@ export function renderMarkdown(markdown, context) {
           indent: indentWidth(item[1]),
           ordered: /\d/.test(item[2]),
           text: taskTextOrText(item[3]),
+          // The item's own line, which is what a Ctrl+click on the bullet opens.
+          line: i + 1 + shift,
         });
         i++;
       }
@@ -519,7 +603,9 @@ export function renderMarkdown(markdown, context) {
       paragraph.push(lines[i]);
       i++;
     }
-    html.push(`<p>${renderInline(paragraph.join(' '), context)}</p>`);
+    // A paragraph that wrapped across source lines is rendered line by line, so each one keeps its own line
+    // number and a Ctrl+click lands on the sentence the reader is looking at rather than on the first line.
+    html.push(`<p${lineAttribute(start)}>${renderLines(paragraph, context, start)}</p>`);
   }
 
   return { html: html.join('\n'), headings };
@@ -528,16 +614,16 @@ export function renderMarkdown(markdown, context) {
 /**
  * A task-list item: a disabled checkbox, then the item's inline Markdown.
  *
- * The checkbox is generated markup rather than author text, which is why the item carried a sentinel
- * through `renderInline`'s escaping instead of being passed through as-is.
+ * The checkbox is generated markup rather than author text, which is why the item carried a sentinel through
+ * `renderInline`'s escaping instead of being passed through as-is. The sentinel is `\0task:<space|x>\0`, and
+ * the state is read from the character before the closing sentinel — comparing the whole sentinel to `' '` was
+ * true for every item, because the prefix is part of it, so every unchecked box rendered as done.
  */
-function renderTaskItem(item, context) {
-  const end = item.indexOf('\u0000', 1);
-  // The character before the closing sentinel is ' ' or 'x'. Comparing the whole sentinel to ' ' was true for every
-  // item, because the sentinel carries a `task:` prefix as well - so every unchecked box rendered as done.
-  const checked = item.charAt(end - 1) === 'x';
+function renderTaskItem(marker, body, context) {
+  const end = marker.indexOf('\u0000', 1);
+  const checked = marker.charAt(end - 1) === 'x';
   return `<input type="checkbox" disabled${checked ? ' checked' : ''}> `
-    + renderInline(item.slice(end + 1), context);
+    + renderInline(body, context);
 }
 
 /** Split a table row on unescaped `|`, dropping the leading and trailing empty cells. */
