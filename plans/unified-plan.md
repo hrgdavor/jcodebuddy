@@ -3963,6 +3963,70 @@ with the build cache **on**; `LINKS` green.
   class file** stayed in `target/test-classes` and kept running — a stale-class hazard of the same family as the
   incremental-compile one. **886** is the count from a clean build; earlier counts in this plan may have included
   stale scratch classes, so a count is only comparable against another clean run.
+
+#### The remainder, specified 2026-10-09 — the answers this step was waiting on
+
+The row's two open items were *"blocks accepted in one action (needs an accept action)"* and *"the
+shape/classification question (control measured `LEFT_UNCLASSIFIED`, `type null`)"*. The second is **closed by step
+4.19**, which the maintainer decided on 2026-10-09: the unclassified case now carries
+`ConflictType.UNCLASSIFIED_TEXT` rather than a `null` type that meant "unknown", "not asked" and "no tier reached it"
+at once. The clause is struck here rather than left to imply work that is already done.
+
+What remains was specified with the maintainer, and it is **four deliverables in this step** (not a new step):
+the block-level accept action; a repo-anchored decisions file; a server mode; and a multi-file review flow. The
+answers, recorded as given:
+
+1. **The block action is a real bulk action, not a measurement of the existing one.** Per-conflict Accept and the
+   page's AUTO-only *"Apply all resolved"* sweep already exist; what does not exist is a control that accepts **a
+   whole block's proposal**.
+2. **It accepts only when the whole block has an answer.** If any conflict in the block has no proposal, the action
+   is **refused and names the conflict that blocks it** — never "accept what we have". A block is either fully
+   answerable or it is not, which is what lets the number mean *finished*.
+3. **One click, then one confirm, with the set visible.** The first click opens the block's proposals — count,
+   each basis, the provenance and verdict already carried by the suggestion channel — and the second applies all of
+   them. "One action" means *leaving the block resolved without visiting each conflict*, **not** applying code
+   nobody displayed as a set.
+4. **This makes the block action take suggestions, and that is a second rule rather than a relaxed one.**
+   `SUGGESTIONS.md` § 5 says a suggestion is never bulk-accepted because accepting one is a judgement about code a
+   person has read; the page-wide sweep therefore stays `AUTO`-only (`isBulkAcceptable` unchanged), and the block
+   action gets **its own predicate and its own test**. The two rules answer different questions — *what may be swept
+   without being shown* versus *what a confirmed, displayed block action may take* — and both are asserted, so the
+   distinction cannot erode into one rule by accident.
+5. **The page records; the CLI applies.** The block action records one decision per conflict in the block into the
+   exported decisions JSON, exactly as per-conflict Accept does, and `DecisionRecorder --decisions` replays them as
+   sticky decisions. It is testable **that way, through the JSON**, with no browser in the loop.
+6. **The decisions JSON carries the repository root**, written at export, so the CLI can be run **from anywhere**;
+   an explicit CLI `--repo` override exists for a moved or copied checkout. A reviewer may export in one checkout
+   and apply in another, and today nothing in the file says which repository it belongs to.
+7. **The same generated page is also servable**, with an API that accepts that same decisions JSON — a mode in
+   `merge-java/review` (`bun run src_build/serve.js`), not an IDE host and not `webviewd`. The standalone file stays
+   the primary artifact: the page must keep working from `file://` with no server (AGENTS.md § 2), and the server is
+   an enhancement that adds one endpoint over the identical payload.
+8. **The page covers one merge run, across all its files**, with a **clickable file list** and, per file, the state
+   of that file's merge — and it is explicitly a **review-one-then-another** flow: resolve a file, move to
+   another, come back to the first, then apply. Per-file state survives navigation, because a reviewer who loses
+   their work by clicking a filename will not use the page twice.
+9. **A block also offers "apply resolved"**, so the reviewer can take everything already settled in that block
+   without walking its conflicts; **the rest of a file's conflicts may be finished in another editor**, which is
+   why the page must never imply that its own completeness is the merge's completeness.
+10. **Three numbers, per file and not one.** `decided` (the tool answered automatically), `accepted` (a person
+    accepted, by the block action or one at a time) and `open` (still needs somebody **or another editor** —
+    deliberately not called "conflicted", since a conflict is one way to be open and a missing answer is another).
+    The metric § 10.3 names — *blocks accepted in one action* — is the **`accepted`-via-block-action** count, and it
+    is displayed **in the file list**, where the selection happens, so a reviewer sees progress across the run
+    rather than inside one file.
+
+**Gate (this remainder):** a block with no answer anywhere in it is refused with the blocking conflict named; a
+block whose whole claim has an answer is accepted after the confirmation and produces **one decision per conflict**
+in the JSON; `DecisionRecorder` applies that JSON from a different working directory using the file's own repo
+root; the same payload applies through the server endpoint; per-file `decided`/`accepted`/`open` counts are
+asserted in a test that navigates away from a file and back without losing a decision; the two bulk predicates are
+each asserted (the sweep still refuses a suggestion, the block action takes a confirmed one); the standalone HTML
+still opens from `file://` with no network; and the recorded `GATE` plus `merge-java`'s suite are green.
+
+**Done when:** a reviewer can decide a whole merge run — block by block, file by file — export one JSON, and apply
+it from anywhere, with the number § 10.3 asks for visible where the deciding happens.
+
 ### 4.14 — The suggestion channel: a resolution kind for an answer that needs a person
 **Who:** agent · **Size:** M
 
@@ -6965,7 +7029,7 @@ start)
 | 4.10 | JetBrains port: whitespace policy as a caller-visible option                                    | agent              | M    | `[x]` — **functionally complete, and both named remainders are now closed.** The flag, the wiring and the acceptance pair were already in (`--whitespace=default | trim | ignore`, an unknown name refused rather than defaulted); the policy reaches detection (type recognition, regions, shapes) **and now the resolution and the report**: `MergeConflictResolver.setWhitespacePolicy(...)`, `MergeFileTool` passing it and **stamping it on every resolution** at the boundary where regions are restated, and `whitespacePolicy` written **per conflict and at file level** — the file-level key because under `IGNORE_WHITESPACES` the vector has **no conflicts at all**, so the per-conflict key can never carry the case that needs it most. The page shows ` · compared ignoring whitespace` only when the policy was lenient. Threading it also fixed an inconsistency earlier rounds introduced: offers were composed under a hardcoded `DEFAULT` while detection ran under the run's policy — measured before the fix, an `IGNORE_WHITESPACES` run reported `TRIM_WHITESPACES`. **923 tests**, page 22, both green. |
 | 4.11 | JetBrains port: `AnalysisLevel` gains the intra-line evidence level                             | agent              | S    | `[x]` — **the level exists and is ordered both ways, and it now has a producer that reads words.** `MethodBodyChangeConflictResolver` declares `TEXT_INTRALINE` and records it **only when the word comparison produced the answer** (`MergeResolve.Result.wordLevel()`), recording `TEXT_LOCAL` when the line comparison alone reached it; the ported pass is consulted **before** the statement-set branches, because two edits of the same *line* look "disjoint" to a line-set comparison and it combined both lines. All three gate clauses hold: both directions order (`scaleOrdersEvidence`), no resolution exceeds its declaration, and a fall-back records `TEXT_LOCAL`. **A trap found on the way**: `reviewResolution` defaults the recorded level to `maxAnalysisLevel()`, so raising a declaration silently raises every answer of that resolver — the "never exceeds" test cannot see it, the weaker-level assertion did. Census unchanged (`escalated 3`, `offered 3`): the route and the recorded level changed, not the outcome. |
 | 4.12 | JetBrains port: the conflict shape, ported onto detection                                       | agent              | M    | `[x]` — **`ConflictShape` computed by the ported classifier**, which makes it `MergeRangeUtil.getMergeType`'s first caller in this module; `ConflictType` unchanged, the report writes `shape` per conflict and the page renders it in its own words. **A copy helper that dropped the shape would have lost it silently** — `MergeFileTool` re-stamps regions, so `withRegion`/`withFilePath`/`withTypeContext` carry it and a test asserts it. The merge-range rule (an unchanged side has the **base's** lines, not the range's empty extent) appeared a **third** time, here costing "every one-sided change reads as a conflict". **One clause named as not met:** the decision does not yet *use* the shape — the 4.5/4.6 fixtures are unchanged and green, and the measurement that would justify the general fix belongs with 4.13 |
-| 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[~]` — **gate**: § 11.1 `18/18`, § 11.2 `2/3` + 1 recorded defect + 0 regressions; word-level corpus `2 offered at TEXT_INTRALINE, 1 refused`. **§ 10.2 rows all measured**: row 1 (`MEMBER_ADD` → `AUTO` at `STRUCTURE` where text-only refuses), row 2 with its control (corrupted `AUTO` → `REVIEW`+`FAILED`; balanced stays `AUTO`/`PASSED`), row 3 (`{TEXT_LOCAL=4, TEXT_FILE=2, STRUCTURE=1, PLATFORM_TYPES=1}`, 3 strategies), row 4 by the replay tests, row 5 half (offered `3`), and **row 6 now MET** (`AUTO` at `PROJECT_TYPES` with a project classpath, `PLATFORM_TYPES` without) — round 38's "unmet" was a **scope error**: the JDK-only corpus cannot contain the case, and the census print now says so instead of pronouncing on the row. **Open:** *blocks accepted in one action* (needs an accept action), and the shape/classification question (control measured `LEFT_UNCLASSIFIED`, `type null`). |  |
+| 4.13 | JetBrains port: **parity gate** + upstream vectors + randomized property test                   | agent              | M    | `[~]` — **gate**: § 11.1 `18/18`, § 11.2 `2/3` + 1 recorded defect + 0 regressions; word-level corpus `2 offered at TEXT_INTRALINE, 1 refused`. **§ 10.2 rows all measured**: row 1 (`MEMBER_ADD` → `AUTO` at `STRUCTURE` where text-only refuses), row 2 with its control (corrupted `AUTO` → `REVIEW`+`FAILED`; balanced stays `AUTO`/`PASSED`), row 3 (`{TEXT_LOCAL=4, TEXT_FILE=2, STRUCTURE=1, PLATFORM_TYPES=1}`, 3 strategies), row 4 by the replay tests, row 5 half (offered `3`), and **row 6 now MET** (`AUTO` at `PROJECT_TYPES` with a project classpath, `PLATFORM_TYPES` without) — round 38's "unmet" was a **scope error**: the JDK-only corpus cannot contain the case, and the census print now says so instead of pronouncing on the row. **Open:** *blocks accepted in one action* (needs an accept action), and the shape/classification question (control measured `LEFT_UNCLASSIFIED`, `type null`). — **Specified 2026-10-09** (the step's own record carries it): the classification half is **struck, closed by 4.19** (`ConflictType.UNCLASSIFIED_TEXT` replaced the `null` type). The remainder is **four deliverables in this step** — a block-level accept action (accepts only a block whose *whole* claim has an answer, refusing and naming the blocking conflict; one click then one confirm with the set visible), a repo-root-anchored decisions JSON applicable from any directory plus a `--repo` override, a `serve.js` acceptor mode over the same payload while the standalone `file://` file stays primary, and a multi-file flow with a clickable file list carrying per-file `decided`/`accepted`/`open` counts (the § 10.3 number visible where the deciding happens). The block action takes suggestions **under its own predicate and test**, which leaves the page-wide sweep `AUTO`-only per `SUGGESTIONS.md` § 5. |  |
 | 4.14 | Suggestion channel: `Suggestion`, `ResolutionKind.SUGGESTION`, `APPLIED_SUGGESTION`             | agent              | M    | `[x]` — the channel with **no producer and no page** (4.15/4.17 produce, 4.16 renders): `Suggestion` as a standalone value, the kind and its own field (the structural guarantee that the channel cannot write `resolvedCode` or `kind`), `LEFT_SUGGESTION` + `APPLIED_SUGGESTION`, `applied()` vs `settled()` so the tally and the exit status ask different questions, and the verifier **labelling** a failed suggestion instead of hiding it. **`APPLIED_SUGGESTION` has no producer yet** — it is the vocabulary the accept path will produce |
 | 4.15 | Move the answers we already compute onto the suggestion channel                                 | agent              | M    | `[x]` — one rule in the orchestrator converts a `REVIEW` carrying code into a `SUGGESTION` carrying **that same text** (provenance = the resolver's name, level = what it recorded, `resolvedCode` cleared so the text lives in one place). **Measured: 3 of 7 sampled review paths were computing an answer and hiding it**, asserted by comparing the suggestion against a direct resolver call, and printed by the test. Nothing promoted; three existing assertions changed, each the step's own point |
 | 4.16 | Page + decisions contract: Accept / Edit / Reject, and the bulk-accept guard                    | agent              | M    | `[x]` — the report carries the suggestion with its basis and verdict detail; the page prefills from `proposedCodeFor` (**a real defect: it read `resolvedCode`, which 4.15 empties, so a suggestion showed an empty editor**), renders provenance/confidence/level/verdict, and exports rejections per provenance. **The bulk guard was not a guard**: it filtered on "a field holds text", which quietly included `REVIEW` and contradicted its own javadoc — it is now `kind === 'AUTO'`. **A clause has no counterpart**: there is no CLI bulk action to guard, and that is recorded rather than invented |
