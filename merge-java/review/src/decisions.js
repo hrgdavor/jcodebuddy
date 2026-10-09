@@ -211,6 +211,86 @@ export function acceptAllResolved(files) {
 }
 
 /**
+ * Whether the block action has an answer for one entry: a concrete result it can write.
+ *
+ * <p>The test is on the **offer**, not on `isResolved`: a suggestion keeps its code in `suggestion.code` and
+ * deliberately leaves `resolvedCode` empty (so the text lives in exactly one place), which means an
+ * `isResolved`-based check would call every suggestion unanswered and refuse the very blocks the action exists
+ * for.</p>
+ */
+export function hasAnswer(entry) {
+  const resolution = entry?.resolution
+  if (!resolution) {
+    return false
+  }
+  if (suggestionOf(resolution)) {
+    return true
+  }
+  return isResolved(resolution)
+}
+
+/** A conflict as a human names it, for the refusal that has to say which one blocks the block. */
+function describeConflict(entry, index) {
+  const region = entry?.resolution?.region ?? entry?.conflict?.region ?? null
+  const where = region ? `lines ${region.startLine}–${region.endLine}` : `conflict ${index + 1}`
+  const type = entry?.resolution?.type ?? entry?.conflict?.type ?? 'unknown type'
+  return `${type} at ${where}`
+}
+
+/**
+ * What a block-level accept would take, or why it cannot be taken (plan step 4.13).
+ *
+ * <p><b>The rule is all-or-nothing.</b> A block is accepted only when <em>every</em> conflict in it has an answer;
+ * if any one of them has none, this reports the blockers and takes nothing. "Accept what we have" is deliberately
+ * not offered: a partially accepted block leaves markers in the file with nothing saying which part is settled, and
+ * it would make the count `accepted` mean "touched" rather than "finished".</p>
+ *
+ * <p>Kept separate from {@link isBulkAcceptable} on purpose, and both are asserted. That predicate answers *what may
+ * be swept without being shown* and is `AUTO`-only; this one answers *what a confirmed, displayed block action may
+ * take* — which includes a suggestion, because the reviewer is shown the set and confirms it. Relaxing the sweep
+ * instead would have merged two different questions into one rule.</p>
+ *
+ * @returns {{accepted: Array, blocked: Array<string>}} `accepted` is empty when `blocked` is not
+ */
+export function blockClaim(block, filePath) {
+  const entries = block?.entries ?? []
+  const blocked = entries
+    .filter((entry) => !hasAnswer(entry))
+    .map((entry, index) => describeConflict(entry, index))
+
+  if (blocked.length > 0) {
+    return { accepted: [], blocked }
+  }
+  const accepted = entries.map((entry) => ({
+    filePath,
+    resolution: entry.resolution,
+    conflict: entry.conflict,
+    resolvedCode: proposedCodeFor(entry.resolution),
+    explanation:
+      `accepted the ${entry.resolution?.kind ?? 'unknown'} resolution for the whole block ` +
+      '(plan step 4.13: one action, after confirming the set)',
+  }))
+  return { accepted, blocked: [] }
+}
+
+/**
+ * The block action: the decisions to record for a block, or a thrown refusal naming what blocks it.
+ *
+ * <p>Throwing rather than returning an empty list is the point — a caller that ignored the refusal would otherwise
+ * accept nothing and report success, which is the silent no-op this page has been burned by before.</p>
+ */
+export function acceptBlock(block, filePath) {
+  const claim = blockClaim(block, filePath)
+  if (claim.blocked.length > 0) {
+    throw new Error(
+      `this block cannot be accepted in one action: ${claim.blocked.length} of ${(block?.entries ?? []).length} `
+        + `conflict(s) have no answer — ${claim.blocked.join('; ')}`,
+    )
+  }
+  return claim.accepted
+}
+
+/**
  * Add decisions that are not already decided, keeping what the reviewer decided themselves.
  *
  * <p>"Apply all resolved" is a bulk convenience, so it must never overwrite a choice somebody made by hand for
