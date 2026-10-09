@@ -181,6 +181,9 @@ class ExampleDivergenceReportTest {
             Map.entry("mapper_request_malformed", "ViewMapperGeneratorTest"),
             Map.entry("validation_constraint_unsupported", "ValidationGeneratorTest"),
             Map.entry("validation_constraint_type_mismatch", "ValidationGeneratorTest"),
+            // Plan step 6.7: the argument-side half of the class-reference rule. Produced on a view whose
+            // constraint names a class the declaring file does not import, so the fixture is that test's.
+            Map.entry("annotation_class_not_resolved", "AnnotationArgumentsTest"),
             Map.entry("deep_tracking_type_not_enabled", "DeepTrackingWiringTest"),
             // hipster-ioc context generation (DEC-036) reports these four; they are produced by that
             // module's generator tests rather than by the entity pass, but they are part of the same

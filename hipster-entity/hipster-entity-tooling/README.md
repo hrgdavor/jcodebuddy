@@ -448,6 +448,34 @@ Two limits worth knowing:
   entities never gains a validation dependency. Generated sources that
   carry constraints need it on their compile path.
 
+A **class-valued argument is qualified before it is carried** (plan step
+6.7, the argument-side half of DEC-047 § 1). The annotation's *type* was
+always a fully qualified name; its argument **text** was the author's, so
+`@Size(groups = Create.class)` reached the metadata JSON and the generated
+`annotations()` override as the bare `Create.class` — readable only
+against the declaring file's imports, which a consumer of the JSON does not
+have. The most common case is the one every Bean Validation constraint
+declares: `groups()` is `Class<?>[]` and `payload()` is
+`Class<? extends Payload>[]` on all of them, so this is ordinary usage and
+not an edge case.
+
+A one-segment class literal is rewritten to its qualified spelling, from an
+explicit import **or** from `java.lang` (the import table holds only
+explicit imports, so a bare `String.class` becomes
+`java.lang.String.class`). Three forms are left exactly as written, and the
+first two are reported as `annotation_class_not_resolved`:
+
+- a name nothing resolves — no import, not `java.lang`, so qualifying it
+  would be a guess;
+- a nested `Outer.Inner.class` — the table maps `Outer`, and qualifying the
+  whole expression would be wrong for a type whose simple name is `Inner`
+  in another package;
+- a class literal **inside a quoted argument**
+  (`@Pattern(regexp = "X.class")` is a regexp, not a type), which is why the
+  resolver computes quoted spans rather than trusting the neighbouring
+  character — the two simpler checks both rewrote it, and the tests pin
+  both spellings.
+
 A `<View>Validator` with a `public static List<String> validate(View)`
 body and explicit messages is emitted alongside, for callers who want
 messages without a provider. It is **not** a fallback for constraints the
@@ -837,7 +865,8 @@ The recognised kinds include `enum_order_shuffled`,
 `mapper_field_missing_in_target`, `mapper_type_incompatible`,
 `mapper_view_not_found`, `mapper_request_malformed`,
 `validation_constraint_unsupported`,
-`validation_constraint_type_mismatch` and `file_frozen`.
+`validation_constraint_type_mismatch`, `annotation_class_not_resolved`
+and `file_frozen`.
 
 ### The whole-file freeze, and why it is a diagnostic and not a silence
 

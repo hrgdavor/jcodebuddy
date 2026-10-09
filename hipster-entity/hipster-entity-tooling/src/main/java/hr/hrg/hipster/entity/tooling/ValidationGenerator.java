@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 
@@ -108,13 +109,37 @@ public final class ValidationGenerator {
      * {@code @NotNull} must both be recognised, and neither is checked against a classpath.</p>
      */
     public static List<FieldConstraint> constraintsOn(J.MethodDeclaration method) {
+        return constraintsOn(method, null, null, null);
+    }
+
+    /**
+     * The same read, with the declaring file's import table and a place to report plan step 6.7's finding.
+     *
+     * <p>The constraint's argument text is rendered as the author wrote it and then passed through
+     * {@link AnnotationArguments#qualify} with the declaring unit's import table, so a class-valued
+     * argument ({@code @ShapeOf(Rect.class)}) reaches every consumer already qualified rather than
+     * depending on a file the consumer may not have. A reference that cannot be resolved is
+     * <strong>reported</strong> and left as written — never dropped, and never guessed at.</p>
+     *
+     * @param method      the accessor carrying the annotations
+     * @param importTable the declaring unit's simple-name to qualified-name table, or {@code null} for a
+     *                    caller that has no unit in hand (the one-argument form above)
+     * @param location    where the arguments came from, for the diagnostic — the view and accessor
+     * @param divergences where an unresolved class reference is reported, or {@code null}
+     */
+    public static List<FieldConstraint> constraintsOn(J.MethodDeclaration method,
+                                                     Map<String, String> importTable,
+                                                     String location,
+                                                     DivergenceReporter divergences) {
         List<FieldConstraint> constraints = new ArrayList<>();
         if (method == null) {
             return constraints;
         }
         for (J.Annotation annotation : method.getLeadingAnnotations()) {
             String name = renderedAnnotationName(annotation);
-            FieldConstraint constraint = constraintOf(name, annotationArguments(annotation));
+            String arguments = AnnotationArguments.qualify(annotationArguments(annotation), importTable,
+                    location, divergences);
+            FieldConstraint constraint = constraintOf(name, arguments);
             if (constraint != null) {
                 constraints.add(constraint);
             }

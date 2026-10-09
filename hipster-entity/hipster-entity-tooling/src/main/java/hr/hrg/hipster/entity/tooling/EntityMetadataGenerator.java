@@ -2606,7 +2606,11 @@ public class EntityMetadataGenerator {
         }
 
         return new Property(name, type, fieldKind, column, relation, expression, lineNumber,
-                ValidationGenerator.constraintsOn(method),
+                // Plan step 6.7: the constraint's arguments are resolved against the declaring unit's
+                // imports here, because this is the one place that has both the annotation and the
+                // import table — and a consumer of the emitted text has neither.
+                ValidationGenerator.constraintsOn(method, importTable,
+                        declaringName + "." + name, activeDivergences),
                 typeImportsFor(name, type, declaringPackage, importTable, declaredTypes),
                 sourcePath, locations);
     }

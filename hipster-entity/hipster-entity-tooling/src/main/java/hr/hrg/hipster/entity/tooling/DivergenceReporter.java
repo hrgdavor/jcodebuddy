@@ -80,6 +80,10 @@ public final class DivergenceReporter implements hr.hrg.jcodebuddy.engine.Diagno
             "mapper_request_malformed",
             "validation_constraint_unsupported",
             "validation_constraint_type_mismatch",
+            // Plan step 6.7: a class literal inside an annotation argument that the declaring file's
+            // imports cannot resolve. The text is carried as written, so this is the one way a consumer
+            // learns that the generator did not qualify it (DEC-047 § 1's argument-side half).
+            "annotation_class_not_resolved",
             "deep_tracking_type_not_enabled",
             // hipster-ioc context generation (DEC-036): the generator's own refusals and skips.
             "circular_dependency_unmarked",
