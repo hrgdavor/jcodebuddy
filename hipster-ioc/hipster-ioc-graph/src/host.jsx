@@ -45,11 +45,13 @@ function Sidebar({ contexts, onSelect }) {
  *
  * The editor arrives as a **node the caller built**, not as `<jsx6-nodditor …/>`. That is a measured
  * consequence of the custom-element contract: the JSX runtime creates a string tag through
- * `document.createElement(tag, options)`, and the options object makes the browser refuse the upgrade
- * (`The result must not have attributes` / `must not have children`, because the element's constructor
- * sets them). Building the element and inserting it as an existing node sidesteps the constructor-
- * argument path entirely, and it is also what lets `main.js` hold the same reference it later hands the
- * graph to — the order nodditor's host guide requires (render → inspect → wire).
+ * `document.createElement(tag, options)`, and passing options makes the browser refuse the upgrade
+ * (`The result must not have attributes` / `must not have children`) unless the element's class defers
+ * its DOM build — which is exactly what was reported to `jsx6` and fixed in its `JsxW` (the constructor
+ * now builds only when the element is already connected, and otherwise waits for `connectedCallback`).
+ * Building the element here and inserting it as an existing node works on both sides of that fix, and it
+ * is what lets `main.js` hold the reference it later hands the graph to — the render → inspect → wire
+ * order nodditor's host guide requires.
  *
  * The status is a signal read as a child, so updating it rewrites one text node and leaves the rest of
  * the page alone — the binding the stack's own example demonstrates, and it is published on `globalThis`

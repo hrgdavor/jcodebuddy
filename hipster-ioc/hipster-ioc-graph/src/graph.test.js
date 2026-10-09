@@ -20,6 +20,9 @@ import { join } from 'node:path'
 import { html, OUTPUT_DIR, readContexts, styles } from './build.js'
 import { layout, readGraph, simpleName } from './model.js'
 
+/** The repository's scratch directory — derived, gitignored, and outside `target/` (AGENTS.md § 2). */
+const REPO_TMP = join(OUTPUT_DIR, '..', '..', '..', '..', '..', '.tmp')
+
 let passed = 0
 let failed = 0
 
@@ -123,6 +126,44 @@ check('the stylesheet carries nodditor geometry and the page frame', () => {
   assert.ok(css.length > 0)
   assert.ok(css.includes('.graph-app'), 'the page frame is ours')
   assert.ok(css.includes('--graph-accent'), 'the block look is ours')
+})
+
+/* ------------------------------------------------------------------ the real page, in a browser */
+
+/**
+ * Renders the built page in headless Chrome and asserts the DOM it actually reaches.
+ *
+ * <p>This is the assertion the page class needs and the reason it is last: everything above can pass
+ * while the page is a blank shell, which is exactly what happened three times while this page was being
+ * built (a `file://` fetch, an ESM script the browser refuses, and a `JsxW` constructor that set
+ * attributes during the custom-element upgrade). Skipped — with a printed note — when no Chrome is
+ * present, because the rest of the file is still meaningful without one.</p>
+ */
+check('the built page renders its shell, its block and its status line in a browser', () => {
+  const page = join(OUTPUT_DIR, 'graph.html')
+  if (!existsSync(page)) {
+    throw new Error(`no built page at ${page}`)
+  }
+  const chrome = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    join(process.env.LOCALAPPDATA ?? '', 'Google/Chrome/Application/chrome.exe'),
+  ].find((candidate) => candidate && existsSync(candidate))
+  if (!chrome) {
+    console.log('         (no Chrome found — the render assertion was skipped, not passed)')
+    return
+  }
+  const profile = join(REPO_TMP, `chrome-${Math.random().toString(36).slice(2, 10)}`)
+  const result = Bun.spawnSync([chrome, '--headless=new', '--no-sandbox', '--disable-gpu',
+    '--disable-crash-reporter', '--virtual-time-budget=8000', `--user-data-dir=${profile}`,
+    '--dump-dom', `file:///${page.replaceAll('\\', '/')}`], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const dom = result.stdout ? new TextDecoder().decode(result.stdout) : ''
+  assert.ok(dom.length > 0, 'Chrome must print the DOM it reached')
+  assert.ok(dom.includes('graph-sidebar'), 'the jsx6 shell rendered')
+  assert.ok(dom.includes('ne-block'), 'and nodditor rendered a block')
+  assert.ok(dom.includes('context(s)'), 'and the page reached its status line')
+  assert.ok(!dom.includes('Cannot read contexts.json'),
+    'the page must not be the fetch-failure shell it was before the JSON was inlined')
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

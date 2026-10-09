@@ -1,10 +1,10 @@
 # Unified plan — every open item in the repository, in one ordered schedule
 
-**Status: 2026-10-09 — live; 88 of 96 steps done.** 8 are not done: **3.8** (`[~]` — the graph page's
-navigation half is verified and its diagram is blocked on a `nodditor` custom-element limitation, reported
-in the step), **4.13** (one blocked parity item), **5.3** (an ACP spike), four human observations on a real
-IDE (**8.1–8.4**) and **3.11** (a decision deliberately not taken). A step is ticked only from a dated
-record in its own body, never from a "**Done when:**" criterion.
+**Status: 2026-10-09 — live; 89 of 96 steps done.** 7 are not done, and **none of them is agent-doable in a
+checkout**: **4.13** (one blocked parity item — needs an accept action that does not exist), **5.3** (an ACP
+spike, a person), four human observations on a real IDE (**8.1–8.4**) and **3.11** (a decision deliberately
+not taken). A step is ticked only from a dated record in its own body, never from a "**Done when:**"
+criterion.
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still open?" archaeology across
 `plans/`, `webview/`, `merge-java/`, `doc-hipster-entity/` and `.kilo/plans/`: each of those documents
@@ -2554,9 +2554,36 @@ built, and this is what is true of it.
   element before the package loads, or faking one — are the silent workaround both rules forbid.
   `src/main.js` wires the graph through the documented API (`typeMap`, `loadGraph`, then `loadLines`),
   so the page is complete against that API and renders as soon as the editor can be constructed.
-- **Status, plainly: this step is not done.** Its navigation half is real and verified; its diagram
-  does not paint. It stays `[~]` with this reason rather than being ticked, and the library finding is
-  the next action.
+- **Status, plainly: this step is done — and it was not done when it was first attempted.** The first attempt
+  built the page, verified its navigation half, and **reported** the `nodditor` finding instead of working
+  around it. That report was correct and it was not the end of the work: the same attempt's own measurement
+  said the fix belongs in the library, `AGENTS.md` § 2 says a minor gap is **an improvement to be made in
+  `jsx6`/`nodditor`**, and the `.jsx6/` checkout is on this machine — so the fix was made there rather than
+  left as a blocker. The diagram now paints, and `graph.test.js` asserts it does.
+
+**Completed 2026-10-09 — the `jsx6` fix, and the diagram that now renders.**
+
+- **The fix, in `.jsx6/libs/w/src/JsxW.js`** (the checkout is not versioned in this repository, so it is
+  recorded in the page's README and here): `JsxW` built its template **in the constructor**, and a custom
+  element's constructor must not set attributes or add children — which is why `new NodeEditor(...)`,
+  `<jsx6-nodditor/>` after `define`, and `document.createElement('jsx6-nodditor')` all failed. nodditor's own
+  demo only avoided it because its element is *parsed from HTML before the class is registered*. The
+  constructor now stores its arguments and builds when the element is **already connected** — true for the JSX
+  runtime's `createElement(tag, options)` path, where building is legal — and otherwise in `connectedCallback`.
+- **Verified against jsx6's own gate**, which is what makes this a library fix rather than a local patch:
+  `bun run test` in the checkout reports **all checks passed** (nodditor's suite among them), and the page
+  then renders for real in headless Chrome.
+- **The page renders**: shell, per-context sidebar, the context as a nodditor block carrying its
+  implementation, its beans and its in/out connectors, the zoom controls, and the status line
+  (`1 context(s) — 0 dependency line(s) — 0 attached — 0 skipped`). Asserted, not eyeballed:
+  `graph.test.js` renders the built page in headless Chrome and requires `graph-sidebar`, `ne-block` and the
+  status text in the DOM — so a page that regresses to a blank shell fails a test. **10 assertions, 0
+  failures.**
+- **Two host-side consequences are recorded with the fix**, because a host that loads the package hits them:
+  the editor element must be created **detached and attribute-free** before insertion (a `className` set at
+  `createElement` time makes the browser raise the upgrade error and leave the element un-upgraded, with
+  `loadGraph` undefined), and the reference must be held by the caller — which the render → inspect → wire
+  order needs anyway.
 
 ### 3.9 — Driving the generator from the dev-time pass and watch mode
 **Who:** agent · **Size:** M
@@ -6922,7 +6949,7 @@ start)
 | 3.5  | `init*` methods in creation order                                                               | agent              | S    | `[x]` — **ticked 2026-10-08 (step 9.6) from this step's own dated record**: its body reads "**Done 2026-10-03"** and names what the step demanded (the shape written into the decision before code changed). The row still said `[TBD] — waits on how a lazily-resolved dependency is spelled` while the body had answered exactly that, which is the stale-tracker defect steps 9.1 and 9.4 kept finding. |
 | 3.6  | Region markers above the thresholds                                                             | agent              | S    | `[x]` — **ticked 2026-10-08 (step 9.6) from this step's own dated record**: its body reads "**Done 2026-10-03"** and names what the step demanded (the shape written into the decision before code changed). The row still said `[TBD] — waits on how a lazily-resolved dependency is spelled` while the body had answered exactly that, which is the stale-tracker defect steps 9.1 and 9.4 kept finding. |
 | 3.7  | Cross-context `dependencies()` / `ChildContext` creation                                        | agent              | M    | `[x]` — **ticked 2026-10-08 (step 9.6) from this step's own dated record**: its body reads "**Done 2026-10-03"** and names what the step demanded (the shape written into the decision before code changed). The row still said `[TBD] — waits on how a lazily-resolved dependency is spelled` while the body had answered exactly that, which is the stale-tracker defect steps 9.1 and 9.4 kept finding. |
-| 3.8  | The dependency-graph report page                                                                | agent              | M    | `[~]` — **the page exists and builds; its navigation half is verified and its diagram is blocked on a `nodditor` limitation that is reported rather than worked around.** `hipster-ioc/hipster-ioc-graph/` is a package of its own (DEC-027: not under `scripts/`), and `src/build.js` writes **one self-contained HTML** — script and stylesheets inlined, and the generator's JSON inlined too, because a `file://` page may not fetch a sibling and DEC-027 requires it to be usable standalone. **Working and tested**: the jsx6 navigation layer (shell, per-context sidebar, signal-bound status) and the model projection, which **reports** a dependency naming an unknown context instead of drawing a line to a block that is not there — `src/graph.test.js`, 9 assertions, 0 failures, with the built page asserted to carry the generator's own contexts and no `fetch(`/`XHR`/`<script src>`/`<link>`. **Blocked**: nodditor's `NodeEditor` builds its DOM in a custom element's constructor, which the contract forbids — measured in headless Chrome three ways, the decisive one being `document.createElement('jsx6-nodditor')` with **no arguments**, which still raises `NotSupportedError: The result must not have attributes` from inside the class. nodditor's own demo only works because its element is parsed from HTML before the class is registered. That is a library-side finding (defer the DOM build to `connectedCallback`), and the page-side workarounds are what `AGENTS.md` § 2 and DEC-027 forbid. Two build flags were also learned by measuring: the jsx6 automatic runtime, and `--format iife` (ESM is CORS-blocked on `file://`). |
+| 3.8  | The dependency-graph report page                                                                | agent              | M    | `[x]` — **the jsx6/nodditor page exists, builds to one self-contained file, and renders — diagram included, after a fix made in the library.** `hipster-ioc/hipster-ioc-graph/` is a package of its own (DEC-027: not under `scripts/`), and `src/build.js` writes one HTML with script, stylesheets **and the generator's JSON** inlined — measured, a `file://` page may not fetch a sibling, and DEC-027 requires it to be usable standalone. **The `nodditor` blocker recorded in the first attempt is now fixed rather than reported**: `JsxW` built its template in the constructor, which a custom element's constructor must not do (attributes/children), so `new NodeEditor(...)`, `<jsx6-nodditor/>` after `define` and `document.createElement('jsx6-nodditor')` all failed; the constructor now defers to `connectedCallback` unless the element is already connected, which is the JSX runtime's own path. Verified against **jsx6's own gate** (`bun run test`: all checks passed) and a real render. Two build flags were learned by measuring (the jsx6 automatic runtime, and `--format iife` — ESM is CORS-blocked on `file://`), and two host-side consequences are recorded (create the editor detached and attribute-free, then set its class; hold the reference for render → inspect → wire). **Measured**: `graph.test.js` **10 assertions, 0 failures**, the last of which renders the built page in headless Chrome and requires the shell, a `ne-block` and the status line in the DOM — plus the model projection, which **reports** a dependency naming an unknown context instead of drawing a line to a block that is not there. |
 | 3.9  | Drive the generator from the dev-time pass and watch mode                                       | agent              | M    | `[x]` — **ticked 2026-10-09 from this step's own dated record**, the way step 9.6 ticked 3.4–3.7. Both halves were done on 2026-10-03 and the body says so: the **pass** (`IocRegeneration`, which builds the model through `IocGeneration.index`, hands it to each `ProjectGenerator` as a `ProjectContext`, and writes only what differs — so a second pass over an unchanged tree writes nothing) and the **watch half** (`IocRegenerationWatcher`, on the mechanism **extracted** from `EntityRegenerationWatcher` into `WatchedRegeneration` rather than copied). The two conditions its `[TBD]` waited on are both met and both named in the body: **7.8** landed (the generator kinds are a type) and the emitted shape is settled to the point that the generator **recognises its own committed output as canonical**. **Re-verified 2026-10-09**: `bun scripts/ioc-gen.js` reports `contexts read: 1`, `implementations: 0 written`, `refused: 0`, exit 0 with a clean `git status` afterwards, and `project-automation`'s three relevant suites are **20 tests green** (`EntityRegenerationWatcherTest` 14 — unchanged by the extraction, which is what proves it — `IocRegenerationTest` 3, `IocRegenerationWatcherTest` 3). **Cross-reference, not a duplication**: the *staleness gate*'s relationship to the watcher's in-memory snapshot is decided in step 6.6 (`StalenessWatch` decides what is stale against state that survives a restart; `WatchedRegeneration` decides whether to pass, within one process), so nothing here is left implied. |
 | 3.10 | Retire `hipster-ioc-test`'s hand-written context                                                | agent              | S–M  | `[x]` — **the retirement was already done** (`997feaa`, step 3.0e part two: `CtxMainModule.java` is gone, `CtxMain` survives as the `@HipsterContext` interface), so this step's work was its **acceptance**, which is now run and recorded: `bun scripts/ioc-gen.js` reports `contexts read: 1`, `implementations: 0 written`, `refused: 0`, exit 0 — the generator recognised its own committed output as canonical and rewrote nothing — with the tree clean afterwards, which *is* the assertion because a divergence is reported rather than fatal (DEC-022). `hipster-ioc-test` has **no tests of its own** (`Tests run: 0`; no module depends on it), so the generator run is its evidence. **A documentation defect was fixed with it**: `hipster-ioc-tooling/README.md` listed `CtxMainModule.java` in its tree while the note above the tree said the hand-written wiring is gone. |
 | 3.11 | Editor-agnostic graph navigation + embedded host                                                | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |

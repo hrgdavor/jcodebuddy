@@ -23,6 +23,10 @@ async function boot() {
   // The generator's JSON arrives as a module the build wrote (`./contexts.js`), not as a fetch: see
   // `build.js` for the measured reason (`file://` refuses a sibling fetch, and DEC-027 requires this
   // page to be usable standalone — no host, no server, nothing to start).
+  // The placeholder in the built HTML is for the instant before the script runs; clearing it keeps it
+  // from sitting above the shell forever.
+  mount.textContent = ''
+
   const graph = readGraph(contexts)
   const select = (context) => {
     editor?.selectBlocks?.([context.id])
@@ -30,15 +34,19 @@ async function boot() {
   }
 
   // Built here rather than in JSX: see `host.jsx` for the measured reason (a custom element's
-  // constructor must not be given attributes or children). Holding the reference is also what the
-  // render-inspect-wire order needs.
+  // constructor must not be given attributes or children). The element is created **detached and
+  // attribute-free**, so the upgrade runs when it is inserted — `createElement` with a `className`
+  // already set makes the browser raise `The result must not have attributes` from its own upgrade step,
+  // which leaves the element un-upgraded and `loadGraph` undefined. Setting the class afterwards is what
+  // keeps the order legal, and holding the reference is what the render-inspect-wire order needs.
   const editor = document.createElement('jsx6-nodditor')
-  editor.className = 'NodeEditor'
-  editor.setAttribute('tabindex', '0')
 
   insert(mount, <GraphShell contexts={graph.contexts} onSelect={select} editor={editor}
     status={summarise(graph)} />)
 
+  // Now the element is in the document and its class has run, so the attributes and the graph are set.
+  editor.className = 'NodeEditor'
+  editor.setAttribute('tabindex', '0')
   editor.typeMap = typeMap
   const blocks = layout(graph.contexts)
   editor.loadGraph({ blocks, lines: [] })
