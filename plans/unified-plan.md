@@ -1,11 +1,10 @@
 # Unified plan — every open item in the repository, in one ordered schedule
 
-**Status: 2026-10-09 — live; 86 of 96 steps done.** 10 are not done: **3.8** and **3.9** (agent — the
-`jsx6`/`nodditor` graph page and the watch-driven pass; the `.jsx6/` checkout now exists, so neither is deferred
-for want of a library), **6.7** (agent — a resolver split out of 6.6 on 2026-10-09), **4.13** (one blocked parity
-item), **5.3** (an ACP spike), four human observations on a real IDE (**8.1–8.4**) and **3.11** (a decision
-deliberately not taken). A step is ticked only from a dated record in its own body, never from a "**Done when:**"
-criterion.
+**Status: 2026-10-09 — live; 87 of 96 steps done.** 9 are not done: **3.8** (agent — the `jsx6`/`nodditor` graph
+page; the `.jsx6/` checkout now exists, so it is ready rather than deferred), **6.7** (agent — a resolver split
+out of 6.6), **4.13** (one blocked parity item), **5.3** (an ACP spike), four human observations on a real IDE
+(**8.1–8.4**) and **3.11** (a decision deliberately not taken). A step is ticked only from a dated record in its
+own body, never from a "**Done when:**" criterion.
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still open?" archaeology across
 `plans/`, `webview/`, `merge-java/`, `doc-hipster-entity/` and `.kilo/plans/`: each of those documents
@@ -2564,6 +2563,23 @@ The IoC side is proven the same way, in `IocRegenerationWatcherTest`: an edit to
 implementation appears; **a batch holding the generated implementations is recognised as that pass's echo and
 ignored** (one pass, not two); a save whose bytes are unchanged is a no-op; and a deletion is acted on.
 `project-automation` is 92 → **95 tests, 0 failures**, and the recorded gate is green with the cache on.
+
+**Both halves re-verified 2026-10-09, and the row ticked from this record.** The `[TBD]` it carried named two
+conditions, and both are now met and written down above: **7.8 landed** (the generator kinds are a type, so the pass
+hands the project generator a model rather than a file) and the emitted shape is settled to the point that the
+generator *recognises its own committed output as canonical*. Because an acceptance that was never re-run is a claim,
+it was re-run: `bun scripts/ioc-gen.js` reports `contexts read: 1`, `implementations: 0 written`, `refused: 0`, exit 0,
+and `git status` is clean afterwards — a divergence is reported rather than fatal (DEC-022), so the clean tree *is* the
+assertion, not the exit code. The three suites that are this step's evidence are green together: **20 tests**
+(`EntityRegenerationWatcherTest` 14 — unchanged since the extraction, which is what proves the extraction preserved the
+behaviour — plus `IocRegenerationTest` 3 and `IocRegenerationWatcherTest` 3).
+
+**Where the staleness gate fits, since step 6.6 now exists.** This step's watch half decides *whether to run a pass*,
+from an in-memory SHA-1 snapshot taken after the last pass; 6.6's `StalenessWatch` decides *what is stale*, against the
+stored metadata entries that survive a restart. They are two questions, deliberately, and neither is a second copy of
+the other: a loop with only the snapshot re-derives everything after a restart, and a loop with only the gate
+regenerates on its own output. The split is recorded in `StalenessWatch`'s own javadoc, so a reader meeting one of them
+is told about the other.
 
 ### 3.10 — Retire `hipster-ioc-test`'s hand-written context
 **Who:** agent · **Size:** S–M
@@ -6826,7 +6842,7 @@ start)
 | 3.6  | Region markers above the thresholds                                                             | agent              | S    | `[x]` — **ticked 2026-10-08 (step 9.6) from this step's own dated record**: its body reads "**Done 2026-10-03"** and names what the step demanded (the shape written into the decision before code changed). The row still said `[TBD] — waits on how a lazily-resolved dependency is spelled` while the body had answered exactly that, which is the stale-tracker defect steps 9.1 and 9.4 kept finding. |
 | 3.7  | Cross-context `dependencies()` / `ChildContext` creation                                        | agent              | M    | `[x]` — **ticked 2026-10-08 (step 9.6) from this step's own dated record**: its body reads "**Done 2026-10-03"** and names what the step demanded (the shape written into the decision before code changed). The row still said `[TBD] — waits on how a lazily-resolved dependency is spelled` while the body had answered exactly that, which is the stale-tracker defect steps 9.1 and 9.4 kept finding. |
 | 3.8  | The dependency-graph report page                                                                | agent              | M    | `[TBD]` — waits on the graph model being settled                                            |
-| 3.9  | Drive the generator from the dev-time pass and watch mode                                       | agent              | M    | `[TBD]` — waits on 7.8 and the shape                                                        |
+| 3.9  | Drive the generator from the dev-time pass and watch mode                                       | agent              | M    | `[x]` — **ticked 2026-10-09 from this step's own dated record**, the way step 9.6 ticked 3.4–3.7. Both halves were done on 2026-10-03 and the body says so: the **pass** (`IocRegeneration`, which builds the model through `IocGeneration.index`, hands it to each `ProjectGenerator` as a `ProjectContext`, and writes only what differs — so a second pass over an unchanged tree writes nothing) and the **watch half** (`IocRegenerationWatcher`, on the mechanism **extracted** from `EntityRegenerationWatcher` into `WatchedRegeneration` rather than copied). The two conditions its `[TBD]` waited on are both met and both named in the body: **7.8** landed (the generator kinds are a type) and the emitted shape is settled to the point that the generator **recognises its own committed output as canonical**. **Re-verified 2026-10-09**: `bun scripts/ioc-gen.js` reports `contexts read: 1`, `implementations: 0 written`, `refused: 0`, exit 0 with a clean `git status` afterwards, and `project-automation`'s three relevant suites are **20 tests green** (`EntityRegenerationWatcherTest` 14 — unchanged by the extraction, which is what proves it — `IocRegenerationTest` 3, `IocRegenerationWatcherTest` 3). **Cross-reference, not a duplication**: the *staleness gate*'s relationship to the watcher's in-memory snapshot is decided in step 6.6 (`StalenessWatch` decides what is stale against state that survives a restart; `WatchedRegeneration` decides whether to pass, within one process), so nothing here is left implied. |
 | 3.10 | Retire `hipster-ioc-test`'s hand-written context                                                | agent              | S–M  | `[x]` — **the retirement was already done** (`997feaa`, step 3.0e part two: `CtxMainModule.java` is gone, `CtxMain` survives as the `@HipsterContext` interface), so this step's work was its **acceptance**, which is now run and recorded: `bun scripts/ioc-gen.js` reports `contexts read: 1`, `implementations: 0 written`, `refused: 0`, exit 0 — the generator recognised its own committed output as canonical and rewrote nothing — with the tree clean afterwards, which *is* the assertion because a divergence is reported rather than fatal (DEC-022). `hipster-ioc-test` has **no tests of its own** (`Tests run: 0`; no module depends on it), so the generator run is its evidence. **A documentation defect was fixed with it**: `hipster-ioc-tooling/README.md` listed `CtxMainModule.java` in its tree while the note above the tree said the hand-written wiring is gone. |
 | 3.11 | Editor-agnostic graph navigation + embedded host                                                | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
 | 4.1  | Replace `WIDENING_CHAINS` with supertype resolution                                             | agent              | S–M  | `[x]`                                                                                       |
