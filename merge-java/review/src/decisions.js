@@ -42,6 +42,11 @@ export function decisionFor(filePath, resolution, choice, conflict) {
     branch2: sides.branch2 ?? '',
     resolvedCode: choice.resolvedCode ?? '',
     explanation: choice.explanation ?? '',
+    // Whether the reviewer made this decision, or it was already answered and simply travelled with the
+    // payload (plan step 4.13's `accepted` count). A recorded decision is a sticky replay either way, so this
+    // is bookkeeping for the page's own counts — it is not part of the decision's key and the recorder does
+    // not read it.
+    decidedNow: choice.decidedNow === true,
   }
 }
 
@@ -70,8 +75,8 @@ export function buildDecisions({ branchName, accepted, rejected, repoPath }) {
     schemaVersion: SCHEMA_VERSION,
     branchName: branchName || '',
     repoPath: repoPath || '',
-    decisions: (accepted ?? []).map(({ filePath, resolution, conflict, resolvedCode, explanation }) =>
-      decisionFor(filePath, resolution, { resolvedCode, explanation }, conflict),
+    decisions: (accepted ?? []).map(({ filePath, resolution, conflict, resolvedCode, explanation, decidedNow }) =>
+      decisionFor(filePath, resolution, { resolvedCode, explanation, decidedNow }, conflict),
     ),
     rejected: (rejected ?? []).map(({ filePath, resolution, conflict }) =>
       rejectionFor(filePath, resolution, conflict),
@@ -215,6 +220,8 @@ export function acceptAllResolved(files) {
         resolution,
         conflict: conflicts[index],
         resolvedCode: resolution.resolvedCode ?? '',
+        // The sweep was not a decision anybody made (plan step 4.13): the answers were already there.
+        decidedNow: false,
         explanation: `accepted the ${resolution.kind} resolution as resolved`,
       })
     })
@@ -278,6 +285,10 @@ export function blockClaim(block, filePath) {
     resolution: entry.resolution,
     conflict: entry.conflict,
     resolvedCode: proposedCodeFor(entry.resolution),
+    // Every entry in an accepted block was covered by the reviewer's one action, so all of them count as
+    // decided-now — including one the engine had already answered, because the action is what settled the
+    // block as a whole (plan step 4.13's `accepted` count).
+    decidedNow: true,
     explanation:
       `accepted the ${entry.resolution?.kind ?? 'unknown'} resolution for the whole block ` +
       '(plan step 4.13: one action, after confirming the set)',

@@ -74,6 +74,14 @@ test('builds one self-contained page from a report', () => {
   assert.ok(html.includes('recommended'), 'the recommendation must be shown')
   assert.ok(html.includes('branch 1'), 'the branches own code must be shown beside the result')
   assert.ok(html.includes('sample data'), 'a page built from the sample must say so')
+
+  // The multi-file flow and the block action are IN the bundle (plan step 4.13, deliverables 1 and 4). These
+  // are the strings a reviewer's controls come from, so a refactor that dropped one would fail here rather
+  // than being noticed by whoever opened the page next.
+  assert.ok(html.includes('Merge run'), 'the file list heading must be in the page')
+  assert.ok(html.includes('Accept this block'), 'the block action must be in the page')
+  assert.ok(html.includes('in one action'), 'and the metric § 10.3 names must be labelled for the reviewer')
+  assert.ok(html.includes('repoPath'), 'the export must carry the repository root (deliverable 2)')
 })
 
 test('says where its data came from when a real report exists', () => {

@@ -3,6 +3,8 @@ import { signal } from '@jsx6/signal'
 import { report, reportSource, isSample, repoRoot } from '../.generated/report.js'
 import {
   acceptAllResolved,
+  acceptBlock,
+  blockClaim,
   buildDecisions,
   decisionKey,
   fileNameFor,
@@ -15,6 +17,7 @@ import {
   suggestionOf,
 } from './decisions.js'
 import { blockLabel, blockNote, blocksOf } from './blocks.js'
+import { fileStatus, runStatus } from './status.js'
 import { isServed, saveDecisions } from './save.js'
 
 /**
@@ -383,6 +386,76 @@ function Resolution({ resolution, filePath, conflict }) {
  * file per block. Reading the report flat is what let a reviewer accept everything and still find the block there,
  * with nothing saying why.
  */
+/**
+ * The block's own actions (plan step 4.13, deliverable 1): **apply resolved** for what is already settled, and
+ * **accept the whole block** in one action.
+ *
+ * <p>The second is one click to open the set and a second to apply it, and the set is shown in between — the
+ * count, and each conflict's basis. That is what makes a bulk action that takes *suggestions* acceptable:
+ * `SUGGESTIONS.md` § 5 forbids sweeping them because nobody was shown that code, and here the reviewer is shown
+ * exactly what will be accepted before it is accepted. Refusing to show, or applying on the first click, would
+ * both be the silent bulk-accept that rule exists to prevent.</p>
+ *
+ * <p>When the block cannot be taken the reason is shown instead of a button that would refuse: which conflict
+ * has no answer, in the words of the refusal `acceptBlock` throws.</p>
+ */
+function BlockActions({ block, filePath }) {
+  const $confirming = signal(false)
+  const claim = blockClaim(block, filePath)
+  const ready = claim.blocked.length === 0 && block.entries.length > 0
+  const resolvedOnly = acceptAllResolved([{ filePath, conflicts: block.entries.map((e) => e.conflict), resolutions: block.entries.map((e) => e.resolution) }])
+
+  const applyResolved = () => {
+    $accepted(mergeAccepted($accepted(), resolvedOnly))
+  }
+  const acceptAll = () => {
+    $accepted(mergeAccepted($accepted(), acceptBlock(block, filePath)))
+    $confirming(false)
+  }
+
+  return (
+    <div class="blockactions">
+      {resolvedOnly.length ? (
+        <button type="button" onclick={applyResolved}>
+          Apply resolved ({resolvedOnly.length})
+        </button>
+      ) : null}
+      {ready ? (
+        <button type="button" class="acceptblock" onclick={() => $confirming(!$confirming())}>
+          {block.entries.length === 1 ? 'Accept this block' : `Accept this block (${block.entries.length} conflicts)`}
+        </button>
+      ) : (
+        <span class="blocked">
+          cannot be accepted in one action: {claim.blocked.join('; ')}
+        </span>
+      )}
+      {$confirming() ? (
+        <div class="confirm">
+          <div class="confirmhead">
+            Accepting all {block.entries.length} conflict(s) in this block. What will be written:
+          </div>
+          <ul>
+            {block.entries.map(({ resolution }) => (
+              <li>
+                <span class="confirmtype">{resolution.kind ?? '?'}</span>{' '}
+                {suggestionOf(resolution)
+                  ? `a suggestion from ${suggestionOf(resolution).provenance} (${suggestionOf(resolution).verification})`
+                  : 'the answer the tool worked out'}
+              </li>
+            ))}
+          </ul>
+          <div class="confirmbuttons">
+            <button type="button" class="confirmyes" onclick={acceptAll}>
+              Accept all {block.entries.length}
+            </button>
+            <button type="button" onclick={() => $confirming(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function Block({ block, filePath }) {
   return (
     <div class={`block${block.severalConflicts ? ' several' : ''}${block.undecided ? ' needs-you' : ''}`}>
@@ -395,6 +468,7 @@ function Block({ block, filePath }) {
         </span>
       </div>
       <div class="blocknote">{blockNote(block)}</div>
+      <BlockActions block={block} filePath={filePath} />
       {block.entries.map(({ resolution, conflict }) => (
         <Resolution resolution={resolution} filePath={filePath} conflict={conflict} />
       ))}
@@ -424,8 +498,55 @@ function FileSection({ file }) {
   )
 }
 
+/**
+ * The file list a reviewer navigates by (plan step 4.13, deliverable 4).
+ *
+ * <p>The page covers ONE merge run, and every file in it is one click away, with the state of that file's merge
+ * beside its name: how much the tool decided, how much a person accepted, and how much is still open. The
+ * `§ 10.3` number — blocks accepted in one action — is shown here rather than inside a file, because this is
+ * where a reviewer sees progress across the run; inside one file there is nothing to compare.</p>
+ *
+ * <p>Selecting a file **does not discard anything**: the accepted decisions live in one list for the whole
+ * session, so moving between files is free and a reviewer can come back to one they left half-decided. That is
+ * the flow the maintainer asked for, and losing work on a filename click is how a page gets used once.</p>
+ */
+function FileList({ files, selected, onSelect, accepted }) {
+  return (
+    <nav class="filelist">
+      <h2>Merge run</h2>
+      <ul>
+        {files.map((file) => {
+          const status = fileStatus(file, accepted)
+          const current = selected === file.filePath
+          return (
+            <li>
+              <button
+                type="button"
+                class={`filestate${current ? ' current' : ''}${status.finishedHere ? ' done' : ''}`}
+                onclick={() => onSelect(file.filePath)}
+              >
+                <span class="filename">{file.filePath}</span>
+                <span class="filecounts">
+                  <b class="decided">{status.decided}</b> auto · <b class="accepted">{status.accepted}</b> you
+                  {status.acceptedInOneAction ? <> · <b class="one">{status.acceptedInOneAction}</b> in one action</> : null}
+                  {' · '}
+                  <b class={status.open ? 'open' : 'none'}>{status.open}</b> open
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
+
 function App() {
   const files = report.files ?? []
+  // Which file is open. The decisions themselves are NOT per file — that is what makes navigation safe.
+  const $selected = signal(files[0]?.filePath ?? '')
+  const selected = files.find((file) => file.filePath === $selected()) ?? files[0] ?? null
+  const totals = runStatus(files, $accepted())
   return (
     <div>
       <h1>
@@ -437,8 +558,22 @@ function App() {
       </div>
       <ExportBar branchName={files[0]?.branchName ?? ''} />
       <Summary summary={report.summary ?? {}} />
-      <h2>Files</h2>
-      {files.length ? files.map((file) => <FileSection file={file} />) : <div class="note">No files in this report.</div>}
+      {files.length ? (
+        <div class="run">
+          <FileList files={files} selected={$selected()} onSelect={$selected} accepted={$accepted()} />
+          <div class="rundetail">
+            <div class="runhead">
+              {files.length} file(s) · <b>{totals.decided}</b> decided by the tool ·{' '}
+              <b>{totals.accepted}</b> accepted by you
+              {totals.acceptedInOneAction ? <> (<b>{totals.acceptedInOneAction}</b> in one action)</> : null} ·{' '}
+              <b>{totals.open}</b> open
+            </div>
+            {selected ? <FileSection file={selected} /> : null}
+          </div>
+        </div>
+      ) : (
+        <div class="note">No files in this report.</div>
+      )}
     </div>
   )
 }

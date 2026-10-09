@@ -105,6 +105,38 @@
       .actions .label {
         color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
       }
+      /* The multi-file flow (plan step 4.13, deliverable 4): the file list beside the open file. */
+      .run { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 18px; margin-top: 16px; }
+      .filelist h2 { font-size: 14px; margin: 0 0 8px; }
+      .filelist ul { list-style: none; margin: 0; padding: 0; }
+      .filestate {
+        display: block; width: 100%; text-align: left; margin-bottom: 4px; padding: 6px 8px;
+        border: 1px solid var(--line); border-left-width: 3px; border-radius: 5px;
+        background: transparent; color: inherit; font: inherit; cursor: pointer;
+      }
+      .filestate:hover { background: #f6f8fc; }
+      .filestate.current { border-color: #2f6feb; background: #eef2ff; }
+      .filestate.done { border-left-color: #4a9d5f; }
+      .filename {
+        display: block; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .filecounts { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+      .filecounts .open { color: #b4541f; }
+      .filecounts .none { color: #4a9d5f; }
+      .runhead { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+      .blockactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+      .blockactions button { font: inherit; padding: 3px 9px; border-radius: 5px; border: 1px solid var(--line); cursor: pointer; }
+      .acceptblock { border-color: #2f6feb; }
+      .blocked { color: var(--muted); font-size: 12px; font-style: italic; }
+      /* One click to open the set, one to apply it: what makes taking suggestions acceptable. */
+      .confirm { flex-basis: 100%; border: 1px solid #2f6feb; border-radius: 6px; padding: 8px 10px; background: #f7f9ff; }
+      .confirmhead { font-weight: 600; margin-bottom: 4px; }
+      .confirm ul { margin: 0 0 6px; padding-left: 18px; color: var(--muted); font-size: 12px; }
+      .confirmtype { font-family: ui-monospace, Consolas, monospace; }
+      .confirmbuttons { display: flex; gap: 8px; }
+      .confirmyes { border-color: #2f6feb; font-weight: 600; }
+      .export-outcome { color: var(--muted); font-size: 12px; flex-basis: 100%; white-space: pre-wrap; }
     </style>
   </head>
   <body>
