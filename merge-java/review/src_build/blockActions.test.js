@@ -181,3 +181,23 @@ test('a block built by blocksOf is refused when the report left part of it open'
   assert.equal(claim.blocked.length, 1)
   assert.match(claim.blocked[0], /STRUCTURAL_CHANGE/)
 })
+
+test('the export carries the repository root, so the CLI can run from anywhere', () => {
+  // Plan step 4.13, deliverable 2. Absolute, because a relative path would be relative to whatever
+  // directory the page was opened from — the problem, not the fix.
+  const document = buildDecisions({
+    branchName: 'feature/payments',
+    repoPath: 'C:\\wrk\\checkout',
+    accepted: acceptBlock(blockOf(answered('COMMENT_ADD', 1, 5)), 'src/A.java'),
+  })
+
+  assert.equal(document.repoPath, 'C:\\wrk\\checkout')
+  assert.equal(document.schemaVersion, 1, 'the field is additive, so the schema version does not move')
+})
+
+test('a document built without a repoPath still says so, and stays readable', () => {
+  // A file written before the field existed means "the directory you run the recorder from", which is how
+  // those files were used; the empty string is the honest spelling of that.
+  const document = buildDecisions({ branchName: 'feature', accepted: [] })
+  assert.equal(document.repoPath, '')
+})

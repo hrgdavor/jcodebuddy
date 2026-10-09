@@ -53,11 +53,23 @@ export function decisionFor(filePath, resolution, choice, conflict) {
  * the suppression that fixes it keys on `(signature, provenance)` — a rejection of a text-comparison answer is
  * not a rejection of a future structural one (SUGGESTIONS.md § 5 rule 4). This step records the refusal; the
  * recorder is what acts on it.
+ *
+ * <p><b>{@code repoPath} is what lets the CLI be run from anywhere (plan step 4.13, deliverable 2).</b> Every
+ * {@code filePath} in this document is relative to the repository the report was produced in, so without it the
+ * recorder has to be run from that directory and a reviewer who exports in one checkout and applies in another
+ * has nothing saying which repository the decisions belong to. It is written as an absolute path — a relative
+ * one would be relative to whatever directory the page was opened from, which is the problem rather than the
+ * fix — and {@code DecisionRecorder --repo} overrides it for a moved or copied checkout.</p>
+ *
+ * <p>The field is <em>additive</em> and the schema version is unchanged: a document written before this existed
+ * has no {@code repoPath} and still means "the directory you run the recorder from", which is exactly how those
+ * files were used.</p>
  */
-export function buildDecisions({ branchName, accepted, rejected }) {
+export function buildDecisions({ branchName, accepted, rejected, repoPath }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     branchName: branchName || '',
+    repoPath: repoPath || '',
     decisions: (accepted ?? []).map(({ filePath, resolution, conflict, resolvedCode, explanation }) =>
       decisionFor(filePath, resolution, { resolvedCode, explanation }, conflict),
     ),

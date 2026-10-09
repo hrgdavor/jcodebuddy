@@ -125,4 +125,80 @@ class DecisionRecorderTest {
         Assertions.assertTrue(result.isEmpty());
         Assertions.assertTrue(result.problems().isEmpty(), result.problems().toString());
     }
+
+    /** The payload with a {@code repoPath}, which is what lets the CLI be run from anywhere (step 4.13). */
+    private Path exportedDecisionWithRepo(Conflict conflict, String repoPath) throws Exception {
+        Map<String, Object> decision = new LinkedHashMap<>();
+        decision.put("signature", ConflictSignature.of(conflict).toFileName());
+        decision.put("type", conflict.getType().name());
+        decision.put("filePath", conflict.getFilePath());
+        decision.put("base", conflict.getBaseCode());
+        decision.put("branch1", conflict.getBranch1Code());
+        decision.put("branch2", conflict.getBranch2Code());
+        decision.put("resolvedCode", conflict.getBranch1Code());
+
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("schemaVersion", DecisionRecorder.SCHEMA_VERSION);
+        document.put("branchName", BRANCH);
+        document.put("repoPath", repoPath);
+        document.put("decisions", List.of(decision));
+
+        Path file = tempDir.resolve("decisions-with-repo.json");
+        Files.writeString(file, new ObjectMapper().writeValueAsString(document), StandardCharsets.UTF_8);
+        return file;
+    }
+
+    @Test
+    @DisplayName("a decisions file naming an existing repository is recorded from any working directory")
+    void aRepoPathIsHonoured() throws Exception {
+        // The point of the field: the same command works from somewhere that is not the repository.
+        Conflict conflict = ConflictFixtures.sample(ConflictType.VARIABLE_RENAME);
+        Path decisions = exportedDecisionWithRepo(conflict, tempDir.toAbsolutePath().toString());
+
+        DecisionRecorder.Result result = DecisionRecorder.record(decisions, tempDir.resolve(BRANCH), BRANCH);
+
+        Assertions.assertEquals(1, result.recorded(), result.describe());
+    }
+
+    @Test
+    @DisplayName("a decisions file naming a repository that is gone is refused, not applied somewhere else")
+    void aMissingRepoPathIsRefused() throws Exception {
+        // The failure this check exists for: without it the decisions would be recorded against whatever
+        // directory the caller happened to be in, keyed on paths that name nothing — a silent wrong answer.
+        Conflict conflict = ConflictFixtures.sample(ConflictType.VARIABLE_RENAME);
+        Path gone = tempDir.resolve("moved-away-repo");
+        Path decisions = exportedDecisionWithRepo(conflict, gone.toAbsolutePath().toString());
+
+        java.io.IOException refused = Assertions.assertThrows(java.io.IOException.class,
+            () -> DecisionRecorder.record(decisions, tempDir.resolve(BRANCH), BRANCH));
+
+        Assertions.assertTrue(refused.getMessage().contains("moved-away-repo"), refused.getMessage());
+        Assertions.assertTrue(refused.getMessage().contains("--repo"),
+            "and it names the way out: " + refused.getMessage());
+    }
+
+    @Test
+    @DisplayName("an explicit --repo overrides a repoPath that no longer exists")
+    void anExplicitRepoOverridesTheDocument() throws Exception {
+        Conflict conflict = ConflictFixtures.sample(ConflictType.VARIABLE_RENAME);
+        Path decisions = exportedDecisionWithRepo(conflict, tempDir.resolve("moved-away-repo").toString());
+
+        DecisionRecorder.Result result = DecisionRecorder.record(decisions, tempDir.resolve(BRANCH), BRANCH,
+            tempDir.toAbsolutePath());
+
+        Assertions.assertEquals(1, result.recorded(),
+            "a moved checkout is the case the override exists for: " + result.describe());
+    }
+
+    @Test
+    @DisplayName("a decisions file written before repoPath existed still records from the working directory")
+    void aDocumentWithoutRepoPathIsUnchanged() throws Exception {
+        // Additive field, unchanged schema: the files reviewers already have keep working exactly as they did.
+        Conflict conflict = ConflictFixtures.sample(ConflictType.VARIABLE_RENAME);
+        Path decisions = exportedDecision(conflict, conflict.getBranch1Code(), null);
+
+        DecisionRecorder.Result result = DecisionRecorder.record(decisions, tempDir.resolve(BRANCH), BRANCH);
+
+        Assertions.assertEquals(1, result.recorded(), result.describe());
+    }
 }

@@ -76,6 +76,29 @@ public final class DecisionRecorder {
      * @throws IOException if the decisions file cannot be read, or is not the expected JSON
      */
     public static Result record(Path decisionsFile, Path historyRoot, String branchName) throws IOException {
+        return record(decisionsFile, historyRoot, branchName, null);
+    }
+
+    /**
+     * The same, with the repository root the exported document names (plan step 4.13, deliverable 2).
+     *
+     * <p>Every {@code filePath} in a decisions document is relative to the repository the report was produced in,
+     * and today nothing in the file says which repository that is — so the recorder had to be run from that
+     * directory. The page now writes {@code repoPath} (an absolute path, see {@code review/src/decisions.js}), and
+     * this is where it is honoured: the important half is the <strong>check</strong>. A document whose
+     * {@code repoPath} no longer exists would otherwise be applied against whatever directory the caller happened
+     * to be in, recording decisions keyed on paths that name nothing — a silent wrong answer rather than a
+     * failure, which is the one outcome this class exists to refuse.</p>
+     *
+     * <p>{@code repoOverride} is the explicit escape for a moved or copied checkout; when given it wins over the
+     * document, and the document's value is only used when there is no override. A document with neither (one
+     * written before this field existed) keeps the old behaviour: the caller's working directory.</p>
+     *
+     * @param repoOverride the repository root to use instead of the document's, or {@code null}
+     * @throws IOException when a {@code repoPath} is present (or overridden) and is not an existing directory
+     */
+    public static Result record(Path decisionsFile, Path historyRoot, String branchName, Path repoOverride)
+            throws IOException {
         Objects.requireNonNull(decisionsFile, "decisionsFile");
         Objects.requireNonNull(historyRoot, "historyRoot");
         Objects.requireNonNull(branchName, "branchName");
@@ -86,10 +109,19 @@ public final class DecisionRecorder {
             throw new IOException("unsupported decisions schemaVersion " + schemaVersion
                 + " (this build understands " + SCHEMA_VERSION + ")");
         }
+        List<String> problems = new ArrayList<>();
+        String declaredRepo = document.path("repoPath").asString("");
+        Path repo = repoOverride != null ? repoOverride
+            : declaredRepo.isEmpty() ? null : Path.of(declaredRepo);
+        if (repo != null && !Files.isDirectory(repo)) {
+            throw new IOException("the decisions file names the repository " + repo.toAbsolutePath()
+                + ", which is not a directory"
+                + (repoOverride != null ? " (--repo)" : " (from its repoPath)")
+                + "; pass --repo with the checkout the decisions belong to");
+        }
         // The file's own branch is a cross-check, not the authority: the caller names the branch to record into,
         // because a reviewer may export from one checkout and record into another.
         String declaredBranch = document.path("branchName").asString("");
-        List<String> problems = new ArrayList<>();
         if (!declaredBranch.isEmpty() && !declaredBranch.equals(branchName)) {
             problems.add("the file was exported for branch '" + declaredBranch + "' but recording into '"
                 + branchName + "'");
@@ -192,31 +224,36 @@ public final class DecisionRecorder {
      *   --decisions &lt;file.json&gt;   what the page exported (required)
      *   --history &lt;dir&gt;           the branch's history root, holding its decisions (required)
      *   --branch &lt;name&gt;           the branch to record into (required)
+     *   --repo &lt;dir&gt;              the checkout the decisions belong to, overriding the file's own repoPath
      * </pre>
      */
     public static void main(String[] args) throws Exception {
         Path decisions = null;
         Path history = null;
         String branch = null;
+        Path repo = null;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--decisions" -> decisions = i + 1 < args.length ? Path.of(args[++i]) : null;
                 case "--history" -> history = i + 1 < args.length ? Path.of(args[++i]) : null;
                 case "--branch" -> branch = i + 1 < args.length ? args[++i] : null;
+                case "--repo" -> repo = i + 1 < args.length ? Path.of(args[++i]) : null;
                 default -> System.err.println("[record-decisions] unknown argument: " + args[i]);
             }
         }
         if (decisions == null || history == null || branch == null) {
-            System.err.println("Usage: record-decisions --decisions <file.json> --history <branchDir> --branch <name>");
+            System.err.println("Usage: record-decisions --decisions <file.json> --history <branchDir> "
+                + "--branch <name> [--repo <dir>]");
             System.exit(2);
             return;
         }
         try {
-            Result result = record(decisions, history, branch);
+            Result result = record(decisions, history, branch, repo);
             // The absolute path is printed because the branch directory is the part a caller can get wrong
             // silently: recording one level up writes fine and is never replayed.
             System.out.println("[record-decisions] " + result.describe()
-                + " into " + history.toAbsolutePath() + "/" + BranchConflictStore.DECISIONS_DIR);
+                + " into " + history.toAbsolutePath() + "/" + BranchConflictStore.DECISIONS_DIR
+                + (repo == null ? "" : " (repository overridden with " + repo.toAbsolutePath() + ")"));
             result.problems().forEach(problem -> System.out.println("  refused: " + problem));
             System.exit(result.isEmpty() ? 1 : 0);
         } catch (IOException | RuntimeException failure) {
