@@ -96,7 +96,7 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 | `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop)                         |
 | `scripts/run-demo.js`                         | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
 | `scripts/entity-html/index.js`                | render the HTML entity index from the JSON a pass wrote (DEC-027); `--module <dir>` for another module |
-| `scripts/jcodebuddy.js`                       | the `jcodebuddy` command line: `bun scripts/jcodebuddy.js metadata parse <file>` prints one file's metadata as one line of JSON, with no daemon, no cache folder and no prior `scan` — DEC-W008's manual-mode path (plan step 7.7). Exit `0` with the entry, `2` with the reason on stderr |
+| `scripts/jcodebuddy.js`                       | the `jcodebuddy` command line. `… metadata parse <file>` prints one file's metadata as one line of JSON, with no daemon, no cache folder and no prior `scan` — DEC-W008's manual-mode path (plan step 7.7); exit `0` with the entry, `2` with the reason on stderr. `… metadata stale <file\|directory>` asks *is this stale, and why?* through the one staleness gate (plan step 6.6): a file prints its verdict, tier and cause, a directory sweeps and summarises, and `--cached-only` narrows the sweep to the items that have an entry; exit `0` nothing to rebuild, `1` something, `2` a usage error |
 
 Every one of them is a **Bun** script — run them as `bun scripts/mvn-jdk25.js`, and so on. They were batch and
 shell files until 2026-09-26; `AGENTS.md` § 2 requires Bun JavaScript for anything an agent writes to run or check

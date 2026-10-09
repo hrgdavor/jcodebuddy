@@ -28,17 +28,27 @@ import { delimiter, envWith, repoRoot, resolveJdk25, resolveMaven, run } from '.
 const REPO = repoRoot()
 const MODULE = 'project-automation'
 const MODULE_DIR = join(REPO, MODULE)
-const MAIN_CLASS = 'hr.hrg.jcodebuddy.automation.cli.MetadataCli'
 const CLASSPATH_FILE = join(REPO, '.tmp', 'jcodebuddy-classpath.txt')
 
-/** What this launcher knows how to run. A command nobody implements is a usage error, not a silent success. */
-const COMMANDS = ['metadata parse']
+/**
+ * What this launcher knows how to run. A command nobody implements is a usage error, not a silent success.
+ *
+ * The class is named per command rather than passed through one dispatcher, because a dispatcher would be a
+ * name-to-handler map — the shape AGENTS.md § 1 exists to reject. `main` is the entry point a user runs, so
+ * naming it here is the wiring, and it is one line a reader can follow.
+ */
+const COMMANDS = {
+  'metadata parse': 'hr.hrg.jcodebuddy.automation.cli.MetadataCli',
+  'metadata stale': 'hr.hrg.jcodebuddy.automation.cli.MetadataStaleCli',
+}
 
 function usage(stream) {
   stream.write(`usage: jcodebuddy <command> [args]
 
 Commands:
-  metadata parse <file>   print the file's metadata as JSON (DEC-W008's no-cache path)
+  metadata parse <file>            print the file's metadata as JSON (DEC-W008's no-cache path)
+  metadata stale <file|directory>  is this stale, and why? — exit 0 fresh, 1 stale, 2 error
+                                   [--cached-only]  sweep: report only items that have an entry
 
 Run from a checkout: this launcher compiles the module with JDK 25 and runs it from target/classes. It needs no
 daemon, no cache folder and no prior scan, and it writes nothing but the JSON on stdout.
@@ -53,7 +63,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
   usage(process.stdout)
   process.exit(args.length === 0 ? 2 : 0)
 }
-if (!COMMANDS.includes(command)) {
+if (!Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
   process.stderr.write(`unknown command: ${args.join(' ')}\n`)
   usage(process.stderr)
   process.exit(2)
@@ -102,7 +112,8 @@ if (!existsSync(classes)) {
 //    rather than a path built here, because resolving it is what makes the candidate *run* before it is accepted.
 const java = jdk.java
 const commandArgs = args.slice(2)
-const result = run(java, ['-cp', `${classes}${delimiter}${exported}`, MAIN_CLASS, args[0], args[1], ...commandArgs], {
+const result = run(java, ['-cp', `${classes}${delimiter}${exported}`, COMMANDS[command],
+  args[0], args[1], ...commandArgs], {
   cwd: REPO,
   env: environment,
 })
