@@ -321,13 +321,18 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 > The step numbers `3.0a`–`3.0k` say *before 3.1* deliberately: this plan renumbers nothing, and these
 > steps must land before the consumer ones to be worth anything.
 
-### 3.11 — Design: how the graph page navigates to source, and what host story it reuses
+### 3.11 — Design: the graph page navigates to source over BOTH integration paths
 **Who:** agent writes, maintainer decides · **Size:** M — **a DESIGN step: it produces a decision and a
 scheduled implementation step, and no application code**
 
 The [ROADMAP](../hipster-ioc/doc/ROADMAP.md) lists "editor-agnostic context navigation" and an embedded light
-HTTP server for the graph, both as **not built**. Both still have no shape as code, and this step gives them
-one. Its blocker — 3.8's page — is done, so the design can now be written against a page that exists.
+HTTP server for the graph, both as **not built**. This step gives them a shape. Its blocker — 3.8's page — is
+done, so the design is written against a page that exists.
+
+**The maintainer's requirement, and it decides the whole design (2026-10-09): both integration paths stay
+open** — the page must be navigable **served over HTTP** *and* **inside an IDE host**, because a **live
+application** needs to ask an editor to open a location, while a person browsing inside the editor needs the
+other. Neither path may be closed, and neither needs to be invented: **both are already built.**
 
 **What the exploration on 2026-10-09 established, measured rather than assumed:**
 
@@ -362,19 +367,37 @@ one. Its blocker — 3.8's page — is done, so the design can now be written ag
    rather than dropping it — `model.js` already applies exactly that rule to a dependency naming a missing
    context. **Bean types are the case to settle**: `contexts.json` records `ObjectMapper` as a *simple* name,
    so state whether the generator must qualify it or the page must report it unresolvable.
-2. **The host story: reuse, or nothing.** The ROADMAP asks for "an embedded light HTTP server". The evidence
-   above says the server half is already built and is not hipster-ioc's to own — the question is whether the
-   page is served by the existing host (as other pages are) or whether this module should ship a server of
-   its own, and the answer must name which and why. **The recommended answer to bring to the maintainer** is
-   reuse: no new server in this module, since a second server is a second way for a page to be served and a
-   second thing to keep in step.
-3. **What "editor-agnostic" is accepted as.** The design must state an acceptance test, not a claim — and
-   given item 1 it can be a concrete one: **the same unmodified page navigates in two different hosts**,
-   because the page calls only `window.openFile` and the transport differs. A page that works in one IDE and
-   not another means this step's answer was wrong.
+2. **Both integration paths stay open, and both already exist — the design's job is to keep them that way.**
+   The maintainer's requirement (2026-10-09): a page must be navigable **served over HTTP** *and* **inside an
+   IDE host**, because the first is how a **live application** asks an editor to open a location, and the
+   second is how a person browsing inside the editor does. Both paths are already built, and the design must
+   not close either:
 
-**Gate:** the design is written into the plan or a decision record, with the three answers above and the
-acceptance test; the reuse-vs-new host answer is recorded with its reason; the implementation work it
+   - **served**: `webviewd` registers `/open` (`WebviewServer` line 179) taking
+     `GET /open?filePath=…&line=…&column=…`, answered with the reasons a caller needs — 200, 400 for no path,
+     **403 when the path is outside the project**, 429 when rate-limited, 404 for a location the file does not
+     have. **So a live application does not need a custom agent:** it can call `/open` directly. What it does
+     need is the **port and token**, which live in the served project's `.jcodebuddy/webview/host.json`
+     (DEC-032/033: host state is per-checkout, not configuration) — and that discovery is the one thing the
+     design must specify, because "the app knows the port" is not an integration story.
+   - **in a host**: a page served through `/page/` gets the bridge appended, so `window.openFile` exists and
+     the transport underneath is the host's business (`Image().src = '/open?…'` for `webviewd`, a
+     `JBCefJSQuery` call for JetBrains, `postMessage` for a mirroring host).
+
+   **A defect to fix while here, because it is exactly the documentation a live-app integrator reads**:
+   `InjectedBridge`'s javadoc says "a plain browser served by the sidecar passes a call to
+   `POST /api/v1/open`". **No such route exists** — the registered set is `applyEdit`, `diff`, `undo`, `redo`
+   and `events`, and the transport actually installed for a served page is a GET image beacon to `/open`. A
+   reader following that comment finds a 404. It is a one-line correction and it is why the live-app path is
+   hard to find today.
+3. **What "editor-agnostic" is accepted as.** The design must state an acceptance test, not a claim — and with
+   item 2 it becomes concrete: **the same unmodified page navigates in a host-served context, and `/open`
+   navigates from outside the browser entirely**, because the page calls only `window.openFile` and the
+   transport differs per host. A page that works in one IDE and not another means this step's answer was wrong.
+
+**Gate:** the design is written into the plan or a decision record, with the three answers above, the
+**port/token discovery story for a live application**, and the acceptance test; the reuse-vs-new host answer is
+recorded with its reason; the `POST /api/v1/open` javadoc is corrected; the implementation work it
 implies is scheduled as its own step with a gate; and **no application code is written in this step**.
 
 **Also in scope, because it is the same confusion**: the ROADMAP's status line said the browsable page "does
@@ -576,7 +599,7 @@ start)
 
 | Step | What                                                                                            | Who                         | Size | State                                                                                       |
 | ---- | ----------------------------------------------------------------------------------------------- | --------------------------- | ---- | ------------------------------------------------------------------------------------------- |
-| 3.11 | Design: graph-page source navigation, and reusing the existing host story                       | agent writes, human decides | M    | `[ ]` — a DESIGN step; 3.8 is done, so its blocker is cleared                               |
+| 3.11 | Design: graph-page source navigation over BOTH paths — served and in-host                       | agent writes, human decides | M    | `[ ]` — a DESIGN step; 3.8 is done, and the maintainer's both-paths requirement is recorded |
 | 5.3  | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                       |
 | 6.8  | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[ ]` — implements DEC-048's 2026-10-09 amendment                                           |
 | 6.9  | The converter manifest, generated and committed                                                 | agent                       | M    | `[ ]` — 6.4's only remainder                                                                |

@@ -6,12 +6,20 @@ package hr.hrg.webview.core;
  * <p>This is the frozen half of the contract in {@code webview/kit/doc/contract.md} § 1: the page
  * sees one function and one version probe, and the transport underneath is the host's business. A
  * JetBrains tool window passes a {@code JBCefJSQuery.inject(...)} invocation as {@code transport}; a
- * plain browser served by the sidecar passes a call to {@code POST /api/v1/open}; a host that only
- * mirrors messages passes a {@code postMessage}.
+ * plain browser served by {@code webviewd} passes an image beacon to {@code GET /open} (registered in
+ * {@code WebviewServer}); a host that only mirrors messages passes a {@code postMessage}.</p>
+ *
+ * <p><b>There is no {@code POST /api/v1/open}.</b> This javadoc claimed one until 2026-10-09, and a
+ * reader following it found a 404: the {@code /api/v1/} routes are the write contract
+ * ({@code applyEdit}, {@code diff}, {@code undo}, {@code redo}) plus {@code events}, while navigation
+ * is {@code GET /open?filePath=…&line=…&column=…}. That endpoint is also how an application OUTSIDE
+ * the browser asks an editor to open a location, which is why the wrong route mattered — it is the
+ * entry point a live-app integration reads first, and it needs the served project's port and token
+ * from that project's {@code .jcodebuddy/webview/host.json} (DEC-032/033).</p>
  *
  * <p>Kept here, rather than in each host, because the two ends of the wire have to stay in step: the
  * keys this script writes are the keys {@link BridgeMessage} reads, and a host that reinvented the
- * script could drift from {@link BridgeMessage#KIND_OPEN_FILE} without any test noticing.
+ * script could drift from {@link BridgeMessage#KIND_OPEN_FILE} without any test noticing.</p>
  */
 public final class InjectedBridge {
 

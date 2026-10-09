@@ -48,10 +48,21 @@
 > above the thresholds, DEC-036 § 9). The first two are proven by tests that compile *and run* the generated
 > context. **The browsable page now exists** — step 3.8 built `graph.html` (jsx6 + `nodditor`, self-contained,
 > verified by a headless render) and the module's README lists it among the entry points. **What does not exist
-> is a host of this module's own and any navigation from the graph into source**; the editor-agnostic
-> navigation itself does exist, in the webview suite's `window.openFile` bridge, and the open question is
-> whether the graph page joins it. That question is step **3.11** — a design step, updated 2026-10-09, at which
-> point this sentence was three steps out of date.
+> is any navigation from the graph into source, and a host of this module's own** — and on the second point,
+> the 2026-10-09 exploration says a module-owned server is not what is missing: the webview suite already
+> serves pages and already navigates, over **two paths that both stay open**, because the first is how a
+> **live application** asks an editor to open a location and the second is how a person browsing inside the
+> editor does:
+>
+> - **served** — `webviewd`'s `GET /open?filePath=…&line=…&column=…`, which any local process can call; it
+>   needs that project's port and token from `.jcodebuddy/webview/host.json` (DEC-032/033);
+> - **in a host** — a page served through `/page/` gets `window.openFile(path, line, column)` injected, and
+>   the transport under it is the host's business (a beacon to `/open` for `webviewd`, a `JBCefJSQuery` call
+>   for JetBrains, `postMessage` for a mirroring host).
+>
+> So the open question is not whether to build navigation or a server, but whether the graph page **joins**
+> what exists. That is step **3.11** — a design step, updated 2026-10-09, at which point the paragraph above
+> it was three steps out of date and this module's README said the page did not exist.
 >
 > Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), with the
 > shape-dependent remainder as steps 3.4–3.11. The record those steps needed is
