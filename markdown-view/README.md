@@ -89,6 +89,20 @@ link already names a location, and the browser's own Ctrl+click on one keeps wor
 text does nothing**. Verified in a browser, not only in unit tests — Ctrl+click on text opened
 `…/README.md:4` while Ctrl+click on a link one line away recorded nothing.
 
+> **The JetBrains plugin must be REBUILT for this to work there, and that is not optional.**
+> The plugin's page is generated at **plugin build time** (the Gradle `markdownPage` task runs
+> `page.js … --template` with `markdown-view/**/*.js` as task inputs) and inlined into its resources, so an
+> installed plugin carries the renderer it was built with. This was measured rather than assumed: a template
+> built from the commit before this feature renders with `data-source` empty and **no line marks at all**, so
+> Ctrl+click does nothing in it, while a current template reports `data-source` and the line. The plugin's Java
+> needs no edit — `MarkdownView.viewJson` already passes `docPath`, which is the `view.source ?? view.docPath`
+> fallback — but the plugin **artifact** does. `webview-jetbrains/build.gradle.kts` depends that task on
+> `markdown-view/**/*.js`, so an ordinary plugin build regenerates it.
+>
+> **To develop the renderer without rebuilding**, point the plugin's `markdownGenerator` setting at
+> `markdown-view/page.js` (or any `.js` generator): it is then run with Bun on each render and the fresh
+> template replaces the embedded one. That path is for a checkout, not for a shipped plugin.
+
 ### `render.js` — the document
 
 **The resolver is the interesting part.** Given the text of a link or a code span, `resolveTarget`

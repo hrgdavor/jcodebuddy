@@ -324,3 +324,12 @@ generator outside the project root is refused (2026-10-04).
 never needs a bundler, a server or `node_modules` at view time. Bun is already this repository's tooling for every
 script and check, so this adds no new kind of dependency; a machine without it fails the build with the command that
 fixes it rather than shipping a Markdown view that cannot render.
+
+**A change to the renderer therefore needs a plugin rebuild to reach an installed plugin.** The page is inlined
+into the plugin's resources at build time, so an installed plugin carries the renderer it was built with - and
+`markdown-view`'s Ctrl+click-on-text (2026-10-09) is a change of exactly that kind. Measured rather than
+assumed: a template built from the commit before it renders with `data-source` empty and no source-line marks
+at all, so the gesture does nothing in an old plugin, while a current one reports both. Nothing on the Java
+side needed editing - `viewJson` already passes `docPath`, which the client reads - but the artifact does, and
+`markdownPage` already declares `markdown-view/**/*.js` as inputs so an ordinary `buildPlugin` regenerates it.
+For iterating on the renderer without a rebuild, use the `markdownGenerator` setting above.
