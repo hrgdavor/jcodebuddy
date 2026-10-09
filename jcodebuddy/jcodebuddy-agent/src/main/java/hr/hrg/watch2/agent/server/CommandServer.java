@@ -37,6 +37,15 @@ public class CommandServer {
 
     private final Path projectRoot;
 
+    /**
+     * Where the editor's jump service is, resolved per request (plan step 8.3).
+     *
+     * <p>Not constructor state, and not a plain port either: the port is a fact about which host is running for
+     * this project <em>right now</em>, and a host that restarts on another port must not require this server to
+     * restart. See {@link WebviewHandshake} for why the published descriptor outranks the system property.</p>
+     */
+    private final WebviewHandshake handshake;
+
     private final List<ToolSetAgent> agents;
 
     private final PendingActionManager actionManager;
@@ -55,6 +64,9 @@ public class CommandServer {
             String user, String password, boolean applyFirst) {
         this.port = port;
         this.projectRoot = projectRoot;
+        // The handshake is built from the same root the server serves, which is the root the descriptor is
+        // keyed by: a jump must reach the host for THIS project and no other.
+        this.handshake = new WebviewHandshake(projectRoot);
         this.agents = agents;
         this.actionManager = actionManager;
         this.password = password;
@@ -370,10 +382,11 @@ public class CommandServer {
      * rather than as a jump that "worked", because the dashboard has to be able to show a person which of the two
      * happened.
      *
-     * <p>The port and token are read per request from {@code jwa.sidecar.jumpPort} (default 7979, the sidecar's own
-     * default) and {@code jwa.sidecar.token}: they are facts about one machine's running host rather than
-     * configuration of this server, so they are not constructor state and a host that restarts on another port does
-     * not need this server restarted.
+     * <p>The port and token are resolved per request from the project's published descriptor, falling back to
+     * {@code jwa.sidecar.jumpPort} and {@code jwa.sidecar.token}: they are facts about one machine's running host
+     * rather than configuration of this server, so they are not constructor state and a host that restarts on
+     * another port does not need this server restarted. <b>Step 8.3's handshake is what replaced the property-only
+     * lookup</b> — a host that took the next free port published it, and this handler could not see it.
      */
     private class JumpHandler implements HttpHandler {
 
@@ -383,8 +396,11 @@ public class CommandServer {
                 sendResponse(exchange, 405, Map.of("error", "Method not allowed"));
                 return;
             }
-            int sidecarPort = Integer.getInteger("jwa.sidecar.jumpPort", 7979);
-            String token = System.getProperty("jwa.sidecar.token", "").trim();
+            int sidecarPort = handshake.jumpPort();
+            String token = handshake.token();
+            // Said once per jump at debug level, so "why did that go to that port" is answerable without guessing.
+            log.debug("remote jump: {} ({}), token {}", sidecarPort, handshake.describe(),
+                    token.isEmpty() ? "none" : "present");
             try {
                 Map<?, ?> request = mapper.readValue(exchange.getRequestBody(), Map.class);
                 java.net.http.HttpRequest forward = java.net.http.HttpRequest.newBuilder()

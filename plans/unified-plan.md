@@ -606,6 +606,34 @@ start)
 | 6.10 | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[ ]` — 6.1's blocked remainder                                                             |
 | 8.1  | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                       |
 | 8.2  | Eclipse observations, then Q2                                                                   | human                       | —    | `[ ]`                                                                                       |
-| 8.3  | Agent IDE hooks                                                                                 | human decides               | —    | `[ ]`                                                                                       |
+| 8.3  | Agent IDE hooks                                                                                 | human decides               | S    | `[ ]` — **handshake DELIVERED 2026-10-10** (`WebviewHandshake`: the agent reads the port the host actually bound); what remains is the in-IDE walk, which needs a person |
 | 8.4  | Zed ACP run                                                                                     | human                       | —    | `[ ]`                                                                                       |
 | 8.5  | Explore Zed editor integration                                                                  | agent proposes              | M    | `[ ]`                                                                                       |
+
+**8.3, what was built on 2026-10-10 — the handshake, because a reading of the code narrowed the step.**
+The step's text said "lightweight IntelliJ/VS Code hooks"; reading the tree showed most of what that meant
+already exists, and one load-bearing piece missing:
+
+- **Existing**: the agent serves `POST /jump` and relays the sidecar's outcome (502 "sidecar unreachable" rather
+  than a false success); the sidecar owns the editor's LSP connection and serves `GET /jump?uri=…&line=…`.
+- **Missing, and it was a defect rather than a gap**: an IDE host binds the port it *can* — `jwa.sidecar.jumpPort`
+  is a request, and when it is taken the next free port is used and **published** to
+  `<project>/.jcodebuddy/webview/host.json`, keyed by project. The agent resolved the port from the system
+  property alone, so a host on the next free port was **unreachable from the dashboard** — the exact case the
+  handshake (§ 1.8's "Instance Discovery") exists for.
+
+`WebviewHandshake` (agent, `server/`) now resolves it: a published descriptor that names **this project** and
+comes from a **live pid** wins; anything else — no file, another project, a dead pid, truncated JSON — falls
+back to the system property, else 7979. The token is read from the descriptor's `tokenPath` when that file
+exists. The descriptor's format is read by name rather than modelled, so this module keeps **no dependency on
+the webview stack** (it would have pulled gson in for a port number); the test pins the keys against the shape
+`HostDescriptor` serialises, and says so where a reader would look.
+
+**Measured**: agent module **30 tests, 0 failures** with the build cache disabled (9 new in
+`WebviewHandshakeTest`; `RemoteJumpTest`'s 2 unchanged, which is what proves the property fallback still works).
+
+**What remains here is the human half, and it needs a running editor**: with a host live on a *non-default*
+port, open the agent dashboard and use a "jump to source" action, then confirm the caret lands. The expected
+evidence is the port the dashboard used (the descriptor's, not 7979) and the editor's own tab. `describe()` and
+the per-jump debug line exist to make "which port did it choose" answerable when it does not.
+
