@@ -46,11 +46,15 @@
 > `default void init<Bean>(<BeanType> bean)` on the module interface, called immediately after that bean is
 > created, DEC-036 § 3), and the **region markers** (step 3.6 — `fields` / `accessors` / `factories`, emitted only
 > above the thresholds, DEC-036 § 9). The first two are proven by tests that compile *and run* the generated
-> context. The browsable page rendered by Bun (DEC-027/029) and the embedded light HTTP server
-> do not exist; the module's README says which entry points do.
+> context. **The browsable page now exists** — step 3.8 built `graph.html` (jsx6 + `nodditor`, self-contained,
+> verified by a headless render) and the module's README lists it among the entry points. **What does not exist
+> is a host of this module's own and any navigation from the graph into source**; the editor-agnostic
+> navigation itself does exist, in the webview suite's `window.openFile` bridge, and the open question is
+> whether the graph page joins it. That question is step **3.11** — a design step, updated 2026-10-09, at which
+> point this sentence was three steps out of date.
 >
 > Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), with the
-> shape-dependent remainder as steps 3.4–3.11 (`[TBD]`). The record those steps needed is
+> shape-dependent remainder as steps 3.4–3.11. The record those steps needed is
 > **[DEC-036](../../doc-hipster-entity/architecture/decisions/DEC-036.md)** — the `.kilo` plan for this
 > work asked for `DEC-W008`, a number the metadata no-cache decision had already taken. Read it as a
 > **proposal** (`Trial`), not as a contract: it is what the prototype implements, and the plan's Phase 3

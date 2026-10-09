@@ -5,11 +5,12 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 10 steps.** Seven were already open — **3.11** (a decision, not work), **5.3** (the ACP spike, a
-person), and **8.1–8.5** (observations on a real editor) — and three are new on 2026-10-09: **6.8, 6.9 and 6.10**,
-which are the remainders that steps 6.1, 6.2 and 6.4 left behind while being closed as steps. Only the editor
-ones need a person; a step is ticked from a dated `Done` record in its own body, never from a "**Done when:**"
-criterion.
+**What is left: 11 steps, and only the editor ones need a person.** **3.11** is the one that changed on
+2026-10-09: it was `[TBD]` because it waited on 3.8, which is now done, so it is scheduled as a **design step**
+— it produces a decision and a follow-up implementation step, and no application code. The rest: **5.3** (the
+ACP spike, a person), **8.1–8.5** (observations on a real editor), and **6.8, 6.9 and 6.10** — the remainders
+steps 6.1, 6.2 and 6.4 left behind while being closed as steps. A step is ticked from a dated `Done` record in
+its own body, never from a "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still
@@ -320,17 +321,69 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 > The step numbers `3.0a`–`3.0k` say *before 3.1* deliberately: this plan renumbers nothing, and these
 > steps must land before the consumer ones to be worth anything.
 
-### 3.11 — Editor-agnostic graph navigation, and the embedded host
-**Who:** human decides · **Size:** unknown
+### 3.11 — Design: how the graph page navigates to source, and what host story it reuses
+**Who:** agent writes, maintainer decides · **Size:** M — **a DESIGN step: it produces a decision and a
+scheduled implementation step, and no application code**
 
-The [ROADMAP](../hipster-ioc/doc/ROADMAP.md) lists "editor-agnostic context navigation" and an embedded
-light HTTP server for the graph. Both were named as **not built** when this phase started, and neither has
-a shape: the navigation depends on 3.8's page, and the host may not be wanted at all once that page can be
-opened from the repository.
+The [ROADMAP](../hipster-ioc/doc/ROADMAP.md) lists "editor-agnostic context navigation" and an embedded light
+HTTP server for the graph, both as **not built**. Both still have no shape as code, and this step gives them
+one. Its blocker — 3.8's page — is done, so the design can now be written against a page that exists.
 
-**Waits on:** 3.8, and a person deciding whether a host is worth having.
-**Schedulable when:** it is either wanted (as a step with a gate) or dropped with a reason — `[-]`, which
-is a real answer, not a deferral.
+**What the exploration on 2026-10-09 established, measured rather than assumed:**
+
+1. **The navigation machinery already exists, in the webview suite, and is not this module's to reinvent.**
+   [`InjectedBridge`](../webview/core/webview-core/src/main/java/hr/hrg/webview/core/InjectedBridge.java)
+   installs a **frozen, versioned** page contract — `window.openFile(path, line, column)` plus
+   `window.__jcbWebViewBridge` for a version probe — and the transport under it is the host's business:
+   JetBrains passes a `JBCefJSQuery.inject(...)` call, a browser served by the sidecar passes
+   `POST /api/v1/open`, a mirroring host passes `postMessage`. The pieces are
+   `EditorHost.openFileAt` (one method per host), `Navigator`, `LocationFragment` (`#L42-L58`), and
+   `LspHost`, which needs no IDE-specific work at all (`window/showDocument` with a selection,
+   editor-agnostic by construction). **So "editor-agnostic navigation" is a property this repository
+   already has; the open question is only whether the graph page joins it.**
+2. **The join data does not exist in the page's model, but it does exist next door.**
+   `contexts.json` carries a context's name, implementation, dependencies and beans — **no file path and no
+   line**. `.jcodebuddy/index/classes.json` carries `path`, `line`, `kind`, `relations`, `members` and
+   `annotations` per FQN, and the join was verified against the real files rather than assumed:
+   `hr.hrg.hipster.ioc.test.CtxMain` → `src/test/java/hr/hrg/hipster/ioc/test/CtxMain.java:7`, and
+   `…CtxMainImpl` → `…CtxMainImpl.java:12`. Both resolve. The page is written to
+   `.jcodebuddy/metadata/hipster-ioc/graph.html`, so the index is one `../index/` away.
+3. **`window.openFile` cannot be reached by double-clicking the page, and that is the whole gap.** A
+   `file://` document has no injected bridge, so the page must feature-detect and degrade — which is
+   precisely the split root `AGENTS.md` § 2 requires (a page is usable standalone; a host is an
+   enhancement). The page already inlines its data rather than fetching it, so opening the file works with
+   nothing running, and that must stay true after this step.
+
+**The design questions, each ending in a recorded answer:**
+
+1. **Where the source positions come from, and how a failure is reported.** Extend the page's model to
+   resolve each context, implementation and bean FQN against `../index/classes.json` at build time (the page
+   inlines its data, so a build-time join keeps it standalone), and report an FQN the index does not know
+   rather than dropping it — `model.js` already applies exactly that rule to a dependency naming a missing
+   context. **Bean types are the case to settle**: `contexts.json` records `ObjectMapper` as a *simple* name,
+   so state whether the generator must qualify it or the page must report it unresolvable.
+2. **The host story: reuse, or nothing.** The ROADMAP asks for "an embedded light HTTP server". The evidence
+   above says the server half is already built and is not hipster-ioc's to own — the question is whether the
+   page is served by the existing host (as other pages are) or whether this module should ship a server of
+   its own, and the answer must name which and why. **The recommended answer to bring to the maintainer** is
+   reuse: no new server in this module, since a second server is a second way for a page to be served and a
+   second thing to keep in step.
+3. **What "editor-agnostic" is accepted as.** The design must state an acceptance test, not a claim — and
+   given item 1 it can be a concrete one: **the same unmodified page navigates in two different hosts**,
+   because the page calls only `window.openFile` and the transport differs. A page that works in one IDE and
+   not another means this step's answer was wrong.
+
+**Gate:** the design is written into the plan or a decision record, with the three answers above and the
+acceptance test; the reuse-vs-new host answer is recorded with its reason; the implementation work it
+implies is scheduled as its own step with a gate; and **no application code is written in this step**.
+
+**Also in scope, because it is the same confusion**: the ROADMAP's status line said the browsable page "does
+not exist" three steps after 3.8 built it. It is corrected as part of this step, and the correction is what
+keeps the next reader from concluding the whole item is unstarted.
+
+**Done when:** the maintainer has accepted or amended the design, and the implementation step exists.
+Dropping the whole item instead is a legitimate outcome — `[-]` with a reason is a real answer, which is what
+this step's `[TBD]` has been waiting for.
 
 ---
 
@@ -521,15 +574,15 @@ a decision that is not made** — deliberately unscheduled, with the decision na
 it is not the same as `[~]`, which waits on something outside the plan, nor as `[ ]`, which is ready to
 start)
 
-| Step | What                                                                                            | Who                | Size | State                                                                                       |
-| ---- | ----------------------------------------------------------------------------------------------- | ------------------ | ---- | ------------------------------------------------------------------------------------------- |
-| 3.11 | Editor-agnostic graph navigation + embedded host                                                | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
-| 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |
-| 6.8  | Nested, collection and polymorphic patch application                                            | agent              | L    | `[ ]` — implements DEC-048's 2026-10-09 amendment                                           |
-| 6.9  | The converter manifest, generated and committed                                                 | agent              | M    | `[ ]` — 6.4's only remainder                                                                |
-| 6.10 | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent              | M    | `[ ]` — 6.1's blocked remainder                                                             |
-| 8.1  | JetBrains maintainer questions + IDE observations                                               | human              | —    | `[ ]`                                                                                       |
-| 8.2  | Eclipse observations, then Q2                                                                   | human              | —    | `[ ]`                                                                                       |
-| 8.3  | Agent IDE hooks                                                                                 | human decides      | —    | `[ ]`                                                                                       |
-| 8.4  | Zed ACP run                                                                                     | human              | —    | `[ ]`                                                                                       |
-| 8.5  | Explore Zed editor integration                                                                  | agent proposes     | M    | `[ ]`                                                                                       |
+| Step | What                                                                                            | Who                         | Size | State                                                                                       |
+| ---- | ----------------------------------------------------------------------------------------------- | --------------------------- | ---- | ------------------------------------------------------------------------------------------- |
+| 3.11 | Design: graph-page source navigation, and reusing the existing host story                       | agent writes, human decides | M    | `[ ]` — a DESIGN step; 3.8 is done, so its blocker is cleared                               |
+| 5.3  | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                       |
+| 6.8  | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[ ]` — implements DEC-048's 2026-10-09 amendment                                           |
+| 6.9  | The converter manifest, generated and committed                                                 | agent                       | M    | `[ ]` — 6.4's only remainder                                                                |
+| 6.10 | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[ ]` — 6.1's blocked remainder                                                             |
+| 8.1  | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                       |
+| 8.2  | Eclipse observations, then Q2                                                                   | human                       | —    | `[ ]`                                                                                       |
+| 8.3  | Agent IDE hooks                                                                                 | human decides               | —    | `[ ]`                                                                                       |
+| 8.4  | Zed ACP run                                                                                     | human                       | —    | `[ ]`                                                                                       |
+| 8.5  | Explore Zed editor integration                                                                  | agent proposes              | M    | `[ ]`                                                                                       |
