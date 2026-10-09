@@ -5,9 +5,11 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 7 steps, and none of them agent-doable in a checkout** — 3.11 (a decision, not work), 5.3
-(the ACP spike, a person), and 8.1–8.5 (observations on a real editor). A step is ticked only from a dated
-`Done` record in its own body, never from a "**Done when:**" criterion.
+**What is left: 10 steps.** Seven were already open — **3.11** (a decision, not work), **5.3** (the ACP spike, a
+person), and **8.1–8.5** (observations on a real editor) — and three are new on 2026-10-09: **6.8, 6.9 and 6.10**,
+which are the remainders that steps 6.1, 6.2 and 6.4 left behind while being closed as steps. Only the editor
+ones need a person; a step is ticked from a dated `Done` record in its own body, never from a "**Done when:**"
+criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still
@@ -361,11 +363,105 @@ into the plan's Phase 5 record.
 
 ## 10. Phase 6 — hipster-entity roadmap rows
 
-**Finished in this phase**, with its records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md): 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7.
+**Finished in this phase**, with its records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md): 6.3, 6.5, 6.6, 6.7.
 
-Each of these is a row of
+> 6.1, 6.2 and 6.4 were **closed as plan steps by their own `Done` records while each still had named work
+> outstanding**, which reading those records against the tree found on 2026-10-09. The findings and the
+> maintainer's answers are in
+> [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) § 6; the readings are in the
+> [archive](../archive/plans/unified-plan-2026-10.md) under each step's id. What remains of them is 6.8, 6.9 and
+> 6.10 below, and each was a real remainder rather than a new wish.
+
+Each step here is a row of
 [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) § 1 or a `Proposed`
 row of its § 3. Close them in the tracker in the same commit.
+
+### 6.8 — Nested, collection and polymorphic patch application
+**Who:** agent · **Size:** L
+
+DEC-048 § 2 specifies the applier, § 5 left the nested case unanswered, and its **2026-10-09 amendment settles
+it**: a generated builder implements its view's `Write`, so a child's writer is reachable and the applier recurses
+through the child's own applier. **Read that amendment before starting** — it is the decision this step
+implements, and it names what is deliberately still open.
+
+What to build, in this order, because each depends on the one before:
+
+1. **Every generated `<View>Builder` implements `<View>.Write`.** This is the route from a view to a writer, and
+   it is an emitter change to every builder, not an addition beside them. `PersonSummaryBuilder` is the example's
+   first case.
+2. **Nested recursion**: a path continuing past this view's field goes to `<Child>PatchApplier` with the child's
+   `Write` obtained through the builder.
+3. **Collection element writes** through the element's own applier, with an **index that no longer exists failing
+   with a named finding** — never a silent skip, and never a guessed position (DEC-016).
+4. **The polymorphic dispatcher on the root family**: read the value's discriminator through the root's
+   `discriminatorField()`, match it against each `permittedSubtypes()` entry's `META.discriminatorValue()`, and
+   call the matching concrete applier. The example's `paymentMethod` family is the case; `PaymentMethodController`
+   is the same dispatch hand-written today.
+5. **Only views reachable from a patch target** get an applier and a dispatcher.
+
+**Gate:** `GATE` green; a nested patch, a collection-element patch and a patch into a polymorphic root all apply
+in a test; a stale collection index produces the named finding rather than a partial patch reported as success;
+and a reader with only the committed sources can follow every one of those operations from the applier to the
+field it sets (AGENTS.md § 1).
+
+**Done when:** the emitter change is in the example's committed sources, `ExampleRegenerationTest` is a
+byte-identical no-op again, and the roadmap row for 6.2's nested half closes with this step's record.
+
+### 6.9 — The converter manifest, generated and committed
+**Who:** agent · **Size:** M
+
+Step 6.4's only remainder, and its gate named it: a manifest of resolved converter pairs, **generated and
+committed**. The decision is that it is **machinery output, byte-reproducible** — the pass writes it, and a
+committed copy that differs from what a pass would write is a failure the way a stale committed enum is, not a
+report that quietly drifts.
+
+- **Source of truth**: `TypeDivergence` (`hipster-entity-tooling`'s `meta`), which the pass already collects via
+  `EntityMetadataGenerator.typeDivergences()` and clears per pass, and which records **both** outcomes — a pair
+  that needs a converter and one that was considered and needed nothing. `TypeDivergence.render()` is the
+  intended manifest line; the question is the file, not the content.
+- **Where it lands**: derived from the output root the pass already knows, under `.jcodebuddy/`. **DEC-026's
+  rule and step 6.4's gate words point at different folders** — `conf/` is what must survive a clone, while
+  `metadata/` is derived — so settle it in this step with the pass in front of you and record the answer where
+  the next reader looks, rather than inferring it from either document.
+- **Byte-reproducibility is the requirement, so it needs a test**: the same inputs produce the same bytes, and a
+  hand-edited or stale manifest fails. Ordering must therefore be defined (by source type, then target, or by
+  the mapping it came from) rather than left to iteration order.
+
+**Gate:** `GATE` green; the manifest is written by a pass and committed; a test proves two passes over the same
+inputs are byte-identical and that a changed pair changes the file; and the roadmap row closes with the record.
+
+**Done when:** the manifest exists in the tree, its location and ordering are recorded, and 6.4's remainder is
+named as closed in that step's record rather than inferred from the roadmap.
+
+### 6.10 — The source → metadata JSON pass, so an annotation can reach a generated enum
+**Who:** agent · **Size:** M
+
+Step 6.1's blocked remainder, and the blocker is measured rather than suspected: `bun scripts/gen.js` runs the
+CLI, the CLI builds its properties from the **metadata JSON** (`viewNode.path("properties")` →
+`propNode.path("constraints")`), the JSON in the checkout is dated 2026-09-26, and the `generate(...)` API path
+that the tests use parses **source**. So the two paths disagree about a freshly written annotation: source emits
+the `annotations()` override, the CLI cannot, and `ExampleRegenerationTest` — the guard that "committed ==
+generated" — is what made it visible. The example is unannotated because of it.
+
+1. **Find and run the source → metadata JSON pass.** The CLI is the JSON → java half; the missing half writes
+   that JSON from source. The step is not finished until the pass exists as a documented entry point (a Bun
+   script, per AGENTS.md § 2) rather than a manual invocation.
+2. **Annotate one example accessor**, regenerate, and confirm its enum constant carries the `annotations()`
+   override.
+3. **Confirm `ExampleRegenerationTest` is a byte-identical no-op again** — that is the check that both halves now
+   agree, and it is the step's real acceptance test.
+4. **The misleading diagnostic is in scope**: `gen.js` reported a `-pl` selector failure with a hint about
+   `GeneratorPreflight` being older than the invocation, and its own log showed the preflight **ok** and the HTML
+   index at "301 links verified". An error message that sends the reader after the wrong cause is a defect in
+   the tool, and this step touches the pass.
+
+**Gate:** `GATE` green; an example view's committed enum carries an annotation that a pass regenerates; the two
+paths (CLI-from-JSON and API-from-source) produce the **same** enum for the same input, asserted by a test; and
+`ExampleRegenerationTest` is green as a no-op.
+
+**Done when:** the example carries the annotation, the pass that makes it reachable is a documented entry point,
+and 6.1's gate — "`GATE` green, the generated example carries the annotations, and the tracker row says what
+landed" — is met in full rather than in part.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
@@ -429,6 +525,9 @@ start)
 | ---- | ----------------------------------------------------------------------------------------------- | ------------------ | ---- | ------------------------------------------------------------------------------------------- |
 | 3.11 | Editor-agnostic graph navigation + embedded host                                                | human              | ?    | `[TBD]` — waits on 3.8, or gets dropped with a reason                                       |
 | 5.3  | ACP go/no-go spike                                                                              | human              | S    | `[ ]`                                                                                       |
+| 6.8  | Nested, collection and polymorphic patch application                                            | agent              | L    | `[ ]` — implements DEC-048's 2026-10-09 amendment                                           |
+| 6.9  | The converter manifest, generated and committed                                                 | agent              | M    | `[ ]` — 6.4's only remainder                                                                |
+| 6.10 | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent              | M    | `[ ]` — 6.1's blocked remainder                                                             |
 | 8.1  | JetBrains maintainer questions + IDE observations                                               | human              | —    | `[ ]`                                                                                       |
 | 8.2  | Eclipse observations, then Q2                                                                   | human              | —    | `[ ]`                                                                                       |
 | 8.3  | Agent IDE hooks                                                                                 | human decides      | —    | `[ ]`                                                                                       |

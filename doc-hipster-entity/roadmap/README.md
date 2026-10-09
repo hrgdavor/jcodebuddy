@@ -9,10 +9,13 @@ This document tracks roadmap progress, current work, and changes in direction fo
 
 ## 1. Roadmap Checklist
 
-The unchecked rows here are **open work**, and the two that are only partly done say so — an earlier
+The unchecked rows here are **open work**, and the ones that are only partly done say so — an earlier
 revision of this list showed `Mapper generation from TypeDescriptor deep flags` as open while
 `ViewMapperGenerator` already existed, and `API/core/module responsibility split enforced by generator`
-as open with no note that the split is deliberately deferred (plan.dsflash § 4.4/S3-X1).
+as open with no note that the split is deliberately deferred (plan.dsflash § 4.4/S3-X1). A **third**
+revision on 2026-10-09 corrected the same class of mistake twice more: `Type divergence analyzer` and
+`FieldAnnotation` were marked closed by their steps while each still had named work outstanding, which
+[§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) records along with what remains.
 
 - [ ] Core entity interface contract (marker interface, per-package semantics) — the contract and its
   validator rule (`view_does_not_derive_from_marker`, `marker_declares_domain_method`) landed; what
@@ -23,16 +26,24 @@ as open with no note that the split is deliberately deferred (plan.dsflash § 4.
   `--validate=STRICT`)
   **-> closed in step 6.3**: the same decision — its wording is exactly "should these be enforceable rather
   than advisory", which is one question, not two
-- [ ] Type divergence analyzer + converter manifest generation
-  **-> closed in step 6.4**
+- [ ] Type divergence analyzer + converter manifest generation — **partly done** (step 6.4): DEC-006 accepted and
+  measured, all three criteria met, `TypeDivergence` and the contract-class wiring in. **What is left is the
+  converter manifest alone**, generated and committed, and its byte-reproducibility is the part that must be
+  tested — see [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) item 2 and the new plan step 6.9
 - [ ] Projection + DTO marker pattern for SQL/NoSQL direct JSON output
-  **-> closed in step 6.5**
-- [ ] Annotation metadata exposure in generated view enums (FieldAnnotation)
-  **-> closed in step 6.1**
+  **-> closed in step 6.5** (done 2026-10-09: `@View(dto = true)`, `ViewJsonGenerator`, the example, 6 tests)
+- [ ] Annotation metadata exposure in generated view enums (FieldAnnotation) — **partly done** (step 6.1): DEC-047,
+  `FieldAnnotation`, `FieldDef.annotations()` and the emitter are in with their tests; **the example half is not**,
+  and it is blocked on a source → metadata JSON pass that the CLI path cannot reach — see
+  [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) item 1
 - [ ] API/core module responsibility split enforced by generator — **deliberately deferred**: S3/X1 keep
   the tracking contract in `hipster-entity-core` for this release, so a generated tracking builder
   depends on `core` (plan.dsflash § 4.4). Not a gap, a recorded scope decision.
   **-> dropped by decision, not pending** (its own words: "Not a gap, a recorded scope decision")
+- [ ] Deep change tracking, the nested half (step 6.2) — the runtime, the emitters and the per-view
+  `<View>PatchApplier` are in; **unknown field is skipped and reported** (DEC-048 § 3), and a missing converter
+  fails a `STRICT` pass. **What is left: nested, collection and polymorphic recursion**, whose shape is settled in
+  [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) items 3–6 and scheduled as the new plan step 6.8
 - [x] **Generated view-to-view mappers landed** — `ViewMapperGenerator` emits a
   statically-dispatched `static <Target> map(<Source>)` into the target's package, requested with
   `--mapper <Src>:<Tgt>[:<ClassName>]`, with a widening-only conversion table, a `null` plus a
@@ -206,4 +217,49 @@ Current high-level rules:
 5. Tooling expectations
 - Tooling MUST validate marker inheritance, package structure, and generated metadata assumptions.
 - Generation SHOULD remain deterministic and aligned with the accepted ADR set.
+
+## 6. Decisions from the steps 6.1–6.5 refinement, 2026-10-09
+
+Steps 6.1–6.5 were closed as plan steps by their own `Done` records, and reading those records against the tree
+found three things still open and one that was closed twice by mistake. The maintainer answered the open
+questions; this section is the answer and a note on what it obliges.
+
+**What was verified in the tree, rather than taken from the records**: `FieldAnnotation` and `TypeDivergence`
+exist; `DEC-003` and `DEC-007` both read `Accepted` (6.5's gate); and **no generated class implements `Write`** —
+`PersonSummaryBuilder` is `public final class PersonSummaryBuilder`, with no `implements` clause and zero matches
+for `implements .*Write` anywhere in the example. That last one is the measurement DEC-048 § 5 made, re-checked
+here because items 3–6 depend on it.
+
+**The maintainer's decisions, as given:**
+
+1. **The converter manifest is machinery output** — generated, committed, and byte-reproducible. It is not an
+   authored allowlist in `conf/` and not a derived report: the pass writes it, and a committed copy that differs
+   from what a pass would write today is a failure the way a stale committed enum is.
+2. **A generated builder implements its view's `Write`.** This is the route from a view instance to a child's
+   writer, which DEC-048 § 5 measured as missing, and it is what lets the applier recurse through the child's own
+   generated applier — the answer chosen over a caller-supplied resolver and over emitting whole child values.
+3. **The polymorphic dispatcher is generated on the root family**, dispatching on `discriminatorField()` against
+   each subtype's `META.discriminatorValue()` — the shape `PaymentMethodController` hand-writes today, emitted
+   instead. The convention itself already exists end to end (`@View(discriminatorField)`, the generated
+   `discriminatorValue`, the generated `permittedSubtypes`); what was missing was only apply-time dispatch.
+4. **Collection support is element writes only.** Add/remove/reorder wait for the runtime-bookkeeping reading
+   DEC-048's Follow-ups already ask for. A **stale index fails with a named finding** rather than being skipped:
+   the document is a description of changes and an applier may be stricter than its emitter.
+5. **Only views reachable from a patch target** get an applier and a dispatcher, so a project pays nothing for a
+   family it never patches.
+
+**What this obliges, and the honest part of it.** Item 2 is an **emitter change to every generated builder**, not
+an addition beside them: `PersonSummaryBuilder` gains `implements PersonSummary.Write`, which also closes a gap
+DEC-048 § 5 recorded without fixing. Items 2–5 change generated output, so by this repository's own rule the
+decision record comes first — **DEC-048 § 5 is amended** with these answers rather than a new ADR being opened for
+one section's remainder, since § 5 is the section that named the question.
+
+**Still open, and deliberately not answered here:**
+
+- **6.1's example half.** It needs a source → metadata JSON pass to exist before an example accessor can carry an
+  annotation at all; `bun scripts/gen.js` runs the CLI, whose input JSON is stale (measured in the step's own
+  record). Whether that pass is part of 6.1's remainder or its own step is not decided.
+- **6.9's manifest path** is derived from the output root the pass already knows (item 1), but the exact
+  `.jcodebuddy/` subtree it lands in is left to the step, because DEC-026's rule and the gate's words point at
+  different folders and the step is where that is resolved with the pass in front of it.
 
