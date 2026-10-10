@@ -5,11 +5,13 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 11 step ids, of which 3.11 is closed — and only the editor ones need a person.** **3.11** was
-`[TBD]` because it waited on 3.8, then a **design step**; on 2026-10-10 its design landed as
-[DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md) and the maintainer **accepted** it, which is
-what its "Done when" named — its implementation is scheduled as **3.11a** (the page join, the one that makes the
-page navigate) and **3.11b** (the live-app entry point). The rest: **5.3** (the ACP spike, a person), **8.1–8.5**
+**What is left: 11 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
+3.8, then a **design step**: on 2026-10-10 its design landed as
+[DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md), the maintainer **accepted** it, and both
+steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
+and **3.11b** (the live-application entry point, documented and verified). What DEC-049 still leaves open is its
+two *optional* steps, **3.11c** (the generator emitting a bean FQN, only if beans should be clickable) and
+**3.11d** (wiring the page build into the recorded pass). The rest: **5.3** (the ACP spike, a person), **8.1–8.5**
 (observations on a real editor), and **6.8, 6.9 and 6.10** — the remainders steps 6.1, 6.2 and 6.4 left behind
 while being closed as steps. A step is ticked from a dated `Done` record in its own body, never from a
 "**Done when:**" criterion.
@@ -484,7 +486,41 @@ exist (fixed 2026-10-09). This step makes it findable and keeps it true:
    including 403 for a path outside the project and 429 once the rate limit is spent.
 
 **Gate:** the check is green in the recorded run and its output is in the commit; `LINKS` green; and the two
-documents name `GET /open` — with no `POST /api/v1/open` anywhere in the tree.
+documents name `GET /open` as the entry point — with **no document calling `POST /api/v1/open` an existing
+route**. (That string does appear elsewhere as a *plan*: `PLAN-webview-suite.md` folds `/jump` into a route of
+that name, and `webview-host-api.md` § 8 repeats the plan. The defect this step's predecessor fixed was the
+javadoc **claiming** the route; a recorded intention is not a claim about the code, and the plan's own words are
+quoted rather than scrubbed.)
+
+**Done 2026-10-10 — the entry point is documented, and its statuses are asserted against live hosts.**
+
+- **The document**: [`webview/doc/webview-host-api.md`](../webview/doc/webview-host-api.md) gains **§ 4c, "A
+  caller that is not the browser — how it finds the port and the token"** — the four-step discovery order
+  (descriptor → credential-free `/health` probe → the optional committed default → the file at `tokenPath`), the
+  table of statuses a caller must handle (`200`, `400`, `403`, `404`, `405`, `429` with the 20-per-20 s limit
+  shared with the write routes), and two measured facts a caller would otherwise discover the hard way: the token
+  file **exists only when the host generated the secret** (a `--token` run leaves `tokenPath` naming a file that
+  is not there), and a stopped host **leaves its descriptor** (which is why the probe, not the file, answers "is
+  a host there"). The page's reader is pointed at it from
+  [`hipster-ioc-graph/README.md`](../hipster-ioc/hipster-ioc-graph/README.md).
+- **The check**: [`webview/tools/check-open-route.js`](../webview/tools/check-open-route.js) — **18 assertions,
+  0 failed, ~1 s**. It starts real `webviewd` processes on throwaway projects, resolves the port and token by
+  the order above (**no `--token`** is passed, precisely because a caller that is told the secret has discovered
+  nothing), and asserts: the descriptor names the bound port, the project, a `tokenPath`, and never the token;
+  the token file holds the generated secret; `/health` confirms identity without credentials; `400` for no
+  `filePath`; `403` for a path outside the project; `403` for no token and for a wrong token; `404` on a headless
+  host rather than a false success (why a headless host does **not** answer `200` is in the document's table);
+  `429` once the limit is spent, naming the limit and its window; and, with a Zed CLI on the PATH, the manifest's
+  `open` capability with `lineNavigation: "file-only"` and a real **`200`** for a file in the project.
+- **What could not be asserted everywhere**: the `200` needs an editor adapter, so that block runs only when the
+  Zed CLI is found on the PATH — detected the way the Java adapter detects it — and prints
+  `note no Zed CLI on the PATH — the 200 assertion was skipped, not passed` otherwise. Everything else is
+  decided by the token check, the path jail and the rate limiter, which are in `webview-core` and need no editor.
+- **Evidence**: the check green as above; `LINKS` green
+  (`check-repo-links.mjs`: 285 files, 1901 links). The Maven gate is unaffected — this step changes no Java.
+- **A side effect of the check, by design**: the host state it creates lives in the *throwaway* project, and the
+  script removes any `host.json`/`token` a previous run left in this repository, saying so when it does. A check
+  may not leave a port behind in a real checkout.
 
 ### 3.11c — Optional: bean types navigate (the generator emits an FQN)
 **Who:** agent, only if the maintainer asks · **Size:** S
@@ -724,7 +760,7 @@ start)
 | ----- | ----------------------------------------------------------------------------------------------- | --------------------------- | ---- | ------------------------------------------------------------------------------------------- |
 | 3.11  | Design: graph-page source navigation over BOTH paths — served and in-host                       | agent writes, human decides | M    | `[x]` — **accepted 2026-10-10**: [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md) is `Accepted` and 3.11a/3.11b are its implementation (done record in the step) |
 | 3.11a | The graph page joins the class index and navigates                                              | agent                       | M    | `[x]` — **done 2026-10-10** (`locations.js` + `navigate.js`, the join in `build.js`; 15 + 14 tests, a stubbed click reaching `window.openFile` at the joined line; done record in the step) |
-| 3.11b | The outside-the-browser entry point is documented and verified                                  | agent                       | S    | `[ ]` — DEC-049 decision 5 and acceptance criterion 3; the page's half landed with 3.11a    |
+| 3.11b | The outside-the-browser entry point is documented and verified                                  | agent                       | S    | `[x]` — **done 2026-10-10** (`webview-host-api.md` § 4c and `check-open-route.js`: 18 assertions, 0 failed; done record in the step) |
 | 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                       |
 | 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[ ]` — implements DEC-048's 2026-10-09 amendment                                           |
 | 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[ ]` — 6.4's only remainder                                                                |

@@ -214,6 +214,51 @@ Two runnable gates cover this section, both against live processes rather than m
 `bun webview/tools/check-port-claim.js` (two hosts on one project, then a host for another project on the
 same port).
 
+## 4c. A caller that is not the browser — how it finds the port and the token
+
+Everything above serves *pages*. This section is for the other direction, because the same route is what an
+application uses to ask an editor to open a location — plan step 3.11 and
+[DEC-049](../../doc-hipster-entity/architecture/decisions/DEC-049.md) settled the graph page's navigation on
+exactly this, and the entry point used to be discoverable only by reading `WebviewServer`:
+
+**`GET /open?filePath=…&line=…&column=…`** is the whole integration. No custom agent, no side channel, and no
+second API: a live application posts nothing anywhere, it calls this route. What it does have to *find* is the
+port and the token, and that is a four-step order, first match wins:
+
+1. **Read the served project's descriptor** — `<project>/.jcodebuddy/webview/host.json`. It names the port the
+   host **actually bound** (not the one it asked for) and a `tokenPath`; it never contains the token itself, so
+   it is safe to log or print.
+2. **Probe that port with the credential-free `GET /health`**, and accept it only when the body carries both
+   `plugin` and `port` **and** its `project` is the directory being served. The descriptor **outlives the
+   process that wrote it** (§ 4), so the file is a hint and the probe is the answer: "is a host there?" is never
+   decided by reading a file.
+3. **Fall back to the project's committed default** — `<project>/.jcodebuddy/conf/webview.json`, optional —
+   when there is no descriptor, it names another project, or nothing answers on that port. Never the user home:
+   a port names a socket for one served directory, and `~/.jcodebuddy/` holds no port at all (DEC-032 § 2).
+4. **Read the secret from the file at `tokenPath`** (§ 4), and present it as `X-WebView-Token: <secret>` or as
+   `?token=<secret>` — the route accepts either, plus an allowed `Origin`. The secret is read **only** for a
+   route that requires it; `/health` and `/.well-known/webview.json` need nothing.
+
+| What the caller must handle | Why, and what it means                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| `200`                       | an adapter is attached and the location was handed to it                                       |
+| `400`                       | no `filePath`                                                                                  |
+| `403`                       | the path is outside the project (the jail), or no token and no allowed `Origin`                |
+| `404`                       | a location the file does not have — **or no editor adapter is attached**, which is the honest answer for a headless host rather than a false success |
+| `405` / `429`               | not a `GET` / the rate limit is spent: **20 per 20 s, shared with the write routes**, per host |
+
+Two facts a caller should not be surprised by, both measured. **The token file exists only when the host
+generated the secret**: passing `--token` leaves the descriptor naming a `tokenPath` that is not there, so an
+integration that requires a discoverable secret must let the host generate one — or be told the secret, which is
+what a host that keeps its token in editor settings requires anyway (`tokenPath` is empty for that reason, § 4).
+And **a stopped host leaves its descriptor in place** (§ 4), which is why step 2 above is a probe and not a
+read.
+
+**Verified, not asserted:** `bun webview/tools/check-open-route.js` starts real hosts on throwaway projects,
+resolves the port and token by the order above, and asserts every status in the table — including `403` for a
+path outside the project, `429` once the limit is spent, `404` for the headless host, and, when a Zed CLI is on
+the PATH, the `200` against an attached adapter.
+
 ## 5. Routes
 
 | Route                                       | Auth                | Answers                                                                                        |

@@ -250,6 +250,7 @@ node webview/kit/scripts/check-docs.mjs           # every relative link in the k
 node webview/tools/check-pages.test.mjs           # and the checker itself fails when it should (21 assertions)
 bun webview/tools/check-capabilities.js           # capability honesty: declared ⇒ served, undeclared ⇒ refused
 bun webview/tools/check-port-claim.js             # two live hosts: one bridge per project, and where a port goes
+bun webview/tools/check-open-route.js             # a caller that is not the browser: port/token discovery, GET /open statuses
 node webview/check-links.mjs                      # every relative link in this folder resolves
 ```
 
@@ -259,7 +260,10 @@ its own coverage** (plan step 5.1): the verbs a headless host supports are liste
 must have been *called* by the end of the run, so a verb the client gains is either driven or deliberately left out
 rather than silently untested — and the run prints the count it checked. That is what makes **"headless lacks
 nothing" a test result** rather than a claim, together with the two checks beside it:
-`bun webview/tools/check-capabilities.js` (declared ⇒ served, undeclared ⇒ refused) and
+`bun webview/tools/check-capabilities.js` (declared ⇒ served, undeclared ⇒ refused),
+`bun webview/tools/check-open-route.js` (a caller that is **not** the browser: the four-step port/token
+discovery of [`doc/webview-host-api.md`](doc/webview-host-api.md) § 4c, and every `GET /open` status a caller
+must handle) and
 [`HostHealthParityTest`](core/webview-core/src/test/java/hr/hrg/webview/core/HostHealthParityTest.java) (every host
 builds its `/health` body through `HostHealth`, and refuses an unauthorized `/open` before reading the request).
 `smoke-test.mjs` drives a real Chromium over the DevTools Protocol, with no dependencies, and skips the browser

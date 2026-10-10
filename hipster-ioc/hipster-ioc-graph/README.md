@@ -18,6 +18,9 @@ bun scripts/ioc-gen.js                        # the generator writes .jcodebuddy
                                               #   and .jcodebuddy/index/classes.json (the join's other half)
 bun run hipster-ioc/hipster-ioc-graph/src/build.js --project=<repo root>
 # → hipster-ioc/hipster-ioc-test/.jcodebuddy/metadata/hipster-ioc/graph.html
+bun run hipster-ioc/hipster-ioc-graph/src/locations.test.js   # the join, against the real class index
+bun run hipster-ioc/hipster-ioc-graph/src/graph.test.js       # the model, the document, and a headless click
+bun webview/tools/check-open-route.js                         # the outside-the-browser route (step 3.11b)
 ```
 
 Open `graph.html` — **double-click it or `file://` it; no server, no host, nothing to start.** It is
@@ -66,8 +69,10 @@ host's business (an image beacon to `/open` for `webviewd`, a `JBCefJSQuery` cal
 
 A **live application outside the browser** calls `GET /open?filePath=…&line=…&column=…` directly on a
 running host, and finds the port and token in the served project's `.jcodebuddy/webview/host.json` (the
-descriptor carries the port and a `tokenPath`, never the token). That path is documented in
-[`webview/doc/webview-host-api.md`](../../webview/doc/webview-host-api.md) and verified by plan step 3.11b.
+descriptor carries the port and a `tokenPath`, never the token). The four-step discovery order and the frozen
+statuses a caller must handle are in
+[`webview/doc/webview-host-api.md` § 4c](../../webview/doc/webview-host-api.md#4c-a-caller-that-is-not-the-browser--how-it-finds-the-port-and-the-token),
+and `bun webview/tools/check-open-route.js` verifies them against live hosts (plan step 3.11b).
 
 
 ## The build, and why it stages inside the checkout
