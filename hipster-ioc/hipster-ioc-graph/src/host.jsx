@@ -12,8 +12,14 @@
  */
 import { signal } from '@jsx6/signal'
 
+import { locationAttribute } from './navigate.js'
+
 /**
- * The sidebar: one button per context.
+ * The sidebar: one row per context — the name selects the block, and a second button opens the context's
+ * source in an editor.
+ *
+ * The source button carries the joined location as `data-location`, the same attribute the blocks carry, so
+ * the page's one delegated listener navigates for both and nothing here knows about hosts.
  *
  * @param {{contexts: Array, onSelect: Function}} attr
  */
@@ -21,7 +27,7 @@ function Sidebar({ contexts, onSelect }) {
   return (
     <aside class="graph-sidebar">
       <h1>hipster-ioc contexts</h1>
-      <p class="graph-hint">Choose a context to select it in the graph.</p>
+      <p class="graph-hint">Choose a context to select it in the graph; “source” opens its declaration.</p>
       <ul class="graph-list">
         {(contexts ?? []).map((context) => (
           <li>
@@ -32,6 +38,17 @@ function Sidebar({ contexts, onSelect }) {
               onclick={() => onSelect(context)}
             >
               {context.simpleName || context.id}
+            </button>
+            <button
+              type="button"
+              class="graph-list-source"
+              title={context.location
+                ? `${context.location.path}:${context.location.line}`
+                : 'no source location: the class index does not know this context'}
+              disabled={!context.location}
+              data-location={locationAttribute(context.location)}
+            >
+              source
             </button>
           </li>
         ))}
@@ -57,17 +74,24 @@ function Sidebar({ contexts, onSelect }) {
  * the page alone — the binding the stack's own example demonstrates, and it is published on `globalThis`
  * because the page updates it after wiring the graph.
  *
- * @param {{contexts: Array, onSelect: Function, status: string, editor: Element}} attr
+ * `navigable` and `navHint` say what navigation this page has (step 3.11a): the class on the root lets the
+ * stylesheet mark the elements that lead somewhere, and the hint tells a reader on a `file://` page why a
+ * click does nothing.
+ *
+ * @param {{contexts: Array, onSelect: Function, status: string, editor: Element, navigable?: boolean, navHint?: string}} attr
  */
 export function GraphShell(attr) {
   const status = signal(attr.status ?? 'loading contexts.json …')
   globalThis.__HIPSTER_IOC_STATUS__ = status
 
   return (
-    <div class="graph-app">
+    <div class={attr.navigable ? 'graph-app graph-navigable' : 'graph-app'}>
       <Sidebar contexts={attr.contexts ?? []} onSelect={attr.onSelect ?? (() => {})} />
       <main class="graph-stage">{attr.editor}</main>
-      <footer class="graph-status">{status}</footer>
+      <footer class="graph-status">
+        <span class="graph-nav-hint">{attr.navHint ?? ''}</span>
+        <span class="graph-status-line">{status}</span>
+      </footer>
     </div>
   )
 }

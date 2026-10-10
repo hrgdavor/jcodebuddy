@@ -32,7 +32,7 @@ value is observable at runtime. Declared handling: **AUTO**. Not sticky.
 Both branches kept the base constant and each added a different one
 (`\n` separates the lines of a side; branch 1 is ours, branch 2 is theirs):
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:constant-add-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#constant-add-sample)
 ```java
     static final String CONSTANT_ADD_BASE = "static final int MAX_RETRIES = 3;";
     static final String CONSTANT_ADD_BRANCH1 = "static final int MAX_RETRIES = 3;\nstatic final int TIMEOUT_MS = 500;";
@@ -41,7 +41,7 @@ Both branches kept the base constant and each added a different one
 
 The two additions are independent, so both are kept automatically:
 
-[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#region:keeps-independent-constants)
+[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#keeps-independent-constants)
 ```java
     @Test
     @DisplayName("keeps constants that were added independently on each branch")
@@ -61,7 +61,7 @@ Two definitions of `LIMIT`, two different values — textually both sides merely
 "added a line"; only reading the declarations shows the *same name* is defined
 twice. This escalates, and the explanation names the constant:
 
-[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#region:escalates-on-differing-values)
+[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#escalates-on-differing-values)
 ```java
     @Test
     @DisplayName("escalates when both branches define the same constant differently")
@@ -86,7 +86,7 @@ twice. This escalates, and the explanation names the constant:
 Both branches defining the same name with the same value is agreement, not
 conflict — it stays `AUTO`:
 
-[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#region:treats-identical-definition-as-duplicate)
+[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#treats-identical-definition-as-duplicate)
 ```java
     @Test
     @DisplayName("treats an identically-defined constant as a duplicate")
@@ -107,7 +107,7 @@ conflict — it stays `AUTO`:
 Enum member lines are collected by name like any other constant, so two
 branches extending the same enum with different members compose:
 
-[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#region:extracts-enum-members)
+[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#extracts-enum-members)
 ```java
     @Test
     @DisplayName("extracts enum members")
@@ -124,7 +124,7 @@ branches extending the same enum with different members compose:
 
 Sides with no constant declarations at all are not this resolver's conflict:
 
-[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#region:declines-when-no-constants-present)
+[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#declines-when-no-constants-present)
 ```java
     @Test
     @DisplayName("declines when neither side adds a constant")
@@ -151,7 +151,7 @@ Sides with no constant declarations at all are not this resolver's conflict:
   is an explicit path for renaming one side's constant (with the warning that
   renaming a public constant breaks callers):
 
-[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#region:recommends-keeping-both)
+[../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ConstantAddConflictResolverTest.java#recommends-keeping-both)
 ```java
     @Test
     @DisplayName("recommends keeping both when nothing collides")

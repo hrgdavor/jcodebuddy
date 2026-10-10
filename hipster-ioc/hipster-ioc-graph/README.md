@@ -3,7 +3,9 @@
 A **`jsx6` application** that shows a project's hipster-ioc contexts as a graph, rendered by Bun from
 the generator's `contexts.json`. It is plan step 3.8, and it is the page DEC-027's 2026-10-01
 amendment was written for: *"navigation across a project's structure"* and *"relations as a picture"*
-are the two things that make a page an application rather than a document.
+are the two things that make a page an application rather than a document. Since plan step **3.11a** it
+also **navigates into source**, over the webview suite's frozen contract — the design is
+[DEC-049](../../doc-hipster-entity/architecture/decisions/DEC-049.md).
 
 It lives **here**, not under `scripts/`, because `scripts/` stays dependency-free for the vanilla
 renderers (DEC-027's 2026-10-02 note). A `jsx6` page is built, so it gets a home that may declare a
@@ -13,7 +15,8 @@ dependency.
 
 ```
 bun scripts/ioc-gen.js                        # the generator writes .jcodebuddy/metadata/hipster-ioc/contexts.json
-bun run hipster-ioc/hipster-ioc-graph/src/build.js
+                                              #   and .jcodebuddy/index/classes.json (the join's other half)
+bun run hipster-ioc/hipster-ioc-graph/src/build.js --project=<repo root>
 # → hipster-ioc/hipster-ioc-test/.jcodebuddy/metadata/hipster-ioc/graph.html
 ```
 
@@ -22,15 +25,50 @@ one self-contained file: the script and both stylesheets are inlined, and the gr
 too, so nothing is fetched at view time (DEC-027's "no network" rule, and the maintainer's "a UI must
 be usable standalone even without webview").
 
-| file                | what it is                                                                                          |
-| ------------------- | --------------------------------------------------------------------------------------------------- |
-| `src/model.js`      | the projection of the generator's JSON: contexts, beans, and the lines between them. A dependency naming a context that is not in the file is **reported, never drawn** |
-| `src/blocks.js`     | the graph blocks — plain DOM, because nodditor's contract is about *elements* (`ncid` + `ne-connect` + `ne-drag`), not components |
-| `src/host.jsx`      | the jsx6 markup: the navigation sidebar and the page shell                                          |
-| `src/main.js`       | the entry: read the graph, render the shell, drive the editor                                       |
-| `src/page.css`      | this page's own look; nodditor's geometry comes from its shipped `nodditor.css`, inlined ahead of it |
-| `src/build.js`      | the build: stage, bundle, inline, write one HTML file. `--check` fails when the built page is stale |
-| `src/graph.test.js` | `bun run src/graph.test.js` — the model, the document, the standalone properties, and (when Chrome is present) that the page **renders** |
+| file                    | what it is                                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/model.js`          | the projection of the generator's JSON: contexts, beans, the lines between them, and the joined locations. A dependency naming a context that is not in the file is **reported, never drawn** |
+| `src/locations.js`      | the join (step 3.11a): a generator FQN → a **project-relative** `{path, line}` from `.jcodebuddy/index/classes.json`, plus the names the index could not answer |
+| `src/navigate.js`       | the one call a page makes — `window.openFile(path, line, column)` — and what a page does when there is no host |
+| `src/blocks.js`         | the graph blocks — plain DOM, because nodditor's contract is about *elements* (`ncid` + `ne-connect` + `ne-drag`), not components |
+| `src/host.jsx`          | the jsx6 markup: the navigation sidebar and the page shell                                          |
+| `src/main.js`           | the entry: read the graph, render the shell, drive the editor, and one delegated click listener for navigation |
+| `src/page.css`          | this page's own look; nodditor's geometry comes from its shipped `nodditor.css`, inlined ahead of it |
+| `src/build.js`          | the build: stage, bundle, inline, write one HTML file. `--check` fails when the built page is stale |
+| `src/graph.test.js`     | `bun run src/graph.test.js` — the model, the document, the standalone properties, and (when Chrome is present) that the page **renders** and that a click reaches the bridge |
+| `src/locations.test.js` | `bun run src/locations.test.js` — the join against the real class index, the reported-not-guessed rule, and the `file://` fallback |
+
+## The join to source, and why the build does it
+
+The page names contexts and beans by fully qualified name; `.jcodebuddy/index/classes.json` (DEC-029)
+turns an FQN into a place. That join happens in the **build**, not in the browser, because a `file://`
+page may not fetch a sibling — a view-time join would close the standalone path the page exists to keep.
+Two consequences are worth knowing:
+
+- **A joined path is project-relative.** The index's rows are *module*-relative, and every host resolves a
+  link against the **project** root (`Navigator`), so the module's own directory prefixes them
+  (`hipster-ioc/hipster-ioc-test/src/test/java/…`). The build therefore needs to be told where the project
+  is: `--project=<dir>`, or `JCODEBUDDY_PROJECT_DIR`. A build that cannot say stops with a message rather
+  than writing links every host would refuse as "not a usable path".
+- **A name the index does not know is reported, never guessed.** `contexts.json` records a bean's type as
+  the *simple* name written in the context's own source (`ObjectMapper`), and the index is keyed by FQN — so
+  the bean is named and not navigable, and both the build's output and the page say so. Making beans
+  navigable is an upstream change (the generator emitting the FQN), recorded as optional step 3.11c in
+  [the plan](../../plans/unified-plan.md).
+
+## Navigating: both integration paths, and the one call
+
+The page calls the **frozen** `window.openFile(path, line, column)` (`InjectedBridge`, `bridgeVersion` 1)
+after feature-detecting it, and it never learns which host it is in — the transport under that call is the
+host's business (an image beacon to `/open` for `webviewd`, a `JBCefJSQuery` call for JetBrains, a
+`postMessage` for a mirroring host). Opened as a plain `file://` document there is no bridge, so the page
+**says navigation needs a host** instead of offering a click that does nothing.
+
+A **live application outside the browser** calls `GET /open?filePath=…&line=…&column=…` directly on a
+running host, and finds the port and token in the served project's `.jcodebuddy/webview/host.json` (the
+descriptor carries the port and a `tokenPath`, never the token). That path is documented in
+[`webview/doc/webview-host-api.md`](../../webview/doc/webview-host-api.md) and verified by plan step 3.11b.
+
 
 ## The build, and why it stages inside the checkout
 
@@ -82,6 +120,10 @@ Two consequences for a host, both in `src/main.js`:
   element un-upgraded (`loadGraph` undefined). Setting the class after insertion is the legal order;
 - the reference is held by the caller, which is what the render → inspect → wire order needs anyway.
 
-**Status: finished.** `src/graph.test.js` covers the model, the document and the standalone properties,
-and — when a Chrome is present — asserts that the built page actually renders its shell, its block and
-its status line, so a page that regresses to a blank shell fails a test rather than being noticed by eye.
+**Status: finished, and since 2026-10-10 it navigates.** `src/graph.test.js` covers the model, the
+document, the standalone properties and the joined locations, and — when a Chrome is present — asserts that
+the built page actually renders its shell, its block and its status line, **and that a click on a located
+element reaches `window.openFile` with the joined path and line** (observed through a stub bridge, which is
+the host's half). `src/locations.test.js` covers the join itself against the real class index. So a page
+that regresses to a blank shell, or to elements that carry a location but never call, fails a test rather
+than being noticed by eye.

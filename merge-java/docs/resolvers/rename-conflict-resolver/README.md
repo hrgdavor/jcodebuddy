@@ -31,7 +31,7 @@ automatically on the next base-branch update. Declared handling: **STICKY**.
 
 Base declares `order`; ours renames it to `purchase`, theirs to `invoice`:
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:variable-rename-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#variable-rename-sample)
 ```java
     static final String VARIABLE_RENAME_BASE = "int order = 1;";
     static final String VARIABLE_RENAME_BRANCH1 = "int purchase = 1;";
@@ -41,7 +41,7 @@ Base declares `order`; ours renames it to `purchase`, theirs to `invoice`:
 The resolver never picks a winner itself — it surfaces both names and marks the
 decision as one that must be replayed later:
 
-[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#region:offers-competing-names)
+[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#offers-competing-names)
 ```java
     @Test
     @DisplayName("never renames silently, but offers the competing names")
@@ -69,7 +69,7 @@ update of the same branch sees the same conflict and replays the recorded
 decision as `DEFERRED` + `STICKY_REPLAY` instead of re-litigating it —
 re-anchored to the incoming file path:
 
-[../../../src/test/java/com/codebuddy/merge/MergeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MergeConflictResolverTest.java#region:replays-sticky-decision)
+[../../../src/test/java/com/codebuddy/merge/MergeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MergeConflictResolverTest.java#replays-sticky-decision)
 ```java
     @Test
     @DisplayName("replays a sticky decision recorded by a previous run")
@@ -121,7 +121,7 @@ re-anchored to the incoming file path:
 When one side kept the base name, that side is the recommended choice because
 it minimises the diff:
 
-[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#region:recommends-base-compatible-name)
+[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#recommends-base-compatible-name)
 ```java
     @Test
     @DisplayName("recommends the name that matches the base branch")
@@ -142,7 +142,7 @@ it minimises the diff:
 
 The reviewer is also always offered the option to make the choice permanent:
 
-[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#region:offers-to-remember-decision)
+[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#offers-to-remember-decision)
 ```java
     @Test
     @DisplayName("offers to remember the decision")
@@ -159,7 +159,7 @@ The reviewer is also always offered the option to make the choice permanent:
 Control-flow statements are not declarations, so the resolver never mistakes an
 `if` for a renamed variable:
 
-[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#region:ignores-control-flow-keywords)
+[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#ignores-control-flow-keywords)
 ```java
     @Test
     @DisplayName("does not treat control-flow keywords as declarations")
@@ -173,7 +173,7 @@ Control-flow statements are not declarations, so the resolver never mistakes an
 
 Both branches renaming to the *same* name is agreement, not a conflict:
 
-[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#region:declines-when-names-agree)
+[../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/RenameConflictResolverTest.java#declines-when-names-agree)
 ```java
     @Test
     @DisplayName("declines when both branches use the same name")

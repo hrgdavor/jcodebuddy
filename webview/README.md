@@ -138,12 +138,11 @@ name a real file and a location inside it — and the location half of that spel
 | `#L42`                       | line 42 — the page settles this itself and passes nothing on              |
 | `#L42-L58`                   | a line range                                                              |
 | `#someMethod`                | a declaration: a method, a constructor, an inner class, a field           |
-| `#region:add`                | the region, or the declaration, named `add`                               |
-| `#region:-add`               | the same declaration's **body only**                                      |
-| `#region:+add`               | the declaration **and its annotations**                                   |
-| `#region:++add`              | the declaration, annotations **and doc comment**                          |
-| `#-add` / `#+add` / `#++add` | the same without the prefix — the prefix is never required, only allowed  |
-| `#region:name,scripts.test`  | dotted JSON key paths, in a `.json` file                                  |
+| `#add`                       | the region, or the declaration, named `add`                               |
+| `#-add`                      | the same declaration's **body only**                                      |
+| `#+add`                      | the declaration **and its annotations**                                   |
+| `#++add`                     | the declaration, annotations **and doc comment**                          |
+| `#name,scripts.test`         | dotted JSON key paths, in a `.json` file                                  |
 
 **A page needs to know none of this.** It puts the whole target on `data-open` — which the frozen contract already
 calls a path — and hands it over. The only fragment it reads is a plain `#L42`, which it can settle itself, and it
@@ -152,10 +151,13 @@ thought of yet, travels through untouched. That is the maintainer's rule of 2026
 know, and a host need not advertise anything about what links there are. There is no capability key and no second
 attribute for this.
 
-**The host sanitises, then resolves.** `Navigator` — the one funnel a page's request passes through — strips an
-inject prefix (`region:`) and a scope modifier (`-`, `+`, `++`) to find the marker, then looks for it: an explicit
-`#region <name>` directive wins over a declaration of the same name, which is exactly `@hrg/inject-examples`' own
-order, so one spelling can name either. A `.json` reference is its key paths. A marker the file does not have is
+**The host resolves through the matcher both sides share.** `Navigator` — the one funnel a page's request passes
+through — hands the fragment to [`@hrg/inject-examples`](https://github.com/hrgdavor/inject-examples)' Java port
+(`hr.hrg.inject:inject-examples`), which is the source of truth for what a reference means: `Cart/add`, a
+`#region <name>` directive, a `-`/`+`/`++` scope. An explicit `#region <name>` directive wins over a declaration of
+the same name, exactly as that library orders it, so one spelling can name either. Only two rules stay here, because
+the library's module boundary deliberately excludes them: an explicit `L42`/`L42-L58` position, which the page
+settles itself, and a `.json` key path. A reference the file does not have is
 **refused** (`LOCATION_NOT_FOUND`, HTTP `404`) rather than aimed at line 1, because a wrong line costs the reader a
 search to discover; a fragment that is *not* a location — a heading anchor in a document, a made-up word — leaves
 the page's own line standing instead of failing.

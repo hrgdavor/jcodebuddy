@@ -77,6 +77,44 @@ body {
   border-color: #c7d2fe;
 }
 
+/* The row is the name and the "source" button side by side (step 3.11a). */
+.graph-list li {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.graph-list-source {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 1px solid var(--graph-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--graph-muted);
+  font: inherit;
+  font-size: 12px;
+}
+
+.graph-list-source:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* A page with the injected bridge marks what leads somewhere, and only then: on a `file://` document the
+   page says it is standalone instead of offering a click that does nothing. */
+.graph-navigable .graph-nav {
+  cursor: pointer;
+}
+
+.graph-navigable .graph-nav:hover {
+  color: var(--graph-accent);
+  text-decoration: underline;
+}
+
+.graph-unlocated {
+  opacity: 0.75;
+}
+
 .graph-stage {
   position: relative;
   min-height: 0;

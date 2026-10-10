@@ -192,7 +192,7 @@ The two human-readable diffs that ship with the fixture:
 The diffs are documentation, never input — a test asserts the structurally
 computed change agrees with them, so a fixture whose diff lies fails:
 
-[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#region:computed-change-agrees-with-the-diff)
+[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#computed-change-agrees-with-the-diff)
 ```java
     @Test
     @DisplayName("the computed change agrees with the diff a human would read")
@@ -218,7 +218,7 @@ computed change agrees with them, so a fixture whose diff lies fails:
 And the resolver composes the two changes into one import block instead of
 reporting a conflict:
 
-[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#region:composes-independent-changes)
+[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#composes-independent-changes)
 ```java
     @Test
     @DisplayName("composes the two independent changes instead of reporting a conflict")
@@ -254,7 +254,7 @@ Resolver tests work at hunk level. The canonical sample every
 (theirs), sides separated by `\n` — lives in
 [`ConflictFixtures`](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java):
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:import-add-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#import-add-sample)
 ```java
     static final String IMPORT_ADD_BASE = "import java.util.List;";
     static final String IMPORT_ADD_BRANCH1 = "import java.util.List;\nimport java.math.BigDecimal;";
@@ -264,7 +264,7 @@ Resolver tests work at hunk level. The canonical sample every
 Both branches added a different import next to the same line; the union is the
 answer:
 
-[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#region:keeps-both-branches-imports)
+[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#keeps-both-branches-imports)
 ```java
     @Test
     @DisplayName("keeps the imports added by both branches instead of reporting a conflict")
@@ -286,7 +286,7 @@ answer:
 
 The shared import appears exactly once in the rendered block:
 
-[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#region:does-not-duplicate-shared-imports)
+[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#does-not-duplicate-shared-imports)
 ```java
     @Test
     @DisplayName("does not duplicate a shared import")
@@ -302,7 +302,7 @@ The shared import appears exactly once in the rendered block:
 A static import is a distinct symbol from the plain import of the same type,
 and keeps its modifier in the output:
 
-[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#region:distinguishes-static-imports)
+[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#distinguishes-static-imports)
 ```java
     @Test
     @DisplayName("treats static imports as distinct from ordinary imports")
@@ -407,7 +407,7 @@ public class PaymentProcessor {
 
 With the default policy the removal loses and the decision stays mechanical:
 
-[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#region:default-policy-keeps-the-import)
+[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#default-policy-keeps-the-import)
 ```java
     @Test
     @DisplayName("the default policy keeps an import one side removed")
@@ -432,7 +432,7 @@ Configured with `REMOVAL_WINS`, the removal is honoured — and because dropping
 an import can break a use of it, the outcome is escalated to `REVIEW` rather
 than applied silently:
 
-[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#region:removal-policy-honours-the-removal)
+[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#removal-policy-honours-the-removal)
 ```java
     @Test
     @DisplayName("configuring REMOVAL_WINS honours the removal and escalates it")
@@ -459,7 +459,7 @@ than applied silently:
 The policy is the *only* difference between the two outcomes — the rest of the
 block is identical:
 
-[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#region:policy-is-the-only-difference)
+[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#policy-is-the-only-difference)
 ```java
     @Test
     @DisplayName("the policy is the only difference between the two outcomes")
@@ -484,7 +484,7 @@ With nothing import-shaped on either side there is no union to compute, and the
 resolver declines — the conflict routes to the MANUAL fallback, which still
 carries fix paths for the reviewer:
 
-[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#region:declines-when-no-imports-present)
+[../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ImportConflictResolverTest.java#declines-when-no-imports-present)
 ```java
     @Test
     @DisplayName("declines when neither side contributes an import")
@@ -513,7 +513,7 @@ carries fix paths for the reviewer:
 Every emitted line is a full declaration and the merged block is balanced,
 asserted for the whole-file fixture:
 
-[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#region:merged-imports-remain-valid)
+[../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java](../../../src/test/java/com/codebuddy/merge/ThreeWayFixtureTest.java#merged-imports-remain-valid)
 ```java
     @Test
     @DisplayName("the merged import block is still syntactically valid")

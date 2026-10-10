@@ -21,16 +21,15 @@ import java.util.Objects;
  * <h3>The spellings</h3>
  * <ul>
  *   <li>{@code L42} and {@code L42-L58} — an explicit position, which always wins.</li>
- *   <li>{@code region:add} — a region or a declaration, with the scope modifiers {@code -} (the body only),
- *       {@code +} (with the annotations) and {@code ++} (with the annotations and the doc comment).</li>
- *   <li>{@code add}, {@code -add}, {@code +add}, {@code ++add} — the same, without the prefix, which is never
- *       required and only allowed: given a name the host resolves it as a declaration or as a region, because a link
+ *   <li>{@code add}, {@code -add}, {@code +add}, {@code ++add} — a region or a declaration, with the scope
+ *       modifiers {@code -} (the body only), {@code +} (with the annotations) and {@code ++} (with the annotations
+ *       and the doc comment): given a name the host resolves it as a declaration or as a region, because a link
  *       should not have to know which one the author wrote.</li>
- *   <li>In a {@code .json} file the reference is dotted key paths, prefixed or not, because JSON has no declarations
+ *   <li>In a {@code .json} file the reference is dotted key paths, because JSON has no declarations
  *       and no comments to hang a region on.</li>
- *   <li>Anything else is not a location: a scheme-like fragment, a malformed position, an empty fragment, or a bare
- *       name in a document — where the page scrolls to its own heading first, and only asks a host when the name is
- *       not one.</li>
+ *   <li>Anything else is not a location: a fragment carrying a colon (a scheme-like one), a malformed position, an
+ *       empty fragment, or a bare name in a document — where the page scrolls to its own heading first, and only
+ *       asks a host when the name is not one.</li>
  * </ul>
  */
 public final class LocationFragment {
@@ -41,9 +40,9 @@ public final class LocationFragment {
         LINE,
         /** A selection: {@code #L42-L58}. */
         RANGE,
-        /** A region or declaration, by name and optional scope: {@code #region:++add}, {@code #++add}. */
+        /** A region or declaration, by name and optional scope: {@code #++add}, {@code #add-}. */
         REGION,
-        /** Dotted key paths in a {@code .json} file: {@code #region:name,scripts.test}. */
+        /** Dotted key paths in a {@code .json} file: {@code #name,scripts.test}. */
         JSON,
         /** A name that is a declaration or a region: {@code #someMethod}, {@code #regionName}. */
         MEMBER
@@ -121,21 +120,8 @@ public final class LocationFragment {
             return null;
         }
 
-        if (text.startsWith("region:")) {
-            String reference = text.substring("region:".length()).trim();
-            if (reference.isEmpty()) {
-                return null;
-            }
-            if (isJson(path)) {
-                return jsonKeys(reference);
-            }
-            Scoped scoped = scopedName(reference);
-            return scoped == null ? null : region(scoped.name, scoped.scope);
-        }
-
-        // 'region:' is the only prefix this grammar owns. Anything else with a colon is a scheme-like fragment, and a
-        // fragment that looks like one but is not (a mis-cased 'REGION:') is a mistake to report as an ordinary link
-        // rather than as a member nobody named that.
+        // A colon is never part of a reference: a fragment that carries one is scheme-like, and is reported as an
+        // ordinary link rather than as a member nobody named that.
         if (text.indexOf(':') >= 0) {
             return null;
         }
@@ -146,9 +132,8 @@ public final class LocationFragment {
             return jsonKeys(text);
         }
 
-        // The prefix is never required, only allowed: the same spellings work bare, which is what a writer types. No
-        // language this repository reads has a declaration whose name starts with '-' or '+', so reading a leading
-        // modifier as a modifier is unambiguous.
+        // The spellings are bare. No language this repository reads has a declaration whose name starts with '-' or
+        // '+', so reading a leading modifier as a modifier is unambiguous.
         if (text.startsWith("+") || text.startsWith("-")) {
             Scoped scoped = scopedName(text);
             return scoped == null ? null : region(scoped.name, scoped.scope);

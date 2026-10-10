@@ -35,7 +35,7 @@ replayed on the next update. Declared handling: **STICKY**.
 Base `com.example.payments`; ours moved the class to `com.example.billing`,
 theirs to `com.example.ledger`:
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:package-change-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#package-change-sample)
 ```java
     static final String PACKAGE_CHANGE_BASE = "package com.example.payments;";
     static final String PACKAGE_CHANGE_BRANCH1 = "package com.example.billing;";
@@ -45,7 +45,7 @@ theirs to `com.example.ledger`:
 Two different destinations — a human picks the home, and the choice is
 replayable:
 
-[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#region:escalates-two-different-destinations)
+[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#escalates-two-different-destinations)
 ```java
     @Test
     @DisplayName("escalates two different destinations and remembers the choice")
@@ -71,7 +71,7 @@ end in the
 Only ours moved the class; theirs left it in the base package. The move is the
 only deliberate change, so it is applied automatically:
 
-[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#region:adopts-one-sided-move)
+[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#adopts-one-sided-move)
 ```java
     @Test
     @DisplayName("adopts a move when only one branch moved the class")
@@ -97,7 +97,7 @@ only deliberate change, so it is applied automatically:
 A package move is never local — the fix paths flag the imports on each side so
 the reviewer knows what must be re-pointed repository-wide:
 
-[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#region:flags-imports-to-update)
+[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#flags-imports-to-update)
 ```java
     @Test
     @DisplayName("flags imports that must be re-pointed after a move")
@@ -120,7 +120,7 @@ the reviewer knows what must be re-pointed repository-wide:
 
 Equal package declarations leave nothing to arbitrate:
 
-[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#region:declines-when-packages-agree)
+[../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/PackageChangeConflictResolverTest.java#declines-when-packages-agree)
 ```java
     @Test
     @DisplayName("declines when the package declarations agree")

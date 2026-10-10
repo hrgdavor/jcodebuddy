@@ -59,14 +59,15 @@ public class LocationResolverTest {
 
     @Test
     public void aRegionDirectiveIsFoundAndSpansToItsEnd() {
-        LocationResolution region = resolve("region:wiring", JAVA);
+        LocationResolution region = resolve("wiring", JAVA);
 
         assertNotNull(region);
         // The directive's own line is line 3, so the region's content starts at 4 and ends before '#endregion'.
         assertEquals(4, region.line());
         assertEquals(4, region.endLine());
         assertEquals(LocationFragment.Kind.REGION, region.kind());
-        assertTrue("the answer says how it was found: " + region.how(), region.how().contains("#region wiring"));
+        assertTrue("the answer says how it was found: " + region.how(),
+            region.how().contains("inject-examples") && region.how().contains("wiring"));
     }
 
     @Test
@@ -74,8 +75,10 @@ public class LocationResolverTest {
         String[] prefixes = {"#region", "// #region", "//region", "<!-- #region", "/* #region", "-- #region",
             "; #region", "% #region", "' #region", "REM #region"};
         for (String prefix : prefixes) {
-            String text = "a\n" + prefix + " body\ncontent here\n";
-            LocationResolution region = resolve("region:body", text);
+            // A region is a *pair*: inject-examples pairs the directives, so an unclosed one is not a
+            // section at all — the close is part of what makes this a directive rather than a comment.
+            String text = "a\n" + prefix + " body\ncontent here\n#endregion\n";
+            LocationResolution region = resolve("body", text);
             assertNotNull(prefix + " must be read as a directive", region);
             assertEquals(prefix, 3, region.line());
         }
@@ -88,7 +91,7 @@ public class LocationResolverTest {
         assertNotNull(declaration);
         assertEquals("the 'public boolean add(...)' line", 9, declaration.line());
         assertEquals(LocationFragment.Kind.MEMBER, declaration.kind());
-        assertTrue(declaration.how().contains("'add'"));
+        assertTrue(declaration.how().contains("\"add\""));
     }
 
     @Test
@@ -96,7 +99,7 @@ public class LocationResolverTest {
         // There is no declaration of 'missing' anywhere, and the only occurrence of a call shape would be a call -
         // which the brace rule rejects, so the answer is nothing rather than the call's line.
         assertNull(resolve("missing", JAVA));
-        assertNull(resolve("region:alsoMissing", JAVA));
+        assertNull("a scheme-like fragment is not a location", resolve("mailto:dev@example.com", JAVA));
     }
 
     @Test
@@ -105,7 +108,7 @@ public class LocationResolverTest {
         LocationResolution type = resolve("SomeFile", text);
         assertNotNull(type);
         assertEquals(3, type.line());
-        assertTrue(type.how().contains("type declaration"));
+        assertTrue(type.how().contains("\"SomeFile\""));
 
         LocationResolution qualified = resolve("a.SomeFile", text);
         assertNotNull("a qualified name resolves by its last segment", qualified);
@@ -121,7 +124,8 @@ public class LocationResolverTest {
 
         assertNotNull(region);
         assertEquals(2, region.line());
-        assertTrue("the directive wins and says so: " + region.how(), region.how().contains("#region"));
+        assertTrue("the directive wins and says so: " + region.how(),
+            region.how().contains("inject-examples"));
     }
 
     @Test
@@ -152,15 +156,14 @@ public class LocationResolverTest {
             }
             """;
 
-        LocationResolution key = LocationResolver.resolve(LocationFragment.parse("package.json", "region:scripts.test"),
+        LocationResolution key = LocationResolver.resolve(LocationFragment.parse("package.json", "scripts.test"),
             json);
         assertNotNull(key);
         assertEquals(4, key.line());
         assertEquals(LocationFragment.Kind.JSON, key.kind());
         assertTrue(key.how().contains("scripts.test"));
 
-        // The bare spelling is the same rule, and an absent key resolves to nothing.
-        assertEquals(4, LocationResolver.resolve(LocationFragment.parse("package.json", "scripts.test"), json).line());
+        // An absent key resolves to nothing.
         assertNull(LocationResolver.resolve(LocationFragment.parse("package.json", "scripts.missing"), json));
     }
 
@@ -169,7 +172,7 @@ public class LocationResolverTest {
         assertNull("no fragment, no answer", LocationResolver.resolve(null, JAVA));
         assertNull("no text, no name resolution", LocationResolver.resolve(at("add"), null));
         assertNull("an empty file has no declaration", LocationResolver.resolve(at("add"), ""));
-        assertNull(resolve("region:", JAVA));
+        assertNull("an empty fragment names nothing", resolve("", JAVA));
         assertNull(resolve("L42-", JAVA));
     }
 }

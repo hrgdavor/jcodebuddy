@@ -69,14 +69,14 @@ Base `int count`, ours `long count`, theirs `double count`. Both sides widen
 the base, but `double` is wider than `long`, so branch 2 supplies the
 declaration that is adopted:
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:type-change-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#type-change-sample)
 ```java
     static final String TYPE_CHANGE_BASE = "int count = 0;";
     static final String TYPE_CHANGE_BRANCH1 = "long count = 0;";
     static final String TYPE_CHANGE_BRANCH2 = "double count = 0;";
 ```
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:adopts-wider-type)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#adopts-wider-type)
 ```java
     @Test
     @DisplayName("adopts the wider type declared on branch 2")
@@ -100,7 +100,7 @@ declaration that is adopted:
 The direction is whatever the evidence says — when branch 2 holds the wider
 type, branch 2 wins:
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:adopts-one-sided-widening)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#adopts-one-sided-widening)
 ```java
     @Test
     @DisplayName("adopts the wider type when branch 2 is the wider one")
@@ -121,7 +121,7 @@ type, branch 2 wins:
 The resolver asks javac, so widening a declaration from `List` to `Collection` is
 adopted automatically — and so is a supertype the deleted table never listed:
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:adopts-collection-supertype)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#adopts-collection-supertype)
 ```java
     @Test
     @DisplayName("adopts a collection supertype when one branch widens the declaration")
@@ -148,7 +148,7 @@ raw names do: `List<String>` is assignable to `Collection<String>` and *not* to
 `Collection<Integer>`. The canonical token the primitive lattice compares still
 drops them, and varargs/array spellings still canonicalise to the same type:
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:ignores-generic-arguments)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#ignores-generic-arguments)
 ```java
     @Test
     @DisplayName("keeps generic arguments rather than dropping them, and still classifies")
@@ -170,7 +170,7 @@ drops them, and varargs/array spellings still canonicalise to the same type:
 
 And widening is never assumed in both directions:
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:widening-is-directional)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#widening-is-directional)
 ```java
     @Test
     @DisplayName("widening is directional")
@@ -187,7 +187,7 @@ And widening is never assumed in both directions:
 `int` and `String` have no widening relationship — which one is safe depends on
 every call site, so a reviewer decides:
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:escalates-unrelated-types)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#escalates-unrelated-types)
 ```java
     @Test
     @DisplayName("escalates unrelated types to a reviewer")
@@ -207,7 +207,7 @@ every call site, so a reviewer decides:
 
 Both branches agreeing on the new type is an agreed change, not a conflict:
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:declines-when-types-agree)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#declines-when-types-agree)
 ```java
     @Test
     @DisplayName("declines when both branches agree on the type")
@@ -226,7 +226,7 @@ A run with **no type context** is not refused: the resolver decides what needs n
 classpath — the primitive conversions and the built-in JDK table — and says so on
 every resolution it produces that way:
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:degrades-without-a-context)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#degrades-without-a-context)
 ```java
     @Test
     @DisplayName("degrades without a type context: decides the common cases and warns")
@@ -263,7 +263,7 @@ What the table does not carry still escalates, and the warning is the difference
 between "no widening relationship" and "no widening relationship this resolver can
 check":
 
-[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#region:degraded-escalation)
+[../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/TypeChangeConflictResolverTest.java#degraded-escalation)
 ```java
     @Test
     @DisplayName("escalates what the built-in table does not carry, and says why")

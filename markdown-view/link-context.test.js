@@ -28,9 +28,9 @@ describe('the links a page builds', () => {
       '- [a line](../core/Navigator.java#L42)',
       '- [a range](../core/Navigator.java#L42-L58)',
       '- [body only](../core/Navigator.java#-open)',
-      '- [a region](../test/MergeConflictResolverTest.java#region:replays-sticky-decision)',
-      '- [short region](../test/MergeConflictResolverTest.java#replays-sticky-decision)',
-      '- [a json key](../package.json#region:name,version)',
+      '- [a region](../test/MergeConflictResolverTest.java#replays-sticky-decision)',
+      '- [body only, again](../test/MergeConflictResolverTest.java#-replays-sticky-decision)',
+      '- [a json key](../package.json#name,version)',
       '',
     ].join('\n'), { docDir: DOC_DIR });
     const opens = links.map((link) => link.open);
@@ -39,10 +39,10 @@ describe('the links a page builds', () => {
       'D:/proj/webview/core/Navigator.java',
       'D:/proj/webview/core/Navigator.java#L42-L58',
       'D:/proj/webview/core/Navigator.java#-open',
-      'D:/proj/webview/test/MergeConflictResolverTest.java#region:replays-sticky-decision',
       'D:/proj/webview/test/MergeConflictResolverTest.java#replays-sticky-decision',
+      'D:/proj/webview/test/MergeConflictResolverTest.java#-replays-sticky-decision',
       // ../ from webview/doc is webview/, not the project root: the join is right, the expectation was not.
-      'D:/proj/webview/package.json#region:name,version',
+      'D:/proj/webview/package.json#name,version',
     ]);
   });
 

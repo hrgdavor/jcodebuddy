@@ -10,24 +10,19 @@ import { parseLocation, locationSummary } from './scripts/webview-location/index
 parseLocation('src/main/java/com/hrg/bla/SomeFile.java', 'someMethod')
 // { kind: 'member', name: 'someMethod' }
 
-parseLocation('src/main/java/com/hrg/bla/SomeFile.java', 'region:++toString')
-
-// The same, without the prefix — it is never required, only allowed:
 parseLocation('src/main/java/com/hrg/bla/SomeFile.java', '++toString')
-// { kind: 'region', name: 'toString', scope: '++' }
 // { kind: 'region', name: 'toString', scope: '++' }
 
 parseLocation('doc/usage.md', 'install')
 // null — a heading anchor is the page's own business
 
-locationSummary(parseLocation('package.json', 'region:name,scripts.test'))
+locationSummary(parseLocation('package.json', 'name,scripts.test'))
 // 'keys name, scripts.test'   (for a link's tooltip)
 ```
 
 A bare name is the same reference whether the thing it names is a declaration or a `#region` directive: the host
-tries the declaration, then the region. The prefix that used to be the only way to say "region" is still allowed, and
-never required. In a document a bare name is also a heading anchor, and the page's own scroll wins — a renderer knows
-its headings, so it only asks a host when the name is not one.
+tries the declaration, then the region. In a document a bare name is also a heading anchor, and the page's own scroll
+wins — a renderer knows its headings, so it only asks a host when the name is not one.
 
 **The grammar is not defined here.** It is defined by `webview/conformance/location-fragments.json`, whose cases are
 hand-written claims, and this module is one of two readers that must satisfy them — the other is

@@ -38,7 +38,7 @@ Base `public void process() throws IOException`; ours changed the return type
 to `int` (and dropped the throws clause), theirs to `long` (`\n` separates the
 lines of a side):
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:api-incompatibility-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#api-incompatibility-sample)
 ```java
     static final String API_INCOMPATIBILITY_BASE = "public void process() throws IOException { }";
     static final String API_INCOMPATIBILITY_BRANCH1 = "public int process() { }";
@@ -47,7 +47,7 @@ lines of a side):
 
 No automatic answer, nothing applied, nothing replayed:
 
-[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#region:never-automatically-resolves)
+[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#never-automatically-resolves)
 ```java
     @Test
     @DisplayName("never changes a public contract automatically")
@@ -63,7 +63,7 @@ No automatic answer, nothing applied, nothing replayed:
 
 The return-type break is named explicitly:
 
-[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#region:names-return-type-difference)
+[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#names-return-type-difference)
 ```java
     @Test
     @DisplayName("names the return type difference")
@@ -80,7 +80,7 @@ The return-type break is named explicitly:
 
 A narrowed visibility:
 
-[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#region:names-narrowed-visibility)
+[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#names-narrowed-visibility)
 ```java
     @Test
     @DisplayName("names a narrowed visibility")
@@ -100,7 +100,7 @@ A narrowed visibility:
 
 A dropped checked exception:
 
-[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#region:names-dropped-exception)
+[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#names-dropped-exception)
 ```java
     @Test
     @DisplayName("names a dropped checked exception")
@@ -120,7 +120,7 @@ A dropped checked exception:
 
 A changed parameter list:
 
-[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#region:names-parameter-change)
+[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#names-parameter-change)
 ```java
     @Test
     @DisplayName("names a parameter list change")
@@ -141,7 +141,7 @@ A changed parameter list:
 And when nothing parses, the reviewer is still told something — never handed an
 empty report:
 
-[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#region:always-reports-something)
+[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#always-reports-something)
 ```java
     @Test
     @DisplayName("always reports something, even for an unparsable declaration")
@@ -166,7 +166,7 @@ empty report:
   breaking edits as its justification and the warning that callers outside the
   merge may stop compiling or silently bind to different behaviour:
 
-[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#region:warns-about-callers)
+[../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/ApiIncompatibilityConflictResolverTest.java#warns-about-callers)
 ```java
     @Test
     @DisplayName("warns that callers outside the merge may break")

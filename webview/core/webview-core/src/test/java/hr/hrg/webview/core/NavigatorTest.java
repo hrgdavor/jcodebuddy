@@ -336,7 +336,7 @@ public class NavigatorTest {
         Fixture fixture = fixture();
         writeSource(fixture);
 
-        fixture.forHost(host).open("src/Example.java", 1, 1, "region:wiring");
+        fixture.forHost(host).open("src/Example.java", 1, 1, "wiring");
 
         assertEquals(1, host.calls.size());
         assertTrue("the region's content starts on line 4: " + host.calls.get(0),
@@ -444,7 +444,7 @@ public class NavigatorTest {
         writeSource(fixture);
         Files.writeString(fixture.project().resolve("README.md"), "# Docs\\n\\n## install\\n");
 
-        NavigationOutcome region = fixture.forHost(host).open("src/Example.java#region:wiring", 1, 1);
+        NavigationOutcome region = fixture.forHost(host).open("src/Example.java#wiring", 1, 1);
         assertEquals(NavigationOutcome.Reason.OK, region.reason());
         assertTrue("a region spelled in the path: " + host.calls.get(0), host.calls.get(0).endsWith(":4:1"));
 

@@ -61,7 +61,14 @@
 >   for JetBrains, `postMessage` for a mirroring host).
 >
 > So the open question is not whether to build navigation or a server, but whether the graph page **joins**
-> what exists. That is step **3.11** — a design step, updated 2026-10-09, at which point the paragraph above
+> what exists. That is step **3.11**, whose design is now **written and accepted** — 2026-10-10, as
+> [DEC-049](../../doc-hipster-entity/architecture/decisions/DEC-049.md) (`Accepted` by the maintainer the same day,
+> which closes the design step): the page joins the frozen `window.openFile(path, line, column)` contract and
+> resolves each context, implementation and bean FQN against the module's `../index/classes.json` **at build time**
+> (the page cannot fetch at `file://`), reporting an FQN the index does not know rather than guessing its line —
+> today that includes a bean recorded under its *simple* type name, `ObjectMapper`. The implementation is scheduled
+> as **3.11a** (the page join) and **3.11b** (the live-application entry point, `GET /open` plus the port/token
+> discovery story, documented and verified). The design was updated 2026-10-09, at which point the paragraph above
 > it was three steps out of date and this module's README said the page did not exist.
 >
 > Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), with the

@@ -24,17 +24,15 @@ const DOCUMENT_EXTENSIONS = new Set(['md', 'markdown', 'html', 'htm'])
 
 const isJson = (path) => /\.json$/i.test(String(path ?? ''))
 
-/** The JSON rule's reference: dotted key paths, comma-separated. Shared by the prefixed and unprefixed spellings,
- * because the file's type decides the rule, not the spelling. */
+/** The JSON rule's reference: dotted key paths, comma-separated, because the file's type decides the rule. */
 function jsonKeys(reference) {
   const keys = reference.split(',').map((key) => key.trim()).filter((key) => key !== '')
   return keys.length ? { kind: 'json', keys } : null
 }
 
 /**
- * A scope modifier, with or without the `region:` prefix: `-` is the body only, `+` adds the annotations, `++` adds
- * the doc comment too. No language this repository reads has a declaration whose name starts with `-` or `+`, so the
- * reading is unambiguous - and the short spelling is what a writer reaches for.
+ * A scope modifier: `-` is the body only, `+` adds the annotations, `++` adds the doc comment too. No language this
+ * repository reads has a declaration whose name starts with `-` or `+`, so the reading is unambiguous.
  *
  * @returns {{scope: string, name: string}|null} null when what is left cannot be a name
  */
@@ -66,7 +64,7 @@ function extensionOf(path) {
 /**
  * Parse a fragment into a location, or `null` when it is not one.
  *
- * @param path     the file the link points at; its type decides which rule a `region:` reference follows, exactly as
+ * @param path     the file the link points at; its type decides which rule a reference follows, exactly as
  *                 it does for inject-examples (`.json` has no comments to hang a region on, so its reference is a
  *                 list of dotted key paths)
  * @param fragment the part after `#`; one leading `#` is tolerated
@@ -98,22 +96,8 @@ export function parseLocation(path, fragment) {
     return null
   }
 
-  if (text.startsWith('region:')) {
-    const reference = text.slice('region:'.length).trim()
-    if (reference === '') {
-      return null
-    }
-    if (isJson(path)) {
-      return jsonKeys(reference)
-    }
-    // The scope modifier comes off the front; the prefix is never required, only allowed.
-    const scoped = scopedName(reference)
-    return scoped === null ? null : { kind: 'region', name: scoped.name, scope: scoped.scope }
-  }
-
-  // 'region:' is the only prefix this grammar owns. Anything else with a colon is a scheme-like fragment, and a
-  // fragment that looks like one but is not (a mis-cased 'REGION:') is a mistake to report as an ordinary link
-  // rather than a member nobody named that.
+  // A colon is never part of a reference: a fragment that carries one is scheme-like, and is reported as an ordinary
+  // link rather than as a member nobody named that.
   if (text.includes(':')) {
     return null
   }
@@ -124,8 +108,8 @@ export function parseLocation(path, fragment) {
     return jsonKeys(text)
   }
 
-  // The prefix is never required, only allowed: the same spellings work bare, which is what a writer types. No
-  // language here has a declaration whose name starts with '-' or '+', so the reading is unambiguous.
+  // The spellings are bare. No language here has a declaration whose name starts with '-' or '+', so the reading is
+  // unambiguous.
   if (text.startsWith('+') || text.startsWith('-')) {
     const scoped = scopedName(text)
     return scoped === null ? null : { kind: 'region', name: scoped.name, scope: scoped.scope }

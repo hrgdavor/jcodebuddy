@@ -27,7 +27,10 @@ repositories {
     // Navigator). It is a Maven module in this repository rather than a Gradle subproject, because it is
     // also consumed by `webview/jwa-sidecar` outside any IDE, so it is resolved from the local Maven
     // repository: run `mvn -pl webview/core/webview-core install` before building this plugin, or use
-    // the `-PskipWebviewCoreCheck` property only when you know the installed jar is current.
+    // the `-PskipWebviewCoreCheck` property only when you know the installed jar is current. Its
+    // section matcher is a separate artifact: install `hr.hrg.inject:inject-examples` from the
+    // inject-examples repository (`mvn install` in its `java/section`), or take it from Maven Central
+    // once it is published there.
     mavenLocal()
 
     // IntelliJ Platform Gradle Plugin Repositories Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-repositories-extension.html
@@ -49,6 +52,12 @@ dependencies {
         // shadow it. The core's own tests still exercise parsing against the pinned gson version.
         isTransitive = false
     }
+
+    // The section matcher, asked for by name for the same reason: `isTransitive = false` above keeps
+    // everything from arriving with the core, so a dependency the plugin *does* need at runtime has to
+    // be declared here. This is what `Navigator` resolves a link through — without it a click fails
+    // with NoClassDefFoundError. It has no dependencies of its own, so nothing else comes with it.
+    implementation("hr.hrg.inject:inject-examples:0.1.0")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {

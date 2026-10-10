@@ -60,7 +60,7 @@ Base body `int total = 0; return total;`; ours inserts `total += 1;`, theirs
 inserts `total *= 2;` — disjoint edits to the same method (`\n` separates the
 lines of a side):
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:method-body-change-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#method-body-change-sample)
 ```java
     static final String METHOD_BODY_CHANGE_BASE = "int total = 0;\nreturn total;";
     static final String METHOD_BODY_CHANGE_BRANCH1 = "int total = 0;\ntotal += 1;\nreturn total;";
@@ -69,7 +69,7 @@ lines of a side):
 
 The combined body keeps both edits, and still asks for confirmation:
 
-[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#region:combines-disjoint-edits)
+[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#combines-disjoint-edits)
 ```java
     @Test
     @DisplayName("combines disjoint edits but still asks for confirmation")
@@ -90,7 +90,7 @@ The combined body keeps both edits, and still asks for confirmation:
 
 Agreement is reported as such — either side's body is already correct:
 
-[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#region:recognises-identical-edits)
+[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#recognises-identical-edits)
 ```java
     @Test
     @DisplayName("recognises an edit both branches made identically")
@@ -112,7 +112,7 @@ Agreement is reported as such — either side's body is already correct:
 The same shape seen from the combination side — when the change sets intersect,
 the resolver refuses to merge and says the edits collide:
 
-[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#region:reports-overlapping-edits)
+[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#reports-overlapping-edits)
 ```java
     @Test
     @DisplayName("reports overlapping edits instead of combining them")
@@ -136,7 +136,7 @@ A partial overlap — both branches inserted the *same* statement and each
 inserted a different one besides — names the shared statement and keeps branch
 1's body only:
 
-[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#region:reports-overlapping-but-different-edits)
+[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#reports-overlapping-but-different-edits)
 ```java
     @Test
     @DisplayName("names the shared statement when the edits only partly overlap")
@@ -167,7 +167,7 @@ inserted a different one besides — names the shared statement and keeps branch
 Blank lines and comments do not participate in the comparison, so formatting
 and documentation edits cannot make two bodies look different:
 
-[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#region:ignores-blank-lines-and-comments)
+[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#ignores-blank-lines-and-comments)
 ```java
     @Test
     @DisplayName("ignores blank lines and comments when comparing statements")
@@ -183,7 +183,7 @@ and documentation edits cannot make two bodies look different:
 
 A side with no statements leaves nothing to compare:
 
-[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#region:declines-without-statements)
+[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#declines-without-statements)
 ```java
     @Test
     @DisplayName("declines when a side has no statements to compare")
@@ -207,7 +207,7 @@ A side with no statements leaves nothing to compare:
   edit to keep for the colliding statements and names them in the
   justification:
 
-[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#region:recommends-combining)
+[../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MethodBodyChangeConflictResolverTest.java#recommends-combining)
 ```java
     @Test
     @DisplayName("recommends combining disjoint edits")

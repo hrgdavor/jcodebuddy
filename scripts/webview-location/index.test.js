@@ -63,12 +63,13 @@ test('a location always has a summary, and a non-location has none', () => {
 
 test('the scope modifiers read as what they mean', () => {
   const base = 'src/main/java/com/hrg/bla/SomeFile.java'
-  assert.equal(locationSummary(parseLocation(base, 'region:-add')), 'region add (body only)')
-  assert.equal(locationSummary(parseLocation(base, 'region:+add')), 'region add (with annotations)')
-  assert.equal(locationSummary(parseLocation(base, 'region:++add')), 'region add (with annotations and doc comment)')
-  assert.equal(locationSummary(parseLocation(base, 'region:add')), 'region add')
+  assert.equal(locationSummary(parseLocation(base, '-add')), 'region add (body only)')
+  assert.equal(locationSummary(parseLocation(base, '+add')), 'region add (with annotations)')
+  assert.equal(locationSummary(parseLocation(base, '++add')), 'region add (with annotations and doc comment)')
+  // A name with no modifier is a member: a declaration, or a heading anchor in a document.
+  assert.equal(locationSummary(parseLocation(base, 'add')), 'member add')
   assert.equal(locationSummary(parseLocation(base, 'L42-L58')), 'lines 42–58')
-  assert.equal(locationSummary(parseLocation('package.json', 'region:name,scripts.test')), 'keys name, scripts.test')
+  assert.equal(locationSummary(parseLocation('package.json', 'name,scripts.test')), 'keys name, scripts.test')
 })
 
 test('a missing or non-string fragment is not a location', () => {

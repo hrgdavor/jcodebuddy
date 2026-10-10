@@ -108,7 +108,7 @@ analysis and inlined. In such cases a builder (level `BUILDER`) is
 sufficient, and forcing a record adds unnecessary allocation and
 coupling.
 
-[../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java](../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java#region:DOCS)
+[../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java](../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/iface/Person.java#DOCS)
 ```java
 @View(gen = hr.hrg.hipster.entity.api.GenLevel.META)
 interface Person{
@@ -119,7 +119,7 @@ interface Person{
 
 Start point V2 (record)
 
-[../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java](../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java#region:DOCS)
+[../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java](../../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/record/Person.java#DOCS)
 ```java
 record Person(
     String name,

@@ -31,7 +31,7 @@ Every resolver test starts from the shared per-type sample in
 both branches added a different comment line above the same statement
 (`\n` separates the lines of a side; branch 1 is ours, branch 2 is theirs):
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:comment-add-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#comment-add-sample)
 ```java
     static final String COMMENT_ADD_BASE = "int total = 0;";
     static final String COMMENT_ADD_BRANCH1 = "// branch 1 explains the running total\nint total = 0;";
@@ -40,7 +40,7 @@ both branches added a different comment line above the same statement
 
 Both comments survive in the union:
 
-[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#region:keeps-both-branches-comments)
+[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#keeps-both-branches-comments)
 ```java
     @Test
     @DisplayName("keeps the documentation from both branches")
@@ -58,7 +58,7 @@ Both comments survive in the union:
 An identical comment on both sides is a duplicate, not a disagreement — the
 union keeps it exactly once:
 
-[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#region:drops-duplicate-comments)
+[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#drops-duplicate-comments)
 ```java
     @Test
     @DisplayName("drops a comment both branches wrote identically")
@@ -80,7 +80,7 @@ union keeps it exactly once:
 Line comments, single-line block comments and javadoc lines are all collected,
 with their markers stripped:
 
-[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#region:recognises-comment-forms)
+[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#recognises-comment-forms)
 ```java
     @Test
     @DisplayName("recognises line and block comments")
@@ -100,7 +100,7 @@ Code changes with no comment text on either side are not this resolver's
 conflict; it declines and the MANUAL fallback takes over (still offering fix
 paths):
 
-[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#region:declines-when-no-comments-present)
+[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#declines-when-no-comments-present)
 ```java
     @Test
     @DisplayName("declines when neither branch added a comment")
@@ -124,7 +124,7 @@ paths):
   (naming the count), with keeping only one side as the alternative for when a
   comment is stale or wrong:
 
-[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#region:recommends-keeping-both)
+[../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/CommentAddConflictResolverTest.java#recommends-keeping-both)
 ```java
     @Test
     @DisplayName("recommends keeping both branches' documentation")

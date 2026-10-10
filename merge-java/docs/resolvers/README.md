@@ -81,7 +81,7 @@ repository root first).
 
 An example starts with an *injection marker*: a line that is nothing but a
 markdown link labelled with its own target path, optionally with a
-`#region:name` fragment on the target to inject part of a larger file.
+`#name` fragment on the target to inject part of a larger file.
 Paths resolve relative to the document holding the marker — the root the package
 defaults to — so every marker doubles as a working link to its source. The
 fenced code block immediately below the marker holds the current content of that
@@ -89,7 +89,7 @@ file or region.
 The next block is a live marker, exactly as it appears in the raw markdown of
 every README here, materialized from the canonical `IMPORT_ADD` sample:
 
-[../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:import-add-sample)
+[../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#import-add-sample)
 ```java
     static final String IMPORT_ADD_BASE = "import java.util.List;";
     static final String IMPORT_ADD_BRANCH1 = "import java.util.List;\nimport java.math.BigDecimal;";

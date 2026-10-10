@@ -12,7 +12,7 @@
  *   <li><b>Absolute paths stay exactly as written.</b> A page whose document directory is known resolves every target
  *       against it, so the host receives `D:/proj/src/A.java#add` — a path, as the frozen contract says `data-open`
  *       is.</li>
- *   <li><b>The fragment rides along.</b> `#add`, `#L42-L58`, `#region:name` are the location (plan step 9.7); the
+ *   <li><b>The fragment rides along.</b> `#add`, `#-open`, `#L42-L58` are the location (plan step 9.7); the
  *       host is the side that resolves one, so losing it here means every click lands on line 1 no matter how right
  *       the rest is.</li>
  *   <li><b>Nothing is claimed about the file.</b> A browser has no filesystem, so the test is a source extension and

@@ -474,11 +474,11 @@ test('splitTarget keeps the file, a fallback line, and the fragment verbatim', (
   expect(splitTarget('src/A.java#someMethod')).toEqual({
     target: 'src/A.java', line: 1, fragment: 'someMethod',
   });
-  expect(splitTarget('src/A.java#region:++add')).toEqual({
-    target: 'src/A.java', line: 1, fragment: 'region:++add',
+  expect(splitTarget('src/A.java#++add')).toEqual({
+    target: 'src/A.java', line: 1, fragment: '++add',
   });
-  expect(splitTarget('package.json#region:scripts.test')).toEqual({
-    target: 'package.json', line: 1, fragment: 'region:scripts.test',
+  expect(splitTarget('package.json#scripts.test')).toEqual({
+    target: 'package.json', line: 1, fragment: 'scripts.test',
   });
   expect(splitTarget('#install')).toEqual({ target: '', line: 1, fragment: 'install' });
 });

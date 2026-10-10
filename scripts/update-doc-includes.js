@@ -3,7 +3,7 @@
 // from the repository root as `npm run inject:examples` / `check:examples`),
 // whose
 // injection marker is a whole line that is nothing but a self-labelled link to its
-// source, optionally with a #region:name fragment. All documents have been migrated
+// source, optionally with a #name fragment. All documents have been migrated
 // to that format; this file is kept because DEC-027 cites it as the evidence that
 // scripts/ already ran Bun JavaScript side tools, and because two of its features
 // have no successor yet: glob CLI patterns and ~suffix short-path lookup (which in

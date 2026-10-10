@@ -124,7 +124,7 @@ public final class Navigator {
                         resolution.absolute(), "could not read the file: " + unreadable.getMessage());
             }
         }
-        LocationResolution at = LocationResolver.resolve(location, text);
+        LocationResolution at = LocationResolver.resolve(location, text, resolution.absolute());
         if (at == null) {
             if (isDocument(resolution.absolute())) {
                 // A bare name in a document is its heading anchor: the viewer knows better than we do.

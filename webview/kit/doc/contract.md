@@ -70,11 +70,10 @@ Two rules follow from the table, and they are the two a generator gets wrong:
 
 #### 1.1.1 A `data-open` path may name a place inside the file
 
-**Added 2026-10-04; nothing above changes.** A path may carry a fragment that names a place rather than a line, in
-the spellings the repository's documentation already uses: `#L42`, `#L42-L58`, `#someMethod`, `#region:add` with a
-`-`/`+`/`++` scope modifier (or the same without the `region:` prefix, because the prefix is never required, only
-allowed), and a `.json` key path. `data-member` stays what § 1.1 says it is — display metadata for a tooltip, never
-a routing key; the fragment inside `data-open` is the routing key.
+**Added 2026-10-04; revised 2026-10-10; nothing above changes.** A path may carry a fragment that names a place
+rather than a line, in the spellings the repository's documentation already uses: `#L42`, `#L42-L58`, `#someMethod`,
+`#add` with a `-`/`+`/`++` scope modifier, and a `.json` key path. `data-member` stays what § 1.1 says it is —
+display metadata for a tooltip, never a routing key; the fragment inside `data-open` is the routing key.
 
 A page still has to write nothing clever: it puts the whole target on `data-open` and passes it through, and the
 only fragment it needs to understand is a plain `#L42`, which it can settle without asking anyone. A page that

@@ -35,7 +35,7 @@ Both branches reworked `process()` — ours added a `charge()` call, theirs a
 `refund()` call — while `audit()` stayed put (`\n` separates the lines of a
 side):
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:structural-change-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#structural-change-sample)
 ```java
     static final String STRUCTURAL_CHANGE_BASE = "void process() { audit(); }\nvoid audit() { }";
     static final String STRUCTURAL_CHANGE_BRANCH1 = "void process() { audit(); charge(); }\nvoid audit() { }";
@@ -44,7 +44,7 @@ side):
 
 The outcome is always a human decision, with options attached:
 
-[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#region:always-requires-human-decision)
+[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#always-requires-human-decision)
 ```java
     @Test
     @DisplayName("always hands structural change to a human")
@@ -66,7 +66,7 @@ The outcome is always a human decision, with options attached:
 Nothing was applied, and the caller can detect that mechanically — the resolved
 code is the manual marker, never a half-merged guess:
 
-[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#region:emits-manual-marker)
+[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#emits-manual-marker)
 ```java
     @Test
     @DisplayName("emits the manual marker as the resolved code")
@@ -84,7 +84,7 @@ code is the manual marker, never a half-merged guess:
 The fix paths offer both branches' structures *and* a combined reading, and the
 impact statement counts the lines each choice would discard:
 
-[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#region:describes-both-sides)
+[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#describes-both-sides)
 ```java
     @Test
     @DisplayName("describes what each branch does that the other does not")
@@ -104,7 +104,7 @@ impact statement counts the lines each choice would discard:
 
 The manual escape hatch is always among them:
 
-[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#region:offers-manual-escape-hatch)
+[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#offers-manual-escape-hatch)
 ```java
     @Test
     @DisplayName("always offers the manual escape hatch")
@@ -124,7 +124,7 @@ A structural decision is a one-off judgement about *this* restructuring;
 replaying it onto a different future conflict would apply an answer to a
 question nobody asked:
 
-[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#region:never-sticky)
+[../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/StructuralChangeConflictResolverTest.java#never-sticky)
 ```java
     @Test
     @DisplayName("never marks a structural resolution as replayable")

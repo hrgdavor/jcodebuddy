@@ -5,11 +5,14 @@ The decision it implements is [DEC-036](../../doc-hipster-entity/architecture/de
 
 > **Status: prototype — the generated shape is not settled.** hipster-ioc is in its prototyping phase, and
 > the point of this generator is to *find* that shape: DEC-036 is `Trial`, the output is expected to be
-> rewritten, and the committed sample in `hipster-ioc-test` is a sample rather than a contract. The work
-> that depends on the shape being decided is deliberately unscheduled and listed as `[TBD]` in
-> [the plan's Phase 3 banner](../../plans/unified-plan.md) (steps 3.4–3.11), each naming the decision it
-> waits on. What this prototype does **not** do: cross-context wiring from `dependencies()`, `init*`
-> methods, region markers, and the `@Circular` two-phase form.
+> rewritten, and the committed sample in `hipster-ioc-test` is a sample rather than a contract. What this
+> prototype does **not** do is now an empty list — cross-context wiring from `dependencies()`, the `init*`
+> methods, the region markers and the `@Circular` two-phase form landed in plan steps 3.4–3.7, and the
+> module's [ROADMAP](../doc/ROADMAP.md) records each one (this paragraph said the opposite until 2026-10-10,
+> which is the paragraph being corrected rather than the work). The one item of this phase still writing no
+> code is **3.11**, whose design is written as
+> [DEC-049](../../doc-hipster-entity/architecture/decisions/DEC-049.md) and whose implementation is scheduled
+> as 3.11a/3.11b in [the plan](../../plans/unified-plan.md).
 >
 > **The wrong shape this prototype had is gone (2026-10-03, plan step 3.0e part two).** hipster-ioc is a
 > **project-wide** generator — it needs the project's type relations (who extends whom, who implements what),

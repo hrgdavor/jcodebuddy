@@ -14,7 +14,7 @@ Two branches each append a method next to the one the base already declared — 
 `refund()` on the other. Git reports the block as a conflict because the insertions are adjacent, and a
 line-based comparison sees "both sides replaced this region", which is true and useless:
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:member-add-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#member-add-sample)
 ```java
     static final String MEMBER_ADD_BASE = "void audit() { log.write(); }";
     static final String MEMBER_ADD_BRANCH1 = "void audit() { log.write(); }\nvoid charge() { ledger.debit(); }";
@@ -27,7 +27,7 @@ The two additions do not interact: nothing collides, and each call site binds to
 So the answer is `KEEP_BOTH`, at `AnalysisLevel.STRUCTURE` — a claim about declared members, which is why
 a text-level claim has no business outranking it.
 
-[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#region:keeps-both-distinct-members)
+[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#keeps-both-distinct-members)
 ```java
     @Test
     @DisplayName("keeps both additions, and the shared member exactly once")
@@ -69,7 +69,7 @@ class with `method audit() is already defined` — which is how the same defect 
 A shared signature means only one member can exist — that is not additive, so it is declined and the
 block becomes a human's decision rather than a guess:
 
-[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#region:refuses-a-shared-signature)
+[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#refuses-a-shared-signature)
 ```java
     @Test
     @DisplayName("refuses two additions with the same signature - only one member can exist")
@@ -93,7 +93,7 @@ A union that cannot be shown sound is refused too. If the two sides share anythi
 prefix, both remainders contain it and it would be repeated — and rather than reason about which repeated
 lines happen to be harmless, the construction is declined:
 
-[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#region:union-needs-a-shared-prefix)
+[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#union-needs-a-shared-prefix)
 ```java
     @Test
     @DisplayName("the union is refused when the sides share more than a prefix")
@@ -147,7 +147,7 @@ call it a member addition:
 
 The canonical detection test, including the removal and identical-addition refusals:
 
-[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#region:detector-requires-a-known-base)
+[../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/MemberAddConflictResolverTest.java#detector-requires-a-known-base)
 ```java
     @Test
     @DisplayName("detection requires a base side, so an addition is never confused with a deletion")

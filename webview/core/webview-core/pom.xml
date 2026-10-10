@@ -20,11 +20,23 @@
         payload it sends, the origin allow-list, the sliding-window rate limiter, the address-bar
         normaliser, the project path jail, the EditorHost SPI, and the Navigator that funnels every
         transport through one place. No IntelliJ, no VS Code, no HTTP framework - only the JDK, Gson
-        for the bridge payload and JUnit for the tests, so it builds and tests in the Maven reactor
-        with no IDE and no Gradle.
+        for the bridge payload, `hr.hrg.inject:inject-examples` for the section matcher, and JUnit for
+        the tests, so it builds and tests in the Maven reactor with no IDE and no Gradle.
     </description>
 
     <dependencies>
+        <!--
+          The section matcher. `@hrg/inject-examples` is the source of truth for targeting beyond a line
+          number, and this is its Java port: the grammar, the block scanner, the language table and the
+          resolution all live there, so a host asks one library where a reference lands instead of
+          growing a second grammar beside it. It has no dependencies of its own, which is what makes it
+          consumable by an IDE plugin. Version is explicit because the parent does not manage it yet.
+        -->
+        <dependency>
+            <groupId>hr.hrg.inject</groupId>
+            <artifactId>inject-examples</artifactId>
+            <version>0.1.0</version>
+        </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>

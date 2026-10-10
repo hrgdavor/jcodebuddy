@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The READMEs under {@code docs/resolvers/} carry injection markers — lines
  * that are nothing but a markdown link labelled with its own target path,
- * optionally with a {@code #region:name} fragment — that the
+ * optionally with a {@code #name} fragment — that the
  * {@code @hrg/inject-examples} package (Node, declared as a dependency of the
  * repository root's {@code package.json} and run through {@code npx} by the
  * root {@code inject:examples} script) materializes into the fenced
@@ -228,7 +228,7 @@ class ResolverDocsTest {
     /**
      * Parses one line as an injection marker: the trimmed line is exactly
      * {@code [label](target)}, the label is the target's path, and the target
-     * carries no fragment or a {@code #region:name} fragment — the same rules
+     * carries no fragment or a {@code #name} fragment — the same rules
      * the {@code @hrg/inject-examples} package applies (which additionally
      * ignores marker-shaped lines inside fenced blocks; the fenced blocks of
      * these READMEs are injection blocks whose contents are Java, never
@@ -250,10 +250,10 @@ class ResolverDocsTest {
         String region = null;
         if (hash >= 0) {
             String fragment = target.substring(hash + 1);
-            if (!fragment.startsWith("region:") || fragment.length() == "region:".length()) {
+            if (fragment.isEmpty()) {
                 return null;
             }
-            region = fragment.substring("region:".length());
+            region = fragment;
         }
         return new Marker(line.trim(), path, region);
     }
@@ -389,7 +389,7 @@ class ResolverDocsTest {
                     marker.path().endsWith("ConflictFixtures.java")
                         && sampleRegion.equals(marker.region()))) {
                 problems.add(folder + "/README.md does not include the canonical sample region "
-                    + "ConflictFixtures.java#region:" + sampleRegion);
+                    + "ConflictFixtures.java#" + sampleRegion);
             }
             String ownTest = simpleName + "Test.java";
             if (markers.stream().noneMatch(marker -> marker.path().contains(ownTest))) {

@@ -4,7 +4,7 @@
   "grammar": [
     "A fragment is the part after '#' in a link, without the '#'. One leading '#' is tolerated and stripped.",
     "'L<line>' and 'L<from>-L<to>' are explicit positions and always win.",
-    "'region:<ref>' names a region or a declaration, with inject-examples' scope modifiers '-' (body only), '+' (with annotations) and '++' (with annotations and the doc comment).",
+    "'<ref>' names a region or a declaration, with inject-examples' scope modifiers '-' (body only), '+' (with annotations) and '++' (with annotations and the doc comment).",
     "In a .json file the reference is a comma-separated list of dotted key paths, because JSON has no comments to hang a region on.",
     "A bare name is a declaration in a source file, and a heading anchor in a document (.md, .markdown, .html, .htm) - which is why a link to '#install' in a README is left to the page itself.",
     "Anything else is not a location and stays an ordinary link."
@@ -59,75 +59,69 @@
       "expect": { "kind": "line", "line": 42 }
     },
     {
-      "why": "the inject-examples marker form: a region or declaration, no scope modifier",
+      "why": "a declaration or a region, by bare name",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "region:add",
-      "expect": { "kind": "region", "name": "add", "scope": "" }
+      "fragment": "add",
+      "expect": { "kind": "member", "name": "add" }
     },
     {
       "why": "the body only, without the signature",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "region:-add",
+      "fragment": "-add",
       "expect": { "kind": "region", "name": "add", "scope": "-" }
     },
     {
       "why": "the declaration and its annotations",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "region:+add",
+      "fragment": "+add",
       "expect": { "kind": "region", "name": "add", "scope": "+" }
     },
     {
       "why": "the declaration, annotations and doc comment - the form the resolver docs use",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "region:++toString",
+      "fragment": "++toString",
       "expect": { "kind": "region", "name": "toString", "scope": "++" }
     },
     {
       "why": "three plus signs is malformed, not a region called '+add'",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "region:+++add",
+      "fragment": "+++add",
       "expect": null
     },
     {
       "why": "two minus signs is malformed, not a region called '-add'",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "region:--add",
-      "expect": null
-    },
-    {
-      "why": "an empty reference names nothing",
-      "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "region:",
+      "fragment": "--add",
       "expect": null
     },
     {
       "why": "regions exist in every file type, markdown included",
       "path": "merge-java/docs/resolvers/README.md",
-      "fragment": "region:add",
-      "expect": { "kind": "region", "name": "add", "scope": "" }
+      "fragment": "add",
+      "expect": { "kind": "member", "name": "add" }
     },
     {
       "why": "in .json the reference is the JSON rule: one dotted key path",
       "path": "package.json",
-      "fragment": "region:scripts.test",
+      "fragment": "scripts.test",
       "expect": { "kind": "json", "keys": ["scripts.test"] }
     },
     {
       "why": "and the JSON rule takes a list, which is why the two rules are told apart by the file's type",
       "path": "package.json",
-      "fragment": "region:name,scripts.test",
+      "fragment": "name,scripts.test",
       "expect": { "kind": "json", "keys": ["name", "scripts.test"] }
     },
     {
       "why": "whitespace around the keys is the writer's formatting, not part of a key",
       "path": "package.json",
-      "fragment": "region:name, scripts.test",
+      "fragment": "name, scripts.test",
       "expect": { "kind": "json", "keys": ["name", "scripts.test"] }
     },
     {
       "why": "an array element is a dotted path like any other",
       "path": "package.json",
-      "fragment": "region:keywords.0",
+      "fragment": "keywords.0",
       "expect": { "kind": "json", "keys": ["keywords.0"] }
     },
     {
@@ -155,9 +149,9 @@
       "expect": { "kind": "member", "name": "SomeFile.Builder.withName" }
     },
     {
-      "why": "a scheme-like fragment is not a location; 'region:' is the only prefix the grammar owns",
+      "why": "a scheme-like fragment is not a location; a colon is never part of a reference",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "REGION:add",
+      "fragment": "mailto:dev@example.com",
       "expect": null
     },
     {

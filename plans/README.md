@@ -14,16 +14,17 @@ that proves it. A plan whose work is done is kept as history or moved to [`../ar
 whose work is open appears as steps in [`unified-plan.md`](unified-plan.md). Anything an agent *runs* lives
 in `scripts/` as Bun JavaScript — never here, and never as a shell script.
 
-**Still live as of 2026-10-09 — slimmed the same day, and 11 steps are open.** The 91 finished step records now
+**Still live as of 2026-10-10 — slimmed on 2026-10-09, and 11 step ids are open.** The 91 finished step records now
 live in [`../archive/plans/unified-plan-2026-10.md`](../archive/plans/unified-plan-2026-10.md), so
-[`unified-plan.md`](unified-plan.md) answers one question — what is left — in ~540 lines instead of ~7,000.
-What remains: **3.11**, now scheduled as a **design step** (its blocker, 3.8's page, is done — the exploration
-found that the repository's `window.openFile` bridge already IS the editor-agnostic navigation, so the design is
-about joining it and reusing the existing host rather than building either); an ACP spike (5.3, a person); five
-human observations on a real editor (8.1–8.5); and three steps added the same day from the 6.1–6.5 refinement —
-**6.8** (nested, collection and polymorphic patch application), **6.9** (the converter manifest) and **6.10**
-(the source → metadata JSON pass), which are the remainders steps 6.1, 6.2 and 6.4 left behind while being
-closed as steps.
+[`unified-plan.md`](unified-plan.md) answers one question — what is left — in ~700 lines instead of ~7,000.
+What remains: **3.11 is closed** — its **design landed on 2026-10-10** as
+[`DEC-049`](../doc-hipster-entity/architecture/decisions/DEC-049.md) and the maintainer **accepted it the same day**,
+which is the condition its "Done when" named — so what is left of it is the work the design scheduled: **3.11a**
+(the graph page joins the class index and navigates) and **3.11b** (the outside-the-browser entry point,
+documented and verified); an ACP spike (5.3, a person); five human observations on a real editor (8.1–8.5); and
+three steps added on 2026-10-09 from the 6.1–6.5 refinement — **6.8** (nested, collection and polymorphic patch
+application), **6.9** (the converter manifest) and **6.10** (the source → metadata JSON pass), which are the
+remainders steps 6.1, 6.2 and 6.4 left behind while being closed as steps.
 
 Step 8.5 (Zed editor integration) was added the same day: Zed is the one editor in the suite that is neither
 JetBrains nor VS Code, and the only one with a first-class agent protocol, so it gets its own survey and decision.

@@ -39,7 +39,7 @@ The base declares `process()`; ours adds `process(String id)`, theirs adds
 `process(String id, boolean force)` — same name, different parameter lists
 (`\n` separates the lines of a side):
 
-[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#region:overload-add-sample)
+[../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java](../../../src/test/java/com/codebuddy/merge/ConflictFixtures.java#overload-add-sample)
 ```java
     static final String OVERLOAD_ADD_BASE = "void process() { }";
     static final String OVERLOAD_ADD_BRANCH1 = "void process() { }\nvoid process(String id) { }";
@@ -50,7 +50,7 @@ Resolved with a type context attached (the tests use the JDK context from
 [`TestTypeContexts`](../../../src/test/java/com/codebuddy/merge/TestTypeContexts.java)),
 both overloads are kept:
 
-[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#region:keeps-distinct-overloads)
+[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#keeps-distinct-overloads)
 ```java
     @Test
     @DisplayName("keeps both methods when the parameter lists differ")
@@ -77,7 +77,7 @@ versus `java.util.List<java.lang.String>`. A text comparison calls them
 distinct and keeps both, which does not compile. Resolved types make them one
 signature, so the resolver escalates:
 
-[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#region:resolves-equivalent-parameter-spellings)
+[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#resolves-equivalent-parameter-spellings)
 ```java
     @Test
     @DisplayName("resolves the same parameter written differently")
@@ -103,7 +103,7 @@ signature, so the resolver escalates:
 The converse holds just as firmly — same raw name, genuinely different resolved
 types, kept automatically:
 
-[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#region:keeps-overloads-with-different-resolved-types)
+[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#keeps-overloads-with-different-resolved-types)
 ```java
     @Test
     @DisplayName("keeps overloads whose resolved parameter types genuinely differ")
@@ -124,7 +124,7 @@ types, kept automatically:
 
 ## Example: literally identical signatures
 
-[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#region:escalates-on-identical-signatures)
+[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#escalates-on-identical-signatures)
 ```java
     @Test
     @DisplayName("escalates when both branches add the same parameter list")
@@ -150,7 +150,7 @@ The same canonical sample, resolved *without* a type context: the resolver
 refuses rather than compares text, nothing may be applied, and the reviewer is
 told how to fix the setup:
 
-[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#region:escalates-without-type-context)
+[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#escalates-without-type-context)
 ```java
     @Test
     @DisplayName("escalates to manual when no type context is supplied")
@@ -175,7 +175,7 @@ told how to fix the setup:
 Two branches adding *differently named* methods is not an overload conflict —
 there is no shared name to arbitrate:
 
-[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#region:declines-for-different-method-names)
+[../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java](../../../src/test/java/com/codebuddy/merge/OverloadAddConflictResolverTest.java#declines-for-different-method-names)
 ```java
     @Test
     @DisplayName("declines when it is not the same method name")

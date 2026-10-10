@@ -24,7 +24,7 @@ import static org.junit.Assert.assertTrue;
  * same claims the page half ({@code scripts/webview-location}, JavaScript) asserts.
  *
  * <p>That is the point of the file: a page renders a link and a host resolves it, so if the two disagree about what
- * {@code #region:++add} means, one of them navigates somewhere wrong. A rule that lives in two languages is only one
+ * {@code #++add} means, one of them navigates somewhere wrong. A rule that lives in two languages is only one
  * rule while both are checked against the same table, and — as {@code webview/conformance/README.md} says — neither
  * reader generates the table, because generating it would only prove one implementation agrees with itself.</p>
  */
@@ -144,15 +144,14 @@ public class LocationFragmentTest {
     @Test
     public void theScopeModifiersReadAsWhatTheyMean() {
         String path = "src/main/java/com/hrg/bla/SomeFile.java";
-        assertEquals("region add (body only)", LocationFragment.parse(path, "region:-add").summary());
-        assertEquals("region add (with annotations)", LocationFragment.parse(path, "region:+add").summary());
+        assertEquals("region add (body only)", LocationFragment.parse(path, "-add").summary());
+        assertEquals("region add (with annotations)", LocationFragment.parse(path, "+add").summary());
         assertEquals("region add (with annotations and doc comment)",
-            LocationFragment.parse(path, "region:++add").summary());
-        assertEquals("region add", LocationFragment.parse(path, "region:add").summary());
-        // The simple spellings say the same thing, which is the point of accepting them.
-        assertEquals(LocationFragment.parse(path, "region:++add"), LocationFragment.parse(path, "++add"));
+            LocationFragment.parse(path, "++add").summary());
+        // A name with no modifier is a member: a declaration, or a heading anchor in a document.
+        assertEquals("member add", LocationFragment.parse(path, "add").summary());
         assertEquals("lines 42\u201358", LocationFragment.parse(path, "L42-L58").summary());
-        assertEquals("keys name, scripts.test", LocationFragment.parse("package.json", "region:name,scripts.test")
+        assertEquals("keys name, scripts.test", LocationFragment.parse("package.json", "name,scripts.test")
             .summary());
     }
 
@@ -162,6 +161,7 @@ public class LocationFragmentTest {
         assertNull("a name needs a file type to be told from a heading anchor", LocationFragment.parse(null, "add"));
         assertNull(LocationFragment.parse(null, null));
         assertNull(LocationFragment.parse("A.java", ""));
-        assertNull(LocationFragment.parse("A.java", "REGION:add"));
+        assertNull("a scheme-like fragment is not a location",
+            LocationFragment.parse("A.java", "mailto:dev@example.com"));
     }
 }

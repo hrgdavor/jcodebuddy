@@ -212,7 +212,7 @@ show with `//#region your-region-name` / `//#endregion` comments, add the
 fixture regions the guide's steps already produced (`ConflictFixtures` holds
 the canonical sample as a `//#region <type>-sample` block), and reference them
 with *injection markers* — single lines that are nothing but a markdown link
-labelled with its own target path (`[path](path#region:name)`), pointing at
+labelled with its own target path (`[path](path#name)`), pointing at
 material under `src/test/`. Then materialize with:
 
 ```
