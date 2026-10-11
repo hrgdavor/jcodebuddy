@@ -30,12 +30,13 @@
           number, and this is its Java port: the grammar, the block scanner, the language table and the
           resolution all live there, so a host asks one library where a reference lands instead of
           growing a second grammar beside it. It has no dependencies of its own, which is what makes it
-          consumable by an IDE plugin. Version is explicit because the parent does not manage it yet.
+          consumable by an IDE plugin. The version is managed by the parent POM, so the pin lives in one
+          place; it is not on Maven Central yet, so it resolves from the local repository after
+          `mvn install` in the inject-examples checkout's `java/section`.
         -->
         <dependency>
             <groupId>hr.hrg.inject</groupId>
             <artifactId>inject-examples</artifactId>
-            <version>0.1.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>

@@ -42,6 +42,13 @@ says so instead of staying empty.
 
 > **`webview-core` must be installed first**: the injected script, its parser, the allow-list and the rate
 > limiter live in `webview/core/webview-core`; run its `mvn install` before `./gradlew test`.
+>
+> **Two more artifacts come from the local Maven repository, not from Central.** The section matcher
+> `hr.hrg.inject:inject-examples` (built from the inject-examples repository's `java/section` with
+> `mvn install`) is not published yet, and the plugin declares it a second time here because the core is
+> pulled with `isTransitive = false` — this build reads the parent POM's `<dependencyManagement>` for
+> nothing, so it pins the version itself and would fail at *runtime* (`NoClassDefFoundError` on a click),
+> not at build time, if the line were dropped.
 
 ```bash
 ./gradlew runIde        # start a sandbox IDE with the plugin installed

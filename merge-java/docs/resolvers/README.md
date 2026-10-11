@@ -11,19 +11,19 @@ The resolvers are the ones registered in
 [`ConflictResolvers.defaultResolvers()`](../../src/main/java/com/codebuddy/merge/ConflictResolvers.java),
 in registration order:
 
-| Resolver                             | Conflict type         | Declared handling | Max evidence  | Sticky | Documentation                                                                            |
-| ------------------------------------ | --------------------- | ----------------- | ------------- | ------ | ---------------------------------------------------------------------------------------- |
-| `ImportConflictResolver`             | `IMPORT_ADD`          | AUTO              | TEXT_FILE     | no     | [import-conflict-resolver](import-conflict-resolver/README.md)                           |
-| `CommentAddConflictResolver`         | `COMMENT_ADD`         | AUTO              | TEXT_LOCAL    | no     | [comment-add-conflict-resolver](comment-add-conflict-resolver/README.md)                 |
-| `ConstantAddConflictResolver`        | `CONSTANT_ADD`        | AUTO              | TEXT_FILE     | no     | [constant-add-conflict-resolver](constant-add-conflict-resolver/README.md)               |
-| `OverloadAddConflictResolver`        | `OVERLOAD_ADD`        | AUTO              | PROJECT_TYPES | no     | [overload-add-conflict-resolver](overload-add-conflict-resolver/README.md)               |
+| Resolver                             | Conflict type         | Declared handling | Max evidence   | Sticky | Documentation                                                                            |
+| ------------------------------------ | --------------------- | ----------------- | -------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `ImportConflictResolver`             | `IMPORT_ADD`          | AUTO              | TEXT_FILE      | no     | [import-conflict-resolver](import-conflict-resolver/README.md)                           |
+| `CommentAddConflictResolver`         | `COMMENT_ADD`         | AUTO              | TEXT_LOCAL     | no     | [comment-add-conflict-resolver](comment-add-conflict-resolver/README.md)                 |
+| `ConstantAddConflictResolver`        | `CONSTANT_ADD`        | AUTO              | TEXT_FILE      | no     | [constant-add-conflict-resolver](constant-add-conflict-resolver/README.md)               |
+| `OverloadAddConflictResolver`        | `OVERLOAD_ADD`        | AUTO              | PROJECT_TYPES  | no     | [overload-add-conflict-resolver](overload-add-conflict-resolver/README.md)               |
 | `MethodBodyChangeConflictResolver`   | `METHOD_BODY_CHANGE`  | REVIEW            | TEXT_INTRALINE | no     | [method-body-change-conflict-resolver](method-body-change-conflict-resolver/README.md)   |
-| `TypeChangeConflictResolver`         | `TYPE_CHANGE`         | REVIEW            | PROJECT_TYPES | no     | [type-change-conflict-resolver](type-change-conflict-resolver/README.md)                 |
-| `RenameConflictResolver`             | `VARIABLE_RENAME`     | STICKY            | TEXT_LOCAL    | yes    | [rename-conflict-resolver](rename-conflict-resolver/README.md)                           |
-| `PackageChangeConflictResolver`      | `PACKAGE_CHANGE`      | STICKY            | TEXT_LOCAL    | yes    | [package-change-conflict-resolver](package-change-conflict-resolver/README.md)           |
-| `StructuralChangeConflictResolver`   | `STRUCTURAL_CHANGE`   | MANUAL            | STRUCTURE     | no     | [structural-change-conflict-resolver](structural-change-conflict-resolver/README.md)     |
-| `ApiIncompatibilityConflictResolver` | `API_INCOMPATIBILITY` | MANUAL            | TEXT_LOCAL    | no     | [api-incompatibility-conflict-resolver](api-incompatibility-conflict-resolver/README.md) |
-| `MemberAddConflictResolver`          | `MEMBER_ADD`          | AUTO              | PROJECT_TYPES | no     | [member-add-conflict-resolver](member-add-conflict-resolver/README.md)                   |
+| `TypeChangeConflictResolver`         | `TYPE_CHANGE`         | REVIEW            | PROJECT_TYPES  | no     | [type-change-conflict-resolver](type-change-conflict-resolver/README.md)                 |
+| `RenameConflictResolver`             | `VARIABLE_RENAME`     | STICKY            | TEXT_LOCAL     | yes    | [rename-conflict-resolver](rename-conflict-resolver/README.md)                           |
+| `PackageChangeConflictResolver`      | `PACKAGE_CHANGE`      | STICKY            | TEXT_LOCAL     | yes    | [package-change-conflict-resolver](package-change-conflict-resolver/README.md)           |
+| `StructuralChangeConflictResolver`   | `STRUCTURAL_CHANGE`   | MANUAL            | STRUCTURE      | no     | [structural-change-conflict-resolver](structural-change-conflict-resolver/README.md)     |
+| `ApiIncompatibilityConflictResolver` | `API_INCOMPATIBILITY` | MANUAL            | TEXT_LOCAL     | no     | [api-incompatibility-conflict-resolver](api-incompatibility-conflict-resolver/README.md) |
+| `MemberAddConflictResolver`          | `MEMBER_ADD`          | AUTO              | PROJECT_TYPES  | no     | [member-add-conflict-resolver](member-add-conflict-resolver/README.md)                   |
 
 The *max evidence* column is
 [`ConflictResolver.maxAnalysisLevel()`](../../src/main/java/com/codebuddy/merge/ConflictResolver.java): the
@@ -123,18 +123,36 @@ the directory is walked rather than listed.
 1. **Examples only from test fixtures.** In the per-resolver READMEs, every
    fenced code block must be an injection block — a marker followed by the
    materialized snippet. Hand-written example code is not accepted, because it
-   is the copy that goes stale.
-2. **Nothing may drift.**
+   is the copy that goes stale. `bun scripts/check-resolver-docs.js` fails when a
+   fenced block is not preceded by a marker, and when a marker includes anything
+   outside `src/test/`.
+2. **Nothing may drift — the reference implementation checks it.**
+   `npm run check:examples` runs the `@hrg/inject-examples` package, the
+   reference implementation of section searching, and fails when a rendered
+   block and its source disagree, when a marker points at a missing file or
+   region, or when a region name is ambiguous within its file. This comparison
+   *was* mirrored by a Java test until 2026-10-11; the mirror was deleted,
+   because a second implementation of the reference drifts. Editing a fixture
+   or a marked test **requires** re-running `npm run inject:examples`, and
+   `npm run check:examples` is what proves it happened.
+3. **The page policy is checked by the reference's own parser.**
+   [`scripts/check-resolver-docs.js`](../../../scripts/check-resolver-docs.js)
+   walks these pages and asks `@hrg/inject-examples` what a marker is
+   (`parseMarker`, `findMarkers`), where the fenced blocks are (`fenceRanges`)
+   and what a region directive is (`regionDirective`) — so its answer cannot
+   disagree with the injector's. It fails when a page shows fewer than four
+   examples, omits the canonical sample region of its conflict type (the type
+   the index table states), omits an example from the resolver's own test, or
+   includes an example from outside `src/test/`. Run it as
+   `bun scripts/check-resolver-docs.js` or `npm run check:resolver-docs`.
+4. **What needs the Java registry stays in Java.**
    [`ResolverDocsTest`](../../src/test/java/com/codebuddy/merge/ResolverDocsTest.java)
-   runs with the module's test suite and fails the build when a rendered block
-   and its source disagree, when a marker points at a missing file or region,
-   when a region name is ambiguous within its file, when an included path is
-   not test material, when a folder does not correspond to a registered
-   resolver (or a registered resolver has no folder), or when a relative link
-   is dead. Editing a fixture or a marked test **requires** re-running the
-   injection script; the test suite says so with the offending block in the
-   failure message.
-3. **A new example starts as a new test.** If a README needs an example the
+   fails while a folder does not correspond to a registered resolver (or a
+   registered resolver has no folder), while the index omits a resolver's folder
+   or its declared analysis level, and while a README names neither its resolver
+   nor its conflict type. Relative links are checked for the whole repository by
+   `scripts/check-repo-links.mjs`.
+5. **A new example starts as a new test.** If a README needs an example the
    fixtures do not have, the example is first added to the test sources — a
    three-way fixture under
    [`src/test/resources/fixtures/`](../../src/test/resources/fixtures)

@@ -4,7 +4,7 @@
   "grammar": [
     "A fragment is the part after '#' in a link, without the '#'. One leading '#' is tolerated and stripped.",
     "'L<line>' and 'L<from>-L<to>' are explicit positions and always win.",
-    "'<ref>' names a region or a declaration, with inject-examples' scope modifiers '-' (body only), '+' (with annotations) and '++' (with annotations and the doc comment).",
+    "'<ref>' names a region or a declaration, with inject-examples' scope modifiers '-' (body only), '+' (with annotations) and '++' (with annotations and the doc comment). The reference implementation owns that spelling: a modifier may lead the whole reference or trail its last segment, and a reference may be a path ('Cart/add').",
     "In a .json file the reference is a comma-separated list of dotted key paths, because JSON has no comments to hang a region on.",
     "A bare name is a declaration in a source file, and a heading anchor in a document (.md, .markdown, .html, .htm) - which is why a link to '#install' in a README is left to the page itself.",
     "Anything else is not a location and stays an ordinary link."
@@ -81,6 +81,24 @@
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
       "fragment": "++toString",
       "expect": { "kind": "region", "name": "toString", "scope": "++" }
+    },
+    {
+      "why": "the reference implementation also accepts the modifier trailing the last segment, its own canonical spelling: reading 'add-' as a name would be a second grammar beside it",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "add-",
+      "expect": { "kind": "region", "name": "add", "scope": "-" }
+    },
+    {
+      "why": "and a reference may be a path - 'Cart/add' is the spelling the webview README names - so the name a link carries is the path it wrote",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "Cart/add",
+      "expect": { "kind": "member", "name": "Cart/add" }
+    },
+    {
+      "why": "with the modifier leading the last segment, which the reference implementation normalises to the same answer as 'Cart/add-'",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "Cart/-add",
+      "expect": { "kind": "region", "name": "Cart/add", "scope": "-" }
     },
     {
       "why": "three plus signs is malformed, not a region called '+add'",

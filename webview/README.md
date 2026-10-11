@@ -163,11 +163,18 @@ search to discover; a fragment that is *not* a location — a heading anchor in 
 the page's own line standing instead of failing.
 
 Where the rules live: [`conformance/location-fragments.json`](conformance/location-fragments.json) is the table of
-claims, written by hand; `webview-core`'s `LocationFragment` (the grammar) and `LocationResolver` (a name to a
-position, with its reasoning in the javadoc) are the host side; `scripts/webview-location` is the same grammar in
-JavaScript for tools that want to classify a link without a host; and
+claims, written by hand; `webview-core`'s `LocationFragment` (the classification) and `LocationResolver` (a name to a
+position, with its reasoning in the javadoc) are the host side; `scripts/webview-location` is the same
+classification in JavaScript for tools that want to classify a link without a host; and
 [`markdown-view/`](../markdown-view/README.md) is the page that renders a document whose links
 navigate this way.
+
+**The reference spelling is the reference implementation's.** Both readers ask `@hrg/inject-examples` for the
+grammar of a reference — the host side its Java port, `hr.hrg.inject:inject-examples`, and the JavaScript module its
+`lib/section.mjs` — so neither language keeps a second spelling that could drift. What stays local is only what that
+library's module boundary excludes: an explicit `L42`/`L42-L58` position, a `.json` key path, and the
+classification itself. `scripts/webview-location` importing the package is the one recorded exception to
+`scripts/`'s dependency-free rule (root `AGENTS.md` § 2), satisfied from a local build until 1.1.0 is published.
 
 **Try it:** [`doc/location-links-demo.md`](doc/location-links-demo.md) is a page written in every spelling above, each
 link pointing at a real file in this repository - the demo, and the dogfooding. Open it through a host and every link

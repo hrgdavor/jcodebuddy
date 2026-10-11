@@ -224,11 +224,23 @@ point the CLI at the whole `docs/resolvers/` directory, so a new page there need
 no script change: the directory is walked, and every `*.md` below it is
 processed in the same run.
 
-`ResolverDocsTest` then re-verifies in the Java build that every rendered block
-still equals its source, so a doc example can only change by changing the test
-it came from. If a page needs an example the tests do not have, write the test
-first — a doc example that is not a passing test's fixture is exactly the copy
-that goes stale. See [docs/resolvers/README.md](docs/resolvers/README.md).
+`npm run check:examples` is then the comparison that proves nothing is stale: it
+is the `@hrg/inject-examples` package's own check, and the plan's EXAMPLES gate.
+(`ResolverDocsTest` used to mirror that comparison in Java; the mirror was
+deleted on 2026-10-11, because a second implementation of the reference
+implementation drifts and the reference wins.) Two checks cover the rest:
+
+- `bun scripts/check-resolver-docs.js` — the page policy, asked of the reference
+  implementation's own marker parser: at least four examples, the canonical
+  sample region of the conflict type, an example from the resolver's own test,
+  every fenced block preceded by a marker, and every example from `src/test/`;
+- `ResolverDocsTest` — what needs the Java registry: the folders against
+  `ConflictResolvers.defaultResolvers()`, the index rows, and a page naming its
+  resolver and conflict type.
+
+If a page needs an example the tests do not have, write the test first — a doc
+example that is not a passing test's fixture is exactly the copy that goes
+stale. See [docs/resolvers/README.md](docs/resolvers/README.md).
 
 ## Checklist
 

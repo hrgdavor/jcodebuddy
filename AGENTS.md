@@ -182,7 +182,8 @@ code or documentation for this repository:
   fact to a report means adding it to that JSON, never teaching
   the Java generator to emit HTML. A **vanilla** renderer lives under
   `scripts/`, which stays **dependency-free** (no `node_modules` under it, no
-  `"dependencies"` in any package under it), while a **`jsx6`** page is built and
+  `"dependencies"` in any package under it; a `scripts/` tool that must read a marker or a section is the
+  recorded exception — see § 2's `@hrg/inject-examples` rule), while a **`jsx6`** page is built and
   therefore gets a home of its own that may declare a dependency (DEC-027's
   2026-10-02 note). Every source file that metadata
   describes is named by the module's **class index**
@@ -532,6 +533,27 @@ canonical statement of a boundary that has no other home.
     be runnable and reviewable by whoever reads the repository next,
     on whatever machine they have. A script that only runs in one
     shell on one OS is invisible wiring for the *workflow*.
+- **One recorded exception to `scripts/`'s dependency-free rule (2026-10-11): a `scripts/` tool may import
+  `@hrg/inject-examples` when what it checks *is* a marker or a section.** That package is the **reference
+  implementation of section searching**, so an internal implementation of the same grammar is a second
+  spelling that drifts — and the reference wins every disagreement: a section-matching or marker-recognition
+  behaviour that differs between an internal implementation and `@hrg/inject-examples` is a bug in the
+  internal one. Two tools use it today: `scripts/webview-location` reads the reference parser
+  (`lib/section.mjs`'s `parseReference`) for the grammar of a link's fragment, keeping only the rules that
+  library's module boundary excludes (an explicit `L42`/`L42-L58` position, a `.json` key path); and
+  `scripts/check-resolver-docs.js` asks it what a marker is (`parseMarker`, `findMarkers`), where the fenced
+  blocks are (`fenceRanges`) and what a region directive is (`regionDirective`) instead of carrying a regex
+  that silently disagreed with it. The Java half of the same contract (`webview-core`'s `LocationFragment`)
+  asks the same implementation's Java port (`hr.hrg.inject:inject-examples`), so the two languages cannot
+  spell a reference differently. **The exception is narrow and stays narrow**: no `package.json` of its own,
+  no `node_modules` under `scripts/`, no bundler, no CDN and no network at view time — these tools use the
+  repository's root dependency set, exactly as the root `package.json`'s own tooling does.
+  **`scripts/webview-location` needs `@hrg/inject-examples` 1.1.0** — the version that first ships
+  `lib/section.mjs`, where the registry still has 1.0.1 — so that subpath is satisfied from a local build of
+  the package (`npm pack`, then `npm install --no-save --no-package-lock <tarball>`) until it is published,
+  the same posture the Java matcher is consumed in from `~/.m2` until it reaches Maven Central.
+  `scripts/check-resolver-docs.js` uses only the package root, which 1.0.1 already exports, so it has no such
+  dependency. Delete the local install and move the range when the package is published.
 - **A JavaScript utility that does a lot of work reports its duration as the last line it prints** — through
   [`scripts/lib/timing.js`](scripts/lib/timing.js), so no two tools invent a format: `links checked in 294ms
   (272 files)`, not a bare number and not silence. The reason is the file walker's reason

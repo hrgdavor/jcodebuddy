@@ -337,6 +337,18 @@
                 <artifactId>webview-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- The section matcher, one of the two artifacts that ship from the inject-examples repository
+                 (`@hrg/inject-examples` for JavaScript, this one for the JVM). `webview-core`'s
+                 LocationResolver asks it where a link's fragment lands, so a host keeps no second grammar.
+                 It is NOT on Maven Central yet: the version is managed here so the pin exists in one place,
+                 and the artifact resolves from the local repository after `mvn install` in that project's
+                 `java/section` (see webview-jetbrains/build.gradle.kts, which cannot read this management
+                 block and therefore pins the same version itself). -->
+            <dependency>
+                <groupId>hr.hrg.inject</groupId>
+                <artifactId>inject-examples</artifactId>
+                <version>0.1.0</version>
+            </dependency>
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>jcodebuddy-agent</artifactId>

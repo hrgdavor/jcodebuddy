@@ -17,10 +17,11 @@ package com.codebuddy.merge;
  * documentation under {@code docs/resolvers/} includes those regions verbatim
  * through the repository's example-injection markers
  * ({@code npm run inject:examples} from the repository root, backed by the
- * published {@code @hrg/inject-examples} package), and {@code ResolverDocsTest}
- * fails the build when a rendered example and the fixture here disagree. Editing a
- * string below therefore edits the documentation example with it; there is no
- * second copy to forget.
+ * published {@code @hrg/inject-examples} package — the reference implementation
+ * of section searching), and {@code npm run check:examples} fails when a
+ * rendered example and the fixture here disagree. Editing a string below
+ * therefore edits the documentation example with it; there is no second copy to
+ * forget.
  */
 final class ConflictFixtures {
 

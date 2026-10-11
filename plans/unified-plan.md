@@ -43,13 +43,14 @@ green. Tick the box in [§ Progress](#progress) in the same commit that finishes
 
 ### Command vocabulary
 
-| Name         | Command                                                                | Notes                                                   |
-| ------------ | ---------------------------------------------------------------------- | ------------------------------------------------------- |
-| **GATE**     | `bun scripts/mvn-jdk25.js`                                             | the recorded gate: the hipster-entity module set, `clean test`, incremental compilation off. Resolves JDK 25 itself. |
-| **MODULE**   | `bun scripts/mvn-jdk25.js -pl <modules> -am test`                      | any module set; add `install` instead of `test` when a consumer resolves it from the local repository |
-| **LINKS**    | `node scripts/check-repo-links.mjs` and `node webview/check-links.mjs` | every relative link in every Markdown file must resolve |
-| **EXAMPLES** | `npm run check:examples`                                               | the `@hrg/inject-examples` markers in `merge-java/docs/resolvers` and `materialization-levels.md` are not stale |
-| **JMH**      | `bun run scripts/run-jmh.js --include "<regex>"`                       | decision-grade results need the default profile (3 forks, 6×2 s warmup, 8×2 s measurement); never record a trimmed run as evidence |
+| Name           | Command                                                                | Notes                                                   |
+| -------------- | ---------------------------------------------------------------------- | ------------------------------------------------------- |
+| **GATE**       | `bun scripts/mvn-jdk25.js`                                             | the recorded gate: the hipster-entity module set, `clean test`, incremental compilation off. Resolves JDK 25 itself. |
+| **MODULE**     | `bun scripts/mvn-jdk25.js -pl <modules> -am test`                      | any module set; add `install` instead of `test` when a consumer resolves it from the local repository |
+| **LINKS**      | `node scripts/check-repo-links.mjs` and `node webview/check-links.mjs` | every relative link in every Markdown file must resolve |
+| **EXAMPLES**   | `npm run check:examples`                                               | the `@hrg/inject-examples` markers in `merge-java/docs/resolvers` and `materialization-levels.md` are not stale |
+| **DOC-POLICY** | `bun scripts/check-resolver-docs.js`                                   | the page policy of `merge-java/docs/resolvers`, asked of the reference implementation's own `parseMarker`/`findMarkers`: ≥4 examples per page, the canonical sample region, the resolver's own test, no unmarked fence, examples only from `src/test/` |
+| **JMH**        | `bun run scripts/run-jmh.js --include "<regex>"`                       | decision-grade results need the default profile (3 forks, 6×2 s warmup, 8×2 s measurement); never record a trimmed run as evidence |
 
 **Sizes** are rough: **S** ≤ half a day, **M** 1–2 days, **L** 3+ days. **Who** is `agent` (doable in a
 checkout with no human) or `human` (needs a person, a running IDE, or an external tool).

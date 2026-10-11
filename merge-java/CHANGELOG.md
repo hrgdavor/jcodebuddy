@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **2026-10-11 - the doc-injection mirror is deleted: the package checks the examples and a Bun checker asks
+  it about markers; the Java test keeps only the registry checks.** `ResolverDocsTest` carried its own marker
+  parse, region extraction, fence handling and a byte comparison of every rendered block - a second
+  implementation of `@hrg/inject-examples`, the reference implementation of section searching. All of that is
+  gone. Drift is `npm run check:examples` (the plan's EXAMPLES gate), made by the reference itself; the page
+  policy is `bun scripts/check-resolver-docs.js` (`npm run check:resolver-docs`), which imports the reference's
+  own `parseMarker`/`findMarkers`/`fenceRanges`/`regionDirective` instead of a regex — the deleted Java regex
+  was fence-blind, accepted a scheme-like target the reference rejects, and refused the empty `#` fragment the
+  reference reads as a whole-file marker. The Java test now holds the three checks that need the resolver
+  registry: folders against `ConflictResolvers.defaultResolvers()`, the index rows with their declared analysis
+  levels, and a page naming its resolver and conflict type. Relative links stay with the repository's LINKS
+  gate. merge-java: 936 tests green; the checker: 12 pages, 89 markers, 0 problems.
 - **2026-10-03 - the review page can record a decision, and a command replays it.** Plan step 4.3: per
   resolution the page offers a fix-path choice, an editable result and Accept, then exports what was accepted
   as `decisions.json`; `DecisionRecorder` records each one into `BranchConflictStore` as a sticky replay, so

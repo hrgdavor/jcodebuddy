@@ -262,7 +262,7 @@ merge-java/
 │   ├── WHAT_IS_BASE.md
 │   └── resolvers/                       <- one folder per resolver; examples
 │       ├── README.md                       included from test fixtures, sync
-│       └── <resolver-name>/README.md       enforced by ResolverDocsTest
+│       └── <resolver-name>/README.md       sync: check:examples; policy: check-resolver-docs.js
 ├── .jcodebuddy/
 │   ├── README.md
 │   ├── metadata/schema.json
@@ -290,7 +290,7 @@ merge-java/
     └── test/java/com/codebuddy/merge/
         ├── AbstractResolverTest.java          reusable resolver contract tests
         ├── ConflictFixtures.java              one sample conflict per type, as doc-includable regions
-        ├── ResolverDocsTest.java              keeps docs/resolvers in sync with what it includes
+        ├── ResolverDocsTest.java              the docs/resolvers checks that need the resolver registry
         └── *Test.java                         the suite
 ```
 
@@ -303,8 +303,14 @@ implementing three methods, and add one line to
 if you forget the last step. Then add its page under
 [docs/resolvers/](docs/resolvers/README.md): `ResolverDocsTest` fails while a
 registered resolver has no folder (or a folder has no registered resolver), and
-keeps every example in those pages byte-identical with the fixture or test it
-is included from.
+the page's example policy is `bun scripts/check-resolver-docs.js` — at least four
+examples, the canonical sample region of the resolver's conflict type, an example
+from the resolver's own test, every fenced block preceded by a marker, and every
+example from `src/test/`. Nothing drifts because `npm run check:examples` — the
+`@hrg/inject-examples` package itself, the reference implementation of section
+searching — compares every rendered block with the file or region it came from.
+The Java test no longer mirrors that comparison; its javadoc says which check
+owns what.
 
 ## Tests
 

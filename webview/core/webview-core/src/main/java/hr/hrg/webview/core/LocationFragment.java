@@ -3,6 +3,10 @@ package hr.hrg.webview.core;
 import java.util.List;
 import java.util.Objects;
 
+import hr.hrg.inject.section.Scope;
+import hr.hrg.inject.section.SectionReference;
+import hr.hrg.inject.section.SectionReferenceException;
+
 /**
  * Where a link points, INSIDE a file — the host half of the location grammar.
  *
@@ -12,24 +16,31 @@ import java.util.Objects;
  * the ones that are only a location (a method name, a line range), so a host can be told what the page meant instead
  * of being handed a guessed line number.</p>
  *
- * <h3>One grammar, two languages</h3>
- * <p>The page half is {@code scripts/webview-location} (JavaScript, for the renderers). Both read the same claims —
- * {@code webview/conformance/location-fragments.json} — and neither generates them, per
- * {@code webview/conformance/README.md}: a rule that lives in two languages is only one rule while both are checked
- * against the same table. <strong>Change the vectors first, then this class and the module beside it.</strong></p>
+ * <h3>The reference grammar is the reference implementation's</h3>
+ * <p>The spelling of a reference — its path segments, the {@code -}/{@code +}/{@code ++} scope, the normalisation
+ * of a leading or a trailing modifier, and the exact errors — belongs to {@code @hrg/inject-examples}, the reference
+ * implementation of section searching, which this module consumes as {@code hr.hrg.inject:inject-examples}. The
+ * JavaScript half ({@code scripts/webview-location}) asks the same implementation through its {@code lib/section.mjs},
+ * so the two languages cannot spell a reference differently. What is local here is only the classification around
+ * the reference: an explicit position, a {@code .json} key path, and whether a bare name is a location at all.</p>
+ *
+ * <p>Both readers assert the same claims — {@code webview/conformance/location-fragments.json} — and neither
+ * generates them, per {@code webview/conformance/README.md}: a rule that lives in two languages is only one rule
+ * while both are checked against the same table. <strong>Change the vectors first, then this class and the module
+ * beside it.</strong></p>
  *
  * <h3>The spellings</h3>
  * <ul>
  *   <li>{@code L42} and {@code L42-L58} — an explicit position, which always wins.</li>
- *   <li>{@code add}, {@code -add}, {@code +add}, {@code ++add} — a region or a declaration, with the scope
- *       modifiers {@code -} (the body only), {@code +} (with the annotations) and {@code ++} (with the annotations
- *       and the doc comment): given a name the host resolves it as a declaration or as a region, because a link
- *       should not have to know which one the author wrote.</li>
+ *   <li>{@code add}, {@code -add}, {@code +add}, {@code ++add}, {@code add-}, {@code Cart/add} — a region or a
+ *       declaration, with the scope modifiers {@code -} (the body only), {@code +} (with the annotations) and
+ *       {@code ++} (with the annotations and the doc comment): given a name the host resolves it as a declaration or
+ *       as a region, because a link should not have to know which one the author wrote.</li>
  *   <li>In a {@code .json} file the reference is dotted key paths, because JSON has no declarations
  *       and no comments to hang a region on.</li>
  *   <li>Anything else is not a location: a fragment carrying a colon (a scheme-like one), a malformed position, an
- *       empty fragment, or a bare name in a document — where the page scrolls to its own heading first, and only
- *       asks a host when the name is not one.</li>
+ *       empty fragment, a reference the implementation refuses, or a bare name in a document — where the page
+ *       scrolls to its own heading first, and only asks a host when the name is not one.</li>
  * </ul>
  */
 public final class LocationFragment {
@@ -132,11 +143,20 @@ public final class LocationFragment {
             return jsonKeys(text);
         }
 
-        // The spellings are bare. No language this repository reads has a declaration whose name starts with '-' or
-        // '+', so reading a leading modifier as a modifier is unambiguous.
-        if (text.startsWith("+") || text.startsWith("-")) {
-            Scoped scoped = scopedName(text);
-            return scoped == null ? null : region(scoped.name, scoped.scope);
+        // The reference itself — its path, its scope modifier, its normalisation and its errors — is the reference
+        // implementation's grammar, not a second copy here. `SectionReference.parse` is the Java counterpart of the
+        // parser the JavaScript half asks, so `add-`, `Cart/add` and `Cart/-add` read the same in both languages,
+        // and a malformed spelling (`+++add`, `--add`, `++`) is refused rather than classified as a name.
+        SectionReference reference;
+        try {
+            reference = SectionReference.parse(text);
+        } catch (SectionReferenceException malformed) {
+            return null;
+        }
+
+        String name = String.join("/", reference.segments());
+        if (reference.scope() != Scope.DECLARATION) {
+            return region(name, modifier(reference.scope()));
         }
 
         // A bare name is a declaration OR a '#region <name>' directive: the resolver tries the declaration and then
@@ -144,12 +164,22 @@ public final class LocationFragment {
         // caught there, where the file's text is available.
         //
         // In a document it is a heading anchor as well, and the page's own scroll wins: a renderer knows its headings,
-        // so it only asks a host when the name is not one.
+        // so it only asks a host when the name is not one - which is why a bare name needs a file type at all.
         if (path != null && !path.isEmpty()) {
-            return member(text);
+            return member(name);
         }
 
         return null;
+    }
+
+    /** The `-`/`+`/`++` spelling this contract uses for a scope the reference implementation parsed. */
+    private static String modifier(Scope scope) {
+        return switch (scope) {
+            case BODY -> "-";
+            case ANNOTATED -> "+";
+            case DOCUMENTED -> "++";
+            case DECLARATION -> "";
+        };
     }
 
     private static boolean isJson(String path) {
@@ -166,29 +196,6 @@ public final class LocationFragment {
             }
         }
         return keys.isEmpty() ? null : json(keys);
-    }
-
-    /** A scope modifier with the name it applies to, or {@code null} when what is left cannot be a name. */
-    private static Scoped scopedName(String reference) {
-        String scope = "";
-        String name = reference;
-        if (reference.startsWith("++")) {
-            scope = "++";
-            name = reference.substring(2);
-        } else if (reference.startsWith("+")) {
-            scope = "+";
-            name = reference.substring(1);
-        } else if (reference.startsWith("-")) {
-            scope = "-";
-            name = reference.substring(1);
-        }
-        if (name.isEmpty() || name.startsWith("+") || name.startsWith("-")) {
-            return null;
-        }
-        return new Scoped(scope, name);
-    }
-
-    private record Scoped(String scope, String name) {
     }
 
     public Kind kind() {

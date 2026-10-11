@@ -1,26 +1,31 @@
 /**
- * Where a link points, INSIDE a file — the whole location grammar in one dependency-free module.
+ * Where a link points, INSIDE a file — the page half of the location contract.
  *
  * A generated page links to source, and a link that can only say "line 42" cannot say what the documentation
- * actually means. The repository's own docs are written with `@hrg/inject-examples`, whose markers name a real file
- * and a location inside it — a region, or a declaration by name, with a scope modifier — because a sample has to come
- * from somewhere. This module reads those spellings, and the ones that are only a location (a method name, a line
- * range), so a page can hand a host something better than a guessed line number.
+ * actually means. The repository's own docs are written with `@hrg/inject-examples` markers, whose references name a
+ * real file and a location inside it — a region or a declaration by name, with a scope modifier — because a sample
+ * has to come from somewhere. This module classifies those references for the tools that read a link without a host
+ * running.
  *
- * The contract this serves is `webview/kit/doc/contract.md`: `data-open` carries the path, `data-fragment` carries
- * the fragment this module parses, and `data-member` stays what the contract says it is — display metadata, never a
- * routing key.
+ * **The reference grammar is not defined here.** `@hrg/inject-examples` is the reference implementation of section
+ * searching, and its `lib/section.mjs` owns the spelling of a reference: the path segments, the `-`/`+`/`++` scope,
+ * the normalisation of a leading or trailing modifier, and the errors. This module asks it (`parseReference`) and
+ * adds only the two rules that library's module boundary deliberately excludes — an explicit `L42`/`L42-L58`
+ * position, and a `.json` key path — plus the classification a page needs. An internal spelling of the same grammar
+ * is what this module used to carry, and it was removed: a second implementation drifts, and the reference wins.
  *
- * The grammar is pinned by `webview/conformance/location-fragments.json`, which the host side
- * (`webview-core`'s `LocationFragment`) asserts against as well: one rule in two languages is only one rule while
- * both are checked against the same claims.
+ * The claims are pinned by `webview/conformance/location-fragments.json`, which this module and `webview-core`'s
+ * `LocationFragment` (Java) both assert against: one rule in two languages is only one rule while both are checked
+ * against the same claims.
+ *
+ * The dependency is the one exception to `scripts/`'s dependency-free rule — see root `AGENTS.md` § 2 — and it is
+ * satisfied from a local build of the package until 1.1.0 is on the registry: see this directory's `README.md`.
  */
+
+import { SectionReferenceError, parseReference } from '@hrg/inject-examples/lib/section.mjs'
 
 /** The kinds a fragment can be. `null` means "not a location" — an ordinary link. */
 export const LOCATION_KINDS = ['line', 'range', 'region', 'json', 'member']
-
-/** Extensions whose bare fragment is a heading anchor rather than a declaration. */
-const DOCUMENT_EXTENSIONS = new Set(['md', 'markdown', 'html', 'htm'])
 
 const isJson = (path) => /\.json$/i.test(String(path ?? ''))
 
@@ -30,36 +35,8 @@ function jsonKeys(reference) {
   return keys.length ? { kind: 'json', keys } : null
 }
 
-/**
- * A scope modifier: `-` is the body only, `+` adds the annotations, `++` adds the doc comment too. No language this
- * repository reads has a declaration whose name starts with `-` or `+`, so the reading is unambiguous.
- *
- * @returns {{scope: string, name: string}|null} null when what is left cannot be a name
- */
-function scopedName(reference) {
-  let scope = ''
-  let name = reference
-  if (reference.startsWith('++')) {
-    scope = '++'
-    name = reference.slice(2)
-  } else if (reference.startsWith('+')) {
-    scope = '+'
-    name = reference.slice(1)
-  } else if (reference.startsWith('-')) {
-    scope = '-'
-    name = reference.slice(1)
-  }
-  if (name === '' || name.startsWith('+') || name.startsWith('-')) {
-    return null
-  }
-  return { scope, name }
-}
-const isDocument = (path) => DOCUMENT_EXTENSIONS.has(extensionOf(path))
-
-function extensionOf(path) {
-  const match = /\.([a-z0-9]+)$/i.exec(String(path ?? ''))
-  return match ? match[1].toLowerCase() : ''
-}
+/** The scope modifier this contract spells for a reference scope; `''` is a plain name. */
+const MODIFIERS = { body: '-', annotated: '+', documented: '++' }
 
 /**
  * Parse a fragment into a location, or `null` when it is not one.
@@ -91,7 +68,7 @@ export function parseLocation(path, fragment) {
   }
 
   // A fragment that starts like a position and is not one ('L42-') is a page's mistake, not a declaration called
-  // 'L42-' - the same reasoning that makes '+++add' malformed rather than a region called '+add'.
+  // 'L42-' - the reference implementation refuses it for the same reason, and the answer must not differ.
   if (/^L\d/.test(text)) {
     return null
   }
@@ -103,25 +80,36 @@ export function parseLocation(path, fragment) {
   }
 
   // In .json there are no declarations to find, so any bare reference is the JSON rule's key paths - checked
-  // before the modifiers, because a leading '-' is a legal key character and not a modifier there.
+  // before the reference grammar, because a leading '-' is a legal key character and not a modifier there.
   if (isJson(path)) {
     return jsonKeys(text)
   }
 
-  // The spellings are bare. No language here has a declaration whose name starts with '-' or '+', so the reading is
-  // unambiguous.
-  if (text.startsWith('+') || text.startsWith('-')) {
-    const scoped = scopedName(text)
-    return scoped === null ? null : { kind: 'region', name: scoped.name, scope: scoped.scope }
+  // The reference itself is the reference implementation's to read. It throws on a spelling that is not a
+  // reference at all ('+++add', '--add', '++'), which is this module's `null`: a malformed reference is not a
+  // location. Any other failure is a real one and travels.
+  let reference
+  try {
+    reference = parseReference(text)
+  } catch (error) {
+    if (error instanceof SectionReferenceError) {
+      return null
+    }
+    throw error
   }
 
-  // A bare name is a declaration OR a `#region <name>` directive: the host tries the declaration and then the region,
-  // because a link should not have to know which one the author wrote. A name that is neither is caught there.
-  //
-  // In a document it is a heading anchor as well, and the page's own scroll wins: a renderer knows its headings, so it
-  // only asks a host when the name is not one.
+  const name = reference.segments.join('/')
+  const scope = MODIFIERS[reference.scope]
+  if (scope !== undefined) {
+    return { kind: 'region', name, scope }
+  }
+
+  // A bare name is a declaration OR a `#region <name>` directive: the host tries the declaration and then the
+  // region, because a link should not have to know which one the author wrote. A name that is neither is caught
+  // there. In a document it is a heading anchor as well, and the page's own scroll wins: a renderer knows its
+  // headings, so it only asks a host when the name is not one - which is why a name needs a file type at all.
   if (String(path ?? '') !== '') {
-    return { kind: 'member', name: text }
+    return { kind: 'member', name }
   }
 
   return null
