@@ -7,6 +7,9 @@ import com.google.gson.JsonParser;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -79,6 +82,9 @@ public final class MarkdownView implements Disposable {
     /** The absolute path of the document on screen, or null. Written and read on the EDT and the VFS thread. */
     private volatile @Nullable String shownPath;
 
+    /** The view data last handed to the page, so two save triggers for one Ctrl+S render once. */
+    private volatile @Nullable String pushedView;
+
     /** The generator setting the cached template was produced from, and the template itself. */
     private volatile @Nullable String cachedGenerator;
     private volatile @Nullable String cachedTemplate;
@@ -92,6 +98,18 @@ public final class MarkdownView implements Disposable {
                     @Override
                     public void after(@NotNull List<? extends VFileEvent> events) {
                         onVfsChanges(events);
+                    }
+                });
+        // And listen for the save itself, on the platform's own callback for it. Two triggers on purpose: the VFS
+        // event carries the save flag that keeps typing out, while this one is the platform saying "this document
+        // was saved" in its own words - so the refresh does not depend on one flag keeping its meaning, which is
+        // exactly the kind of silent failure a reader cannot diagnose (the page simply keeps the old text). Both
+        // triggers for one save render once, because `pushSaved` drops a repeat of the same view data.
+        ApplicationManager.getApplication().getMessageBus().connect(this)
+                .subscribe(FileDocumentManagerListener.TOPIC, new FileDocumentManagerListener() {
+                    @Override
+                    public void beforeDocumentSaving(@NotNull Document document) {
+                        onDocumentSaving(document);
                     }
                 });
     }
@@ -109,6 +127,10 @@ public final class MarkdownView implements Disposable {
         return lower.endsWith(".md") || lower.endsWith(".markdown");
     }
 
+    /** One rendered document: the URL of the page written for it, and the view data substituted into that page. */
+    record Rendered(@NotNull String pageUrl, @NotNull String json) {
+    }
+
     /**
      * Render a Markdown file in the tool window.
      *
@@ -116,16 +138,45 @@ public final class MarkdownView implements Disposable {
      *         readable - each with a log line saying which
      */
     public boolean show(@NotNull String filePath) {
+        Rendered rendered = render(filePath);
+        if (rendered == null) {
+            return false;
+        }
+        WebViewPanel panel = WebViewService.getInstance(project).getPanel();
+        // The page is always the same file, so its URL never changes - and a browser does not reload a URL it
+        // already has. Asking for a load here is what made the second right-click (and the address bar after it)
+        // do nothing at all: the file on disk was new and the page on screen was the old document. Pushing the
+        // new view data re-renders in place, which is the same road the save refresh takes.
+        if (panel != null && canPushInsteadOfLoad(panel.currentUrl(), rendered.pageUrl())) {
+            panel.pushMarkdownView(rendered.json());
+            return true;
+        }
+        // No page of ours on screen: the tool window owns the browser and decides the first page (see PendingLoad).
+        return WebViewService.getInstance(project).openInPanel(rendered.pageUrl());
+    }
+
+    /**
+     * Writes the page for a document and remembers the document as the one on screen — everything except showing it.
+     *
+     * <p>Split out of {@link #show} for the tool window's startup, which has to render a document <em>before</em>
+     * there is a panel to show it in: a restart brings the window back on the page URL, and that page is a snapshot
+     * with no document behind it (see {@link #documentToRestore}). Rendering the document again is what puts both
+     * the current content and the link back — remembered in the project's state, so the next restart has it too.
+     *
+     * @return the page URL and its view data, or null when the path is unusable, outside the project, unreadable,
+     *         or the template is missing
+     */
+    @Nullable Rendered render(@NotNull String filePath) {
         PathResolver resolver = PathResolver.forProject(project.getBasePath());
         PathResolution resolution = resolver.resolve(filePath);
         if (resolution == null) {
             LOG.info("Markdown view: not a usable path: " + filePath);
-            return false;
+            return null;
         }
         if (resolution.escaped()) {
             // The rule of 2026-10-04: no webview plugin reaches a file outside the project root, by any route.
             LOG.info("Markdown view: refusing a path outside the project: " + filePath);
-            return false;
+            return null;
         }
 
         Path file = Path.of(resolution.absolute());
@@ -134,32 +185,124 @@ public final class MarkdownView implements Disposable {
             markdown = Files.readString(file, StandardCharsets.UTF_8);
         } catch (IOException | RuntimeException unreadable) {
             LOG.info("Markdown view: could not read " + file + ": " + unreadable);
-            return false;
+            return null;
         }
 
         String json = viewJson(markdown, file, classIndexFor(file));
         String page = substitute(readTemplate(), json);
         if (page == null) {
-            return false;
+            return null;
         }
         Path written = writePage(page);
         if (written == null) {
-            return false;
+            return null;
         }
 
         shownPath = resolution.absolute();
-        String pageUrl = "file:///" + slash(written);
-        WebViewPanel panel = WebViewService.getInstance(project).getPanel();
-        // The page is always the same file, so its URL never changes - and a browser does not reload a URL it
-        // already has. Asking for a load here is what made the second right-click (and the address bar after it)
-        // do nothing at all: the file on disk was new and the page on screen was the old document. Pushing the
-        // new view data re-renders in place, which is the same road the save refresh takes.
-        if (panel != null && canPushInsteadOfLoad(panel.currentUrl(), pageUrl)) {
-            panel.pushMarkdownView(json);
-            return true;
+        // The page is one file for every document, so the document is remembered separately - which is what a
+        // restart needs to re-link the window it brings back (the reported bug of 2026-10-11).
+        PluginStateService.getInstance(project).setLastMarkdownDocument(shownPath);
+        pushedView = json;
+        return new Rendered("file:///" + slash(written), json);
+    }
+
+    /** The document this view rendered last, from the project's state; empty when there is none. */
+    public @NotNull String lastDocument() {
+        return PluginStateService.getInstance(project).getLastMarkdownDocument();
+    }
+
+    /**
+     * The document the page currently on disk was rendered for, or empty.
+     *
+     * <p>The self-healing half of the restart fix: a build older than 2026-10-11 remembered only the page URL, so the
+     * first restart after the change has no remembered document — and the page is the only other witness, because it
+     * embeds the view data it was rendered from, {@code docPath} among it. One file read at tool-window creation is
+     * what makes that first restart work instead of asking the reader to open the file once more; the value is then
+     * remembered for every restart after it.
+     */
+    @NotNull String documentInCurrentPage() {
+        String base = project.getBasePath();
+        if (base == null) {
+            return "";
         }
-        // No page of ours on screen: the tool window owns the browser and decides the first page (see PendingLoad).
-        return WebViewService.getInstance(project).openInPanel(pageUrl);
+        try {
+            String document = documentInPage(Files.readString(
+                    Path.of(base, STATE_DIR, PAGE_FILE), StandardCharsets.UTF_8));
+            return document == null ? "" : document;
+        } catch (IOException | RuntimeException unreadable) {
+            return "";
+        }
+    }
+
+    /**
+     * The document a rendered page shows, from the view data it carries — or null when this is not one of our pages.
+     *
+     * <p>Pure and tested: the page embeds its view data in the {@code #view-data} script tag, so a page without that
+     * tag (anything else the tool window can show) answers null rather than a guess.
+     */
+    static @Nullable String documentInPage(@Nullable String pageHtml) {
+        if (pageHtml == null) {
+            return null;
+        }
+        int tag = pageHtml.indexOf("id=\"view-data\"");
+        if (tag < 0) {
+            return null;
+        }
+        int start = pageHtml.indexOf('>', tag);
+        int end = pageHtml.indexOf("</script>", start);
+        if (start < 0 || end < 0) {
+            return null;
+        }
+        try {
+            JsonElement root = JsonParser.parseString(pageHtml.substring(start + 1, end));
+            if (!root.isJsonObject()) {
+                return null;
+            }
+            JsonElement path = root.getAsJsonObject().get("docPath");
+            if (path == null || !path.isJsonPrimitive()) {
+                return null;
+            }
+            String document = path.getAsString();
+            return document == null || document.isBlank() ? null : document;
+        } catch (RuntimeException malformed) {
+            return null;
+        }
+    }
+
+    /**
+     * The URL of the page this view writes for a project — the URL a restart brings back.
+     *
+     * <p>Package-visible and pure so {@link #documentToRestore} can be asserted without an IDE.
+     */
+    static @NotNull String pageUrlOf(@NotNull String projectBasePath) {
+        return "file:///" + slash(Path.of(projectBasePath, STATE_DIR, PAGE_FILE));
+    }
+
+    /**
+     * The Markdown document the tool window should render again at startup, or null when there is nothing to restore.
+     *
+     * <p>A restart brings the tool window back on the URL it remembered, and for this view that URL is the <em>page</em>:
+     * a snapshot of the document as it looked before the restart, with nothing behind it. The page cannot say which
+     * file it holds — one page file serves every document — and the save refresh matches editor paths, so the window
+     * looked right and stopped refreshing until the file was opened again ("refresh works, but not after IDE restart",
+     * reported 2026-10-11). Remembering the document closes that: the startup path renders it again, which is current
+     * content and the link back in one step.
+     *
+     * <p>Pure, so the rule is asserted rather than trusted. It answers with a document only when the URL about to be
+     * loaded is our own page, the remembered path is not blank, and the file is still there — a document that moved
+     * must not bring back a preview of nothing.
+     *
+     * @param lastUrl          the URL the tool window remembered
+     * @param remembered       the document this view rendered last, or null/blank
+     * @param projectBasePath  the project root, from which the page URL is built
+     * @param rememberedExists whether that document is still a readable file
+     */
+    static @Nullable String documentToRestore(@Nullable String lastUrl, @Nullable String remembered,
+                                              @NotNull String projectBasePath, boolean rememberedExists) {
+        if (remembered == null || remembered.isBlank() || !rememberedExists) {
+            return null;
+        }
+        return canPushInsteadOfLoad(lastUrl, pageUrlOf(projectBasePath)) ? remembered : null;
     }
 
     /**
@@ -470,7 +613,7 @@ public final class MarkdownView implements Disposable {
     }
 
     /**
-     * A save of the document on screen: push the new text into the live page.
+     * A save of the document on screen, pushed into the live page.
      *
      * <p>A reload would be simpler and worse - the reader loses their place, and the whole page is re-fetched to
      * show one changed line. Only a save counts: {@link VFileEvent#isFromSave()} is false while somebody types.
@@ -488,15 +631,65 @@ public final class MarkdownView implements Disposable {
             if (file == null || file.isDirectory() || !samePath(file.getPath(), shown)) {
                 continue;
             }
-            String fresh = viewJson(readText(file), Path.of(shown), classIndexFor(Path.of(shown)));
-            WebViewPanel panel = WebViewService.getInstance(project).getPanel();
-            if (panel == null) {
-                return;
-            }
-            LOG.info("Markdown view: " + shown + " was saved, re-rendering the page in place");
-            panel.pushMarkdownView(fresh);
+            pushSaved(shown, readText(file), "the file-system save event");
             return;
         }
+    }
+
+    /**
+     * The platform's own save callback, for the same document — see the constructor for why both triggers exist.
+     *
+     * <p>The document's text, not the file's bytes: this fires before the bytes are written, and the reader must
+     * see what they just saved.
+     */
+    private void onDocumentSaving(@NotNull Document document) {
+        String shown = shownPath;
+        if (shown == null) {
+            return;
+        }
+        VirtualFile file = FileDocumentManager.getInstance().getFile(document);
+        if (file == null || file.isDirectory() || !samePath(file.getPath(), shown)) {
+            return;
+        }
+        // This callback runs on the EDT, and building the view data reads the document's class index, so the work
+        // is handed to a pooled thread: nobody should wait on a file read because they pressed Ctrl+S.
+        String text = document.getText();
+        ApplicationManager.getApplication().executeOnPooledThread(
+                () -> pushSaved(shown, text, "the platform's document-save callback"));
+    }
+
+    /**
+     * Pushes the view data for one save, once.
+     *
+     * <p>Both save triggers can fire for one Ctrl+S, and rendering twice would colour the document twice for no
+     * reason; identical view data is therefore dropped. The log line names <em>which</em> trigger fired, because
+     * when a preview stops refreshing the question is always "did the host notice at all", and that question has
+     * to be answerable from the IDE's log rather than by reading this class.
+     *
+     * @param trigger where the save was noticed, for the log
+     */
+    private void pushSaved(@NotNull String shown, @NotNull String markdown, @NotNull String trigger) {
+        String json = viewJson(markdown, Path.of(shown), classIndexFor(Path.of(shown)));
+        synchronized (this) {
+            if (json.equals(pushedView)) {
+                return;
+            }
+            pushedView = json;
+        }
+        WebViewPanel panel = WebViewService.getInstance(project).getPanel();
+        String base = project.getBasePath();
+        if (panel == null || base == null) {
+            LOG.info("Markdown view: " + shown + " was saved, but no tool window is holding our page");
+            return;
+        }
+        // Only into our own page: the tool window can be showing anything (the splash, a served page), and pushing
+        // this document's data into a stranger would render it in the wrong window.
+        if (!canPushInsteadOfLoad(panel.currentUrl(), pageUrlOf(base))) {
+            LOG.info("Markdown view: " + shown + " was saved, but the tool window is not showing the Markdown page");
+            return;
+        }
+        LOG.info("Markdown view: " + shown + " was saved (" + trigger + "), re-rendering the page in place");
+        panel.pushMarkdownView(json);
     }
 
     private static @NotNull String readText(@NotNull VirtualFile file) {

@@ -141,6 +141,55 @@ public class MarkdownViewTest {
         }
     }
 
+    @Test
+    public void aRestartRendersTheDocumentRatherThanTheStalePage() {
+        // The reported bug: "refresh works, but not after IDE restart - I need to load markdown again even though it
+        // shows the rendered file". A restart restores the *page* URL, and that page is a snapshot with no document
+        // behind it: one page file serves every document, so the URL cannot say which file it holds, and the save
+        // refresh matches an editor path. The remembered document is what the startup path renders again.
+        String base = "D:/proj";
+        String page = MarkdownView.pageUrlOf(base);
+        assertEquals("file:///D:/proj/.jcodebuddy/webview/markdown-view/view.html", page);
+
+        assertEquals("D:/proj/docs/NOTES.md",
+                MarkdownView.documentToRestore(page, "D:/proj/docs/NOTES.md", base, true));
+        // JCEF spells a restored URL with backslashes or percent-escapes; the comparison is the one the second
+        // right-click already uses, so both spellings mean this page.
+        assertEquals("D:/proj/docs/NOTES.md", MarkdownView.documentToRestore(
+                "file:///D:\\proj\\.jcodebuddy\\webview\\markdown-view\\view.html", "D:/proj/docs/NOTES.md", base, true));
+        assertEquals("D:/proj/my docs/NOTES.md", MarkdownView.documentToRestore(
+                "file:///D:/proj/my%20docs/.jcodebuddy/webview/markdown-view/view.html",
+                "D:/proj/my docs/NOTES.md", "D:/proj/my docs", true));
+
+        // Nothing to restore: the document moved, was never recorded, or the window is not on our page at all.
+        assertNull("a document that is gone must not bring back a preview of nothing",
+                MarkdownView.documentToRestore(page, "D:/proj/docs/NOTES.md", base, false));
+        assertNull(MarkdownView.documentToRestore(page, "", base, true));
+        assertNull(MarkdownView.documentToRestore(page, null, base, true));
+        assertNull("the splash page is not a snapshot of a document",
+                MarkdownView.documentToRestore("file:///D:/proj/splash.html", "D:/proj/docs/NOTES.md", base, true));
+        assertNull(MarkdownView.documentToRestore(null, "D:/proj/docs/NOTES.md", base, true));
+        assertNull(MarkdownView.documentToRestore("about:blank", "D:/proj/docs/NOTES.md", base, true));
+    }
+
+    @Test
+    public void thePageOnDiskKnowsWhichDocumentItShows() {
+        // The first restart after this change has no remembered document (an older build stored only the URL), and
+        // the page on disk is the only other witness: it embeds the view data it was rendered from.
+        String page = "<!DOCTYPE html><html><body><script id=\"view-data\" type=\"application/json\">"
+                + "{\"markdown\":\"# x\",\"docPath\":\"D:/proj/docs/NOTES.md\",\"docDir\":\"D:/proj/docs\"}"
+                + "</script></body></html>";
+        assertEquals("D:/proj/docs/NOTES.md", MarkdownView.documentInPage(page));
+        // A path the JSON escaped (a Windows spelling) reads back as the real path.
+        assertEquals("D:\\proj\\NOTES.md", MarkdownView.documentInPage(
+                "<script id=\"view-data\" type=\"application/json\">{\"docPath\":\"D:\\\\proj\\\\NOTES.md\"}</script>"));
+        // Any other page the tool window can show is not ours, and must not be read as one.
+        assertNull(MarkdownView.documentInPage("<!DOCTYPE html><html><body>the splash page</body></html>"));
+        assertNull(MarkdownView.documentInPage("<script id=\"view-data\" type=\"application/json\">{not json}</script>"));
+        assertNull(MarkdownView.documentInPage("<script id=\"view-data\" type=\"application/json\">{\"docPath\":\"\"}</script>"));
+        assertNull(MarkdownView.documentInPage(null));
+    }
+
     private static void deleteTree(Path root) throws IOException {
         if (!Files.exists(root)) {
             return;

@@ -480,19 +480,22 @@ public final class EclipseHttpBridge implements AutoCloseable {
         NavigationOutcome outcome = navigator.open(filePath, line, column);
         Answer answer = switch (outcome.reason()) {
             case OK -> new Answer(200, "Opening " + filePath + ":" + line + ":" + column);
+            // The fallback rule of contract § 1.1.1 (2026-10-11): the named place is not in the file, so the file
+            // was opened instead — 200, with the reason in the body. Listed here because the switch is exhaustive.
+            case LOCATION_FALLBACK -> new Answer(200, "Opened " + filePath + " without the named place: "
+                    + outcome.detail());
             case INVALID_PATH -> new Answer(400, "Missing filePath parameter");
             case OUTSIDE_PROJECT ->
                     new Answer(403, "Forbidden: '" + outcome.absolutePath() + "' is outside the project");
             case RATE_LIMITED -> new Answer(429, "Too Many Requests: " + Navigator.RATE_LIMIT_COUNT
                     + " per " + (Navigator.RATE_LIMIT_WINDOW_MS / 1000) + "s");
-            // LOCATION_NOT_FOUND is plan 9.7's reason: the link named a place the file does not have. It is a
-            // 404 like the other "nothing there" answers, and it must be listed here or this switch will not
-            // compile - which is how these two hosts were found not to have been built since that change.
-            case NO_HOST, HOST_REFUSED, LOCATION_NOT_FOUND ->
+            case NO_HOST, HOST_REFUSED ->
                     new Answer(404, "Could not open " + filePath);
         };
         if (answer.status() != 200) {
             note("refused " + filePath + ": " + answer.status() + " " + answer.body());
+        } else if (outcome.reason() == NavigationOutcome.Reason.LOCATION_FALLBACK) {
+            note("fallback " + filePath + ": " + outcome.detail());
         }
         send(exchange, answer.status(), "text/plain", bytes(answer.body()));
     }

@@ -79,6 +79,27 @@ public interface EditorHost {
     boolean openFileAt(String absolutePath, int line, int column);
 
     /**
+     * Brings an already-open editor for the file to the front <b>without moving the caret</b>, and answers
+     * whether the host had one at all.
+     *
+     * <p>This is the second half of the fallback rule (contract § 1.1.1, 2026-10-11): a link that names a place
+     * the file does not have still opens the file, and when the file is <em>already open</em> the reader's caret
+     * must not move — being thrown to line 1 is how a fallback stops being a fallback. {@link Navigator} calls
+     * this first on the fallback path and only opens the file when it answers false.</p>
+     *
+     * <p>The default answers false, which is the honest answer for a host that cannot tell whether it has an
+     * editor open (an LSP client, a CLI launcher, no host at all): the caller then opens the file, which is still
+     * the fallback the contract promises.</p>
+     *
+     * @param absolutePath an absolute, forward-slashed path that has already passed the path jail
+     * @return true when the file already had an editor, which this call brought to the front with its caret left
+     *         where the reader put it; false when the caller must open the file
+     */
+    default boolean focusOpenFile(String absolutePath) {
+        return false;
+    }
+
+    /**
      * Reveals an already-open (or openable) file in the host's own navigation UI — the project view in
      * an IDE, the file tree in an editor. Not part of the frozen contract; a host without such a UI
      * omits {@link #CAP_REVEAL}.

@@ -11,6 +11,9 @@ import com.intellij.ui.jcef.JBCefApp;
 import hr.hrg.jetbrains.webview.services.PluginStateService;
 import org.jetbrains.annotations.NotNull;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * Creates the WebView Explorer tool window: one {@link WebViewPanel}, registered with
  * {@link WebViewService} so nothing else has to search for it.
@@ -64,7 +67,30 @@ public final class JcefToolWindowFactory implements ToolWindowFactory, DumbAware
             PluginStateService.getInstance(project).setLastUrl("");
             lastUrl = "";
         }
-        String fallback = lastUrl == null || lastUrl.isBlank() ? SplashPage.URL : lastUrl;
+
+        // A restart brings the window back on the page URL - and that page is a snapshot of a Markdown document with
+        // nothing behind it: one page file serves every document, so the URL cannot say which file it holds, and the
+        // save refresh matches an editor path. The window looked right and stopped refreshing until the file was
+        // opened again (reported 2026-10-11). So when the remembered URL is our Markdown page, the document it was
+        // showing is rendered again instead of loading the stale snapshot: current content, and the link back.
+        MarkdownView view = MarkdownView.getInstance(project);
+        String base = project.getBasePath();
+        String remembered = view.lastDocument();
+        if (remembered.isBlank()) {
+            // The first restart after this change remembers no document: an older build recorded only the URL. The
+            // page on disk was rendered from one, so it is asked which (and the answer is remembered from then on).
+            remembered = view.documentInCurrentPage();
+        }
+        boolean rememberedExists = base != null && !remembered.isBlank()
+                && Files.isRegularFile(Path.of(remembered));
+        String document = base == null ? null
+                : MarkdownView.documentToRestore(lastUrl, remembered, base, rememberedExists);
+        MarkdownView.Rendered restored = document == null ? null : view.render(document);
+        if (document != null && restored == null) {
+            LOG.info("WebView Explorer: the remembered Markdown document could not be rendered: " + document);
+        }
+        String fallback = restored != null ? restored.pageUrl()
+                : lastUrl == null || lastUrl.isBlank() ? SplashPage.URL : lastUrl;
         WebViewService.getInstance(project).register(panel, fallback);
         panel.applyIdeStyling();
     }

@@ -157,10 +157,12 @@ through — hands the fragment to [`@hrg/inject-examples`](https://github.com/hr
 `#region <name>` directive, a `-`/`+`/`++` scope. An explicit `#region <name>` directive wins over a declaration of
 the same name, exactly as that library orders it, so one spelling can name either. Only two rules stay here, because
 the library's module boundary deliberately excludes them: an explicit `L42`/`L42-L58` position, which the page
-settles itself, and a `.json` key path. A reference the file does not have is
-**refused** (`LOCATION_NOT_FOUND`, HTTP `404`) rather than aimed at line 1, because a wrong line costs the reader a
-search to discover; a fragment that is *not* a location — a heading anchor in a document, a made-up word — leaves
-the page's own line standing instead of failing.
+settles itself, and a `.json` key path. A reference the file does not have is **not a dead end**: the host opens the
+file, and when that file is already open it brings its editor to the front **without moving the cursor** — the
+reader gets the file they clicked, and a file they were editing is not thrown to line 1 (`LOCATION_FALLBACK`; over
+HTTP a `200` whose body says the named place was not found, because a `404` from `/open` still means the *path* did
+not resolve). A fragment that is *not* a location — a heading anchor in a document, a made-up word — leaves the
+page's own line standing.
 
 Where the rules live: [`conformance/location-fragments.json`](conformance/location-fragments.json) is the table of
 claims, written by hand; `webview-core`'s `LocationFragment` (the classification) and `LocationResolver` (a name to a
@@ -196,7 +198,9 @@ documentation this repository is full of.
   **no Kotlin** one, so a Kotlin fence is escaped plaintext rather than an approximation that would mislead
   (DEC-043).
 - **A save re-renders in place.** The page exposes `window.__renderMarkdown()`, so the host pushes the new text
-  into the live page instead of reloading it: the reader keeps their scroll position.
+  into the live page instead of reloading it: the reader keeps their scroll position. The JetBrains host notices the
+  save two ways — the file-system save event and the platform's own document-save callback — because a missed save
+  is silent, and each push logs which trigger fired.
 - Links carry `data-open` with a location fragment, exactly as in the generated pages, so a method or a region
   named in a Markdown link navigates to that method or region (see "Pointing at a place inside a file").
 - The page and its state live in the project's `.jcodebuddy/webview/markdown-view/`: derived, machine-written and

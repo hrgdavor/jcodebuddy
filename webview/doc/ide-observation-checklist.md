@@ -6,7 +6,9 @@ The three claims in this product that **no test in this repository can make for 
   **unsaved** change, the file on disk is untouched, and one `Ctrl+Z` takes it back;
 - **the same claim for VS Code**, through `vscode.workspace.applyEdit`;
 - **the same claim for Eclipse** (§ 1a), through one `IRewriteTarget` compound change — plus the caret claim
-  the Eclipse Phase 1 gate needs: a click on `data-open`/`data-line` lands the caret on the named line.
+  the Eclipse Phase 1 gate needs: a click on `data-open`/`data-line` lands the caret on the named line;
+- **the fallback's caret claim** (§ 2b, added 2026-10-11): a link whose place cannot be resolved still opens the
+  file, and a file **already open keeps its cursor**.
 
 Everything up to the platform call is implemented and unit-tested (core's `WriteSurface`; the plugin's
 `DocumentEdits` + `WriteCommandEditor`; VS Code's `BridgePolicy` decisions; the Eclipse module's
@@ -235,6 +237,36 @@ has actually been observed". The plan's Phase 3 record keeps the sequence.
 
 ---
 
+## 2b. The section-link fallback: the caret must not move (2026-10-11)
+
+The contract's fallback rule (§ 1.1.1) says a link whose place cannot be resolved still opens the file, and that a
+file **already open keeps its cursor**. The first half is a unit test; the second is a claim about a running editor —
+`webview-core` can prove the host was asked in the right order (`focusOpenFile` before `openFileAt`;
+`NavigatorTest`), and only a person can see that the caret stayed where they left it.
+
+Run sheet (JetBrains: a rebuilt plugin and an open project — `Sample.java` from § 0 works):
+
+1. Open `Sample.java` in the editor and put the caret somewhere you will recognise — line 2, say.
+2. Ask the host for a **place that is not in that file**, either from a page in the tool window or over HTTP with the
+   fragment on the path:
+
+   ```console
+   curl "http://127.0.0.1:<port>/open?filePath=<abs>/Sample.java%23noSuchThing&line=1&column=1"
+   ```
+
+   The body must say `without the named place` — a `200`, not a `404` (a `404` now means the **path** did not
+   resolve).
+3. **What must be true**: `Sample.java` is still the editor in front, and the caret is still on line 2. A caret on
+   line 1 is the exact failure this rule exists to prevent, and it is silent unless you look.
+4. Then the other half with the file **closed**: the same request opens the file at the page's line (1), which is the
+   fallback one step earlier.
+
+| Host                                                          | Date | Result |
+| ------------------------------------------------------------- | ---- | ------ |
+| **JetBrains** (rebuilt plugin, `runIde` sandbox or installed) | —    | **Not observed — outstanding.** Implemented and unit-tested (`webview-core` 201 tests; the plugin's 54); the state is written down rather than claimed. |
+
+---
+
 ## 3. When something else happens
 
 Diagnose before reporting; the interesting outcomes are the ones *not* in the tables above.
@@ -248,6 +280,7 @@ Diagnose before reporting; the interesting outcomes are the ones *not* in the ta
 | `409 stale`                                                                   | The bytes changed between the script's read and its request — most likely a save in the IDE. Re-run. |
 | `404 not-found` (VS Code)                                                     | Path mismatch: pass the absolute path, and prefer a path without a symlink. |
 | 200 with `target: "buffer"` but **nothing visible** in the editor             | The most valuable report: the document changed without a visible editor. Say so, and include the response body. |
+| a save does **not** refresh the Markdown preview                              | Read the IDE log for `Markdown view: … was saved (…)` first. **Absent** → the host never noticed the save: the preview's documented path is the one it was *opened* with, so a `..` or symlinked spelling that differs from the editor's is enough to miss, and a tool-window tab showing our page with no view behind it has nothing to match either. **Present** → the push reached the page the tool window holds, so the page on screen is not that page: close the tool-window tab and open the file again, so the current page is loaded. **After an IDE restart** the window renders the remembered document again (2026-10-11), so a restart alone is no longer a cause — when it is, the log names the document it restored. |
 
 ---
 
@@ -261,6 +294,8 @@ script output:   <the whole paste, including the health document and the disk di
 visual 0:        (Eclipse only) the caret landed on the requested line and column — yes / no / partial
 visual 1:        the replacement is visible in the editor and the tab is marked modified — yes / no / partial
 visual 2:        one Ctrl+Z restores the original text and the tab goes clean — yes / no / partial
+visual 3:        (§ 2b) with Sample.java already open on line 2, a request for a place it does not have left the
+                 caret on line 2 and opened no second editor — yes / no
 saved anything?  no (if yes, say what happened to the file on disk)
 anything else:   <e.g. an unexpected status, a dialog, a log line, a delay>
 ```

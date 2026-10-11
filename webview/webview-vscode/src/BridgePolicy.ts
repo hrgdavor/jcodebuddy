@@ -174,7 +174,7 @@ export function healthDocument(
     tokenRequired: boolean,
     capabilities: readonly string[],
     ide: string = IDE_VSCODE,
-    project: string = ''
+    project = ''
 ): HealthDocument {
     if (port < 0) {
         throw new Error(`a bound port cannot be negative, was ${port}`);
@@ -530,6 +530,30 @@ function first(value: string | string[] | undefined): string | undefined {
 function positive(value: string | string[] | undefined, fallback: number): number {
     const parsed = Number.parseInt(first(value) ?? '', 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Split the path a page handed over into the file and the place inside it (contract § 1.1.1).
+ *
+ * A page puts the whole target on `data-open` — `src/A.java#add`, `src/A.java#L42` — and this host has no section
+ * matcher, so the fragment must come off before the path is jailed and opened. The one location it *does*
+ * understand, a plain `#L42`, becomes the line; anything else stays in `fragment`, which is exactly the "place is
+ * not in this file" case of the fallback rule: the file is opened, and a file that is already open keeps its
+ * cursor. `line` is the caller's line (the query's, or the contract's default 1) and is returned unchanged unless
+ * the fragment names one.
+ */
+export function splitOpenTarget(target: string, line: number): { filePath: string; fragment: string | null; line: number } {
+    const hash = target.indexOf('#');
+    if (hash < 0) {
+        return { filePath: target, fragment: null, line };
+    }
+    const filePath = target.slice(0, hash);
+    const fragment = target.slice(hash + 1);
+    const explicit = /^L?(\d+)$/i.exec(fragment.trim());
+    if (explicit) {
+        return { filePath, fragment: null, line: Math.max(1, Number(explicit[1])) };
+    }
+    return { filePath, fragment: fragment.length === 0 ? null : fragment, line };
 }
 
 /**

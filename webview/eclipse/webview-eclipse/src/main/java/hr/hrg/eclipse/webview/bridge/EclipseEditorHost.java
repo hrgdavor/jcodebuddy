@@ -114,10 +114,33 @@ public class EclipseEditorHost implements EditorHost {
     }
 
     /**
-     * Selects the span in an already-open editor, clamped to the document, and reveals it. A file
-     * that is not open is not opened here — this is the selection rung, not the open rung.
+     * The fallback rule of contract § 1.1.1 (2026-10-11): an already-open file is brought to the front
+     * <b>without touching the caret</b>. It is deliberately not {@link #openFileAt} — that method ends in
+     * {@code selectAndReveal}, which is a caret move, and this one never opens an editor either: answering
+     * false is what tells {@link hr.hrg.webview.core.Navigator} to open the file at the page's line.
      */
     @Override
+    public boolean focusOpenFile(String absolutePath) {
+        IWorkbenchPage page = activePage();
+        if (page == null) {
+            return false;
+        }
+        IFile file = WorkspaceFiles.find(absolutePath);
+        if (file == null) {
+            return false;
+        }
+        IEditorPart editor = page.findEditor(new FileEditorInput(file));
+        if (editor == null) {
+            return false;
+        }
+        page.activate(editor);
+        return true;
+    }
+
+    /**
+     * Selects the span in an already-open editor, clamped to the document, and reveals it. A file
+     * that is not open is not opened here — this is the selection rung, not the open rung.
+     */    @Override
     public boolean select(String absolutePath, TextRange range) {
         IWorkbenchPage page = activePage();
         if (page == null) {

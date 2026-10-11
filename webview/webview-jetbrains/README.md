@@ -288,13 +288,37 @@ renders the Markdown with this repository's own renderer and colours code fences
 **Java** grammar and no Kotlin one, so Kotlin fences stay plaintext on purpose (DEC-043).
 
 **Saving re-renders in place.** The page exposes `window.__renderMarkdown()`, so a save of the file on screen pushes
-the new text into the live page - no reload, so the reader keeps their scroll position. Only a save counts: the
-listener asks `VFileEvent.isFromSave()`, so the page does not flicker while somebody types. `MarkdownView` in
-`toolWindow/` owns the routing and the listener.
+the new text into the live page - no reload, so the reader keeps their scroll position. Only a save counts, and
+`MarkdownView` in `toolWindow/` watches for one **two ways**: the file-system event that carries
+`VFileEvent.isFromSave()` (false while somebody types, so the page does not flicker), and the platform's own
+`FileDocumentManagerListener.beforeDocumentSaving` callback. Both exist because a refresh that fails is *silent* -
+the page simply keeps the old text - so it must not depend on one flag keeping its meaning; a save that reaches both
+renders once. Each push names its trigger in the log:
+
+```
+Markdown view: <file> was saved (the file-system save event), re-rendering the page in place
+```
+
+Look for that line first when a preview stops refreshing: its presence says the host noticed the save, its absence
+says it did not - a different bug with a different fix (see
+[`webview/doc/ide-observation-checklist.md`](../doc/ide-observation-checklist.md) § 3).
+
+**A restart brings the document back with the window.** The tool window restores the *page* URL it last showed, and
+that page is a snapshot: one page file serves every document, so the URL cannot say which file it holds, and the save
+refresh matches an editor path — which is why the window looked right after a restart and stopped refreshing until the
+file was opened again (reported 2026-10-11). The document is therefore remembered in the project's workspace state
+(`lastMarkdownDocument`, beside `lastUrl`) and the startup path **renders it again** instead of loading the stale
+page — current content and the link back in one step. A remembered document that has since moved is forgotten, the
+same way a stale remembered URL already was. When nothing was remembered at all — the first restart after this
+change, since older builds stored only the URL — the page on disk is asked which document it shows, because it embeds
+the view data it was rendered from (`documentInPage`), and that answer is remembered for the restarts after it.
 
 **Links in the rendered page navigate the IDE**, including to a method or a region: the page writes the whole
-location into `data-open` (plan step 9.7) and the injected bridge resolves it through the shared core. **A file
-outside the project is refused** - by the address bar, by the action and by the page's links alike (2026-10-04).
+location into `data-open` (plan step 9.7) and the injected bridge resolves it through the shared core. **A place the
+file does not have is not a dead end** (contract § 1.1.1, 2026-10-11): the file opens anyway, and a file **already
+open** is brought to the front by `FileEditorManager.openFile(file, true)` — no `OpenFileDescriptor`, so the caret
+stays where you left it. **A file outside the project is refused** - by the address bar, by the action and by the
+page's links alike (2026-10-04).
 
 **Configuring the generator — optional, per project.** The page comes from the one **embedded in the plugin** unless
 this project points somewhere else. That serves two different purposes: **developing the renderer** (point at a

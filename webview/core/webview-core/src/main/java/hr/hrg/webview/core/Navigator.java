@@ -85,9 +85,12 @@ public final class Navigator {
      * a page that also sends line 1 is sending the contract's own default, not an intention. A fragment that is not a
      * location (a heading anchor in a document, say) leaves the page's line standing, exactly as before.</p>
      *
-     * <p><strong>A name the file does not have is refused, not aimed at line 1.</strong> A wrong line costs the
-     * reader a search to discover, and looks like a link that worked. In a document, though, a bare name is the
-     * viewer's own business (a heading anchor), so it falls back to the line rather than refusing.</p>
+     * <p><strong>A name the file does not have still opens the file (2026-10-11).</strong> The rule used to be a
+     * refusal, on the argument that a wrong line costs the reader a search to discover; the maintainer replaced it
+     * because the refusal cost the reader the file as well. The file is opened instead, and a file that is
+     * <em>already open</em> keeps its caret: the fallback must not throw a reader who is editing it to line 1
+     * (contract § 1.1.1, and {@link #fallbackToFile}). In a document, a bare name is the viewer's own business (a
+     * heading anchor), so it falls back to the page's line rather than to the file.</p>
      */
     public NavigationOutcome open(String filePath, int line, int column, String fragment) {
         // A fragment may ride in the path itself: 'data-open="src/A.java#add"' is how a page spells a location, and
@@ -131,12 +134,41 @@ public final class Navigator {
                 return act(resolution, EditorHost.CAP_OPEN,
                         () -> host.openFileAt(resolution.absolute(), Math.max(1, line), Math.max(1, column)));
             }
-            return NavigationOutcome.refused(NavigationOutcome.Reason.LOCATION_NOT_FOUND,
-                    resolution.absolute(), location.summary() + " is not in this file");
+            // The link named a place this file does not have. Since 2026-10-11 that is not a refusal: the reader
+            // gets the file, and a file that is already open keeps its caret (contract § 1.1.1).
+            return fallbackToFile(resolution, line, column,
+                    location.summary() + " is not in this file");
         }
         int target = Math.max(1, at.line());
         return act(resolution, EditorHost.CAP_OPEN,
                 () -> host.openFileAt(resolution.absolute(), target, 1));
+    }
+
+    /**
+     * Opens the file a link named after the place it named turned out not to be there — the fallback rule of
+     * contract § 1.1.1 (2026-10-11).
+     *
+     * <p>The order is the requirement: an <b>already open</b> file is brought to the front by
+     * {@link EditorHost#focusOpenFile} and its caret is left alone, because a reader editing that file must not
+     * be thrown to line 1 by a link that failed to resolve. Only when the host has no editor for it is the file
+     * opened — at the page's own line, which for a place-naming link is the contract's default 1.</p>
+     */
+    private NavigationOutcome fallbackToFile(PathResolution resolution, int line, int column, String detail) {
+        NavigationOutcome unavailable = hostRefusal(EditorHost.CAP_OPEN, resolution.absolute());
+        if (unavailable != null) {
+            return unavailable;
+        }
+        EditorHost current = host;
+        if (current.focusOpenFile(resolution.absolute())) {
+            return NavigationOutcome.fallback(resolution.absolute(),
+                    detail + "; the file was already open, so the cursor did not move");
+        }
+        boolean opened = current.openFileAt(resolution.absolute(), Math.max(1, line), Math.max(1, column));
+        if (!opened) {
+            return NavigationOutcome.refused(NavigationOutcome.Reason.HOST_REFUSED,
+                    resolution.absolute(), "host '" + current.name() + "' could not open the file");
+        }
+        return NavigationOutcome.fallback(resolution.absolute(), detail + "; the file was opened instead");
     }
 
     /** The extensions whose fragments are their own anchors rather than source locations. */
@@ -245,19 +277,29 @@ public final class Navigator {
 
     /** Capability check, then the host call itself. */
     private NavigationOutcome act(PathResolution resolution, String capability, BooleanSupplier call) {
+        NavigationOutcome unavailable = hostRefusal(capability, resolution.absolute());
+        if (unavailable != null) {
+            return unavailable;
+        }
         EditorHost current = host;
-        if (!current.isAvailable()) {
-            return NavigationOutcome.refused(NavigationOutcome.Reason.NO_HOST,
-                    resolution.absolute(), "no " + capability + " host is attached");
-        }
-        if (!current.capabilities().contains(capability)) {
-            return NavigationOutcome.refused(NavigationOutcome.Reason.NO_HOST,
-                    resolution.absolute(), "host '" + current.name() + "' cannot " + capability);
-        }
         boolean acted = call.getAsBoolean();
         return acted
                 ? NavigationOutcome.ok(resolution.absolute())
                 : NavigationOutcome.refused(NavigationOutcome.Reason.HOST_REFUSED,
                         resolution.absolute(), "host '" + current.name() + "' refused");
+    }
+
+    /** The refusal when the attached host cannot run this capability, or null when it can. */
+    private NavigationOutcome hostRefusal(String capability, String absolutePath) {
+        EditorHost current = host;
+        if (!current.isAvailable()) {
+            return NavigationOutcome.refused(NavigationOutcome.Reason.NO_HOST,
+                    absolutePath, "no " + capability + " host is attached");
+        }
+        if (!current.capabilities().contains(capability)) {
+            return NavigationOutcome.refused(NavigationOutcome.Reason.NO_HOST,
+                    absolutePath, "host '" + current.name() + "' cannot " + capability);
+        }
+        return null;
     }
 }

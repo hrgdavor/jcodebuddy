@@ -40,6 +40,15 @@ class EclipseEditorHostTest {
     }
 
     @Test
+    void withoutAWorkbenchThereIsNoOpenFileToFocus() {
+        // The fallback rule (contract § 1.1.1): Navigator asks this before opening a file. With no
+        // workbench it must answer false, so the caller opens the file rather than believing it brought
+        // an editor to the front. The workbench half — an open editor activated with its caret left alone
+        // — needs a running Eclipse and is the observed gate, not a unit test.
+        assertFalse(host.focusOpenFile("/whatever/src/A.java"));
+    }
+
+    @Test
     void applyEditDelegatesToTheSeam() {
         RecordingEditor editor = new RecordingEditor(true);
         EclipseEditorHost host = new EclipseEditorHost(editor);

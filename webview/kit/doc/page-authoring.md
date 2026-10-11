@@ -137,7 +137,9 @@ A few facts that decide how you wire it:
   rather than `fetch` — `fetch` from a `file://` page is blocked by CORS regardless of the server.
 * **Navigation is rate limited**, shared by every transport of that host. Do not wire a `mouseover` to it.
 * **`404` means the path did not resolve** (or the rate limit refused it), so a broken link is diagnosable
-  and never silent. `403` means the caller proved nothing.
+  and never silent. `403` means the caller proved nothing. A place *inside* a file that does not exist is **not** a
+  `404`: the host opens the file, keeping the caret if it was already open (contract § 1.1.1, 2026-10-11), and says
+  so in the body — so verify a section link yourself if you need it to be right.
 
 ### 4.1 The edit rung: propose, show the diff, then write
 

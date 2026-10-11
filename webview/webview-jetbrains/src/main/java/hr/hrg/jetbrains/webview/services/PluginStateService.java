@@ -24,6 +24,16 @@ public final class PluginStateService implements PersistentStateComponent<Plugin
     public static class State {
         /** The last URL the tool window showed. Empty means "show the splash page". */
         public String lastUrl = "";
+        /**
+         * The absolute path of the Markdown document the view is rendering, or empty.
+         *
+         * <p>Remembered because the URL above is not enough after a restart: the Markdown view shows one page file
+         * for every document, so "the page I last showed" says nothing about *which* document it holds. The window
+         * came back looking right and stopped refreshing until the file was opened again (reported 2026-10-11),
+         * because the save refresh matches an editor path and nothing had told the view which file it had. The
+         * startup path renders this document again, which is both current content and the link back.
+         */
+        public String lastMarkdownDocument = "";
         /** The HTTP bridge port, or null when the bridge is off. */
         public Integer port = null;
         /** Comma-separated origins allowed to call the HTTP bridge. Empty denies every caller. */
@@ -73,5 +83,14 @@ public final class PluginStateService implements PersistentStateComponent<Plugin
 
     public void setLastUrl(String url) {
         myState.lastUrl = url == null ? "" : url;
+    }
+
+    /** The Markdown document the view is showing, or empty — see {@link State#lastMarkdownDocument}. */
+    public String getLastMarkdownDocument() {
+        return myState.lastMarkdownDocument == null ? "" : myState.lastMarkdownDocument;
+    }
+
+    public void setLastMarkdownDocument(String path) {
+        myState.lastMarkdownDocument = path == null ? "" : path;
     }
 }

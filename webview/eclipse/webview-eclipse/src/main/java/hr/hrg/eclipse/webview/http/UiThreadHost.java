@@ -70,6 +70,16 @@ public final class UiThreadHost implements EditorHost {
         return onUiThread(() -> delegate.openFileAt(absolutePath, line, column));
     }
 
+    /**
+     * Forwarded, not defaulted: the fallback rule (contract § 1.1.1) asks this before it opens a file, and a
+     * wrapper that let the interface default answer would make the Eclipse host re-open an already-open file
+     * instead of bringing it to the front — the one behaviour the rule exists to avoid.
+     */
+    @Override
+    public boolean focusOpenFile(String absolutePath) {
+        return onUiThread(() -> delegate.focusOpenFile(absolutePath));
+    }
+
     @Override
     public boolean reveal(String absolutePath) {
         return onUiThread(() -> delegate.reveal(absolutePath));

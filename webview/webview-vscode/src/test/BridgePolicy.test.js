@@ -150,6 +150,36 @@ function run() {
         'a missing filePath is not an opening');
     checks += 7;
 
+    // A page puts the whole target on data-open, fragment and all (contract § 1.1.1). This host resolves no place
+    // inside a file, so the fragment has to come off before the jail sees the path — and a plain #L42, the one
+    // location the page usually settles itself, still has to arrive as the line. The caret half of the fallback
+    // rule is asserted where the editor is (HttpBridge.navigateToFile); this is the decision it is built on.
+    assert.deepStrictEqual(
+        policy.splitOpenTarget('src/main.ts', 10),
+        { filePath: 'src/main.ts', fragment: null, line: 10 },
+        'a path with no fragment is untouched');
+    assert.deepStrictEqual(
+        policy.splitOpenTarget('src/main.ts#add', 1),
+        { filePath: 'src/main.ts', fragment: 'add', line: 1 },
+        'a place this host cannot resolve is split off, so the jail sees the file');
+    assert.deepStrictEqual(
+        policy.splitOpenTarget('src/main.ts#++toString', 1),
+        { filePath: 'src/main.ts', fragment: '++toString', line: 1 },
+        'an inject scope modifier is part of the place, not of the path');
+    assert.deepStrictEqual(
+        policy.splitOpenTarget('src/main.ts#L42', 1),
+        { filePath: 'src/main.ts', fragment: null, line: 42 },
+        'a plain line fragment is the line, exactly as the Java hosts read it');
+    assert.deepStrictEqual(
+        policy.splitOpenTarget('src/main.ts#42', 7),
+        { filePath: 'src/main.ts', fragment: null, line: 42 },
+        'a bare number is a line too, the spelling lib/section.mjs accepts');
+    assert.deepStrictEqual(
+        policy.splitOpenTarget('src/main.ts#', 5),
+        { filePath: 'src/main.ts', fragment: null, line: 5 },
+        'an empty fragment names nothing, so it changes nothing');
+    checks += 6;
+
     assert.deepStrictEqual(policy.decideRoute('GET', '/health', {}, noOrigins, null, null, false),
         { action: 'health' }, '/health answers without credentials');
     assert.deepStrictEqual(policy.decideRoute('GET', '/health', {}, noOrigins, null, null, true),

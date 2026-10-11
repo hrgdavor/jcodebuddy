@@ -183,9 +183,25 @@ public final class NavigatorService implements EditorHost {
         return true;
     }
 
+    /**
+     * The fallback rule of contract § 1.1.1 (2026-10-11): bring an already-open file to the front and leave the
+     * caret where the reader put it. {@code openFile(file, true)} selects the editor <em>without</em> an
+     * {@link OpenFileDescriptor}, which is the whole difference from {@link #openFileAt} — that one asks the
+     * platform for a line and a column, and the platform then moves the caret and scrolls.
+     */
     @Override
-    public boolean select(@NotNull String absolutePath, hr.hrg.webview.core.TextRange range) {
+    public boolean focusOpenFile(@NotNull String absolutePath) {
         VirtualFile file = LocalFileSystem.getInstance().findFileByPath(absolutePath);
+        FileEditorManager editors = FileEditorManager.getInstance(project);
+        if (file == null || !editors.isFileOpen(file)) {
+            return false;
+        }
+        ApplicationManager.getApplication().invokeLater(() -> editors.openFile(file, true));
+        return true;
+    }
+
+    @Override
+    public boolean select(@NotNull String absolutePath, hr.hrg.webview.core.TextRange range) {        VirtualFile file = LocalFileSystem.getInstance().findFileByPath(absolutePath);
         if (file == null) {
             return false;
         }

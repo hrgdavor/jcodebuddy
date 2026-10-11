@@ -21,6 +21,7 @@ import {
     mapEdits,
     normalizeProject,
     parseEditRequest,
+    splitOpenTarget,
     writeRefusalBody
 } from './BridgePolicy';
 import {
@@ -546,19 +547,33 @@ export class HttpBridge {
      * @returns true when the file was opened, so an HTTP caller can answer 403 rather than claim success
      */
     public async navigateToFile(filePath: string, line: number, column: number): Promise<boolean> {
-        const confined = resolveInsideProject(this.projectRoot(), filePath);
+        const target = splitOpenTarget(filePath, line);
+        const confined = resolveInsideProject(this.projectRoot(), target.filePath);
         if (!confined) {
             vscode.window.showErrorMessage(
-                `Refused to open a file outside the project: ${filePath}`);
+                `Refused to open a file outside the project: ${target.filePath}`);
             return false;
         }
 
         try {
             const uri = vscode.Uri.file(confined);
             const document = await vscode.workspace.openTextDocument(uri);
-            const editor = await vscode.window.showTextDocument(document);
 
-            const position = new vscode.Position(Math.max(0, line - 1), Math.max(0, column - 1));
+            // The fallback rule of contract § 1.1.1 (2026-10-11). This host has no section matcher, so a fragment
+            // that is not a line IS the "the named place is not in this file" case: the file opens either way, and
+            // a file that is already open is brought to the front with its cursor left alone — no selection is set
+            // and nothing is revealed, which is what would move the reader.
+            if (target.fragment !== null) {
+                const already = vscode.window.visibleTextEditors.find(
+                    (editor) => editor.document.uri.toString() === document.uri.toString());
+                if (already) {
+                    await vscode.window.showTextDocument(already.document, already.viewColumn);
+                    return true;
+                }
+            }
+
+            const editor = await vscode.window.showTextDocument(document);
+            const position = new vscode.Position(Math.max(0, target.line - 1), Math.max(0, column - 1));
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
             return true;

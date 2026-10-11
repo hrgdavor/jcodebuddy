@@ -35,6 +35,8 @@ public class NavigatorTest {
         private final Set<String> capabilities;
         private boolean available = true;
         private boolean answer = true;
+        /** Whether this host pretends to already have an editor for the file the fallback asks about. */
+        private boolean fileAlreadyOpen = false;
 
         RecordingHost(String... capabilities) {
             this.capabilities = Set.of(capabilities);
@@ -59,6 +61,12 @@ public class NavigatorTest {
         public boolean openFileAt(String absolutePath, int line, int column) {
             calls.add("open " + absolutePath + ":" + line + ":" + column);
             return answer;
+        }
+
+        @Override
+        public boolean focusOpenFile(String absolutePath) {
+            calls.add("focus " + absolutePath);
+            return fileAlreadyOpen;
         }
 
         @Override
@@ -357,17 +365,55 @@ public class NavigatorTest {
     }
 
     @Test
-    public void aNameTheFileDoesNotHaveIsRefusedAndTheHostIsNeverCalled() throws IOException {
+    public void aNameTheFileDoesNotHaveStillOpensTheFile() throws IOException {
         RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
         Fixture fixture = fixture();
         writeSource(fixture);
 
         NavigationOutcome outcome = fixture.forHost(host).open("src/Example.java", 1, 1, "missing");
 
-        assertEquals(NavigationOutcome.Reason.LOCATION_NOT_FOUND, outcome.reason());
-        assertFalse(outcome.succeeded());
-        assertTrue("a wrong line costs a search to discover, so nothing is opened: " + host.calls,
-                host.calls.isEmpty());
+        assertEquals(NavigationOutcome.Reason.LOCATION_FALLBACK, outcome.reason());
+        assertTrue("the reader gets the file even though the place is not in it", outcome.succeeded());
+        assertEquals("the file is asked about first, then opened at the page's line: " + host.calls,
+                2, host.calls.size());
+        assertTrue("the fallback must ask whether the file is already open: " + host.calls.get(0),
+                host.calls.get(0).startsWith("focus "));
+        assertTrue("a file that is not open is opened at the page's own line: " + host.calls.get(1),
+                host.calls.get(1).endsWith("/proj/src/Example.java:1:1"));
+        assertTrue("the outcome says what happened: " + outcome.detail(),
+                outcome.detail().contains("missing is not in this file"));
+    }
+
+    @Test
+    public void anAlreadyOpenFileKeepsItsCaretOnTheFallback() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        host.fileAlreadyOpen = true;
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        NavigationOutcome outcome = fixture.forHost(host).open("src/Example.java", 1, 1, "missing");
+
+        assertEquals(NavigationOutcome.Reason.LOCATION_FALLBACK, outcome.reason());
+        assertTrue(outcome.succeeded());
+        assertEquals("nothing may be opened or selected, or the caret would move: " + host.calls,
+                1, host.calls.size());
+        assertTrue(host.calls.get(0).startsWith("focus "));
+        assertTrue("the answer has to say the caret did not move: " + outcome.detail(),
+                outcome.detail().contains("the file was already open, so the cursor did not move"));
+    }
+
+    @Test
+    public void aResolvedNameStillMovesTheCaretEvenWhenTheFileIsOpen() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        host.fileAlreadyOpen = true;
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        NavigationOutcome outcome = fixture.forHost(host).open("src/Example.java", 1, 1, "add");
+
+        assertEquals(NavigationOutcome.Reason.OK, outcome.reason());
+        assertEquals("a resolved name is the whole point of the link: " + host.calls, 1, host.calls.size());
+        assertTrue("the caret goes to the declaration: " + host.calls.get(0), host.calls.get(0).endsWith(":7:1"));
     }
 
     @Test
