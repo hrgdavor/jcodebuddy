@@ -370,7 +370,8 @@
         if (!link) { return; }
         event.preventDefault();
         client.open(client.absolute(link.getAttribute('data-open'), linkBase),
-          parseInt(link.getAttribute('data-line') || '1', 10), 1);
+          parseInt(link.getAttribute('data-line') || '1', 10),
+          parseInt(link.getAttribute('data-column') || '1', 10));
       });
     }
     function links() {
@@ -379,6 +380,7 @@
         return {
           open: element.getAttribute('data-open'),
           line: parseInt(element.getAttribute('data-line') || '1', 10),
+          column: parseInt(element.getAttribute('data-column') || '1', 10),
           member: element.getAttribute('data-member') || '',
           resolved: client.absolute(element.getAttribute('data-open'), linkBase)
         };

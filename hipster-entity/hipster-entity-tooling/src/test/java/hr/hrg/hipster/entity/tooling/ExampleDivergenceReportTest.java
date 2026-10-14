@@ -141,13 +141,14 @@ class ExampleDivergenceReportTest {
      * list exactly — a kind added to the list without a producer fails here instead of quietly
      * becoming documentation.</p>
      *
-     * <p>Two kinds are <strong>not</strong> in this map on purpose, and the reason is worth stating:
+     * <p>Three kinds are <strong>not</strong> in this map on purpose, and the reason is worth stating:
      * {@code addon_on_non_view} is produced by {@code ViewAnnotationRule} and
-     * {@code enum_order_shuffled} by {@code EnumConstantOrderChecker}. Both are members of the
-     * validator/checker subsystem with their own violation channel, not of the generation pass, so a
-     * generation pass can never emit them. They are listed in {@code KINDS} because that list is the
-     * project-wide vocabulary of divergence kinds; {@link #KINDS_PRODUCED_ELSEWHERE} names their
-     * producers so the exception is explicit rather than an unexplained gap.</p>
+     * {@code enum_order_shuffled} and {@code enum_ordinal_taken} by {@code EnumConstantOrderChecker}.
+     * All three are members of the validator/checker subsystem with their own violation channel, not of
+     * the generation pass, so a generation pass can never emit them. They are listed in {@code KINDS}
+     * because that list is the project-wide vocabulary of divergence kinds;
+     * {@link #KINDS_PRODUCED_ELSEWHERE} names their producers so the exception is explicit rather than
+     * an unexplained gap.</p>
      */
     private static final Map<String, String> KIND_PRODUCER = Map.ofEntries(
             Map.entry("nested_record_reused", "this class (the example's own pass)"),
@@ -197,7 +198,8 @@ class ExampleDivergenceReportTest {
     /** Kinds in the project vocabulary whose producer is a validator, not the generation pass. */
     private static final Map<String, String> KINDS_PRODUCED_ELSEWHERE = Map.of(
             "addon_on_non_view", "ViewAnnotationRuleTest (the annotation rule's own channel)",
-            "enum_order_shuffled", "EnumConstantOrderCheckerTest (the checker's violation list)");
+            "enum_order_shuffled", "EnumConstantOrderCheckerTest (the checker's violation list)",
+            "enum_ordinal_taken", "EnumConstantOrderCheckerTest (the checker's violation list)");
 
     @Test
     void everyRecognizedKindIsEitherProducedOrExplicitlyUnreachable() {

@@ -154,7 +154,9 @@ Three steps, in the order that keeps you honest:
 1. **Decide where a location comes from.** A path is easy. A *name* needs a table — this tool uses the
    class index, but anything with a name-to-location mapping works (a coverage report, an OpenAPI spec, a
    trace file).
-2. **Write `data-open` and `data-line`** on whatever element you like, and use
+2. **Write `data-open` and `data-line`** on whatever element you like — plus `data-column` when you are pointing
+   inside a line (`data-open="A.java#L42:12"`, or the page settles the position itself and writes `data-line="42"
+   data-column="12"`, which needs no host grammar at all) — and use
    `openFileClientScript()` from `open-file.js` inlined into your page. Do not link anything you cannot
    resolve. Set `data-source` on `<body>` to the document's own path and the same client gives you
    **Ctrl+click on any text** back into the source, which costs nothing extra: the click handler is the same

@@ -108,23 +108,26 @@
   function open(link) {
     var relative = link.getAttribute('data-open');
     var line = parseInt(link.getAttribute('data-line') || '1', 10);
+    var column = parseInt(link.getAttribute('data-column') || '1', 10);
     var member = link.getAttribute('data-member') || '';
     var target = absoluteTarget(relative) || relative;
-    return navigate(target, line, member || relative);
+    return navigate(target, line, member || relative, column);
   }
 
   /** The ladder itself, taking an already resolved target. */
-  function navigate(target, line, label) {
+  function navigate(target, line, label, column) {
+    column = column || 1;
     // 1. the IDE webview injected this after the page loaded
     if (typeof window.openFile === 'function') {
-      window.openFile(target, line, 1);
-      say('Opened ' + (label || target) + ' at line ' + line + ' in the IDE.');
+      window.openFile(target, line, column);
+      say('Opened ' + (label || target) + ' at line ' + line
+        + (column > 1 ? ', column ' + column : '') + ' in the IDE.');
       return 'injected';
     }
     // 2. the loopback HTTP bridge, through a hidden iframe so no CORS grant is needed
     if (PORT > 0) {
       var url = 'http://127.0.0.1:' + PORT + '/open?filePath=' + encodeURIComponent(target)
-        + '&line=' + line + '&column=1' + (TOKEN ? '&token=' + encodeURIComponent(TOKEN) : '');
+        + '&line=' + line + '&column=' + column + (TOKEN ? '&token=' + encodeURIComponent(TOKEN) : '');
       var previous = document.getElementById('bridge-frame');
       if (previous) { previous.remove(); }
       var frame = document.createElement('iframe');
@@ -209,6 +212,7 @@
         return {
           open: element.getAttribute('data-open'),
           line: parseInt(element.getAttribute('data-line') || '1', 10),
+          column: parseInt(element.getAttribute('data-column') || '1', 10),
           member: element.getAttribute('data-member') || '',
           resolved: absoluteTarget(element.getAttribute('data-open'))
         };

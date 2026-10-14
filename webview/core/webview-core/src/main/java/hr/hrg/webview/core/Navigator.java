@@ -140,8 +140,9 @@ public final class Navigator {
                     location.summary() + " is not in this file");
         }
         int target = Math.max(1, at.line());
+        int atColumn = Math.max(1, at.column());
         return act(resolution, EditorHost.CAP_OPEN,
-                () -> host.openFileAt(resolution.absolute(), target, 1));
+                () -> host.openFileAt(resolution.absolute(), target, atColumn));
     }
 
     /**

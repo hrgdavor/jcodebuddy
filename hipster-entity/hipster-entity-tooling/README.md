@@ -742,13 +742,18 @@ The comparison is the **removal-then-queue-jump** rule, implemented in
    itself be an earlier baseline constant — otherwise the constant that
    jumped the queue is reported, with its old and new index, as
    `enum_order_shuffled`.
+3. when the slot a removed constant held is occupied by a constant the
+   baseline did not have, that is reported as well, as
+   `enum_ordinal_taken`: the value is gone *and* the ordinal now answers to
+   a different name. A neighbour that merely slid into the hole is not this
+   case.
 
 A plain "baseline is a subsequence of the target" test is **not** enough:
 `[id, firstName]` → `[id, email, firstName]` is a valid subsequence even
 though `firstName` moved from ordinal 1 to 2. The queue-jump rule catches
 it.
 
-Both kinds are reported in the DEC-022 format
+The kinds are reported in the DEC-022 format
 (`kind, location, cause, current, canonical, action`). An enum that is
 **unmarked in the baseline** is skipped for that comparison, so the
 bootstrap commit that first adds the marker is not reported as a mass
@@ -856,7 +861,7 @@ entries in the uniform DEC-022 shape
 `kind, location, cause, current, canonical, action`, printed at the end
 of the pass and readable from `EntityMetadataGenerator.lastDivergences()`.
 The recognised kinds include `enum_order_shuffled`,
-`enum_constant_removed`, `enum_constant_appended`,
+`enum_constant_removed`, `enum_ordinal_taken`, `enum_constant_appended`,
 `enum_reorder_allowed`, `enum_not_parsed`, `field_retired`,
 `addon_on_non_view`, `field_in_enum_not_in_interface`,
 `field_in_interface_not_in_enum`, `stale_switch`, `missing_setter`,

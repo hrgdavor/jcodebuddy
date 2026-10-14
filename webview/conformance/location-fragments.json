@@ -3,10 +3,11 @@
   "note": "Every way a generated page may point INSIDE a file, and what it means. Written by hand, per webview/conformance/README.md: a vector is a claim about behaviour, and generating it from one implementation would only prove that implementation agrees with itself. The page side (scripts/webview-location) and the host side (webview-core) both assert against this file.",
   "grammar": [
     "A fragment is the part after '#' in a link, without the '#'. One leading '#' is tolerated and stripped.",
-    "'L<line>' and 'L<from>-L<to>' are explicit positions and always win.",
-    "'<ref>' names a region or a declaration, with inject-examples' scope modifiers '-' (body only), '+' (with annotations) and '++' (with annotations and the doc comment). The reference implementation owns that spelling: a modifier may lead the whole reference or trail its last segment, and a reference may be a path ('Cart/add').",
+    "'L<line>' and 'L<from>-L<to>' are explicit positions and always win, and a position may name the column it starts at after a colon ('L42:12'). Lines and columns count from 1 and a range may not end before it starts, as the reference implementation reads them: '#L0' and '#L58-L42' are malformed, not clamped. A range carries the column it starts at; its END column is not carried, because this contract places one caret and selects a line span.",
+    "'<ref>' names a region or a declaration, with inject-examples' scope modifiers '-' (body only), '+' (with annotations) and '++' (with annotations and the doc comment). The reference implementation owns that spelling, and in its current grammar a modifier is a whole TRAILING segment: 'add/-', 'add/+', 'add/++'. The older leading forms ('+add', '++add') are refused by it, and '-add' is not a modifier at all but a name, because '-' may appear in a name and '+' may not.",
     "In a .json file the reference is a comma-separated list of dotted key paths, because JSON has no comments to hang a region on.",
     "A bare name is a declaration in a source file, and a heading anchor in a document (.md, .markdown, .html, .htm) - which is why a link to '#install' in a README is left to the page itself.",
+    "The reference also reads a comma as a list of selectors and an envelope pair ('foo/^,foo/$'). A list is several places and an envelope is a property of one, so neither is one location in this contract: they are not locations here, and the file opens instead. A .json file's comma list is its own rule, checked before the reference, and is unaffected.",
     "Anything else is not a location and stays an ordinary link."
   ],
   "cases": [
@@ -35,22 +36,34 @@
       "expect": { "kind": "range", "from": 42, "to": 42 }
     },
     {
-      "why": "line 0 means the first line rather than an error, per the contract's clamp rule",
+      "why": "line 0 is malformed rather than line 1: the reference implementation counts lines and columns from 1, so a page that wrote it has a bug, not a clamp",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
       "fragment": "L0",
-      "expect": { "kind": "line", "line": 0 }
+      "expect": null
     },
     {
-      "why": "a reversed range is a page's mistake; the grammar reports what was written and the host normalises",
+      "why": "a reversed range is malformed too - the reference refuses it ('ends before it starts') rather than normalising what the page wrote",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
       "fragment": "L58-L42",
-      "expect": { "kind": "range", "from": 58, "to": 42 }
+      "expect": null
     },
     {
       "why": "an open-ended range is not a location",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
       "fragment": "L42-",
       "expect": null
+    },
+    {
+      "why": "a position may name the column it starts at: line 42 from its twelfth character, which a caret can be placed at (the page splits on ':' and needs no grammar for it)",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L42:12",
+      "expect": { "kind": "line", "line": 42, "column": 12 }
+    },
+    {
+      "why": "and a range carries the column it starts at; its end column is not carried, because a caret is one position and the selection is a line span",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "L42:12-L44:3",
+      "expect": { "kind": "range", "from": 42, "to": 44, "column": 12 }
     },
     {
       "why": "a leading '#' is tolerated, because a page has the fragment either way",
@@ -65,51 +78,99 @@
       "expect": { "kind": "member", "name": "add" }
     },
     {
-      "why": "the body only, without the signature",
+      "why": "the body only: the modifier is the path's last segment, which is the spelling the reference implementation reads",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "-add",
+      "fragment": "add/-",
       "expect": { "kind": "region", "name": "add", "scope": "-" }
     },
     {
       "why": "the declaration and its annotations",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "+add",
+      "fragment": "add/+",
       "expect": { "kind": "region", "name": "add", "scope": "+" }
     },
     {
       "why": "the declaration, annotations and doc comment - the form the resolver docs use",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "++toString",
+      "fragment": "toString/++",
       "expect": { "kind": "region", "name": "toString", "scope": "++" }
     },
     {
-      "why": "the reference implementation also accepts the modifier trailing the last segment, its own canonical spelling: reading 'add-' as a name would be a second grammar beside it",
+      "why": "a bare plus is refused by the reference implementation, which says so and names the spelling to use ('#<path>/+'): reading it as a region would be a second grammar beside it",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "add-",
-      "expect": { "kind": "region", "name": "add", "scope": "-" }
+      "fragment": "+add",
+      "expect": null
     },
     {
-      "why": "and a reference may be a path - 'Cart/add' is the spelling the webview README names - so the name a link carries is the path it wrote",
+      "why": "and the same for the widening double plus, which used to be the resolver docs' spelling",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "++toString",
+      "expect": null
+    },
+    {
+      "why": "a plus glued to a name is not a modifier either",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "add+",
+      "expect": null
+    },
+    {
+      "why": "a trailing minus is NOT a modifier: '-' may appear in a name, so 'add-' is the name it says",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "add-",
+      "expect": { "kind": "member", "name": "add-" }
+    },
+    {
+      "why": "and a leading minus is a name character too, so this is a name and never a body-only region",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "-add",
+      "expect": { "kind": "member", "name": "-add" }
+    },
+    {
+      "why": "two or three minus signs are names as well - there is no such modifier, and the name is what the page wrote",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "--add",
+      "expect": { "kind": "member", "name": "--add" }
+    },
+    {
+      "why": "and the three-minus spelling is a name for the same reason",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "---add",
+      "expect": { "kind": "member", "name": "---add" }
+    },
+    {
+      "why": "a reference may be a path - 'Cart/add' is the spelling the webview README names - so the name a link carries is the path it wrote",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
       "fragment": "Cart/add",
       "expect": { "kind": "member", "name": "Cart/add" }
     },
     {
-      "why": "with the modifier leading the last segment, which the reference implementation normalises to the same answer as 'Cart/add-'",
+      "why": "and the scope rides on the end of that path",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "Cart/-add",
+      "fragment": "Cart/add/-",
       "expect": { "kind": "region", "name": "Cart/add", "scope": "-" }
     },
     {
-      "why": "three plus signs is malformed, not a region called '+add'",
+      "why": "a minus after the slash is a name inside the path, not a modifier: only the LAST segment may be one, and '-add' is not a modifier spelling",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "+++add",
+      "fragment": "Cart/-add",
+      "expect": { "kind": "member", "name": "Cart/-add" }
+    },
+    {
+      "why": "a bare modifier names nothing",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "++",
       "expect": null
     },
     {
-      "why": "two minus signs is malformed, not a region called '-add'",
+      "why": "the reference reads a comma as a list of selectors; this contract names one place, and a .json file's comma list is its own rule",
       "path": "src/main/java/com/hrg/bla/SomeFile.java",
-      "fragment": "--add",
+      "fragment": "add,regionName",
+      "expect": null
+    },
+    {
+      "why": "an envelope pair is a property of a reference list, not one place in this contract",
+      "path": "src/main/java/com/hrg/bla/SomeFile.java",
+      "fragment": "Cart/^,Cart/$",
       "expect": null
     },
     {
@@ -143,10 +204,22 @@
       "expect": { "kind": "json", "keys": ["keywords.0"] }
     },
     {
+      "why": "in .json a bare reference is the JSON rule before the reference grammar: JSON has no regions, and a leading dash is a legal key character",
+      "path": "package.json",
+      "fragment": "-name",
+      "expect": { "kind": "json", "keys": ["-name"] }
+    },
+    {
       "why": "a bare fragment in a document is a candidate too: the page scrolls to a heading of that name without asking anyone, and only asks a host when the name is not one - which is how a README region link works",
       "path": "doc/usage.md",
       "fragment": "install",
       "expect": { "kind": "member", "name": "install" }
+    },
+    {
+      "why": "and a document takes a scope the same way a source file does: the modifier is the last segment",
+      "path": "doc/usage.md",
+      "fragment": "install/++",
+      "expect": { "kind": "region", "name": "install", "scope": "++" }
     },
     {
       "why": "and the same is true of HTML, whose anchors are its own",
@@ -191,15 +264,9 @@
       "expect": null
     },
     {"why":"THE maintainer's case: a bare name spelled like a region, with no prefix at all - it is a name exactly like a method or a field, and what it resolves to is the host's business (a declaration, or a #region directive of that name)", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"regionName", "expect":{"kind":"member", "name":"regionName"}},
-    {"why":"a declaration name and a region name are the same reference: a link should not have to know which one the author wrote", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"add", "expect":{"kind":"member", "name":"add"}},
-    {"why":"a scope modifier needs no prefix either - no language here has a declaration whose name starts with a minus, so it is unambiguous", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"-add", "expect":{"kind":"region", "name":"add", "scope":"-"}},
-    {"why":"the same, with the bare plus form", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"+add", "expect":{"kind":"region", "name":"add", "scope":"+"}},
-    {"why":"and the bare double plus, the form the resolver docs use", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"++toString", "expect":{"kind":"region", "name":"toString", "scope":"++"}},
-    {"why":"a modifier with nothing after it names nothing", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"++", "expect":null},
-    {"why":"three minuses is not a modifier, and not a name either", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"---add", "expect":null},
+    {"why":"a name that may contain a dash reads as the name it is, whatever the dash count", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"update-document-test", "expect":{"kind":"member", "name":"update-document-test"}},
+    {"why":"the widening double plus, in the spelling the reference reads", "path":"src/main/java/com/hrg/bla/SomeFile.java", "fragment":"add/++", "expect":{"kind":"region", "name":"add", "scope":"++"}},
     {"why":"in .json there are no declarations to find, so a bare reference is the JSON rule: dotted key paths", "path":"package.json", "fragment":"scripts.test", "expect":{"kind":"json", "keys":["scripts.test"]}},
-    {"why":"including the list form, without the prefix", "path":"package.json", "fragment":"name,scripts.test", "expect":{"kind":"json", "keys":["name", "scripts.test"]}},
-    {"why":"and in a document a region works the same way bare: the prefix is never required, only allowed", "path":"doc/usage.md", "fragment":"++install", "expect":{"kind":"region", "name":"install", "scope":"++"}},
-    {"why":"in .json a bare reference is the JSON rule before any modifier rule: JSON has no regions, and a leading dash is a legal key character","path":"package.json","fragment":"-name","expect":{"kind":"json","keys":["-name"]}}
+    {"why":"a list in a code file is not one location in this contract, while the same text in .json is its key list", "path":"package.json", "fragment":"name,scripts.test", "expect":{"kind":"json", "keys":["name", "scripts.test"]}}
   ]
 }

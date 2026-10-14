@@ -10,8 +10,14 @@ import { parseLocation, locationSummary } from './scripts/webview-location/index
 parseLocation('src/main/java/com/hrg/bla/SomeFile.java', 'someMethod')
 // { kind: 'member', name: 'someMethod' }
 
-parseLocation('src/main/java/com/hrg/bla/SomeFile.java', '++toString')
-// { kind: 'region', name: 'toString', scope: '++' }
+parseLocation('src/main/java/com/hrg/bla/SomeFile.java', 'toString/++')
+// { kind: 'region', name: 'toString', scope: '++' } — a modifier is a whole trailing segment
+
+parseLocation('src/main/java/com/hrg/bla/SomeFile.java', 'L42-L58')
+// { kind: 'range', from: 42, to: 58 } — the reference implementation's own position spelling
+
+parseLocation('src/main/java/com/hrg/bla/SomeFile.java', 'L42:12')
+// { kind: 'line', line: 42, column: 12 } — a position is a line and the column it starts at
 
 parseLocation('doc/usage.md', 'install')
 // { kind: 'member', name: 'install' } — a document's bare name is its own heading anchor first
@@ -25,11 +31,12 @@ tries the declaration, then the region. In a document a bare name is also a head
 wins — a renderer knows its headings, so it only asks a host when the name is not one.
 
 **The reference grammar is not implemented here.** `@hrg/inject-examples` is the reference implementation of section
-searching: its `lib/section.mjs` owns the spelling of a reference — the path segments, the `-`/`+`/`++` scope, the
-normalisation of a leading or a trailing modifier, and the errors — and this module **asks it** (`parseReference`)
-instead of spelling a second copy. What is left here is only what that library's module boundary deliberately
-excludes: an explicit `L42`/`L42-L58` position, a `.json` key path, and the classification a page needs. Any internal
-implementation of section searching complies with the reference; a disagreement is a bug here, never there.
+searching: its `lib/section.mjs` owns the spelling of a reference — the path segments, the `-`/`+`/`++` scope as a
+whole trailing segment, the line ranges and columns, the normalisation, and the errors — and this module **asks it**
+(`parseSelectors`) instead of spelling a second copy. What is left here is the classification a page needs — which of
+that implementation's readings this contract can name — and the `.json` key path JSON's own lack of comments forces.
+Any internal implementation of section searching complies with the reference; a disagreement is a bug here, never
+there.
 
 **The claims** are `webview/conformance/location-fragments.json`, written by hand, and this module is one of two
 readers that must satisfy them — the other is `webview/core/webview-core`'s `LocationFragment`, which asks the Java

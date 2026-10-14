@@ -218,6 +218,7 @@ export function renderDocument(markdown, options) {
     const record = {
       open: target.open,
       line: target.line,
+      column: target.column ?? 1,
       member: target.member ?? '',
       role: target.role ?? '',
       from: documentPath,
@@ -230,6 +231,7 @@ export function renderDocument(markdown, options) {
     // contract, and a page that names a declaration writes it the way the documentation already does.
     const openSpelling = target.fragment ? target.open + '#' + target.fragment : target.open;
     const attributes = `data-open="${escapeHtml(openSpelling)}" data-line="${target.line}"`
+      + (target.column > 1 ? ` data-column="${target.column}"` : '')
       + (target.member ? ` data-member="${escapeHtml(target.member)}"` : '')
       + (target.role ? ` data-role="${escapeHtml(target.role)}"` : '')
       + ` title="${escapeHtml(title || ('open ' + (target.member || target.open) + ' at line ' + target.line))}"`;

@@ -18,10 +18,10 @@ Nothing here is special to this document: a link is an ordinary Markdown link wh
 
 - [the `open` method](../core/webview-core/src/main/java/hr/hrg/webview/core/Navigator.java#open) — a bare name is
   a declaration **or** a region directive of that name; the host tries the declaration, then the region.
-- [its body only](../core/webview-core/src/main/java/hr/hrg/webview/core/Navigator.java#-open) — the `-` scope
-  modifier.
-- [with its annotations](../core/webview-core/src/main/java/hr/hrg/webview/core/Navigator.java#+open) — `+`.
-- [with its doc comment too](../core/webview-core/src/main/java/hr/hrg/webview/core/Navigator.java#++open) — `++`.
+- [its body only](../core/webview-core/src/main/java/hr/hrg/webview/core/Navigator.java#open/-) — the `-` scope
+  modifier, as a whole trailing segment (the reference implementation's spelling: `#-open` is the *name* `-open`).
+- [with its annotations](../core/webview-core/src/main/java/hr/hrg/webview/core/Navigator.java#open/+) — `+`.
+- [with its doc comment too](../core/webview-core/src/main/java/hr/hrg/webview/core/Navigator.java#open/++) — `++`.
 
 ## A region, the way the resolver docs name one
 
@@ -29,7 +29,7 @@ Nothing here is special to this document: a link is an ordinary Markdown link wh
 
 - [#replays-sticky-decision](../../merge-java/src/test/java/com/codebuddy/merge/MergeConflictResolverTest.java#replays-sticky-decision)
   — the region directive, found first, exactly as `@hrg/inject-examples`' code rule orders it.
-- [#++replaysStickyDecision](../../merge-java/src/test/java/com/codebuddy/merge/MergeConflictResolverTest.java#++replaysStickyDecision)
+- [#replaysStickyDecision/++](../../merge-java/src/test/java/com/codebuddy/merge/MergeConflictResolverTest.java#replaysStickyDecision/++)
   — a declaration with the widest scope, which lands on the declaration itself.
 
 ## A JSON key

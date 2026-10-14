@@ -281,6 +281,25 @@ public final class EnumConstantOrderChecker {
      *   <li>remove &rarr; fails as a removal (a subsequence cannot skip an element of the
      *       <em>baseline</em>).</li>
      * </ul>
+     *
+     * <h3>A removal is reported twice when the ordinal was handed on</h3>
+     * <p>The removal loop below reports every baseline constant that is gone. When the slot it held is
+     * occupied in the target by a constant that <strong>did not exist in the baseline</strong>, that is
+     * a second, different fact and gets a second violation: {@code enum_ordinal_taken}. The two are not
+     * duplicates. {@code enum_constant_removed} says the value is gone; {@code enum_ordinal_taken} says
+     * the slot is now answering to a different name — which is what persisted data keyed on the ordinal
+     * meets, and what a reader of {@code [id, firstName] -> [id, givenName]} has to be told, because
+     * "firstName was removed" alone reads as "there is a hole here" when there is in fact a new value in
+     * the old value's place.</p>
+     *
+     * <p>Where this came from: a differential run against the {@code enum-checker} prototype's
+     * {@code checkOrdinalStability} over thirteen before/after pairs (append, middle insertion, first
+     * insertion, adjacent and distant swap, reverse, three removals, rename, and two mixed cases). The
+     * two checkers <strong>agree on every pass/fail verdict</strong> — the prototype catches nothing
+     * this one misses, which is why its positional algorithm was not ported. The one thing its output
+     * carried that ours did not is its "expected X, found Y" at a position, i.e. the pair of values
+     * sharing one ordinal; that fact is what this kind records, expressed in this checker's vocabulary
+     * rather than the prototype's index arithmetic.</p>
      */
     public static OrderVerdict compare(List<String> baseline, List<String> target) {
         List<String> violations = new ArrayList<>();
@@ -288,9 +307,22 @@ public final class EnumConstantOrderChecker {
         // Removal first: every baseline constant must still exist, so a delete is reported as a
         // removal rather than as a reorder of everything after it.
         for (String constant : baseline) {
-            if (!target.contains(constant)) {
-                violations.add("enum_constant_removed: " + constant + " (was at index "
-                        + baseline.indexOf(constant) + ", now absent)");
+            int baselineIndex = baseline.indexOf(constant);
+            if (target.contains(constant)) {
+                continue;
+            }
+            violations.add("enum_constant_removed: " + constant + " (was at index "
+                    + baselineIndex + ", now absent)");
+            // The ordinal the removed constant held. A constant that occupies it in the target and was
+            // not in the baseline is a replacement at that position, not an insertion before it: the
+            // slot's meaning changed, and the two facts are reported separately.
+            if (baselineIndex < target.size()) {
+                String nowAtTheSlot = target.get(baselineIndex);
+                if (!baseline.contains(nowAtTheSlot)) {
+                    violations.add("enum_ordinal_taken: " + constant + " to " + nowAtTheSlot
+                            + " (index " + baselineIndex + " no longer means " + constant
+                            + "; persisted data carrying that ordinal now resolves to " + nowAtTheSlot + ")");
+                }
             }
         }
         if (!violations.isEmpty()) {

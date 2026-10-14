@@ -100,6 +100,76 @@ class EnumConstantOrderCheckerTest {
                 "the removed constant is named; got " + verdict.violations());
     }
 
+    /**
+     * A removal whose <strong>ordinal was handed to a new constant</strong> is two facts, not one.
+     *
+     * <p>{@code [id, firstName, lastName] -> [id, givenName, lastName]} is a rename. The ordinal is
+     * intact — slot 1 is still slot 1 — but it no longer resolves to the name persisted data was
+     * written with, and {@code enum_constant_removed: firstName} alone reads as "there is a hole at
+     * index 1" when in fact a different value is standing there.</p>
+     *
+     * <p>This is the one fact a differential run against the {@code enum-checker} prototype's
+     * {@code checkOrdinalStability} showed our output did not carry, and it is the reason this kind
+     * exists. The prototype's positional "expected 'firstName', found 'givenName'" is that fact; so is
+     * the second assertion below. The prototype was <em>not</em> ported: over thirteen before/after
+     * pairs the two checkers agree on every pass/fail verdict, so there was no detection to gain.</p>
+     */
+    @Test
+    void aRemovalThatHandsTheOrdinalOnIsReportedAsTwoFacts() {
+        String baseline = enumSource(HEADER_MARKED, "id", "firstName", "lastName");
+        String target = enumSource(HEADER_MARKED, "id", "givenName", "lastName");
+
+        OrderVerdict verdict = EnumConstantOrderChecker.compareSources(baseline, target, "example.PersonSummary_");
+
+        Assertions.assertFalse(verdict.ok(), "a renamed constant must fail: " + verdict.violations());
+        Assertions.assertTrue(verdict.violations().stream().anyMatch(v -> v.startsWith("enum_constant_removed: firstName")),
+                "the value is gone, and that is still reported on its own: " + verdict.violations());
+        Assertions.assertTrue(verdict.violations().stream().anyMatch(v -> v.startsWith("enum_ordinal_taken: firstName to givenName")),
+                "and index 1 now means givenName, which is the fact a reader has to act on: "
+                        + verdict.violations());
+    }
+
+    /**
+     * The guard on the new kind: a removal that leaves <strong>no</strong> replacement behind is a
+     * removal and nothing else.
+     *
+     * <p>Reported because the opposite failure is the cheap one to write: matching the target's slot
+     * against the baseline by <em>position</em> rather than by a constant the baseline did not have
+     * would flag every removal that shifts its neighbours, turning a clean report into noise.</p>
+     */
+    @Test
+    void aRemovalThatHandsNothingOnReportsOnlyTheRemoval() {
+        // `lastName` merely slid into the hole `firstName` left; it is not a new constant, so nothing
+        // took an ordinal over — the slot is occupied by a survivor, and the survivor moved.
+        String baseline = enumSource(HEADER_MARKED, "id", "firstName", "lastName");
+        String target = enumSource(HEADER_MARKED, "id", "lastName");
+
+        OrderVerdict verdict = EnumConstantOrderChecker.compareSources(baseline, target, "example.PersonSummary_");
+
+        Assertions.assertTrue(verdict.violations().stream().anyMatch(v -> v.contains("enum_constant_removed")),
+                "the removal is reported: " + verdict.violations());
+        Assertions.assertTrue(verdict.violations().stream().noneMatch(v -> v.contains("enum_ordinal_taken")),
+                "but lastName was already in the baseline, so no ordinal changed meaning: "
+                        + verdict.violations());
+    }
+
+    /**
+     * The same shape, checked against the prototype that motivated it — kept as a fixture rather than
+     * as a copied algorithm, because the algorithm was measured and found to add nothing.
+     */
+    @Test
+    void aReorderIsStillOneViolationPerOffendingConstant() {
+        String baseline = enumSource(HEADER_MARKED, "id", "firstName", "lastName");
+        String target = enumSource(HEADER_MARKED, "id", "email", "firstName", "lastName");
+
+        OrderVerdict verdict = EnumConstantOrderChecker.compareSources(baseline, target, "example.PersonSummary_");
+
+        Assertions.assertFalse(verdict.ok(), "insertion in the middle still fails");
+        Assertions.assertTrue(verdict.violations().stream().noneMatch(v -> v.contains("enum_ordinal_taken")),
+                "an insertion pushes survivors aside instead of taking a slot over, so the new kind must "
+                        + "stay silent here and the shuffle alone must carry the report: " + verdict.violations());
+    }
+
     // ------------------------------------------------------------------ 24
     @Test
     void optInIsHonoured() {

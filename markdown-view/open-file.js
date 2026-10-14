@@ -120,22 +120,22 @@ export function openFileClientScript(options = {}) {
    * steps is how a fallback drifts, and the copy that drifts is the one nobody tested (a browser, where
    * window.openFile is absent).
    */
-  function openAt(relative, line, member, what) {
+  function openAt(relative, line, column, member, what) {
     var target = absoluteTarget(relative) || relative;
 
     if (typeof window.openFile === 'function') {
-      window.openFile(target, line, 1);
+      window.openFile(target, line, column);
       // "Asked", not "Opened": the page hands the location over and cannot know what the IDE did with it. The
       // old wording said "at line 1" for a method link, which reads like the IDE ignored the method when the
       // line was only ever the fallback.
       say(member
         ? 'Asked the IDE to open ' + member + ' in ' + String(relative).split('#')[0] + '.'
-        : 'Asked the IDE to open ' + target + (line > 1 ? ' at line ' + line : '') + '.');
+        : 'Asked the IDE to open ' + target + at(line, column) + '.');
       return;
     }
     if (BRIDGE_PORT > 0) {
       var url = 'http://127.0.0.1:' + BRIDGE_PORT + '/open?filePath=' + encodeURIComponent(target)
-        + '&line=' + line + '&column=1';
+        + '&line=' + line + '&column=' + column;
       var previous = document.getElementById('bridge-frame');
       if (previous) { previous.remove(); }
       var frame = document.createElement('iframe');
@@ -144,18 +144,28 @@ export function openFileClientScript(options = {}) {
       frame.setAttribute('aria-hidden', 'true');
       frame.src = url;
       document.body.appendChild(frame);
-      say('Sent line ' + line + ' to the IDE bridge on port ' + BRIDGE_PORT + '.');
+      say('Sent ' + (column > 1 ? 'line ' + line + ' column ' + column : 'line ' + line)
+        + ' to the IDE bridge on port ' + BRIDGE_PORT + '.');
       return;
     }
     copy(target + ':' + line);
     say('No IDE bridge here. Location copied: ' + target + ':' + line);
   }
 
+  /** {@code at line 42, column 12}, or nothing when the position is the contract's own default. */
+  function at(line, column) {
+    if (line > 1 && column > 1) { return ' at line ' + line + ', column ' + column; }
+    if (line > 1) { return ' at line ' + line; }
+    if (column > 1) { return ' at column ' + column; }
+    return '';
+  }
+
   function open(link) {
     var relative = link.getAttribute('data-open');
     var line = parseInt(link.getAttribute('data-line') || '1', 10);
+    var column = parseInt(link.getAttribute('data-column') || '1', 10);
     var member = link.getAttribute('data-member') || '';
-    openAt(relative, line, member, 'link');
+    openAt(relative, line, column, member, 'link');
   }
 
   document.addEventListener('click', function (event) {
@@ -169,7 +179,7 @@ export function openFileClientScript(options = {}) {
       var own = sourcePath();
       if (!line || !own) { return; }
       event.preventDefault();
-      openAt(own, parseInt(line.getAttribute('data-line') || '1', 10), '',
+      openAt(own, parseInt(line.getAttribute('data-line') || '1', 10), 1, '',
         'this document');
       return;
     }

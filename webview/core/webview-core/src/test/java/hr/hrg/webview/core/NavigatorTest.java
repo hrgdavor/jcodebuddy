@@ -484,6 +484,25 @@ public class NavigatorTest {
     }
 
     @Test
+    public void aPositionWithAColumnPutsTheCaretThere() throws IOException {
+        RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
+        Fixture fixture = fixture();
+        writeSource(fixture);
+
+        // A position is a line and a column, and both must reach the host: the page split `#L42:12` itself (it needs
+        // no grammar for that), so the host would otherwise land at the start of line 42 and quietly lose the column.
+        NavigationOutcome outcome = fixture.forHost(host).open("src/Example.java#L42:12", 1, 1);
+
+        assertEquals(NavigationOutcome.Reason.OK, outcome.reason());
+        assertEquals(1, host.calls.size());
+        assertTrue("the column must reach the host: " + host.calls.get(0), host.calls.get(0).endsWith(":42:12"));
+
+        // And a position with no column is still the plain line it always was.
+        fixture.forHost(host).open("src/Example.java#L42", 1, 1);
+        assertTrue("no column, no column: " + host.calls.get(1), host.calls.get(1).endsWith(":42:1"));
+    }
+
+    @Test
     public void aRegionInThePathIsReadTooAndADocumentStillKeepsItsAnchors() throws IOException {
         RecordingHost host = new RecordingHost(EditorHost.CAP_OPEN);
         Fixture fixture = fixture();

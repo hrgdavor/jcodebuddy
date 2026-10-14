@@ -20,7 +20,8 @@ import java.util.regex.Pattern;
  *
  * <p>The two diagnostics that must exist first are the two that bit the example — "field in the enum
  * but not in the interface" and "field in the interface but not in the enum" — together with the two
- * R1 kinds {@code enum_order_shuffled} and {@code enum_constant_removed} and the warning-level
+ * R1 kinds {@code enum_order_shuffled} and {@code enum_constant_removed}, the second fact of a removal
+ * whose ordinal was handed on ({@code enum_ordinal_taken}) and the warning-level
  * {@code enum_reorder_allowed}.</p>
  *
  * <h3>Why a report and not just a print</h3>
@@ -62,6 +63,10 @@ public final class DivergenceReporter implements hr.hrg.jcodebuddy.engine.Diagno
             "ordinal_drift",
             "enum_order_shuffled",
             "enum_constant_removed",
+            // The removal's second fact, when the slot was handed to a constant the baseline did not
+            // have: the ordinal still exists, and now resolves to a different value (see
+            // EnumConstantOrderChecker.compare).
+            "enum_ordinal_taken",
             "enum_constant_appended",
             "enum_reorder_allowed",
             "enum_not_parsed",

@@ -68,12 +68,13 @@ public final class LocationResolver {
         switch (fragment.kind()) {
             case LINE:
                 // An explicit position needs no file: the page said where to go, and the host clamps if it is past
-                // the end (the frozen contract's rule 3).
-                return new LocationResolution(fragment.line(), fragment.line(), fragment.kind(),
-                    "the page's own line number");
+                // the end (the frozen contract's rule 3). A position is a line AND a column, so both travel: the page
+                // wrote `#L42:12` and the caret belongs at (42, 12), not at the start of the line.
+                return new LocationResolution(fragment.line(), fragment.line(), fragment.column(), fragment.kind(),
+                    fragment.column() > 1 ? "the page's own line and column" : "the page's own line number");
             case RANGE:
                 return new LocationResolution(fragment.from(), Math.max(fragment.from(), fragment.to()),
-                    fragment.kind(), "the page's own line range");
+                    fragment.column(), fragment.kind(), "the page's own line range");
             default:
                 break;
         }
@@ -88,15 +89,17 @@ public final class LocationResolver {
 
     /**
      * Where the reference lands, as {@code @hrg/inject-examples} resolves it. The fragment's scope becomes the
-     * library's trailing modifier, except that {@code +} and {@code ++} are dropped for navigation (see the class
-     * note): a reader wants the declaration, not the annotations above it.
+     * library's trailing modifier segment — {@code add/-} — except that {@code +} and {@code ++} are dropped for
+     * navigation (see the class note): a reader wants the declaration, not the annotations above it.
      *
      * <p>A qualified name is tried as written first, and by its last segment second. The library matches a dotted
      * name as one token — that is its own rule for markers, where {@code Foo.Bar} really can be the name — while a
      * link that says {@code a.SomeFile} means the member {@code SomeFile}, so the fallback is the host's to make.
      */
     private static LocationResolution byReference(LocationFragment fragment, String fileText, String path) {
-        String scope = "-".equals(fragment.scope()) ? "-" : "";
+        // A modifier is a whole trailing segment in the reference grammar (2026-10-13): 'add-', which this built
+        // before, is the NAME 'add-' now, so the body-only scope has to be spelled 'add/-' or it resolves to nothing.
+        String scope = "-".equals(fragment.scope()) ? "/-" : "";
         LocationResolution exact = attempt(fragment, fragment.name() + scope, fileText, path);
         if (exact != null) {
             return exact;

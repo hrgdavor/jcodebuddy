@@ -265,6 +265,34 @@ Run sheet (JetBrains: a rebuilt plugin and an open project — `Sample.java` fro
 | ------------------------------------------------------------- | ---- | ------ |
 | **JetBrains** (rebuilt plugin, `runIde` sandbox or installed) | —    | **Not observed — outstanding.** Implemented and unit-tested (`webview-core` 201 tests; the plugin's 54); the state is written down rather than claimed. |
 
+## 2c. A position with a column lands inside the line (2026-10-13)
+
+A position may name the column it starts at — `#L42:12`, line 42 from its twelfth character — and both halves of the
+rule are worth one look each, because only the second is a claim about a running editor: `webview-core` proves the
+column reached the host (`NavigatorTest.aPositionWithAColumnPutsTheCaretThere` asserts `openFileAt(path, 42, 12)`,
+and every host already accepted a column), while "the caret is *between* the characters the link named" is a
+person's observation.
+
+Run sheet (any host; a rebuilt plugin for JetBrains):
+
+1. Put a longish line in a file you will open — a line with four or more words is enough — and note the character
+   position of, say, the third word.
+2. Ask for that position with the column:
+
+   ```console
+   curl "http://127.0.0.1:<port>/open?filePath=<abs>/Sample.java%23L2:12&line=1&column=1"
+   ```
+
+   The bare `%23L2:12` is the fragment: the host reads the position, and the page does the same split when a link
+   carries it.
+3. **What must be true**: the editor is in front with the caret *inside* line 2 at column 12 — not at the start of
+   the line. A caret at column 1 is the failure this rule exists to catch, and the page's own spelling
+   (`data-open="…/Sample.java#L2:12"`, or `data-line="2" data-column="12"`) must behave the same way.
+
+| Host                                                          | Date | Result |
+| ------------------------------------------------------------- | ---- | ------ |
+| **JetBrains** (rebuilt plugin, `runIde` sandbox or installed) | —    | **Not observed — outstanding.** Implemented and unit-tested (`webview-core` 204 tests; the plugin's 56). |
+
 ---
 
 ## 3. When something else happens

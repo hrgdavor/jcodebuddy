@@ -64,6 +64,9 @@ export function anchorFor(target, text, kind, escape = escapeHtml) {
   const attributes = [
     `data-open="${escape(open)}"`,
     `data-line="${target.line}"`,
+    // The column is written only when the page was given one: a link with no column says nothing extra, and every
+    // generated anchor stays exactly the size it was. The host reads `column 1` as "the start of the line".
+    target.column > 1 ? `data-column="${target.column}"` : '',
     target.member ? `data-member="${escape(target.member)}"` : '',
     target.role ? `data-role="${escape(target.role)}"` : '',
   ].filter(Boolean).join(' ');
@@ -87,6 +90,7 @@ export function linksFor(markdown, options = {}) {
         open,
         path: target.open,
         line: target.line,
+        column: target.column ?? 1,
         fragment: target.fragment ?? null,
         member: target.member ?? '',
         role: target.role ?? '',

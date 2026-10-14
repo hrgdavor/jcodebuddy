@@ -8,11 +8,12 @@
  * running.
  *
  * **The reference grammar is not defined here.** `@hrg/inject-examples` is the reference implementation of section
- * searching, and its `lib/section.mjs` owns the spelling of a reference: the path segments, the `-`/`+`/`++` scope,
- * the normalisation of a leading or trailing modifier, and the errors. This module asks it (`parseReference`) and
- * adds only the two rules that library's module boundary deliberately excludes — an explicit `L42`/`L42-L58`
- * position, and a `.json` key path — plus the classification a page needs. An internal spelling of the same grammar
- * is what this module used to carry, and it was removed: a second implementation drifts, and the reference wins.
+ * searching, and its `lib/section.mjs` owns the spelling of a reference: the path segments, the `-`/`+`/`++` scope as
+ * a whole trailing segment, the line ranges and columns, the normalisation, and the errors. This module asks it
+ * (`parseSelectors`) and adds only the classification a page needs — which of the implementation's readings this
+ * contract can name, and the `.json` key path that JSON's own lack of comments forces — plus the summary a link's
+ * tooltip shows. An internal spelling of the same grammar is what this module used to carry, and it was removed: a
+ * second implementation drifts, and the reference wins.
  *
  * The claims are pinned by `webview/conformance/location-fragments.json`, which this module and `webview-core`'s
  * `LocationFragment` (Java) both assert against: one rule in two languages is only one rule while both are checked
@@ -22,7 +23,7 @@
  * satisfied from a local build of the package until 1.1.0 is on the registry: see this directory's `README.md`.
  */
 
-import { SectionReferenceError, parseReference } from '@hrg/inject-examples/lib/section.mjs'
+import { SectionReferenceError, parseSelectors } from '@hrg/inject-examples/lib/section.mjs'
 
 /** The kinds a fragment can be. `null` means "not a location" — an ordinary link. */
 export const LOCATION_KINDS = ['line', 'range', 'region', 'json', 'member']
@@ -57,49 +58,69 @@ export function parseLocation(path, fragment) {
     return null
   }
 
-  // An explicit position always wins: a page that wrote a line number meant that line.
-  const range = /^L(\d+)-L(\d+)$/.exec(text)
-  if (range) {
-    return { kind: 'range', from: Number(range[1]), to: Number(range[2]) }
+  // The reference itself is the reference implementation's to read — its path segments, its scope, its line ranges and
+  // columns. It throws on a spelling that is not a reference at all ('+add', '++add', 'L0', 'L58-L42', 'L42-'), which
+  // is this module's `null`: a malformed reference is not a location. Any other failure is a real one and travels.
+  // This used to carry its own 'L<line>'-shaped regexes, which is the drift the reference exists to end (2026-10-13).
+  let reference = null
+  try {
+    reference = parseSelectors(text)
+  } catch (error) {
+    if (!(error instanceof SectionReferenceError)) {
+      throw error
+    }
   }
-  const line = /^L(\d+)$/.exec(text)
-  if (line) {
-    return { kind: 'line', line: Number(line[1]) }
-  }
+  const selectors = reference?.selectors ?? []
 
-  // A fragment that starts like a position and is not one ('L42-') is a page's mistake, not a declaration called
-  // 'L42-' - the reference implementation refuses it for the same reason, and the answer must not differ.
-  if (/^L\d/.test(text)) {
-    return null
+  // An explicit position always wins: a page that wrote a line number meant that line. The implementation read it, so
+  // this only carries its answer into this contract's kinds — a line, and the column it starts at when one was
+  // written (`#L42:12`), because a caret is placed with both.
+  if (selectors.length === 1 && selectors[0].kind === 'lines') {
+    const { from, to } = selectors[0]
+    if (from == null) {
+      return null
+    }
+    const column = from.column ?? 1
+    // A range carries the column it starts at. Its END column is not carried: a host places one caret and selects a
+    // line span, so `#L42:12-L44:3` lands at (42, 12) and runs to the end of line 44 as far as the editor can.
+    const location = to == null
+      ? { kind: 'line', line: from.line }
+      : { kind: 'range', from: from.line, to: to.line }
+    // The column is written only when one was named, so a location without one keeps exactly the shape it had.
+    if (column > 1) {
+      location.column = column
+    }
+    return location
   }
 
   // A colon is never part of a reference: a fragment that carries one is scheme-like, and is reported as an ordinary
-  // link rather than as a member nobody named that.
+  // link rather than as a member nobody named that. Only reached when the implementation read no position above,
+  // which is why `#L42:12` is a location and `mailto:dev@example.com` is not.
   if (text.includes(':')) {
     return null
   }
 
-  // In .json there are no declarations to find, so any bare reference is the JSON rule's key paths - checked
-  // before the reference grammar, because a leading '-' is a legal key character and not a modifier there.
+  // In .json there are no declarations to find, so any bare reference is the JSON rule's key paths - checked before
+  // the reference's path grammar, because a leading '-' is a legal key character there and because a comma is a key
+  // list here while the reference reads it as a list of selectors.
   if (isJson(path)) {
     return jsonKeys(text)
   }
-
-  // The reference itself is the reference implementation's to read. It throws on a spelling that is not a
-  // reference at all ('+++add', '--add', '++'), which is this module's `null`: a malformed reference is not a
-  // location. Any other failure is a real one and travels.
-  let reference
-  try {
-    reference = parseReference(text)
-  } catch (error) {
-    if (error instanceof SectionReferenceError) {
-      return null
-    }
-    throw error
+  if (reference == null) {
+    return null
   }
 
-  const name = reference.segments.join('/')
-  const scope = MODIFIERS[reference.scope]
+  // What is left is what this contract can name: ONE path selector. A list names several places and an envelope is a
+  // property of a pair - neither is one location here, so a link carrying one falls back to the file (rule 2) rather
+  // than being guessed at.
+  if (selectors.length !== 1 || selectors[0].kind !== 'path') {
+    return null
+  }
+  const name = selectors[0].segments.join('/')
+  if (name === '') {
+    return null
+  }
+  const scope = MODIFIERS[selectors[0].scope]
   if (scope !== undefined) {
     return { kind: 'region', name, scope }
   }
@@ -120,11 +141,14 @@ export function locationSummary(location) {
   if (!location) {
     return ''
   }
+  // A position is a line and, when one was written, the column it starts at - the same sentence the Java reader
+  // writes, so a tooltip does not depend on which language asked.
+  const atColumn = location.column > 1 ? `, column ${location.column}` : ''
   switch (location.kind) {
     case 'line':
-      return `line ${location.line}`
+      return `line ${location.line}${atColumn}`
     case 'range':
-      return `lines ${location.from}–${location.to}`
+      return `lines ${location.from}–${location.to}${atColumn}`
     case 'member':
       return `member ${location.name}`
     case 'region': {

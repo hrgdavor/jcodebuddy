@@ -112,27 +112,36 @@ export function classIndexFrom(json, moduleName = '') {
 
 /** `#L14`, `#l14`, `#14` or a `:14` suffix. Returns `{target, line}` with `line` 1 when absent. */
 /**
- * Split a link target into the file, the line, and whatever follows the '#' (plan step 9.7).
+ * Split a link target into the file, the position, and whatever follows the '#' (plan step 9.7).
  *
  * Deliberately not a grammar. A page does not need to know what a fragment means: it puts the whole target on
  * `data-open` and hands it to the host, which is the only part that resolves anything. What the page DOES need is the
- * file, to check it exists, and a line, as the fallback a host that cannot resolve a location still understands.
+ * file, to check it exists, and a position, as the answer a host that cannot resolve a location still understands.
  *
- * @returns {{target: string, line: number, fragment: string|null}}
+ * A position is a line and, after a colon, the column it starts at — `#L42:12` is line 42 from its twelfth character.
+ * That is not a fragment to parse, it is one split on ':', exactly like the plain `#L42` beside it, and the reference
+ * implementation reads the same spelling the same way.
+ *
+ * @returns {{target: string, line: number, column: number, fragment: string|null}}
  */
 export function splitTarget(raw) {
   const text = String(raw ?? '').trim()
   const hash = text.indexOf('#')
   if (hash < 0) {
     const { target, line } = splitLineSuffix(text)
-    return { target, line, fragment: null }
+    return { target, line, column: 1, fragment: null }
   }
   const target = text.slice(0, hash)
   const fragment = text.slice(hash + 1)
-  // The one thing worth reading: a plain line fragment is a line the page can settle itself, so it does not have to
-  // be passed on as a location at all.
-  const line = /^L?(\d+)$/i.exec(fragment)
-  return { target, line: line ? Number(line[1]) : 1, fragment: line ? null : fragment }
+  // The one thing worth reading: a position is something the page settles itself, so it never has to be passed on as
+  // a location at all.
+  const position = /^L?(\d+)(?::(\d+))?$/i.exec(fragment)
+  return {
+    target,
+    line: position ? Number(position[1]) : 1,
+    column: position && position[2] ? Number(position[2]) : 1,
+    fragment: position ? null : fragment,
+  }
 }
 
 /** `#L14`, `#l14`, `#14` or a `:14` suffix. Returns `{target, line}` with `line` 1 when absent. */
@@ -164,10 +173,10 @@ export function isSourcePath(target) {
  *
  * @param {string} raw the link text, e.g. `src/main/java/a/B.java#L42` or `PersonSummary`
  * @param {{directory: string, index: ClassIndex, isOpenable: (p: string) => boolean}} context
- * @returns {{open: string, line: number, member: string, role: string, fromIndex: boolean}|null}
+ * @returns {{open: string, line: number, column: number, member: string, role: string, fromIndex: boolean}|null}
  */
 export function resolveTarget(raw, context) {
-  const { target, line, fragment } = splitTarget(String(raw ?? ''));
+  const { target, line, column, fragment } = splitTarget(String(raw ?? ''));
   // Cheapest and most important guard first: a sentence, an elided path (`src/main/java/…`) or an
   // over-long blob is prose, not a location — and this holds whatever the caller's `isOpenable` says, so
   // no caller can emit a link to one by handing the resolver a permissive predicate.
@@ -181,8 +190,10 @@ export function resolveTarget(raw, context) {
   for (const candidate of [joinPosix(context.directory, target), target]) {
     if (candidate && openable(candidate)) {
       // A fragment travels with the path and means nothing to this renderer: the host reads it, in whatever
-      // spelling the documentation used, inject prefixes and all. The page states the file and the fallback line.
-      return { open: candidate, line, member: '', role: 'file', fragment, fromIndex: false };
+      // spelling the documentation used, inject prefixes and all. The page states the file and the position it could
+      // read itself — a line, and the column after a colon — as the answer a host that cannot resolve a location
+      // still understands.
+      return { open: candidate, line, column, member: '', role: 'file', fragment, fromIndex: false };
     }
   }
 
@@ -196,6 +207,7 @@ export function resolveTarget(raw, context) {
       return {
         open: row.path,
         line: line > 1 ? line : row.line,
+        column,
         // The link opens the type's own declaration line, where the *simple* name is what appears, so that
         // is what a verifier should look for. The tooltip still shows the fully qualified name.
         member: row.fqn.slice(row.fqn.lastIndexOf('.') + 1),

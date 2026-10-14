@@ -130,7 +130,9 @@ public class LocationResolverTest {
 
     @Test
     public void theBodyOnlyScopeLandsPastTheOpeningBrace() {
-        LocationResolution body = resolve("-add", JAVA);
+        // The modifier is a trailing segment in the reference grammar: 'add-', which this read before 2026-10-13, is
+        // the name 'add-' now, and the resolver has to spell the body scope the way the reference reads it.
+        LocationResolution body = resolve("add/-", JAVA);
 
         assertNotNull(body);
         // 'public boolean add(String item) {' is line 9, so the body starts on line 10.
@@ -141,8 +143,64 @@ public class LocationResolverTest {
     public void theWideningScopesLandOnTheDeclaration() {
         // + and ++ widen what an INCLUDE copies; a person following a link wants the code, so all three land alike.
         assertEquals(9, resolve("add", JAVA).line());
-        assertEquals(9, resolve("+add", JAVA).line());
-        assertEquals(9, resolve("++add", JAVA).line());
+        assertEquals(9, resolve("add/+", JAVA).line());
+        assertEquals(9, resolve("add/++", JAVA).line());
+    }
+
+    @Test
+    public void aLocalVariableInsideAMethodIsATarget() {
+        // The reported case of 2026-10-13: `#run/perOrg` must resolve to the local the maintainer declared inside
+        // the method — a nested generic type (`Map<Long, List<Session>>`), which used to make the declaration
+        // invisible to the matcher. webview asks the Java port for this; the port mirrors the reference, so the
+        // answer here is the reference's answer.
+        String source = "package a;\n"
+                + "\n"
+                + "public class Runner {\n"
+                + "    public void run() {\n"
+                + "        try { while (!Thread.interrupted()) {\n"
+                + "            Map<Long, List<Session>> perOrg = new HashMap<>();\n"
+                + "        } }\n"
+                + "    }\n"
+                + "}\n";
+
+        LocationResolution byName = resolve("perOrg", source);
+        assertNotNull("a local inside a block is a member", byName);
+        assertEquals(6, byName.line());
+
+        LocationResolution byPath = resolve("run/perOrg", source);
+        assertNotNull("and the method reaches it by name", byPath);
+        assertEquals(6, byPath.line());
+        assertEquals(LocationFragment.Kind.MEMBER, byPath.kind());
+    }
+
+    @Test
+    public void anEnumConstantIsATarget() {
+        // The reported case of 2026-10-13: a link to an enum's constant must land on the constant, whether the
+        // constants take a line each or share one line with the declaration. The rule is the reference
+        // implementation's (matcher 4 reads a field *or constant*), so this asserts the wiring as much as the
+        // answer: webview asks the Java port and does not carry a rule of its own.
+        String lineByLine = "package a;\n\npublic enum OrgFeature {\n\tCALL,\n\tCHAT,\n\tCHAT_AUDIO\n}\n";
+        String bunched = "package a;\n\npublic enum OrgFeature { CALL, CHAT, CHAT_AUDIO }\n";
+
+        LocationResolution byPath = resolve("OrgFeature/CHAT", lineByLine);
+        assertNotNull("a constant is a member of the enum that holds it", byPath);
+        assertEquals(5, byPath.line());
+        assertEquals(LocationFragment.Kind.MEMBER, byPath.kind());
+        assertTrue("and the answer says what resolved it: " + byPath.how(),
+            byPath.how().contains("inject-examples"));
+
+        LocationResolution bare = resolve("CHAT_AUDIO", lineByLine);
+        assertNotNull("and a constant is reachable by its own name", bare);
+        assertEquals(6, bare.line());
+
+        // A body written on one line is a container because its constants are its members, and the constant lands
+        // on the line it is written on — the only line there is.
+        LocationResolution inline = resolve("OrgFeature/CHAT", bunched);
+        assertNotNull("one line of constants is still a member list", inline);
+        assertEquals(3, inline.line());
+
+        // A name the enum does not have is still nothing, not a guess at the line.
+        assertNull(resolve("OrgFeature/NOPE", lineByLine));
     }
 
     @Test

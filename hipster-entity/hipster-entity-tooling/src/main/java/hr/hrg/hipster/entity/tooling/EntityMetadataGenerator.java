@@ -1052,7 +1052,8 @@ public class EntityMetadataGenerator {
         System.err.println();
         System.err.println("R1 order checker:");
         System.err.println("  java -jar hipster-entity-tooling.jar enum-order --repo <path> --baseline <ref> [--target <ref>] [--strict]");
-        System.err.println("  Exits non-zero on any enum_order_shuffled / enum_constant_removed violation.");
+        System.err.println("  Exits non-zero on any enum_order_shuffled / enum_constant_removed / "
+                + "enum_ordinal_taken violation.");
         System.err.println();
         System.err.println("Field-enum compaction (a deliberate ordinal migration; needs BOTH acknowledgements):");
         System.err.println("  java -jar hipster-entity-tooling.jar enum-compact --repo <path> --allow-reorder \\");

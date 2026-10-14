@@ -465,22 +465,29 @@ describe('a full run over the example module', () => {
 
 // ── the location grammar, on the page side (plan step 9.7) ─────────────────────────────────────────
 
-test('splitTarget keeps the file, a fallback line, and the fragment verbatim', () => {
-  // A line the page can settle itself is not a location: it never has to be passed on.
-  expect(splitTarget('src/A.java#L14')).toEqual({ target: 'src/A.java', line: 14, fragment: null });
-  expect(splitTarget('src/A.java:14')).toEqual({ target: 'src/A.java', line: 14, fragment: null });
+test('splitTarget keeps the file, a fallback position, and the fragment verbatim', () => {
+  // A position the page can settle itself is not a location: it never has to be passed on. A position is a line and,
+  // after a colon, the column it starts at - one split on ':', so no grammar is needed for it.
+  expect(splitTarget('src/A.java#L14')).toEqual({ target: 'src/A.java', line: 14, column: 1, fragment: null });
+  expect(splitTarget('src/A.java:14')).toEqual({ target: 'src/A.java', line: 14, column: 1, fragment: null });
+  expect(splitTarget('src/A.java#L42:12')).toEqual({
+    target: 'src/A.java', line: 42, column: 12, fragment: null,
+  });
+  expect(splitTarget('src/A.java#42:12')).toEqual({
+    target: 'src/A.java', line: 42, column: 12, fragment: null,
+  });
   // Everything else is handed to the host exactly as written - the page does not read the grammar, so a spelling
   // nobody has thought of yet still gets through.
   expect(splitTarget('src/A.java#someMethod')).toEqual({
-    target: 'src/A.java', line: 1, fragment: 'someMethod',
+    target: 'src/A.java', line: 1, column: 1, fragment: 'someMethod',
   });
   expect(splitTarget('src/A.java#++add')).toEqual({
-    target: 'src/A.java', line: 1, fragment: '++add',
+    target: 'src/A.java', line: 1, column: 1, fragment: '++add',
   });
   expect(splitTarget('package.json#scripts.test')).toEqual({
-    target: 'package.json', line: 1, fragment: 'scripts.test',
+    target: 'package.json', line: 1, column: 1, fragment: 'scripts.test',
   });
-  expect(splitTarget('#install')).toEqual({ target: '', line: 1, fragment: 'install' });
+  expect(splitTarget('#install')).toEqual({ target: '', line: 1, column: 1, fragment: 'install' });
 });
 
 test('without a location the resolved shape is exactly what it always was', () => {
@@ -492,11 +499,15 @@ test('without a location the resolved shape is exactly what it always was', () =
 
   // The plain file case and the plain line case both keep their old shape, because callers and tests know it.
   expect(resolveTarget('../src/A.java', context)).toEqual({
-    open: 'src/A.java', line: 1, member: '', role: 'file', fragment: null, fromIndex: false,
+    open: 'src/A.java', line: 1, column: 1, member: '', role: 'file', fragment: null, fromIndex: false,
   });
   // A line needs no fragment either: data-line says it, and the host has nothing to resolve.
   expect(resolveTarget('../src/A.java#L9', context)).toEqual({
-    open: 'src/A.java', line: 9, member: '', role: 'file', fragment: null, fromIndex: false,
+    open: 'src/A.java', line: 9, column: 1, member: '', role: 'file', fragment: null, fromIndex: false,
+  });
+  // A column is a position like any other, so it travels as one and the host resolves nothing.
+  expect(resolveTarget('../src/A.java#L9:4', context)).toEqual({
+    open: 'src/A.java', line: 9, column: 4, member: '', role: 'file', fragment: null, fromIndex: false,
   });
 });
 

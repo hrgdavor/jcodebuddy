@@ -136,16 +136,21 @@ name a real file and a location inside it — and the location half of that spel
 | `data-open` fragment         | The place it names                                                        |
 | ---------------------------- | ------------------------------------------------------------------------- |
 | `#L42`                       | line 42 — the page settles this itself and passes nothing on              |
+| `#L42:12`                    | line 42 from its twelfth character — a position, settled the same way     |
 | `#L42-L58`                   | a line range                                                              |
 | `#someMethod`                | a declaration: a method, a constructor, an inner class, a field           |
 | `#add`                       | the region, or the declaration, named `add`                               |
-| `#-add`                      | the same declaration's **body only**                                      |
-| `#+add`                      | the declaration **and its annotations**                                   |
-| `#++add`                     | the declaration, annotations **and doc comment**                          |
+| `#add/-`                     | the same declaration's **body only**                                      |
+| `#add/+`                     | the declaration **and its annotations**                                   |
+| `#add/++`                    | the declaration, annotations **and doc comment**                          |
 | `#name,scripts.test`         | dotted JSON key paths, in a `.json` file                                  |
 
+A scope modifier is a whole **trailing** segment, which is the reference implementation's spelling: `#-add` is the
+*name* `-add` (a name may contain a dash), and `#+add` is refused with a message naming `#add/+`.
+
 **A page needs to know none of this.** It puts the whole target on `data-open` — which the frozen contract already
-calls a path — and hands it over. The only fragment it reads is a plain `#L42`, which it can settle itself, and it
+calls a path — and hands it over. The only fragment it reads is a **position**, `#L42` or `#L42:12`, which it settles
+itself — a line, and the column after a colon, one split and no grammar — and it
 splits the fragment off solely to check that the file exists. Everything else, including a spelling nobody has
 thought of yet, travels through untouched. That is the maintainer's rule of 2026-10-04: the webapp part need not
 know, and a host need not advertise anything about what links there are. There is no capability key and no second
@@ -155,9 +160,10 @@ attribute for this.
 through — hands the fragment to [`@hrg/inject-examples`](https://github.com/hrgdavor/inject-examples)' Java port
 (`hr.hrg.inject:inject-examples`), which is the source of truth for what a reference means: `Cart/add`, a
 `#region <name>` directive, a `-`/`+`/`++` scope. An explicit `#region <name>` directive wins over a declaration of
-the same name, exactly as that library orders it, so one spelling can name either. Only two rules stay here, because
-the library's module boundary deliberately excludes them: an explicit `L42`/`L42-L58` position, which the page
-settles itself, and a `.json` key path. A reference the file does not have is **not a dead end**: the host opens the
+the same name, exactly as that library orders it, so one spelling can name either. The explicit position is that
+library's reading too — `L42`, `L42-L58`, and it refuses `#L0` and a range that ends before it starts — while a page
+settles a plain `#L42` itself and needs no host for it. What stays here is the classification around that grammar and
+one rule the library has no opinion about: a `.json` key path, because JSON has no comments to hang a region on. A reference the file does not have is **not a dead end**: the host opens the
 file, and when that file is already open it brings its editor to the front **without moving the cursor** — the
 reader gets the file they clicked, and a file they were editing is not thrown to line 1 (`LOCATION_FALLBACK`; over
 HTTP a `200` whose body says the named place was not found, because a `404` from `/open` still means the *path* did
@@ -173,10 +179,11 @@ navigate this way.
 
 **The reference spelling is the reference implementation's.** Both readers ask `@hrg/inject-examples` for the
 grammar of a reference — the host side its Java port, `hr.hrg.inject:inject-examples`, and the JavaScript module its
-`lib/section.mjs` — so neither language keeps a second spelling that could drift. What stays local is only what that
-library's module boundary excludes: an explicit `L42`/`L42-L58` position, a `.json` key path, and the
-classification itself. `scripts/webview-location` importing the package is the one recorded exception to
-`scripts/`'s dependency-free rule (root `AGENTS.md` § 2), satisfied from a local build until 1.1.0 is published.
+`lib/section.mjs` — so neither language keeps a second spelling that could drift: the Java classifier carries no
+`L<line>` regex of its own either (2026-10-13), the port reads the position. What stays local is only the
+classification around that grammar and the `.json` key path. `scripts/webview-location` importing the package is the
+one recorded exception to `scripts/`'s dependency-free rule (root `AGENTS.md` § 2), satisfied from a local build until
+1.1.0 is published.
 
 **Try it:** [`doc/location-links-demo.md`](doc/location-links-demo.md) is a page written in every spelling above, each
 link pointing at a real file in this repository - the demo, and the dogfooding. Open it through a host and every link

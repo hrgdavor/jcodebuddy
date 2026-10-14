@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openrewrite.java.tree.J;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -280,6 +281,59 @@ class SourceReaderTest {
         Assertions.assertEquals(0, check.methods().get(0).parameterCount());
         Assertions.assertSame(check, JavaSyntaxCheck.inspect(source),
                 "a repeat call must reuse the parse rather than run javac again");
+    }
+
+    /**
+     * A UTF-8 byte-order mark is not part of the program, so it must not make the program unreadable.
+     *
+     * <p>Measured before the fix existed: a file whose first three bytes are {@code EF BB BF} was
+     * rejected by <em>both</em> halves of the read, and — worse than a wrong answer — with nothing to
+     * report. OpenRewrite attaches no {@code ParseExceptionResult} and throws nothing, so
+     * {@link SourceReader#problemsIn(String)} returned an empty list for text the reader refused, and
+     * javac reports a syntax error on the mark. Every caller of this class treats "unreadable" as
+     * "leave the file alone", so the practical effect was that a BOM'd generated file silently stopped
+     * being regenerated — the R1 ledger path included, which is the artifact the ordinal contract
+     * lives in.</p>
+     *
+     * <p>The file path is the one that matters and is asserted first, because that is how the mark
+     * really arrives: a Windows editor writes it, and {@link Files#readString(Path)} hands it over as
+     * the character {@code U+FEFF}. Both assertions were red before the fix.</p>
+     */
+    @Test
+    void aByteOrderMarkDoesNotMakeTheFileUnreadable() throws Exception {
+        Path file = Files.createTempDirectory("source-reader-bom").resolve("Bom.java");
+        Files.write(file, ("\uFEFF" + "package p;\npublic interface Bom {}\n")
+                .getBytes(StandardCharsets.UTF_8));
+        Assertions.assertTrue(Files.readString(file).startsWith("\uFEFF"),
+                "the fixture must really carry the mark, or this test proves nothing");
+
+        SourceReader.Read read = SourceReader.read(file);
+
+        Assertions.assertTrue(read.readable(),
+                "a BOM is a byte-order mark, not part of the program: refusing this file stops every "
+                        + "generator from ever updating it");
+        Assertions.assertEquals("p", TreeQueries.packageName(read.unit()));
+        Assertions.assertEquals("Bom", TreeQueries.interfaces(read.unit()).get(0).getSimpleName());
+        Assertions.assertTrue(SourceReader.readText("\uFEFFpackage p;\npublic interface Bom {}\n").readable(),
+                "the text entry point must answer the same way as the file one");
+    }
+
+    /**
+     * NUL characters are <strong>not</strong> repaired, because a text holding them is not a program.
+     *
+     * <p>Paired with the test above so the boundary is pinned rather than implied: the fix strips
+     * exactly one leading byte-order mark and invents nothing else. Text with NULs is a UTF-16 file
+     * misread as UTF-8 or genuinely corrupt, and in both cases "unreadable, and the caller reports it"
+     * is the answer this class exists to give.</p>
+     */
+    @Test
+    void nulCharactersAreStillUnreadable() {
+        String interleaved = "package p;\npublic interface Ok {}\n".replace("\n", "\u0000\n");
+
+        Assertions.assertFalse(SourceReader.readText(interleaved).readable(),
+                "a NUL is not whitespace: removing it would invent a reading for bytes nobody wrote");
+        Assertions.assertFalse(SourceReader.readText("\uFEFF\u0000package p;\npublic interface Ok {}\n").readable(),
+                "stripping the mark must leave the NULs that follow it to fail on their own");
     }
 
     /**

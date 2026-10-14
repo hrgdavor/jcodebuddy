@@ -70,15 +70,20 @@ Two rules follow from the table, and they are the two a generator gets wrong:
 
 #### 1.1.1 A `data-open` path may name a place inside the file
 
-**Added 2026-10-04; revised 2026-10-10 and 2026-10-11; nothing above changes.** A path may carry a fragment that names a place
-rather than a line, in the spellings the repository's documentation already uses: `#L42`, `#L42-L58`, `#someMethod`,
-`#add` with a `-`/`+`/`++` scope modifier, and a `.json` key path. `data-member` stays what § 1.1 says it is —
-display metadata for a tooltip, never a routing key; the fragment inside `data-open` is the routing key.
+**Added 2026-10-04; revised 2026-10-10, 2026-10-11 and 2026-10-13; nothing above changes.** A path may carry a
+fragment that names a place rather than a line, in the spellings the repository's documentation already uses:
+`#L42`, `#L42:12` (line 42 from its twelfth character), `#L42-L58`, `#someMethod`, a name with a trailing
+`-`/`+`/`++` scope segment (`#add/-`, the reference implementation's spelling — a leading `#-add` is a *name* and
+`#+add` is refused by it), and a `.json` key path.
+`data-member` stays what § 1.1 says it is — display metadata for a tooltip, never a routing key; the fragment inside
+`data-open` is the routing key.
 
 A page still has to write nothing clever: it puts the whole target on `data-open` and passes it through, and the
-only fragment it needs to understand is a plain `#L42`, which it can settle without asking anyone. A page that
-prefers to be explicit may pass a line in `data-line` as well; a host that resolves the fragment uses the
-fragment, and one that does not uses the line.
+only fragment it needs to understand is a **position** — `#L42`, or `#L42:12` with the column it starts at — which it
+can settle without asking anyone: a line, and the column after a colon. A page that prefers to be explicit may pass
+the position in `data-line` (and `data-column`, 1-based, when it is inside a line) as well; a host that resolves the
+fragment uses the fragment, and one that does not uses those attributes. A range's **end** column is not carried: a
+host places one caret and selects a line span.
 
 **A place that does not resolve falls back to the file (2026-10-11, an official requirement of this contract).**
 When the fragment names a place the file does not contain — a declaration, a region, a `.json` key — the host

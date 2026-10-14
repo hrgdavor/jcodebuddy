@@ -147,6 +147,50 @@ public final class SourceReader {
     }
 
     /**
+     * The source text without a leading UTF-8 byte-order mark, which is what a file saved by a Windows
+     * editor may carry and what both halves of the read would otherwise reject.
+     *
+     * <h3>Why this is here rather than in a Windows-only editor's business</h3>
+     * <p><strong>Measured on JDK 25</strong>, with the tree one commit before this method existed: a
+     * file whose first three bytes are {@code EF BB BF} is <em>rejected by both halves</em> of the read.
+     * OpenRewrite attaches no {@code ParseExceptionResult} and throws nothing, so
+     * {@link #problemsIn} returns an empty list while the tree it produced is not a
+     * {@link J.CompilationUnit}; javac reports a syntax error on the text with the mark
+     * ({@code '\ufeff'} is not a legal token in the position the mark occupies, even though javac
+     * tolerates the mark when it reads a file itself, through the file's encoding). The verdict was
+     * therefore "could not be read" with <em>no</em> reason available to report.</p>
+     *
+     * <p>The consequence is the one this class exists to prevent, pointing the safe way round: every
+     * caller treats an unreadable file as "leave it alone and report it", so a BOM'd generated file is
+     * never regenerated. The R1 ledger path is the sharp case — it is exactly "the previous revision
+     * kept as it is on disk" for the artifact that carries the ordinal contract.</p>
+     *
+     * <h3>Why stripping is the correct reading rather than a papering-over</h3>
+     * <p>{@code U+FEFF} at the start of a compilation unit is a byte-order mark and nothing else: it is
+     * not part of the program, every Java toolchain (javac, Eclipse, IntelliJ) ignores it, and the
+     * author's intent is the source that follows. It is also <em>not</em> an identifier character, so
+     * no legal program starts with it. Exactly one character is stripped, and the reversed mark
+     * (U+FFFE) is deliberately <strong>not</strong> accepted: it is a Unicode noncharacter, a sign the
+     * bytes were decoded with the wrong endianness, and a file that decoded that way has its characters
+     * interleaved with NULs — so it fails as unreadable on its own, which is the answer wanted.</p>
+     *
+     * <p><strong>NUL characters are deliberately left alone</strong>, for that same reason: a text
+     * carrying NULs is a UTF-16 file misread as UTF-8 or genuinely corrupt, and neither is a legal
+     * program. Removing them would invent a reading for bytes nobody wrote, and "unreadable, and the
+     * caller must report it" is the right answer.</p>
+     *
+     * <p>The mark is stripped from the <em>whole</em> text at the one entry point rather than from each
+     * parsed input, so the parser and {@link JavaSyntaxCheck} cannot be asked about two different
+     * strings; a second strip site would be a second place to keep in step.</p>
+     */
+    private static String withoutByteOrderMark(String source) {
+        if (!source.isEmpty() && source.charAt(0) == '\uFEFF') {
+            return source.substring(1);
+        }
+        return source;
+    }
+
+    /**
      * {@link #read(Path)} for a caller outside this package � the class index, which has to describe a
      * generated artifact's types by parsing the file the pass just wrote.
      *
@@ -178,11 +222,16 @@ public final class SourceReader {
      * {@code getResult().isPresent()}. OpenRewrite has no such flag, so the equivalent question is
      * asked in the two places it can be answered: did the parse throw, and is the result actually a
      * Java compilation unit.</p>
+     *
+     * <p>The text is normalised once, before any parse, by {@link #withoutByteOrderMark}: the parser
+     * and the javac guard must see the <em>same</em> characters, or the guard answers a question about
+     * text nobody parsed.</p>
      */
     public static Read readText(String source) {
         if (source == null) {
             return Read.ofUnparseable();
         }
+        source = withoutByteOrderMark(source);
         ParseOutcome outcome = parse(source);
         // A parse failure is one of three things, and checking only the first two silently
         // reintroduces F-34 — that is a measured finding, not a precaution:

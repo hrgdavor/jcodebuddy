@@ -42,10 +42,10 @@ Its shape is `{ "shape": "location-fragments", "cases": [ { "why", "path", "frag
 grammar is stated in the file itself, beside the cases, because the cases only make sense as instances of it.
 
 It exists for the same reason as the file above it. A page renders the link; a host resolves it; if the two disagree
-about `#++add`, one of them navigates somewhere wrong. Two readers assert against this file today — `webview/core/webview-core` (Java, the host side a click depends
+about `#add/++`, one of them navigates somewhere wrong. Two readers assert against this file today — `webview/core/webview-core` (Java, the host side a click depends
 on) and `scripts/webview-location` (JavaScript, for tools that classify a link without a host) — and, as above,
 **neither generates it**. Both readers ask `@hrg/inject-examples` — the reference implementation of section
-searching — for the spelling of a reference itself (its Java port and its `lib/section.mjs`), so the vectors pin what
+searching — for the spelling of a reference itself, positions included (its Java port and its `lib/section.mjs`), so the vectors pin what
 each side *classifies* and the library pins the grammar they classify; a vector that disagrees with the library is a
 bug in the reader. The pages that render links do not read it at all: a page carries the target and passes it on,
 and only the host resolves anything (see [`webview/README.md`](../README.md), "Pointing at a place inside a file").

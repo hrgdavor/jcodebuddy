@@ -539,13 +539,15 @@ canonical statement of a boundary that has no other home.
   spelling that drifts — and the reference wins every disagreement: a section-matching or marker-recognition
   behaviour that differs between an internal implementation and `@hrg/inject-examples` is a bug in the
   internal one. Two tools use it today: `scripts/webview-location` reads the reference parser
-  (`lib/section.mjs`'s `parseReference`) for the grammar of a link's fragment, keeping only the rules that
-  library's module boundary excludes (an explicit `L42`/`L42-L58` position, a `.json` key path); and
+  (`lib/section.mjs`'s `parseSelectors`) for the grammar of a link's fragment — a path, its trailing scope segment, a
+  line range with its columns — keeping only the classification this repository's contract adds and the `.json` key
+  path that JSON's own lack of comments forces; and
   `scripts/check-resolver-docs.js` asks it what a marker is (`parseMarker`, `findMarkers`), where the fenced
   blocks are (`fenceRanges`) and what a region directive is (`regionDirective`) instead of carrying a regex
   that silently disagreed with it. The Java half of the same contract (`webview-core`'s `LocationFragment`)
-  asks the same implementation's Java port (`hr.hrg.inject:inject-examples`), so the two languages cannot
-  spell a reference differently. **The exception is narrow and stays narrow**: no `package.json` of its own,
+  asks the same implementation's Java port (`hr.hrg.inject:inject-examples`) — `SectionReference.parse` reads the
+  whole reference, an explicit `L42`/`L42-L58` position included, so neither language carries an `L<line>` regex of
+  its own (2026-10-13) — so the two languages cannot spell a reference differently. **The exception is narrow and stays narrow**: no `package.json` of its own,
   no `node_modules` under `scripts/`, no bundler, no CDN and no network at view time — these tools use the
   repository's root dependency set, exactly as the root `package.json`'s own tooling does.
   **`scripts/webview-location` needs `@hrg/inject-examples` 1.1.0** — the version that first ships
