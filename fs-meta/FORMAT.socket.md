@@ -118,3 +118,82 @@ it is safe, which is what makes the pipelining free rather than merely fast.
 
 `START_BATCH` also fails fast: `number` and `parent` are in the first message, so a consumer whose `from_batch` does not
 match `parent - 1` learns it immediately instead of after receiving a change set it cannot apply.
+
+### Handshake
+
+A handshake should answer four questions before any change flows — *which protocol, which layout, which hash, which
+role* — and it should be impossible to confuse with either JSON-RPC or a stray write to the socket.
+
+**Simultaneous greeting.** Both sides send one `HELLO` immediately on connect, without waiting:
+
+```
+kind   = 0x01            (2 bytes, little-endian, always < 0x7B)
+flags  = 0               (2 bytes)
+length = 24              (4 bytes: a FIXED greeting size)
+payload:
+  u16  protocol        major << 8 | minor
+  u16  entry_size      64
+  u8   hash_algorithm  0 = wyhash64
+  u8   role            0 = server, 1 = client
+  u8   capabilities    bit 0 = snapshot, bit 1 = changes_hash, bits 2..7 reserved
+  u8   reserved        0
+  u64  generation      the newest batch this side knows (0 = none)
+  u64  max_frame       largest payload this side will accept
+```
+
+Then each side reads the peer's greeting and checks it, in this order and with these names — the same ones the file
+format uses, so a client reports one vocabulary:
+
+| check                                   | failure                  |
+| --------------------------------------- | ------------------------ |
+| `entry_size == 64`                      | `unsupported-entry-size` |
+| `hash_algorithm == 0`                   | `unsupported-hash`       |
+| `major` differs from ours               | `unsupported-version`    |
+| `length` is not the greeting's fixed 24 | protocol error           |
+| unknown **required** capability bits    | `unsupported-capability` |
+
+Minor versions are negotiated by allowance: a newer minor may append fields after byte 23 and advertise them in
+`capabilities`; an older peer reads the fixed 24 bytes and ignores the rest because `length` tells it how much to skip.
+Major versions change the layout and are refused rather than guessed.
+
+After the greeting the client sends `SUBSCRIBE {from_batch}`; the server replies with `HELLO`-derived replay
+(`START_BATCH` … `END_BATCH` per generation) or the live stream. There is no "who speaks first" question because both
+greet at once, and no state machine whose order can deadlock.
+
+### Lessons taken from ZMTP (ZeroMQ's wire protocol)
+
+ZMTP solved several of these problems a decade earlier, and four of its decisions transfer directly:
+
+- **A fixed greeting before any length-prefixed frame.** ZMTP's greeting is 64 fixed bytes; only after it do frames with
+  length fields begin. The lesson: bootstrap framing with a size both sides already know, so a wrong length assumption
+  cannot corrupt the stream before the first frame is parsed. That is why our `HELLO` payload is fixed at 24 and the
+  variable frames come after it.
+- **A signature that cannot be another protocol.** ZMTP starts with `0xFF` followed by zeros specifically so an HTTP or
+  other text request cannot be mistaken for it, and a peer that sees a non-matching first byte can report "not ZMTP"
+  instead of guessing. Ours is the same idea in the other direction: every `kind` is `< 0x7B`, so a binary greeting can
+  never begin with `{` and JSON-RPC is identified by `0x7B 0x22`.
+- **Version and mechanism advertised in the greeting, not discovered later.** ZMTP puts `major`, `minor`, a 20-byte
+  mechanism name and an `as-server` bit in the greeting, and negotiates security *after* the transport is framed. We
+  copy the shape — `protocol`, `capabilities`, `role` — and deliberately leave the mechanism slot empty: a loopback
+  unix socket has no authentication story today, but reserving the byte means adding one later does not need a major
+  version. ZMTP's own rule applies: an unknown mechanism is an error, never a silent downgrade — the same reason an
+  unknown capability bit is `unsupported-capability` rather than ignored when the sender called it required.
+- **Command frames, separate from data frames, so the protocol can grow.** ZMTP 3.1 added `PING`, `PONG` and `ERROR` as
+  command frames without a version bump, precisely because a command is a frame with a different flag rather than a new
+  envelope. Our kind table is that idea taken to its end: everything, including `CHANGE_ENTRY`, is a kind, so a new
+  message is a new number and an old peer refuses it cleanly instead of misparsing it.
+
+Two ZMTP choices we deliberately do **not** copy:
+
+- **Short and long length encodings.** ZMTP uses a one-byte length below 256 and eight bytes above; at 64 bytes per
+  entry our frames are always over the threshold, so the shorter form would only add a branch. A 4-byte `length` in
+  the prefix is simpler and measurable: it costs 8 bytes per entry on the wire, and a replay of 3,900 entries is
+  ~31 KB, which is not a reason to complicate the decoder.
+- **Skipping an unknown frame by its length.** A ZMTP peer may skip a frame it does not understand. Here that is the
+  one unrecoverable mistake: a skipped `CHANGE_ENTRY` is a silently wrong index, so an unknown `kind` is an error and
+  the connection is closed, and the client resumes from its own `from_batch`.
+
+One ZMTP idea worth adopting later is **multipart (`MORE`)**: one frame carrying several entries would amortise the
+8-byte prefix over a whole batch. It trades away the per-entry self-delimiting property — a client could no longer
+validate `length == 64 + nameLength` per message and would have to walk a frame's interior — so it belongs after a
+measurement shows the prefix is the cost, not before.
