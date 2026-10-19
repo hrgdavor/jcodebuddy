@@ -22,6 +22,16 @@ pub const ScanFields = struct {
     respect_gitignore: bool,
 };
 
+/// A batch records itself (§ 17.2): the generation it produces, the one it follows, and the counts its entries
+/// must agree with. Absent from the main meta.
+pub const BatchFields = struct {
+    number: u64,
+    parent: u64,
+    added: u64,
+    changed: u64,
+    deleted: u64,
+};
+
 pub const Fields = struct {
     generation: u64,
     count: u64,
@@ -38,6 +48,8 @@ pub const Fields = struct {
     updated: []const u8,
     writer: []const u8,
     scan: ?ScanFields = null,
+    /// Present only in a batch trio (§ 17.2).
+    batch: ?BatchFields = null,
 };
 
 /// The document a publish writes: `FORMAT.md` § 7's keys, in the order a reader sees them.
@@ -66,6 +78,10 @@ pub fn encode(gpa: std.mem.Allocator, fields: Fields) ![]u8 {
         try writer.writeAll("  \"rootPath\": ");
         try writeString(writer, root_path);
         try writer.writeAll(",\n");
+    }
+    if (fields.batch) |batch| {
+        try writer.print("  \"batch\": {{ \"number\": {d}, \"parent\": {d}, \"added\": {d}, \"changed\": {d}, \"deleted\": {d} }},\n",
+            .{ batch.number, batch.parent, batch.added, batch.changed, batch.deleted });
     }
     if (fields.scan) |scan| {
         try writer.writeAll("  \"scan\": { \"hashMode\": ");
@@ -269,4 +285,32 @@ test "a string is escaped correctly" {
     var parsed = try parse(gpa, bytes);
     defer parsed.deinit();
     try std.testing.expectEqualStrings("C:\\a \"quoted\" path\nnext", optionalString(&parsed.value.object, "rootPath").?);
+}
+
+test "a batch block is emitted when present, and absent from the main meta" {
+    const gpa = std.testing.allocator;
+    const fields = Fields{
+        .generation = 14,
+        .count = 3,
+        .meta_bytes = 192,
+        .txt_bytes = 21,
+        .meta_hash = 0x1234,
+        .txt_hash = 0x5678,
+        .normalize = "text",
+        .root_dev = 1,
+        .root_ino = 2,
+        .created = "2026-10-19T00:00:00Z",
+        .updated = "2026-10-19T00:00:00Z",
+        .writer = "fsmeta-zig/1",
+        .batch = .{ .number = 14, .parent = 13, .added = 1, .changed = 1, .deleted = 1 },
+    };
+    const with_batch = try encode(gpa, fields);
+    defer gpa.free(with_batch);
+    try std.testing.expect(std.mem.indexOf(u8, with_batch, "\"batch\": { \"number\": 14, \"parent\": 13, \"added\": 1, \"changed\": 1, \"deleted\": 1 }") != null);
+
+    var plain = fields;
+    plain.batch = null;
+    const without_batch = try encode(gpa, plain);
+    defer gpa.free(without_batch);
+    try std.testing.expect(std.mem.indexOf(u8, without_batch, "\"batch\"") == null);
 }
