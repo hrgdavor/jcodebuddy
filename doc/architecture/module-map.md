@@ -43,7 +43,13 @@ jcodebuddy-parent (POM)
 │   └── eclipse/webview-eclipse
 │
 ├── merge-java
-└── project-automation         strictly private: never installed, never deployed (§ 1.1)
+├── project-automation         strictly private: never installed, never deployed (§ 1.1)
+└── fs-meta                    STANDALONE (`hr.hrg:fs-meta`, own version, no parent): the file-system state
+                               contract a watcher maintains and every other tool reads (FORMAT.md) — a trio of
+                               files.meta / files.txt / files.json per folder, one 64-byte entry per file, with
+                               a Java and a Bun implementation and one shared conformance vector set (a Zig one
+                               is planned). `java-watch*` may depend on it (AGENTS.md § 2's 2026-10-16
+                               amendment): the watcher is the writer of that trio
 ```
 
 ## Dependency Direction
@@ -58,6 +64,7 @@ The following modules have **no dependency** on any other JCodeBuddy module:
 | `jcodebuddy-builder-api` | The builder's annotations: `GenerateBuilder`, one file, no dependency of its own (step 3.0n renamed it from `jwa-builder-api`) |
 | `jcodebuddy-generated`   | DEC-035's marker vocabulary and the parser that reads it: three types, no compile dependency at all, so a tool that only wants to know where generated code stops resolves neither OpenRewrite nor Jackson (step 3.0l) |
 | `jcodebuddy-meta`        | DEC-W006–W009's metadata serving: cache access over JSON-RPC and Apache Fory, on HTTP and Unix sockets. Declares slf4j, Jackson and Fory, and **no workspace artifact** — step 3.0m renamed it from `metadata-server` without changing what it depends on |
+| `fs-meta`                | **Not a JCodeBuddy artifact** — `hr.hrg:fs-meta`, its own version, no parent. The file-system state contract ([`fs-meta/FORMAT.md`](../../fs-meta/FORMAT.md)): the trio (`files.meta` / `files.txt` / `files.json`), the 64-byte entry codec, the validator, a `.gitignore`-honouring walk, the atomic publisher, a diff and a hash-recovery repair. Its one dependency is the hash, [`wyhash`](https://github.com/hrgdavor/wyhash) — a project of its own since 2026-10-16, consumed as the artifact `hr.hrg:wyhash` (DEC-050) rather than built here — and nothing else: no Jackson, no OpenRewrite, no workspace artifact. Its Bun port is not a Maven module (it lives under `fs-meta/js`) and imports that project's JavaScript port through the package link the root `package.json` declares; every port asserts `fs-meta/conformance/fsmeta-vectors.json`. It is in the recorded gate as a **contract** module, because the format is read by tools that do not build together — and a `watch/*` module may depend on it (AGENTS.md § 2's 2026-10-16 amendment), since the watcher is the writer of the trio |
 | `webview-core`           | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
 
 `project-automation` used to be listed here and does not belong: it depends on Layer 2 modules, so it was

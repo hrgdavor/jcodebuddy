@@ -21,6 +21,18 @@
  * itself, and on ordinary third-party libraries it chooses for itself (`directory-watcher`, `wyhash`,
  * `jsch*`, `ecj`, `slf4j`).
  *
+ * **Recorded amendment, 2026-10-16 (maintainer): standalone packages in this checkout are not "this
+ * workspace".** `hr.hrg:fs-meta` (`fs-meta/`) has its own group id, its own artifact id, its own version and
+ * **no parent**, and carries no workspace dependency of its own; a `watch/*` module **may** depend on it, and
+ * that is the point: the watcher is the writer of the trio that project defines. The amendment named a second
+ * package — the `wyhash` project — and since 2026-10-16 that one is not a package *in this checkout* at all: it
+ * has its own repository and is consumed as `hr.hrg:wyhash`, which a `watch/*` module may depend on for the
+ * same reason (DEC-050).
+ * decision rather than luck: the patterns below match the `hr.hrg.jcodebuddy` / `hr.hrg.hipster` groups and
+ * the `jcodebuddy-*` / `hipster-*` / `metadata-*` / `jwa-*` artifact families, and neither project matches
+ * any of them. What the rule is about is those families and their abstractions — not which directory a
+ * library happens to live in. See AGENTS.md § 2's own amendment.
+ *
  * **What this check's scope is: the watch/ group.** A module that needs Jackson, jcodebuddy-builder or another\n * workspace artifact to do JCodeBuddy's work is not part of the standalone watcher library — java-watch-agent\n * was exactly that and moved to the jcodebuddy group on 2026-10-03, still consuming java-watch-core (the\n * library that stays clean). Moving a module into the right group is the fix when the group is what was wrong;\n * a leak *inside* watch/ is a different thing and is what the violations below are.\n *\n * The watcher knows a directory changed; it decides nothing about Java. A port the watcher needs must be
  * **the watcher's own** (`ActionTool` is), with the adapter that bridges it to a JCodeBuddy SPI living in the
  * module that legitimately depends on both.

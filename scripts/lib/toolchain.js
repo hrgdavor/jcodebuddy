@@ -27,6 +27,19 @@ import { dirname, resolve } from 'node:path';
 /** How many majors the tooling needs (class file 69). */
 export const REQUIRED_JAVA = 25;
 
+/**
+ * The Zig release the repository's Zig sources are written for.
+ *
+ * **0.17, and it is a hard floor rather than a preference.** Zig 0.17 removed the `**` array-repetition
+ * operator and reworked `std.Io`/`std.process`, so a source written for 0.17 does not compile under 0.16 and
+ * the other way round — the two are different languages for these purposes. The wyhash project's `gen-vectors.zig`
+ * is deliberately written to compile under both (it builds its repeated fixture at run time) because it is the
+ * *reference* generator and a machine that regenerates the vectors should not have to be on one exact release;
+ * what must not happen is regenerating them under an older Zig and committing a file whose `reference.zigVersion`
+ * silently moves backwards.
+ */
+export const REQUIRED_ZIG = '0.17';
+
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** The repository root, derived from this file's own location rather than from the caller's cwd. */
@@ -136,6 +149,91 @@ export function resolveJdk25() {
   throw new Error(
     `no JDK ${REQUIRED_JAVA}+ found. Tried:\n  ${tried.join('\n  ')}\n` +
       'Set JCODEBUDDY_JDK25 to a JDK 25 home (for example C:\\Program Files\\Java\\jdk-25) and re-run.'
+  );
+}
+
+/** The `major.minor` a `zig version` prints, or null when it cannot be determined. */
+export function zigVersion(zig) {
+  const result = run(zig, ['version'], { stdio: 'pipe' });
+  if (result.status !== 0) {
+    return null;
+  }
+  const match = `${result.stdout}${result.stderr}`.match(/(\d+)\.(\d+)/);
+  return match ? `${match[1]}.${match[2]}` : null;
+}
+
+/** Whether `found` is at least `required`, comparing `major.minor` numerically. */
+export function atLeastVersion(found, required) {
+  if (!found) {
+    return false;
+  }
+  const [foundMajor, foundMinor] = found.split('.').map((part) => Number.parseInt(part, 10));
+  const [requiredMajor, requiredMinor] = required.split('.').map((part) => Number.parseInt(part, 10));
+  return foundMajor > requiredMajor || (foundMajor === requiredMajor && foundMinor >= requiredMinor);
+}
+
+/**
+ * The Zig executable, at {@link REQUIRED_ZIG} or newer, **verified by running it**.
+ *
+ * Resolution order, the same shape as {@link resolveJdk25}: the explicit `JCODEBUDDY_ZIG` (then `ZIG`, which is
+ * the variable Zig's own tooling reads), the recorded per-release directories under the machine's Zig root,
+ * then `zig` from the PATH. A PATH `zig` that is older than {@link REQUIRED_ZIG} is reported as such rather
+ * than used: on this machine the PATH holds 0.16 while the sources are 0.17, and "it compiled yesterday" is
+ * exactly the confusion this resolver exists to prevent.
+ *
+ * @returns {{command: string, version: string, source: string}}
+ * @throws when nothing acceptable is found, with the candidates it tried
+ */
+export function resolveZig() {
+  const candidates = [];
+  if (process.env.JCODEBUDDY_ZIG) {
+    candidates.push([process.env.JCODEBUDDY_ZIG, 'JCODEBUDDY_ZIG']);
+  }
+  if (process.env.ZIG) {
+    candidates.push([process.env.ZIG, 'ZIG']);
+  }
+  // The recorded Zig root: one directory per release, as this machine keeps them. Newest first, so a machine
+  // that holds 0.16 and 0.17 together picks 0.17 without the PATH having to be right.
+  for (const root of [
+    'D:\\wrk\\zig',
+    join(process.env.USERPROFILE ?? process.env.HOME ?? '', 'zig'),
+  ]) {
+    if (!existsSync(root)) {
+      continue;
+    }
+    try {
+      const releases = readdirSync(root)
+        .map((entry) => entry)
+        .sort((left, right) => Number.parseInt(right, 10) - Number.parseInt(left, 10));
+      for (const release of releases) {
+        candidates.push([join(root, release, exe('zig')), `${root}\\${release}`]);
+      }
+    } catch {
+      /* unreadable: skip */
+    }
+  }
+  candidates.push(['zig', 'PATH']);
+
+  const tried = [];
+  for (const [command, source] of candidates) {
+    if (command.includes('\\') && !existsSync(command)) {
+      continue;
+    }
+    const version = zigVersion(command);
+    if (version === null) {
+      tried.push(`${command} (${source}: could not read its version)`);
+      continue;
+    }
+    if (!atLeastVersion(version, REQUIRED_ZIG)) {
+      tried.push(`${command} (${source}: Zig ${version}, needs ${REQUIRED_ZIG}+)`);
+      continue;
+    }
+    return { command, version, source };
+  }
+
+  throw new Error(
+    `no Zig ${REQUIRED_ZIG}+ found. Tried:\n  ${tried.join('\n  ')}\n` +
+      `Set JCODEBUDDY_ZIG to a Zig ${REQUIRED_ZIG} executable (for example D:\\wrk\\zig\\17\\zig.exe) and re-run.`
   );
 }
 

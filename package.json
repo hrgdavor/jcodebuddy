@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@hrg/inject-examples": "^1.0.1",
-    "@hrg/md-fix-tables": "^1.2.0"
-  }
+    "@hrg/md-fix-tables": "^1.2.0",
+    "wyhash": "link:wyhash"
+  },
+  "comment": "`wyhash` is a LINK to the hash project's own checkout (github.com/hrgdavor/wyhash), not a copy: fs-meta's Bun port imports the hash from there (`import { wyhash64 } from 'wyhash/js/wyhash64.mjs'`), so the two ports of fs-meta hash with the same code, and an edit in that project is visible here immediately. One-time setup on a machine or a fresh clone: run `bun link` once inside the wyhash checkout (it registers the package), then `bun install` here. The Java half resolves the same project as the artifact `hr.hrg:wyhash` — installed from that checkout until 1.1.0 is published; see fs-meta/pom.xml. If the JavaScript port is ever published to npm, this specifier becomes a version range and the setup step disappears."
 }

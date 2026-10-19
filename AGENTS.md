@@ -778,6 +778,28 @@ canonical statement of a boundary that has no other home.
   test, which also unblocked 3.0i), the sample's Jackson demo rewritten (its point was hot-reload, not the
   library), and the agent moved to the group it belongs to. A leak *inside* `watch/` is what the check is for.
   See [`DEC-038`](doc-hipster-entity/architecture/decisions/DEC-038.md)'s amendment.
+
+  **Amendment, 2026-10-16 (maintainer): STANDALONE PACKAGES IN THIS CHECKOUT ARE NOT "THIS WORKSPACE" — the
+  watcher may depend on them.** The rule forbids the JCodeBuddy and hipster families and their abstractions; it
+  was never a rule about which directory a library happens to live in. Two projects are standalone by
+  construction — their own group id, artifact id, version and **no parent** — and carry no workspace dependency
+  of their own:
+
+  - **`hr.hrg:fs-meta`** ([`fs-meta/`](fs-meta/FORMAT.md)) — the file-system state trio a watcher maintains and
+    every other tool reads. The watcher is the *writer* of that trio, so this is the dependency the rule would
+    otherwise forbid by accident.
+  - **`hr.hrg:wyhash`** — one hash, one definition, ports aligned by shared vectors;
+    `hr.hrg:wyhash:1.0.0` is already what `java-watch-core` hashes with. **Since 2026-10-16 it is not a
+    package in this checkout**: the project has its own repository ([github.com/hrgdavor/wyhash](https://github.com/hrgdavor/wyhash))
+    and is consumed as an artifact — a *stronger* version of the same permission rather than a narrower one.
+    See DEC-050.
+
+  A `watch/*` module may therefore depend on those two, and on nothing else from this checkout. `fs-meta` is in
+  the reactor so that the gate builds it, which is a build relationship rather than a namespace: what makes it
+  legal here is that it names no `jcodebuddy`/`hipster` type and resolves no Jackson or OpenRewrite.
+  `hr.hrg:wyhash` reaches a consumer the ordinary way — a released artifact, or the local repository.
+  `check-watch-standalone.js` reads the rule the same way — its regexes never matched these coordinates, and its
+  header now says why that is a decision rather than luck.
 ## 3. Notes for whoever reads next
 
 - **`proto/` is a local workspace, not a checkout target.** The whole directory is gitignored with no

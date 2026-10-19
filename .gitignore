@@ -94,6 +94,18 @@ webview/zed/*/extension.wasm
 # is ever committed or required. The rule is in AGENTS.md § 2.
 .tmp/
 
+# fs-meta's per-checkout state: the trio a watcher maintains (fs-meta/FORMAT.md) is derived output for
+# whichever folder it describes, exactly like `.jcodebuddy/`'s derived subtrees, and a clone carries none
+# of it. A project that wants to *commit* a trio opts it back in with a `!` rule.
+.fs-meta/
+
+# The Zig build's own output and caches, wherever a Zig port lives (fs-meta/zig when it lands, and any future
+# one). The check runners pin the caches under the module so a sandboxed or CI run writes nothing outside the
+# tree, and a check that compiles Java for itself writes `.java-check/` for the same reason.
+zig-out/
+.zig-cache/
+.java-check/
+
 # The jsx6 checkout that AGENTS.md § 2 requires for any UI work: a local clone, updated on demand
 # (`git -C .jsx6 pull --ff-only`), never pinned and never committed. It sits beside `.tmp/` for the
 # same reason the scratch rule gives — the recorded gate runs `clean`, so it must not live under

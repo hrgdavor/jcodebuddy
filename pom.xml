@@ -97,6 +97,15 @@
         <module>jcodebuddy/jcodebuddy-meta-mcp</module>
         <module>jcodebuddy/metadata-arena</module>
         <module>merge-java</module>
+        <!-- The file-system state contract a watcher maintains and every other tool reads: one 64-byte
+             entry per file, so "has this changed?" is a cache-line read rather than a tree walk. It is in
+             the gate because the format is a contract between tools that do not build together — the
+             conformance vectors in `fs-meta/conformance/` are asserted by a Java implementation and a Bun
+             implementation today, and a Zig one when it lands. See fs-meta/FORMAT.md. -->
+        <module>fs-meta</module>
+        <!-- `wyhash` was a module here until 2026-10-16. It has its own repository
+             (github.com/hrgdavor/wyhash) and is consumed as the artifact `hr.hrg:wyhash`; it is deliberately
+             NOT in this list, because the reactor and the gate build what this repository owns (DEC-050). -->
     </modules>
 
     <dependencyManagement>
@@ -424,6 +433,14 @@
                 <artifactId>jcodebuddy-meta-mcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
+            <!--
+                `hr.hrg:fs-meta` is deliberately NOT managed here. It is a reactor module with its own
+                coordinates, its own version and no parent (see fs-meta/pom.xml): the reactor builds it, the
+                namespace does not own it. A managed entry would only invite a consumer to inherit a version
+                from this POM for an artifact that does not version with this reactor — and since it is not a
+                `hr.hrg.jcodebuddy` artifact, nothing here can manage it correctly anyway.
+            -->
 
             <dependency>
                 <groupId>org.apache.fory</groupId>

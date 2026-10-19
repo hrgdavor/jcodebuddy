@@ -40,6 +40,15 @@
  *   context source lands, so a generator change that emits something that does not compile fails here. Two
  *   modules in for their compile is a deliberate price, not an oversight — a module that only builds still fails
  *   the gate when the code it holds stops compiling.
+ * - `fs-meta` is the file-system state contract (FORMAT.md): one 64-byte entry per file, so a watcher publishes
+ *   the tree once and every other tool asks "has this changed?" with a cache-line read instead of a walk. It is
+ *   in the set because that contract is read by tools that do not build together — the conformance vectors under
+ *   `fs-meta/conformance/` are asserted by a Java implementation and a Bun implementation today, and a Zig one
+ *   when it lands — so a change that breaks the format must fail here rather than in a consumer.
+ * - `wyhash` is **not** in this set, and that is a decision rather than an omission (DEC-050): the hash every
+ *   table here is written with has its own repository and is consumed as the artifact `hr.hrg:wyhash`. A change
+ *   to its values is caught by that project's own `bun check-ports.mjs`, which re-runs the generator and holds
+ *   all three ports to the same generated vectors — a stronger check than a member of this gate would be.
  *
  * **The cost, stated rather than implied:** a larger gate is a slower gate. These were chosen because a change
  * that breaks them is a change to the engine's contract, not because they compile — the webview, watch,
@@ -62,6 +71,7 @@ export const GATE_MODULES = [
   'hipster-ioc-tooling',
   'hipster-ioc-test',
   'project-automation',
+  'fs-meta',
 ].join(',');
 
 /**
