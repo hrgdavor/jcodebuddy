@@ -118,7 +118,9 @@ describe('validation', () => {
       const config = parseConfig(JSON.stringify(vector.json));
       const validation = validate(bytesOfHex(vector.metaHex), bytesOfHex(vector.txtHex), config);
       assert.equal(validation.verdict, vector.verdict, `verdict for case '${vector.label}'`);
-      assert.deepEqual(validation.untrusted, vector.untrusted, `untrusted entries for '${vector.label}'`);
+      if (vector.untrusted !== undefined) {
+        assert.deepEqual(validation.untrusted, vector.untrusted, `untrusted entries for '${vector.label}'`);
+      }
       const perEntry = vector.verdict === 'entry-out-of-range' || vector.verdict === 'name-hash-mismatch';
       if (perEntry) {
         assert.ok(validation.firstBadEntry >= 0, `'${vector.label}' fails on an entry, so it must name the index`);

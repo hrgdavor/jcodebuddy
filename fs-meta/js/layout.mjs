@@ -49,8 +49,15 @@ export const LF = 0x0a;
 
 export const FLAG_CONTENT_KNOWN = 0x01;
 export const FLAG_REGULAR_FILE = 0x02;
-export const FLAG_HASH_LF = 0x04;
-export const FLAG_KNOWN_MASK = FLAG_CONTENT_KNOWN | FLAG_REGULAR_FILE | FLAG_HASH_LF;
+/** A directory entry (§ 6): listed for its mtime, never carrying a content hash. */
+export const FLAG_IS_DIR = 0x04;
+/** The hash was taken over LF-normalised bytes (§ 12). */
+export const FLAG_HASH_LF = 0x08;
+/** A symlink, listed and never followed (§ 16). */
+export const FLAG_SYMLINK = 0x10;
+/** Exactly one of these must be set on every entry. */
+export const FLAG_TYPE_MASK = FLAG_REGULAR_FILE | FLAG_IS_DIR | FLAG_SYMLINK;
+export const FLAG_KNOWN_MASK = FLAG_CONTENT_KNOWN | FLAG_TYPE_MASK | FLAG_HASH_LF;
 
 export const HASH_MODES = ['none', 'lf', 'text'];
 
