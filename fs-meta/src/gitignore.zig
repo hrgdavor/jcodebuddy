@@ -67,6 +67,9 @@ pub const Rule = struct {
     /// For an anchored rule whose first segment is literal, that segment: a path starting with anything else
     /// cannot match, so the expensive match is skipped. `null` when the first segment holds a wildcard.
     first_segment: ?[]const u8,
+    /// For a rule whose *last* segment is literal (`**/target`, `x/**/y`), that segment. A path whose base is
+    /// something else cannot match, which rejects most entries with one comparison instead of a prefix walk.
+    last_segment: ?[]const u8,
 };
 
 /// The patterns of one `.gitignore` file, parsed once and owned by the caller.
@@ -126,6 +129,12 @@ pub const Rules = struct {
             var kind: Kind = .glob;
             var suffix: []const u8 = "";
             var first_segment: ?[]const u8 = null;
+            var last_segment: ?[]const u8 = null;
+            {
+                const slash = std.mem.lastIndexOfScalar(u8, line, '/') orelse 0;
+                const tail = if (slash == 0) line else line[slash + 1 ..];
+                if (tail.len > 0 and !hasWildcard(tail)) last_segment = tail;
+            }
             if (anchored) {
                 const slash = std.mem.indexOfScalar(u8, line, '/') orelse line.len;
                 const head = line[0..slash];
@@ -146,6 +155,7 @@ pub const Rules = struct {
                 .kind = kind,
                 .suffix = suffix,
                 .first_segment = first_segment,
+                .last_segment = last_segment,
             });
         }
 
@@ -262,6 +272,14 @@ fn hasWildcard(line: []const u8) bool {
 /// Matches the pattern against the whole path, or — for an unanchored pattern — against its final segment.
 /// Literal and suffix rules never reach `globMatch`.
 fn pathMatches(rule: Rule, path: []const u8) bool {
+    // A literal last segment rejects the path with one comparison, before any prefix or glob work.
+    if (rule.anchored) {
+        if (rule.last_segment) |tail| {
+            const base = path[(std.mem.lastIndexOfScalar(u8, path, '/') orelse 0)..];
+            const name = if (base.len > 0 and base[0] == '/') base[1..] else base;
+            if (!std.mem.eql(u8, name, tail)) return false;
+        }
+    }
     const text = if (rule.anchored) path else blk: {
         const slash = std.mem.lastIndexOfScalar(u8, path, '/');
         break :blk if (slash) |index| path[index + 1 ..] else path;

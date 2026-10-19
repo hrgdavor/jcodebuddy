@@ -14,7 +14,26 @@
 // builtin, and this port asserts the same vectors as that project (plus its own, which pin the hash as part of
 // this format's contract). `fs-meta` has no hash implementation of its own on purpose — a second copy would be
 // a second thing to keep equal to the first.
-import { wyhash64, wyhash64Hex } from 'wyhash/js/wyhash64.mjs';
+// The one hash, and the reference implementation of it, when the runtime has one.
+//
+// Bun is built on Zig, and `Bun.hash.wyhash` is the same `std.hash.Wyhash` the engine calls: it agrees with the
+// JS port bit-for-bit on empty input, on short strings, on a 4 KiB buffer, and above 2^53 (it returns a bigint).
+// So under Bun there is no second implementation to drift — the native function is used directly, and Node and CI
+// fall back to the JS port. The export names are unchanged, so every call site in this module and its consumers
+// keeps working.
+const nativeWyhash = globalThis.Bun?.hash?.wyhash ?? null;
+const jsWyhash = nativeWyhash ? null : await import('wyhash/js/wyhash64.mjs');
+
+/** wyhash of `bytes`, seed 0 by default: Bun’s built-in under Bun, the JS port everywhere else. */
+export const wyhash64 = (bytes, seed = 0n) =>
+  nativeWyhash ? BigInt(nativeWyhash(bytes, Number(seed))) : jsWyhash.wyhash64(bytes, seed);
+
+/** `wyhash64`, as sixteen hex characters. */
+export const wyhash64Hex = (bytes, seed = 0n) =>
+  nativeWyhash ? BigInt(nativeWyhash(bytes, Number(seed))).toString(16).padStart(16, '0') : jsWyhash.wyhash64Hex(bytes, seed);
+
+/** Which implementation answers `wyhash64` here — reported by the port so a run says what it used. */
+export const wyhashProvider = () => (nativeWyhash ? 'bun (native std.hash.Wyhash)' : 'js port (wyhash/js/wyhash64.mjs)');
 
 export const FORMAT = 'fs-meta';
 export const VERSION = 1;
@@ -95,10 +114,10 @@ const u64 = (value) => BigInt.asUintN(64, BigInt(value));
  */
 export function putEntry(buffer, offset, entry) {
   const at = Number(offset);
-  buffer.writeBigUInt64LE(u64(entry.mtimeMillis), at + 0);
-  buffer.writeBigUInt64LE(u64(entry.nameHash), at + 8);
+  buffer.writeBigUInt64LE(u64(entry.mtimeMillis), at + 0); // mtime in ns on the wire (§ 5)
+  buffer.writeBigUInt64LE(u64(entry.sizeBytes), at + 8);
   buffer.writeBigUInt64LE(u64(entry.contentHash), at + 16);
-  buffer.writeBigUInt64LE(u64(entry.sizeBytes), at + 24);
+  buffer.writeBigUInt64LE(u64(entry.nameHash), at + 24);
   buffer.writeBigUInt64LE(u64(entry.nameOffset), at + 32);
   buffer.writeUInt32LE(entry.nameLength, at + 40);
   buffer.writeUInt32LE(entry.flags, at + 44);
@@ -111,9 +130,9 @@ export function getEntry(buffer, offset) {
   const at = Number(offset);
   return {
     mtimeMillis: buffer.readBigUInt64LE(at + 0),
-    nameHash: buffer.readBigUInt64LE(at + 8),
+    sizeBytes: buffer.readBigUInt64LE(at + 8),
     contentHash: buffer.readBigUInt64LE(at + 16),
-    sizeBytes: buffer.readBigUInt64LE(at + 24),
+    nameHash: buffer.readBigUInt64LE(at + 24),
     nameOffset: buffer.readBigUInt64LE(at + 32),
     nameLength: buffer.readUInt32LE(at + 40),
     flags: buffer.readUInt32LE(at + 44),
@@ -263,8 +282,8 @@ export function parseConfig(text) {
     order: typeof document.order === 'string' ? document.order : ORDER,
     generation: document.generation === undefined ? 0 : requireInteger(document, 'generation'),
     count: requireInteger(document, 'count'),
-    meta: { bytes: requireInteger(meta, 'bytes') },
-    txt: { bytes: requireInteger(txt, 'bytes') },
+    meta: { bytes: requireInteger(meta, 'bytes'), wyhash: typeof meta.wyhash === 'string' ? meta.wyhash : null },
+    txt: { bytes: requireInteger(txt, 'bytes'), wyhash: typeof txt.wyhash === 'string' ? txt.wyhash : null },
     hash: {
       content: requireString(hash, 'content'),
       name: requireString(hash, 'name'),
@@ -408,6 +427,12 @@ export function validate(meta, txt, config) {
     return failure('meta-size-mismatch', -1,
       `files.meta is ${metaBytes} bytes but the document records ${config.meta.bytes}`);
   }
+  // 6b: the size is not a claim about the bytes; this is. Before any entry check, or a corrupted meta would be
+  // reported as the first thing *inside* it that looks wrong.
+  if (typeof config.meta.wyhash === 'string' && hex64(wyhash64(meta)) !== config.meta.wyhash) {
+    return failure('meta-hash-mismatch', -1,
+      `wyhash(files.meta) is ${hex64(wyhash64(meta))}, meta.wyhash says ${config.meta.wyhash}`);
+  }
 
   const txtBytes = txt.length;
   if (txtBytes !== config.txt.bytes) {
@@ -431,6 +456,11 @@ export function validate(meta, txt, config) {
     if (lines !== config.count) {
       return failure('txt-size-mismatch', -1, `files.txt holds ${lines} names but the document says ${config.count}`);
     }
+    // 7b: the text file's own hash, before the names are read out of it.
+    if (typeof config.txt.wyhash === 'string' && hex64(wyhash64(txt)) !== config.txt.wyhash) {
+      return failure('txt-hash-mismatch', -1,
+        `wyhash(files.txt) is ${hex64(wyhash64(txt))}, txt.wyhash says ${config.txt.wyhash}`);
+    }
   }
 
   const entries = decodeEntries(meta);
@@ -452,6 +482,17 @@ export function validate(meta, txt, config) {
       if (txt[offset + i] === LF) {
         return failure('entry-out-of-range', index, "the entry's name slice contains an LF");
       }
+    }
+    // § 6: exactly one kind bit, nothing undefined, and HASH_LF only where CONTENT_KNOWN says a hash was taken.
+    // A reader that trusts an entry's kind must not be able to be told 'this is a file' and 'this is a directory'
+    // at the same time, nor be handed a flag this version has never defined.
+    const kindBits = entry.flags & 0x16; // REGULAR_FILE | IS_DIR | SYMLINK
+    if ((entry.flags & ~0x1f) !== 0 || (kindBits !== 0x02 && kindBits !== 0x04 && kindBits !== 0x10)) {
+      return failure('invalid-flags', index,
+        `the entry's flags are 0x${(entry.flags >>> 0).toString(16)}: not exactly one of file/dir/symlink`);
+    }
+    if ((entry.flags & 0x01) === 0 && (entry.flags & 0x08) !== 0) {
+      return failure('invalid-flags', index, 'HASH_LF is set without CONTENT_KNOWN');
     }
   }
 
