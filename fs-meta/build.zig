@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
     // Every module, so one command proves the whole reference.
     const test_step = b.step("test", "Run every module's tests");
     const modules = [_][]const u8{
-        "format", "json_doc", "validate", "cache", "coldstart", "gitignore", "scan", "lister", "publish", "ignore", "engine", "watch", "watch_tuning", "watch_run", "reconcile",
+        "format", "json_doc", "validate", "cache", "coldstart", "gitignore", "scan", "lister", "publish", "ignore", "engine", "watch", "watch_tuning", "watch_run", "reconcile", "batch",
     };
     for (modules) |name| {
         const tests = b.addTest(.{
