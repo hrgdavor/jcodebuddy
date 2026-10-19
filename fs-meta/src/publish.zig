@@ -67,7 +67,8 @@ pub fn publish(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cache:
     for (dirs_it) |path| {
         if (path.len != 0) try paths.append(allocator, path); // the root is never listed (§ 3)
     }
-    std.mem.sort([]const u8, paths.items, {}, pathLessThan);
+    // § 3: `(nameHash, name)`. The hash is the name ident, so a batch and the main meta are joined the same way.
+    std.mem.sort([]const u8, paths.items, {}, pathLessThanByHash);
 
     var names: std.ArrayListUnmanaged([]const u8) = .empty;
     defer names.deinit(allocator);
@@ -173,6 +174,13 @@ pub fn publish(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cache:
     };
 }
 
+fn pathLessThanByHash(_: void, a: []const u8, b: []const u8) bool {
+    const ha = format.wyhash(a);
+    const hb = format.wyhash(b);
+    if (ha != hb) return ha < hb;
+    return std.mem.lessThan(u8, a, b);
+}
+
 fn pathLessThan(_: void, left: []const u8, right: []const u8) bool {
     return switch (format.compareNames(left, right)) {
         .lt => true,
@@ -265,7 +273,7 @@ test "a published trio passes the reader's own checks" {
     const outcome = try publishInto(meta_dir, io, arena, &cache, 2);
 
     // The three names, in byte order, and one LF-terminated line each.
-    try testing.expectEqualStrings("a.txt\nsrc\nsrc/b.java\n", outcome.txt);
+    try testing.expectEqualStrings("a.txt\nsrc/b.java\nsrc\n", outcome.txt);
     try testing.expectEqual(@as(u64, 3), outcome.count);
     try testing.expectEqual(@as(u64, 3 * 64), outcome.meta_bytes);
 
@@ -285,7 +293,7 @@ test "a published trio passes the reader's own checks" {
     try testing.expect(result.entries[0].contentKnown());
     try testing.expectEqual(@as(u64, 0xabcdef), result.entries[0].content_hash);
     // And the directory carries no fingerprint.
-    try testing.expectEqual(format.Kind.dir, result.entries[1].kind().?);
+    try testing.expectEqual(format.Kind.dir, result.entries[2].kind().?);
     try testing.expect(!result.entries[1].contentKnown());
 
     // A publish is a new generation, and the reader sees it.

@@ -168,6 +168,18 @@ pub const Cache = struct {
                 written_dirs[index] += 1;
             }
         }
+
+        // § 4 orders the trio by `(nameHash, name)`, so a child list no longer arrives sorted by name. Children
+        // stay in name order — the listing merge and the walker search them by name — at the cost of one sort
+        // per directory per publish, and only for directories that changed.
+        for (self.dirs.values()) |*state| {
+            std.mem.sort([]const u8, state.file_names, {}, nameLessThanByBytes);
+            std.mem.sort([]const u8, state.dir_names, {}, nameLessThanByBytes);
+        }
+    }
+
+    fn nameLessThanByBytes(_: void, a: []const u8, b: []const u8) bool {
+        return std.mem.lessThan(u8, a, b);
     }
 
     pub fn fileCount(self: *const Cache) usize {

@@ -61,7 +61,9 @@ parts — no directory table to index before a name can be compared, hashed or j
 front of every check that reports a path. The measurements, the alternatives and the trigger for revisiting are
 in [doc/path-layout-research.md](doc/path-layout-research.md).
 
-The byte order has three consequences: duplicates are adjacent, two snapshots can be diffed with a single merge join, and a reader can binary-search `files.txt`.
+The order is `(nameHash, name)`: the hash compared as unsigned 64-bit, the name as unsigned bytes. It has three
+consequences: two snapshots are joined by one ordered walk (the hash is the name id), names sharing a hash stay
+adjacent and distinguishable, and a consumer reconciles without comparing paths.
 
 ## 4. `files.txt`
 
@@ -286,3 +288,149 @@ That ends at the first release. From then on a new version is required for a lay
 - The writer is the engine. A client does not publish; it reads the trio, or asks the engine over the socket for the live path
 
 Vectors in `conformance/fsmeta-vectors.json` pin ignore cases and hashes.
+
+## 17. Batches
+
+**Status: working design.** The folder layout is fixed enough to implement; the storage is not. The long-term
+shape is one append-only log with rotation (a WAL), not a directory of small files, and that change must not be
+visible to a consumer — see § 17.6.
+
+### 17.1 What a batch is
+
+A tool that maintains its own index needs to know what changed since it last synced, without walking the tree.
+A **batch** is the set of names whose state changed between one generation and the next, stored in the same trio
+format as the main meta.
+
+```text
+.fs-meta/
+  files.meta  files.txt  files.json    the current state (generation N)
+  batches/
+    00000001/  files.meta files.txt files.json   the change set for generation 1
+    00000002/  ...
+```
+
+- The number is the **generation** the batch produces: batch `N` describes the step from generation `N-1` to
+  `N`, and the main trio after that publish carries `"generation": N`.
+- Numbers are dense from 1. A gap or a duplicate is diagnosed (`batch-gap`), never skipped: a consumer that
+  skipped a batch would silently miss a change.
+- A pass that changes nothing writes **no** batch, so the sequence advances only when the tree does.
+- The first trio is generation `0` and may have no `batches/` folder at all.
+
+### 17.2 The entry, and the change bits
+
+A batch entry is an ordinary § 5 entry for the **new** state of the name, with one change bit set in `flags`:
+
+| Flag             | Value  | Meaning                                         |
+| ---------------- | ------ | ----------------------------------------------- |
+| `CHANGE_ADDED`   | `0x20` | the name did not exist in the parent generation |
+| `CHANGE_CHANGED` | `0x40` | it existed, and its entry (§ 11) differs        |
+| `CHANGE_DELETED` | `0x80` | it existed, and is now absent                   |
+
+- **Exactly one** change bit is set on every entry in a batch. A batch entry without one, or with two, is
+  `invalid-flags`.
+- The change bits are **never** set in the main trio: there they are unknown bits, which § 6 already makes
+  `invalid-flags`. Validation therefore has two modes, `meta` and `batch`.
+- A `CHANGE_DELETED` entry carries no content: `CONTENT_KNOWN` and `HASH_LF` are clear, `sizeBytes` and
+  `mtimeNs` are `0`, and the kind bits describe what the name **was** (a deleted directory is `IS_DIR`). The
+  name is still present in `files.txt`, because the batch must say *which* name disappeared.
+- A batch is otherwise a trio: `files.meta` is the entries, `files.txt` the names (whole path relative to the
+  root, LF-terminated, sorted), `files.json` the same sidekick with `count`, `meta`, `txt`, `hash`, and
+  `generation` equal to the batch number.
+
+Additional required JSON keys for a batch:
+
+```json
+"batch": { "number": 14, "parent": 13, "added": 2, "changed": 5, "deleted": 1 }
+```
+
+The three counts must equal the entries with the matching change bit; a mismatch is `batch-count-mismatch`.
+
+### 17.2a Order: by name hash, not by path
+
+Every trio is sorted by `(nameHash, name)` (§ 4): the main meta and every batch alike. A batch carries the same
+64-bit), because a consumer *joins* it: the hash is the name ident from § 3, so
+
+- two batches are combined by one ordered walk over two lists — no lookup, no allocation, no string compare;
+- a name history across N batches is a join on the same key;
+- a batch needs no name index of its own to be consumed, and a consumer needs no trie.
+
+The sort key is the pair (nameHash, name), name compared as unsigned bytes. A 64-bit hash can collide, and the
+name is the tie-break that keeps such a pair ordered deterministically and distinguishable — a fold that keyed on
+the hash alone would report two different files as one file changing twice.
+
+iles.txt in a batch is written in this same order, so ameOffset/ameLength still address the names (a
+name is stored whole, as always), and the entry order is the trio order.
+
+A consumer that walks a batch must therefore compare hashes first and names only when they are equal. Ports that
+cannot express an unsigned 64-bit order (Java's signed long) compare with an unsigned comparison.
+### 17.3 Why it is not a tombstone log
+
+A batch supersedes "deletion = absent name" (§ 15) **for the window it covers only**: the main trio still has no
+tombstones, and a name that is gone is absent from it. The batch is the only place the disappearance is recorded,
+which is why a consumer must not delete its batches before every reader has advanced past them (§ 17.6).
+
+### 17.4 Reconcile: from a batch to a batch
+
+A tool knows it synced at batch 11. It is called again when the latest is 14. It needs the **combined** change:
+what to add, update or remove in its own index, as if 11 to 14 had happened in one step.
+
+```text
+reconcile(root, from = 11, to = 14, baseline?) -> Change[]
+
+Change = { name, kind: added | changed | deleted, entry? }
+```
+
+`baseline` is an optional map `name -> entry` describing the state at `from` as the **consumer** recorded it.
+It is optional because a consumer may not have kept it — but without it one case is undecidable (§ 17.5).
+
+The algorithm reads batches `from + 1` to `to` in order and, per name, keeps the first and last event:
+
+| first → last      | combined                                                             |
+| ----------------- | -------------------------------------------------------------------- |
+| added → changed   | `added` (final entry)                                                |
+| added → deleted   | **nothing** (it never existed at `from`, and does not exist at `to`) |
+| changed → changed | `changed` (final entry)                                              |
+| changed → deleted | `deleted`                                                            |
+| deleted → added   | `changed` (it existed at `from`; the name is back)                   |
+| deleted → changed | `changed` (final entry)                                              |
+| deleted → deleted | `deleted`                                                            |
+| any → (same)      | as the first row of the pair, with the final entry                   |
+
+Then the **baseline check**, which is the case the design exists for: switching to a branch and back changes a
+file twice, ending at the hash it started with. With a baseline entry for that name,
+
+- `changed` whose final entry equals the baseline entry (§ 11 identity: same `contentHash`, `sizeBytes`, flags)
+  is **dropped** — the consumer's index already holds exactly that state;
+- `deleted` whose baseline says the name was absent is dropped (it cannot be absent twice);
+- `added` whose baseline says the name was present with the final entry is dropped.
+
+Without a baseline, `changed → changed` collapses to one `changed`, which is correct but may reconcile to a
+no-op the consumer does not need. That is a cost, not a wrong answer: the record is still a superset of the
+real change, and applying it is idempotent.
+
+### 17.5 What a consumer must not do
+
+- **Must not parse `batches/` itself.** The layout is working design (§ 17.1) and becomes a log; the API is the
+  contract. A port that walks the folder will break when the storage changes, and the format exists so that it
+  does not have to.
+- **Must not assume dense batches are permanent forever**: retention (§ 17.6) will delete old ones. A consumer
+  whose `from` is older than the oldest retained batch is told `batch-too-old` and must fall back to a full
+  pass — an explicit answer, never a silent partial reconcile.
+- **Must not infer "unchanged" from the main trio alone** in the window it is reconciling: the trio is the end
+  state, and a file that changed and changed back is invisible in it.
+
+### 17.6 Storage, retention, and what is deliberately not decided yet
+
+The directory of trios is chosen because it needs no new parser and lets a batch be validated exactly like a
+trio. It is **not** the final design:
+
+- One append-only file per generation, with a header per batch, is cheaper (one open instead of three, no
+  directory per write) and can be rotated by appending a sequence marker; a reader replays from an offset.
+- Retention: a window (e.g. the last 32 generations, or everything a socket client could need) plus a
+  `reconcile` answer of `batch-too-old` when the window is exceeded. Deleting batches is safe only for
+  consumers known to be past them; the socket (§ 12) is the place to know that.
+- Whether a batch is written before or after the main trio: the tentative answer is **after** (the trio is the
+  commit record, § 9), with a missing batch diagnosed as `batch-gap` rather than reconstructed, because a
+  guessed batch is a wrong change record.
+
+None of that changes the API in § 17.4, which is why the API is specified first.

@@ -351,6 +351,10 @@ fn scanNames(arena: std.mem.Allocator, root: []const u8, io: std.Io) ![][]const 
     for (facts, 0..) |fact, index| names[index] = fact.name;
     std.mem.sort([]const u8, names, {}, struct {
         fn lessThan(_: void, left: []const u8, right: []const u8) bool {
+            // The trio's order (§ 4): name hash first, then the name, so this walk can be compared entry by entry.
+            const left_hash = format.wyhash(left);
+            const right_hash = format.wyhash(right);
+            if (left_hash != right_hash) return left_hash < right_hash;
             return switch (format.compareNames(left, right)) {
                 .lt => true,
                 else => false,
@@ -368,6 +372,12 @@ fn hasName(names: [][]const u8, wanted: []const u8) bool {
 }
 
 fn expectNameSets(a: [][]const u8, b: [][]const u8) !void {
+    if (a.len != b.len) std.debug.print("length differs: walk={d} trio={d}\n", .{ a.len, b.len });
+    for (a, b, 0..) |left, right, index| {
+        if (!std.mem.eql(u8, left, right)) {
+            std.debug.print("index {d}: walk={s} trio={s}\n", .{ index, left, right });
+        }
+    }
     try testing.expectEqual(a.len, b.len);
     for (a, b) |left, right| try testing.expectEqualStrings(left, right);
 }
@@ -401,7 +411,10 @@ test "a pass and a full walk agree about the tree, .gitignore included" {
 
     const expected = [_][]const u8{ ".gitignore", "a.txt", "keep.log", "src", "src/z.txt" };
     try testing.expectEqual(@as(usize, expected.len), from_pass.len);
-    for (expected, from_pass) |want, got| try testing.expectEqualStrings(want, got);
+        // The trio is ordered by (nameHash, name) (section 4) while the expectation is written in name order, so
+        // the agreement is about membership: same names, same count. The order itself is asserted by publish's test.
+        try testing.expectEqual(expected.len, from_pass.len);
+        for (expected) |want| try testing.expect(hasName(from_pass, want));
 
     // Relax the rules: the previously excluded file and directory must appear, through the pass as well.
     try tmp.dir.writeFile(io, .{ .sub_path = ".gitignore", .data = "!keep.log\n" });
