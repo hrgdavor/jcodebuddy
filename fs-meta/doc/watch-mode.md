@@ -92,15 +92,15 @@ once warm.
 Measured with [`../bench/bench.mjs`](../bench/bench.mjs) on the trees in [`benchmark.md`](benchmark.md), with the
 matcher fixed (`globMatch` as a segment DP) and hashing enabled:
 
-| tree                                           | warm pass | cold pass | matcher off (same pass) |
-| ---------------------------------------------- | --------: | --------: | ----------------------: |
-| Apache Fory (3881 entries, 50 `**` patterns)   | 231.9 ms  | 574.5 ms  | 78.0 ms (**2.97×**)     |
-| jcodebuddy (1965 entries, 8,735 ignored files) | 71.3 ms   | 222.9 ms  | 101.0 ms (**0.71×**)    |
+| tree                                           | warm pass      | cold pass | matcher off (same pass) |
+| ---------------------------------------------- | -------------: | --------: | ----------------------: |
+| Apache Fory (3881 entries, 50 `**` patterns)   | 147.6-148.0 ms | 574.5 ms  | 61-65 ms (**2.4×**)     |
+| jcodebuddy (1965 entries, 8,735 ignored files) | 58.9-60.1 ms   | 222.9 ms  | 228.5 ms (**0.26×**)    |
 
 
-The Fory matcher is **still above the 2× budget**: 154 ms of its warm pass is pattern matching. On jcodebuddy the
+The Fory matcher is **still above the 2× budget, by ~20%**: 148 ms warm against a 61–65 ms no-rule baseline. The
 rules *save* time, because they prune a dependency tree (71.3 ms with, 101.0 ms without). The full tables and the
-remaining items are in [benchmark.md](benchmark.md#current-numbers-2026-10-19).
+Full tables and the remaining items are in [benchmark.md](benchmark.md#current-numbers-2026-10-19).
 The warm pass is 32% of the cold pass on jcodebuddy (71.3 of 222.9 ms) — the property an incremental
 matcher is inside the 2× budget on a tree whose `.gitignore` is deliberately hostile.
 

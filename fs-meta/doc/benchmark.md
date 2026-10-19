@@ -93,6 +93,14 @@ Apache Fory @ `a11d257` — 3881 names:
 | verify                           | 10.7 ms          |
 | scan — no hashing / hashing      | 707.3 / 752.1 ms |
 
+
+**Update, later the same day.** Two more changes moved these numbers again, both measured the same way:
+`globMatch` became a segment DP, and `**/pattern` is now normalised to the unanchored form it means — which
+moved Fory's ~50 such rules out of the general-glob class into the indexed suffix/literal classes. The warm
+pass is now **147.6–148.0 ms on Fory** against a **61–65 ms** no-rule baseline (**2.4×**, down from 2.97×), and
+**58.9–60.1 ms on jcodebuddy** against **228.5 ms** without rules (**0.26×** — the rules prune 8,735 ignored
+files, so keeping them is four times cheaper than listing without them). The remaining ~20% on Fory is the rules
+that are still genuinely anchored (`x/**`, `a/**/b`), each of which still walks the ancestor prefixes.
 **What changed, and what is still open.** Cold on Fory went from ~5,100 ms to 574 ms, and the warm pass from
 ~4,600 ms to 232 ms — the `globMatch` rewrite is the reason. But measured against the *same pass with the rules
 off* (78 ms), the matcher now costs 154 ms on Fory: **~3× the baseline, not the 2× target**. The earlier "1.8×"

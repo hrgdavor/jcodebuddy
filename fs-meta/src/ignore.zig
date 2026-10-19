@@ -19,43 +19,73 @@
 const std = @import("std");
 const gitignore = @import("gitignore.zig");
 
+/// A rule chain position, kept beside the part of it that the lookup needs.
+const SuffixEntry = struct { suffix: []const u8, at: usize };
+const RuleEntry = struct { rule: gitignore.Rule, at: usize };
+
 /// One flattened matcher for a directory: every `.gitignore` that governs it, in precedence order.
 const Chain = struct {
-    /// Deepest file first, each file reversed. An anchored rule's `glob` is already scoped to the root.
+    /// Deepest file first, each file reversed. An anchored rule `glob` is already scoped to the root.
     items: []gitignore.Rule,
     literals: std.StringHashMapUnmanaged(usize) = .{},
     literals_dir_only: std.StringHashMapUnmanaged(usize) = .{},
+    /// `*.ext` rules: only the final segment can match, and only its ending matters.
+    suffixes: []SuffixEntry = &.{},
+    /// Unanchored general globs: matched against the final segment (or any segment, for directory-only).
+    wilds: []RuleEntry = &.{},
+    /// Rules that carry a path (`x/**`, `a/**/b`): matched against the whole path and its prefixes.
+    anchored: []RuleEntry = &.{},
 
     fn decide(self: Chain, path: []const u8, base: []const u8, is_dir: bool) ?bool {
-        var bound: ?usize = null;
+        var best: ?usize = null;
         var start: usize = 0;
         while (start <= path.len) {
             const slash = std.mem.indexOfScalarPos(u8, path, start, '/') orelse path.len;
             const segment = path[start..slash];
             if (self.literals.get(segment)) |at| {
-                if (bound == null or at < bound.?) bound = at;
+                if (best == null or at < best.?) best = at;
             }
             const last_segment = slash == path.len;
             if (!last_segment or is_dir) {
                 if (self.literals_dir_only.get(segment)) |at| {
-                    if (bound == null or at < bound.?) bound = at;
+                    if (best == null or at < best.?) best = at;
                 }
             }
             if (last_segment) break;
             start = slash + 1;
         }
 
-        const limit = bound orelse self.items.len;
-        for (self.items[0..limit]) |rule| {
-            if (rule.kind == .literal and !rule.anchored) continue; // answered by the indexed literals
-            if (chainRuleMatches(rule, path, base, is_dir)) return !rule.negated;
+        for (self.suffixes) |entry| {
+            if (best) |limit| if (entry.at > limit) break;
+            if (base.len >= entry.suffix.len and std.mem.endsWith(u8, base, entry.suffix)) {
+                best = entry.at;
+                break;
+            }
         }
-        if (bound) |at| return !self.items[at].negated;
+        for (self.wilds) |entry| {
+            if (best) |limit| if (entry.at > limit) break;
+            if (chainRuleMatches(entry.rule, path, base, is_dir)) {
+                best = entry.at;
+                break;
+            }
+        }
+        for (self.anchored) |entry| {
+            if (best) |limit| if (entry.at > limit) break;
+            if (chainRuleMatches(entry.rule, path, base, is_dir)) {
+                best = entry.at;
+                break;
+            }
+        }
+
+        if (best) |at| return !self.items[at].negated;
         return null;
     }
 };
-
 fn chainRuleMatches(rule: gitignore.Rule, path: []const u8, base: []const u8, is_dir: bool) bool {
+    if (rule.first_segment) |head| {
+        const path_first = path[0..(std.mem.indexOfScalar(u8, path, '/') orelse path.len)];
+        if (!std.mem.eql(u8, head, path_first)) return false;
+    }
     if (!rule.directory_only) return chainMatchText(rule, if (rule.anchored) path else base);
     if (is_dir and chainMatchText(rule, path)) return true;
     var index: usize = 0;
@@ -102,6 +132,9 @@ pub const Stack = struct {
         while (it.next()) |entry| {
             entry.value_ptr.*.literals.deinit(self.arena);
             entry.value_ptr.*.literals_dir_only.deinit(self.arena);
+            self.arena.free(entry.value_ptr.*.suffixes);
+            self.arena.free(entry.value_ptr.*.wilds);
+            self.arena.free(entry.value_ptr.*.anchored);
             self.arena.free(entry.value_ptr.*.items);
             self.arena.destroy(entry.value_ptr.*);
         }
@@ -161,6 +194,9 @@ pub const Stack = struct {
 
         // Deepest first, each file reversed; anchored patterns scoped with their owner's path.
         var items: std.ArrayListUnmanaged(gitignore.Rule) = .empty;
+        var suffixes: std.ArrayListUnmanaged(SuffixEntry) = .empty;
+        var wilds: std.ArrayListUnmanaged(RuleEntry) = .empty;
+        var anchored: std.ArrayListUnmanaged(RuleEntry) = .empty;
         var chain = try self.arena.create(Chain);
         chain.* = .{ .items = &.{} };
         var walk: []const u8 = key;
@@ -174,11 +210,26 @@ pub const Stack = struct {
                     if (rule.anchored and base_rel.len > 0) {
                         rule.glob = try std.fmt.allocPrint(self.arena, "{s}/{s}", .{ base_rel, rule.glob });
                     }
+                    if (rule.anchored) {
+                        // The parse-time value described the pattern before this scope was prepended, so it is
+                        // recomputed here: a literal first segment rejects a path outside that subtree with one
+                        // comparison instead of a prefix walk.
+                        const slash = std.mem.indexOfScalar(u8, rule.glob, '/') orelse rule.glob.len;
+                        const head = rule.glob[0..slash];
+                        const wild = head.len == 0 or head[0] == '*' or head[0] == '?' or head[0] == '[';
+                        rule.first_segment = if (wild) null else head;
+                    }
                     const position = items.items.len;
                     try items.append(self.arena, rule);
                     if (rule.kind == .literal and !rule.anchored) {
                         const map = if (rule.directory_only) &chain.literals_dir_only else &chain.literals;
                         if (!map.contains(rule.glob)) try map.put(self.arena, rule.glob, position);
+                    } else if (rule.anchored) {
+                        try anchored.append(self.arena, .{ .rule = rule, .at = position });
+                    } else if (rule.kind == .suffix) {
+                        try suffixes.append(self.arena, .{ .suffix = rule.suffix, .at = position });
+                    } else {
+                        try wilds.append(self.arena, .{ .rule = rule, .at = position });
                     }
                 }
             }
@@ -188,6 +239,9 @@ pub const Stack = struct {
             walk = parent;
         }
         chain.items = try items.toOwnedSlice(self.arena);
+        chain.suffixes = try suffixes.toOwnedSlice(self.arena);
+        chain.wilds = try wilds.toOwnedSlice(self.arena);
+        chain.anchored = try anchored.toOwnedSlice(self.arena);
         try self.chains.put(self.arena, key, chain);
         return chain;
     }

@@ -120,9 +120,17 @@ pub const Rules = struct {
 
             // A separator at the start or anywhere in the middle anchors the pattern to this file's
             // directory. The leading slash is not part of the pattern itself.
-            const anchored = (line.len > 0 and line[0] == '/') or
+            var anchored = (line.len > 0 and line[0] == '/') or
                 std.mem.indexOfScalar(u8, line, '/') != null;
             if (line.len > 0 and line[0] == '/') line = line[1..];
+
+            // `**/pat` applies at any depth, which is what an unanchored pattern already means. Normalising the
+            // prefix here is what keeps those rules in the indexed classes instead of the general glob: without
+            // it, every entry pays an ancestor-prefix walk for each of them (fifty-odd in a real Java tree).
+            if (anchored and std.mem.startsWith(u8, line, "**/")) {
+                line = line[3..];
+                anchored = false;
+            }
 
             if (line.len == 0) continue;
 
