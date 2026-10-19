@@ -24,6 +24,7 @@ const cache_mod = @import("cache.zig");
 const coldstart = @import("coldstart.zig");
 const lister = @import("lister.zig");
 const publish_mod = @import("publish.zig");
+const batch_mod = @import("batch.zig");
 const scan = @import("scan.zig");
 const ignore_mod = @import("ignore.zig");
 
@@ -108,6 +109,8 @@ fn readTrio(io: std.Io, dir: std.Io.Dir, allocator: std.mem.Allocator) !?Trio {
 /// One pass over `root`. `arena` holds everything for the pass; the returned outcome is a value.
 pub fn refresh(arena: std.mem.Allocator, io: std.Io, root: []const u8, options: Options) !Outcome {
     var outcome: Outcome = .{};
+// Filled right after Cache.load: the only moment the previous generation still exists.
+var previous: std.ArrayListUnmanaged(batch_mod.Item) = .empty;
     const t0 = nowNs(io);
 
     // Open the root, then create .fs-meta inside it: one relative component. Creating the directory from an
@@ -149,6 +152,12 @@ pub fn refresh(arena: std.mem.Allocator, io: std.Io, root: []const u8, options: 
                 if (json.optionalString(&parsed.value.object, "created")) |value| created = value;
             }
             cache = try Cache.load(arena, result.entries, result.names, generation);
+// The previous generation exists only here: discovery mutates the cache in place.
+for (cache.files.keys()) |name| try previous.append(arena, batch_mod.fileItem(name, cache.files.get(name).?));
+for (cache.dirs.keys()) |name| {
+if (name.len == 0) continue;
+try previous.append(arena, batch_mod.dirItem(name, cache.dirs.get(name).?));
+}
         }
     }
 
@@ -212,6 +221,32 @@ pub fn refresh(arena: std.mem.Allocator, io: std.Io, root: []const u8, options: 
     outcome.published = true;
     outcome.generation = generation;
     outcome.count = written.count;
+// The change set, after the commit record: nothing changed means no batch, so the sequence does not advance.
+if (outcome.previous_verdict == .ok) {
+var current: std.ArrayListUnmanaged(batch_mod.Item) = .empty;
+for (cache.files.keys()) |name| try current.append(arena, batch_mod.fileItem(name, cache.files.get(name).?));
+for (cache.dirs.keys()) |name| {
+if (name.len == 0) continue;
+try current.append(arena, batch_mod.dirItem(name, cache.dirs.get(name).?));
+}
+const plan = try batch_mod.diff(arena, previous.items, current.items);
+if (plan.entries.len > 0) {
+try batch_mod.write(arena, io, meta_dir, plan, .{
+.generation = generation,
+.parent = generation - 1,
+.normalize = switch (options.hash_mode) {
+.none => "none",
+.lf => "lf",
+.text => "text",
+},
+.root_dev = root_stat.file_id_hi,
+.root_ino = root_stat.file_id_lo,
+.created = created,
+.updated = options.updated,
+.writer = options.writer,
+});
+}
+}
     outcome.stats = .{ .load_ns = t1 - t0, .discover_ns = t2 - t1, .hash_ns = t3 - t2, .publish_ns = nowNs(io) - t3 };
     return outcome;
 }

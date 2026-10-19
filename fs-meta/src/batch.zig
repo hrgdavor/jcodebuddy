@@ -14,6 +14,7 @@
 const std = @import("std");
 const format = @import("format.zig");
 const reconcile = @import("reconcile.zig");
+const json_doc = @import("json_doc.zig");
 
 /// A name that did not exist in the parent generation.
 pub const CHANGE_ADDED: u32 = 0x20;
@@ -378,4 +379,145 @@ test "decode refuses an entry with no change bit" {
     // Clear the change bit in place: the entry is still a valid entry, just not a change.
     encoded.meta[44] = 0;
     try testing.expectError(error.InvalidChangeFlags, decode(testing.allocator, encoded.meta, encoded.txt));
+}
+/// A file from a cache state, as an entry. The identity fields are the ones diff compares (section 11); the layout
+/// fields are the writer's and stay zero.
+pub fn fileItem(name: []const u8, state: anytype) Item {
+    var entry = std.mem.zeroes(format.Entry);
+    entry.mtime_ns = state.mtime_ns;
+    entry.size_bytes = state.size_bytes;
+    entry.content_hash = state.content_hash orelse 0;
+    entry.name_hash = format.wyhash(name);
+    entry.file_id_lo = state.file_id_lo;
+    entry.file_id_hi = state.file_id_hi;
+    entry.flags_word = format.flags.regular_file |
+        (if (state.content_hash != null) format.flags.content_known else 0) |
+        (if (state.hash_lf) format.flags.hash_lf else 0);
+    return .{ .name = name, .entry = entry };
+}
+
+/// A directory from a cache state: listed for its mtime, never carrying a content hash (section 16).
+pub fn dirItem(name: []const u8, state: anytype) Item {
+    var entry = std.mem.zeroes(format.Entry);
+    entry.mtime_ns = state.mtime_ns;
+    entry.name_hash = format.wyhash(name);
+    entry.file_id_lo = state.file_id_lo;
+    entry.file_id_hi = state.file_id_hi;
+    entry.flags_word = format.flags.is_dir;
+    return .{ .name = name, .entry = entry };
+}
+
+/// What a batch needs beyond its change set to write a sidekick.
+pub const Context = struct {
+    generation: u64,
+    parent: u64,
+    normalize: []const u8 = "text",
+    root_dev: u64 = 0,
+    root_ino: u64 = 0,
+    created: []const u8 = "",
+    updated: []const u8 = "",
+    writer: []const u8 = "fsmeta-zig/1",
+};
+
+/// Write the plan as batches/<generation>/ under the meta directory: three files, no renames.
+///
+/// A batch is derived output: a torn batch fails its own hashes and is reported, never repaired, because a repaired
+/// batch would be a guessed change record. The main trio keeps the section 9 rename order, which is where a torn
+/// write would matter.
+pub fn write(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    meta_dir: std.Io.Dir,
+    plan: Plan,
+    context: Context,
+) !void {
+    const encoded = try encode(allocator, plan);
+    defer allocator.free(encoded.meta);
+    defer allocator.free(encoded.txt);
+
+    var added: u64 = 0;
+    var changed: u64 = 0;
+    var deleted: u64 = 0;
+    for (plan.entries) |entry| switch (kindOf(entry) orelse return error.InvalidChangeFlags) {
+        .added => added += 1,
+        .changed => changed += 1,
+        .deleted => deleted += 1,
+    };
+
+    const json_bytes = try json_doc.encode(allocator, .{
+        .generation = context.generation,
+        .count = plan.entries.len,
+        .meta_bytes = encoded.meta.len,
+        .txt_bytes = encoded.txt.len,
+        .meta_hash = format.wyhash(encoded.meta),
+        .txt_hash = format.wyhash(encoded.txt),
+        .normalize = context.normalize,
+        .root_dev = context.root_dev,
+        .root_ino = context.root_ino,
+        .created = context.created,
+        .updated = context.updated,
+        .writer = context.writer,
+        .batch = .{
+            .number = context.generation,
+            .parent = context.parent,
+            .added = added,
+            .changed = changed,
+            .deleted = deleted,
+        },
+    });
+    defer allocator.free(json_bytes);
+
+    const relative = try std.fmt.allocPrint(allocator, "batches/{d:0>8}", .{context.generation});
+    defer allocator.free(relative);
+    try meta_dir.createDirPath(io, relative);
+    const dir = try meta_dir.openDir(io, relative, .{});
+    defer dir.close(io);
+
+    try dir.writeFile(io, .{ .sub_path = format.meta_file, .data = encoded.meta });
+    try dir.writeFile(io, .{ .sub_path = format.txt_file, .data = encoded.txt });
+    try dir.writeFile(io, .{ .sub_path = format.json_file, .data = json_bytes });
+}
+
+test "a written batch lands under batches/<generation>, three files, decodable" {
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const plan = try diff(testing.allocator, &.{}, &.{
+        item("a.txt", 10, format.flags.regular_file | format.flags.content_known),
+        item("b.txt", 20, format.flags.regular_file | format.flags.content_known),
+    });
+    defer {
+        testing.allocator.free(plan.entries);
+        testing.allocator.free(plan.names);
+    }
+
+    try write(testing.allocator, io, tmp.dir, plan, .{
+        .generation = 2,
+        .parent = 1,
+        .created = "2026-10-19T00:00:00Z",
+        .updated = "2026-10-19T00:00:00Z",
+    });
+
+    const dir = try tmp.dir.openDir(io, "batches/00000002", .{});
+    defer dir.close(io);
+
+    const meta = try dir.readFileAlloc(io, format.meta_file, testing.allocator, std.Io.Limit.limited(1 << 16));
+    defer testing.allocator.free(meta);
+    const txt = try dir.readFileAlloc(io, format.txt_file, testing.allocator, std.Io.Limit.limited(1 << 16));
+    defer testing.allocator.free(txt);
+    const json = try dir.readFileAlloc(io, format.json_file, testing.allocator, std.Io.Limit.limited(1 << 16));
+    defer testing.allocator.free(json);
+
+    try testing.expectEqual(@as(usize, 2 * format.entry_size), meta.len);
+    try testing.expectEqualStrings("a.txt\nb.txt\n", txt);
+    try testing.expect(std.mem.indexOf(u8, json, "\"batch\": { \"number\": 2, \"parent\": 1, \"added\": 2, \"changed\": 0, \"deleted\": 0 }") != null);
+
+    const decoded = try decode(testing.allocator, meta, txt);
+    defer {
+        testing.allocator.free(decoded.entries);
+        testing.allocator.free(decoded.names);
+    }
+    try testing.expectEqual(@as(usize, 2), decoded.entries.len);
+    try testing.expectEqual(reconcile.Kind.added, kindOf(decoded.entries[0]).?);
 }
