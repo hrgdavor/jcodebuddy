@@ -94,11 +94,11 @@ matcher fixed (`globMatch` as a segment DP) and hashing enabled:
 
 | tree                                           | warm pass      | cold pass | matcher off (same pass) |
 | ---------------------------------------------- | -------------: | --------: | ----------------------: |
-| Apache Fory (3881 entries, 50 `**` patterns)   | 147.6-148.0 ms | 574.5 ms  | 61-65 ms (**2.4×**)     |
-| jcodebuddy (1965 entries, 8,735 ignored files) | 58.9-60.1 ms   | 222.9 ms  | 228.5 ms (**0.26×**)    |
+| Apache Fory (3881 entries, 50 `**` patterns)   | 103-109 ms     | 574.5 ms  | 68.1 ms (**1.6×**)      |
+| jcodebuddy (1965 entries, 8,735 ignored files) | 57.7 ms        | 222.9 ms  | 228.5 ms (**0.25×**)    |
 
 
-The Fory matcher is **still above the 2× budget, by ~20%**: 148 ms warm against a 61–65 ms no-rule baseline. The
+**Both trees are inside the 2× budget.** Fory: 103-109 ms warm against a 68.1 ms no-rule baseline
 rules *save* time, because they prune a dependency tree (71.3 ms with, 101.0 ms without). The full tables and the
 Full tables and the remaining items are in [benchmark.md](benchmark.md#current-numbers-2026-10-19).
 The warm pass is 32% of the cold pass on jcodebuddy (71.3 of 222.9 ms) — the property an incremental

@@ -94,6 +94,11 @@ Apache Fory @ `a11d257` — 3881 names:
 | scan — no hashing / hashing      | 707.3 / 752.1 ms |
 
 
+
+**Final numbers for this round.** One more change — pruned anchored rules by their literal first segment — brought
+Fory to **103-109 ms** warm against a **68.1 ms** no-rule baseline (**1.6×**, inside the 2× budget) and left
+jcodebuddy at **57.7 ms** against **228.5 ms** without rules (**0.25×**). The whole arc, and the code for every
+optimisation that produced it, is in [gitignore-and-optimisations.md](gitignore-and-optimisations.md).
 **Update, later the same day.** Two more changes moved these numbers again, both measured the same way:
 `globMatch` became a segment DP, and `**/pattern` is now normalised to the unanchored form it means — which
 moved Fory's ~50 such rules out of the general-glob class into the indexed suffix/literal classes. The warm

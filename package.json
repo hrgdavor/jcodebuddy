@@ -8,7 +8,7 @@
     "check:resolver-docs": "bun scripts/check-resolver-docs.js"
   },
   "dependencies": {
-    "@hrg/inject-examples": "^1.0.1",
+    "@hrg/inject-examples": "^1.2.2",
     "@hrg/md-fix-tables": "^1.2.0",
     "wyhash": "link:wyhash"
   },

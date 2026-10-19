@@ -82,6 +82,7 @@ const Chain = struct {
     }
 };
 fn chainRuleMatches(rule: gitignore.Rule, path: []const u8, base: []const u8, is_dir: bool) bool {
+{//chain-anchored-prune
     if (rule.first_segment) |head| {
         const path_first = path[0..(std.mem.indexOfScalar(u8, path, '/') orelse path.len)];
         if (!std.mem.eql(u8, head, path_first)) return false;
@@ -95,6 +96,7 @@ fn chainRuleMatches(rule: gitignore.Rule, path: []const u8, base: []const u8, is
         }
     }
     return false;
+}
 }
 
 fn chainMatchText(rule: gitignore.Rule, text: []const u8) bool {

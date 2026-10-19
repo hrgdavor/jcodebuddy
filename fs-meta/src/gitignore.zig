@@ -127,10 +127,12 @@ pub const Rules = struct {
             // `**/pat` applies at any depth, which is what an unanchored pattern already means. Normalising the
             // prefix here is what keeps those rules in the indexed classes instead of the general glob: without
             // it, every entry pays an ancestor-prefix walk for each of them (fifty-odd in a real Java tree).
+{//doublestar-normalise
             if (anchored and std.mem.startsWith(u8, line, "**/")) {
                 line = line[3..];
                 anchored = false;
             }
+}
 
             if (line.len == 0) continue;
 
