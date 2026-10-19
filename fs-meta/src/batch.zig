@@ -127,6 +127,58 @@ pub fn diff(
     return .{ .entries = try entries.toOwnedSlice(allocator), .names = try names.toOwnedSlice(allocator) };
 }
 
+/// A batch laid out as the two byte files a trio carries, without the sidekick.
+pub const Encoded = struct {
+    meta: []u8,
+    txt: []u8,
+};
+
+/// Lay the plan out as `files.meta` and `files.txt`: entries in plan order, names LF-terminated, offsets assigned
+/// here because `diff` leaves them zero — the layout is the writer's business, the change set is not.
+pub fn encode(allocator: std.mem.Allocator, plan: Plan) !Encoded {
+    const meta = try allocator.alloc(u8, plan.entries.len * format.entry_size);
+    errdefer allocator.free(meta);
+    var txt: std.ArrayListUnmanaged(u8) = .empty;
+    errdefer txt.deinit(allocator);
+
+    for (plan.entries, 0..) |entry, index| {
+        const offset = txt.items.len;
+        try txt.appendSlice(allocator, plan.names[index]);
+        try txt.append(allocator, '\n');
+
+        var laid_out = entry;
+        laid_out.name_offset = offset;
+        laid_out.name_length = @intCast(plan.names[index].len);
+        var bytes: [format.entry_size]u8 = undefined;
+        laid_out.encode(&bytes);
+        @memcpy(meta[index * format.entry_size ..][0..format.entry_size], &bytes);
+    }
+
+    return .{ .meta = meta, .txt = try txt.toOwnedSlice(allocator) };
+}
+
+/// The inverse: entries and their names, with every entry required to carry exactly one change bit.
+pub fn decode(allocator: std.mem.Allocator, meta: []const u8, txt: []const u8) !Plan {
+    if (meta.len % format.entry_size != 0) return error.MetaSizeMismatch;
+    const count = meta.len / format.entry_size;
+    const entries = try allocator.alloc(format.Entry, count);
+    errdefer allocator.free(entries);
+    const names = try allocator.alloc([]const u8, count);
+    errdefer allocator.free(names);
+
+    for (0..count) |index| {
+        const entry = format.Entry.decode(meta[index * format.entry_size ..][0..format.entry_size]);
+        if (kindOf(entry) == null) return error.InvalidChangeFlags;
+        if (entry.name_length == 0) return error.EntryOutOfRange;
+        const end = entry.name_offset + entry.name_length;
+        if (end >= txt.len or txt[end] != '\n') return error.EntryOutOfRange;
+        entries[index] = entry;
+        names[index] = txt[entry.name_offset..end];
+    }
+
+    return .{ .entries = entries, .names = names };
+}
+
 /// The change set as the events `reconcile.collapse` consumes.
 pub fn toEvents(allocator: std.mem.Allocator, plan: Plan) ![]reconcile.Event {
     const events = try allocator.alloc(reconcile.Event, plan.entries.len);
@@ -273,4 +325,57 @@ test "two batches fold to the net effect: added then deleted is nothing" {
     const changes = try reconcile.collapse(testing.allocator, both, null);
     defer testing.allocator.free(changes);
     try testing.expectEqual(@as(usize, 0), changes.len);
+}
+test "encode then decode is the same plan, byte for byte in both files" {
+    const plan = try diff(testing.allocator, &.{
+        item("a.txt", 10, format.flags.regular_file | format.flags.content_known),
+        item("gone.txt", 25, format.flags.regular_file | format.flags.content_known),
+    }, &.{
+        item("a.txt", 10, format.flags.regular_file | format.flags.content_known | format.flags.hash_lf),
+        item("new.txt", 30, format.flags.regular_file | format.flags.content_known),
+    });
+    defer {
+        testing.allocator.free(plan.entries);
+        testing.allocator.free(plan.names);
+    }
+
+    const encoded = try encode(testing.allocator, plan);
+    defer {
+        testing.allocator.free(encoded.meta);
+        testing.allocator.free(encoded.txt);
+    }
+    try testing.expectEqual(@as(usize, 3 * format.entry_size), encoded.meta.len);
+    try testing.expectEqualStrings("a.txt\ngone.txt\nnew.txt\n", encoded.txt);
+
+    const decoded = try decode(testing.allocator, encoded.meta, encoded.txt);
+    defer {
+        testing.allocator.free(decoded.entries);
+        testing.allocator.free(decoded.names);
+    }
+    try testing.expectEqual(@as(usize, plan.entries.len), decoded.entries.len);
+    for (plan.names, decoded.names) |want, got| try testing.expectEqualStrings(want, got);
+    for (plan.entries, decoded.entries) |want, got| {
+        try testing.expectEqual(kindOf(want).?, kindOf(got).?);
+        try testing.expectEqual(want.name_hash, got.name_hash);
+        try testing.expectEqual(want.content_hash, got.content_hash);
+        try testing.expectEqual(want.flags_word & ~CHANGE_MASK, got.flags_word & ~CHANGE_MASK);
+    }
+}
+
+test "decode refuses an entry with no change bit" {
+    const plan = try diff(testing.allocator, &.{
+        item("a.txt", 1, format.flags.regular_file | format.flags.content_known),
+    }, &.{});
+    defer {
+        testing.allocator.free(plan.entries);
+        testing.allocator.free(plan.names);
+    }
+    const encoded = try encode(testing.allocator, plan);
+    defer {
+        testing.allocator.free(encoded.meta);
+        testing.allocator.free(encoded.txt);
+    }
+    // Clear the change bit in place: the entry is still a valid entry, just not a change.
+    encoded.meta[44] = 0;
+    try testing.expectError(error.InvalidChangeFlags, decode(testing.allocator, encoded.meta, encoded.txt));
 }
