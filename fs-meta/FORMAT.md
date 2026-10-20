@@ -50,7 +50,7 @@ A name is the file's or directory's **whole path relative to the project root** 
 - No leading `/`, no trailing `/`, no empty segment, no `.` or `..` segment, and never empty. The root itself is never listed; its identity is in `files.json` `root`.
 - Case is preserved exactly as the file system reports it; nothing is case-folded. On a case-insensitive file system, two names that differ only in case cannot both be listed.
 - Names are ordered by **unsigned byte comparison of their UTF-8 encoding** (i.e. `memcmp`), which is a different order from Java's `String.compareTo` (UTF-16 code units) for some non-BMP characters — a writer must sort on bytes, not on strings.
-- Both files and directories are listed. A directory's name is listed without a trailing slash, e.g. `src`. Its existence is what carries its mtime for fast readdir skipping.
+- Both files and directories are listed. A directory's **path** is written without a trailing slash (`src`): that is the name the hash is taken over and the name a lookup is given. Only its stored line in `files.txt` carries the `/` (§ 4), because the slash is what makes the folder's subtree an exactly bounded byte range. A directory's existence is what carries its mtime for fast readdir skipping.
 
 **A name is the whole path, deliberately.** The alternative — a directory table with each file carrying a parent
 reference and only a basename — was measured on two real trees and rejected: it halves `iles.txt (47–49%) and
@@ -168,6 +168,7 @@ UTF-8 JSON object, no comment. The commit record.
 | `root`           | object | `{ "dev": number, "ino": number }` - identity of the root directory; tells you the root moved |
 | `rootPath`       | string | optional, informational: the absolute path that was scanned. Never used for identity — two machines reach one tree by different paths, and a copied trio must not claim to describe the original |
 | `scan`           | object | optional, the settings the engine used: `{ "hashMode": "text" \| "lf" \| "none", "ignoredDirectoryNames": [string], "respectGitignore": boolean }` |
+| `roots`          | object | optional, § 18: `{ "<direct child>": { "offset": number, "length": number } }` — byte ranges in `files.txt`, each covering the folder's own `dir/` line and its subtree |
 
 Required keys: `format`, `version`, `entrySize`, `count`, `meta.bytes`, `meta.wyhash`, `txt.bytes`, `txt.wyhash`, `hash.content`, `hash.name`, `hash.seed`. Unknown keys ignored and preserved by rewriter.
 
@@ -370,10 +371,11 @@ Additional required JSON keys for a batch:
 
 The three counts must equal the entries with the matching change bit; a mismatch is `batch-count-mismatch`.
 
-### 17.2a Order: by name hash, not by path
+### 17.2a Order: the meta by name hash, the text by name
 
-A batch follows both orders of § 4: its `files.meta` by `(nameHash, name)`, its `files.txt` by name with directory
-64-bit), because a consumer *joins* it: the hash is the name ident from § 3, so
+A batch follows both orders of § 4: its `files.meta` by `(nameHash, name)`, its `files.txt` by name in stored form,
+the directory slash included. The hash is the key a consumer *joins* on, so the meta order is the one a batch
+cannot spell differently — and it is why a batch and the main meta are consumed by the same ordered walk:
 
 - two batches are combined by one ordered walk over two lists — no lookup, no allocation, no string compare;
 - a name history across N batches is a join on the same key;
@@ -383,11 +385,13 @@ The sort key is the pair (nameHash, name), name compared as unsigned bytes. A 64
 name is the tie-break that keeps such a pair ordered deterministically and distinguishable — a fold that keyed on
 the hash alone would report two different files as one file changing twice.
 
-iles.txt in a batch is written in this same order, so ameOffset/ameLength still address the names (a
-name is stored whole, as always), and the entry order is the trio order.
+`files.txt` in a batch is written in name order, so `nameOffset`/`nameLength` still address the names (a name is
+stored whole, as always), and the entry order stays the meta order: the two orders are independent by
+construction, because an entry addresses its name by offset (§ 4).
 
 A consumer that walks a batch must therefore compare hashes first and names only when they are equal. Ports that
 cannot express an unsigned 64-bit order (Java's signed long) compare with an unsigned comparison.
+
 ### 17.3 Why it is not a tombstone log
 
 A batch supersedes "deletion = absent name" (§ 15) **for the window it covers only**: the main trio still has no
