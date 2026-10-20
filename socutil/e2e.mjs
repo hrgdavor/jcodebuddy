@@ -1,0 +1,378 @@
+#!/usr/bin/env bun
+// End-to-end test: a real unix-socket fixture, a real socutil process, real HTTP.
+//
+//   zig build && bun socutil/e2e.mjs
+//   bun socutil/e2e.mjs --exe /path/to/socutil
+//
+// The test binds the server to port 0 and reads the port it actually took from the server's own
+// "listening on" line, so it never collides with a socutil a person is using. The SSE half talks raw
+// HTTP over a TCP socket instead of through fetch: the point is the wire, and a client library that
+// buffers an event stream tests the library instead.
+//
+// Prints one `ok` line per check, then PASS, and exits non-zero on the first failure. It always tears
+// down the process and the fixture socket, including on failure, so a failed run leaves nothing bound.
+import assert from "node:assert/strict";
+import net from "node:net";
+import fs from "node:fs";
+import path from "node:path";
+
+const here = import.meta.dir;
+const repoRoot = path.dirname(here);
+const scratch = path.join(repoRoot, ".tmp", "socutil-e2e");
+const sockDir = path.join(scratch, "sockdir");
+const sockPath = path.join(sockDir, "demo.sock");
+
+const argv = process.argv.slice(2);
+const at = argv.indexOf("--exe");
+const exe =
+  at >= 0
+    ? argv[at + 1]
+    : path.join(here, "zig-out", "bin", process.platform === "win32" ? "socutil.exe" : "socutil");
+
+if (!exe) {
+  console.error("--exe needs a path to the socutil executable");
+  process.exit(2);
+}
+if (!fs.existsSync(exe)) {
+  console.error(`socutil executable not found at ${exe}`);
+  console.error("build it first: (cd socutil && zig build) - see socutil/README.md");
+  process.exit(1);
+}
+
+fs.mkdirSync(sockDir, { recursive: true });
+fs.rmSync(sockPath, { force: true });
+
+const fixture = net.createServer((socket) => {
+  socket.write("demo online\n");
+  socket.on("data", (data) => {
+    const line = data.toString("utf8");
+    if (line.trim() === "quit") {
+      socket.end("bye\n");
+      return;
+    }
+    socket.write("echo:" + line);
+  });
+});
+await new Promise((resolve, reject) => {
+  fixture.once("error", reject);
+  fixture.listen(sockPath, resolve);
+});
+
+const server = Bun.spawn([exe, "--port", "0", "--dir", sockDir], {
+  stdout: "pipe",
+  stderr: "pipe",
+});
+const stderrChunks = [];
+void (async () => {
+  for await (const chunk of server.stderr) stderrChunks.push(Buffer.from(chunk));
+})();
+
+let base;
+{
+  let output = "";
+  const reader = server.stdout.getReader();
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    output += Buffer.from(value).toString("utf8");
+    const match = /socutil listening on (http:\/\/[^\s/]+)\//.exec(output);
+    if (match) {
+      base = match[1];
+      break;
+    }
+  }
+  if (!base) {
+    console.error("socutil did not print a listening URL; stderr:\n" + Buffer.concat(stderrChunks).toString("utf8"));
+    await teardown(1);
+  }
+}
+
+async function get(pathname) {
+  return fetch(base + pathname);
+}
+
+// A raw HTTP/1.1 request, resolved with the whole response once the server closes it.
+function rawGet(requestPath, host = "127.0.0.1") {
+  const { port } = new URL(base);
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host, port: Number(port) });
+    let buffer = "";
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`timeout on ${requestPath}; got:\n${buffer.slice(0, 2000)}`));
+    }, 10_000);
+    socket.on("connect", () => {
+      socket.write(`GET ${requestPath} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
+    });
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+    });
+    socket.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    socket.on("end", () => {
+      clearTimeout(timer);
+      resolve(buffer);
+    });
+  });
+}
+
+// The SSE session: reads events from one raw request, and lets the caller await them in order.
+class SseSession {
+  constructor() {
+    const { port } = new URL(base);
+    this.socket = net.createConnection({ host: "127.0.0.1", port: Number(port) });
+    this.buffer = "";
+    this.events = [];
+    this.waiters = [];
+    this.ended = false;
+    this.error = null;
+
+    this.socket.on("data", (chunk) => this.feed(chunk.toString("utf8")));
+    this.socket.on("end", () => {
+      this.ended = true;
+      this.wake();
+    });
+    this.socket.on("error", (error) => {
+      this.error = error;
+      this.ended = true;
+      this.wake();
+    });
+  }
+
+  open(requestPath) {
+    this.socket.write(
+      `GET ${requestPath} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`,
+    );
+    return this;
+  }
+
+  feed(text) {
+    this.buffer += text.replace(/\r\n/g, "\n");
+    // Drop the HTTP head once, then keep parsing event blocks. Chunk-size lines between events are
+    // ignored by the line parser below, so chunked framing needs no special case.
+    if (!this.headersSeen) {
+      const end = this.buffer.indexOf("\n\n");
+      if (end === -1) return;
+      this.head = this.buffer.slice(0, end);
+      this.buffer = this.buffer.slice(end + 2);
+      this.headersSeen = true;
+    }
+
+    let split;
+    while ((split = this.buffer.indexOf("\n\n")) !== -1) {
+      const block = this.buffer.slice(0, split);
+      this.buffer = this.buffer.slice(split + 2);
+      if (block.startsWith(":")) continue;
+      let event = "message";
+      let data = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (event === "message" && data === "") continue;
+      this.events.push({ event, data });
+    }
+    this.wake();
+  }
+
+  wake() {
+    while (this.waiters.length !== 0) {
+      const waiter = this.waiters[0];
+      if (this.events.length !== 0) {
+        this.waiters.shift();
+        waiter.resolve(this.events.shift());
+      } else if (this.ended) {
+        this.waiters.shift();
+        waiter.reject(this.error ?? new Error("SSE stream ended before the expected event"));
+      } else {
+        return;
+      }
+    }
+  }
+
+  next(timeoutMs = 10_000) {
+    if (this.events.length !== 0) return Promise.resolve(this.events.shift());
+    if (this.ended) return Promise.reject(this.error ?? new Error("SSE stream already ended"));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error("timed out waiting for the next SSE event"));
+      }, timeoutMs);
+      this.waiters.push({
+        resolve: (event) => {
+          clearTimeout(timer);
+          resolve(event);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+    });
+  }
+
+  close() {
+    this.socket.destroy();
+  }
+}
+
+function assertStatus(response, expected, label) {
+  assert.equal(response.status, expected, `${label}: expected ${expected}, got ${response.status}`);
+}
+
+try {
+  {
+    const response = await get("/");
+    assertStatus(response, 200, "GET /");
+    assert.match(response.headers.get("content-type") ?? "", /^text\/html/);
+    assert.match(await response.text(), /socutil/);
+    console.log("ok static index");
+  }
+
+  {
+    const response = await get("/app.js");
+    assertStatus(response, 200, "GET /app.js");
+    assert.match(response.headers.get("content-type") ?? "", /javascript/);
+    console.log("ok embedded script");
+  }
+
+  {
+    const response = await get("/style.css");
+    assertStatus(response, 200, "GET /style.css");
+    assert.match(response.headers.get("content-type") ?? "", /text\/css/);
+    console.log("ok embedded stylesheet");
+  }
+
+  {
+    const response = await get("/api/sockets");
+    assertStatus(response, 200, "GET /api/sockets");
+    const listing = await response.json();
+    assert.ok(listing.dirs.includes(sockDir), "the scanned directory should be reported");
+    const found = listing.sockets.find((entry) => entry.name === "demo.sock");
+    assert.ok(found, "demo.sock should be listed");
+    assert.equal(found.path, sockPath);
+    console.log("ok socket listing", found.path);
+  }
+
+  const sessionId = crypto.randomUUID();
+  const sse = new SseSession().open(
+    "/api/events?" + new URLSearchParams({ id: sessionId, path: sockPath }).toString(),
+  );
+
+  try {
+    const ready = await sse.next();
+    assert.equal(ready.event, "ready", "first event should be ready");
+    const readyData = JSON.parse(ready.data);
+    assert.equal(readyData.path, sockPath);
+    assert.match(sse.head ?? "", /^HTTP\/1\.1 200/);
+    assert.match(sse.head ?? "", /text\/event-stream/);
+    console.log("ok SSE ready");
+
+    const input = (body) =>
+      fetch(base + "/api/input?" + new URLSearchParams({ id: sessionId }).toString(), {
+        method: "POST",
+        body,
+      });
+
+    let response = await input("hello\n");
+    assertStatus(response, 200, "POST /api/input hello");
+    assert.deepEqual(await response.json(), { ok: true, written: 6 });
+
+    let output = "";
+    for (;;) {
+      const event = await sse.next();
+      assert.equal(event.event, "out", `unexpected event ${event.event}`);
+      output += Buffer.from(JSON.parse(event.data).b, "base64").toString("utf8");
+      if (output.includes("echo:hello")) break;
+    }
+    assert.ok(output.includes("demo online"), "the fixture greeting should arrive");
+    console.log("ok socket round trip", JSON.stringify(output));
+
+    response = await input("quit\n");
+    assertStatus(response, 200, "POST /api/input quit");
+
+    for (;;) {
+      const event = await sse.next();
+      if (event.event === "out") {
+        const text = Buffer.from(JSON.parse(event.data).b, "base64").toString("utf8");
+        if (text.includes("bye")) output += text;
+        continue;
+      }
+      assert.equal(event.event, "exit");
+      assert.equal(JSON.parse(event.data).reason, "eof");
+      break;
+    }
+    assert.ok(output.includes("bye"), "the fixture's farewell should arrive before the exit event");
+    console.log("ok exit event");
+  } finally {
+    sse.close();
+  }
+
+  {
+    const response = await fetch(
+      base + "/api/input?" + new URLSearchParams({ id: sessionId }).toString(),
+      { method: "POST", body: "nope\n" },
+    );
+    assertStatus(response, 404, "POST to a finished session");
+    console.log("ok finished session rejected");
+  }
+
+  {
+    const response = await fetch(base + "/api/sockets", { method: "POST" });
+    assertStatus(response, 405, "POST /api/sockets");
+    assert.match(response.headers.get("allow") ?? "", /GET/);
+    console.log("ok method not allowed");
+  }
+
+  {
+    const response = await get("/does-not-exist");
+    assertStatus(response, 404, "GET /does-not-exist");
+    console.log("ok unknown asset is 404");
+  }
+
+  {
+    const response = await get("/api/events?id=has%20space&path=" + encodeURIComponent(sockPath));
+    assertStatus(response, 400, "invalid session id");
+    console.log("ok invalid session id is rejected");
+  }
+
+  {
+    const outside = path.join(scratch, "not-a-socket.sock");
+    const response = await get(
+      "/api/events?" + new URLSearchParams({ id: "outside", path: outside }).toString(),
+    );
+    assertStatus(response, 404, "socket outside the scan");
+    console.log("ok unscanned path is rejected");
+  }
+
+  {
+    const raw = await rawGet("/api/sockets");
+    assert.match(raw, /^HTTP\/1\.1 200/);
+    assert.match(raw, /"demo\.sock"/);
+    console.log("ok raw HTTP response");
+  }
+
+  console.log("PASS");
+} catch (error) {
+  console.error("\nFAIL: " + (error?.stack ?? error));
+  console.error("server stderr:\n" + Buffer.concat(stderrChunks).toString("utf8"));
+  await teardown(1);
+} finally {
+  await teardown(0);
+}
+
+async function teardown(code) {
+  try {
+    server.kill();
+  } catch {}
+  try {
+    await Promise.race([server.exited, Bun.sleep(2000)]);
+  } catch {}
+  try {
+    await new Promise((resolve) => fixture.close(resolve));
+  } catch {}
+  fs.rmSync(sockPath, { force: true });
+  process.exit(code);
+}
