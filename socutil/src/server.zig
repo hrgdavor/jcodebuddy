@@ -13,6 +13,11 @@
 //!     needs to move more uses its own continuation, because the transport does
 //!     not reassemble WebSocket fragments.
 //!
+//! A request never carries a path. A socket is selected by the name the listing
+//! returned (`<dir-name>.<file-name>`), and the server resolves it against a
+//! fresh scan of the configured directories; an unknown name is a 404. See
+//! README "Names, not paths" for the naming rule.
+//!
 //! Threading model:
 //!   * one accept loop (the main thread) spawns one detached thread per HTTP
 //!     connection;
@@ -54,7 +59,7 @@ const ws_chunk_len = 64 * 1024;
 pub const App = struct {
     gpa: std.mem.Allocator,
     io: Io,
-    dirs: []const []const u8,
+    dirs: []const sockets.Dir,
     sessions: std.StringHashMapUnmanaged(*Session) = .empty,
     sessions_mutex: Io.Mutex = .init,
 };
@@ -222,13 +227,21 @@ fn handleSockets(app: *App, req: *http.Server.Request) !void {
     try w.writeAll("{\"dirs\":[");
     for (app.dirs, 0..) |dir, i| {
         if (i != 0) try w.writeByte(',');
-        try writeJsonString(w, dir);
+        try w.writeAll("{\"name\":");
+        try writeJsonString(w, dir.name);
+        try w.writeAll(",\"path\":");
+        try writeJsonString(w, dir.path);
+        try w.writeByte('}');
     }
     try w.writeAll("],\"sockets\":[");
     for (scan.entries.items, 0..) |entry, i| {
         if (i != 0) try w.writeByte(',');
         try w.writeAll("{\"name\":");
         try writeJsonString(w, entry.name);
+        try w.writeAll(",\"file\":");
+        try writeJsonString(w, entry.file_name);
+        try w.writeAll(",\"dirName\":");
+        try writeJsonString(w, entry.dir_name);
         try w.writeAll(",\"dir\":");
         try writeJsonString(w, entry.dir);
         try w.writeAll(",\"path\":");
@@ -248,18 +261,18 @@ fn handleEvents(app: *App, req: *http.Server.Request, query: []const u8) !void {
     const q = try parseQuery(a, query);
     const id = q.id orelse return respondError(req, .bad_request, "missing id");
     if (!validSessionId(id)) return respondError(req, .bad_request, "invalid id");
-    const requested_path = q.path orelse return respondError(req, .bad_request, "missing path");
+    const name = q.name orelse return respondError(req, .bad_request, "missing name");
 
-    // Only sockets we just discovered may be connected to: the client cannot
-    // make the server connect to an arbitrary path.
+    // Only a socket we just discovered may be connected to, and only by its
+    // name: the request never carries a path, so there is nothing to join.
     var scan = sockets.scan(app.gpa, app.io, app.dirs) catch |err| {
         std.log.err("socutil: socket scan failed: {s}", .{@errorName(err)});
         return respondError(req, .internal_server_error, "scan failed");
     };
     defer scan.deinit();
 
-    const socket_path = scan.find(requested_path) orelse
-        return respondError(req, .not_found, "socket not found");
+    const entry = scan.find(name) orelse return respondError(req, .not_found, "socket not found");
+    const socket_path = entry.path;
 
     const session = createSession(app, id, socket_path) catch |err| {
         std.log.warn("socutil: cannot connect to {s}: {s}", .{ socket_path, @errorName(err) });
@@ -388,7 +401,7 @@ fn handleWebSocket(
     const q = try parseQuery(a, query);
     const id = q.id orelse return respondError(req, .bad_request, "missing id");
     if (!validSessionId(id)) return respondError(req, .bad_request, "invalid id");
-    const requested_path = q.path orelse return respondError(req, .bad_request, "missing path");
+    const name = q.name orelse return respondError(req, .bad_request, "missing name");
 
     const key: []const u8 = switch (req.upgradeRequested()) {
         .websocket => |maybe_key| maybe_key orelse
@@ -408,16 +421,16 @@ fn handleWebSocket(
         return respondError(req, .bad_request, "unsupported websocket version");
     }
 
-    // Only a socket a fresh scan just returned may be connected to; a client
-    // cannot use this route to reach an arbitrary path.
+    // Only a socket a fresh scan just returned may be connected to, and only by
+    // the name it was listed under: the request never carries a path.
     var scan = sockets.scan(app.gpa, app.io, app.dirs) catch |err| {
         std.log.err("socutil: socket scan failed: {s}", .{@errorName(err)});
         return respondError(req, .internal_server_error, "scan failed");
     };
     defer scan.deinit();
 
-    const socket_path = scan.find(requested_path) orelse
-        return respondError(req, .not_found, "socket not found");
+    const entry = scan.find(name) orelse return respondError(req, .not_found, "socket not found");
+    const socket_path = entry.path;
 
     const session = createSession(app, id, socket_path) catch |err| {
         std.log.warn("socutil: cannot connect to {s}: {s}", .{ socket_path, @errorName(err) });
@@ -781,7 +794,9 @@ fn respondError(req: *http.Server.Request, status: http.Status, message: []const
 
 const Query = struct {
     id: ?[]const u8 = null,
-    path: ?[]const u8 = null,
+    /// The socket to open, by the name `/api/sockets` listed. There is no path
+    /// field: a path is never read from a request.
+    name: ?[]const u8 = null,
 };
 
 fn parseQuery(allocator: std.mem.Allocator, raw: []const u8) !Query {
@@ -794,8 +809,8 @@ fn parseQuery(allocator: std.mem.Allocator, raw: []const u8) !Query {
         const value = if (eq) |i| part[i + 1 ..] else "";
         if (std.mem.eql(u8, key, "id")) {
             query.id = try decodeQueryValue(allocator, value);
-        } else if (std.mem.eql(u8, key, "path")) {
-            query.path = try decodeQueryValue(allocator, value);
+        } else if (std.mem.eql(u8, key, "name")) {
+            query.name = try decodeQueryValue(allocator, value);
         }
     }
     return query;
@@ -843,13 +858,18 @@ test "query decoding" {
     defer arena.deinit();
     const a = arena.allocator();
 
-    const q = try parseQuery(a, "id=abc%2D123&path=%2Ftmp%2Fmy+socket.sock&other=ignored");
+    const q = try parseQuery(a, "id=abc%2D123&name=run.app.sock&other=ignored");
     try std.testing.expectEqualStrings("abc-123", q.id.?);
-    try std.testing.expectEqualStrings("/tmp/my socket.sock", q.path.?);
+    try std.testing.expectEqualStrings("run.app.sock", q.name.?);
+
+    // A path in the query is not a field at all: it is ignored, so a request
+    // cannot select a socket by path even if it tries.
+    const path_attempt = try parseQuery(a, "id=abc&path=%2Ftmp%2Fmy+socket.sock");
+    try std.testing.expect(path_attempt.name == null);
 
     const empty = try parseQuery(a, "");
     try std.testing.expect(empty.id == null);
-    try std.testing.expect(empty.path == null);
+    try std.testing.expect(empty.name == null);
 }
 
 test "json string escaping" {

@@ -11,6 +11,10 @@ Two transports share the relay:
 - the **tail transport** (`/api/events` + `POST /api/input`), for a line-based socket: send the handshake
   command once, then follow the output as Server-Sent Events.
 
+Sockets are **selected by name, never by path**. A configured directory has a name (`--dir db=/var/run`), a
+socket in it is `<dir-name>.<file-name>` (`db.postgres.sock`), and that is the only selector a request may
+send. Paths appear in the listing for display and nowhere in a request.
+
 It was written to answer the everyday question *"what is listening on a unix socket right now, and what
 does it say?"* without `socat`, `nc`, and a second terminal. The socket side is byte-transparent; the page
 shows the bytes as UTF-8 text.
@@ -38,21 +42,37 @@ zig build run -- --dir /run        # build and run, arguments after `--` passed 
 `D:\wrk\zig\17\zig.exe`, then `zig` on `PATH`. A wrong version fails with the path to use.
 
 ```sh
-socutil                        # scan the platform defaults, listen on 127.0.0.1:8765
-socutil --port 0 /run /tmp     # any free port, two directories
-socutil --listen 0.0.0.0 --port 9000 --dir /var/run
+socutil                              # scan the platform defaults, listen on 127.0.0.1:8765
+socutil --port 0 /run /tmp           # any free port; names derive from the basenames
+socutil --dir db=/var/run --port 9000 # the sockets are named db.<file-name>
 ```
 
-| Option            | Meaning                                                        |
-| ----------------- | -------------------------------------------------------------- |
-| `--listen <host>` | address to bind; also spelled `--host` (default `127.0.0.1`)   |
-| `--port <port>`   | TCP port to bind; `0` picks a free one (default `8765`)        |
-| `--dir <path>`    | a directory to scan; may be repeated, and bare arguments work  |
-| `-h`, `--help`    | usage                                                          |
+| Option                | Meaning                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `--listen <host>`     | address to bind; also spelled `--host` (default `127.0.0.1`)                            |
+| `--port <port>`       | TCP port to bind; `0` picks a free one (default `8765`)                                 |
+| `--dir [name=]<path>` | a directory to scan; repeatable, and bare arguments work; default name is the basename  |
+| `-h`, `--help`        | usage                                                                                   |
 
 With no directory arguments the defaults are `$XDG_RUNTIME_DIR`, `/tmp`, `/var/run`, `/run` and `.` on
 POSIX, and `%TEMP%`, `%TMP%` and `.` on Windows. The startup line prints the URL that was actually bound,
 which is what the end-to-end test reads to find its port.
+
+## Names, not paths
+
+This is the API's central rule: **no request carries a filesystem path.** A request chooses a socket by
+name; it cannot express a path at all.
+
+- Each configured directory has a name: explicit with `--dir name=/path`, otherwise its basename
+  (`/var/run` → `run`). The name is restricted to letters, digits, `-` and `_`, and made unique
+  (`run`, `run-2`) so it can never contain a separator or a dot.
+- A socket's name is `<directory-name>.<file-name>`, e.g. `run.postgres.sock`. That is what
+  `/api/sockets` lists and what `/api/events` and `/api/ws` accept.
+- The server resolves a name against a **fresh scan of the configured directories**. An unknown name — and
+  a path sent where a name belongs is just an unknown name — is `404`. Nothing from a request is ever
+  joined into a path, so a request can only reach a socket those directories contain.
+- The listing still shows `dir`, `path` and `file` for display and for copy/paste into a shell. They are
+  output only.
 
 ## How a socket is recognised
 
@@ -72,20 +92,28 @@ sockets in the rest.
 
 Every plain response uses `connection: close`; a WebSocket request upgrades instead and stays open.
 
-| Request                          | Response                                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET /`                          | the embedded page (`/index.html` is the same)                                                    |
-| `GET /app.js`, `GET /style.css`  | the embedded assets                                                                              |
-| `GET /api/sockets`               | `{"dirs":[…],"sockets":[{"name","dir","path"}]}` — a fresh scan on every request, sorted by path |
-| `GET /api/events?id=&path=`      | an SSE stream for one scanned socket: `ready`, then `out` events, then `exit`                    |
-| `GET /api/ws?id=&path=`          | a WebSocket byte tunnel (see below); a plain request is `426`                                    |
-| `POST /api/input?id=`            | writes the request body to the socket; `{"ok":true,"written":<bytes>}`                           |
-| `POST /api/close?id=`            | shuts the socket down and ends the session                                                       |
-| `GET /favicon.ico`               | `204`                                                                                            |
+| Request                          | Response                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| `GET /`                          | the embedded page (`/index.html` is the same)                                |
+| `GET /app.js`, `GET /style.css`  | the embedded assets                                                          |
+| `GET /api/sockets`               | `{"dirs":[{"name","path"}],"sockets":[{"name","file","dirName","dir","path"}]}` — a fresh scan, sorted by path |
+| `GET /api/events?id=&name=`      | an SSE stream for one listed socket: `ready`, then `out` events, then `exit` |
+| `GET /api/ws?id=&name=`          | a WebSocket byte tunnel (see below); a plain request is `426`                |
+| `POST /api/input?id=`            | writes the request body to the socket; `{"ok":true,"written":<bytes>}`       |
+| `POST /api/close?id=`            | shuts the socket down and ends the session                                   |
+| `GET /favicon.ico`               | `204`                                                                        |
 
-`path` must equal a socket found by the scan on that same request: the client cannot ask the server to
-connect anywhere else. Session ids are 1–64 alphanumeric, `-` or `_` characters, and identify the live
-connection on later `POST`s for either transport.
+`name` must be `<directory-name>.<file-name>` for a socket the fresh scan finds: the request never carries a
+path, and a name the server cannot resolve is `404`. Session ids are 1–64 alphanumeric, `-` or `_`
+characters, and identify the live connection on later `POST`s for either transport.
+
+With `--dir db=/var/run`, the socket `/var/run/postgres.sock` is listed as:
+
+```json
+{"name":"db.postgres.sock","file":"postgres.sock","dirName":"db","dir":"/var/run","path":"/var/run/postgres.sock"}
+```
+
+and every request refers to it as `name=db.postgres.sock`.
 
 The page uses the tunnel by default; add `?transport=sse` to the page URL to use the tail transport.
 
@@ -110,7 +138,7 @@ a vanished browser is noticed, which then shuts the socket down.
 
 ### The WebSocket tunnel (`/api/ws`)
 
-`GET /api/ws?id=<id>&path=<path>` upgrades a standard WebSocket (`sec-websocket-version: 13`; any other
+`GET /api/ws?id=<id>&name=<name>` upgrades a standard WebSocket (`sec-websocket-version: 13`; any other
 version is `400`, and a plain request is `426`). After the `101`:
 
 - the server sends one **binary** frame per read from the unix socket, up to 64 KiB;
@@ -124,16 +152,19 @@ The transport does **not** reassemble WebSocket fragments and does not grow a bu
 frame must fit the 64 KiB read buffer, and a protocol that needs to move more uses its own continuation.
 That limit is a constant today and can become a flag; nothing above it has to change.
 
-Errors are JSON `{"error":"…"}` with these statuses: `400` missing/invalid id, path or WebSocket version,
-`404` unknown session or socket, `405` wrong method (with `Allow`), `409` session id already in use, `413`
-a body of 64 KiB or more, `426` `/api/ws` without an upgrade, `502` the socket could not be connected to
-or written.
+Errors are JSON `{"error":"…"}` with these statuses: `400` missing/invalid id, name or WebSocket version,
+`404` unknown session or socket name, `405` wrong method (with `Allow`), `409` session id already in use,
+`413` a body of 64 KiB or more, `426` `/api/ws` without an upgrade, `502` the socket could not be connected
+to or written.
 
 ## What it is not
 
 - **Not authenticated, by design.** It is a local tool: it binds `127.0.0.1` and has no access control.
   Exposing it is a decision for a proxy — Caddy, nginx, or whatever fronts it — which is also where TLS and
   authentication belong. The code does not grow its own.
+- **Never path-driven.** No endpoint reads a path from a request. The worst a malformed or hostile request
+  can do is name a socket that is not in the scan, which is a `404`; it cannot reach a file the configured
+  directories do not contain.
 - **The page types text; the tunnel is still byte-exact.** The input box encodes what you type as UTF-8 and
   appends a newline, and the page renders output as UTF-8 text. The WebSocket transport itself passes bytes
   unchanged in both directions, so a protocol that needs binary needs a different client (or a future raw
@@ -152,17 +183,18 @@ bun socutil/ui-smoke.mjs       # the page in a real browser: both transports, li
 
 The end-to-end test builds nothing: build first (it says so if the binary is missing). It starts the
 server on port 0, reads the port from the server's own startup line, and drives a real unix socket with a
-greeting, an echo round trip, a clean `EOF` exit, and the error statuses above, over both transports. The
-WebSocket half also checks the 64 KiB refusal (`1009`), the version check and the upgrade requirement. Its
-fixture lives under the repository's `.tmp/socutil-e2e/`, and it always tears the process and socket down,
-including on failure. Use `--exe <path>` to test another build.
+greeting, an echo round trip, a clean `EOF` exit, and the error statuses above, over both transports. It
+selects the socket by the name the listing returned, refuses a path sent as a name, and proves a `path`
+parameter is not a selector at all. The WebSocket half also checks the 64 KiB refusal (`1009`), the version
+check and the upgrade requirement. Its fixture lives under the repository's `.tmp/socutil-e2e/`, and it
+always tears the process and socket down, including on failure. Use `--exe <path>` to test another build.
 
 The browser test is the half the end-to-end test cannot see — the page's own `WebSocket`/`EventSource`
-wiring, base64 or binary decoding, form and status line — driven over the Chrome DevTools Protocol. It
-runs the same scenario twice: the default tunnel, then the page reloaded with `?transport=sse`. It looks
-for Chrome or a Chromium on the usual paths (`CHROME`, or `--chrome <path>`, overrides that) and prints
-`SKIP` and exits 0 when none is installed; the server-side test is the mandatory one, and this one is an
-enhancement. Its profile and fixture live under `.tmp/socutil-ui-smoke/`.
+wiring, base64 or binary decoding, form, status line, and the name it sends — driven over the Chrome
+DevTools Protocol. It runs the same scenario twice: the default tunnel, then the page reloaded with
+`?transport=sse`. It looks for Chrome or a Chromium on the usual paths (`CHROME`, or `--chrome <path>`,
+overrides that) and prints `SKIP` and exits 0 when none is installed; the server-side test is the mandatory
+one, and this one is an enhancement. Its profile and fixture live under `.tmp/socutil-ui-smoke/`.
 
 ## Layout
 

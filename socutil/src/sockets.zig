@@ -13,12 +13,28 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
 
-pub const Entry = struct {
-    /// The configured directory, exactly as given on the command line.
-    dir: []const u8,
-    /// The entry name within that directory.
+/// A configured directory, with the name the API uses for sockets found in it.
+pub const Dir = struct {
+    /// The configured name. It has no path separator, so it can never be read
+    /// as a path, and it is unique among the configured directories.
     name: []const u8,
-    /// `dir` joined with `name`, as a path the client may pass back to us.
+    /// The directory, exactly as given on the command line.
+    path: []const u8,
+};
+
+pub const Entry = struct {
+    /// The API name: `<dir-name>.<file-name>`. This is the only selector a
+    /// client may send, and it is resolved against a fresh scan of the
+    /// configured directories — never joined into a filesystem path.
+    name: []const u8,
+    /// The configured directory's name.
+    dir_name: []const u8,
+    /// The configured directory, exactly as given (borrowed from `Dir`).
+    dir: []const u8,
+    /// The entry name within that directory, for display.
+    file_name: []const u8,
+    /// `dir` joined with `file_name`. The server connects to this; it is listed
+    /// for the UI but never accepted from a request.
     path: []const u8,
 };
 
@@ -28,24 +44,27 @@ pub const Scan = struct {
 
     pub fn deinit(self: *Scan) void {
         for (self.entries.items) |entry| {
-            self.allocator.free(entry.dir);
             self.allocator.free(entry.name);
+            self.allocator.free(entry.file_name);
             self.allocator.free(entry.path);
         }
         self.entries.deinit(self.allocator);
     }
 
-    pub fn find(self: *const Scan, path: []const u8) ?[]const u8 {
-        for (self.entries.items) |entry| {
-            if (std.mem.eql(u8, entry.path, path)) return entry.path;
+    pub fn find(self: *const Scan, name: []const u8) ?*const Entry {
+        for (self.entries.items) |*entry| {
+            if (std.mem.eql(u8, entry.name, name)) return entry;
         }
         return null;
     }
-
-    pub fn containsPath(self: *const Scan, path: []const u8) bool {
-        return self.find(path) != null;
-    }
 };
+
+/// The name a socket is selected by. A `.` cannot occur in a directory name
+/// (configured names are letters, digits, `-` and `_`), so this is unambiguous
+/// and needs no parsing back from the client.
+pub fn makeName(allocator: std.mem.Allocator, dir_name: []const u8, file_name: []const u8) ![]u8 {
+    return std.fmt.allocPrint(allocator, "{s}.{s}", .{ dir_name, file_name });
+}
 
 /// Scan `dirs` for unix-domain sockets, sorted by path.
 ///
@@ -54,35 +73,37 @@ pub const Scan = struct {
 pub fn scan(
     allocator: std.mem.Allocator,
     io: Io,
-    dirs: []const []const u8,
+    dirs: []const Dir,
 ) std.mem.Allocator.Error!Scan {
     var result: Scan = .{ .allocator = allocator };
     errdefer result.deinit();
 
-    for (dirs) |dir_path| {
-        var dir = openDir(io, dir_path) catch |err| {
-            std.log.warn("socutil: cannot scan {s}: {s}", .{ dir_path, @errorName(err) });
+    for (dirs) |dir| {
+        var opened = openDir(io, dir.path) catch |err| {
+            std.log.warn("socutil: cannot scan {s}: {s}", .{ dir.path, @errorName(err) });
             continue;
         };
-        defer dir.close(io);
+        defer opened.close(io);
 
-        var it = dir.iterate();
+        var it = opened.iterate();
         while (it.next(io) catch |err| {
-            std.log.warn("socutil: cannot read {s}: {s}", .{ dir_path, @errorName(err) });
+            std.log.warn("socutil: cannot read {s}: {s}", .{ dir.path, @errorName(err) });
             break;
         }) |dirent| {
-            if (!isSocketEntry(io, dir, dirent)) continue;
+            if (!isSocketEntry(io, opened, dirent)) continue;
 
-            const dir_copy = try allocator.dupe(u8, dir_path);
-            errdefer allocator.free(dir_copy);
-            const name_copy = try allocator.dupe(u8, dirent.name);
-            errdefer allocator.free(name_copy);
-            const path = try Io.Dir.path.join(allocator, &.{ dir_path, dirent.name });
+            const file_name = try allocator.dupe(u8, dirent.name);
+            errdefer allocator.free(file_name);
+            const name = try makeName(allocator, dir.name, dirent.name);
+            errdefer allocator.free(name);
+            const path = try Io.Dir.path.join(allocator, &.{ dir.path, dirent.name });
             errdefer allocator.free(path);
 
             try result.entries.append(allocator, .{
-                .dir = dir_copy,
-                .name = name_copy,
+                .name = name,
+                .dir_name = dir.name,
+                .dir = dir.path,
+                .file_name = file_name,
                 .path = path,
             });
         }
@@ -133,4 +154,13 @@ test "socket suffix convention" {
     try std.testing.expect(hasSocketSuffix("x.socket"));
     try std.testing.expect(!hasSocketSuffix("app.socketx"));
     try std.testing.expect(!hasSocketSuffix("app"));
+}
+
+test "socket names are names, not paths" {
+    const name = try makeName(std.testing.allocator, "run", "app.sock");
+    defer std.testing.allocator.free(name);
+
+    try std.testing.expectEqualStrings("run.app.sock", name);
+    try std.testing.expect(std.mem.indexOfScalar(u8, name, '/') == null);
+    try std.testing.expect(std.mem.indexOfScalar(u8, name, '\\') == null);
 }

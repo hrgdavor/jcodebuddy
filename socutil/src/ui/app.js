@@ -8,7 +8,10 @@ const encoder = new TextEncoder();
 const transport = new URLSearchParams(location.search).get("transport");
 
 const state = {
-  /** @type {{id: string, path: string, kind: "ws" | "sse", source: WebSocket | EventSource, decoder: TextDecoder} | null} */
+  /**
+   * `name` is the only selector sent to the server; `path` is for display.
+   * @type {{id: string, name: string, path: string, kind: "ws" | "sse", source: WebSocket | EventSource, decoder: TextDecoder} | null}
+   */
   session: null,
   sockets: [],
 };
@@ -72,11 +75,12 @@ function renderSockets(dirs) {
     button.type = "button";
     button.className = "socket";
     button.title = socket.path;
-    if (state.session && state.session.path === socket.path) button.classList.add("active");
+    button.dataset.name = socket.name;
+    if (state.session && state.session.name === socket.name) button.classList.add("active");
 
     const name = document.createElement("span");
     name.className = "socket-name";
-    name.textContent = socket.name;
+    name.textContent = socket.file || socket.name;
 
     const dir = document.createElement("span");
     dir.className = "socket-dir";
@@ -108,11 +112,18 @@ function connectTo(socket) {
  */
 function connectTunnel(socket) {
   const id = randomSessionId();
-  const params = new URLSearchParams({ id, path: socket.path });
+  const params = new URLSearchParams({ id, name: socket.name });
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   const source = new WebSocket(scheme + "//" + location.host + "/api/ws?" + params.toString());
   source.binaryType = "arraybuffer";
-  const session = { id, path: socket.path, kind: "ws", source, decoder: new TextDecoder() };
+  const session = {
+    id,
+    name: socket.name,
+    path: socket.path,
+    kind: "ws",
+    source,
+    decoder: new TextDecoder(),
+  };
   state.session = session;
 
   prepareSession(socket);
@@ -152,9 +163,16 @@ function connectTunnel(socket) {
 /** The tail transport: SSE down, the handshake command POSTed up. */
 function connectTail(socket) {
   const id = randomSessionId();
-  const params = new URLSearchParams({ id, path: socket.path });
+  const params = new URLSearchParams({ id, name: socket.name });
   const source = new EventSource("/api/events?" + params.toString());
-  const session = { id, path: socket.path, kind: "sse", source, decoder: new TextDecoder() };
+  const session = {
+    id,
+    name: socket.name,
+    path: socket.path,
+    kind: "sse",
+    source,
+    decoder: new TextDecoder(),
+  };
   state.session = session;
 
   prepareSession(socket);
@@ -210,7 +228,7 @@ function renderSocketsActive() {
   if (!state.session) return;
   const list = $("sockets").querySelectorAll(".socket");
   list.forEach((button) => {
-    if (button.title === state.session.path) button.classList.add("active");
+    if (button.dataset.name === state.session.name) button.classList.add("active");
   });
 }
 

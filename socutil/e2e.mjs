@@ -123,9 +123,9 @@ function rawGet(requestPath) {
   );
 }
 
-function upgradeRequest(id, socketPath, version = "13") {
+function upgradeRequest(id, socketName, version = "13") {
   return (
-    `GET /api/ws?id=${id}&path=${encodeURIComponent(socketPath)} HTTP/1.1\r\n` +
+    `GET /api/ws?id=${id}&name=${encodeURIComponent(socketName)} HTTP/1.1\r\n` +
     `Host: 127.0.0.1\r\n` +
     `Upgrade: websocket\r\n` +
     `Connection: Upgrade\r\n` +
@@ -135,19 +135,26 @@ function upgradeRequest(id, socketPath, version = "13") {
   );
 }
 
-function tunnelUrl(id, socketPath = sockPath) {
+async function socketName(file) {
+  const listing = await (await get("/api/sockets")).json();
+  const entry = listing.sockets.find((socket) => socket.file === file);
+  if (!entry) throw new Error(`socket ${file} is not listed`);
+  return entry.name;
+}
+
+function tunnelUrl(id, socketName) {
   const url = new URL(base);
   url.protocol = "ws:";
   url.pathname = "/api/ws";
-  url.search = new URLSearchParams({ id, path: socketPath }).toString();
+  url.search = new URLSearchParams({ id, name: socketName }).toString();
   return url;
 }
 
 // The WebSocket tunnel: decodes binary frames into one text buffer, and lets
 // the caller wait for a match or for the close event.
 class Tunnel {
-  constructor(id, socketPath = sockPath) {
-    this.ws = new WebSocket(tunnelUrl(id, socketPath));
+  constructor(id, socketName) {
+    this.ws = new WebSocket(tunnelUrl(id, socketName));
     this.ws.binaryType = "arraybuffer";
     this.received = "";
     this.closed = null;
@@ -326,20 +333,31 @@ try {
     console.log("ok embedded stylesheet");
   }
 
+  let demoName;
   {
     const response = await get("/api/sockets");
     assertStatus(response, 200, "GET /api/sockets");
     const listing = await response.json();
-    assert.ok(listing.dirs.includes(sockDir), "the scanned directory should be reported");
-    const found = listing.sockets.find((entry) => entry.name === "demo.sock");
+    assert.ok(
+      listing.dirs.some((dir) => dir.path === sockDir),
+      "the scanned directory should be reported",
+    );
+    assert.ok(
+      listing.dirs.some((dir) => dir.name === "sockdir"),
+      "the directory should carry a configured name",
+    );
+    const found = listing.sockets.find((entry) => entry.file === "demo.sock");
     assert.ok(found, "demo.sock should be listed");
-    assert.equal(found.path, sockPath);
-    console.log("ok socket listing", found.path);
+    assert.equal(found.name, "sockdir.demo.sock", "the API name is <dir-name>.<file-name>");
+    assert.equal(found.dirName, "sockdir");
+    assert.equal(found.path, sockPath, "the path is listed for display");
+    demoName = found.name;
+    console.log("ok socket listing", found.name, "->", found.path);
   }
 
   const sessionId = crypto.randomUUID();
   const sse = new SseSession().open(
-    "/api/events?" + new URLSearchParams({ id: sessionId, path: sockPath }).toString(),
+    "/api/events?" + new URLSearchParams({ id: sessionId, name: demoName }).toString(),
   );
 
   try {
@@ -401,7 +419,7 @@ try {
   }
 
   {
-    const tunnel = new Tunnel(crypto.randomUUID());
+    const tunnel = new Tunnel(crypto.randomUUID(), demoName);
     await tunnel.opened();
     await tunnel.waitForText("demo online", "the WebSocket greeting");
     tunnel.send("hello\n");
@@ -428,7 +446,8 @@ try {
     });
 
     try {
-      const ws = new WebSocket(tunnelUrl(crypto.randomUUID(), binaryPath));
+      const binaryName = await socketName("binary.sock");
+      const ws = new WebSocket(tunnelUrl(crypto.randomUUID(), binaryName));
       ws.binaryType = "arraybuffer";
       const chunks = [];
       let received = 0;
@@ -465,7 +484,7 @@ try {
   }
 
   {
-    const tunnel = new Tunnel(crypto.randomUUID());
+    const tunnel = new Tunnel(crypto.randomUUID(), demoName);
     await tunnel.opened();
     tunnel.ws.send(new Uint8Array(100 * 1024));
     const closed = await tunnel.waitForClose();
@@ -476,28 +495,31 @@ try {
 
   {
     const response = await get(
-      "/api/ws?" + new URLSearchParams({ id: "plain", path: sockPath }).toString(),
+      "/api/ws?" + new URLSearchParams({ id: "plain", name: demoName }).toString(),
     );
     assertStatus(response, 426, "GET /api/ws without an upgrade");
     console.log("ok websocket requires an upgrade");
   }
 
   {
-    const raw = await rawRequest(upgradeRequest("bad-version", sockPath, "8"));
+    const raw = await rawRequest(upgradeRequest("bad-version", demoName, "8"));
     assert.match(raw, /^HTTP\/1\.1 400/, "a version other than 13 must be refused");
     console.log("ok websocket version is checked");
   }
 
   {
-    const outside = path.join(scratch, "not-a-socket.sock");
-    const raw = await rawRequest(upgradeRequest("outside", outside));
-    assert.match(raw, /^HTTP\/1\.1 404/, "an unscanned path must not be connected to");
-    console.log("ok websocket refuses an unscanned path");
+    const raw = await rawRequest(upgradeRequest("outside", sockPath));
+    assert.match(
+      raw,
+      /^HTTP\/1\.1 404/,
+      "a path sent where a name belongs must not resolve to a socket",
+    );
+    console.log("ok websocket refuses a path as a name");
   }
 
   {
     const id = crypto.randomUUID();
-    const tunnel = new Tunnel(id);
+    const tunnel = new Tunnel(id, demoName);
     await tunnel.opened();
     const response = await fetch(base + "/api/close?id=" + id, { method: "POST" });
     assertStatus(response, 200, "POST /api/close on a websocket session");
@@ -519,24 +541,38 @@ try {
   }
 
   {
-    const response = await get("/api/events?id=has%20space&path=" + encodeURIComponent(sockPath));
+    const response = await get(
+      "/api/events?id=has%20space&name=" + encodeURIComponent(demoName),
+    );
     assertStatus(response, 400, "invalid session id");
     console.log("ok invalid session id is rejected");
   }
 
   {
-    const outside = path.join(scratch, "not-a-socket.sock");
+    const response = await get("/api/events?id=path-attempt&path=" + encodeURIComponent(sockPath));
+    assertStatus(response, 400, "a path is not a selector");
+    console.log("ok path parameters are refused");
+  }
+
+  {
+    const response = await get("/api/ws?id=path-attempt&path=" + encodeURIComponent(sockPath));
+    assertStatus(response, 400, "a path is not a selector");
+    console.log("ok websocket path parameters are refused");
+  }
+
+  {
     const response = await get(
-      "/api/events?" + new URLSearchParams({ id: "outside", path: outside }).toString(),
+      "/api/events?" + new URLSearchParams({ id: "outside", name: sockPath }).toString(),
     );
-    assertStatus(response, 404, "socket outside the scan");
-    console.log("ok unscanned path is rejected");
+    assertStatus(response, 404, "a path sent as a name is not a socket");
+    console.log("ok a path sent as a name is rejected");
   }
 
   {
     const raw = await rawGet("/api/sockets");
     assert.match(raw, /^HTTP\/1\.1 200/);
-    assert.match(raw, /"demo\.sock"/);
+    assert.match(raw, /"file":"demo\.sock"/);
+    assert.match(raw, /"name":"sockdir\.demo\.sock"/);
     console.log("ok raw HTTP response");
   }
 

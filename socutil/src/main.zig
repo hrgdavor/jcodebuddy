@@ -10,13 +10,14 @@ const Io = std.Io;
 const net = Io.net;
 
 const server = @import("server.zig");
+const sockets = @import("sockets.zig");
 
 const default_port: u16 = 8765;
 
 const Config = struct {
     host: []const u8 = "127.0.0.1",
     port: u16 = default_port,
-    dirs: std.ArrayList([]const u8) = .empty,
+    dirs: std.ArrayList(sockets.Dir) = .empty,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -37,7 +38,7 @@ pub fn main(init: std.process.Init) !void {
         },
     };
 
-    if (config.dirs.items.len == 0) try addDefaultDirs(arena, init, &config.dirs);
+    if (config.dirs.items.len == 0) try addDefaultDirs(arena, init, &config);
     const dirs = try config.dirs.toOwnedSlice(arena);
 
     const app = try arena.create(server.App);
@@ -95,33 +96,93 @@ fn parseArgs(args: []const [:0]const u8, arena: std.mem.Allocator, config: *Conf
         } else if (std.mem.eql(u8, arg, "--dir")) {
             i += 1;
             if (i >= args.len) return error.MissingValue;
-            try config.dirs.append(arena, args[i]);
+            try addDirOption(arena, config, args[i]);
         } else if (arg.len != 0 and arg[0] == '-') {
             return error.UnknownOption;
         } else {
-            try config.dirs.append(arena, arg);
+            try addDir(arena, config, arg, null);
         }
     }
 }
 
-fn addDefaultDirs(arena: std.mem.Allocator, init: std.process.Init, dirs: *std.ArrayList([]const u8)) !void {
-    if (init.environ_map.get("XDG_RUNTIME_DIR")) |path| try appendUnique(arena, dirs, path);
-    if (builtin.os.tag == .windows) {
-        if (init.environ_map.get("TEMP")) |path| try appendUnique(arena, dirs, path);
-        if (init.environ_map.get("TMP")) |path| try appendUnique(arena, dirs, path);
-    } else {
-        try appendUnique(arena, dirs, "/tmp");
-        try appendUnique(arena, dirs, "/var/run");
-        try appendUnique(arena, dirs, "/run");
+/// `--dir [name=]<path>`. The name is what clients see and send; it defaults to
+/// the directory's basename. A value whose part before `=` contains a path
+/// separator is a path that happens to contain `=`, not a name.
+fn addDirOption(arena: std.mem.Allocator, config: *Config, value: []const u8) !void {
+    if (std.mem.indexOfScalar(u8, value, '=')) |eq| {
+        const prefix = value[0..eq];
+        const suffix = value[eq + 1 ..];
+        if (validDirName(prefix)) return addDir(arena, config, suffix, prefix);
+        if (std.mem.indexOfAny(u8, prefix, "/\\") == null) return error.InvalidDirName;
     }
-    try appendUnique(arena, dirs, ".");
+    try addDir(arena, config, value, null);
 }
 
-fn appendUnique(arena: std.mem.Allocator, dirs: *std.ArrayList([]const u8), path: []const u8) !void {
-    for (dirs.items) |existing| {
-        if (std.mem.eql(u8, existing, path)) return;
+fn addDir(
+    arena: std.mem.Allocator,
+    config: *Config,
+    path: []const u8,
+    explicit_name: ?[]const u8,
+) !void {
+    if (path.len == 0) return error.EmptyDirPath;
+    for (config.dirs.items) |existing| {
+        if (std.mem.eql(u8, existing.path, path)) return;
     }
-    try dirs.append(arena, path);
+
+    const base = explicit_name orelse try derivedDirName(arena, path, config.dirs.items.len);
+    var name = base;
+    var suffix: usize = 2;
+    while (dirNameTaken(config, name)) {
+        if (explicit_name != null) return error.DuplicateDirName;
+        name = try std.fmt.allocPrint(arena, "{s}-{d}", .{ base, suffix });
+        suffix += 1;
+    }
+
+    try config.dirs.append(arena, .{ .name = name, .path = path });
+}
+
+fn dirNameTaken(config: *const Config, name: []const u8) bool {
+    for (config.dirs.items) |existing| {
+        if (std.mem.eql(u8, existing.name, name)) return true;
+    }
+    return false;
+}
+
+/// A configured name has no path separator and no dot, so `<dir>.<file>` is
+/// unambiguous and can never be mistaken for a path.
+fn validDirName(name: []const u8) bool {
+    if (name.len == 0 or name.len > 32) return false;
+    for (name) |c| {
+        if (!std.ascii.isAlphanumeric(c) and c != '-' and c != '_') return false;
+    }
+    return true;
+}
+
+fn derivedDirName(arena: std.mem.Allocator, path: []const u8, index: usize) ![]const u8 {
+    const trimmed = std.mem.trimEnd(u8, path, "/\\");
+    const base = if (trimmed.len == 0) "" else std.fs.path.basename(trimmed);
+    if (base.len == 0 or std.mem.eql(u8, base, ".") or std.mem.eql(u8, base, "..")) {
+        return std.fmt.allocPrint(arena, "d{d}", .{index});
+    }
+
+    const out = try arena.alloc(u8, @min(base.len, 32));
+    for (base[0..out.len], out) |c, *dest| {
+        dest.* = if (std.ascii.isAlphanumeric(c) or c == '-' or c == '_') c else '_';
+    }
+    return out;
+}
+
+fn addDefaultDirs(arena: std.mem.Allocator, init: std.process.Init, config: *Config) !void {
+    if (init.environ_map.get("XDG_RUNTIME_DIR")) |path| try addDir(arena, config, path, null);
+    if (builtin.os.tag == .windows) {
+        if (init.environ_map.get("TEMP")) |path| try addDir(arena, config, path, null);
+        if (init.environ_map.get("TMP")) |path| try addDir(arena, config, path, null);
+    } else {
+        try addDir(arena, config, "/tmp", null);
+        try addDir(arena, config, "/var/run", null);
+        try addDir(arena, config, "/run", null);
+    }
+    try addDir(arena, config, ".", null);
 }
 
 fn printListenUrl(io: Io, host: []const u8, port: u16) !void {
@@ -148,16 +209,45 @@ fn printUsage() void {
         \\or a Server-Sent Events tail with commands sent by POST.
         \\
         \\options:
-        \\  --listen <host>   address to bind (default 127.0.0.1)
-        \\  --port <port>     TCP port to bind (default 8765, 0 = any free port)
-        \\  --dir <path>      directory to scan; may be repeated
-        \\  -h, --help        show this help
+        \\  --listen <host>     address to bind (default 127.0.0.1)
+        \\  --port <port>       TCP port to bind (default 8765, 0 = any free port)
+        \\  --dir [name=]<path> directory to scan; may be repeated; the name
+        \\                      defaults to the directory's basename
+        \\  -h, --help          show this help
+        \\
+        \\A socket is selected by name, never by path: the name is
+        \\"<directory-name>.<file-name>" and the server resolves it against a fresh
+        \\scan, so a request can only choose from the listed sockets.
         \\
         \\With no directory arguments, platform defaults are used:
         \\  POSIX:   $XDG_RUNTIME_DIR, /tmp, /var/run, /run, .
         \\  Windows: %TEMP%, %TMP%, .
         \\
     , .{});
+}
+
+test "directory names are configuration, not paths" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var config: Config = .{};
+    try addDir(a, &config, "/run", null);
+    try addDir(a, &config, "/var/run", null); // same basename: run -> run-2
+    try addDirOption(a, &config, "db=/tmp"); // explicit name
+    try addDirOption(a, &config, "/tmp/db=prod"); // '=' with separators is a path
+
+    try std.testing.expectEqualStrings("run", config.dirs.items[0].name);
+    try std.testing.expectEqualStrings("run-2", config.dirs.items[1].name);
+    try std.testing.expectEqualStrings("db", config.dirs.items[2].name);
+    try std.testing.expectEqualStrings("/tmp/db=prod", config.dirs.items[3].path);
+
+    for (config.dirs.items) |dir| {
+        try std.testing.expect(std.mem.indexOfAny(u8, dir.name, "/\\.") == null);
+    }
+
+    try std.testing.expectError(error.InvalidDirName, addDirOption(a, &config, "bad name=/tmp"));
+    try std.testing.expectError(error.DuplicateDirName, addDirOption(a, &config, "db=/var/tmp"));
 }
 
 test {

@@ -213,6 +213,14 @@ async function scenario(label, kind) {
     actualKind === kind,
     JSON.stringify(actualKind),
   );
+  check(
+    `[${label}] the session selects the socket by name`,
+    String(await evaluate("state.session && state.session.name")) === "sockdir.demo.sock",
+  );
+  check(
+    `[${label}] the page keeps the path for display only`,
+    String(await evaluate("document.querySelector('.socket').title")) === sockPath,
+  );
   await waitFor(
     "document.getElementById('output').textContent.includes('demo online')",
     `the greeting (${label})`,
