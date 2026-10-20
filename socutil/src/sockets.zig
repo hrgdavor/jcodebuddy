@@ -35,11 +35,15 @@ pub const Scan = struct {
         self.entries.deinit(self.allocator);
     }
 
-    pub fn containsPath(self: *const Scan, path: []const u8) bool {
+    pub fn find(self: *const Scan, path: []const u8) ?[]const u8 {
         for (self.entries.items) |entry| {
-            if (std.mem.eql(u8, entry.path, path)) return true;
+            if (std.mem.eql(u8, entry.path, path)) return entry.path;
         }
-        return false;
+        return null;
+    }
+
+    pub fn containsPath(self: *const Scan, path: []const u8) bool {
+        return self.find(path) != null;
     }
 };
 

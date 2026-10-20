@@ -1,18 +1,29 @@
-//! HTTP server, request routing, and the SSE relay sessions.
+//! HTTP server, request routing, and the socket relay sessions.
 //!
-//! The wire protocol deliberately uses Server-Sent Events for the socket ->
-//! browser direction and a plain POST for browser -> socket. SSE has no frame
-//! format of its own (unlike WebSocket), and the session id lets the UI post
-//! commands back to the same live connection.
+//! Two transports share the relay:
+//!
+//!   * `/api/events` is the **tail** transport, for a line-based socket: the
+//!     browser sends its handshake command once over `/api/input` and then
+//!     follows the output. The socket -> browser direction is Server-Sent
+//!     Events (which has no frame format of its own, unlike WebSocket) and a
+//!     plain POST carries the command back.
+//!   * `/api/ws` is a **full-duplex byte tunnel**: binary frames down and up,
+//!     no envelope and no base64, and the payload is passed through untouched.
+//!     One frame must fit in `connection_buffer_len` (64 KiB); a protocol that
+//!     needs to move more uses its own continuation, because the transport does
+//!     not reassemble WebSocket fragments.
 //!
 //! Threading model:
 //!   * one accept loop (the main thread) spawns one detached thread per HTTP
 //!     connection;
-//!   * an SSE connection additionally spawns a reader thread which blocks on
+//!   * a relay connection additionally spawns a reader thread which blocks on
 //!     the unix socket and queues its output for the connection thread;
-//!   * the connection thread polls that queue, writes SSE events, and emits a
-//!     keepalive every ~15s. A failed keepalive write is how a vanished
-//!     browser is detected, which then shuts the unix socket down.
+//!   * the connection thread polls that queue, writes SSE events or binary
+//!     frames, and emits a keepalive every ~15s. A failed keepalive write is
+//!     how a vanished browser is detected, which then shuts the socket down;
+//!   * a WebSocket connection adds a second thread which reads browser frames
+//!     and writes them to the unix socket. Both threads write to the browser,
+//!     so every frame write is serialised by `ws_mutex`.
 
 const std = @import("std");
 const Io = std.Io;
@@ -23,14 +34,22 @@ const sockets = @import("sockets.zig");
 
 /// How much unread socket output we are willing to buffer per session.
 const max_pending_output = 1 << 20;
-/// How often the SSE connection thread checks the queue and keepalive timer.
+/// How often the relay connection thread checks the queue and keepalive timer.
 const poll_interval = Io.Duration.fromMilliseconds(50);
 /// Keeps proxies and dead sockets honest; ~300 * 50ms.
 const keepalive_ticks = 300;
-/// Read buffer for the unix socket (per SSE session reader thread).
+/// Read buffer for the unix socket (per relay session reader thread).
 const socket_read_buffer_len = 8192;
 /// SSE payload chunk per event.
 const sse_chunk_len = 4096;
+/// Browser-side read buffer per connection, and therefore the largest
+/// WebSocket message `readSmallMessage` can accept. It is deliberately not
+/// bigger: a message that does not fit is the application protocol's cue to
+/// use its own continuation, and the transport reports the limit as close
+/// code 1009 instead of growing a buffer to fit whatever the peer sends.
+const connection_buffer_len = 64 * 1024;
+/// WebSocket payload chunk per binary frame.
+const ws_chunk_len = 64 * 1024;
 
 pub const App = struct {
     gpa: std.mem.Allocator,
@@ -134,7 +153,7 @@ pub fn connectionThread(app: *App, stream: net.Stream) void {
 fn handleConnection(app: *App, stream: net.Stream) !void {
     defer stream.close(app.io);
 
-    var read_buf: [8192]u8 = undefined;
+    var read_buf: [connection_buffer_len]u8 = undefined;
     var write_buf: [8192]u8 = undefined;
     var reader = stream.reader(app.io, &read_buf);
     var writer = stream.writer(app.io, &write_buf);
@@ -143,10 +162,10 @@ fn handleConnection(app: *App, stream: net.Stream) !void {
     // Every response is sent with `connection: close`, so one request per
     // connection is enough and keeps the lifecycle trivial.
     var request = try server.receiveHead();
-    try route(app, &request);
+    try route(app, &request, stream);
 }
 
-fn route(app: *App, req: *http.Server.Request) !void {
+fn route(app: *App, req: *http.Server.Request, stream: net.Stream) !void {
     const target = req.head.target;
     const query_pos = std.mem.indexOfScalar(u8, target, '?');
     const path = target[0..(query_pos orelse target.len)];
@@ -159,6 +178,10 @@ fn route(app: *App, req: *http.Server.Request) !void {
     if (std.mem.eql(u8, path, "/api/events")) {
         if (!getLike(req)) return methodNotAllowed(req, "GET");
         return handleEvents(app, req, query);
+    }
+    if (std.mem.eql(u8, path, "/api/ws")) {
+        if (req.head.method != .GET) return methodNotAllowed(req, "GET");
+        return handleWebSocket(app, req, query, stream);
     }
     if (std.mem.eql(u8, path, "/api/input")) {
         if (req.head.method != .POST) return methodNotAllowed(req, "POST");
@@ -235,14 +258,8 @@ fn handleEvents(app: *App, req: *http.Server.Request, query: []const u8) !void {
     };
     defer scan.deinit();
 
-    var target: ?[]const u8 = null;
-    for (scan.entries.items) |entry| {
-        if (std.mem.eql(u8, entry.path, requested_path)) {
-            target = entry.path;
-            break;
-        }
-    }
-    const socket_path = target orelse return respondError(req, .not_found, "socket not found");
+    const socket_path = scan.find(requested_path) orelse
+        return respondError(req, .not_found, "socket not found");
 
     const session = createSession(app, id, socket_path) catch |err| {
         std.log.warn("socutil: cannot connect to {s}: {s}", .{ socket_path, @errorName(err) });
@@ -350,6 +367,214 @@ fn cleanupSession(app: *App, session: *Session, reader_thread: std.Thread) void 
     reader_thread.join();
     session.stream.close(app.io);
     session.release();
+}
+
+/// `/api/ws?<id>&<path>`: upgrade, then relay the unix socket byte for byte.
+///
+/// The frames are opaque here. A binary frame down is one read from the unix
+/// socket; a text or binary frame up is written to it unchanged. The transport
+/// does not interpret, frame or reassemble anything, and it does not append a
+/// newline: the protocol on top owns its own framing and continuation.
+fn handleWebSocket(
+    app: *App,
+    req: *http.Server.Request,
+    query: []const u8,
+    stream: net.Stream,
+) !void {
+    var arena = std.heap.ArenaAllocator.init(app.gpa);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const q = try parseQuery(a, query);
+    const id = q.id orelse return respondError(req, .bad_request, "missing id");
+    if (!validSessionId(id)) return respondError(req, .bad_request, "invalid id");
+    const requested_path = q.path orelse return respondError(req, .bad_request, "missing path");
+
+    const key: []const u8 = switch (req.upgradeRequested()) {
+        .websocket => |maybe_key| maybe_key orelse
+            return respondError(req, .bad_request, "missing sec-websocket-key"),
+        else => return respondError(req, .upgrade_required, "websocket upgrade required"),
+    };
+
+    // std accepts the upgrade without looking at the advertised version; RFC
+    // 6455 says 13, and a client that asks for anything else is refused before
+    // the 101 is written.
+    var version: ?[]const u8 = null;
+    var headers = req.iterateHeaders();
+    while (headers.next()) |header| {
+        if (std.ascii.eqlIgnoreCase(header.name, "sec-websocket-version")) version = header.value;
+    }
+    if (version == null or !std.mem.eql(u8, version.?, "13")) {
+        return respondError(req, .bad_request, "unsupported websocket version");
+    }
+
+    // Only a socket a fresh scan just returned may be connected to; a client
+    // cannot use this route to reach an arbitrary path.
+    var scan = sockets.scan(app.gpa, app.io, app.dirs) catch |err| {
+        std.log.err("socutil: socket scan failed: {s}", .{@errorName(err)});
+        return respondError(req, .internal_server_error, "scan failed");
+    };
+    defer scan.deinit();
+
+    const socket_path = scan.find(requested_path) orelse
+        return respondError(req, .not_found, "socket not found");
+
+    const session = createSession(app, id, socket_path) catch |err| {
+        std.log.warn("socutil: cannot connect to {s}: {s}", .{ socket_path, @errorName(err) });
+        return respondError(req, .bad_gateway, "cannot connect to socket");
+    };
+
+    registerSession(app, session) catch |err| {
+        session.stream.close(app.io);
+        session.release();
+        return switch (err) {
+            error.SessionAlreadyExists => respondError(req, .conflict, "session id in use"),
+            else => respondError(req, .internal_server_error, "cannot register session"),
+        };
+    };
+
+    const reader_thread = std.Thread.spawn(.{}, readerMain, .{session}) catch |err| {
+        std.log.err("socutil: cannot spawn socket reader: {s}", .{@errorName(err)});
+        unregisterSession(app, session);
+        dropReaderRef(app, session);
+        session.stream.close(app.io);
+        session.release();
+        return respondError(req, .internal_server_error, "cannot start reader");
+    };
+
+    var ws = req.respondWebSocket(.{ .key = key }) catch |err| {
+        cleanupSession(app, session, reader_thread);
+        return err;
+    };
+    // The 101 sits in the buffered writer until this flush.
+    ws.flush() catch |err| {
+        cleanupSession(app, session, reader_thread);
+        return err;
+    };
+
+    var ws_mutex: Io.Mutex = .init;
+    const input_thread = std.Thread.spawn(.{}, wsInputMain, .{ app, session, &ws, &ws_mutex }) catch |err| {
+        std.log.err("socutil: cannot spawn websocket reader: {s}", .{@errorName(err)});
+        wsWriteClose(app, &ws, &ws_mutex, 1011, "cannot start reader");
+        cleanupSession(app, session, reader_thread);
+        return err;
+    };
+
+    wsWriterLoop(app, session, &ws, &ws_mutex);
+
+    // Order matters: shutdown the unix socket first (the writer may be in its
+    // poll sleep), then the browser stream so the frame reader stops blocking
+    // on a read, then join both. The close frame, if one was sent, is already
+    // flushed and queued ahead of the shutdown.
+    unregisterSession(app, session);
+    closeSession(app, session);
+    stream.shutdown(app.io, .both) catch {};
+    input_thread.join();
+    reader_thread.join();
+    session.stream.close(app.io);
+    session.release();
+}
+
+/// Browser -> unix socket: text and binary frames are written verbatim, pings
+/// are answered with a pong, and anything the transport cannot accept is
+/// reported as a close code before the session is shut down.
+fn wsInputMain(app: *App, session: *Session, ws: *http.Server.WebSocket, ws_mutex: *Io.Mutex) void {
+    while (true) {
+        const message = ws.readSmallMessage() catch |err| {
+            switch (err) {
+                error.ConnectionClose => wsWriteClose(app, ws, ws_mutex, 1000, "closed"),
+                error.MessageOversize => wsWriteClose(app, ws, ws_mutex, 1009, "message too big"),
+                error.UnexpectedOpCode => wsWriteClose(app, ws, ws_mutex, 1003, "unsupported frame"),
+                error.MissingMaskBit => wsWriteClose(app, ws, ws_mutex, 1002, "unmasked frame"),
+                else => {},
+            }
+            closeSession(app, session);
+            return;
+        };
+
+        if (message.opcode == .ping) {
+            ws_mutex.lockUncancelable(app.io);
+            const sent = ws.writeMessage(message.data, .pong);
+            ws_mutex.unlock(app.io);
+            sent catch {
+                closeSession(app, session);
+                return;
+            };
+            continue;
+        }
+
+        if (session.closed.load(.acquire)) return;
+
+        session.write_mutex.lockUncancelable(app.io);
+        const wrote: bool = blk: {
+            var write_buf: [1024]u8 = undefined;
+            var writer = session.stream.writer(app.io, &write_buf);
+            writer.interface.writeAll(message.data) catch break :blk false;
+            writer.interface.flush() catch break :blk false;
+            break :blk true;
+        };
+        session.write_mutex.unlock(app.io);
+
+        if (!wrote) {
+            closeSession(app, session);
+            return;
+        }
+    }
+}
+
+/// Unix socket -> browser: drain the session queue into binary frames, keep
+/// the connection alive with pings, and close with the reason the reader
+/// reported when the socket ends.
+fn wsWriterLoop(app: *App, session: *Session, ws: *http.Server.WebSocket, ws_mutex: *Io.Mutex) void {
+    var chunk: [ws_chunk_len]u8 = undefined;
+    var idle_ticks: u32 = 0;
+
+    while (true) {
+        if (session.closed.load(.acquire)) return;
+
+        const n = session.drainOutput(&chunk);
+        if (n != 0) {
+            // The frame reader may have sent a close frame and set this while
+            // the queue was being drained; nothing may follow a close frame.
+            if (session.closed.load(.acquire)) return;
+            ws_mutex.lockUncancelable(app.io);
+            const sent = ws.writeMessage(chunk[0..n], .binary);
+            ws_mutex.unlock(app.io);
+            sent catch return;
+            idle_ticks = 0;
+            continue;
+        }
+
+        const state = session.outputState();
+        if (state.done) {
+            wsWriteClose(app, ws, ws_mutex, 1000, state.reason);
+            return;
+        }
+
+        app.io.sleep(poll_interval, .awake) catch return;
+        idle_ticks += 1;
+        if (idle_ticks >= keepalive_ticks) {
+            ws_mutex.lockUncancelable(app.io);
+            const sent = ws.writeMessage("socutil", .ping);
+            ws_mutex.unlock(app.io);
+            sent catch return;
+            idle_ticks = 0;
+        }
+    }
+}
+
+/// A close frame's payload is a 2-byte code followed by up to 123 bytes of
+/// UTF-8 reason (RFC 6455 §5.5.1). Best effort: the connection may already be
+/// gone, which is why the result is discarded.
+fn wsWriteClose(app: *App, ws: *http.Server.WebSocket, ws_mutex: *Io.Mutex, code: u16, reason: []const u8) void {
+    var payload: [125]u8 = undefined;
+    std.mem.writeInt(u16, payload[0..2], code, .big);
+    const reason_len = @min(reason.len, payload.len - 2);
+    @memcpy(payload[2..][0..reason_len], reason[0..reason_len]);
+
+    ws_mutex.lockUncancelable(app.io);
+    defer ws_mutex.unlock(app.io);
+    ws.writeMessage(payload[0 .. 2 + reason_len], .connection_close) catch {};
 }
 
 fn readerMain(session: *Session) void {

@@ -93,18 +93,16 @@ async function get(pathname) {
 }
 
 // A raw HTTP/1.1 request, resolved with the whole response once the server closes it.
-function rawGet(requestPath, host = "127.0.0.1") {
+function rawRequest(requestText, host = "127.0.0.1") {
   const { port } = new URL(base);
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ host, port: Number(port) });
     let buffer = "";
     const timer = setTimeout(() => {
       socket.destroy();
-      reject(new Error(`timeout on ${requestPath}; got:\n${buffer.slice(0, 2000)}`));
+      reject(new Error(`timeout; got:\n${buffer.slice(0, 2000)}`));
     }, 10_000);
-    socket.on("connect", () => {
-      socket.write(`GET ${requestPath} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
-    });
+    socket.on("connect", () => socket.write(requestText));
     socket.on("data", (chunk) => {
       buffer += chunk.toString("utf8");
     });
@@ -117,6 +115,89 @@ function rawGet(requestPath, host = "127.0.0.1") {
       resolve(buffer);
     });
   });
+}
+
+function rawGet(requestPath) {
+  return rawRequest(
+    `GET ${requestPath} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`,
+  );
+}
+
+function upgradeRequest(id, socketPath, version = "13") {
+  return (
+    `GET /api/ws?id=${id}&path=${encodeURIComponent(socketPath)} HTTP/1.1\r\n` +
+    `Host: 127.0.0.1\r\n` +
+    `Upgrade: websocket\r\n` +
+    `Connection: Upgrade\r\n` +
+    `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n` +
+    `Sec-WebSocket-Version: ${version}\r\n` +
+    `\r\n`
+  );
+}
+
+function tunnelUrl(id, socketPath = sockPath) {
+  const url = new URL(base);
+  url.protocol = "ws:";
+  url.pathname = "/api/ws";
+  url.search = new URLSearchParams({ id, path: socketPath }).toString();
+  return url;
+}
+
+// The WebSocket tunnel: decodes binary frames into one text buffer, and lets
+// the caller wait for a match or for the close event.
+class Tunnel {
+  constructor(id, socketPath = sockPath) {
+    this.ws = new WebSocket(tunnelUrl(id, socketPath));
+    this.ws.binaryType = "arraybuffer";
+    this.received = "";
+    this.closed = null;
+    this.ws.addEventListener("message", (event) => {
+      this.received +=
+        typeof event.data === "string"
+          ? event.data
+          : new TextDecoder().decode(event.data, { stream: true });
+    });
+    this.ws.addEventListener("close", (event) => {
+      this.closed = event;
+    });
+  }
+
+  opened() {
+    if (this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      this.ws.addEventListener("open", resolve, { once: true });
+      this.ws.addEventListener("error", () => reject(new Error("websocket failed to open")), {
+        once: true,
+      });
+    });
+  }
+
+  send(text) {
+    this.ws.send(new TextEncoder().encode(text));
+  }
+
+  async waitForText(text, label) {
+    const deadline = Date.now() + 10_000;
+    while (!this.received.includes(text)) {
+      if (Date.now() >= deadline) {
+        throw new Error(`timed out waiting for ${label}; got ${JSON.stringify(this.received)}`);
+      }
+      await Bun.sleep(20);
+    }
+  }
+
+  async waitForClose() {
+    const deadline = Date.now() + 10_000;
+    while (this.closed === null) {
+      if (Date.now() >= deadline) throw new Error("timed out waiting for the close frame");
+      await Bun.sleep(20);
+    }
+    return this.closed;
+  }
+
+  close() {
+    this.ws.close();
+  }
 }
 
 // The SSE session: reads events from one raw request, and lets the caller await them in order.
@@ -317,6 +398,111 @@ try {
     );
     assertStatus(response, 404, "POST to a finished session");
     console.log("ok finished session rejected");
+  }
+
+  {
+    const tunnel = new Tunnel(crypto.randomUUID());
+    await tunnel.opened();
+    await tunnel.waitForText("demo online", "the WebSocket greeting");
+    tunnel.send("hello\n");
+    await tunnel.waitForText("echo:hello", "the WebSocket echo");
+    tunnel.send("quit\n");
+    const closed = await tunnel.waitForClose();
+    assert.equal(closed.code, 1000, "a socket EOF should close normally");
+    assert.match(closed.reason, /eof/);
+    assert.ok(tunnel.received.includes("bye"), "the farewell should arrive before the close");
+    console.log("ok websocket byte tunnel", JSON.stringify(tunnel.received));
+  }
+
+  {
+    const binaryPath = path.join(sockDir, "binary.sock");
+    fs.rmSync(binaryPath, { force: true });
+    const greeting = [0x00, 0xff, 0x10, 0x7f];
+    const binaryFixture = net.createServer((socket) => {
+      socket.write(Buffer.from(greeting));
+      socket.on("data", (data) => socket.write(data));
+    });
+    await new Promise((resolve, reject) => {
+      binaryFixture.once("error", reject);
+      binaryFixture.listen(binaryPath, resolve);
+    });
+
+    try {
+      const ws = new WebSocket(tunnelUrl(crypto.randomUUID(), binaryPath));
+      ws.binaryType = "arraybuffer";
+      const chunks = [];
+      let received = 0;
+      ws.addEventListener("message", (event) => {
+        const bytes = new Uint8Array(event.data);
+        chunks.push(Buffer.from(bytes));
+        received += bytes.length;
+      });
+      await new Promise((resolve, reject) => {
+        ws.addEventListener("open", resolve, { once: true });
+        ws.addEventListener("error", () => reject(new Error("websocket failed to open")), { once: true });
+      });
+
+      const deadline = Date.now() + 10_000;
+      while (received < greeting.length && Date.now() < deadline) await Bun.sleep(20);
+      const before = Buffer.concat(chunks);
+      assert.deepEqual([...before.subarray(0, greeting.length)], greeting, "the greeting must be byte-exact");
+
+      const payload = Uint8Array.of(0x00, 0x01, 0x02, 0xff);
+      ws.send(payload);
+      while (received < greeting.length + payload.length && Date.now() < deadline) await Bun.sleep(20);
+      const after = Buffer.concat(chunks);
+      assert.deepEqual(
+        [...after.subarray(greeting.length, greeting.length + payload.length)],
+        [...payload],
+        "the echo must be byte-exact",
+      );
+      ws.close();
+      console.log("ok websocket is byte-exact");
+    } finally {
+      await new Promise((resolve) => binaryFixture.close(resolve));
+      fs.rmSync(binaryPath, { force: true });
+    }
+  }
+
+  {
+    const tunnel = new Tunnel(crypto.randomUUID());
+    await tunnel.opened();
+    tunnel.ws.send(new Uint8Array(100 * 1024));
+    const closed = await tunnel.waitForClose();
+    assert.equal(closed.code, 1009, "a frame over the 64 KiB buffer must be refused with 1009");
+    assert.match(closed.reason, /too big/);
+    console.log("ok websocket oversize refused");
+  }
+
+  {
+    const response = await get(
+      "/api/ws?" + new URLSearchParams({ id: "plain", path: sockPath }).toString(),
+    );
+    assertStatus(response, 426, "GET /api/ws without an upgrade");
+    console.log("ok websocket requires an upgrade");
+  }
+
+  {
+    const raw = await rawRequest(upgradeRequest("bad-version", sockPath, "8"));
+    assert.match(raw, /^HTTP\/1\.1 400/, "a version other than 13 must be refused");
+    console.log("ok websocket version is checked");
+  }
+
+  {
+    const outside = path.join(scratch, "not-a-socket.sock");
+    const raw = await rawRequest(upgradeRequest("outside", outside));
+    assert.match(raw, /^HTTP\/1\.1 404/, "an unscanned path must not be connected to");
+    console.log("ok websocket refuses an unscanned path");
+  }
+
+  {
+    const id = crypto.randomUUID();
+    const tunnel = new Tunnel(id);
+    await tunnel.opened();
+    const response = await fetch(base + "/api/close?id=" + id, { method: "POST" });
+    assertStatus(response, 200, "POST /api/close on a websocket session");
+    await tunnel.waitForClose();
+    console.log("ok websocket session closed by the API");
   }
 
   {

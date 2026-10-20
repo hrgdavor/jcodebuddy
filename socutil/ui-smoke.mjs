@@ -190,26 +190,32 @@ const report = [];
 const check = (name, ok, detail = "") =>
   report.push(`${ok ? "ok  " : "FAIL"} ${name}${detail ? " - " + detail : ""}`);
 
-try {
-  await waitFor("document.querySelectorAll('.socket').length === 1", "the socket list");
+async function scenario(label, kind) {
+  await waitFor("document.querySelectorAll('.socket').length === 1", `the socket list (${label})`);
   check(
-    "the page lists the fixture socket",
+    `[${label}] the page lists the fixture socket`,
     String(await evaluate("document.querySelector('.socket').title")) === sockPath,
   );
   check(
-    "the page reports idle",
+    `[${label}] the page reports idle`,
     String(await evaluate("document.getElementById('status').textContent")) === "idle",
   );
 
   await evaluate("document.querySelector('.socket').click(); true");
-  await waitFor("document.getElementById('input').disabled === false", "the input to enable");
+  await waitFor("document.getElementById('input').disabled === false", `the input to enable (${label})`);
   check(
-    "connecting enables input",
+    `[${label}] connecting enables input`,
     String(await evaluate("document.getElementById('status').textContent")) === "connected",
   );
+  const actualKind = String(await evaluate("state.session && state.session.kind"));
   check(
-    "the greeting arrives in the page",
-    String(await evaluate("document.getElementById('output').textContent")).includes("demo online"),
+    `[${label}] the session uses the ${kind} transport`,
+    actualKind === kind,
+    JSON.stringify(actualKind),
+  );
+  await waitFor(
+    "document.getElementById('output').textContent.includes('demo online')",
+    `the greeting (${label})`,
   );
 
   await evaluate(
@@ -217,15 +223,24 @@ try {
   );
   await waitFor(
     "document.getElementById('output').textContent.includes('echo:hello')",
-    "the echo to arrive",
+    `the echo (${label})`,
   );
 
   await evaluate("document.getElementById('disconnect').click(); true");
-  await waitFor("document.getElementById('status').textContent === 'idle'", "the disconnect");
+  await waitFor("document.getElementById('status').textContent === 'idle'", `the disconnect (${label})`);
   check(
-    "disconnect resets the page",
+    `[${label}] disconnect resets the page`,
     String(await evaluate("document.getElementById('target').textContent")) === "not connected",
   );
+}
+
+try {
+  await scenario("ws", "ws");
+
+  // The same page over the tail transport, reloaded with ?transport=sse.
+  await send("Page.navigate", { url: base + "/?transport=sse" });
+  await scenario("sse", "sse");
+
   check("no page exception was thrown", exceptions.length === 0, exceptions.join(" | "));
 } catch (error) {
   report.push("FAIL " + (error?.stack ?? error));

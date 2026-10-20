@@ -1,9 +1,14 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+const encoder = new TextEncoder();
+
+// `?transport=sse` uses the tail transport; the default is the WebSocket byte
+// tunnel. Both are served by the same binary and tested.
+const transport = new URLSearchParams(location.search).get("transport");
 
 const state = {
-  /** @type {{id: string, path: string, source: EventSource, decoder: TextDecoder} | null} */
+  /** @type {{id: string, path: string, kind: "ws" | "sse", source: WebSocket | EventSource, decoder: TextDecoder} | null} */
   session: null,
   sockets: [],
 };
@@ -89,18 +94,71 @@ function renderSockets(dirs) {
 
 function connectTo(socket) {
   closeSession(false);
+  if (transport === "sse" || typeof WebSocket !== "function") {
+    connectTail(socket);
+  } else {
+    connectTunnel(socket);
+  }
+}
 
+/**
+ * The byte tunnel: binary frames both ways, no handshake envelope and no
+ * base64. A frame the server cannot accept (over 64 KiB) closes the session
+ * with code 1009 and a "message too big" reason.
+ */
+function connectTunnel(socket) {
+  const id = randomSessionId();
+  const params = new URLSearchParams({ id, path: socket.path });
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  const source = new WebSocket(scheme + "//" + location.host + "/api/ws?" + params.toString());
+  source.binaryType = "arraybuffer";
+  const session = { id, path: socket.path, kind: "ws", source, decoder: new TextDecoder() };
+  state.session = session;
+
+  prepareSession(socket);
+  setStatus("connecting", "busy");
+
+  source.addEventListener("open", () => {
+    if (state.session !== session) return;
+    setStatus("connected", "ok");
+    setInputEnabled(true);
+    $("input").focus();
+    appendText("[connected to " + socket.path + "]\n");
+  });
+
+  source.addEventListener("message", (event) => {
+    if (state.session !== session) return;
+    if (typeof event.data === "string") {
+      appendText(event.data);
+      return;
+    }
+    appendText(session.decoder.decode(event.data, { stream: true }));
+  });
+
+  source.addEventListener("close", (event) => {
+    if (state.session !== session) return;
+    const reason = event.reason ? ": " + event.reason : "";
+    appendText("\n[socket closed" + reason + "]\n");
+    closeSession(false);
+  });
+
+  source.addEventListener("error", () => {
+    if (state.session !== session) return;
+    appendText("\n[connection lost]\n");
+    closeSession(false);
+  });
+}
+
+/** The tail transport: SSE down, the handshake command POSTed up. */
+function connectTail(socket) {
   const id = randomSessionId();
   const params = new URLSearchParams({ id, path: socket.path });
   const source = new EventSource("/api/events?" + params.toString());
-  const session = { id, path: socket.path, source, decoder: new TextDecoder() };
+  const session = { id, path: socket.path, kind: "sse", source, decoder: new TextDecoder() };
   state.session = session;
 
-  $("output").textContent = "";
-  $("target").textContent = socket.path;
+  prepareSession(socket);
   setStatus("connecting", "busy");
-  setInputEnabled(false);
-  renderSocketsActive();
 
   source.addEventListener("ready", () => {
     if (state.session !== session) return;
@@ -139,6 +197,13 @@ function connectTo(socket) {
   });
 }
 
+function prepareSession(socket) {
+  $("output").textContent = "";
+  $("target").textContent = socket.path;
+  setInputEnabled(false);
+  renderSocketsActive();
+}
+
 function renderSocketsActive() {
   const buttons = document.querySelectorAll(".socket");
   buttons.forEach((button) => button.classList.remove("active"));
@@ -153,12 +218,22 @@ function closeSession(notifyServer = true) {
   const session = state.session;
   if (!session) return;
   state.session = null;
-  session.source.close();
 
-  if (notifyServer) {
-    fetch("/api/close?" + new URLSearchParams({ id: session.id }).toString(), { method: "POST" }).catch(
-      () => {},
-    );
+  if (session.kind === "ws") {
+    // The close frame is the notification: the server shuts the unix socket
+    // down when it arrives, so no POST is needed.
+    try {
+      session.source.close(1000, "page closed");
+    } catch {
+      /* already closing */
+    }
+  } else {
+    session.source.close();
+    if (notifyServer) {
+      fetch("/api/close?" + new URLSearchParams({ id: session.id }).toString(), {
+        method: "POST",
+      }).catch(() => {});
+    }
   }
 
   setStatus("idle");
@@ -181,12 +256,22 @@ $("input-form").addEventListener("submit", async (event) => {
   const input = $("input");
   const line = input.value;
   input.value = "";
+  const payload = line + "\n";
+
+  if (session.kind === "ws") {
+    if (session.source.readyState !== WebSocket.OPEN) {
+      appendText("\n[not connected]\n");
+      return;
+    }
+    session.source.send(encoder.encode(payload));
+    return;
+  }
 
   try {
     const response = await fetch("/api/input?" + new URLSearchParams({ id: session.id }).toString(), {
       method: "POST",
       headers: { "content-type": "text/plain; charset=utf-8" },
-      body: line + "\n",
+      body: payload,
     });
     if (!response.ok) {
       const detail = (await response.text()).trim();
@@ -199,8 +284,15 @@ $("input-form").addEventListener("submit", async (event) => {
 
 window.addEventListener("beforeunload", () => {
   const session = state.session;
-  if (session) {
+  if (!session) return;
+  if (session.kind === "sse") {
     navigator.sendBeacon("/api/close?" + new URLSearchParams({ id: session.id }).toString());
+  } else {
+    try {
+      session.source.close(1000, "page closed");
+    } catch {
+      /* already closing */
+    }
   }
 });
 

@@ -1,9 +1,15 @@
 # socutil
 
 A tiny browser UI for **unix-domain sockets**: it lists the sockets in the directories you name, connects
-to one, and relays it to the page like a terminal — output arrives over Server-Sent Events, input goes back
-over `POST`. It is one binary with the page embedded (`@embedFile`), so there is nothing to install and no
-build step for the UI.
+to one, and relays it to the page like a terminal. It is one binary with the page embedded (`@embedFile`),
+so there is nothing to install and no build step for the UI.
+
+Two transports share the relay:
+
+- the **WebSocket byte tunnel** (`/api/ws`), the page's default: raw bytes both ways, no base64, no
+  envelope;
+- the **tail transport** (`/api/events` + `POST /api/input`), for a line-based socket: send the handshake
+  command once, then follow the output as Server-Sent Events.
 
 It was written to answer the everyday question *"what is listening on a unix socket right now, and what
 does it say?"* without `socat`, `nc`, and a second terminal. The socket side is byte-transparent; the page
@@ -64,7 +70,7 @@ sockets in the rest.
 
 ## HTTP API
 
-Every response uses `connection: close`; there is one request per connection.
+Every plain response uses `connection: close`; a WebSocket request upgrades instead and stays open.
 
 | Request                          | Response                                                                                         |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -72,13 +78,16 @@ Every response uses `connection: close`; there is one request per connection.
 | `GET /app.js`, `GET /style.css`  | the embedded assets                                                                              |
 | `GET /api/sockets`               | `{"dirs":[…],"sockets":[{"name","dir","path"}]}` — a fresh scan on every request, sorted by path |
 | `GET /api/events?id=&path=`      | an SSE stream for one scanned socket: `ready`, then `out` events, then `exit`                    |
+| `GET /api/ws?id=&path=`          | a WebSocket byte tunnel (see below); a plain request is `426`                                    |
 | `POST /api/input?id=`            | writes the request body to the socket; `{"ok":true,"written":<bytes>}`                           |
 | `POST /api/close?id=`            | shuts the socket down and ends the session                                                       |
 | `GET /favicon.ico`               | `204`                                                                                            |
 
 `path` must equal a socket found by the scan on that same request: the client cannot ask the server to
 connect anywhere else. Session ids are 1–64 alphanumeric, `-` or `_` characters, and identify the live
-connection on later `POST`s.
+connection on later `POST`s for either transport.
+
+The page uses the tunnel by default; add `?transport=sse` to the page URL to use the tail transport.
 
 The SSE stream carries three event types:
 
@@ -99,47 +108,70 @@ data: {"reason":"eof"}
 `reset`, `closed`, `timeout`, `canceled`, `io error`, or `buffer overflow`. A failed keepalive write is how
 a vanished browser is noticed, which then shuts the socket down.
 
-Errors are JSON `{"error":"…"}` with these statuses: `400` missing/invalid id or path, `404` unknown
-session or socket, `405` wrong method (with `Allow`), `409` session id already in use, `413` a body of
-64 KiB or more, `502` the socket could not be connected to or written.
+### The WebSocket tunnel (`/api/ws`)
+
+`GET /api/ws?id=<id>&path=<path>` upgrades a standard WebSocket (`sec-websocket-version: 13`; any other
+version is `400`, and a plain request is `426`). After the `101`:
+
+- the server sends one **binary** frame per read from the unix socket, up to 64 KiB;
+- every **text or binary** frame from the browser is written to the socket unchanged — no newline is
+  added and nothing is interpreted;
+- a ping is answered with a pong, and the server pings after about 15 seconds of silence;
+- a socket EOF closes with code `1000` and the reason, a frame over the read buffer is refused with
+  `1009` (`message too big`), and a close frame from the browser shuts the socket down.
+
+The transport does **not** reassemble WebSocket fragments and does not grow a buffer to fit a message: one
+frame must fit the 64 KiB read buffer, and a protocol that needs to move more uses its own continuation.
+That limit is a constant today and can become a flag; nothing above it has to change.
+
+Errors are JSON `{"error":"…"}` with these statuses: `400` missing/invalid id, path or WebSocket version,
+`404` unknown session or socket, `405` wrong method (with `Allow`), `409` session id already in use, `413`
+a body of 64 KiB or more, `426` `/api/ws` without an upgrade, `502` the socket could not be connected to
+or written.
 
 ## What it is not
 
-- **Not authenticated.** It binds `127.0.0.1` by default; anyone who can reach the port can read and write
-  every socket under the scanned directories. Do not expose it to a network you do not trust.
-- **Not binary-safe on input.** The page sends text lines; output is decoded as UTF-8. A protocol that
-  needs raw bytes in both directions is a different tool.
+- **Not authenticated, by design.** It is a local tool: it binds `127.0.0.1` and has no access control.
+  Exposing it is a decision for a proxy — Caddy, nginx, or whatever fronts it — which is also where TLS and
+  authentication belong. The code does not grow its own.
+- **The page types text; the tunnel is still byte-exact.** The input box encodes what you type as UTF-8 and
+  appends a newline, and the page renders output as UTF-8 text. The WebSocket transport itself passes bytes
+  unchanged in both directions, so a protocol that needs binary needs a different client (or a future raw
+  input mode), not a different transport.
 - **Bounded.** Up to 1 MiB of unread socket output is buffered per session; beyond that the oldest half is
-  dropped so a stalled browser cannot make the server grow without bound.
+  dropped so a stalled browser cannot make the server grow without bound. A WebSocket message must fit the
+  64 KiB read buffer.
 
 ## Tests
 
 ```sh
 cd socutil && zig build test   # unit tests: session-id validation, query decoding, JSON escaping, suffixes
-bun socutil/e2e.mjs            # end-to-end: fixture socket, real server, raw HTTP + SSE
-bun socutil/ui-smoke.mjs       # the page in a real browser: list, connect, send, receive, disconnect
+bun socutil/e2e.mjs            # end-to-end: fixture socket, real server, raw HTTP + SSE + WebSocket
+bun socutil/ui-smoke.mjs       # the page in a real browser: both transports, list to disconnect
 ```
 
 The end-to-end test builds nothing: build first (it says so if the binary is missing). It starts the
 server on port 0, reads the port from the server's own startup line, and drives a real unix socket with a
-greeting, an echo round trip, a clean `EOF` exit, and the error statuses above. Its fixture lives under the
-repository's `.tmp/socutil-e2e/`, and it always tears the process and socket down, including on failure.
-Use `--exe <path>` to test another build.
+greeting, an echo round trip, a clean `EOF` exit, and the error statuses above, over both transports. The
+WebSocket half also checks the 64 KiB refusal (`1009`), the version check and the upgrade requirement. Its
+fixture lives under the repository's `.tmp/socutil-e2e/`, and it always tears the process and socket down,
+including on failure. Use `--exe <path>` to test another build.
 
-The browser test is the half the end-to-end test cannot see — the page's own `EventSource`, base64
-decoding, form and status line — driven over the Chrome DevTools Protocol. It looks for Chrome or a
-Chromium on the usual paths (`CHROME`, or `--chrome <path>`, overrides that) and prints `SKIP` and exits 0
-when none is installed; the server-side test is the mandatory one, and this one is an enhancement. Its
-profile and fixture live under `.tmp/socutil-ui-smoke/`.
+The browser test is the half the end-to-end test cannot see — the page's own `WebSocket`/`EventSource`
+wiring, base64 or binary decoding, form and status line — driven over the Chrome DevTools Protocol. It
+runs the same scenario twice: the default tunnel, then the page reloaded with `?transport=sse`. It looks
+for Chrome or a Chromium on the usual paths (`CHROME`, or `--chrome <path>`, overrides that) and prints
+`SKIP` and exits 0 when none is installed; the server-side test is the mandatory one, and this one is an
+enhancement. Its profile and fixture live under `.tmp/socutil-ui-smoke/`.
 
 ## Layout
 
-| Path                    | What it is                                                        |
-| ----------------------- | ----------------------------------------------------------------- |
-| `src/main.zig`          | argument parsing, defaults, listener, one thread per connection   |
-| `src/server.zig`        | HTTP routing, the SSE relay, session lifecycle and refcounting    |
-| `src/sockets.zig`       | socket discovery and the platform rules above                     |
-| `src/ui/`               | the page, script and stylesheet, embedded at build time           |
-| `check-zig.mjs`         | toolchain check: says which Zig to use instead of failing vaguely |
-| `e2e.mjs`               | the end-to-end test                                               |
-| `ui-smoke.mjs`          | the page exercised in a real browser                              |
+| Path                    | What it is                                                          |
+| ----------------------- | ------------------------------------------------------------------- |
+| `src/main.zig`          | argument parsing, defaults, listener, one thread per connection     |
+| `src/server.zig`        | HTTP routing, the SSE tail and WebSocket tunnel, session lifecycle  |
+| `src/sockets.zig`       | socket discovery and the platform rules above                       |
+| `src/ui/`               | the page, script and stylesheet, embedded at build time             |
+| `check-zig.mjs`         | toolchain check: says which Zig to use instead of failing vaguely   |
+| `e2e.mjs`               | the end-to-end test, both transports                                |
+| `ui-smoke.mjs`          | the page exercised in a real browser, both transports               |

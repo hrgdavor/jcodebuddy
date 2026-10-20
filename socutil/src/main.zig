@@ -1,8 +1,8 @@
 //! socutil - a tiny browser UI for unix-domain sockets.
 //!
 //! It serves an embedded HTML/JS page, lists unix sockets from configured
-//! directories, and relays a socket to the browser over Server-Sent Events.
-//! Commands travel back over a plain POST, keyed by the SSE session id.
+//! directories, and relays one to the browser: a WebSocket byte tunnel by
+//! default, or a Server-Sent Events tail with commands over a plain POST.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -144,7 +144,8 @@ fn printUsage() void {
         \\usage: socutil [options] [directory...]
         \\
         \\Serves a small browser UI that lists unix-domain sockets found in the
-        \\given directories and relays one of them over Server-Sent Events.
+        \\given directories and relays one of them, over a WebSocket byte tunnel
+        \\or a Server-Sent Events tail with commands sent by POST.
         \\
         \\options:
         \\  --listen <host>   address to bind (default 127.0.0.1)
