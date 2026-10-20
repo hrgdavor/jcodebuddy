@@ -71,6 +71,14 @@ pub const Cache = struct {
         return path[slash + 1 ..];
     }
 
+    /// § 4 stores a directory's name in `files.txt` with a trailing `/` so that its subtree is an exactly bounded
+    /// byte range. That slash is the layout's, not the name's: every path this model holds, and every path a
+    /// listing produces, names the folder without it.
+    pub fn dirPath(stored: []const u8) []const u8 {
+        if (stored.len > 1 and stored[stored.len - 1] == '/') return stored[0 .. stored.len - 1];
+        return stored;
+    }
+
     /// `true` when `path` is `base` or lies below it — the test a subtree removal needs.
     pub fn isUnder(path: []const u8, base: []const u8) bool {
         if (base.len == 0) return true;
@@ -80,6 +88,12 @@ pub const Cache = struct {
 
     /// A cache from a validated trio: `entries` and `names` in `files.txt` order (§ 8 has already established
     /// that every name is a usable path and that the pair is consistent).
+    ///
+    /// A directory is keyed by its **path**, without the trailing slash § 4 stores in `files.txt` — that slash is
+    /// the layout's rule for making a subtree a byte range, not part of the name. Keeping it here would put a key
+    /// in the map that no listing can ever produce again (a listing reports `src`), so the directory would be
+    /// re-added under its path while the slashed key survived as a second, unremovable entry — and a publish would
+    /// list both, one of them as `src//`.
     pub fn load(allocator: std.mem.Allocator, entries: []const format.Entry, names: []const []const u8, generation: u64) !Cache {
         var cache: Cache = .{ .allocator = allocator, .generation = generation };
         errdefer cache.deinit();
@@ -89,7 +103,7 @@ pub const Cache = struct {
 
         for (entries, names) |entry, name| {
             switch (entry.kind() orelse continue) {
-                .dir => try cache.dirs.put(allocator, name, .{
+                .dir => try cache.dirs.put(allocator, dirPath(name), .{
                     .mtime_ns = entry.mtime_ns,
                     .file_id_lo = entry.file_id_lo,
                     .file_id_hi = entry.file_id_hi,
@@ -216,7 +230,8 @@ test "a trio loads into directories with their children, sorted" {
     defer arena.deinit();
     const a = arena.allocator();
 
-    const names = [_][]const u8{ "a.txt", "src", "src/b.java", "src/sub", "src/sub/c.txt" };
+    // The names in § 4's stored form, as `files.txt` carries them: a directory's name ends with '/'.
+    const names = [_][]const u8{ "a.txt", "src/", "src/b.java", "src/sub/", "src/sub/c.txt" };
     const kinds = [_]format.Kind{ .regular_file, .dir, .regular_file, .dir, .regular_file };
     const entries = try a.alloc(format.Entry, names.len);
     for (entries, 0..) |*entry, index| {
@@ -224,7 +239,7 @@ test "a trio loads into directories with their children, sorted" {
             .mtime_ns = 100 + index,
             .size_bytes = if (kinds[index] == .regular_file) 10 else 0,
             .content_hash = if (kinds[index] == .regular_file) 0x1234 else 0,
-            .name_hash = format.wyhash(names[index]),
+            .name_hash = format.wyhash(Cache.dirPath(names[index])),
             .name_offset = 0,
             .name_length = @intCast(names[index].len),
             .flags_word = if (kinds[index] == .regular_file)
@@ -243,6 +258,8 @@ test "a trio loads into directories with their children, sorted" {
     try std.testing.expectEqual(@as(usize, 2), cache.dirCount()); // src and src/sub; the root is bookkeeping, never an entry
     try std.testing.expect(cache.dirs.contains("src"));
     try std.testing.expect(cache.dirs.contains("src/sub"));
+    // The slash is the stored form, not the key: a listing reports `src`, so that is what the model must hold.
+    try std.testing.expect(!cache.dirs.contains("src/"));
 
     const root = cache.dirs.get("") orelse return error.MissingRoot;
     try expectNames(&.{"a.txt"}, root.file_names);

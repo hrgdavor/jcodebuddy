@@ -106,6 +106,14 @@ const Dropped = struct {
 pub fn coldStart(arena: std.mem.Allocator, cache: *Cache, lister: Lister, root: []const u8) !Report {
     var report: Report = .{};
 
+    // The root is bookkeeping rather than an entry (§ 3), and it needs a state like any other directory: its own
+    // mtime and identity are what the *next* pass compares, and its child lists are what a removal is looked for
+    // against. A cache loaded from a trio carries it; the first pass over a tree starts from an empty cache, and
+    // without it `Cache.dirCount` — which subtracts this one key — reports one directory too few.
+    if (cache.dirs.getPtr("") == null) {
+        try cache.dirs.put(cache.allocator, "", .{ .mtime_ns = 0, .file_id_lo = 0, .file_id_hi = 0 });
+    }
+
     // Breadth-first over the directories this run visits. The root is always visited: § 7 keeps the root's
     // identity but not its mtime, so there is nothing to compare against.
     const Queued = struct {
