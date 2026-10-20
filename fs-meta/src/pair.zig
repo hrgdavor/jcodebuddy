@@ -90,34 +90,36 @@ pub fn layout(allocator: std.mem.Allocator, items: []const Item) !Layout {
         try txt.append(allocator, '\n');
     }
 
-    // 2. `roots`, from the same order: a range starts at a segment's first item (its `dir/` entry) and ends where
-    //    the next segment begins.
+    // 2. `roots`, from the same order. A folder's own `dir/` line and every name below it are contiguous in the
+    //    text order (that is what the slash buys, § 4), so a range starts there and ends at the first name that is
+    //    *not* under it. That name is often the next folder — but it can be a root-level file, and ending the
+    //    range at the next folder would then swallow the file and report a sibling as part of the subtree.
     var roots: std.ArrayListUnmanaged(RootRange) = .empty;
     errdefer roots.deinit(allocator);
-    var open: ?[2]usize = null; // [segment index into work, first index]
-    for (work, 0..) |item, index| {
-        const segment = topSegment(item.stored) orelse continue;
+    const Open = struct { folder: []const u8, start: u64 };
+    var open: ?Open = null;
+    for (work) |item| {
         if (open) |range| {
-            if (!std.mem.eql(u8, topSegment(work[range[1]].stored).?, segment)) {
-                const start = work[range[1]].offset;
-                const end = item.offset;
-                try roots.append(allocator, .{
-                    .name = try allocator.dupe(u8, topSegment(work[range[1]].stored).?),
-                    .offset = start,
-                    .length = end - start,
-                });
-                open = .{ index, index };
-            }
-        } else {
-            open = .{ index, index };
+            if (std.mem.startsWith(u8, item.stored, range.folder)) continue; // still inside the open folder
+            try roots.append(allocator, .{
+                .name = try allocator.dupe(u8, range.folder[0 .. range.folder.len - 1]),
+                .offset = range.start,
+                .length = item.offset - range.start,
+            });
+            open = null;
         }
+        // A range belongs to a direct child of the root: a nested folder is inside its parent's range, which the
+        // parent's own name says by being the same as the folder's first path segment.
+        if (item.entry.kind() != .dir) continue;
+        const segment = topSegment(item.stored) orelse continue;
+        if (segment.len != item.stored.len - 1) continue;
+        open = .{ .folder = item.stored, .start = item.offset };
     }
     if (open) |range| {
-        const start = work[range[1]].offset;
         try roots.append(allocator, .{
-            .name = try allocator.dupe(u8, topSegment(work[range[1]].stored).?),
-            .offset = start,
-            .length = txt.items.len - start,
+            .name = try allocator.dupe(u8, range.folder[0 .. range.folder.len - 1]),
+            .offset = range.start,
+            .length = txt.items.len - range.start,
         });
     }
 
@@ -200,24 +202,24 @@ test "roots gives one range per direct child, covering its own entry and its sub
         file("src/b.java", 2),
         directory("docs"),
         file("docs/readme.md", 3),
-        file("z.txt", 4),
+        file("e.txt", 4), // a root-level file between two folders: not part of either range
+        file("z.txt", 5),
     });
     defer deinit(testing.allocator, layout_result);
 
-    for (layout_result.roots) |range| {
-        std.debug.print("root {s} offset {d} length {d}\n", .{ range.name, range.offset, range.length });
-    }
-    std.debug.print("txt: {s}\n", .{layout_result.txt});
+    try testing.expectEqualStrings("a.txt\ndocs/\ndocs/readme.md\ne.txt\nsrc/\nsrc/b.java\nz.txt\n", layout_result.txt);
     try testing.expectEqual(@as(usize, 2), layout_result.roots.len);
     try testing.expectEqualStrings("docs", layout_result.roots[0].name);
     try testing.expectEqualStrings("src", layout_result.roots[1].name);
-    // Each range starts at the folder's own `dir/` line and holds everything below it.
-    for (layout_result.roots) |range| {
-        const slice = layout_result.txt[range.offset..][0..range.length];
-        try testing.expect(std.mem.startsWith(u8, slice, range.name));
-    }
+    // Each range is exactly the folder's own line and everything below it — the range ends where the prefix stops
+    // matching, which is `e.txt` here and not `src/` (§ 18: the range must not return a sibling).
+    const docs = layout_result.roots[0];
+    try testing.expectEqualStrings("docs/\ndocs/readme.md\n", layout_result.txt[docs.offset..][0..docs.length]);
+    const src = layout_result.roots[1];
+    try testing.expectEqualStrings("src/\nsrc/b.java\n", layout_result.txt[src.offset..][0..src.length]);
     // Root-level files are not ranges, and the ranges do not overlap.
-    try testing.expect(layout_result.roots[0].offset < layout_result.roots[1].offset);
+    try testing.expect(docs.offset < src.offset);
+    try testing.expect(docs.offset + docs.length <= src.offset);
 }
 
 test "an empty tree lays out as two empty files and no roots" {
