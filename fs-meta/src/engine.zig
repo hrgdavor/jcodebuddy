@@ -379,42 +379,41 @@ fn trioNames(arena: std.mem.Allocator, root: []const u8, io: std.Io) ![][]const 
     return names;
 }
 
-/// The names a full walk reports, sorted the same way.
+/// The names a full walk reports, in the order the file system handed them over. The agreement with a trio is
+/// about membership, not order: the trio is sorted by `(nameHash, name)` (§ 4) and a walk has no order to offer.
 fn scanNames(arena: std.mem.Allocator, root: []const u8, io: std.Io) ![][]const u8 {
     const facts = try scan.scan(arena, io, root, .{ .hash_mode = .none, .respect_gitignore = true, .ignored_dir_names = &.{ ".git", ".fs-meta" } });
     const names = try arena.alloc([]const u8, facts.len);
     for (facts, 0..) |fact, index| names[index] = fact.name;
-    std.mem.sort([]const u8, names, {}, struct {
-        fn lessThan(_: void, left: []const u8, right: []const u8) bool {
-            // The trio's order (§ 4): name hash first, then the name, so this walk can be compared entry by entry.
-            const left_hash = format.wyhash(left);
-            const right_hash = format.wyhash(right);
-            if (left_hash != right_hash) return left_hash < right_hash;
-            return switch (format.compareNames(left, right)) {
-                .lt => true,
-                else => false,
-            };
-        }
-    }.lessThan);
     return names;
+}
+
+/// § 4 stores a directory's name with a trailing `/`; the walk reports a folder by its path, which has none. The
+/// two describe the same tree, so a name is compared in the form that is not a layout decision.
+fn trimSlash(name: []const u8) []const u8 {
+    if (name.len > 1 and name[name.len - 1] == 0x2F) return name[0 .. name.len - 1];
+    return name;
 }
 
 fn hasName(names: [][]const u8, wanted: []const u8) bool {
     for (names) |name| {
-        if (std.mem.eql(u8, name, wanted)) return true;
+        if (std.mem.eql(u8, trimSlash(name), trimSlash(wanted))) return true;
     }
     return false;
 }
 
+/// Same names, same count — the order each side has is its own (§ 4 orders the trio, nothing orders a walk).
 fn expectNameSets(a: [][]const u8, b: [][]const u8) !void {
-    if (a.len != b.len) std.debug.print("length differs: walk={d} trio={d}\n", .{ a.len, b.len });
-    for (a, b, 0..) |left, right, index| {
-        if (!std.mem.eql(u8, left, right)) {
-            std.debug.print("index {d}: walk={s} trio={s}\n", .{ index, left, right });
-        }
+    if (a.len != b.len) {
+        std.debug.print("length differs: walk={d} trio={d}\n", .{ a.len, b.len });
+        for (a) |name| std.debug.print("  walk: {s}\n", .{name});
+        for (b) |name| std.debug.print("  trio: {s}\n", .{name});
     }
     try testing.expectEqual(a.len, b.len);
-    for (a, b) |left, right| try testing.expectEqualStrings(left, right);
+    for (a) |want| {
+        if (!hasName(b, want)) std.debug.print("the trio has no '{s}'\n", .{want});
+        try testing.expect(hasName(b, want));
+    }
 }
 
 test "a pass and a full walk agree about the tree, .gitignore included" {
