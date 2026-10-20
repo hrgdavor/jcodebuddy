@@ -201,7 +201,7 @@ pub fn validate(arena: std.mem.Allocator, input: Input) !Outcome {
         const start: usize = @intCast(entry.name_offset);
         const name = input.txt_bytes[start .. start + entry.name_length];
         names[index] = name;
-        if (format.wyhash(name) != entry.name_hash) {
+        if (nameHashFor(entry, name) != entry.name_hash) {
             return fail(arena, .name_hash_mismatch, "entry {d} ({s}): wyhash(name) is {x:0>16}, nameHash says {x:0>16}",
                 .{ index, name, format.wyhash(name), entry.name_hash });
         }
@@ -476,4 +476,13 @@ test "the wire strings are the ones § 8 lists" {
     try std.testing.expectEqualStrings("name-hash-mismatch", Verdict.name_hash_mismatch.wire());
     try std.testing.expect(Verdict.ok.usable());
     try std.testing.expect(!Verdict.invalid_flags.usable());
+}
+
+/// § 4: a directory entry's stored name carries a trailing slash; the hash is over the name without it,
+/// because a lookup is given a path and the path of the folder has no slash.
+fn nameHashFor(entry: format.Entry, stored: []const u8) u64 {
+    if (entry.kind() == .dir and stored.len > 0 and stored[stored.len - 1] == '/') {
+        return format.wyhash(stored[0 .. stored.len - 1]);
+    }
+    return format.wyhash(stored);
 }

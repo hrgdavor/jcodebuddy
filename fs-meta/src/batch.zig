@@ -143,13 +143,19 @@ pub fn encode(allocator: std.mem.Allocator, plan: Plan) !Encoded {
     errdefer txt.deinit(allocator);
 
     for (plan.entries, 0..) |entry, index| {
+        // § 4: a directory's stored name carries a trailing slash, which is what makes its subtree an exact
+        // byte range; the entry's name_hash is over the name without it.
+        const stored = if (entry.kind() == .dir)
+            try std.fmt.allocPrint(allocator, "{s}/", .{plan.names[index]})
+        else
+            plan.names[index];
         const offset = txt.items.len;
-        try txt.appendSlice(allocator, plan.names[index]);
+        try txt.appendSlice(allocator, stored);
         try txt.append(allocator, '\n');
 
         var laid_out = entry;
         laid_out.name_offset = offset;
-        laid_out.name_length = @intCast(plan.names[index].len);
+        laid_out.name_length = @intCast(stored.len);
         var bytes: [format.entry_size]u8 = undefined;
         laid_out.encode(&bytes);
         @memcpy(meta[index * format.entry_size ..][0..format.entry_size], &bytes);
