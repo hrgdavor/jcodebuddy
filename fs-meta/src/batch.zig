@@ -15,6 +15,7 @@ const std = @import("std");
 const format = @import("format.zig");
 const reconcile = @import("reconcile.zig");
 const json_doc = @import("json_doc.zig");
+const pair = @import("pair.zig");
 
 /// A name that did not exist in the parent generation.
 pub const CHANGE_ADDED: u32 = 0x20;
@@ -137,31 +138,20 @@ pub const Encoded = struct {
 /// Lay the plan out as `files.meta` and `files.txt`: entries in plan order, names LF-terminated, offsets assigned
 /// here because `diff` leaves them zero — the layout is the writer's business, the change set is not.
 pub fn encode(allocator: std.mem.Allocator, plan: Plan) !Encoded {
-    const meta = try allocator.alloc(u8, plan.entries.len * format.entry_size);
-    errdefer allocator.free(meta);
-    var txt: std.ArrayListUnmanaged(u8) = .empty;
-    errdefer txt.deinit(allocator);
-
+    // One layout for every writer (§ 4): the text by name, the meta by (nameHash, name), the offsets assigned
+    // there. A batch that laid out its own pair could order it differently from the main trio and still be
+    // valid, which is exactly the drift the shared function prevents.
+    const items = try allocator.alloc(pair.Item, plan.entries.len);
+    defer allocator.free(items);
     for (plan.entries, 0..) |entry, index| {
-        // § 4: a directory's stored name carries a trailing slash, which is what makes its subtree an exact
-        // byte range; the entry's name_hash is over the name without it.
-        const stored = if (entry.kind() == .dir)
-            try std.fmt.allocPrint(allocator, "{s}/", .{plan.names[index]})
-        else
-            plan.names[index];
-        const offset = txt.items.len;
-        try txt.appendSlice(allocator, stored);
-        try txt.append(allocator, '\n');
-
-        var laid_out = entry;
-        laid_out.name_offset = offset;
-        laid_out.name_length = @intCast(stored.len);
-        var bytes: [format.entry_size]u8 = undefined;
-        laid_out.encode(&bytes);
-        @memcpy(meta[index * format.entry_size ..][0..format.entry_size], &bytes);
+        items[index] = .{ .name = plan.names[index], .entry = entry };
     }
 
-    return .{ .meta = meta, .txt = try txt.toOwnedSlice(allocator) };
+    const laid = try pair.layout(allocator, items);
+    // The batch has no use for the ranges; free them here rather than making Encoded own them.
+    for (laid.roots) |range| allocator.free(range.name);
+    allocator.free(laid.roots);
+    return .{ .meta = laid.meta, .txt = laid.txt };
 }
 
 /// The inverse: entries and their names, with every entry required to carry exactly one change bit.
