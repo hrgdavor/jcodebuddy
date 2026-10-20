@@ -77,13 +77,21 @@ pub fn publish(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cache:
 
     // 2. The pair, through the one layout every writer uses: `files.txt` by name in stored form, `files.meta` by
     //    `(nameHash, name)`, each entry addressing its name by offset. `meta` and `txt` outlive this call because
-    //    the outcome returns them.
+    //    the outcome returns them; the ranges are the layout's, and are freed here after the sidekick has written
+    //    the bytes it needs — `json.encode` copies, so nothing may point into the layout once it returns.
     const laid = try pair.layout(allocator, items.items);
     const meta = laid.meta;
     const txt_bytes = laid.txt;
-    // The sidekick's `roots` (§ 18) is not emitted yet; free the ranges so the layout owns nothing on return.
-    for (laid.roots) |range| allocator.free(range.name);
-    allocator.free(laid.roots);
+    defer {
+        for (laid.roots) |range| allocator.free(range.name);
+        allocator.free(laid.roots);
+    }
+    // § 18: the direct children of the root, as the ranges the text layout produced.
+    const roots = try allocator.alloc(json.RootFields, laid.roots.len);
+    defer allocator.free(roots);
+    for (laid.roots, 0..) |range, index| {
+        roots[index] = .{ .name = range.name, .offset = range.offset, .length = range.length };
+    }
 
     // 3. The sidekick, carrying the hashes the next reader will check.
     const json_bytes = try json.encode(allocator, .{
@@ -101,6 +109,7 @@ pub fn publish(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cache:
         .updated = request.updated,
         .writer = request.writer,
         .scan = request.scan,
+        .roots = roots,
     });
 
     // 4. Write both temporary files completely, and fsync each, before the first rename.

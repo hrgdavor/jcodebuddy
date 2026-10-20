@@ -32,6 +32,14 @@ pub const BatchFields = struct {
     deleted: u64,
 };
 
+/// One direct child of the root and where its subtree sits in `files.txt` (§ 18). `name` has no trailing slash:
+/// the key is the folder's path, and the slash belongs to the text layout the range addresses.
+pub const RootFields = struct {
+    name: []const u8,
+    offset: u64,
+    length: u64,
+};
+
 pub const Fields = struct {
     generation: u64,
     count: u64,
@@ -48,6 +56,9 @@ pub const Fields = struct {
     updated: []const u8,
     writer: []const u8,
     scan: ?ScanFields = null,
+    /// The direct children of the root (§ 18). A writer that can compute it emits it, an empty map included: "this
+    /// tree has no folders" is a fact, and it is not the same statement as "nobody computed the ranges".
+    roots: ?[]const RootFields = null,
     /// Present only in a batch trio (§ 17.2).
     batch: ?BatchFields = null,
 };
@@ -67,6 +78,21 @@ pub fn encode(gpa: std.mem.Allocator, fields: Fields) ![]u8 {
     try writer.print("  \"count\": {d},\n", .{fields.count});
     try writer.print("  \"meta\": {{ \"bytes\": {d}, \"wyhash\": \"{x:0>16}\" }},\n", .{ fields.meta_bytes, fields.meta_hash });
     try writer.print("  \"txt\": {{ \"bytes\": {d}, \"wyhash\": \"{x:0>16}\" }},\n", .{ fields.txt_bytes, fields.txt_hash });
+    if (fields.roots) |roots| {
+        // § 18: keyed by the direct child's name, in the order the text layout gave them, which is name order.
+        if (roots.len == 0) {
+            try writer.writeAll("  \"roots\": {},\n");
+        } else {
+            try writer.writeAll("  \"roots\": {\n");
+            for (roots, 0..) |root, index| {
+                try writer.writeAll("    ");
+                try writeString(writer, root.name);
+                try writer.print(": {{ \"offset\": {d}, \"length\": {d} }}", .{ root.offset, root.length });
+                try writer.writeAll(if (index + 1 == roots.len) "\n" else ",\n");
+            }
+            try writer.writeAll("  },\n");
+        }
+    }
 
     try writer.writeAll("  \"hash\": { \"content\": \"wyhash64\", \"name\": \"wyhash64\", \"seed\": 0");
     try writer.writeAll(", \"normalize\": ");
@@ -313,4 +339,53 @@ test "a batch block is emitted when present, and absent from the main meta" {
     const without_batch = try encode(gpa, plain);
     defer gpa.free(without_batch);
     try std.testing.expect(std.mem.indexOf(u8, without_batch, "\"batch\"") == null);
+}
+
+test "a roots map is emitted when present, an empty one too, and absent otherwise" {
+    const gpa = std.testing.allocator;
+    var fields = Fields{
+        .generation = 2,
+        .count = 3,
+        .meta_bytes = 192,
+        .txt_bytes = 21,
+        .meta_hash = 0x1234,
+        .txt_hash = 0x5678,
+        .normalize = "text",
+        .root_dev = 1,
+        .root_ino = 2,
+        .created = "2026-10-20T00:00:00Z",
+        .updated = "2026-10-20T00:00:00Z",
+        .writer = "fsmeta-zig/1",
+    };
+
+    // Nothing to say about the tree's folders and nothing claimed (§ 18: the map is optional).
+    const without = try encode(gpa, fields);
+    defer gpa.free(without);
+    try std.testing.expect(std.mem.indexOf(u8, without, "\"roots\"") == null);
+
+    fields.roots = &.{
+        .{ .name = "docs", .offset = 0, .length = 18 },
+        .{ .name = "src", .offset = 18, .length = 12 },
+    };
+    const with_roots = try encode(gpa, fields);
+    defer gpa.free(with_roots);
+    try std.testing.expect(std.mem.indexOf(u8, with_roots,
+        "  \"roots\": {\n" ++
+            "    \"docs\": { \"offset\": 0, \"length\": 18 },\n" ++
+            "    \"src\": { \"offset\": 18, \"length\": 12 }\n" ++
+            "  },\n") != null);
+
+    // And it reads back as the object it is, keyed by the child's name.
+    var parsed = try parse(gpa, with_roots);
+    defer parsed.deinit();
+    const roots = try objectField(&parsed.value.object, "roots");
+    const src = try objectField(roots, "src");
+    try std.testing.expectEqual(@as(u64, 18), try intField(src, "offset"));
+    try std.testing.expectEqual(@as(u64, 12), try intField(src, "length"));
+
+    // An empty map is the statement "computed, and this tree has no folders" — not the same as no map at all.
+    fields.roots = &.{};
+    const empty = try encode(gpa, fields);
+    defer gpa.free(empty);
+    try std.testing.expect(std.mem.indexOf(u8, empty, "  \"roots\": {},\n") != null);
 }
