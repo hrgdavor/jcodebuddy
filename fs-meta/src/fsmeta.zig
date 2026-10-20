@@ -237,8 +237,8 @@ fn runMerge(io: std.Io, arena: std.mem.Allocator, gpa: std.mem.Allocator, root: 
             var iter = batches_dir.iterate();
             while (try iter.next(io)) |entry| {
                 const name = entry.name;
-                if (entry.kind == .dir) {
-                    const n = std.fmt.parseInt(usize, name, 10) catch continue;
+                if (entry.kind == .directory) {
+                    const n = std.fmt.parseInt(usize, name, 16) catch continue;
                     if (n > max) max = n;
                 }
             }
@@ -258,7 +258,7 @@ fn runMerge(io: std.Io, arena: std.mem.Allocator, gpa: std.mem.Allocator, root: 
     defer batches_dir.close(io);
 
     for (start_num + 1 .. end_num + 1) |n| {
-        const dir_name = try std.fmt.allocPrint(arena, "{d}", .{n});
+        const dir_name = try std.fmt.allocPrint(arena, "{x}", .{n});
         var batch_dir = batches_dir.openDir(io, dir_name, .{ .iterate = true }) catch continue;
         defer batch_dir.close(io);
 
@@ -276,9 +276,10 @@ fn runMerge(io: std.Io, arena: std.mem.Allocator, gpa: std.mem.Allocator, root: 
         }
     }
 
-    const all_events = events.toOwnedSlice(arena);
+    const all_events = try events.toOwnedSlice(arena);
 
-    // Collapse to the net change.
+    // Merge: the first batch becomes the change set, subsequent batches merge into it.
+    // This is the collapse matrix without a baseline — (first, last) → net kind.
     const changes = try reconcile.collapse(arena, all_events, null);
     defer arena.free(changes);
     arena.free(all_events);
@@ -291,25 +292,31 @@ fn runMerge(io: std.Io, arena: std.mem.Allocator, gpa: std.mem.Allocator, root: 
     }
 
     if (json) {
-        var writer = std.Io.Writer.Allocating.init(arena);
-        writer.writeAll("[\n") catch return;
-        var first = true;
-        for (changes) |c| {
-            if (c.kind == .deleted) continue;
-            if (!first) writer.writeAll(",\n") catch return;
-            first = false;
-            writer.writeAll("  {\n") catch return;
-            writer.writeAll("    \"name\": \"") catch return;
-            jsonWriteString(&writer, c.name);
-            writer.writeAll("\",\n") catch return;
-            const kind_str = if (c.kind == .added) "added" else "changed";
-            writer.print("    \"kind\": \"{s}\"\n", .{kind_str}) catch return;
-            writer.writeAll("  }") catch return;
+        var out: std.Io.Writer.Allocating = .init(arena);
+        errdefer out.deinit();
+        const writer = &out.writer;
+
+        if (count == 0) {
+            try writer.writeAll("[]\n");
+        } else {
+            try writer.writeAll("[\n");
+            var first = true;
+            for (changes) |c| {
+                if (c.kind == .deleted) continue;
+                if (!first) try writer.writeAll(",\n");
+                first = false;
+                try writer.writeAll("  {\n");
+                try writer.writeAll("    \"name\": ");
+                try jsonWriteString(writer, c.name);
+                try writer.writeAll(",\n");
+                const kind_str = if (c.kind == .added) "added" else "changed";
+                try writer.print("    \"kind\": \"{s}\"\n", .{kind_str});
+                try writer.writeAll("  }");
+            }
+            try writer.writeAll("\n]\n");
         }
-        if (!first) writer.writeAll("\n") catch return;
-        writer.writeAll("]\n") catch return;
-        const out = writer.toOwnedSlice();
-        try write(io, out);
+        const result = try out.toOwnedSlice();
+        try write(io, result);
     } else {
         for (changes) |c| {
             if (c.kind == .deleted) continue;
@@ -335,23 +342,25 @@ fn openBatchesDir(io: std.Io, arena: std.mem.Allocator, root: []const u8) !std.I
 }
 
 /// Escape a string for JSON output.
-fn jsonWriteString(writer: *std.Io.Writer.Allocating, s: []const u8) !void {
+fn jsonWriteString(writer: *std.Io.Writer, s: []const u8) !void {
+    try writer.writeByte('"');
     for (s) |ch| {
         switch (ch) {
-            '"' => writer.writeAll("\\\"") catch return,
-            '\\' => writer.writeAll("\\\\") catch return,
-            '\n' => writer.writeAll("\\n") catch return,
-            '\r' => writer.writeAll("\\r") catch return,
-            '\t' => writer.writeAll("\\t") catch return,
+            '"' => try writer.writeAll("\\\""),
+            '\\' => try writer.writeAll("\\\\"),
+            '\n' => try writer.writeAll("\\n"),
+            '\r' => try writer.writeAll("\\r"),
+            '\t' => try writer.writeAll("\\t"),
             else => {
                 if (ch < 0x20) {
-                    writer.print("\\u{0:0>4s}", .{std.fmt.allocPrint(std.heap.page_allocator, "{x:0>4}", .{ch}) catch return}) catch return;
+                    try writer.print("\\u{x:0>4}", .{ch});
                 } else {
-                    writer.writeByte(ch) catch return;
+                    try writer.writeByte(ch);
                 }
             },
         }
     }
+    try writer.writeByte('"');
 }
 
 /// Load the trio from `<root>/.fs-meta` into a Cache.

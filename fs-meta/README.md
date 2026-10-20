@@ -44,6 +44,14 @@ The two ports take the same commands, print the same output and return the same 
 subject failed, 2 usage), so a pipeline does not care which one answers.
 
 ```sh
+# the Zig engine (reference implementation; `zig build` then run)
+zig-out/bin/fsmeta.exe scan <root>                    # walk the tree, write .fs-meta/
+zig-out/bin/fsmeta.exe verify <root>                   # is the trio usable?
+zig-out/bin/fsmeta.exe refresh <root>                  # rescan and publish a new generation
+zig-out/bin/fsmeta.exe glob <root> <pattern> [--since <ts>] [--json]
+zig-out/bin/fsmeta.exe changed <root> --since <ts> [--glob <pattern>] [--json]
+zig-out/bin/fsmeta.exe merge <root> <start> [end] [--json]
+
 # the Bun port (no build step)
 bun fs-meta/js/fsmeta-cli.mjs scan --root .          # walk the tree, write .fs-meta/
 bun fs-meta/js/fsmeta-cli.mjs verify                 # is the trio usable?
@@ -67,6 +75,26 @@ bun fs-meta/check-ports.mjs                          # needs the module built (a
 `scan` honours `.gitignore` files in the tree unless `--no-gitignore` is given; `--normalize none|lf|text`
 chooses the content-hash mode (`text` is the default, which makes a CRLF and an LF checkout agree), and
 `--ignore NAME` adds a directory name to skip. The walk's ignore rules are `FORMAT.md` § 16.
+
+### `merge` — combined change set for a batch range
+
+`fsmeta merge <root> <start> [end] [--json]` gives the **merged set of changes** for a range of batches.
+A single batch is trivial (its own entries); the command is useful when several batches are combined into one
+change set — the input a parser or checker tool needs to re-run over the names that actually moved.
+
+- `start` is the **baseline** generation (not included in the range). It is the generation the consumer last
+  synced at.
+- `end` is the **end of the range** (inclusive). Omitted means "the latest batch."
+- The window is batches `start + 1` through `end`, merged per the matrix in `FORMAT.md` § 17.4:
+  a name added and then deleted in the window cancels out; a name changed twice is one change carrying the
+  final entry.
+- The output is **added and changed only** — deleted names are filtered out — because the consumer re-runs its
+  parser or checker over the names whose content it must re-read.
+
+Without a baseline (the consumer's recorded state at `start`), the answer is a superset: correct, idempotent,
+and occasionally a no-op the consumer did not need. That is the documented trade-off in § 17.4.
+
+Batch directories are named by hex generation number, no padding: `1`, `2`, … `f`, `10`, …
 
 ### As a library
 
