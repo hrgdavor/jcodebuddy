@@ -61,9 +61,34 @@ parts — no directory table to index before a name can be compared, hashed or j
 front of every check that reports a path. The measurements, the alternatives and the trigger for revisiting are
 in [doc/path-layout-research.md](doc/path-layout-research.md).
 
-The order is `(nameHash, name)`: the hash compared as unsigned 64-bit, the name as unsigned bytes. It has three
-consequences: two snapshots are joined by one ordered walk (the hash is the name id), names sharing a hash stay
-adjacent and distinguishable, and a consumer reconciles without comparing paths.
+Two files, two orders, because they answer two different questions.
+
+**`files.meta` is sorted by `(nameHash, name)`** — the hash as unsigned 64-bit, the name as unsigned bytes. An id
+lookup has no filename, only a hash, so the hash is the only key that can be binary-searched; the name is the
+tie-break that keeps two names sharing a hash adjacent and distinguishable. Two snapshots are joined by one ordered
+walk on this key, which is also how a consumer reconciles without comparing paths.
+
+**`files.txt` is sorted by name**, unsigned byte compare of the stored form. It is the file a human reads, a `grep`
+searches and a diff between generations compares — and it is where prefix structure is visible, because sorting by
+name groups a subtree. Its order is independent of the entries' order in `files.meta`: an entry addresses its name
+by `nameOffset`/`nameLength`, not by its position.
+
+**A directory entry's name in `files.txt` ends with `/`** (`src/`, `node_modules/`). A directory is listed like any
+other entry — it has an mtime and an id — and the trailing slash is what makes its subtree a contiguous, exactly
+bounded region:
+
+```text
+src/     <  src/a.java     the folder's own entry comes first
+src-b    <  src/a.java     because '-' (0x2D) < '/' (0x2F)
+src/a    <  src0           because '/' (0x2F) < '0' (0x30)
+```
+
+so a subtree is the byte range `[dir + "/", dir + "0")` — a range a reader can slice without examining a single
+name. Without the slash, `[dir, dir + "0")` would also contain `src-b`, a sibling that is not in the subtree.
+
+The **name hash is over the name without the trailing slash** (`wyhash("src")`, not `wyhash("src/")`), because a
+lookup is given the path and the path of the folder is `src`. A reader that needs a directory entry's hash strips
+the slash; a reader that needs the entry from a name keeps it.
 
 ## 4. `files.txt`
 
@@ -347,7 +372,7 @@ The three counts must equal the entries with the matching change bit; a mismatch
 
 ### 17.2a Order: by name hash, not by path
 
-Every trio is sorted by `(nameHash, name)` (§ 4): the main meta and every batch alike. A batch carries the same
+A batch follows both orders of § 4: its `files.meta` by `(nameHash, name)`, its `files.txt` by name with directory
 64-bit), because a consumer *joins* it: the hash is the name ident from § 3, so
 
 - two batches are combined by one ordered walk over two lists — no lookup, no allocation, no string compare;
@@ -434,3 +459,29 @@ trio. It is **not** the final design:
   guessed batch is a wrong change record.
 
 None of that changes the API in § 17.4, which is why the API is specified first.
+
+## 18. roots: where the direct children live
+
+`files.json` carries one lookup accelerator:
+
+```json
+"roots": {
+  "docs": { "offset": 91, "length": 1200 },
+  "src":  { "offset": 1300, "length": 8400 }
+}
+```
+
+- Keys are the **direct children of the root only**. A folder nested deeper is reached through its parent's range; a
+  nested folder never gets a key of its own.
+- `offset` and `length` are **bytes in `files.txt`**, covering the folder's own entry (the `dir/` name) and
+  everything below it, so one range is the whole subtree.
+- The range is exactly `[dir + "/", dir + "0")` (§ 4). A consumer reads it without checking a name; a prefix check is
+  needed only when the range answers a *lookup* rather than a scan, so a malformed range cannot quietly return a
+  sibling.
+- **Root-level files are not listed.** They are whatever no range covers, and nothing needs a range over them: a direct
+  lookup is a binary search in `files.txt`, and an id lookup never reads the text file at all.
+- The map is **optional**. A reader that finds no `roots` scans `files.txt`; a writer that cannot compute it cheaply
+  omits it. Nothing may be inferred from its absence, and an unknown key must survive a rewrite (§ 7).
+
+The cost is two numbers per top-level folder and no per-file data, which is why this belongs in the sidekick rather
+than in a second index file.
