@@ -26,6 +26,7 @@ const builtin = @import("builtin");
 const format = @import("format.zig");
 const json = @import("json_doc.zig");
 const cache_mod = @import("cache.zig");
+const pair = @import("pair.zig");
 
 pub const Cache = cache_mod.Cache;
 
@@ -58,80 +59,36 @@ pub const Outcome = struct {
 
 /// Write the trio into `dir` (an open `.fs-meta` directory) and return what was written.
 pub fn publish(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cache: *const Cache, request: Request) !Outcome {
-    // 1. The pair, in the trio's order (unsigned byte comparison of the names, § 3).
-    var paths: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer paths.deinit(allocator);
+    // 1. The items: every listed name with its entry, in whatever order the cache holds them. Ordering is the
+    //    layout's job (§ 4), not this loop's; a second writer that sorted here would re-decide it.
+    var items: std.ArrayListUnmanaged(pair.Item) = .empty;
+    defer items.deinit(allocator);
     const files_it = cache.files.keys();
-    for (files_it) |path| try paths.append(allocator, path);
+    for (files_it) |path| {
+        try items.append(allocator, .{ .name = path, .entry = fileEntry(path, cache.files.get(path).?) });
+    }
     const dirs_it = cache.dirs.keys();
     for (dirs_it) |path| {
-        if (path.len != 0) try paths.append(allocator, path); // the root is never listed (§ 3)
+        if (path.len == 0) continue; // the root is never listed (§ 3)
+        try items.append(allocator, .{ .name = path, .entry = dirEntry(path, cache.dirs.get(path).?) });
     }
-    // § 3: `(nameHash, name)`. The hash is the name ident, so a batch and the main meta are joined the same way.
-    std.mem.sort([]const u8, paths.items, {}, pathLessThanByHash);
+    // The loader and the walker both depend on this count; a mismatch here is the bug, not a symptom of it.
+    std.debug.assert(items.items.len == cache.files.count() + cache.dirs.count() - 1); // -1: the root is never listed
 
-    var names: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer names.deinit(allocator);
-    var entries: std.ArrayListUnmanaged(format.Entry) = .empty;
-    defer entries.deinit(allocator);
-    var txt: std.ArrayListUnmanaged(u8) = .empty;
-    defer txt.deinit(allocator);
+    // 2. The pair, through the one layout every writer uses: `files.txt` by name in stored form, `files.meta` by
+    //    `(nameHash, name)`, each entry addressing its name by offset. `meta` and `txt` outlive this call because
+    //    the outcome returns them.
+    const laid = try pair.layout(allocator, items.items);
+    const meta = laid.meta;
+    const txt_bytes = laid.txt;
+    // The sidekick's `roots` (§ 18) is not emitted yet; free the ranges so the layout owns nothing on return.
+    for (laid.roots) |range| allocator.free(range.name);
+    allocator.free(laid.roots);
 
-    var offset: u64 = 0;
-    for (paths.items) |path| {
-        try names.append(allocator, path);
-        try txt.appendSlice(allocator, path);
-        try txt.append(allocator, '\n');
-
-        const name_length: u32 = @intCast(path.len);
-        if (cache.files.get(path)) |file| {
-            // A dirty hash is published as listing-only, not as a wrong hash (§ 6).
-            const known = file.content_hash != null;
-            try entries.append(allocator, .{
-                .mtime_ns = file.mtime_ns,
-                .size_bytes = file.size_bytes,
-                .content_hash = file.content_hash orelse 0,
-                .name_hash = format.wyhash(path),
-                .name_offset = offset,
-                .name_length = name_length,
-                .flags_word = switch (file.kind) {
-                    .dir => unreachable, // directories live in `cache.dirs`
-                    .symlink => format.flags.symlink,
-                    .regular_file => format.flags.regular_file |
-                        (if (known) format.flags.content_known else 0) |
-                        (if (known and file.hash_lf) format.flags.hash_lf else 0),
-                },
-                .file_id_lo = file.file_id_lo,
-                .file_id_hi = file.file_id_hi,
-            });
-        } else if (cache.dirs.get(path)) |directory| {
-            try entries.append(allocator, .{
-                .mtime_ns = directory.mtime_ns,
-                .size_bytes = 0,
-                .content_hash = 0,
-                .name_hash = format.wyhash(path),
-                .name_offset = offset,
-                .name_length = name_length,
-                .flags_word = format.flags.is_dir,
-                .file_id_lo = directory.file_id_lo,
-                .file_id_hi = directory.file_id_hi,
-            });
-        } else {
-            return error.CacheEntryMissing;
-        }
-        offset += path.len + 1;
-    }
-
-    const meta = try allocator.alloc(u8, entries.items.len * format.entry_size);
-    for (entries.items, 0..) |entry, index| {
-        entry.encode(meta[index * format.entry_size ..][0..format.entry_size]);
-    }
-    const txt_bytes = try allocator.dupe(u8, txt.items);
-
-    // 2. The sidekick, carrying the hashes the next reader will check.
+    // 3. The sidekick, carrying the hashes the next reader will check.
     const json_bytes = try json.encode(allocator, .{
         .generation = request.generation,
-        .count = entries.items.len,
+        .count = items.items.len,
         .meta_bytes = meta.len,
         .txt_bytes = txt_bytes.len,
         .meta_hash = format.wyhash(meta),
@@ -146,24 +103,24 @@ pub fn publish(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cache:
         .scan = request.scan,
     });
 
-    // 3. Write both temporary files completely, and fsync each, before the first rename.
+    // 4. Write both temporary files completely, and fsync each, before the first rename.
     try writeTemp(io, dir, format.meta_file, meta);
     try writeTemp(io, dir, format.txt_file, txt_bytes);
     try writeTemp(io, dir, format.json_file, json_bytes);
 
-    // 4. The directory's own entry table, where the platform can flush it.
+    // 5. The directory's own entry table, where the platform can flush it.
     syncDirectory(io, dir);
 
-    // 5. Rename, with the commit record last.
+    // 6. Rename, with the commit record last.
     try std.Io.Dir.rename(dir, format.meta_file ++ ".tmp", dir, format.meta_file, io);
     try std.Io.Dir.rename(dir, format.txt_file ++ ".tmp", dir, format.txt_file, io);
     try std.Io.Dir.rename(dir, format.json_file ++ ".tmp", dir, format.json_file, io);
 
-    // 6. And once more, so the renames themselves are on the medium where that is possible.
+    // 7. And once more, so the renames themselves are on the medium where that is possible.
     syncDirectory(io, dir);
 
     return .{
-        .count = entries.items.len,
+        .count = items.items.len,
         .meta_bytes = meta.len,
         .txt_bytes = txt_bytes.len,
         .meta_hash = format.wyhash(meta),
@@ -174,17 +131,40 @@ pub fn publish(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, cache:
     };
 }
 
-fn pathLessThanByHash(_: void, a: []const u8, b: []const u8) bool {
-    const ha = format.wyhash(a);
-    const hb = format.wyhash(b);
-    if (ha != hb) return ha < hb;
-    return std.mem.lessThan(u8, a, b);
+/// A file's entry, as the trio records it. A dirty hash is published as listing-only, not as a wrong hash (§ 6).
+fn fileEntry(path: []const u8, file: cache_mod.FileState) format.Entry {
+    const known = file.content_hash != null;
+    return .{
+        .mtime_ns = file.mtime_ns,
+        .size_bytes = file.size_bytes,
+        .content_hash = file.content_hash orelse 0,
+        .name_hash = format.wyhash(path), // without a slash: a directory's stored form is the layout's (§ 4)
+        .name_offset = 0, // the layout assigns both, from the text layout it decides
+        .name_length = 0,
+        .flags_word = switch (file.kind) {
+            .dir => unreachable, // directories live in `cache.dirs`
+            .symlink => format.flags.symlink,
+            .regular_file => format.flags.regular_file |
+                (if (known) format.flags.content_known else 0) |
+                (if (known and file.hash_lf) format.flags.hash_lf else 0),
+        },
+        .file_id_lo = file.file_id_lo,
+        .file_id_hi = file.file_id_hi,
+    };
 }
 
-fn pathLessThan(_: void, left: []const u8, right: []const u8) bool {
-    return switch (format.compareNames(left, right)) {
-        .lt => true,
-        else => false,
+/// A directory's entry: listed for its mtime and identity, never carrying a fingerprint (§ 6).
+fn dirEntry(path: []const u8, directory: cache_mod.DirState) format.Entry {
+    return .{
+        .mtime_ns = directory.mtime_ns,
+        .size_bytes = 0,
+        .content_hash = 0,
+        .name_hash = format.wyhash(path),
+        .name_offset = 0,
+        .name_length = 0,
+        .flags_word = format.flags.is_dir,
+        .file_id_lo = directory.file_id_lo,
+        .file_id_hi = directory.file_id_hi,
     };
 }
 
@@ -232,7 +212,9 @@ fn entryFor(name: []const u8, kind: format.Kind, mtime_ns: u64, size: u64, hash:
 
 /// A cache with two files and a directory, the shape every test here publishes.
 fn sampleCache(allocator: std.mem.Allocator) !Cache {
-    const names = [_][]const u8{ "a.txt", "src", "src/b.java" };
+    // The names in § 4's stored form, as `files.txt` carries them: a directory's name ends with '/'. The entry's
+    // name hash is over the path (`src`), so the stored form is the names' business and not the entry's.
+    const names = [_][]const u8{ "a.txt", "src/", "src/b.java" };
     const entries = [_]format.Entry{
         entryFor("a.txt", .regular_file, 100, 6, 0xabcdef, 10),
         entryFor("src", .dir, 200, 0, null, 11),
@@ -272,8 +254,9 @@ test "a published trio passes the reader's own checks" {
 
     const outcome = try publishInto(meta_dir, io, arena, &cache, 2);
 
-    // The three names, in byte order, and one LF-terminated line each.
-    try testing.expectEqualStrings("a.txt\nsrc/b.java\nsrc\n", outcome.txt);
+    // The three names, by name, one LF-terminated line each: the directory in its stored form, and before the
+    // names below it, because '/' sorts before any character that can follow the folder's name (§ 4).
+    try testing.expectEqualStrings("a.txt\nsrc/\nsrc/b.java\n", outcome.txt);
     try testing.expectEqual(@as(u64, 3), outcome.count);
     try testing.expectEqual(@as(u64, 3 * 64), outcome.meta_bytes);
 
@@ -285,16 +268,20 @@ test "a published trio passes the reader's own checks" {
     });
     try testing.expectEqual(validate.Verdict.ok, result.verdict);
 
-    // The dirty file is published as listing-only: its content hash is 0 and CONTENT_KNOWN is clear.
-    const dirty = result.entries[2];
+    // In `files.meta`'s order — a.txt, src/b.java, src — the dirty file is published as listing-only: its content
+    // hash is 0 and CONTENT_KNOWN is clear.
+    const dirty = result.entries[1];
+    try testing.expectEqualStrings("src/b.java", result.names[1]);
     try testing.expect(!dirty.contentKnown());
     try testing.expectEqual(@as(u64, 0), dirty.content_hash);
     // The hashed one carries the hash it had.
     try testing.expect(result.entries[0].contentKnown());
     try testing.expectEqual(@as(u64, 0xabcdef), result.entries[0].content_hash);
-    // And the directory carries no fingerprint.
+    // And the directory carries no fingerprint, and its stored name carries the slash its hash does not.
     try testing.expectEqual(format.Kind.dir, result.entries[2].kind().?);
-    try testing.expect(!result.entries[1].contentKnown());
+    try testing.expectEqualStrings("src/", result.names[2]);
+    try testing.expectEqual(format.wyhash("src"), result.entries[2].name_hash);
+    try testing.expect(!result.entries[2].contentKnown());
 
     // A publish is a new generation, and the reader sees it.
     const second = try publishInto(meta_dir, io, arena, &cache, 3);
