@@ -22,11 +22,11 @@ reuses the format the engine already writes so that **nothing on the wire needs 
 
 Every message is an 8-byte prefix followed by `length` payload bytes, all integers little-endian:
 
-| Offset | Size | Field    | Meaning                                                |
-| ------ | ---- | -------- | ------------------------------------------------------ |
-| 0      | 2    | `kind`   | the message kind, a `u16` from the table below         |
-| 2      | 2    | `flags`  | reserved, `0` for now; a reader rejects unknown bits   |
-| 4      | 4    | `length` | payload bytes after the prefix, at most 1 MiB          |
+| Offset | Size | Field    | Meaning                                                                                   |
+| ------ | ---- | -------- | ----------------------------------------------------------------------------------------- |
+| 0      | 2    | `kind`   | the message kind, a `u16` from the table below                                            |
+| 2      | 2    | `flags`  | bit 0 = `MULTIPART` (reserved, unused); bits 1..15 reserved; a reader rejects any set bit |
+| 4      | 4    | `length` | payload bytes after the prefix, at most 1 MiB                                             |
 
 `kind` values are all **below `0x7B`**, so the first byte of a binary message can never be `0x7B` (`{`) — which is
 what makes the JSON-RPC side of the socket recognisable from its first byte, as the notes ask: a JSON object starts
@@ -197,3 +197,29 @@ One ZMTP idea worth adopting later is **multipart (`MORE`)**: one frame carrying
 8-byte prefix over a whole batch. It trades away the per-entry self-delimiting property — a client could no longer
 validate `length == 64 + nameLength` per message and would have to walk a frame's interior — so it belongs after a
 measurement shows the prefix is the cost, not before.
+
+### Multipart: reserved, not specified
+
+`flags` bit 0 is **`MULTIPART`**. It is *defined* and *unused*: every message today carries it clear, and a receiver that
+sees it set answers `unsupported-flags` and closes the connection rather than guessing what follows. "Reserved" must
+never be read as "supported", or a future sender would be silently ignored by today's reader.
+
+What it will mean when it is specified:
+
+- one frame carrying **several `CHANGE_ENTRY` payloads back to back**, each still self-delimiting by `64 + nameLength`;
+- the 8-byte prefix is paid once per frame instead of once per entry — on a full replay of 3,900 entries that is
+  ~31 KB of prefix, the largest single overhead the protocol has today;
+- the cost is the property this document relies on elsewhere: a receiver could no longer check one message against one
+  `length` field, and a truncated interior would be harder to diagnose than a truncated frame.
+
+Why it is reserved rather than specified: **nothing needs it yet**, and reserving costs one bit. That bit is also what
+keeps the door open — without it, a later batched framing would have to overload `kind` or bump the major version,
+both of which break peers for a change that is purely an optimisation.
+
+The rules for today, so the reservation is enforceable rather than decorative:
+
+| today      | rule                                                                |
+| ---------- | ------------------------------------------------------------------- |
+| senders    | write `flags` as `0`                                                |
+| receivers  | `flags != 0` → `unsupported-flags`, close, resume from `from_batch` |
+| bits 1..15 | reserved on the same terms as bit 0                                 |
