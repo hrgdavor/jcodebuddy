@@ -26,6 +26,25 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // The matcher and the chain come from the sibling `gitignore` project. They are mounted under their file
+    // names, so every `@import("gitignore.zig")` in this tree keeps working: the move is build-level.
+    const gitignore_dep = b.dependency("gitignore", .{ .target = target, .optimize = optimize });
+    const gitignore_module = b.createModule(.{
+        .root_source_file = gitignore_dep.path("src/gitignore.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const ignore_module = b.createModule(.{
+        .root_source_file = gitignore_dep.path("src/ignore.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "gitignore.zig", .module = gitignore_module }},
+    });
+    const basis_imports = [_]std.Build.Module.Import{
+        .{ .name = "gitignore.zig", .module = gitignore_module },
+        .{ .name = "ignore.zig", .module = ignore_module },
+    };
+
     // The engine: no third-party dependency.
     const fsmeta = b.addExecutable(.{
         .name = "fsmeta",
@@ -33,6 +52,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/fsmeta.zig"),
             .target = target,
             .optimize = optimize,
+            .imports = &basis_imports,
         }),
     });
     b.installArtifact(fsmeta);
@@ -43,7 +63,7 @@ pub fn build(b: *std.Build) void {
     // Every module, so one command proves the whole reference.
     const test_step = b.step("test", "Run every module's tests");
     const modules = [_][]const u8{
-        "format", "json_doc", "validate", "cache", "coldstart", "gitignore", "scan", "lister", "publish", "ignore", "engine", "watch", "watch_tuning", "watch_run", "reconcile", "batch", "wire", "pair", "query", "server",
+        "format", "json_doc", "validate", "cache", "coldstart", "scan", "lister", "publish", "engine", "watch", "watch_tuning", "watch_run", "reconcile", "batch", "wire", "pair", "query", "server",
     };
     for (modules) |name| {
         const tests = b.addTest(.{
@@ -51,6 +71,7 @@ pub fn build(b: *std.Build) void {
                 .root_source_file = b.path(b.fmt("src/{s}.zig", .{name})),
                 .target = target,
                 .optimize = optimize,
+                .imports = &basis_imports,
             }),
         });
         test_step.dependOn(&b.addRunArtifact(tests).step);
