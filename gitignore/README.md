@@ -43,49 +43,98 @@ Three problems are the same for every port, and each one is cheaper to solve onc
 gitignore/
   src/gitignore.zig        the matcher (moved from fs-meta)
   src/ignore.zig           the chain (moved from fs-meta)
-  conformance/             vectors every port must pass, and the generator
+  src/conformance_test.zig the vectors as a test
+  src/decide_main.zig      the bench contract as a CLI (`ignore-decide`)
+  conformance/             vectors every port must pass, the runner's file, and the corpus generator
   bench/                   the workloads and the runner
-  doc/                     the rules as implemented, and where the test corpus comes from
+  doc/                     the rules as implemented, the porting guide, and where the corpus comes from
 ```
 
-The **vectors** are JSON: a case is `{ rules, path, isDir, kind, expect }` where `expect` is `include`, `exclude` or
-`no-opinion` (the chain's three-valued answer). A port ships a runner that reads the file and reports pass/fail per
-case; the Zig runner is the basis, and the file is generated *from* the Zig implementation, which is exactly why a
-port failing a case is worth investigating rather than dismissing.
+The **vectors** are JSON: a case is `{ name, ruleFiles, path, isDir, expect }` where each rule file is a `{ dir,
+rules }` pair and `expect` is `include`, `exclude` or `no-opinion` (the chain's three-valued answer). They were
+hand-authored from [`doc/rules.md`](doc/rules.md) and are run by
+[`src/conformance_test.zig`](src/conformance_test.zig), which materialises each case as a real temporary tree and
+answers it through the chain. The file is **not** generated from the Zig implementation: it is written from the
+rules, so a disagreement is a port bug or a finding to report back — the unterminated-class case was the latter, and
+[`conformance/README.md`](conformance/README.md) records the correction.
 
 The **bench contract** is one CLI:
 
 ```text
-<port> --rules <file.gitignore> --paths <file.txt>   → one line per path: include|exclude|no-opinion
+<port> --rules <file.gitignore> --paths <file.txt> [--dirs <file>]   → one line per path: include|exclude|no-opinion
 ```
 
-so a port is measured on identical input, and the runner does not need to know the language. The workloads are
-generated, never checked into a repository: a synthetic tree with the pathological shapes (a long `.gitignore` with
-many `**` rules, deep Java-like paths, a dependency folder) plus the small real-world rule sets quoted inline, so
-**no checkout of Apache Fory or any other project is required**.
+so a port is measured on identical input, and the runner does not need to know the language. `--dirs` takes one
+`0`/`1` per path, so directory-only rules are measured without a second format. The reference is
+[`src/decide_main.zig`](src/decide_main.zig); the workloads are generated, never checked into a repository, and the
+runner verifies the **verdict count equals the path count** before it reports a time.
 
-## Plan
+### Building and running it
 
-1. **Move the code and keep `fs-meta` green.** Copy `gitignore.zig` and `ignore.zig` here, add this project as a
-   dependency of `fs-meta`'s `build.zig.zon` (path dependency, local), and switch the imports — that is the commit
-   that makes `fs-meta` smaller, and it is all-or-nothing: both files move together with their tests.
-2. **Conformance.** A generator that writes `conformance/gitignore-vectors.json` by running the Zig matcher over a
-   curated list of cases (the rules table in `doc/rules.md` read as a test matrix), plus the three-valued cases only
-   the chain can answer. A runner for Zig, then one for Java, then one for JS.
-3. **Benchmarks that reproduce the failures.** Build the workloads (naive/deep/`**`-heavy/anchored) and the runner that
-   reports `ns/decision` and `ms/pass` per workload. Reproduce the four numbers above with the *old* designs kept as
-   branches inside the bench (`naive` and `unindexed` modes), so a newcomer can see what the fixes bought rather than
-   take it on faith.
-4. **The Zig CLI** behind the bench contract, and a small `bench/compare.mjs` that runs any number of ports and prints
-   one table. This is the piece that lets a port "push performance for all": a faster Java matcher is visible, and the
-   Zig side can adopt the idea.
-5. **Documentation for ports**: a porting guide that lists the invariants (in order), the three-valued result, the
-   precedence rules, and the two reserved behaviours (case sensitivity, `.git/info/exclude` not read).
+```text
+cd gitignore
+D:\wrk\zig\17\zig.exe build -Doptimize=ReleaseFast                        # zig-out/bin/ignore-decide
+D:\wrk\zig\17\zig.exe build -Dnaive=true -Doptimize=ReleaseFast            # zig-out/bin/ignore-decide-naive
+bun bench/perf.mjs --emit
+bun bench/perf.mjs --port "zig-out/bin/ignore-decide.exe --rules {rules} --paths {paths}" --repeat 5 --label indexed
+bun bench/perf.mjs --port "zig-out/bin/ignore-decide-naive.exe --rules {rules} --paths {paths}" --repeat 5 --label naive
+```
+
+`--naive` is the historical design kept as a benchmark mode: every rule of the chain is scanned instead of using the
+per-kind index, and `**` is matched by a recursion that retries the rest of the pattern at every position instead of
+the segment dynamic program. The naive code is **not in the default executable** — nothing it runs references either
+function, so Zig never analyses them there; the tests do call both, which is how they are kept honest — and the naive
+build installs under a distinct name so both can sit in `zig-out/bin`.
+
+### Measured
+
+ReleaseFast, best of 5, Windows 11, Zig 0.17.0 (2026-10-21). One process per workload, so the fixed cost of process
+start-up, reading the inputs and creating/removing the temporary root (about 12 ms) is included in every row; compare
+within a row, not across rows.
+
+| workload   | verdicts | indexed ms | naive ms |
+| ---------- | -------: | ---------: | -------: |
+| flat       | 1000     | 13.0       | 13.4     |
+| deep       | 2000     | 34.8       | 37.3     |
+| doublestar | 2000     | 37.9       | 38.1     |
+| anchored   | 2000     | 22.0       | 24.1     |
+| dirs       | 1000     | 13.8       | 15.9     |
+| backtrack  | 2000     | 89.2       | 558.1    |
+
+`backtrack` is the row that makes the recursive matcher's shape visible: a rule with three `**` segments and a path
+that repeats their literal neighbours, so every split is tried and the final `*.g4` never matches. It is 6.3× slower
+in the naive build, and its size is chosen so the row fits in a normal bench run. The other rows are close because
+`**/x` normalises to an indexed class (`**/*.cpp` becomes a suffix rule) and the process start-up dominates 1–2k
+paths at these times.
+
+The historical figures in this README — the ~4,700 ms recursive pass, the 1,466 ms superlinear `decide`, the 2.97×
+anchored-`**` pass — were measured on a real 3,900-entry tree against the designs that preceded this one. The table
+above reproduces the **shapes** at a size a gate can afford; it does not reproduce those magnitudes, and a port should
+quote its own numbers with the tree, build and date rather than these.
+
+## Status
+
+Steps 1–6 of [`plans/next-steps.md`](plans/next-steps.md) are implemented:
+
+- the vectors are a gate: [`src/conformance_test.zig`](src/conformance_test.zig) materialises all 34 cases, and a
+  generated corpus can be run with `-Dvectors=<file>`;
+- the rules table is [`doc/rules.md`](doc/rules.md), with every vector name in a row and every row linked to a test;
+- the bench contract is a CLI ([`src/decide_main.zig`](src/decide_main.zig)), with `--dirs` for directory-only rules;
+- the historical designs are `-Dnaive=true`, measured against the current one in the table above;
+- the porting guide is [`doc/porting.md`](doc/porting.md);
+- the corpus generator is [`conformance/from-git-check-ignore.mjs`](conformance/from-git-check-ignore.mjs), a
+  separate step because it needs a checkout CI will not have.
+
+What remains is **publishing** (step 7): once this project has a version, `fs-meta`'s path dependency
+(`../gitignore` in its `build.zig.zon`) becomes a version range, the way `hr.hrg:wyhash` is consumed. The Java and JS
+ports still consume the vectors and the bench rather than re-deriving them, and a `bench/compare.mjs` that runs
+several ports in one table is a convenience, not a contract.
 
 ## Research: where correctness cases come from
 
 The matcher's rules are documented, but *cases* are what a port is judged on, and a hand-written dozen is not a
-catalog. The plan for gathering sources is deliberately open and belongs in `doc/corpus.md`:
+catalog. The sources are described in [`conformance/README.md`](conformance/README.md), and the one that is automated
+is the checkout:
 
 - **git's own tests** — `t/t0008-ignore.sh` and `t/t7063-status-untracked-cache.sh` in git's tree are the
   authoritative behaviour, written as shell with `.gitignore` fixtures; they can be read as cases, not executed.
@@ -101,18 +150,28 @@ catalog. The plan for gathering sources is deliberately open and belongs in `doc
   generated cases from a checkout must not carry the repository's file contents, only names and rules.
 
 The catalog is a *plan*, not a promise: the first version of this project ships the rules table's cases and the
-`git check-ignore` generator stub, and a port that finds a disagreement is expected to send the case back here.
+[`git check-ignore` generator](conformance/from-git-check-ignore.mjs), and a port that finds a disagreement is
+expected to send the case back here.
 
 ## Using it from Zig
 
 ```zig
-const gitignore = @import("gitignore");
-var stack = try gitignore.Stack.init(allocator, io, root, true);
-const verdict = try stack.decide("src/main/java/Foo.java", false); // include | exclude | no-opinion
+// The import name is the consumer's choice; `fs-meta` mounts the two source files as `gitignore.zig` and
+// `ignore.zig`, which is why these look like file names.
+const ignore = @import("ignore.zig");
+
+var stack = ignore.Stack.init(arena, io, root, true); // no error union; `arena` must outlive the stack
+defer stack.deinit();
+
+const verdict = try stack.decide("src/main/java/Foo.java", false);
+// verdict: ?bool — true = excluded, false = re-included, null = no-opinion
 ```
 
-The library does no file walking of its own: it answers about a path you give it, and caches the chains it built.
-That is what lets a port's own walker use it without adopting its I/O.
+The library does no file walking of its own: it reads the `.gitignore` files under the root you give it, answers about
+a path, and caches the chains it built. That is what lets a port's own walker use it without adopting its I/O. The
+walker-shaped entry point is `ignored(dir_path, name, is_dir)`; `decide(rel_path, is_dir)` is the three-valued form
+the vectors and the bench CLI need, and it also honours an excluded ancestor (which is why it exists next to the
+per-entry one).
 
 ## Licence
 

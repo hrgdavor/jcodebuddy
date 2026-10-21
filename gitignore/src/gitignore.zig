@@ -37,6 +37,9 @@
 //!   trailing `/**` covers everything
 //!   *inside* a directory (not the directory itself), and `a/**/b` covers zero or more directories between
 //!   two segments. Any other run of asterisks is just a run of asterisks.
+//! * **A character class** is `[...]`, `[!...]` or `[^...]`. A `]` immediately after the opener is a member,
+//!   not the terminator (`[]]` is a class holding `]`), and a class that is never closed matches **nothing**:
+//!   git's `wildmatch` aborts the whole pattern, so `[abc` does not even match the literal name `[abc`.
 //! * **Matching is case-sensitive on every platform**, deliberately: a trio is written on one machine and
 //!   read on another, so the ports must agree with each other before they agree with a file system.
 
@@ -407,6 +410,40 @@ pub fn globMatch(pattern: []const u8, path: []const u8) bool {
     return ok[path_count];
 }
 
+/// The same match, written the way the first implementation did it: a recursion that retries the rest of the
+/// pattern at every position after a `**`.
+///
+/// This is deliberately **exponential** on a path with several `**` segments — it is the historical design
+/// kept as a benchmark mode, not an alternative implementation. `-Dnaive=true` builds a CLI that calls this
+/// (through `ignore.decideNaive`); the default executable never references it, so Zig does not analyse it
+/// there (the tests do call it, so the historical path is tested rather than only remembered).
+pub fn globMatchNaive(pattern: []const u8, path: []const u8) bool {
+    var pattern_segments: [max_segments][]const u8 = undefined;
+    var path_segments: [max_segments][]const u8 = undefined;
+    const pattern_count = splitSegments(pattern, &pattern_segments);
+    const path_count = splitSegments(path, &path_segments);
+    if (pattern_count > max_segments or path_count > max_segments) return false;
+    return naiveSegments(pattern_segments[0..pattern_count], path_segments[0..path_count]);
+}
+
+fn naiveSegments(pattern: []const []const u8, path: []const []const u8) bool {
+    if (pattern.len == 0) return path.len == 0;
+    const first = pattern[0];
+    if (std.mem.eql(u8, first, "**")) {
+        // A trailing `**` needs at least one segment (it means "inside"); a middle one matches zero or more.
+        if (pattern.len == 1) return path.len > 0;
+        if (naiveSegments(pattern[1..], path)) return true;
+        var index: usize = 0;
+        while (index < path.len) : (index += 1) {
+            if (naiveSegments(pattern[1..], path[index + 1 ..])) return true;
+        }
+        return false;
+    }
+    if (path.len == 0) return false;
+    if (!wildMatchSegment(first, path[0])) return false;
+    return naiveSegments(pattern[1..], path[1..]);
+}
+
 /// Matches one segment with `*`, `?`, `[...]` and `\` escapes. The text never contains a `/`.
 fn wildMatchSegment(pattern: []const u8, text: []const u8) bool {
     if (pattern.len == 0) return text.len == 0;
@@ -452,14 +489,26 @@ const ClassMatch = struct {
 
 /// Matches one `[...]` class against `ch`. `pattern[0]` is the opening `[`.
 ///
-/// An unterminated class is a literal `[` — git's behaviour, and the Java/Bun ports'. An empty class
-/// matches nothing (a negated empty class does too, matching the ports).
+/// A `]` as the **first** member (after `[`, `[!` or `[^`) is a literal member, not the terminator, which is
+/// what makes `[]]` a class containing `]`. That is git's behaviour and POSIX's, and a port that scans for
+/// the first `]` without this rule reads `[]]` as an empty class and matches nothing.
+///
+/// A class that is never closed matches **nothing** and consumes the rest of the pattern. It is *not* a
+/// literal `[`: git's `wildmatch` reports `ABORT_ALL` for an unterminated bracket expression, so the whole
+/// pattern fails. `[abc` therefore does not match the name `[abc`.
 fn matchClass(pattern: []const u8, ch: u8) ClassMatch {
-    const close_rel = std.mem.indexOfScalar(u8, pattern[1..], ']');
+    // Where the body may start, and the first position that can hold the closing `]`.
+    var index: usize = 1;
+    if (index < pattern.len and (pattern[index] == '!' or pattern[index] == '^')) index += 1;
+    var search = index;
+    if (search < pattern.len and pattern[search] == ']') search += 1;
+
+    const close_rel = std.mem.indexOfScalar(u8, pattern[search..], ']');
     if (close_rel == null) {
-        return .{ .matched = ch == '[', .next = 1 };
+        // Unterminated (or `[]`, which the same rule leaves without a terminator): no text can match.
+        return .{ .matched = false, .next = pattern.len };
     }
-    const close = 1 + close_rel.?;
+    const close = search + close_rel.?;
     const body = pattern[1..close];
     return .{ .matched = classBodyMatches(body, ch), .next = close + 1 };
 }
@@ -635,16 +684,20 @@ test "the three ** forms follow git's rules" {
     }
 }
 
-test "character classes, and an unterminated one" {
-    var rules = try parseForTest("file[0-9].txt\n[!a].txt\nno[class\n");
+test "character classes, a closing bracket first, and an unterminated one" {
+    var rules = try parseForTest("file[0-9].txt\n[!a].txt\n[]]x\nno[class\n");
     defer rules.deinit();
 
     try testing.expect(rules.matches("file7.txt", false));
     try testing.expect(!rules.matches("filex.txt", false));
     try testing.expect(rules.matches("b.txt", false));
     try testing.expect(!rules.matches("a.txt", false));
-    // An unterminated `[` is a literal `[`, the way git treats it.
-    try testing.expect(rules.matches("no[class", false));
+    // `]` immediately after the opener is a member, not the terminator (git's wildmatch, and POSIX).
+    try testing.expect(rules.matches("]x", false));
+    try testing.expect(!rules.matches("x", false));
+    // An unterminated `[` makes the whole pattern unmatchable — git's wildmatch aborts it, so not even the
+    // literal name matches. This is a correction of what the first version and the ports assumed.
+    try testing.expect(!rules.matches("no[class", false));
     try testing.expect(!rules.matches("noXclass", false));
 }
 
@@ -701,4 +754,13 @@ test "the parse owns its bytes and deinit releases them" {
     // `testing.allocator` fails the test on a leak, so this pins the ownership the walker relies on.
     var rules = try Rules.parse(testing.allocator, "*.tmp\n!keep.tmp\n");
     rules.deinit();
+}
+
+test "a question mark matches exactly one byte" {
+    var rules = try parseForTest("a?c\n");
+    defer rules.deinit();
+
+    try testing.expect(rules.matches("abc", false));
+    try testing.expect(!rules.matches("abbc", false));
+    try testing.expect(!rules.matches("ac", false));
 }

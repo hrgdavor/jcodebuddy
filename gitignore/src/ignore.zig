@@ -106,6 +106,34 @@ fn chainMatchText(rule: gitignore.Rule, text: []const u8) bool {
         .glob => gitignore.globMatch(rule.glob, text),
     };
 }
+
+/// `chainRuleMatches` with the historical recursive `**` matcher instead of the segment DP. Only
+/// `decideNaive` calls this.
+fn chainRuleMatchesNaive(rule: gitignore.Rule, path: []const u8, base: []const u8, is_dir: bool) bool {
+    if (!rule.directory_only) return chainMatchTextNaive(rule, if (rule.anchored) path else base);
+    if (is_dir and chainMatchTextNaive(rule, path)) return true;
+    var index: usize = 0;
+    while (index < path.len) : (index += 1) {
+        if (path[index] == '/') {
+            if (chainMatchTextNaive(rule, path[0..index])) return true;
+        }
+    }
+    return false;
+}
+
+fn chainMatchTextNaive(rule: gitignore.Rule, text: []const u8) bool {
+    return switch (rule.kind) {
+        .literal => std.mem.eql(u8, rule.glob, text),
+        .suffix => text.len >= rule.suffix.len and std.mem.endsWith(u8, text, rule.suffix),
+        .glob => gitignore.globMatchNaive(rule.glob, text),
+    };
+}
+
+/// The final segment of a `/`-separated path.
+fn baseName(path: []const u8) []const u8 {
+    const slash = std.mem.lastIndexOfScalar(u8, path, '/') orelse return path;
+    return path[slash + 1 ..];
+}
 pub const Stack = struct {
     arena: std.mem.Allocator,
     io: std.Io,
@@ -120,6 +148,14 @@ pub const Stack = struct {
     chains: std.StringHashMapUnmanaged(*Chain) = .{},
     /// One reused buffer for the path handed to a chain: an entry lookup must not allocate.
     scratch: std.ArrayListUnmanaged(u8) = .empty,
+    /// The same, for the absolute directory a root-relative `decide` asks a chain about. A three-valued
+    /// decision walks the ancestors, so this is hit once per level per path and must not allocate.
+    path_scratch: std.ArrayListUnmanaged(u8) = .empty,
+    /// Whether a root-relative directory is excluded, keyed by that directory. A path list visits the same
+    /// directories many times, and the answer cannot change while this snapshot of the rules is loaded.
+    excluded_dirs: std.StringHashMapUnmanaged(bool) = .{},
+    /// The same cache for `decideNaive`, kept apart so the two implementations cannot hide a disagreement.
+    excluded_dirs_naive: std.StringHashMapUnmanaged(bool) = .{},
 
     pub fn init(arena: std.mem.Allocator, io: std.Io, root: []const u8, respect: bool) Stack {
         return .{ .arena = arena, .io = io, .root = root, .respect = respect };
@@ -130,6 +166,9 @@ pub const Stack = struct {
         self.rules.deinit(self.arena);
         self.checked.deinit(self.arena);
         self.scratch.deinit(self.arena);
+        self.path_scratch.deinit(self.arena);
+        self.excluded_dirs.deinit(self.arena);
+        self.excluded_dirs_naive.deinit(self.arena);
         var it = self.chains.iterator();
         while (it.next()) |entry| {
             entry.value_ptr.*.literals.deinit(self.arena);
@@ -173,6 +212,79 @@ pub const Stack = struct {
         }
         try self.scratch.appendSlice(self.arena, name);
         return chain.decide(self.scratch.items, name, is_dir) orelse false;
+    }
+
+    /// What the chain decides about `rel_path`, a `/`-separated path relative to the stack's root.
+    ///
+    /// `true` means excluded, `false` means the deepest file with an opinion re-includes it, and `null` means
+    /// no `.gitignore` has an opinion — which is **not** "included", because the caller may have a default.
+    ///
+    /// An excluded **ancestor directory** excludes the path below it, because git never enters the directory:
+    /// no rule inside it can re-include anything. That is why the ancestors are asked first, each through the
+    /// chain of *its own* parent (a file inside a directory does not govern the directory itself).
+    pub fn decide(self: *Stack, rel_path: []const u8, is_dir: bool) !?bool {
+        if (!self.respect) return null;
+        var index: usize = 0;
+        while (index < rel_path.len) : (index += 1) {
+            if (rel_path[index] != '/') continue;
+            if (try self.ancestorExcluded(rel_path[0..index])) return true;
+        }
+        return self.decideOne(rel_path, is_dir);
+    }
+
+    /// Whether the directory at `rel_dir` is excluded, answered once per directory. A directory visited by
+    /// many paths is decided once; the rules are a snapshot, so the answer cannot change under this stack.
+    fn ancestorExcluded(self: *Stack, rel_dir: []const u8) !bool {
+        if (self.excluded_dirs.get(rel_dir)) |excluded| return excluded;
+        const excluded = (try self.decideOne(rel_dir, true)) orelse false;
+        try self.excluded_dirs.put(self.arena, try self.arena.dupe(u8, rel_dir), excluded);
+        return excluded;
+    }
+
+    fn ancestorExcludedNaive(self: *Stack, rel_dir: []const u8) !bool {
+        if (self.excluded_dirs_naive.get(rel_dir)) |excluded| return excluded;
+        const excluded = (try self.decideOneNaive(rel_dir, true)) orelse false;
+        try self.excluded_dirs_naive.put(self.arena, try self.arena.dupe(u8, rel_dir), excluded);
+        return excluded;
+    }
+
+    fn decideOne(self: *Stack, rel_path: []const u8, is_dir: bool) !?bool {
+        const chain = (try self.chainForRel(std.fs.path.dirname(rel_path) orelse "")) orelse return null;
+        if (chain.items.len == 0) return null;
+        return chain.decide(rel_path, baseName(rel_path), is_dir);
+    }
+
+    /// The historical `decide`: test every rule of the chain, in precedence order, with the recursive `**`
+    /// matcher. This is the design that was superlinear in a real tree; it exists for `-Dnaive=true` bench
+    /// builds, and the default executable never calls it (the tests do, so it cannot rot).
+    pub fn decideNaive(self: *Stack, rel_path: []const u8, is_dir: bool) !?bool {
+        if (!self.respect) return null;
+        var index: usize = 0;
+        while (index < rel_path.len) : (index += 1) {
+            if (rel_path[index] != '/') continue;
+            if (try self.ancestorExcludedNaive(rel_path[0..index])) return true;
+        }
+        return self.decideOneNaive(rel_path, is_dir);
+    }
+
+    fn decideOneNaive(self: *Stack, rel_path: []const u8, is_dir: bool) !?bool {
+        const chain = (try self.chainForRel(std.fs.path.dirname(rel_path) orelse "")) orelse return null;
+        const name = baseName(rel_path);
+        for (chain.items) |rule| {
+            if (chainRuleMatchesNaive(rule, rel_path, name, is_dir)) return !rule.negated;
+        }
+        return null;
+    }
+
+    /// The chain governing a root-relative directory, with the absolute path the readers need.
+    fn chainForRel(self: *Stack, rel_dir: []const u8) !?*Chain {
+        if (rel_dir.len == 0) return self.chainFor(self.root);
+        self.path_scratch.clearRetainingCapacity();
+        try self.path_scratch.appendSlice(self.arena, self.root);
+        const last = if (self.root.len > 0) self.root[self.root.len - 1] else '/';
+        if (last != '/' and last != '\\') try self.path_scratch.append(self.arena, '/');
+        try self.path_scratch.appendSlice(self.arena, rel_dir);
+        return self.chainFor(self.path_scratch.items);
     }
 
     /// The flattened matcher for `dir_path`, built once per deepest rules file and cached there.
@@ -244,7 +356,8 @@ pub const Stack = struct {
         chain.suffixes = try suffixes.toOwnedSlice(self.arena);
         chain.wilds = try wilds.toOwnedSlice(self.arena);
         chain.anchored = try anchored.toOwnedSlice(self.arena);
-        try self.chains.put(self.arena, key, chain);
+        // The key can point into the caller's scratch buffer, so the cache owns its own copy.
+        try self.chains.put(self.arena, try self.arena.dupe(u8, key), chain);
         return chain;
     }
 
@@ -309,7 +422,22 @@ test "the deepest .gitignore wins, and a negation re-includes" {
     try testing.expect(try stack.ignored(root, "build", true));
     try testing.expect(!try stack.ignored(root, ".gitignore", false)); // the rule file itself is visible
 
+    // The three-valued form: the same answers, plus the absence of an opinion, and an excluded ancestor
+    // excludes what is below it even when a negation would re-include the file from inside.
+    try testing.expectEqual(@as(?bool, true), try stack.decide("x.log", false));
+    try testing.expectEqual(@as(?bool, false), try stack.decide("keep.log", false));
+    try testing.expectEqual(@as(?bool, false), try stack.decide("src/keep.log", false));
+    try testing.expectEqual(@as(?bool, true), try stack.decide("build/x.txt", false));
+    try testing.expectEqual(@as(?bool, null), try stack.decide("other.txt", false));
+
+    // The historical path to the same answers, kept for the bench build.
+    try testing.expectEqual(@as(?bool, true), try stack.decideNaive("x.log", false));
+    try testing.expectEqual(@as(?bool, false), try stack.decideNaive("src/keep.log", false));
+    try testing.expectEqual(@as(?bool, true), try stack.decideNaive("build/x.txt", false));
+    try testing.expectEqual(@as(?bool, null), try stack.decideNaive("other.txt", false));
+
     var off = Stack.init(arena, io, root, false);
     defer off.deinit();
     try testing.expect(!try off.ignored(root, "x.log", false)); // respect = false lists everything
+    try testing.expectEqual(@as(?bool, null), try off.decide("x.log", false));
 }
