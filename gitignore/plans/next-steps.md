@@ -12,7 +12,7 @@ D:\wrk\zig\17\zig.exe build test --cache-dir .zig-cache\local --summary all
 ```
 
 Status (2026-10-21): **steps 1–6 are implemented**; step 7 waits on a published version. The `test` step succeeds
-with 16 distinct tests (13 matcher, 1 chain, 2 conformance); `zig build test` reports 13, 14 and 16 per binary
+with 17 distinct tests (14 matcher, 1 chain, 2 conformance); `zig build test` reports 14, 15 and 17 per binary
 because `ignore.zig` imports the matcher's tests, so its binary counts them again.
 
 ## 1. The Zig vector runner
