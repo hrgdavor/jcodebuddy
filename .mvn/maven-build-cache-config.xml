@@ -88,17 +88,9 @@
                 <include>../merge-java/docs</include>
                 <include>../../merge-java/docs</include>
                 <include>../../../merge-java/docs</include>
-                <!-- fs-meta's conformance vectors, which its Java tests read off disk
-                     (`FsMetaConformanceTest`, `GitIgnoreVectorsTest`). MEASURED 2026-10-16, by appending a
-                     newline to the file and re-running the module: without this entry the checksum stayed at
-                     51726c11278b09bb, so a cached run would have reported SUCCESS with the vectors' own tests
-                     skipped - the F-47 shape this list exists to prevent. With it, the same edit moves the
-                     checksum. `fs-meta/js/**` is deliberately NOT here: the Maven build reads none of it, and
-                     the Bun port's tests are run by `bun test fs-meta/js`, which no Maven cache entry can
-                     answer for. The bare form resolves for `fs-meta` only (no other module has a
-                     `conformance/` directory), which is exactly the scope wanted. -->
-                <include>conformance</include>
-                <!-- a module's own documentation, where its tests read it -->
+                <!-- fs-meta moved to github.com/hrgdavor/fs-meta on 2026-10-23, so its conformance vectors are no
+                       longer a cache input here: the module and its tests left with it. -->
+                                <!-- a module's own documentation, where its tests read it -->
                 <include>docs</include>
                 <include>../docs</include>
                 <include>../../docs</include>

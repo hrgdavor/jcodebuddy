@@ -22,7 +22,7 @@
  * `jsch*`, `ecj`, `slf4j`).
  *
  * **Recorded amendment, 2026-10-16 (maintainer): standalone packages in this checkout are not "this
- * workspace".** `hr.hrg:fs-meta` (`fs-meta/`) has its own group id, its own artifact id, its own version and
+ * workspace".** `hr.hrg:fs-meta` (github.com/hrgdavor/fs-meta since 2026-10-23) has its own group id, its own artifact id, its own version and
  * **no parent**, and carries no workspace dependency of its own; a `watch/*` module **may** depend on it, and
  * that is the point: the watcher is the writer of the trio that project defines. The amendment named a second
  * package — the `wyhash` project — and since 2026-10-16 that one is not a package *in this checkout* at all: it
