@@ -244,7 +244,8 @@ class ProjectAutomationIsolationTest {
                         return !relative.contains("/target/")
                                 && !relative.startsWith("target/")
                                 && !relative.startsWith(".kilo/")
-                && !relative.contains("/.kilo/")
+                                && !relative.contains("/.kilo/")
+                                && !relative.startsWith("node_modules/")                                 && !relative.contains("/node_modules/")                                 && !relative.startsWith(".tmp/")                                 && !relative.contains("/.tmp/");
                     })
                     .sorted()
                     .toList();
