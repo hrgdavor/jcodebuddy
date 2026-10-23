@@ -97,8 +97,6 @@
         <module>jcodebuddy/jcodebuddy-meta-mcp</module>
         <module>jcodebuddy/metadata-arena</module>
         <module>merge-java</module>
-        <!-- The file-system state contract a watcher maintains and every other tool reads: one 64-byte
-             entry per file, so "has this changed?" is a cache-line read rather than a tree walk. It is in
      <!-- fs-meta was a reactor module until 2026-10-23; it now lives at github.com/hrgdavor/fs-meta and is
           consumed as a project of its own, the way wyhash is. Its conformance vectors and its Java and Bun
           implementations moved with it. -->
