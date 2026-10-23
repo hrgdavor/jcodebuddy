@@ -1,5 +1,12 @@
 # Next steps — gitignore
 
+## Status
+
+Done: step 1 (the vectors are a test), step 2 (`doc/rules.md`), step 3 (the `ignore-decide` CLI), step 5
+(`doc/porting.md`), step 6 (the corpus generator). Step 4 is half done: `-Dnaive` and the `backtrack` workload
+exist, but the bench table does not yet report the historical failures as its own modes. Step 7 (publish) is open.
+
+
 Runnable plan for the project that now owns the matcher, the chain, the vectors and the benchmarks. Each step states
 what it changes, the command that proves it, and how to commit it. Steps 1–3 are the ones that turn the contract from
 written into enforced; do them in order.
