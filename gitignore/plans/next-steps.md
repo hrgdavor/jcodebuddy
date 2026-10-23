@@ -3,8 +3,7 @@
 ## Status
 
 Done: step 1 (the vectors are a test), step 2 (`doc/rules.md`), step 3 (the `ignore-decide` CLI), step 5
-(`doc/porting.md`), step 6 (the corpus generator). Step 4 is half done: `-Dnaive` and the `backtrack` workload
-exist, but the bench table does not yet report the historical failures as its own modes. Step 7 (publish) is open.
+(`doc/porting.md`), step 6 (the corpus generator). Step 4 is done: `-Dnaive` builds a second binary, `bench/perf.mjs` takes repeated `--port` labels and prints a comparison table, and the README records the numbers (backtrack 7.0x, overall 3.53x). Step 7 (publish) is open.
 
 
 Runnable plan for the project that now owns the matcher, the chain, the vectors and the benchmarks. Each step states

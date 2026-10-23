@@ -83,13 +83,16 @@ function* generated() {
 }
 
 const emit = process.argv.includes('--emit');
-const port_at = process.argv.indexOf('--port');
-const port = port_at >= 0 ? process.argv[port_at + 1] : null;
+const ports = [];
+for (let index = 0; index < process.argv.length; index += 1) {
+  if (process.argv[index] !== '--port') continue;
+  const spec = process.argv[index + 1] ?? '';
+  const equals = spec.indexOf('=');
+  // `--port "label=command …"` names the row; a bare command uses the executable's own name.
+  ports.push(equals > 0 ? { label: spec.slice(0, equals), command: spec.slice(equals + 1) } : { label: null, command: spec });
+}
 const repeat_at = process.argv.indexOf('--repeat');
 const repeat = repeat_at >= 0 ? Number(process.argv[repeat_at + 1] ?? 5) : 5;
-// `--label` names the row, so two builds of one port (for example `-Dnaive=true`) can be reported side by side.
-const label_at = process.argv.indexOf('--label');
-const label = label_at >= 0 ? process.argv[label_at + 1] : null;
 
 mkdirSync(out, { recursive: true });
 const workloads = [];
@@ -102,35 +105,57 @@ for (const workload of generated()) {
   console.log(`${workload.name.padEnd(11)} ${String(workload.rules.length).padStart(4)} rules  ${String(workload.paths.length).padStart(5)} paths`);
 }
 
-if (emit || !port) {
-  console.log(`\nwritten to ${out}/; point a port at them with --port "<command> --rules <file.gitignore> --paths <file.paths>"`);
+if (emit || ports.length === 0) {
+  console.log(
+    `\nwritten to ${out}/; time a port with --port "<label>=<command> --rules {rules} --paths {paths}", repeated for each port`,
+  );
   process.exit(0);
 }
 
-// A port is measured by wall time over the whole path list, best of `repeat`, and the number is ns per decision.
-const template = port.split(' ').filter(Boolean);
-const port_label = label ?? template[0].split('/').pop();
+// One row per workload per port. The measurement is wall time of a process over the whole path list, best of
+// `repeat`, so it includes the port's start-up: that is the number a port's users feel, and it is the same
+// overhead for every row.
 console.log('\n| workload | port | verdicts | best ms | ns/decision |');
 console.log('| -------- | ---- | -------: | ------: | ----------: |');
+const totals = new Map();
 for (const workload of workloads) {
-  let best = Infinity;
-  for (let attempt = 0; attempt < repeat; attempt += 1) {
-    const args = template.map((part) => part.replace('{rules}', workload.rules_path).replace('{paths}', workload.paths_path));
-    const started = performance.now();
-    const result = spawnSync(args[0], args.slice(1), { stdio: ['ignore', 'pipe', 'inherit'] });
-    const elapsed = performance.now() - started;
-    if (result.status !== 0) {
-      console.log(`| ${workload.name} | ${port_label} | - | failed (${result.status}) | - |`);
-      break;
+  for (const port of ports) {
+    const template = port.command.split(' ').filter(Boolean);
+    const label = port.label ?? template[0].split(/[\\/]/).pop();
+    let best = Infinity;
+    let verdicts = 0;
+    let failed = false;
+    for (let attempt = 0; attempt < repeat; attempt += 1) {
+      const args = template.map((part) => part.replace('{rules}', workload.rules_path).replace('{paths}', workload.paths_path));
+      const started = performance.now();
+      const result = spawnSync(args[0], args.slice(1), { stdio: ['ignore', 'pipe', 'inherit'] });
+      const elapsed = performance.now() - started;
+      if (result.status !== 0) {
+        console.log(`| ${workload.name} | ${label} | failed (${result.status}) | | |`);
+        failed = true;
+        break;
+      }
+      verdicts = String(result.stdout ?? '').trim().split('\n').filter(Boolean).length;
+      if (verdicts !== workload.paths.length) {
+        console.log(`| ${workload.name} | ${label} | ${verdicts} != ${workload.paths.length} | | |`);
+        failed = true;
+        break;
+      }
+      best = Math.min(best, elapsed);
     }
-    const lines = String(result.stdout ?? '').trim().split('\n').filter(Boolean).length;
-    if (lines !== workload.paths.length) {
-      console.log(`| ${workload.name} | ${port_label} | ${lines} | verdict count != ${workload.paths.length} | - |`);
-      break;
-    }
-    best = Math.min(best, elapsed);
+    if (failed) continue;
+    totals.set(label, (totals.get(label) ?? 0) + best);
+    console.log(
+      `| ${workload.name} | ${label} | ${verdicts} | ${best.toFixed(1)} | ${((best * 1e6) / workload.paths.length).toFixed(0)} |`,
+    );
   }
-  if (Number.isFinite(best)) {
-    console.log(`| ${workload.name} | ${port_label} | ${workload.paths.length} | ${best.toFixed(1)} | ${((best * 1e6) / workload.paths.length).toFixed(0)} |`);
+}
+
+if (ports.length > 1) {
+  console.log('\n| port | total ms over all workloads | vs fastest |');
+  console.log('| ---- | ---------------------------: | ---------: |');
+  const fastest = Math.min(...totals.values());
+  for (const [label, total] of [...totals.entries()].sort((left, right) => left[1] - right[1])) {
+    console.log(`| ${label} | ${total.toFixed(1)} | ${(total / fastest).toFixed(2)}x |`);
   }
 }
