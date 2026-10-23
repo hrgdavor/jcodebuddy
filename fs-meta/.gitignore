@@ -1,2 +1,0 @@
-# the package cache zig fetch materialises: third-party sources, not ours to commit or link-check
-zig-pkg/
