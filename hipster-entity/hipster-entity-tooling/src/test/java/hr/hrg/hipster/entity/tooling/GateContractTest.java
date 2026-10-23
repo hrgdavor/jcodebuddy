@@ -36,7 +36,7 @@ class GateContractTest {
             "jcodebuddy-core", "jcodebuddy-generated", "jcodebuddy-meta", "jcodebuddy-meta-mcp",
             "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling", "hipster-entity-jackson",
             "hipster-entity-test", "hipster-entity-example", "hipster-ioc-api", "hipster-ioc-tooling",
-            "hipster-ioc-test", "project-automation", "fs-meta");
+            "hipster-ioc-test", "project-automation");
 
     /**
      * {@code -Dmaven.compiler.useIncrementalCompilation=false} is the other half of F-47's fix. {@code clean}

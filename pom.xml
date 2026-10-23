@@ -102,7 +102,6 @@
              the gate because the format is a contract between tools that do not build together — the
              conformance vectors in `fs-meta/conformance/` are asserted by a Java implementation and a Bun
              implementation today, and a Zig one when it lands. See fs-meta/FORMAT.md. -->
-        <module>fs-meta</module>
         <!-- `wyhash` was a module here until 2026-10-16. It has its own repository
              (github.com/hrgdavor/wyhash) and is consumed as the artifact `hr.hrg:wyhash`; it is deliberately
              NOT in this list, because the reactor and the gate build what this repository owns (DEC-050). -->

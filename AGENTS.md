@@ -785,9 +785,10 @@ canonical statement of a boundary that has no other home.
   construction — their own group id, artifact id, version and **no parent** — and carry no workspace dependency
   of their own:
 
-  - **`hr.hrg:fs-meta`** ([`fs-meta/`](fs-meta/FORMAT.md)) — the file-system state trio a watcher maintains and
-    every other tool reads. The watcher is the *writer* of that trio, so this is the dependency the rule would
-    otherwise forbid by accident.
+  - **`hr.hrg:fs-meta`** ([github.com/hrgdavor/fs-meta](https://github.com/hrgdavor/fs-meta)) — the file-system state
+    trio a watcher maintains and every other tool reads. **Since 2026-10-23 it is not a package in this checkout**:
+    the project has its own repository, as `wyhash` does, and is consumed as an artifact or a checkout. The watcher is
+    the *writer* of that trio, so this is the dependency the rule would otherwise forbid by accident.
   - **`hr.hrg:wyhash`** — one hash, one definition, ports aligned by shared vectors;
     `hr.hrg:wyhash:1.0.0` is already what `java-watch-core` hashes with. **Since 2026-10-16 it is not a
     package in this checkout**: the project has its own repository ([github.com/hrgdavor/wyhash](https://github.com/hrgdavor/wyhash))
