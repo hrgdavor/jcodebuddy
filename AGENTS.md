@@ -795,9 +795,9 @@ canonical statement of a boundary that has no other home.
     and is consumed as an artifact — a *stronger* version of the same permission rather than a narrower one.
     See DEC-050.
 
-  A `watch/*` module may therefore depend on those two, and on nothing else from this checkout. `fs-meta` is in
-  the reactor so that the gate builds it, which is a build relationship rather than a namespace: what makes it
-  legal here is that it names no `jcodebuddy`/`hipster` type and resolves no Jackson or OpenRewrite.
+  A `watch/*` module may therefore depend on those two, and on nothing else from this checkout. Neither is built
+  here any more: what makes the dependency legal is that it names no `jcodebuddy`/`hipster` type and resolves no
+  Jackson or OpenRewrite, and that is a property of the project rather than of where its sources sit.
   `hr.hrg:wyhash` reaches a consumer the ordinary way — a released artifact, or the local repository.
   `check-watch-standalone.js` reads the rule the same way — its regexes never matched these coordinates, and its
   header now says why that is a decision rather than luck.
