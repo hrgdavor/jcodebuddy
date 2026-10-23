@@ -348,6 +348,12 @@ satisfiable because the artifact was being installed. Either one alone would hav
 
 ## 2. Other rules you are expected to follow
 
+- **`glob` is abandoned and strictly not supported; `wildmatch` is the only wildcard syntax.** The ecosystem rule, as
+  given: wildcard file matching uses git's `wildmatch` semantics as implemented by the `gitignore` project
+  (DEC-051), in `jcodebuddy` as well as in `fs-meta` and `gitignore`. No glob dialect — braces, extglob, PCRE — is
+  accepted anywhere; a pattern that looks like one is read by `wildmatch`'s rules. `java-watch*` predates the decision
+  and is exempt for now.
+
 Most of these come from existing project files and are recorded here as a
 reminder with pointers rather than as new policy; the `proto/` rule is the
 canonical statement of a boundary that has no other home.
