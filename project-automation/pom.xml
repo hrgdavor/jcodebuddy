@@ -26,6 +26,13 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>java-watch-core</artifactId>
         </dependency>
+        <!-- `SourceFiles` matches with git's wildmatch, from the project that owns it (DEC-051), the
+             same artifact `fs-meta` consumes. Declared here because this module imports it directly,
+             rather than relying on `java-watch-core`'s transitive use of it. -->
+        <dependency>
+            <groupId>hr.hrg</groupId>
+            <artifactId>gitignore</artifactId>
+        </dependency>
         <!-- The dev-time pass drives the hipster-ioc generator (DEC-036 § 11, plan step 3.9). One direction only:
              the generator's module must never depend on a project-automation module (AGENTS.md § 1.1). -->
         <dependency>

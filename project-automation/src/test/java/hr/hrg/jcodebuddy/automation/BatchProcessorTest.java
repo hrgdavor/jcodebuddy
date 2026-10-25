@@ -112,7 +112,7 @@ class BatchProcessorTest {
     }
 
     @Test
-    void processMatchingUsesARealGlob() throws IOException {
+    void processMatchingUsesWildmatch() throws IOException {
         AutomationEngine engine = new AutomationEngine();
         engine.register(TestTransformation.identity("noop"));
         write("RootController.java", "class A {}\n");
@@ -121,13 +121,14 @@ class BatchProcessorTest {
         BatchProcessor processor = new BatchProcessor(engine, 1);
 
         try {
-            // `*Controller.java` does not cross a directory boundary in a glob, so it is the root only —
-            // the sketch's `path.toString().matches(glob)` against the absolute path matched neither.
-            assertEquals(List.of("RootController.java"),
+            // A pattern with no separator is a basename at any depth in wildmatch, and a leading slash
+            // anchors it: `/*Controller.java` is the root only, while `*Controller.java` is both.
+            // RootController.java is first because files are sorted by path, and 'R' sorts before 'a'.
+            assertEquals(List.of("RootController.java", "NestedController.java"),
                     names(processor.processMatching(root, "*Controller.java", "noop")));
-            // `**/` means "anywhere", which includes the root: Java's own glob would have missed
-            // RootController.java here (SourceFiles explains the deviation). RootController.java is first
-            // because files are sorted by path, and 'R' sorts before 'a'.
+            assertEquals(List.of("RootController.java"),
+                    names(processor.processMatching(root, "/*Controller.java", "noop")));
+            // `**/` is zero or more directories, so it includes the root as well.
             assertEquals(List.of("RootController.java", "NestedController.java"),
                     names(processor.processMatching(root, "**/*Controller.java", "noop")));
             assertEquals(List.of("NestedController.java", "PersonService.java"),

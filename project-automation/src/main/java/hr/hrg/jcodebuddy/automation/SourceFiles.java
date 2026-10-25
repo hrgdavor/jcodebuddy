@@ -1,11 +1,11 @@
 package hr.hrg.jcodebuddy.automation;
 
+import hr.hrg.gitignore.GitIgnoreFile;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 /**
  * Which files an automation run covers.
  *
- * <h3>Deterministic order, and a real glob</h3>
+ * <h3>Deterministic order, and wildmatch</h3>
  * <p>Two things the plan's sketch got wrong and this class fixes, both of which only show up on a real
  * tree:</p>
  * <ul>
@@ -23,12 +23,12 @@ import java.util.stream.Stream;
  *       has already paid for an unstable iteration order once — a {@code HashMap} over markers made two
  *       runs of the generator emit byte-different output. Files are returned <strong>sorted by path</strong>
  *       so a report is reproducible.</li>
- *   <li><strong>Glob.</strong> The sketch matched with {@code path.toString().matches(globPattern)}, which
- *       treats the pattern as a regular expression against the <em>whole absolute path</em> — so
- *       {@code "*Controller.java"} matches nothing at all, and {@code ".*Controller.java"} would match
- *       everything. {@link PathMatcher} is the glob engine the JDK actually provides, and
- *       {@link #findJavaFilesMatching} uses it, so {@code "**&#47;*Controller.java"} and
- *       {@code "*Controller.java"} both mean what a reader expects.</li>
+ *   <li><strong>Wildmatch.</strong> The sketch matched with {@code path.toString().matches(globPattern)},
+ *       which treats the pattern as a regular expression against the <em>whole absolute path</em> — so
+ *       {@code "*Controller.java"} matched nothing, and {@code ".*Controller.java"} would match
+ *       everything. Matching is now git's {@code wildmatch}, read by the published
+ *       {@code hr.hrg:gitignore} matcher (DEC-051): {@code "**&#47;*Controller.java"} is a controller at
+ *       any depth, and a leading {@code /} anchors a pattern to the source root.</li>
  * </ul>
  *
  * <p>Generated and derived trees are skipped: {@code target/} (build output) and {@code .jcodebuddy/}
@@ -72,56 +72,33 @@ public final class SourceFiles {
     }
 
     /**
-     * The {@code .java} files under {@code sourceRoot} whose path matches {@code glob}.
+     * The {@code .java} files under {@code sourceRoot} whose path matches {@code pattern}.
      *
      * <p>The pattern is matched against the <strong>path relative to {@code sourceRoot}</strong> with
      * forward slashes, so the same pattern means the same thing on every platform and does not depend on
-     * where the tree happens to live: {@code "**&#47;*Controller.java"} is every controller in the tree,
-     * {@code "*Controller.java"} is only those at the root of it.</p>
+     * where the tree happens to live. Matching is git's {@code wildmatch}, as implemented by
+     * {@code hr.hrg:gitignore} (DEC-051): {@code "**&#47;*Controller.java"} is a controller at any depth,
+     * a pattern with no separator ({@code "*Controller.java"}) is that basename at any depth, and a
+     * leading {@code /} ({@code "&#47;*Controller.java"}) anchors it to the root. There is no second
+     * dialect — braces and extglob are not expanded, and {@code *} never crosses a {@code /}.</p>
      *
-     * <p><strong>One deviation from the JDK's glob, on purpose.</strong> In Java's glob a {@code **}
-     * segment must stand for at least one directory, so {@code "**&#47;*Controller.java"} does
-     * <em>not</em> match a controller sitting at the root of the tree — measured, not assumed. A caller who
-     * writes that pattern means "a controller anywhere", and silently missing the root-level ones is
-     * exactly the class of quiet omission this class exists to remove, so a leading {@code **&#47;} is also
-     * tried as a root-level pattern. {@code "*Controller.java"} keeps its literal meaning: the root, and
-     * nothing below it.</p>
-     *
-     * @param glob a glob such as {@code "**&#47;*Controller.java"} or {@code "a/b/*.java"}; {@code *} does
-     *             not cross a directory boundary in a glob, which is why the recursive form is {@code **}
-     * @throws IllegalArgumentException when the pattern is null, empty, or not a valid glob
+     * @param pattern a wildmatch pattern such as {@code "**&#47;*Controller.java"} or {@code "a/b/*.java"}
+     * @throws IllegalArgumentException when the pattern is null or empty
      */
-    public static List<Path> findJavaFilesMatching(Path sourceRoot, String glob) {
+    public static List<Path> findJavaFilesMatching(Path sourceRoot, String pattern) {
         Path root = requireDirectory(sourceRoot);
-        if (glob == null || glob.isEmpty()) {
-            throw new IllegalArgumentException("globPattern cannot be null or empty");
+        if (pattern == null || pattern.isEmpty()) {
+            throw new IllegalArgumentException("pattern cannot be null or empty");
         }
-        List<PathMatcher> matchers = new ArrayList<>(2);
-        matchers.add(compile(glob));
-        if (glob.startsWith("**/")) {
-            matchers.add(compile(glob.substring("**/".length())));
-        }
+        GitIgnoreFile matcher = GitIgnoreFile.parse("", pattern);
         List<Path> matched = new ArrayList<>();
         for (Path file : findJavaFiles(root)) {
             String relative = root.relativize(file).toString().replace('\\', '/');
-            Path relativePath = FileSystems.getDefault().getPath(relative);
-            for (PathMatcher matcher : matchers) {
-                if (matcher.matches(relativePath)) {
-                    matched.add(file);
-                    break;
-                }
+            if (matcher.decide(relative, false).orElse(false)) {
+                matched.add(file);
             }
         }
         return List.copyOf(matched);
-    }
-
-    /** Compiles one glob, reporting an unparseable pattern as a caller error. */
-    private static PathMatcher compile(String glob) {
-        try {
-            return FileSystems.getDefault().getPathMatcher("glob:" + glob);
-        } catch (RuntimeException e) {
-            throw new IllegalArgumentException("not a valid glob: '" + glob + "'", e);
-        }
     }
 
     /** Whether any path segment of {@code path} below {@code root} is an excluded directory. */

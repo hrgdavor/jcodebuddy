@@ -22,6 +22,13 @@
             <version>${wyhash.version}</version>
         </dependency>
 
+        <!-- The watcher's path filter is git's wildmatch, not a glob of its own: `FileFilter` calls
+             `hr.hrg.gitignore`, the same standalone project `fs-meta` consumes (DEC-051). -->
+        <dependency>
+            <groupId>hr.hrg</groupId>
+            <artifactId>gitignore</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>io.methvin</groupId>
             <artifactId>directory-watcher</artifactId>

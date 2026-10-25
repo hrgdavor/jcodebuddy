@@ -3,6 +3,7 @@
 package hr.hrg.watch2.scp;
 
 import hr.hrg.watch2.core.ChecksumDatabase;
+import hr.hrg.watch2.core.FileFilter;
 import hr.hrg.watch2.core.WatchConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -329,10 +330,11 @@ public class WatchScpApp {
         }
 
         ChecksumDatabase db = new ChecksumDatabase();
+        FileFilter filter = new FileFilter(sourceDir.toPath(), config.getCreateIncludes(),
+                config.getCreateExcludes());
         try (Stream<Path> paths = java.nio.file.Files.walk(sourceDir.toPath())) {
             paths.filter(java.nio.file.Files::isRegularFile)
-                    .filter(path -> shouldIncludeFile(sourceDir.toPath(), path, config.getCreateIncludes(),
-                            config.getCreateExcludes()))
+                    .filter(filter::shouldInclude)
                     .forEach(path -> {
                         String relPath = sourceDir.toPath().relativize(path).toString().replace('\\', '/');
                         try {
@@ -355,37 +357,6 @@ public class WatchScpApp {
             System.out.println("Successfully created " + dbFile.getAbsolutePath());
         } catch (IOException e) {
             System.err.println("Error saving database: " + e.getMessage());
-        }
-    }
-
-    private static boolean shouldIncludeFile(Path sourcePath, Path file, List<String> includes, List<String> excludes) {
-        String relPath = sourcePath.relativize(file).toString().replace('\\', '/');
-
-        for (String pat : excludes) {
-            if (matchPattern(relPath, pat))
-                return false;
-        }
-        if (!includes.isEmpty()) {
-            for (String pat : includes) {
-                if (matchPattern(relPath, pat))
-                    return true;
-            }
-            return false;
-        }
-        return true;
-    }
-
-    private static boolean matchPattern(String path, String pattern) {
-        // Basic glob to regex conversion: * -> .*, ** -> .*
-        String regex = pattern.replace(".", "\\.")
-                .replace("**/", "(.*/)?")
-                .replace("**", ".*")
-                .replace("*", "[^/]*")
-                .replace("?", ".");
-        try {
-            return path.matches(regex);
-        } catch (Exception e) {
-            return false;
         }
     }
 }

@@ -131,15 +131,15 @@ public class BatchProcessor {
     }
 
     /**
-     * Runs one transformation over the files matching a glob, without writing.
+     * Runs one transformation over the files matching a wildmatch pattern, without writing.
      *
      * <p>Useful for the report-only passes this repository actually runs — every {@code *_.java} field
-     * enum, every controller — and the reason {@link SourceFiles#findJavaFilesMatching} had to be a real
-     * glob rather than a regular expression over an absolute path.</p>
+     * enum, every controller — and the reason {@link SourceFiles#findJavaFilesMatching} had to match
+     * paths rather than a regular expression over an absolute path.</p>
      */
-    public BatchReport processMatching(Path sourceRoot, String glob, String transformationName) {
+    public BatchReport processMatching(Path sourceRoot, String pattern, String transformationName) {
         requireRegistered(transformationName);
-        List<Path> files = SourceFiles.findJavaFilesMatching(sourceRoot, glob);
+        List<Path> files = SourceFiles.findJavaFilesMatching(sourceRoot, pattern);
         List<TransformationResult> results = new ArrayList<>();
         for (Path file : files) {
             results.add(engine.apply(file, transformationName));
