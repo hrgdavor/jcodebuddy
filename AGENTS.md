@@ -351,10 +351,8 @@ satisfiable because the artifact was being installed. Either one alone would hav
 - **`glob` is abandoned and strictly not supported; `wildmatch` is the only wildcard syntax.** The ecosystem rule, as
   given: wildcard file matching uses git's `wildmatch` semantics as implemented by the `gitignore` project
   (DEC-051), in `jcodebuddy` as well as in `fs-meta` and `gitignore`. No glob dialect — braces, extglob, PCRE — is
-  accepted anywhere; a pattern that looks like one is read by `wildmatch`'s rules. `java-watch*` predated the decision and was exempt
-  `for now`; **as of 2026-10-25 it complies** - `FileFilter` parses and decides with `hr.hrg:gitignore:0.3.3`, and the
-  hand-written glob-to-regex copy in `java-watch-scp` and the JDK `glob:` matcher are gone - so the exemption has nothing
-  left to cover.
+  accepted anywhere; a pattern that looks like one is read by `wildmatch`'s rules. `java-watch*` predates the decision
+  and is exempt for now.
 
 Most of these come from existing project files and are recorded here as a
 reminder with pointers rather than as new policy; the `proto/` rule is the
