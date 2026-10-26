@@ -5,15 +5,15 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 8 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
+**What is left: 7 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
 3.8, then a **design step**: on 2026-10-10 its design landed as
 [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md), the maintainer **accepted** it, and both
 steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
 and **3.11b** (the live-application entry point, documented and verified). What DEC-049 still leaves open is its
-two *optional* steps, **3.11c** (the generator emitting a bean FQN, only if beans should be clickable) and
-**3.11d** (wiring the page build into the recorded pass). The rest: **5.3** (the ACP spike, a person) and **8.1–8.5**
-(observations on a real editor). A step is ticked from a dated `Done` record in its own body, never from a
-"**Done when:**" criterion.
+*optional* step, **3.11c** (the generator emitting a bean FQN, only if beans should be clickable); **3.11d**
+(wiring the page build into the recorded pass) was closed on 2026-10-26. The rest: **5.3** (the ACP spike, a
+person) and **8.1–8.5** (observations on a real editor). A step is ticked from a dated `Done` record in its own
+body, never from a "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still
@@ -568,6 +568,23 @@ The step's `[TBD]` was a design it did not have, and it now has one:
 - **Evidence for the docs half**: `check-repo-links.mjs` green (285 files, 1890 links) and
   `webview/check-links.mjs` green (240 links), with `md-fix-tables` run over every changed document.
 
+**Done 2026-10-26 — one command regenerates and verifies the page.**
+
+- **`scripts/ioc-gen.js` gained the two flags**: `--graph` runs the generator, then the page build (write), then
+  the build's `--check`; `--graph-check` runs the check without writing. The build is invoked with
+  `--project=<repo root>`, which the script already knows; `JCODEBUDDY_JSX6_DIR` stays the build's own checkout
+  variable (AGENTS.md § 2).
+- **Measured**: `bun scripts/ioc-gen.js --graph` exit 0 — generator wrote `contexts.json`, the build wrote
+  `graph.html` (**121521 bytes**) and its check reported `ok graph.html is current`; the one unresolved name is
+  still reported (`ObjectMapper`, step 3.11c's optional subject), not dropped.
+- **The script's Maven invocation now passes `-Dmaven.build.cache.skipSave=true`** because it is a `test-compile`,
+  never a test run; a cache entry saved without tests is the false-green hazard `doc/AGENTS.md` records.
+- **The page's README** lists `bun scripts/ioc-gen.js --graph` as the command that regenerates and verifies, and keeps
+  the manual `build.js` invocation for a one-off build.
+- **Evidence**: `bun scripts/ioc-gen.js --graph` exit 0 as above; `--graph-check` the same check without a write;
+  `LINKS` green; **GATE** — `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (8:53), with `hipster-entity-tooling` at
+  **525 tests, 0 failures**; a `scripts/` change is a global cache input, so the gate re-checksummed every module.
+
 ---
 
 ## 8. Phase 4 — merge-java: Phase 9's residue and Phase 13
@@ -873,20 +890,22 @@ a decision that is not made** — deliberately unscheduled, with the decision na
 it is not the same as `[~]`, which waits on something outside the plan, nor as `[ ]`, which is ready to
 start)
 
-| Step  | What                                                                                            | Who                         | Size | State                                                                                       |
-| ----- | ----------------------------------------------------------------------------------------------- | --------------------------- | ---- | ------------------------------------------------------------------------------------------- |
+| Step  | What                                                                                            | Who                         | Size | State                                                                                         |
+| ----- | ----------------------------------------------------------------------------------------------- | --------------------------- | ---- | --------------------------------------------------------------------------------------------- |
 | 3.11  | Design: graph-page source navigation over BOTH paths — served and in-host                       | agent writes, human decides | M    | `[x]` — **accepted 2026-10-10**: [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md) is `Accepted` and 3.11a/3.11b are its implementation (done record in the step) |
 | 3.11a | The graph page joins the class index and navigates                                              | agent                       | M    | `[x]` — **done 2026-10-10** (`locations.js` + `navigate.js`, the join in `build.js`; 15 + 14 tests, a stubbed click reaching `window.openFile` at the joined line; done record in the step) |
 | 3.11b | The outside-the-browser entry point is documented and verified                                  | agent                       | S    | `[x]` — **done 2026-10-10** (`webview-host-api.md` § 4c and `check-open-route.js`: 18 assertions, 0 failed; done record in the step) |
-| 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                       |
+| 3.11c | Optional: the generator emits a bean FQN, so beans navigate                                     | agent, only if asked        | S    | `[ ]` — optional; the page reports `ObjectMapper` as `locationless` until this is taken       |
+| 3.11d | The graph build is part of the recorded pass                                                    | agent                       | S    | `[x]` — **done 2026-10-26**: `ioc-gen.js --graph` regenerates and `--check` verifies the page |
+| 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                         |
 | 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[x]` — **done 2026-10-26**: builders implement `Write`, recursion goes through child builders, and the root family has a generated dispatcher (done record in the step) |
 | 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[x]` — **done 2026-10-26**: `.jcodebuddy/conf/converters.json` is sorted, byte-reproducible, and compared with a fresh pass (done record in the step) |
 | 6.10  | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[x]` — **done 2026-10-26**: the JSON writer now carries `constraints`; the "CLI is the JSON path" premise was corrected (done record in the step) |
-| 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                       |
-| 8.2   | Eclipse observations, including the 4.41 dropins layout                                         | human                       | —    | `[ ]` — Q2 is answered: dropins is the first-release path                                   |
+| 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                         |
+| 8.2   | Eclipse observations, including the 4.41 dropins layout                                         | human                       | —    | `[ ]` — Q2 is answered: dropins is the first-release path                                     |
 | 8.3   | Agent IDE hooks                                                                                 | human decides               | S    | `[ ]` — **handshake DELIVERED 2026-10-10** (`WebviewHandshake`: the agent reads the port the host actually bound); what remains is the in-IDE walk, which needs a person |
-| 8.4   | Zed ACP run                                                                                     | human                       | —    | `[ ]`                                                                                       |
-| 8.5   | Explore Zed editor integration                                                                  | agent proposes              | M    | `[ ]`                                                                                       |
+| 8.4   | Zed ACP run                                                                                     | human                       | —    | `[ ]`                                                                                         |
+| 8.5   | Explore Zed editor integration                                                                  | agent proposes              | M    | `[ ]`                                                                                         |
 
 **8.3, what was built on 2026-10-10 — the handshake, because a reading of the code narrowed the step.**
 The step's text said "lightweight IntelliJ/VS Code hooks"; reading the tree showed most of what that meant

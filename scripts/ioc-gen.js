@@ -27,11 +27,14 @@
  *   bun scripts/ioc-gen.js --root <dir>            generate for another source root
  *   bun scripts/ioc-gen.js --indent "  "           use two-space indentation
  *   bun scripts/ioc-gen.js --quiet                 print only the divergences
+ *   bun scripts/ioc-gen.js --graph                 generate, then rebuild and verify graph.html
+ *   bun scripts/ioc-gen.js --graph-check           verify the committed graph.html without writing
  *
  * Exit code: non-zero when any context was refused (a cycle, a lazy bean with no factory, or a context that
- * names its own implementation), so a check can depend on it. Report-only divergences exit 0.
+ * names its own implementation), so a check can depend on it. Report-only divergences exit 0. The graph flags
+ * add the page build's own status; they need the jsx6 checkout AGENTS.md § 2 names (JCODEBUDDY_JSX6_DIR).
  *
- * Environment: JCODEBUDDY_JDK25, JCODEBUDDY_MVN.
+ * Environment: JCODEBUDDY_JDK25, JCODEBUDDY_MVN, JCODEBUDDY_JSX6_DIR.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -54,10 +57,14 @@ function usage() {
   bun scripts/ioc-gen.js --root <dir>           generate for another source root
   bun scripts/ioc-gen.js --indent "  "          one indentation step for generated code
   bun scripts/ioc-gen.js --quiet                print only the divergences
+  bun scripts/ioc-gen.js --graph                generate, then rebuild and verify graph.html
+  bun scripts/ioc-gen.js --graph-check          verify the committed graph.html without writing
   bun scripts/ioc-gen.js --help                 this text
 
 The generator reads @HipsterContext interfaces, writes <Context>Impl beside each one, and writes the
-dependency graph to the module's .jcodebuddy/metadata/hipster-ioc/contexts.json.`);
+dependency graph to the module's .jcodebuddy/metadata/hipster-ioc/contexts.json. --graph also runs the
+graph page's build (its --check mode is the staleness guard), so a page whose sources changed cannot
+stay stale behind a green generator pass.`);
 }
 
 function main() {
@@ -77,10 +84,13 @@ function main() {
   }
 
   // Compile the module and its reactor dependencies, and export the classpath in the same invocation: the
-  // export maps reactor modules to target/classes only while they are in this reactor run.
+  // export maps reactor modules to target/classes only while they are in this reactor run. `skipSave` is
+  // deliberate: this is a `test-compile`, never a test run, and a cache entry saved without tests would let a
+  // later full build restore it and skip surefire (doc/AGENTS.md's measured false-green).
   console.log(`ioc-gen: compiling with ${jdk.version} …`);
   const build = run(maven.command, [
     '-o', '-q', '-pl', 'hipster-ioc/hipster-ioc-tooling', '-am', '-DskipTests',
+    '-Dmaven.build.cache.skipSave=true',
     'test-compile', 'dependency:build-classpath', `-Dmdep.outputFile=${CLASSPATH_FILE}`,
   ], { stdio: 'inherit', env, cwd: REPO });
   if (build.error || build.status !== 0) {
@@ -100,10 +110,37 @@ function main() {
   if (indent !== undefined) passthrough.push('--indent', indent);
   if (argv.includes('--quiet')) passthrough.push('--quiet');
 
-  return run(jdk.java, [
+  const status = run(jdk.java, [
     '-cp', `${classes}${delimiter}${exported}`,
     'hr.hrg.hipster.ioc.tooling.IocTool', '--root', root, ...passthrough,
   ], { stdio: 'inherit', env, cwd: REPO }).status ?? 1;
+  if (status !== 0) {
+    return status;
+  }
+  if (argv.includes('--graph')) {
+    // One command that regenerates and then verifies: the write is the regeneration; the check is the
+    // staleness guard, and it runs against exactly what was just written.
+    const write = graphBuild(['--project=' + REPO]);
+    if (write !== 0) {
+      return write;
+    }
+    return graphBuild(['--project=' + REPO, '--check']);
+  }
+  if (argv.includes('--graph-check')) {
+    return graphBuild(['--project=' + REPO, '--check']);
+  }
+  return 0;
+}
+
+/** Runs the graph page's build; its own exit status is the step's status (step 3.11d). */
+function graphBuild(args) {
+  const result = run('bun', ['run', join(REPO, 'hipster-ioc', 'hipster-ioc-graph', 'src', 'build.js'), ...args],
+    { stdio: 'inherit' });
+  if (result.error) {
+    console.error(`ioc-gen: could not run the graph build: ${result.error.message}`);
+    return 1;
+  }
+  return result.status ?? 1;
 }
 
 /** The value after {@code flag}, or undefined. */

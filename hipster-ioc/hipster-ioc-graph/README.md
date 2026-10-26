@@ -14,8 +14,8 @@ dependency.
 ## What it does
 
 ```
-bun scripts/ioc-gen.js                        # the generator writes .jcodebuddy/metadata/hipster-ioc/contexts.json
-                                              #   and .jcodebuddy/index/classes.json (the join's other half)
+bun scripts/ioc-gen.js --graph                # generator writes contexts.json + the class index, then the
+                                              #   page is rebuilt and its --check verifies it (step 3.11d)
 bun run hipster-ioc/hipster-ioc-graph/src/build.js --project=<repo root>
 # → hipster-ioc/hipster-ioc-test/.jcodebuddy/metadata/hipster-ioc/graph.html
 bun run hipster-ioc/hipster-ioc-graph/src/locations.test.js   # the join, against the real class index
