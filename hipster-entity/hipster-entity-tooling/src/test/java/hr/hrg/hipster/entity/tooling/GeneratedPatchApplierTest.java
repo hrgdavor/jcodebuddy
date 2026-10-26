@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The generated patch applier — DEC-048 § 2, plan step 6.2's second half.
+ * The generated patch applier — DEC-048 § 2 and its 2026-10-09 amendment, plan step 6.8.
  *
  * <p>The applier is generated rather than generic because DEC-019 forbids resolving a field by name through a
  * {@code Map<String, Method>} and a view's setters are typed methods: only an emitted {@code switch} can make a patch
@@ -91,8 +91,11 @@ class GeneratedPatchApplierTest {
         String emitted = Files.readString(root.resolve("patch/hr/PersonSummaryPatchApplier.java"));
 
         Assertions.assertTrue(emitted.contains("public static java.util.List<String> apply(")
-                        && emitted.contains("JsonNode document, PersonSummary.Write target)"),
-                "the entry point takes the document and the view's own Write target:\n" + emitted);
+                        && emitted.contains("JsonNode document, PersonSummary view, PersonSummary.Write target)"),
+                "the entry point takes the document, the source view and the view's own Write target:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("public static Result apply(JsonNode document, PersonSummary view)"),
+                "and the convenience entry point takes only the view, using view.toBuilder() as the writer:\n"
+                        + emitted);
         Assertions.assertTrue(emitted.contains("case \"firstName\" ->") && emitted.contains("case \"age\" ->"),
                 "a writable field gets a direct-call arm, which is the whole reason this class is generated:\n"
                         + emitted);
@@ -172,15 +175,16 @@ class GeneratedPatchApplierTest {
     }
 
     /**
-     * The nested case, in the shape DEC-048 § 5 chose: a <b>caller-supplied writer resolver</b>.
+     * The nested case, in the shape DEC-048's 2026-10-09 amendment chose: the <b>child's own builder</b> is the
+     * writer.
      *
-     * <p>Nothing generated implements {@code Write}, and {@code toBuilder()} yields a builder that does not, so an
-     * applier cannot reach inside a child view on its own. The generated {@code Children} interface is where the caller
-     * says how a nested writer is obtained, and the child's own applier does the writing — which is what keeps the
-     * recursion typed and navigable rather than a name lookup.</p>
+     * <p>A generated builder implements its view's {@code Write}, so {@code child.toBuilder()} is the route from a
+     * view instance to a writer. The nested operation is handed to the child's own applier and the rebuilt child is
+     * written back through the parent's typed setter — typed and navigable, with no caller-supplied resolver and no
+     * name lookup.</p>
      */
     @Test
-    void aNestedViewIsAppliedThroughACallerSuppliedWriterAndCompiles() throws Exception {
+    void aNestedViewIsAppliedThroughTheChildBuilderAndCompiles() throws Exception {
         Path root = tempDir.resolve("nested");
         Path pkg = root.resolve("patch/hr");
         Files.createDirectories(pkg);
@@ -226,26 +230,23 @@ class GeneratedPatchApplierTest {
         }
         String emitted = Files.readString(pkg.resolve("PersonSummaryPatchApplier.java"));
 
-        Assertions.assertTrue(emitted.contains("public interface Children {"),
-                "the resolver is where the caller says how a nested writer is obtained (DEC-048 § 5):\n" + emitted);
-        Assertions.assertTrue(emitted.contains("Write address();"),
-                "and it is TYPED on the child's own Write, so the recursion stays navigable:\n" + emitted);
-        Assertions.assertTrue(emitted.contains("AddressPatchApplier.apply(childDocument(delta, 1), child)"),
-                "the nested operation is handed to the child's own applier with the child's field name first in the "
-                        + "path:\n" + emitted);
-        Assertions.assertTrue(emitted.contains("no_child_writer: address"),
-                "and a caller that supplies none gets a report rather than silence:\n" + emitted);
-        Assertions.assertTrue(emitted.contains("Write previousAddresses(int index);"),
-                "a COLLECTION nested field resolves per element, so an addition at the end is not confused with a "
-                        + "document member (DEC-024 § 3):\n" + emitted);
-        Assertions.assertTrue(emitted.contains("childDocument(entry, 2)"),
-                "and its paths carry the element index, so the child's field name is one deeper:\n" + emitted);
-        Assertions.assertTrue(emitted.contains("return apply(document, target, null);"),
-                "the two-argument overload is the no-nested-writer case:\n" + emitted);
-
-        // The child's own applier must exist too, and both must compile — the check that makes the resolver real.
+        // The child's own applier must exist too, and both must compile — the check that makes the builder
+        // route real rather than a text assertion.
         Assertions.assertTrue(Files.exists(pkg.resolve("AddressPatchApplier.java")),
                 "the child view got its own applier: " + Files.walk(root).toList());
+        Assertions.assertTrue(emitted.contains("AddressBuilder childTarget = child.toBuilder();"),
+                "the child's writer is its own builder — the route DEC-048's amendment chose:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("AddressPatchApplier.apply(childDocument(delta, 1), child, childTarget)"),
+                "the nested operation is handed to the child's own applier with the child's field name first in the "
+                        + "path:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("target.address(childTarget.build())"),
+                "and the rebuilt child is written back through the parent's typed setter:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("stale_index: previousAddresses"),
+                "a collection index that no longer exists is a named finding, never a silent skip:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("updated.set(index, childTarget.build())"),
+                "a collection element is patched through its own builder and put back by index:\n" + emitted);
+        Assertions.assertTrue(emitted.contains("childEntryDocument(entry, 2)"),
+                "and its paths carry the element index, so the child's field name is one deeper:\n" + emitted);
         CompileHarness.compileOrFail(CompileHarness.findRepoRoot(), "patch-applier-nested",
                 CompileHarness.javaSourcesUnder(root), List.of());
     }

@@ -11,7 +11,7 @@ import jakarta.validation.constraints.NotNull;
  * writable fields: a {@code DERIVED}/{@code JOINED} field stays readable and keeps its
  * ordinal, but has no setter (S1).
  */
-public final class PersonSummaryBuilder {
+public final class PersonSummaryBuilder implements PersonSummary.Write {
 
     private java.lang.Long id;
     private String firstName;

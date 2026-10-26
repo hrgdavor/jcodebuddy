@@ -6,43 +6,43 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
-import hr.hrg.jcodebuddy.engine.source.SourceReader;
-import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
 
 /**
- * Emits {@code <View>PatchApplier} — the inverse of {@code EntityJacksonDeepChangeSerializer} (DEC-048 § 2, plan step
- * 6.2's second half).
+ * Emits {@code <View>PatchApplier} — the inverse of {@code EntityJacksonDeepChangeSerializer} (DEC-048 § 2,
+ * plan step 6.8).
  *
- * <p>The emitted class applies a deep change document to a view's own {@code Write} target: it walks the document's
- * field-map, dispatches on the field <b>name</b> with the direct-call shape the generated {@code forName} switch already
- * uses, and calls the <b>typed setter</b>. That is the whole reason the applier is generated rather than generic:
- * DEC-019 forbids resolving a name through a {@code Map<String, Method>}, and a view's setters are typed methods, so
- * there is no set-by-name call a generic applier could make.</p>
+ * <p>The emitted class applies a deep change document to a view. It walks the document's field map,
+ * dispatches on the field <b>name</b> with the direct-call shape the generated {@code forName} switch
+ * already uses, and calls the <b>typed setter</b> through the view's own {@code Write}. That is the whole
+ * reason the applier is generated rather than generic: DEC-019 forbids resolving a name through a
+ * {@code Map<String, Method>}, and a view's setters are typed methods, so there is no set-by-name call a
+ * generic applier could make.</p>
  *
- * <p><strong>Opt-in, like the SQL adapters, and for a module-boundary reason rather than a maturity one.</strong> The
- * document is JSON, so the emitted class imports {@code tools.jackson.databind.JsonNode}; generating it for every
- * project would put a Jackson dependency into code that a project never asked for. It is reached through
- * {@code --patch-appliers}.</p>
+ * <h3>The route into a child: the builder (DEC-048's 2026-10-09 amendment)</h3>
+ * <p>A generated builder implements its view's {@code Write}, so {@code view.toBuilder()} is the route
+ * from a view instance to a writer. A nested field's operation is a leaf <em>inside</em> the child, so the
+ * applier reads the child from the source view, gets {@code child.toBuilder()}, recurses through the
+ * child's own applier, and writes the rebuilt child back through the parent's typed setter. Collection
+ * fields are element writes for the same reason: the document names an element by index, and an index
+ * that no longer exists is a <b>named finding</b>, never a silent skip (DEC-016's "never a guessed
+ * position" and the amendment's "an applier may be stricter than its emitter").</p>
  *
- * <h3>What this first slice applies, and what it refuses to guess</h3>
- * <p>It applies the <b>leaf</b> operations whose type it can convert directly — {@code String}, the primitive and
- * boxed numeric types, {@code boolean} — reading {@code current} from the document. Everything else is
- * <strong>reported, never silently applied or silently dropped</strong>:</p>
+ * <h3>What it refuses to guess</h3>
  * <ul>
- *   <li>a field the view does not have — DEC-016 forbids resolving it through a hash map, so it is named in the report
- *       (the same rule the emitter's fallback note exists for);</li>
- *   <li>a nested view or collection field, whose document value is a {@code paths} array rather than a leaf — applying
- *       one of those needs the child's {@code Write}, and how a generated applier obtains it is the question this slice
- *       leaves open rather than answers wrongly;</li>
- *   <li>a field whose declared type has no direct {@code JsonNode} conversion yet;</li>
- *   <li>a value carrying {@code "fallback": true} — the emitter's statement that identity matching failed and the path
- *       is positional. It is carried into the report so a caller can tell a positional application from an identified
- *       one.</li>
+ *   <li>a field the view does not have — named in the report (DEC-016);</li>
+ *   <li>a writable field the developer's {@code Write} omits — reported, not called;</li>
+ *   <li>a field whose declared type has no direct {@code JsonNode} conversion — reported;</li>
+ *   <li>a value carrying {@code "fallback": true} — carried into the report so a caller can tell a
+ *       positional application from an identified one.</li>
  * </ul>
+ *
+ * <p><strong>Opt-in</strong> like the SQL adapters: the document is JSON, so the emitted class imports
+ * {@code tools.jackson.databind.JsonNode}. It is reached through {@code --patch-appliers}.</p>
  */
 public final class ViewPatchApplierGenerator {
 
@@ -52,23 +52,34 @@ public final class ViewPatchApplierGenerator {
     /** The generated class's suffix, so a reader can find it from the view's name alone. */
     public static final String CLASS_SUFFIX = "PatchApplier";
 
-    /** Writes {@code <View>PatchApplier.java}, or leaves it alone and reports when its header froze it. */
-    public static void generate(Path javaOutputRoot, String packageName, ViewMeta view, Path viewSource,
-                                List<Property> writable, java.util.Set<String> viewNames,
-                                DivergenceReporter divergences) throws IOException {
-        Path packageDir = packageName == null || packageName.isBlank()
+    /** A polymorphic root and the concrete views a patch addressed to the root must dispatch to. */
+    public record Family(String packageName, String rootName, String rootFqn, String discriminatorField,
+                         List<Member> members) {
+        public Family {
+            members = List.copyOf(members);
+        }
+    }
+
+    /** One concrete view of a {@link Family}; it must have its own generated applier. */
+    public record Member(String packageName, String name, String fqn, String discriminatorValue) {
+    }
+
+    /**
+     * Emits {@code <Root>PatchApplier} — the dispatcher DEC-048's 2026-10-09 amendment asks for.
+     *
+     * <p>It reads the value's discriminator through the root's accessor, matches it against each concrete
+     * view's declared value, and calls that view's own generated applier. The arms are direct calls, so an
+     * IDE can follow a discriminator to the applier and then to the typed setter — the same property
+     * {@code PaymentMethodController} hand-writes today.</p>
+     */
+    public static void generateDispatcher(Path javaOutputRoot, Family family, DivergenceReporter divergences)
+            throws IOException {
+        Path packageDir = family.packageName() == null || family.packageName().isBlank()
                 ? javaOutputRoot
-                : javaOutputRoot.resolve(packageName.replace('.', '/'));
-        String className = view.name() + CLASS_SUFFIX;
+                : javaOutputRoot.resolve(family.packageName().replace('.', '/'));
+        String className = family.rootName() + CLASS_SUFFIX;
         Path file = packageDir.resolve(className + ".java");
-
-        // The setters the DEVELOPER declared, because the applier writes through the view's own `Write` interface and
-        // emitting a call for one that is not there produces code that cannot compile. `null` means "not known" (no
-        // source, or unreadable) and falls back to every writable field, which is what the tooling's own
-        // `missing_setter` report already covers.
-        java.util.Set<String> declared = declaredSetters(viewSource, view.name(), divergences);
-        String canonical = source(packageName, view, className, writable, declared, viewNames);
-
+        String canonical = dispatcherSource(family, className);
         if (!Files.exists(file)) {
             Files.createDirectories(packageDir);
             Files.writeString(file, canonical);
@@ -77,43 +88,82 @@ public final class ViewPatchApplierGenerator {
         ViewAdapterGenerator.writeUnlessFrozen(file, canonical, divergences);
     }
 
-    /**
-     * The one-parameter method names of the view's nested {@code Write} interface, or {@code null} when they cannot be
-     * read.
-     *
-     * <p>Read through {@link SourceReader}, the one place this repository decides whether a file is readable (F-34): an
-     * error-tolerant partial parse that missed the setters would emit an applier that cannot compile, which is the
-     * failure this method exists to prevent rather than cause.</p>
-     */
-    private static java.util.Set<String> declaredSetters(Path viewSource, String viewName,
-                                                         DivergenceReporter divergences) throws IOException {
-        if (viewSource == null || !Files.isRegularFile(viewSource)) {
-            return null;
+    private static String dispatcherSource(Family family, String className) {
+        String nl = System.lineSeparator();
+        StringBuilder sb = new StringBuilder();
+        sb.append(GeneratedCodeMarkers.fileHeader(ViewPatchApplierGenerator.class.getName(),
+                "Dispatches a deep change document to the concrete " + family.rootName() + " view.")).append(nl);
+        if (family.packageName() != null && !family.packageName().isBlank()) {
+            sb.append("package ").append(family.packageName()).append(";").append(nl).append(nl);
         }
-        SourceReader.Read read = SourceReader.read(viewSource);
-        if (!read.readable()) {
-            SourceReader.reportUnparseable(divergences, "source_not_parsed", viewName + CLASS_SUFFIX,
-                    "the view could not be read, so the setters its `Write` interface declares are unknown",
-                    "the applier was generated from every writable field");
-            return null;
+        sb.append("import tools.jackson.databind.JsonNode;").append(nl).append(nl);
+        sb.append("/**").append(nl);
+        sb.append(" * Applies a deep change document to a {@link ").append(family.rootName()).append("} by")
+                .append(nl);
+        sb.append(" * dispatching on its discriminator to the concrete view's own applier.").append(nl);
+        sb.append(" */").append(nl);
+        sb.append("public final class ").append(className).append(" {").append(nl).append(nl);
+        sb.append("    /** The patched view and the operations that could not be applied. */").append(nl);
+        sb.append("    public record Result(").append(family.rootFqn())
+                .append(" value, java.util.List<String> report) {").append(nl);
+        sb.append("    }").append(nl).append(nl);
+        sb.append("    private ").append(className).append("() {").append(nl);
+        sb.append("    }").append(nl).append(nl);
+        sb.append("    public static Result apply(JsonNode document, ").append(family.rootFqn())
+                .append(" view) {").append(nl);
+        sb.append("        String discriminator = String.valueOf(view.").append(family.discriminatorField())
+                .append("());").append(nl);
+        sb.append("        return switch (discriminator) {").append(nl);
+        for (Member member : family.members()) {
+            sb.append("            case \"").append(member.discriminatorValue()).append("\" -> {").append(nl);
+            sb.append("                ").append(member.fqn()).append(" concrete = (")
+                    .append(member.fqn()).append(") view;").append(nl);
+            sb.append("                ").append(member.fqn()).append(CLASS_SUFFIX).append(".Result result = ")
+                    .append(member.fqn()).append(CLASS_SUFFIX).append(".apply(document, concrete);").append(nl);
+            sb.append("                yield new Result(result.value(), result.report());").append(nl);
+            sb.append("            }").append(nl);
         }
-        for (org.openrewrite.java.tree.J.ClassDeclaration declaration : TreeQueries.interfaces(read.unit())) {
-            if ("Write".equals(declaration.getSimpleName())) {
-                java.util.Set<String> names = new java.util.LinkedHashSet<>();
-                for (org.openrewrite.java.tree.J.MethodDeclaration method : TreeQueries.methodsOf(declaration)) {
-                    if (TreeQueries.hasOneParameter(method)) {
-                        names.add(method.getSimpleName());
-                    }
-                }
-                return names;
+        sb.append("            default -> new Result(view, java.util.List.of(")
+                .append(stringLiteral("unknown_discriminator: "))
+                .append(" + discriminator));").append(nl);
+        sb.append("        };").append(nl);
+        sb.append("    }").append(nl).append(nl);
+        sb.append("}").append(nl);
+        return sb.toString();
+    }
+
+    /** Writes {@code <View>PatchApplier.java}, or leaves it alone and reports when its header froze it. */
+    public static void generate(Path javaOutputRoot, String packageName, ViewMeta view, Path viewSource,
+                                List<Property> writable, Set<String> viewNames,
+                                DivergenceReporter divergences) throws IOException {
+        ViewWriteInterface write = ViewWriteInterface.readOrNull(viewSource);
+        if (write == null || write.setters().isEmpty()) {
+            if (divergences != null) {
+                divergences.report("patch_applier_without_write", view.name(),
+                        "the view declares no Write interface, so there is no typed writer for an applier to call",
+                        "no nested Write", "a Write interface with one-parameter setters",
+                        "add the view's Write interface, or turn --patch-appliers off");
             }
+            return;
         }
-        return java.util.Set.of();
+        Path packageDir = packageName == null || packageName.isBlank()
+                ? javaOutputRoot
+                : javaOutputRoot.resolve(packageName.replace('.', '/'));
+        String className = view.name() + CLASS_SUFFIX;
+        Path file = packageDir.resolve(className + ".java");
+
+        String canonical = source(packageName, view, className, writable, write, viewNames);
+        if (!Files.exists(file)) {
+            Files.createDirectories(packageDir);
+            Files.writeString(file, canonical);
+            return;
+        }
+        ViewAdapterGenerator.writeUnlessFrozen(file, canonical, divergences);
     }
 
     /** The class's text, deterministic: the same view writes the same bytes. */
     private static String source(String packageName, ViewMeta view, String className, List<Property> writable,
-                                 java.util.Set<String> declaredSetters, java.util.Set<String> viewNames) {
+                                 ViewWriteInterface write, Set<String> viewNames) {
         String nl = System.lineSeparator();
         StringBuilder sb = new StringBuilder();
         sb.append(header(view)).append(nl);
@@ -125,102 +175,63 @@ public final class ViewPatchApplierGenerator {
         sb.append(" * Applies a deep change document to a {@link ").append(view.name())
                 .append("} — the inverse of the deep change serializer.").append(nl);
         sb.append(" *").append(nl);
-        sb.append(" * <p>Every key of the document is a field of this view. A key this view does not have, a nested")
+        sb.append(" * <p>Every key of the document is a field of this view. A key this view does not have, a")
                 .append(nl);
-        sb.append(" * or collection field (whose document value is a {@code paths} array), a type this applier does")
+        sb.append(" * type this applier does not convert, and a {@code fallback} marker are all")
                 .append(nl);
-        sb.append(" * not convert, and a {@code fallback} marker are all <strong>reported</strong> in the returned")
+        sb.append(" * <strong>reported</strong> in the returned list instead of being guessed at.")
                 .append(nl);
-        sb.append(" * list instead of being guessed at.").append(nl);
         sb.append(" */").append(nl);
         sb.append("public final class ").append(className).append(" {").append(nl).append(nl);
+        sb.append("    /** The patched view and the operations that could not be applied. */").append(nl);
+        sb.append("    public record Result(").append(view.name())
+                .append(" value, java.util.List<String> report) {").append(nl);
+        sb.append("    }").append(nl).append(nl);
         sb.append("    private ").append(className).append("() {").append(nl);
         sb.append("    }").append(nl).append(nl);
+
+        // The view-to-writer route: the builder implements the view's Write (DEC-048's amendment).
+        sb.append("    /**").append(nl);
+        sb.append("     * Applies {@code document} to a copy of {@code view}, returning the patched value and")
+                .append(nl);
+        sb.append("     * one line per operation it did not apply.").append(nl);
+        sb.append("     */").append(nl);
+        sb.append("    public static Result apply(JsonNode document, ").append(view.name())
+                .append(" view) {").append(nl);
+        sb.append("        ").append(view.name()).append("Builder target = view.toBuilder();").append(nl);
+        sb.append("        java.util.List<String> report = apply(document, view, target);").append(nl);
+        sb.append("        return new Result(target.build(), report);").append(nl);
+        sb.append("    }").append(nl).append(nl);
+
         sb.append("    /**").append(nl);
         sb.append("     * Applies {@code document} to {@code target}, returning one line per operation it did not")
                 .append(nl);
         sb.append("     * apply. An empty list means every operation landed.").append(nl);
         sb.append("     */").append(nl);
-        boolean nested = hasNested(writable, viewNames);
         sb.append("    public static java.util.List<String> apply(JsonNode document, ").append(view.name())
-                .append(".Write target").append(nested ? ", Children children" : "").append(") {").append(nl);
+                .append(" view, ").append(view.name()).append(".Write target) {").append(nl);
         sb.append("        java.util.List<String> report = new java.util.ArrayList<>();").append(nl);
         sb.append("        for (java.util.Map.Entry<String, JsonNode> operation : document.properties()) {").append(nl);
         sb.append("            switch (operation.getKey()) {").append(nl);
+        boolean nested = false;
         for (Property property : writable) {
-            if (declaredSetters != null && !declaredSetters.contains(property.name())) {
-                // Writable by the framework's rule, but the developer's `Write` interface declares no setter for it —
-                // so there is nothing to call. Reported rather than emitted, and reported in the same vocabulary the
-                // builder generator already uses for it (§ 8.7/3.20).
+            if (!declares(write, property.name())) {
                 sb.append("                case \"").append(property.name()).append("\" -> report.add(")
                         .append(stringLiteral("missing_setter: " + view.name() + ".Write declares no setter for "
                                 + property.name() + ", so this operation cannot be applied"))
                         .append(");").append(nl);
                 continue;
             }
-            String erased = ValidationGenerator.erase(property.type());
-            boolean collection = false;
-            String childView = viewNames.contains(erased) ? erased : null;
-            if (childView == null) {
-                List<String> arguments = typeArguments(property.type());
-                if (arguments.size() == 1 && viewNames.contains(ValidationGenerator.erase(arguments.get(0)))) {
-                    childView = ValidationGenerator.erase(arguments.get(0));
-                    collection = true;
-                }
-            }
+            String childView = childViewOf(property, viewNames);
             if (childView != null) {
-                // A nested view, or a collection of them: the document names a leaf INSIDE the child, so the operation
-                // is handed to the child's own applier with the caller-supplied writer (DEC-048 § 5's shape (a)).
-                // Nothing generated implements `Write`, so the caller is the only one who can say where a nested
-                // view's writer comes from — and this is why the resolver exists instead of a walk.
-                String childApplier = childApplierName(property, childView);
-                String childWrite = qualifiedViewName(property, childView) + ".Write";
-                sb.append("                case \"").append(property.name()).append("\" -> {").append(nl);
-                sb.append("                    JsonNode delta = operation.getValue();").append(nl);
-                if (collection) {
-                    sb.append("                    for (JsonNode entry : delta.path(\"paths\")) {").append(nl);
-                    sb.append("                        JsonNode path = entry.path(\"path\");").append(nl);
-                    sb.append("                        int index = path.path(1).asInt();").append(nl);
-                    sb.append("                        ").append(childWrite).append(" child = children == null")
-                            .append(nl);
-                    sb.append("                                ? null : children.").append(property.name())
-                            .append("(index);").append(nl);
-                    sb.append("                        if (child == null) {").append(nl);
-                    sb.append("                            report.add(\"no_child_writer: ").append(property.name())
-                            .append("[\" + index + \"]\");").append(nl);
-                    sb.append("                            continue;").append(nl);
-                    sb.append("                        }").append(nl);
-                    sb.append("                        report.addAll(").append(childApplier)
-                            .append(".apply(childDocument(entry, 2), child));").append(nl);
-                    sb.append("                    }").append(nl);
-                } else {
-                    sb.append("                    ").append(childWrite).append(" child = children == null")
-                            .append(nl);
-                    sb.append("                            ? null : children.").append(property.name())
-                            .append("();").append(nl);
-                    sb.append("                    if (child == null) {").append(nl);
-                    sb.append("                        report.add(\"no_child_writer: ").append(property.name())
-                            .append("\");").append(nl);
-                    sb.append("                    } else {").append(nl);
-                    sb.append("                        report.addAll(").append(childApplier)
-                            .append(".apply(childDocument(delta, 1), child));").append(nl);
-                    sb.append("                    }").append(nl);
-                }
-                sb.append("                    if (delta.path(\"fallback\").asBoolean(false)) {").append(nl);
-                sb.append("                        report.add(\"positional_fallback: ").append(property.name())
-                        .append(" was matched by position, not by identity\");").append(nl);
-                sb.append("                    }").append(nl);
-                sb.append("                }").append(nl);
+                nested = true;
+                appendNestedArm(sb, view, property, childView, viewNames);
                 continue;
             }
             String conversion = conversion(property.type());
             if (conversion == null) {
-                // A writable field this applier cannot convert — a nested view, a collection, a date. It gets its own
-                // arm rather than falling through to `default`, because `default` would say "unknown_field … is not a
-                // writable field", and that is FALSE: the field is writable, this revision simply cannot write it yet.
-                // A report that is wrong about why is worse than no report, which is what writing the test showed.
                 String message = "unsupported_type: " + property.name() + " (" + property.type()
-                        + ") needs a conversion, or a child applier, that this revision does not emit";
+                        + ") needs a conversion that this revision does not emit";
                 sb.append("                case \"").append(property.name()).append("\" -> report.add(")
                         .append(stringLiteral(message)).append(");").append(nl);
                 continue;
@@ -235,53 +246,19 @@ public final class ViewPatchApplierGenerator {
             sb.append("                    }").append(nl);
             sb.append("                }").append(nl);
         }
-        sb.append("                default -> report.add(\"unknown_field: \" + operation.getKey()")
-                .append(nl);
-        sb.append("                        + \" is not a writable field of ").append(view.name()).append("\");")
-                .append(nl);
+        sb.append("                default -> report.add(\"unknown_field: \" + operation.getKey()").append(nl);
+        sb.append("                        + \" is not a writable field of ").append(view.name()).append("\");").append(nl);
         sb.append("            }").append(nl);
         sb.append("        }").append(nl);
         sb.append("        return report;").append(nl);
         sb.append("    }").append(nl).append(nl);
-        if (hasNested(writable, viewNames)) {
-            sb.append("    /**").append(nl);
-            sb.append("     * Applies {@code document} to {@code target} when the caller has no writer for a nested")
-                    .append(nl);
-            sb.append("     * view: every operation that needs one is reported rather than dropped.").append(nl);
-            sb.append("     */").append(nl);
-            sb.append("    public static java.util.List<String> apply(JsonNode document, ").append(view.name())
-                    .append(".Write target) {").append(nl);
-            sb.append("        return apply(document, target, null);").append(nl);
-            sb.append("    }").append(nl).append(nl);
-            sb.append("    /**").append(nl);
-            sb.append("     * How the caller supplies a writer for each nested view (DEC-048 § 5). A view's own `Write`")
-                    .append(nl);
-            sb.append("     * interface is the application's, and nothing generated implements it, so an applier cannot")
-                    .append(nl);
-            sb.append("     * reach inside a child without being told where that child's writer is.").append(nl);
-            sb.append("     */").append(nl);
-            sb.append("    public interface Children {").append(nl);
-            for (Property property : writable) {
-                String child = childViewOf(property, viewNames);
-                if (child == null) {
-                    continue;
-                }
-                String childApplier = childApplierName(property, child);
-                String childWrite = qualifiedViewName(property, child) + ".Write";
-                boolean collection = typeArguments(property.type()).size() == 1;
-                sb.append("        /** The writer for ").append(collection ? "element `index` of " : "")
-                        .append("`").append(property.name()).append("`, or {@code null} when the caller has none. */")
-                        .append(nl);
-                sb.append("        ").append(childWrite).append(" ").append(property.name())
-                        .append(collection ? "(int index);" : "();").append(nl);
-            }
-            sb.append("    }").append(nl).append(nl);
+        if (nested) {
             sb.append("    /**").append(nl);
             sb.append("     * Rebuilds a child document from a nested field's {@code paths} array: each entry's path")
                     .append(nl);
-            sb.append("     * names this view's field first (and, for a collection, the element index second), so the")
+            sb.append("     * names this view's field first (and, for a collection, the element index second), so")
                     .append(nl);
-            sb.append("     * child's own field name follows that prefix.").append(nl);
+            sb.append("     * the child's own field name follows that prefix.").append(nl);
             sb.append("     */").append(nl);
             sb.append("    private static JsonNode childDocument(JsonNode delta, int prefixLength) {").append(nl);
             sb.append("        tools.jackson.databind.node.ObjectNode child =").append(nl);
@@ -293,31 +270,94 @@ public final class ViewPatchApplierGenerator {
             sb.append("            }").append(nl);
             sb.append("        }").append(nl);
             sb.append("        return child;").append(nl);
+            sb.append("    }").append(nl).append(nl);
+            sb.append("    /**").append(nl);
+            sb.append("     * Rebuilds a child document from one collection element's operation entry: the path")
+                    .append(nl);
+            sb.append("     * names the collection field, the element index and then the child's own field, so")
+                    .append(nl);
+            sb.append("     * the child's field name is at {@code prefixLength}.").append(nl);
+            sb.append("     */").append(nl);
+            sb.append("    private static JsonNode childEntryDocument(JsonNode entry, int prefixLength) {").append(nl);
+            sb.append("        tools.jackson.databind.node.ObjectNode child =").append(nl);
+            sb.append("                tools.jackson.databind.node.JsonNodeFactory.instance.objectNode();").append(nl);
+            sb.append("        JsonNode path = entry.path(\"path\");").append(nl);
+            sb.append("        if (path.size() > prefixLength) {").append(nl);
+            sb.append("            child.set(path.path(prefixLength).asText(), entry);").append(nl);
+            sb.append("        }").append(nl);
+            sb.append("        return child;").append(nl);
             sb.append("    }").append(nl);
         }
         sb.append("}").append(nl);
         return sb.toString();
     }
 
-    /** The child view's applier, named fully so a child in another package needs no import. */
-    private static String childApplierName(Property property, String childView) {
-        String qualified = qualifiedViewName(property, childView);
-        return qualified + CLASS_SUFFIX;
-    }
-
-    /** The child view's fully-qualified name, from the property's own type imports when it carries one. */
-    private static String qualifiedViewName(Property property, String childView) {
-        for (String importName : property.typeImports()) {
-            String name = importName.startsWith("import ") ? importName.substring("import ".length()).trim() : importName;
-            if (name.endsWith("." + childView)) {
-                return name.substring(0, name.length() - childView.length() - 1) + "." + childView;
-            }
+    /** One nested-field arm: recurse through the child's applier and write the rebuilt child back. */
+    private static void appendNestedArm(StringBuilder sb, ViewMeta view, Property property, String childView,
+                                        Set<String> viewNames) {
+        String childQualified = qualifiedViewName(property, childView);
+        String childApplier = childQualified + CLASS_SUFFIX;
+        String childBuilder = childQualified + "Builder";
+        boolean collection = collectionOf(property);
+        sb.append("                case \"").append(property.name()).append("\" -> {").append(nl());
+        sb.append("                    JsonNode delta = operation.getValue();").append(nl());
+        if (collection) {
+            sb.append("                    java.util.List<").append(childQualified).append("> current = view.")
+                    .append(property.name()).append("();").append(nl());
+            sb.append("                    if (current == null) {").append(nl());
+            sb.append("                        report.add(\"missing_child_value: ").append(property.name())
+                    .append("\");").append(nl());
+            sb.append("                    } else {").append(nl());
+            sb.append("                        java.util.List<").append(childQualified)
+                    .append("> updated = new java.util.ArrayList<>(current);").append(nl());
+            sb.append("                        for (JsonNode entry : delta.path(\"paths\")) {").append(nl());
+            sb.append("                            JsonNode path = entry.path(\"path\");").append(nl());
+            sb.append("                            int index = path.size() > 1 ? path.path(1).asInt() : -1;")
+                    .append(nl());
+            sb.append("                            if (index < 0 || index >= updated.size()) {").append(nl());
+            sb.append("                                report.add(\"stale_index: ").append(property.name())
+                    .append("[\" + index + \"] has no element (size \" + updated.size() + \")\");").append(nl());
+            sb.append("                                continue;").append(nl());
+            sb.append("                            }").append(nl());
+            sb.append("                            ").append(childQualified).append(" child = updated.get(index);")
+                    .append(nl());
+            sb.append("                            if (child == null) {").append(nl());
+            sb.append("                                report.add(\"missing_child_value: ").append(property.name())
+                    .append("[\" + index + \"]\");").append(nl());
+            sb.append("                                continue;").append(nl());
+            sb.append("                            }").append(nl());
+            sb.append("                            ").append(childBuilder).append(" childTarget = child.toBuilder();")
+                    .append(nl());
+            sb.append("                            report.addAll(").append(childApplier)
+                    .append(".apply(childEntryDocument(entry, 2), child, childTarget));").append(nl());
+            sb.append("                            updated.set(index, childTarget.build());").append(nl());
+            sb.append("                        }").append(nl());
+            sb.append("                        target.").append(property.name()).append("(updated);").append(nl());
+            sb.append("                    }").append(nl());
+        } else {
+            sb.append("                    ").append(childQualified).append(" child = view.").append(property.name())
+                    .append("();").append(nl());
+            sb.append("                    if (child == null) {").append(nl());
+            sb.append("                        report.add(\"missing_child_value: ").append(property.name())
+                    .append("\");").append(nl());
+            sb.append("                    } else {").append(nl());
+            sb.append("                        ").append(childBuilder).append(" childTarget = child.toBuilder();")
+                    .append(nl());
+            sb.append("                        report.addAll(").append(childApplier)
+                    .append(".apply(childDocument(delta, 1), child, childTarget));").append(nl());
+            sb.append("                        target.").append(property.name()).append("(childTarget.build());")
+                    .append(nl());
+            sb.append("                    }").append(nl());
         }
-        return childView;
+        sb.append("                    if (delta.path(\"fallback\").asBoolean(false)) {").append(nl());
+        sb.append("                        report.add(\"positional_fallback: ").append(property.name())
+                .append(" was matched by position, not by identity\");").append(nl());
+        sb.append("                    }").append(nl());
+        sb.append("                }").append(nl());
     }
 
     /** The child view a field nests, or {@code null} when it nests none. */
-    private static String childViewOf(Property property, java.util.Set<String> viewNames) {
+    private static String childViewOf(Property property, Set<String> viewNames) {
         String erased = ValidationGenerator.erase(property.type());
         if (viewNames.contains(erased)) {
             return erased;
@@ -329,13 +369,24 @@ public final class ViewPatchApplierGenerator {
         return null;
     }
 
-    private static boolean hasNested(List<Property> writable, java.util.Set<String> viewNames) {
-        for (Property property : writable) {
-            if (childViewOf(property, viewNames) != null) {
-                return true;
+    private static boolean collectionOf(Property property) {
+        return typeArguments(property.type()).size() == 1;
+    }
+
+    /** Whether the developer's Write declares a setter for {@code name}. */
+    private static boolean declares(ViewWriteInterface write, String name) {
+        return write.setters().stream().anyMatch(setter -> setter.name().equals(name));
+    }
+
+    /** The child view's fully-qualified name, from the property's own type imports when it carries one. */
+    private static String qualifiedViewName(Property property, String childView) {
+        for (String importName : property.typeImports()) {
+            String name = importName.startsWith("import ") ? importName.substring("import ".length()).trim() : importName;
+            if (name.endsWith("." + childView)) {
+                return name;
             }
         }
-        return false;
+        return childView;
     }
 
     /** The single type argument of a parameterized declared type, or an empty list. */
@@ -348,7 +399,6 @@ public final class ViewPatchApplierGenerator {
         }
         String inside = type.substring(open + 1, close);
         if (inside.indexOf('<') >= 0) {
-            // A nested generic (a Map, or a collection of collections) is not a single-element collection of views.
             return List.of(inside);
         }
         return List.of(inside.trim());
@@ -357,24 +407,10 @@ public final class ViewPatchApplierGenerator {
     /**
      * The setter argument for one declared type, or {@code null} when this applier cannot convert it yet.
      *
-     * <p>Direct {@code JsonNode} accessors, plus the JDK types whose Jackson form is fixed by Jackson's own rules rather
-     * than by a mapper configuration this generator cannot see:</p>
-     *
-     * <ul>
-     *   <li>{@code BigDecimal}/{@code BigInteger} and {@code UUID} — a JSON number and a JSON string respectively,
-     *       always, so {@code new BigDecimal(node.asText())} and {@code UUID.fromString(node.asText())} are the value's
-     *       own textual form;</li>
-     *   <li>the primitives and {@code String}, through the accessors themselves.</li>
-     * </ul>
-     *
-     * <p><strong>Two conversions are deliberately absent, and they are different problems.</strong> A <em>date</em>
-     * ({@code Instant}, {@code LocalDate}) is written by Jackson as an ISO string only when the caller's mapper has the
-     * JavaTime module registered, and as something else when it does not ({@code EntityJacksonMapper} adds only its own
-     * view module, so the answer lives with the caller). Guessing wrong there fails at <em>runtime</em>, not at compile
-     * time — the worst kind — so the type is reported instead. An <em>enum</em> would be {@code valueOf(node.asText())},
-     * which is right by Jackson's default and wrong for any declared type that is not an enum: guessing from the type
-     * text would emit code that does not compile in someone else's project. Neither is a line here; both need the
-     * generator to be told, by the emitter's format contract or by the resolved type information respectively.</p>
+     * <p>Direct {@code JsonNode} accessors, plus the JDK types whose Jackson form is fixed by Jackson's own rules
+     * rather than by a mapper configuration this generator cannot see. A date is deliberately absent: its
+     * form depends on the caller's mapper (ISO text with the JavaTime module, something else without), and a
+     * wrong guess fails at runtime rather than at compile time.</p>
      */
     private static String conversion(String declaredType) {
         String type = declaredType == null ? "" : declaredType.trim();
@@ -392,6 +428,10 @@ public final class ViewPatchApplierGenerator {
             case "UUID", "java.util.UUID" -> "java.util.UUID.fromString({node}.asText())";
             default -> null;
         };
+    }
+
+    private static String nl() {
+        return System.lineSeparator();
     }
 
     /** The two-line file header, via the one place its spelling is written down (DEC-035). */

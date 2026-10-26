@@ -117,15 +117,17 @@ class GeneratedPatchApplierRuntimeTest {
         try (var loader = new java.net.URLClassLoader(new java.net.URL[] { classes.toUri().toURL() },
                 getClass().getClassLoader())) {
             Class<?> applier = loader.loadClass("runtime.hr.PersonSummaryPatchApplier");
+            Class<?> view = loader.loadClass("runtime.hr.PersonSummary");
             Class<?> write = loader.loadClass("runtime.hr.PersonSummary$Write");
 
             RecordingWriter recorder = new RecordingWriter();
             Object target = Proxy.newProxyInstance(loader, new Class<?>[] { write }, recorder);
+            Object source = Proxy.newProxyInstance(loader, new Class<?>[] { view }, (proxy, method, args) -> null);
 
             @SuppressWarnings("unchecked")
             List<String> report = (List<String>) applier
-                    .getMethod("apply", JsonNode.class, write)
-                    .invoke(null, document(), target);
+                    .getMethod("apply", JsonNode.class, view, write)
+                    .invoke(null, document(), source, target);
 
             Assertions.assertEquals("Grace", recorder.calls.get("firstName"),
                     "the String leaf is applied with the value the document carried");
@@ -139,6 +141,126 @@ class GeneratedPatchApplierRuntimeTest {
                     report,
                     "a field the view does not have is REPORTED and not applied (DEC-016), which is the half of the "
                             + "contract a compile check cannot see");
+        }
+    }
+
+    /** A nested child view with its own builder level and Write, so the builder route is real. */
+    private static final String ADDRESS = """
+            package runtime.hr;
+            import hr.hrg.hipster.entity.api.GenLevel;
+            import hr.hrg.hipster.entity.api.View;
+            import hr.hrg.hipster.entity.api.ViewWriter;
+            @View(gen = GenLevel.BUILDER_ALL)
+            public interface Address extends Thing {
+                String city();
+                interface Write extends Address, ViewWriter {
+                    Write city(String value);
+                }
+            }
+            """;
+
+    /** The parent: one nested field and one collection of nested views. */
+    private static final String PARENT = """
+            package runtime.hr;
+            import hr.hrg.hipster.entity.api.GenLevel;
+            import hr.hrg.hipster.entity.api.View;
+            import hr.hrg.hipster.entity.api.ViewWriter;
+            import java.util.List;
+            @View(gen = GenLevel.BUILDER_ALL)
+            public interface PersonSummary extends Thing {
+                String firstName();
+                Address address();
+                List<Address> previousAddresses();
+                interface Write extends PersonSummary, ViewWriter {
+                    Write firstName(String value);
+                    Write address(Address value);
+                    Write previousAddresses(List<Address> value);
+                }
+            }
+            """;
+
+    /** One nested leaf, one collection leaf, and one index that no longer exists. */
+    private static JsonNode nestedDocument() {
+        var root = JsonNodeFactory.instance.objectNode();
+
+        var address = JsonNodeFactory.instance.objectNode();
+        var addressPaths = JsonNodeFactory.instance.arrayNode();
+        var city = JsonNodeFactory.instance.objectNode();
+        city.set("path", JsonNodeFactory.instance.arrayNode().add("address").add("city"));
+        city.put("current", "New");
+        addressPaths.add(city);
+        address.set("paths", addressPaths);
+        root.set("address", address);
+
+        var previous = JsonNodeFactory.instance.objectNode();
+        var previousPaths = JsonNodeFactory.instance.arrayNode();
+        var first = JsonNodeFactory.instance.objectNode();
+        first.set("path", JsonNodeFactory.instance.arrayNode().add("previousAddresses").add(0).add("city"));
+        first.put("current", "Paris");
+        previousPaths.add(first);
+        var stale = JsonNodeFactory.instance.objectNode();
+        stale.set("path", JsonNodeFactory.instance.arrayNode().add("previousAddresses").add(5).add("city"));
+        stale.put("current", "Nowhere");
+        previousPaths.add(stale);
+        previous.set("paths", previousPaths);
+        root.set("previousAddresses", previous);
+        return root;
+    }
+
+    @Test
+    void nestedAndCollectionLeavesAreAppliedThroughTheBuildersAndAStaleIndexIsReported() throws Exception {
+        Path root = tempDir.resolve("nested-runtime");
+        Path pkg = root.resolve("runtime/hr");
+        Files.createDirectories(pkg);
+        Files.writeString(pkg.resolve("Thing.java"), MARKER);
+        Files.writeString(pkg.resolve("Address.java"), ADDRESS);
+        Files.writeString(pkg.resolve("PersonSummary.java"), PARENT);
+
+        EntityMetadataGenerator.setGeneratePatchAppliers(true);
+        try {
+            EntityMetadataGenerator.generate(root, root, root, new DivergenceReporter());
+        } finally {
+            EntityMetadataGenerator.setGeneratePatchAppliers(false);
+        }
+
+        Path classes = CompileHarness.compileOrFail(CompileHarness.findRepoRoot(), "patch-applier-nested-runtime",
+                CompileHarness.javaSourcesUnder(root), List.of());
+
+        try (var loader = new java.net.URLClassLoader(new java.net.URL[] { classes.toUri().toURL() },
+                getClass().getClassLoader())) {
+            Class<?> addressClass = loader.loadClass("runtime.hr.Address");
+            Class<?> addressBuilderClass = loader.loadClass("runtime.hr.AddressBuilder");
+            Class<?> summaryClass = loader.loadClass("runtime.hr.PersonSummary");
+            Class<?> summaryBuilderClass = loader.loadClass("runtime.hr.PersonSummaryBuilder");
+            Class<?> writeClass = loader.loadClass("runtime.hr.PersonSummary$Write");
+
+            Object oldAddress = addressBuilderClass.getConstructor().newInstance();
+            addressBuilderClass.getMethod("city", String.class).invoke(oldAddress, "Old");
+            Object oldListChild = addressBuilderClass.getConstructor().newInstance();
+            addressBuilderClass.getMethod("city", String.class).invoke(oldListChild, "Old list");
+
+            Object view = summaryBuilderClass.getConstructor().newInstance();
+            summaryBuilderClass.getMethod("address", addressClass).invoke(view, oldAddress);
+            summaryBuilderClass.getMethod("previousAddresses", java.util.List.class)
+                    .invoke(view, List.of(oldListChild));
+            Object target = summaryBuilderClass.getConstructor(summaryClass).newInstance(view);
+
+            Class<?> applier = loader.loadClass("runtime.hr.PersonSummaryPatchApplier");
+            @SuppressWarnings("unchecked")
+            List<String> report = (List<String>) applier
+                    .getMethod("apply", JsonNode.class, summaryClass, writeClass)
+                    .invoke(null, nestedDocument(), view, target);
+
+            Object patchedAddress = summaryBuilderClass.getMethod("address").invoke(target);
+            Assertions.assertEquals("New", addressClass.getMethod("city").invoke(patchedAddress),
+                    "the nested leaf is applied through the child's own builder");
+            List<?> patchedList = (List<?>) summaryBuilderClass.getMethod("previousAddresses").invoke(target);
+            Assertions.assertEquals(1, patchedList.size(), "the stale index did not grow the list: " + report);
+            Assertions.assertEquals("Paris", addressClass.getMethod("city").invoke(patchedList.get(0)),
+                    "the in-range collection element is applied through its own builder");
+            Assertions.assertEquals(1, report.size(), "only the stale index is a finding: " + report);
+            Assertions.assertTrue(report.get(0).startsWith("stale_index: previousAddresses[5]"),
+                    "an index that no longer exists is named, never silently skipped: " + report);
         }
     }
 }

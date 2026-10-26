@@ -40,10 +40,12 @@ revision on 2026-10-09 corrected the same class of mistake twice more: `Type div
   the tracking contract in `hipster-entity-core` for this release, so a generated tracking builder
   depends on `core` (plan.dsflash § 4.4). Not a gap, a recorded scope decision.
   **-> dropped by decision, not pending** (its own words: "Not a gap, a recorded scope decision")
-- [ ] Deep change tracking, the nested half (step 6.2) — the runtime, the emitters and the per-view
-  `<View>PatchApplier` are in; **unknown field is skipped and reported** (DEC-048 § 3), and a missing converter
-  fails a `STRICT` pass. **What is left: nested, collection and polymorphic recursion**, whose shape is settled in
-  [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) items 3–6 and scheduled as the new plan step 6.8
+- [x] Deep change tracking, the nested half (step 6.2) — **done 2026-10-26 (step 6.8)**. The runtime, the emitters
+  and the per-view `<View>PatchApplier` are in; **unknown field is skipped and reported** (DEC-048 § 3), a missing
+  converter fails a `STRICT` pass, and the remaining nested/collection/polymorphic recursion landed with the generated
+  builder implementing its view's `Write`: a child's writer is `child.toBuilder()`, a stale collection index is a
+  named finding, and a patch addressed to a marker root dispatches through the generated
+  `<Root>PatchApplier`.
 - [x] **Generated view-to-view mappers landed** — `ViewMapperGenerator` emits a
   statically-dispatched `static <Target> map(<Source>)` into the target's package, requested with
   `--mapper <Src>:<Tgt>[:<ClassName>]`, with a widening-only conversion table, a `null` plus a

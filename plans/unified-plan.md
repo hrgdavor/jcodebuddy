@@ -5,15 +5,15 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 10 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
+**What is left: 9 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
 3.8, then a **design step**: on 2026-10-10 its design landed as
 [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md), the maintainer **accepted** it, and both
 steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
 and **3.11b** (the live-application entry point, documented and verified). What DEC-049 still leaves open is its
 two *optional* steps, **3.11c** (the generator emitting a bean FQN, only if beans should be clickable) and
 **3.11d** (wiring the page build into the recorded pass). The rest: **5.3** (the ACP spike, a person), **8.1–8.5**
-(observations on a real editor), and **6.8 and 6.9** — the remainders steps 6.2 and 6.4 left behind while being
-closed as steps. A step is ticked from a dated `Done` record in its own body, never from a
+(observations on a real editor), and **6.9** — the remainder step 6.4 left behind while being closed as a step. A
+step is ticked from a dated `Done` record in its own body, never from a
 "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
@@ -247,7 +247,7 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 | the general suggestion channel, asked for 2026-10-07 — designed in [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md) | steps 4.14–4.17: a first-class `SUGGESTION` resolution that carries a concrete answer and is never applied on its own; the answers the module **already computes but hides behind a refusal**; the page's Accept/Edit/Reject; rejection memory; and the **SUGGESTION** half of the JetBrains port as its first producer | **done** — closed into steps 4.14–4.17, all `[x]` (the channel, the report, the refusal memory and the proposer as one provenance) |
 | [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **closed in steps 5.1–5.3** — 5.1 is `[x]` (the headless parity test, extended and asserted to cover every verb); 5.2 is `[x]` (Q3 answered 2026-10-26: keep the shared core); 5.3 is a person’s |
 | [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **closed in steps 5.4 and 8.2** — 5.4 is `[x]` (Q2 answered 2026-10-26: dropins is acceptable, so Phase 5 is declined); 8.2 remains the human observation of the 4.41 dropins layout |
-| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5, 6.10               | **closed in steps 6.1–6.5 and 6.10** — 6.1, 6.3 and 6.5 are `[x]`; 6.2 and 6.4 are `[x]` as steps with their remainders scheduled as 6.8/6.9; 6.10 closed the FieldAnnotation row (2026-10-26) |
+| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5, 6.8, 6.10          | **closed in steps 6.1–6.5, 6.8 and 6.10** — 6.1, 6.3, 6.5, 6.8 and 6.10 are `[x]`; 6.2 and 6.4 are `[x]` as steps, with 6.9 the only remainder left (2026-10-26) |
 | [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | **done for steps 7.1–7.10** (all `[x]`, and 7.7–7.10 are newer than this row’s own range), with **8.1 and 8.3 closed in themselves** (human observations on a real IDE) and **the two items nothing else scheduled decided in step 9.1b** — the sidecar’s "add more tools" (struck: the sidecar owns the host half, generators live in the agent’s tool registry) and the agent’s "lightweight hooks for IntelliJ and VS Code" (struck: delivered by `webview-jetbrains` and `webview-vscode`), the only two step 9.1’s coverage check found unaccounted for |
 | [`plans/rewrite-migration/`](rewrite-migration/README.md)                         | nothing — it is **complete**      | **done** — every step it contributed is `[x]`, and step 9.2 (archive) is `[x]` too, so the plan is a historical record rather than open work |
 
@@ -600,7 +600,7 @@ into the plan's Phase 5 record.
 
 ## 10. Phase 6 — hipster-entity roadmap rows
 
-**Finished in this phase**: 6.3, 6.5, 6.6 and 6.7, with their records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md), and **6.10**, whose `Done` record is in its own step below.
+**Finished in this phase**: 6.3, 6.5, 6.6 and 6.7, with their records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md), and **6.8 and 6.10**, whose `Done` records are in their own steps below.
 
 > 6.1, 6.2 and 6.4 were **closed as plan steps by their own `Done` records while each still had named work
 > outstanding**, which reading those records against the tree found on 2026-10-09. The findings and the
@@ -643,6 +643,43 @@ field it sets (AGENTS.md § 1).
 
 **Done when:** the emitter change is in the example's committed sources, `ExampleRegenerationTest` is a
 byte-identical no-op again, and the roadmap row for 6.2's nested half closes with this step's record.
+
+**Done 2026-10-26 — builders are writers, recursion goes through them, and the root family has a dispatcher.**
+
+- **Every compatible generated builder implements its view's `Write`.** `ViewWriteInterface` reads the nested
+  `Write` from the view source; `ViewBuilderGenerator` emits `implements <View>.Write` only when every setter matches
+  a writable field and no accessor is primitive (the builder's getters are boxed, so a primitive accessor could not
+  override). The source is threaded through the main pass and the merge re-emission (`MergeModel.viewSource`). The
+  example's `PersonSummaryBuilder` is the first case; a `Write` the builder cannot satisfy is reported
+  (`builder_write_not_implemented`) and left without the clause, and the applier is skipped for that view
+  (`patch_applier_without_builder_write`).
+- **Nested recursion.** The applier is now `apply(JsonNode, <View> view, <View>.Write target)` with a convenience
+  `apply(JsonNode, <View> view)` returning `Result(value, report)`. A path continuing into a child reads the child
+  from the source view, gets `child.toBuilder()`, recurses through the child's own applier, and writes the rebuilt
+  child back through the parent's typed setter. The caller-supplied `Children` resolver of the first slice is gone:
+  the builder *is* the route (DEC-048's amendment).
+- **Collection elements, and the stale index.** A collection field applies element writes: copy the list, bounds-check
+  each index, patch through the element's builder, set it back, then write the list through the parent's setter. An
+  index that no longer exists produces `stale_index: <field>[<i>] has no element (size <n>)` rather than a silent
+  skip; the valid operations still land and the report is non-empty, so the patch is never reported as success.
+  `childEntryDocument` carries one element's operation to the child applier — the runtime test found that the old code
+  passed the *entry* to a helper expecting a `paths` container.
+- **Polymorphic roots.** `Family`/`Member` and `patchFamilies` build the marker-root families from the parsed
+  interfaces. `<Root>PatchApplier` reads the value's discriminator through the root's accessor, switches on each
+  concrete view's declared value, casts to that view, and calls `<Concrete>PatchApplier.apply(...)` — direct calls per
+  arm, no reflection. A dispatcher is emitted only for a root with at least two builder-level `Write` members, and a
+  member whose builder cannot implement `Write` is excluded.
+- **Scope, stated precisely.** A patch target is a view with a `Write`; an applier is emitted only for those, and a
+  nested child is reached from its parent's applier. A view with no `Write` is reported
+  (`patch_applier_without_write`) rather than given a class that cannot compile, and a family with no applier member
+  gets no dispatcher — a project pays nothing for a family it never patches.
+- **Roadmap:** row 43 (deep change tracking, the nested half) is ticked with this record.
+- **Evidence:** `hipster-entity-tooling` — **522 tests, 0 failures** (cache off), including
+  `GeneratedPatchApplierTest` 4/0, `GeneratedPatchApplierRuntimeTest` 2/0 (leaf; nested + collection + stale index),
+  and `GeneratedPatchApplierPolymorphicTest` 1/0; `ExampleRegenerationTest` **9/0**; `bun scripts/gen.js` exit 0,
+  301 links verified, and the only committed source it changed is `PersonSummaryBuilder` gaining
+  `implements PersonSummary.Write`. **GATE** — `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (8:12), a clean run
+  after the stale `-DskipTests` cache entries were removed, so the 522 tests above are the gate's own run.
 
 ### 6.9 — The converter manifest, generated and committed
 **Who:** agent · **Size:** M
@@ -816,7 +853,7 @@ start)
 | 3.11a | The graph page joins the class index and navigates                                              | agent                       | M    | `[x]` — **done 2026-10-10** (`locations.js` + `navigate.js`, the join in `build.js`; 15 + 14 tests, a stubbed click reaching `window.openFile` at the joined line; done record in the step) |
 | 3.11b | The outside-the-browser entry point is documented and verified                                  | agent                       | S    | `[x]` — **done 2026-10-10** (`webview-host-api.md` § 4c and `check-open-route.js`: 18 assertions, 0 failed; done record in the step) |
 | 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                       |
-| 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[ ]` — implements DEC-048's 2026-10-09 amendment                                           |
+| 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[x]` — **done 2026-10-26**: builders implement `Write`, recursion goes through child builders, and the root family has a generated dispatcher (done record in the step) |
 | 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[ ]` — 6.4's only remainder                                                                |
 | 6.10  | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[x]` — **done 2026-10-26**: the JSON writer now carries `constraints`; the "CLI is the JSON path" premise was corrected (done record in the step) |
 | 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                       |

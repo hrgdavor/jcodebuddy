@@ -619,7 +619,8 @@ public class EntityMetadataGenerator {
      */
     private record MergeModel(String packageName, ViewMeta view, List<Property> properties, boolean nestedRecord,
                               java.util.Map<String, TrackableType> trackableTypes,
-                              java.util.Set<String> nonTrackableViewNames, boolean trackingBuilder) {
+                              java.util.Set<String> nonTrackableViewNames, boolean trackingBuilder,
+                              Path viewSource) {
     }
 
     /** The per-view builder inputs of this pass, for {@link #generateRequestedMerges}. */
@@ -1806,6 +1807,13 @@ public class EntityMetadataGenerator {
                 .filter(info -> isMarkerEntityOrRoot(info, interfaceMap))
                 .toList();
 
+        // The polymorphic families a patch can address: a marker root, its concrete builder-level views with
+        // a Write, and the discriminator each one declares. Computed before the emission loop so the
+        // dispatchers can be written once, after every member's own applier exists.
+        List<ViewPatchApplierGenerator.Family> applierFamilies = generatePatchAppliers
+                ? patchFamilies(interfaceMap, moduleRoot)
+                : List.of();
+
         for (InterfaceInfo info : markers) {
             boolean derivedFromAnotherMarker = markers.stream()
                     .anyMatch(other -> other != info && isDerivedFrom(info, other, interfaceMap));
@@ -2041,6 +2049,9 @@ public class EntityMetadataGenerator {
                         ViewAdapterGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
                                 divergences);
                     }
+                    Path viewSource = view.sourcePath() == null || view.sourcePath().isBlank()
+                            ? null
+                            : moduleRoot.resolve(view.sourcePath());
                     if (generatePatchAppliers
                             && (view.gen() == GenLevel.BUILDER
                                     || view.gen() == GenLevel.BUILDER_TRACKED
@@ -2060,11 +2071,20 @@ public class EntityMetadataGenerator {
                         // `nonTrackableViewNames` the rest, so their union is every view this pass generated.
                         java.util.Set<String> viewNames = new java.util.LinkedHashSet<>(trackableTypes.keySet());
                         viewNames.addAll(nonTrackableViewNames);
-                        ViewPatchApplierGenerator.generate(javaOutputRoot, viewPackage, view,
-                                view.sourcePath() == null || view.sourcePath().isBlank()
-                                        ? null
-                                        : sourceRoot.resolve(view.sourcePath()),
-                                ViewPatchApplierGenerator.writableOf(ordinalProperties), viewNames, divergences);
+                        // The applier's only writer route is `view.toBuilder()`, so the builder must actually
+                        // implement the view's Write (DEC-048's amendment). A Write the builder cannot satisfy
+                        // (a primitive accessor, a setter type mismatch) is reported and skipped rather than
+                        // generating a class that calls a Write the builder does not implement.
+                        if (!ViewBuilderGenerator.implementsWrite(view, ordinalProperties, viewSource, null)) {
+                            divergences.report("patch_applier_without_builder_write", view.name(),
+                                    "the view's Write cannot be implemented by its builder, so view.toBuilder() "
+                                            + "is not a Write target",
+                                    "incompatible Write/builder", "a Write whose setters match the builder's fields",
+                                    "fix the Write or the field types, then regenerate");
+                        } else {
+                            ViewPatchApplierGenerator.generate(javaOutputRoot, viewPackage, view, viewSource,
+                                    ViewPatchApplierGenerator.writableOf(ordinalProperties), viewNames, divergences);
+                        }
                     }
                     if (wantsTrackingBuilder) {
                         ViewTrackingBuilderGenerator.generate(javaOutputRoot, viewPackage, view,
@@ -2079,14 +2099,15 @@ public class EntityMetadataGenerator {
                             || view.gen() == GenLevel.BUILDER_TRACKED
                             || view.gen() == GenLevel.BUILDER_ALL) {
                         ViewBuilderGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
-                                nestedRecordUsable, divergences);
+                                nestedRecordUsable, List.of(), divergences, viewSource);
                     }
                     // Plan step 7.3: keep what a merge request will need to re-emit this view's builders. A merge is
                     // between two views, and the partner may be resolved after this one, so the pass records the
                     // inputs now and applies the merges once every view is known - the same "after all views" shape
                     // the mapper requests already use.
                     mergeModels.put(view.name(), new MergeModel(viewPackage, view, ordinalProperties,
-                            nestedRecordUsable, trackableTypes, nonTrackableViewNames, wantsTrackingBuilder));
+                            nestedRecordUsable, trackableTypes, nonTrackableViewNames, wantsTrackingBuilder,
+                            viewSource));
                     // § 8.2/G2 + § 8.6/3.17a: the two builder entry points are `default` methods on
                     // the VIEW interface — the one file the developer owns. The emitter recognises an
                     // existing method by shape and only writes when one is actually missing, so a
@@ -2156,6 +2177,10 @@ public class EntityMetadataGenerator {
                     "unparseable source", "a readable compilation unit",
                     "fix the syntax: nothing is generated for this file, and its types are invisible "
                             + "to every other file's resolution");
+        }
+
+        for (ViewPatchApplierGenerator.Family family : applierFamilies) {
+            ViewPatchApplierGenerator.generateDispatcher(javaOutputRoot, family, divergences);
         }
 
         generateRequestedMappers(javaOutputRoot, emittedViews, divergences);
@@ -2351,7 +2376,8 @@ public class EntityMetadataGenerator {
                     || model.view().gen() == GenLevel.BUILDER_TRACKED
                     || model.view().gen() == GenLevel.BUILDER_ALL) {
                 ViewBuilderGenerator.generate(javaOutputRoot, model.packageName(), model.view(),
-                        model.properties(), model.nestedRecord(), entry.getValue(), divergences);
+                        model.properties(), model.nestedRecord(), entry.getValue(), divergences,
+                        model.viewSource());
             }
             System.out.println("Merged into " + entry.getKey() + "Builder: "
                     + entry.getValue().stream().map(ViewMergeGenerator.Partner::simpleName).toList());
@@ -3045,6 +3071,15 @@ public class EntityMetadataGenerator {
      * @return the literal, or {@code null} when the view declares no discriminator
      */
     private static String discriminatorValueOf(InterfaceInfo view, Map<String, InterfaceInfo> interfaceMap) {
+        Discriminator discriminator = discriminatorOf(view, interfaceMap);
+        return discriminator == null ? null : discriminator.value();
+    }
+
+    /** A polymorphic view's discriminator field and the value its own default accessor returns. */
+    private record Discriminator(String field, String value) {
+    }
+
+    private static Discriminator discriminatorOf(InterfaceInfo view, Map<String, InterfaceInfo> interfaceMap) {
         if (view == null || view.declaration() == null) {
             return null;
         }
@@ -3074,7 +3109,7 @@ public class EntityMetadataGenerator {
                 // A string literal is one `J.Literal` discriminated by its primitive, not a dedicated
                 // `StringLiteralExpr` node (MIGRATION-CAVEATS.md § 2).
                 if (expression instanceof J.Literal literal && literal.getValue() instanceof String text) {
-                    return text;
+                    return new Discriminator(method.getSimpleName(), text);
                 }
             }
         }
@@ -3789,6 +3824,87 @@ public class EntityMetadataGenerator {
             }
         }
         return null;
+    }
+
+    /**
+     * The polymorphic families a patched view can address (DEC-048's 2026-10-09 amendment).
+     *
+     * <p>A family is a marker root plus the concrete views that declare a discriminator value, are at a
+     * builder level, and declare a {@code Write}. Only roots that are <em>not</em> themselves views are
+     * dispatched here: a view root has its own generated applier, and two classes with the same name would
+     * be a collision. Members without an applier are excluded rather than emitted as a cast that cannot
+     * call anything.</p>
+     */
+    private static List<ViewPatchApplierGenerator.Family> patchFamilies(
+            Map<String, InterfaceInfo> interfaceMap, Path moduleRoot) throws IOException {
+        Map<String, InterfaceInfo> roots = new LinkedHashMap<>();
+        Map<String, String> fields = new LinkedHashMap<>();
+        Map<String, List<ViewPatchApplierGenerator.Member>> members = new LinkedHashMap<>();
+        for (InterfaceInfo view : interfaceMap.values()) {
+            if (view.view() == null || !isBuilderLevel(view.view().gen())) {
+                continue;
+            }
+            Discriminator discriminator = discriminatorOf(view, interfaceMap);
+            if (discriminator == null) {
+                continue;
+            }
+            InterfaceInfo root = discriminatorRoot(view, discriminator.field(), interfaceMap);
+            if (root == null || root.view() != null) {
+                continue;
+            }
+            Path source = view.sourcePath() == null || view.sourcePath().isBlank()
+                    ? null
+                    : moduleRoot.resolve(view.sourcePath());
+            ViewWriteInterface write = ViewWriteInterface.readOrNull(source);
+            if (write == null || write.setters().isEmpty()) {
+                continue;
+            }
+            if (!ViewBuilderGenerator.implementsWrite(new ViewMeta(view.name(), view.extendsTypes(),
+                    view.view().gen(), view.view().discriminatorField(), view.view().addons(), view.view().dto(),
+                    view.properties(), view.lineNumber(), view.sourcePath()), view.properties(), source, null)) {
+                continue;
+            }
+            String rootFqn = getQualifiedName(root.packageName(), root.name());
+            roots.putIfAbsent(rootFqn, root);
+            fields.putIfAbsent(rootFqn, discriminator.field());
+            members.computeIfAbsent(rootFqn, ignored -> new ArrayList<>())
+                    .add(new ViewPatchApplierGenerator.Member(view.packageName(), view.name(),
+                            getQualifiedName(view.packageName(), view.name()), discriminator.value()));
+        }
+        List<ViewPatchApplierGenerator.Family> families = new ArrayList<>();
+        for (Map.Entry<String, List<ViewPatchApplierGenerator.Member>> entry : members.entrySet()) {
+            if (entry.getValue().size() < 2) {
+                continue;
+            }
+            InterfaceInfo root = roots.get(entry.getKey());
+            families.add(new ViewPatchApplierGenerator.Family(root.packageName(), root.name(),
+                    entry.getKey(), fields.get(entry.getKey()), entry.getValue()));
+        }
+        return families;
+    }
+
+    /** The nearest supertype that declares the discriminator accessor as an abstract method. */
+    private static InterfaceInfo discriminatorRoot(InterfaceInfo view, String field,
+                                                   Map<String, InterfaceInfo> interfaceMap) {
+        for (InterfaceInfo candidate : interfaceMap.values()) {
+            if (candidate == view || candidate.declaration() == null || !isDerivedFrom(view, candidate, interfaceMap)) {
+                continue;
+            }
+            for (J.MethodDeclaration method : TreeQueries.methodsOf(candidate.declaration())) {
+                if (method.getSimpleName().equals(field)
+                        && TreeQueries.hasNoParameters(method)
+                        && !TreeQueries.isDefaultMethod(method)
+                        && !TreeQueries.isVoidReturn(method)) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Whether a generation level emits the plain builder, hence a {@code toBuilder()} writer. */
+    private static boolean isBuilderLevel(GenLevel level) {
+        return level == GenLevel.BUILDER || level == GenLevel.BUILDER_TRACKED || level == GenLevel.BUILDER_ALL;
     }
 
     private static List<Property> collectViewProperties(InterfaceInfo viewInfo, InterfaceInfo marker, Map<String, InterfaceInfo> interfaceMap) {

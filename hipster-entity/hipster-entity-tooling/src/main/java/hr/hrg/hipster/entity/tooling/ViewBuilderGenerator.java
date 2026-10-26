@@ -92,6 +92,23 @@ public final class ViewBuilderGenerator {
                                   List<Property> allProperties, boolean nestedRecord,
                                   List<ViewMergeGenerator.Partner> partners,
                                   DivergenceReporter divergences) throws IOException {
+        return generate(outputRoot, packageName, view, allProperties, nestedRecord, partners, divergences, null);
+    }
+
+    /**
+     * As above, with the view's own source so the builder can implement the view's nested {@code Write}
+     * (DEC-048's 2026-10-09 amendment).
+     *
+     * <p>The builder is the route from a view instance to a writer: {@code view.toBuilder()} returns it, and
+     * the patch applier recurses through a child's builder. The clause is emitted only when the view declares
+     * a {@code Write} <em>and</em> the builder's generated methods can satisfy it; a view with no
+     * {@code Write}, a primitive accessor (the builder's getters are boxed), or a setter whose parameter type
+     * differs is reported rather than compiled into a broken file.</p>
+     */
+    public static Result generate(Path outputRoot, String packageName, ViewMeta view,
+                                  List<Property> allProperties, boolean nestedRecord,
+                                  List<ViewMergeGenerator.Partner> partners,
+                                  DivergenceReporter divergences, Path viewSource) throws IOException {
         Path packageDir = packageName == null || packageName.isBlank()
                 ? outputRoot
                 : outputRoot.resolve(packageName.replace('.', '/'));
@@ -102,6 +119,7 @@ public final class ViewBuilderGenerator {
         if (divergences != null) {
             reportMissingSetters(builderFile, builderClass, view.name(), writable, divergences);
         }
+        boolean implementsWrite = implementsWrite(view, allProperties, viewSource, divergences);
         // § 8.7/3.19 (DEC-020) + the follow-up plan's § 1.1: reconcile the previous revision member by
         // member — a member the emitter does not produce is carried through, an edit to one it does
         // produce is reported. A RETIRED field's members are excluded: the generator used to emit its
@@ -114,6 +132,7 @@ public final class ViewBuilderGenerator {
         CooperativeCodegen.Reconciled reconciled = CooperativeCodegen.reconcileMembers(
                 builderFile, builderClass,
                 source(packageName, view, allProperties, writable, builderClass, nestedRecord,
+                        implementsWrite,
                         mergePlans(view, allProperties, partners, divergences, builderClass)),
                 CooperativeCodegen.Reconciliation.ALL, retired);
         if (divergences != null) {
@@ -121,6 +140,71 @@ public final class ViewBuilderGenerator {
         }
         Files.writeString(builderFile, reconciled.source());
         return new Result(builderFile, builderClass, writable.stream().map(Property::name).toList());
+    }
+
+    /**
+     * Whether the builder can add {@code implements <View>.Write} and compile.
+     *
+     * <p>Three conditions, each of which would otherwise turn a well-meant clause into a broken committed
+     * file: the view declares {@code Write}; no accessor returns a primitive (the builder's getters are
+     * boxed, so {@code int age()} and {@code Integer age()} cannot be the same override); and every
+     * {@code Write} setter has a writable field of the same erased type. A setter the builder does not
+     * generate is the common case of a hand-written interface that outgrew the view, and it is reported —
+     * exactly as the applier reports a missing setter rather than calling one that is not there.</p>
+     */
+    static boolean implementsWrite(ViewMeta view, List<Property> allProperties, Path viewSource,
+                                   DivergenceReporter divergences) throws IOException {
+        ViewWriteInterface write = ViewWriteInterface.readOrNull(viewSource);
+        if (write == null || write.setters().isEmpty()) {
+            return false;
+        }
+        String reason = null;
+        for (Property property : allProperties) {
+            if (isPrimitiveType(property.type())) {
+                reason = "the field `" + property.name() + "` is primitive (`" + property.type()
+                        + "`), and the builder's boxed getters cannot override the view's primitive accessor";
+                break;
+            }
+        }
+        if (reason == null) {
+            java.util.Map<String, Property> writableByName = new java.util.LinkedHashMap<>();
+            for (Property property : allProperties) {
+                if (ViewAdapterGenerator.isWritable(property)) {
+                    writableByName.put(property.name(), property);
+                }
+            }
+            for (ViewWriteInterface.Setter setter : write.setters()) {
+                Property property = writableByName.get(setter.name());
+                if (property == null) {
+                    reason = "`Write." + setter.name() + "` has no writable field to write";
+                    break;
+                }
+                String builderType = ViewTrackingBuilderGenerator.boxedType(property.type());
+                if (!ValidationGenerator.erase(builderType).equals(ValidationGenerator.erase(setter.parameterType()))) {
+                    reason = "`Write." + setter.name() + "(" + setter.parameterType() + ")` does not match the "
+                            + "builder's `" + builderType + "`";
+                    break;
+                }
+            }
+        }
+        if (reason != null) {
+            if (divergences != null) {
+                divergences.report("builder_write_not_implemented", view.name(),
+                        "the view declares a Write interface the builder cannot implement without breaking compilation",
+                        reason, "a Write whose setters match the builder's writable fields",
+                        "fix the Write interface (or the field type), then regenerate");
+            }
+            return false;
+        }
+        return true;
+    }
+
+    /** Whether a declared type is one of Java's primitives, which the builder boxes. */
+    private static boolean isPrimitiveType(String declaredType) {
+        return switch (declaredType == null ? "" : declaredType.trim()) {
+            case "byte", "short", "int", "long", "float", "double", "boolean", "char" -> true;
+            default -> false;
+        };
     }
 
     /**
@@ -195,6 +279,7 @@ public final class ViewBuilderGenerator {
 
     private static String source(String packageName, ViewMeta view, List<Property> allProperties,
                                  List<Property> writable, String builderClass, boolean nestedRecord,
+                                 boolean implementsWrite,
                                  List<ViewMergeGenerator.Plan> mergePlans) {
         String viewName = view.name();
         StringBuilder sb = new StringBuilder();
@@ -219,7 +304,13 @@ public final class ViewBuilderGenerator {
         sb.append(" * writable fields: a {@code DERIVED}/{@code JOINED} field stays readable and keeps its\n");
         sb.append(" * ordinal, but has no setter (S1).\n");
         sb.append(" */\n");
-        sb.append("public final class ").append(builderClass).append(" {\n\n");
+        sb.append("public final class ").append(builderClass);
+        if (implementsWrite) {
+            // DEC-048's 2026-10-09 amendment: the builder is the route from a view instance to a writer,
+            // so a patch applier can recurse through a child's own builder instead of a caller lambda.
+            sb.append(" implements ").append(viewName).append(".Write");
+        }
+        sb.append(" {\n\n");
 
         for (Property property : allProperties) {
             for (hr.hrg.hipster.entity.tooling.meta.FieldConstraint constraint : property.constraints()) {
