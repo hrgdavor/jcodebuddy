@@ -1578,25 +1578,35 @@ public class EntityMetadataGenerator {
      * The manifest's text: the document format DEC-026's readers already expect, with the pair list plus the counts a
      * reviewer scans first.
      *
-     * <p>Ordered as the pass resolved the pairs, so a diff shows what changed rather than reshuffling.</p>
+     * <p><strong>Ordering is part of the format.</strong> Pairs are sorted by source type, then target type, then
+     * location. The manifest is compared byte-for-byte with a committed copy (plan step 6.9), so the same set of pairs
+     * must render the same bytes whatever order the mappers happened to resolve them in; "the order the pass saw them"
+     * was the earlier behaviour and could not support that comparison.</p>
      */
     private static String renderConverterManifest() {
+        java.util.List<hr.hrg.hipster.entity.tooling.meta.TypeDivergence> ordered =
+                new java.util.ArrayList<>(typeDivergences);
+        ordered.sort(java.util.Comparator
+                .comparing(hr.hrg.hipster.entity.tooling.meta.TypeDivergence::sourceType)
+                .thenComparing(hr.hrg.hipster.entity.tooling.meta.TypeDivergence::targetType)
+                .thenComparing(hr.hrg.hipster.entity.tooling.meta.TypeDivergence::location));
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         sb.append("  \"generator\": \"").append(EntityMetadataGenerator.class.getName()).append("\",\n");
-        long required = typeDivergences.stream()
+        long required = ordered.stream()
                 .filter(hr.hrg.hipster.entity.tooling.meta.TypeDivergence::converterRequired).count();
-        sb.append("  \"pairs\": ").append(typeDivergences.size()).append(",\n");
+        sb.append("  \"pairs\": ").append(ordered.size()).append(",\n");
         sb.append("  \"convertersRequired\": ").append(required).append(",\n");
         sb.append("  \"resolved\": [\n");
-        for (int i = 0; i < typeDivergences.size(); i++) {
-            var pair = typeDivergences.get(i);
+        for (int i = 0; i < ordered.size(); i++) {
+            var pair = ordered.get(i);
             sb.append("    {\"source\": \"").append(jsonEscape(pair.sourceType()))
                     .append("\", \"target\": \"").append(jsonEscape(pair.targetType()))
                     .append("\", \"location\": \"").append(jsonEscape(pair.location()))
                     .append("\", \"converterRequired\": ").append(pair.converterRequired())
                     .append(", \"reason\": \"").append(jsonEscape(pair.reason())).append("\"}")
-                    .append(i + 1 < typeDivergences.size() ? "," : "").append("\n");
+                    .append(i + 1 < ordered.size() ? "," : "")
+                    .append("\n");
         }
         sb.append("  ]\n");
         sb.append("}\n");

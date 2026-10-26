@@ -256,9 +256,14 @@ function main() {
   // pattern, and `PersonDto` carries the `@View(dto = true)` marker. Both halves are required — the flag
   // enables the emitter, the marker selects the view — so this line adds one committed class
   // (`PersonDtoJson`) and leaves every unmarked view exactly as it was.
+  // `--mapper` since plan step 6.9: the converter manifest is machinery output and byte-reproducible, so
+  // the example needs a mapping that produces pairs. `PersonSummary -> PersonDto` is the projection pair
+  // the pattern documents; its committed `.jcodebuddy/conf/converters.json` is what
+  // ExampleConverterManifestTest compares against a fresh pass.
   status = step(jdk.java, ['-cp', classpath, 'hr.hrg.hipster.entity.tooling.EntityMetadataGenerator',
     SOURCE_ROOT, METADATA_DIR, '--java-out', SOURCE_ROOT, '--packages', PACKAGES, '--validate=STRICT',
     '--dto-projections',
+    '--mapper', 'PersonSummary:PersonDto',
     '--run-record', join(METADATA_DIR, 'generation.json')], { logPath, env });
   if (status !== 0) {
     return report(logPath, status);

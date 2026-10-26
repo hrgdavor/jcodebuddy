@@ -63,9 +63,58 @@ class MapperConverterContractTest {
         EntityMetadataGenerator.setMapperRequests(List.of("conv.hr.SourceView:conv.hr.TargetView"));
     }
 
+    /** The output root the manifest writer needs: under a module's `.jcodebuddy/`, never a bare out dir. */
+    private Path manifestTree(String name) throws Exception {
+        Path root = tree(name);
+        Files.createDirectories(root.resolve(".jcodebuddy/metadata/entity"));
+        return root;
+    }
+
+    private static Path manifest(Path root) {
+        return root.resolve(".jcodebuddy/conf/converters.json");
+    }
+
     private static void reset() {
         EntityMetadataGenerator.setMapperRequests(List.of());
         EntityMetadataGenerator.setValidationPolicy(EntityMetadataGenerator.Policy.OFF);
+    }
+
+    @Test
+    void twoPassesOverTheSameInputsProduceByteIdenticalManifests() throws Exception {
+        Path root = manifestTree("manifest-idem");
+        Path out = root.resolve(".jcodebuddy/metadata/entity");
+        map();
+        try {
+            EntityMetadataGenerator.generate(root, out, root, new DivergenceReporter());
+            byte[] first = Files.readAllBytes(manifest(root));
+            EntityMetadataGenerator.generate(root, out, root, new DivergenceReporter());
+            byte[] second = Files.readAllBytes(manifest(root));
+            Assertions.assertArrayEquals(first, second,
+                    "the manifest is machinery output: the same inputs must write the same bytes");
+        } finally {
+            reset();
+        }
+    }
+
+    @Test
+    void aChangedPairChangesTheManifest() throws Exception {
+        Path root = manifestTree("manifest-change");
+        Path out = root.resolve(".jcodebuddy/metadata/entity");
+        map();
+        try {
+            EntityMetadataGenerator.generate(root, out, root, new DivergenceReporter());
+            String before = Files.readString(manifest(root));
+            // The same field with a different source type: the pair, not the pass order, is what changes.
+            Files.writeString(root.resolve("conv/hr/SourceView.java"),
+                    SOURCE.replace("Integer amount()", "Long amount()"));
+            EntityMetadataGenerator.generate(root, out, root, new DivergenceReporter());
+            String after = Files.readString(manifest(root));
+            Assertions.assertNotEquals(before, after, "a changed pair must change the committed file");
+            Assertions.assertTrue(after.contains("\"source\": \"Long\""),
+                    "and the new source type is in the manifest:\n" + after);
+        } finally {
+            reset();
+        }
     }
 
     @Test

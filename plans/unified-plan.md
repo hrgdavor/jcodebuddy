@@ -5,15 +5,14 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 9 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
+**What is left: 8 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
 3.8, then a **design step**: on 2026-10-10 its design landed as
 [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md), the maintainer **accepted** it, and both
 steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
 and **3.11b** (the live-application entry point, documented and verified). What DEC-049 still leaves open is its
 two *optional* steps, **3.11c** (the generator emitting a bean FQN, only if beans should be clickable) and
-**3.11d** (wiring the page build into the recorded pass). The rest: **5.3** (the ACP spike, a person), **8.1–8.5**
-(observations on a real editor), and **6.9** — the remainder step 6.4 left behind while being closed as a step. A
-step is ticked from a dated `Done` record in its own body, never from a
+**3.11d** (wiring the page build into the recorded pass). The rest: **5.3** (the ACP spike, a person) and **8.1–8.5**
+(observations on a real editor). A step is ticked from a dated `Done` record in its own body, never from a
 "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
@@ -600,7 +599,7 @@ into the plan's Phase 5 record.
 
 ## 10. Phase 6 — hipster-entity roadmap rows
 
-**Finished in this phase**: 6.3, 6.5, 6.6 and 6.7, with their records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md), and **6.8 and 6.10**, whose `Done` records are in their own steps below.
+**Finished in this phase**: 6.3, 6.5, 6.6 and 6.7, with their records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md), and **6.8, 6.9 and 6.10**, whose `Done` records are in their own steps below.
 
 > 6.1, 6.2 and 6.4 were **closed as plan steps by their own `Done` records while each still had named work
 > outstanding**, which reading those records against the tree found on 2026-10-09. The findings and the
@@ -706,6 +705,33 @@ inputs are byte-identical and that a changed pair changes the file; and the road
 
 **Done when:** the manifest exists in the tree, its location and ordering are recorded, and 6.4's remainder is
 named as closed in that step's record rather than inferred from the roadmap.
+
+**Done 2026-10-26 — the manifest is generated, committed, sorted, and compared with a fresh pass.**
+
+- **Location: `.jcodebuddy/conf/converters.json`.** `conf/` is the one tracked `.jcodebuddy/` subtree (DEC-026), which
+  is what makes a committed copy possible at all; `metadata/` is derived and ignored. The writer already found the
+  module's `.jcodebuddy/` by walking up from the output directory, so this step settled the answer in the file a reader
+  opens: [`conf/README.md`](../hipster-entity/hipster-entity-example/.jcodebuddy/conf/README.md) records the format,
+  the source of truth and the ordering rule.
+- **Ordering is part of the format.** `renderConverterManifest` now sorts by **source type, then target type, then
+  location**; the earlier "as the pass resolved them" order could not support a byte comparison. The test also shows
+  that changing one pair's source type changes the file.
+- **The example produces and commits a real manifest.** `scripts/gen.js` now makes the `PersonSummary:PersonDto`
+  mapper request (the read-projection pair the pattern documents), which writes
+  [`converters.json`](../hipster-entity/hipster-entity-example/.jcodebuddy/conf/converters.json) — **6 pairs,
+  `convertersRequired: 0`** — and commits the generated
+  [`PersonSummaryToPersonDtoMapper`](../hipster-entity/hipster-entity-example/src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummaryToPersonDtoMapper.java).
+  A pair that needs a converter appears as `"converterRequired": true` with its reason; the fixture test covers that
+  outcome, and the example is coverage rather than a failure.
+- **Committed == generated, as a test.** `ExampleConverterManifestTest` copies the example's sources, runs the same
+  mapper request, and compares the generated manifest with the committed one (line endings normalised).
+  `MapperConverterContractTest` gains the two byte tests: two passes over the same inputs are byte-identical, and a
+  changed pair changes the file.
+- **6.4's remainder is closed here**, and the roadmap's type-divergence row (§ 1 row 29 and § 6 item 2) is ticked.
+- **Evidence:** `MapperConverterContractTest` **6/0** (two new), `ExampleConverterManifestTest` **1/0**;
+  `ExampleRegenerationTest` **9/0**; `bun scripts/gen.js` exit 0, 301 links verified; the generated mapper and manifest
+  compile (example module BUILD SUCCESS). **GATE** — `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (8:21, clean run after
+  the stale `-DskipTests` cache entries were removed), with `hipster-entity-tooling` at **525 tests, 0 failures**.
 
 ### 6.10 — The source → metadata JSON pass, so an annotation can reach a generated enum
 **Who:** agent · **Size:** M
@@ -854,7 +880,7 @@ start)
 | 3.11b | The outside-the-browser entry point is documented and verified                                  | agent                       | S    | `[x]` — **done 2026-10-10** (`webview-host-api.md` § 4c and `check-open-route.js`: 18 assertions, 0 failed; done record in the step) |
 | 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                       |
 | 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[x]` — **done 2026-10-26**: builders implement `Write`, recursion goes through child builders, and the root family has a generated dispatcher (done record in the step) |
-| 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[ ]` — 6.4's only remainder                                                                |
+| 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[x]` — **done 2026-10-26**: `.jcodebuddy/conf/converters.json` is sorted, byte-reproducible, and compared with a fresh pass (done record in the step) |
 | 6.10  | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[x]` — **done 2026-10-26**: the JSON writer now carries `constraints`; the "CLI is the JSON path" premise was corrected (done record in the step) |
 | 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                       |
 | 8.2   | Eclipse observations, including the 4.41 dropins layout                                         | human                       | —    | `[ ]` — Q2 is answered: dropins is the first-release path                                   |

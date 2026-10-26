@@ -26,10 +26,11 @@ revision on 2026-10-09 corrected the same class of mistake twice more: `Type div
   `--validate=STRICT`)
   **-> closed in step 6.3**: the same decision — its wording is exactly "should these be enforceable rather
   than advisory", which is one question, not two
-- [ ] Type divergence analyzer + converter manifest generation — **partly done** (step 6.4): DEC-006 accepted and
-  measured, all three criteria met, `TypeDivergence` and the contract-class wiring in. **What is left is the
-  converter manifest alone**, generated and committed, and its byte-reproducibility is the part that must be
-  tested — see [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) item 2 and the new plan step 6.9
+- [x] Type divergence analyzer + converter manifest generation — **done 2026-10-26 (step 6.9)**: DEC-006 accepted
+  and measured, all three criteria met, `TypeDivergence` and the contract-class wiring in; the manifest is generated
+  into the tracked `.jcodebuddy/conf/converters.json`, sorted by source, target and location, byte-reproducible, and
+  compared with a fresh pass by `ExampleConverterManifestTest` — see
+  [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) item 2
 - [ ] Projection + DTO marker pattern for SQL/NoSQL direct JSON output
   **-> closed in step 6.5** (done 2026-10-09: `@View(dto = true)`, `ViewJsonGenerator`, the example, 6 tests)
 - [x] Annotation metadata exposure in generated view enums (FieldAnnotation) — **done 2026-10-26 (step 6.10)**:
@@ -264,9 +265,10 @@ one section's remainder, since § 5 is the section that named the question.
   `constraints` the pass had already resolved; it now writes them, and `MetadataJsonAnnotationTest` asserts the
   document's property list emits the same `FieldAnnotation` metadata as the source path. No separate source → JSON
   CLI was needed.
-- **6.9's manifest path** is derived from the output root the pass already knows (item 1), but the exact
-  `.jcodebuddy/` subtree it lands in is left to the step, because DEC-026's rule and the gate's words point at
-  different folders and the step is where that is resolved with the pass in front of it.
+- **6.9's manifest path — closed 2026-10-26 (step 6.9).** It lands in the tracked
+  `.jcodebuddy/conf/converters.json` (DEC-026's `conf/` is the subtree that survives a clone), and its ordering is
+  part of the format: source type, then target type, then location. Two passes over the same inputs are byte-identical
+  and a changed pair changes the file; `ExampleConverterManifestTest` compares the committed copy with a fresh pass.
 
-**Item 1 above was closed on 2026-10-26 (step 6.10); item 2 remains the subject of step 6.9.**
+**Item 1 above was closed on 2026-10-26 (step 6.10), and item 2 by step 6.9 the same day.**
 

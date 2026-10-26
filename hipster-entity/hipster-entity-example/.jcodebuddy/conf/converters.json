@@ -1,0 +1,13 @@
+{
+  "generator": "hr.hrg.hipster.entity.tooling.EntityMetadataGenerator",
+  "pairs": 6,
+  "convertersRequired": 0,
+  "resolved": [
+    {"source": "Integer", "target": "Integer", "location": "PersonSummaryToPersonDtoMapper.toPersonDto.age", "converterRequired": false, "reason": "the mapper converts this pair as it stands"},
+    {"source": "Map<String,List<Long>>", "target": "Map<String,List<Long>>", "location": "PersonSummaryToPersonDtoMapper.toPersonDto.metadata", "converterRequired": false, "reason": "the mapper converts this pair as it stands"},
+    {"source": "String", "target": "String", "location": "PersonSummaryToPersonDtoMapper.toPersonDto.departmentName", "converterRequired": false, "reason": "the mapper converts this pair as it stands"},
+    {"source": "String", "target": "String", "location": "PersonSummaryToPersonDtoMapper.toPersonDto.firstName", "converterRequired": false, "reason": "the mapper converts this pair as it stands"},
+    {"source": "String", "target": "String", "location": "PersonSummaryToPersonDtoMapper.toPersonDto.lastName", "converterRequired": false, "reason": "the mapper converts this pair as it stands"},
+    {"source": "java.lang.Long", "target": "java.lang.Long", "location": "PersonSummaryToPersonDtoMapper.toPersonDto.id", "converterRequired": false, "reason": "the mapper converts this pair as it stands"}
+  ]
+}
