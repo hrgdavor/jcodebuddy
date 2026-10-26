@@ -53,11 +53,12 @@ Two consequences are worth knowing:
   (`hipster-ioc/hipster-ioc-test/src/test/java/…`). The build therefore needs to be told where the project
   is: `--project=<dir>`, or `JCODEBUDDY_PROJECT_DIR`. A build that cannot say stops with a message rather
   than writing links every host would refuse as "not a usable path".
-- **A name the index does not know is reported, never guessed.** `contexts.json` records a bean's type as
-  the *simple* name written in the context's own source (`ObjectMapper`), and the index is keyed by FQN — so
-  the bean is named and not navigable, and both the build's output and the page say so. Making beans
-  navigable is an upstream change (the generator emitting the FQN), recorded as optional step 3.11c in
-  [the plan](../../plans/unified-plan.md).
+- **A name the index does not know is reported, never guessed.** The generator resolves a bean's **simple**
+  type name through the context file's imports and package and writes the FQN (step 3.11c), so the example's
+  same-package `ObjectMapper` becomes `hr.hrg.hipster.ioc.test.ObjectMapper` and navigates like any other
+  source type. A name the index still cannot answer — an external type, or a generic/array left as written —
+  stays in `locationless` and both the build's output and the page say so; the page never matches it by its
+  tail.
 
 ## Navigating: both integration paths, and the one call
 

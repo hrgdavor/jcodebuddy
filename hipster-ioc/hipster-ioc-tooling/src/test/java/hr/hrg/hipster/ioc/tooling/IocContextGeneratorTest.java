@@ -582,6 +582,12 @@ class IocContextGeneratorTest {
         Map<?, ?> entry = (Map<?, ?>) contexts.get(0);
         Assertions.assertEquals("ioc.fixture.AppContext", entry.get("context"));
         Assertions.assertEquals(2, ((List<?>) entry.get("beans")).size());
+        // Step 3.11c: the graph carries the FQN, not the simple name the context source writes, so the page's
+        // class-index join can place the bean.
+        Assertions.assertTrue(((List<?>) entry.get("beans")).stream()
+                        .map(bean -> ((Map<?, ?>) bean).get("type"))
+                        .anyMatch("ioc.fixture.Gadget"::equals),
+                "a same-package bean type is written as its FQN: " + entry.get("beans"));
     }
 
     @Test

@@ -212,13 +212,67 @@ public final class IocGeneration {
         for (IocModel.Bean bean : model.beans()) {
             Map<String, Object> beanEntry = new LinkedHashMap<>();
             beanEntry.put("name", bean.name());
-            beanEntry.put("type", bean.typeText());
+            // Step 3.11c: the graph page joins an FQN against the class index, so the document carries the
+            // qualified type rather than the simple name the context source happens to use.
+            String type = qualifiedBeanType(model, bean.typeText(), index);
+            beanEntry.put("type", type);
             IocModel.Factory factory = model.factories().get(bean.name());
-            beanEntry.put("createdBy", factory == null ? "new " + bean.typeText() + "()" : factory.methodName());
+            beanEntry.put("createdBy", factory == null ? "new " + type + "()" : factory.methodName());
             beans.add(beanEntry);
         }
         entry.put("beans", beans);
         return entry;
+    }
+
+    /**
+     * The bean type as a fully-qualified name when the context's own file makes that knowable (step 3.11c).
+     *
+     * <p>A bean is declared as the source spells it — usually a simple name. The page's join is keyed by FQN,
+     * so the simple name is reported as {@code locationless}; resolving it here, from the context file's
+     * imports and package, is the upstream projection the page needs and keeps the page free of a second
+     * name-resolution rule. Only a bare identifier is resolved: a generic, array or already-qualified type is
+     * left exactly as written, and an unresolvable name stays simple (reported by the page, never guessed).</p>
+     */
+    static String qualifiedBeanType(IocModel.Context context, String typeText, ClassIndex index) {
+        String text = typeText == null ? "" : typeText.trim();
+        if (!text.matches("[A-Za-z_$][A-Za-z0-9_$]*")) {
+            return text;
+        }
+        for (String line : context.importLines()) {
+            String imported = importName(line);
+            if (imported != null && imported.endsWith("." + text)) {
+                return imported;
+            }
+        }
+        String samePackage = context.packageName().isEmpty()
+                ? text
+                : context.packageName() + "." + text;
+        if (index.row(samePackage) != null) {
+            return samePackage;
+        }
+        for (String line : context.importLines()) {
+            String imported = importName(line);
+            if (imported != null && imported.endsWith(".*")) {
+                String candidate = imported.substring(0, imported.length() - 1) + text;
+                if (index.row(candidate) != null) {
+                    return candidate;
+                }
+            }
+        }
+        return text;
+    }
+
+    /** The name after {@code import}, or {@code null} for a line that is not one import. */
+    private static String importName(String line) {
+        String text = line == null ? "" : line.trim();
+        if (!text.startsWith("import ")) {
+            return null;
+        }
+        String name = text.substring("import ".length()).trim();
+        if (name.startsWith("static ")) {
+            return null;
+        }
+        return name.endsWith(";") ? name.substring(0, name.length() - 1).trim() : name;
     }
 
     /** Sorted, so two runs over the same tree produce the same graph byte for byte. */

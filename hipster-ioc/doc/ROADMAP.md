@@ -47,12 +47,11 @@
 > created, DEC-036 § 3), and the **region markers** (step 3.6 — `fields` / `accessors` / `factories`, emitted only
 > above the thresholds, DEC-036 § 9). The first two are proven by tests that compile *and run* the generated
 > context. **The browsable page now exists** — step 3.8 built `graph.html` (jsx6 + `nodditor`, self-contained,
-> verified by a headless render) and the module's README lists it among the entry points. **What does not exist
-> is any navigation from the graph into source, and a host of this module's own** — and on the second point,
-> the 2026-10-09 exploration says a module-owned server is not what is missing: the webview suite already
-> serves pages and already navigates, over **two paths that both stay open**, because the first is how a
-> **live application** asks an editor to open a location and the second is how a person browsing inside the
-> editor does:
+> verified by a headless render) and the module's README lists it among the entry points. **It also navigates**
+> (step 3.11a) and a live application reaches the same positions over `GET /open` (step 3.11b); a host of this
+> module's own is still not needed, because the webview suite already serves pages and already navigates, over
+> **two paths that both stay open**, because the first is how a **live application** asks an editor to open a
+> location and the second is how a person browsing inside the editor does:
 >
 > - **served** — `webviewd`'s `GET /open?filePath=…&line=…&column=…`, which any local process can call; it
 >   needs that project's port and token from `.jcodebuddy/webview/host.json` (DEC-032/033);
@@ -65,11 +64,13 @@
 > [DEC-049](../../doc-hipster-entity/architecture/decisions/DEC-049.md) (`Accepted` by the maintainer the same day,
 > which closes the design step): the page joins the frozen `window.openFile(path, line, column)` contract and
 > resolves each context, implementation and bean FQN against the module's `../index/classes.json` **at build time**
-> (the page cannot fetch at `file://`), reporting an FQN the index does not know rather than guessing its line —
-> today that includes a bean recorded under its *simple* type name, `ObjectMapper`. The implementation is scheduled
-> as **3.11a** (the page join) and **3.11b** (the live-application entry point, `GET /open` plus the port/token
-> discovery story, documented and verified). The design was updated 2026-10-09, at which point the paragraph above
-> it was three steps out of date and this module's README said the page did not exist.
+> (the page cannot fetch at `file://`), reporting an FQN the index does not know rather than guessing its line.
+> The generator now writes a bean's type as its **FQN** (step 3.11c), resolving the simple name through the
+> context file's imports and package, so the example's `ObjectMapper` joins like any other source type. The
+> implementation landed as **3.11a** (the page join), **3.11b** (the live-application entry point, `GET /open` plus
+> the port/token discovery story), **3.11c** (the bean FQN) and **3.11d** (`bun scripts/ioc-gen.js --graph`
+> rebuilds and checks the page); all four were done by 2026-10-26. The design was updated 2026-10-09, at which
+> point the paragraph above it was three steps out of date and this module's README said the page did not exist.
 >
 > Tracked as steps 3.1–3.3 of [`plans/unified-plan.md`](../../plans/unified-plan.md), with the
 > shape-dependent remainder as steps 3.4–3.11. The record those steps needed is

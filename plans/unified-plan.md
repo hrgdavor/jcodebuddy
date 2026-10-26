@@ -5,15 +5,14 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 7 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
+**What is left: 6 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
 3.8, then a **design step**: on 2026-10-10 its design landed as
 [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md), the maintainer **accepted** it, and both
 steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
-and **3.11b** (the live-application entry point, documented and verified). What DEC-049 still leaves open is its
-*optional* step, **3.11c** (the generator emitting a bean FQN, only if beans should be clickable); **3.11d**
-(wiring the page build into the recorded pass) was closed on 2026-10-26. The rest: **5.3** (the ACP spike, a
-person) and **8.1–8.5** (observations on a real editor). A step is ticked from a dated `Done` record in its own
-body, never from a "**Done when:**" criterion.
+and **3.11b** (the live-application entry point, documented and verified). Its optional **3.11c** (the generator
+emitting a bean FQN) and **3.11d** (the page build in the recorded pass) were both closed on 2026-10-26. The rest:
+**5.3** (the ACP spike, a person) and **8.1–8.5** (observations on a real editor). A step is ticked from a dated
+`Done` record in its own body, never from a "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still
@@ -535,6 +534,24 @@ which is honest.
 **Gate:** `GATE` green; `contexts.json` carries an FQN for the example's bean; the graph page shows it located; and
 `ExampleRegenerationTest`/the generator's own tests are a byte-identical no-op where they were.
 
+**Done 2026-10-26 — the generator writes the bean FQN, and the page places it.**
+
+- **Resolution is upstream, in the graph projection.** `IocGeneration.qualifiedBeanType` resolves a bare bean type
+  through the context file's explicit imports, then its own package, then wildcard imports, each against the class
+  index; a generic, array or already-qualified type is left as written, and an unresolved name stays simple (the page
+  still reports it as `locationless`, never guesses a tail match).
+- **Measured on the example**: `contexts.json` now carries
+  `"type": "hr.hrg.hipster.ioc.test.ObjectMapper"` and `"createdBy": "new hr.hrg.hipster.ioc.test.ObjectMapper()"`;
+  the build reports **no** `locationless` name, and the page joins the bean to `ObjectMapper.java` line 5 — the same
+  source index the contexts and implementations use.
+- **Tests**: `IocContextGeneratorTest` **19/0** (a same-package bean is written as its FQN);
+  `locations.test.js` **15/0** (the bean joins, `locationless` is empty, a simple name is still not matched by its
+  tail); `graph.test.js` **14/0** (the built page carries the bean path). The generated `CtxMainImpl` is unchanged
+  (`0 written`), so the generator's committed output is a no-op where it was.
+- **Evidence**: `bun scripts/ioc-gen.js --graph` exit 0 — `graph.html` **121754 bytes**, `ok graph.html is current`;
+  `LINKS` green; **GATE** — `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (29.3 s, with `IocContextGeneratorTest`
+  **19/0** executed and the unchanged modules restored from cache).
+
 ### 3.11d — The graph build is part of the recorded pass (optional, recorded so it is not forgotten)
 **Who:** agent · **Size:** S
 
@@ -576,7 +593,7 @@ The step's `[TBD]` was a design it did not have, and it now has one:
   variable (AGENTS.md § 2).
 - **Measured**: `bun scripts/ioc-gen.js --graph` exit 0 — generator wrote `contexts.json`, the build wrote
   `graph.html` (**121521 bytes**) and its check reported `ok graph.html is current`; the one unresolved name is
-  still reported (`ObjectMapper`, step 3.11c's optional subject), not dropped.
+  still reported (`ObjectMapper`, whose FQN resolution is step 3.11c, closed the same day), not dropped.
 - **The script's Maven invocation now passes `-Dmaven.build.cache.skipSave=true`** because it is a `test-compile`,
   never a test run; a cache entry saved without tests is the false-green hazard `doc/AGENTS.md` records.
 - **The page's README** lists `bun scripts/ioc-gen.js --graph` as the command that regenerates and verifies, and keeps
@@ -895,7 +912,7 @@ start)
 | 3.11  | Design: graph-page source navigation over BOTH paths — served and in-host                       | agent writes, human decides | M    | `[x]` — **accepted 2026-10-10**: [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md) is `Accepted` and 3.11a/3.11b are its implementation (done record in the step) |
 | 3.11a | The graph page joins the class index and navigates                                              | agent                       | M    | `[x]` — **done 2026-10-10** (`locations.js` + `navigate.js`, the join in `build.js`; 15 + 14 tests, a stubbed click reaching `window.openFile` at the joined line; done record in the step) |
 | 3.11b | The outside-the-browser entry point is documented and verified                                  | agent                       | S    | `[x]` — **done 2026-10-10** (`webview-host-api.md` § 4c and `check-open-route.js`: 18 assertions, 0 failed; done record in the step) |
-| 3.11c | Optional: the generator emits a bean FQN, so beans navigate                                     | agent, only if asked        | S    | `[ ]` — optional; the page reports `ObjectMapper` as `locationless` until this is taken       |
+| 3.11c | Optional: the generator emits a bean FQN, so beans navigate                                     | agent, only if asked        | S    | `[x]` — **done 2026-10-26**: `contexts.json` carries the bean FQN and the page joins it       |
 | 3.11d | The graph build is part of the recorded pass                                                    | agent                       | S    | `[x]` — **done 2026-10-26**: `ioc-gen.js --graph` regenerates and `--check` verifies the page |
 | 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                         |
 | 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[x]` — **done 2026-10-26**: builders implement `Write`, recursion goes through child builders, and the root family has a generated dispatcher (done record in the step) |

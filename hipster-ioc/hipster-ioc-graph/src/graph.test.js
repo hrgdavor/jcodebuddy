@@ -214,7 +214,7 @@ check('the stylesheet carries nodditor geometry and the page frame', () => {
   assert.ok(css.includes('--graph-accent'), 'the block look is ours')
 })
 
-check('the built page carries the joined source locations, and the name it could not place', () => {
+check('the built page carries the joined source locations, including the bean', () => {
   const file = join(OUTPUT_DIR, 'graph.html')
   assert.ok(existsSync(file), `the page must be built at ${file} — run src/build.js --project=<dir>`)
   const page = readFileSync(file, 'utf8')
@@ -228,7 +228,9 @@ check('the built page carries the joined source locations, and the name it could
   // where a click reads it back through `getAttribute`.
   assert.ok(page.includes('"data-location"'), 'a joined location must reach an element attribute')
   assert.ok(page.includes(context.path), 'the joined project-relative path must be inlined in the page')
-  assert.ok(page.includes('ObjectMapper'), 'the unresolved bean type is reported in the page rather than dropped')
+  const bean = joined.locations['hr.hrg.hipster.ioc.test.ObjectMapper']
+  assert.ok(bean, 'the generated contexts.json now carries the bean FQN (step 3.11c)')
+  assert.ok(page.includes(bean.path), 'and the bean path reaches the page like every other joined location')
 })
 
 /* ------------------------------------------------------------------ the real page, in a browser */

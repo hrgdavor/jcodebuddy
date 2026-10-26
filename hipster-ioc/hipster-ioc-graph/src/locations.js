@@ -13,9 +13,10 @@
  * <ul>
  *   <li><b>Report, never guess</b> (DEC-040 D4; DEC-016's "never a guessed position"): an FQN the index does
  *       not know is listed in {@link joinLocations}'s `locationless` result instead of being dropped or
- *       matched by simple name. `ObjectMapper` is the real case this exists for: `contexts.json` records a
- *       bean's type as the *simple* name written in the context's own source, and the index is keyed by FQN,
- *       so the bean is named in the page and not navigable — which the page then says.</li>
+ *       matched by simple name. The generator resolves a bean's simple type through the context file's imports
+ *       and package and writes the FQN (step 3.11c), so the example's `ObjectMapper` now joins; an external
+ *       type, or a generic/array left as written, is still named in `locationless` — which the page then
+ *       says.</li>
  *   <li><b>The link a host resolves is project-relative</b> (`Navigator` confines every navigation to the
  *       project root, so a module-relative path is refused as "not a usable path" the moment the module is not
  *       the project). The index carries the path relative to the **module**, so the module's own directory

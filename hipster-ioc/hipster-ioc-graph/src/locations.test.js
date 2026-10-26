@@ -81,12 +81,16 @@ check('the joined path names the line that carries the declaration, on disk', ()
   }
 })
 
-check('a simple type name is reported, never guessed (the ObjectMapper case)', () => {
+check('a bean type is resolved to its FQN and joins (step 3.11c)', () => {
   const joined = readLocations(readContexts(), { project: PROJECT })
-  // The generator's `contexts.json` records a bean's type as the simple name written in the context's own
-  // source, and the class index is keyed by FQN — so the bean is named and not navigable. DEC-049 decision 4:
-  // the page reports it; the FQN belongs in the generator's projection, not in a guess here.
-  assert.deepEqual(joined.locationless, ['ObjectMapper (bean mapper of hr.hrg.hipster.ioc.test.CtxMain)'])
+  // The generator resolves a bean's simple name through the context file's imports and package, so the
+  // example's same-package ObjectMapper arrives as an FQN the class index can answer.
+  const fqn = 'hr.hrg.hipster.ioc.test.ObjectMapper'
+  const at = joined.locations[fqn]
+  assert.ok(at, `the bean FQN must join: ${fqn} — got ${JSON.stringify(joined.locations)}`)
+  assert.ok(at.path.endsWith('ObjectMapper.java'), `the bean points at its file: ${at.path}`)
+  assert.equal(at.line, 5, 'the class declaration line')
+  assert.deepEqual(joined.locationless, [], 'nothing is left unplaced for the example')
   assert.equal(joined.locations.ObjectMapper, undefined, 'a simple name must not be matched by its tail')
 })
 
@@ -95,7 +99,9 @@ check('the join writes the location onto the context and bean the model reads', 
   const context = joined.contexts.contexts[0]
   assert.equal(context.location.path.split('/').pop(), 'CtxMain.java')
   assert.equal(context.implementationLocation.line, 12)
-  assert.equal(context.beans[0].location, null, 'the unresolved bean carries null rather than a guess')
+  assert.ok(context.beans[0].location, 'the resolved bean carries its location')
+  assert.ok(context.beans[0].location.path.endsWith('ObjectMapper.java'),
+    'and it is the bean type file, not a guessed line')
 })
 
 check('a repeated unresolved name is one absence, with the first owner that asked', () => {
