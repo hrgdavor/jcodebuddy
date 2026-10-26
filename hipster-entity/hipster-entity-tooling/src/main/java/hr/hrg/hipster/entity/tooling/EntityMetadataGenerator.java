@@ -3315,6 +3315,13 @@ public class EntityMetadataGenerator {
                 Property prop = view.properties().get(j);
                 sb.append("        {\n");
                 appendJsonField(sb, "name", prop.name(), true, 8);
+                // DEC-047 (plan step 6.10): the accessor's Bean Validation annotations are a fact the
+                // source pass already resolved and the enum already emits. They were missing from the
+                // document, so a consumer reading only the JSON could not see what the generated enum
+                // carries. Written before `type` so every existing key keeps its comma decision.
+                if (!prop.constraints().isEmpty()) {
+                    appendJsonConstraints(sb, prop.constraints(), 8);
+                }
                 sb.append("        \"type\": ");
                 boolean hasFieldKind = prop.fieldKind() != null;
                 appendJsonType(sb, parseTypeDescriptor(prop.type()), true, 0);
@@ -3555,6 +3562,34 @@ public class EntityMetadataGenerator {
     }
 
     /**
+     * One property's Bean Validation constraints, in declaration order (DEC-047, plan step 6.10).
+     *
+     * <p>The key is {@code annotation} and its value is the {@link FieldConstraint#simpleName() simple
+     * name}, which is the shape {@link #fromJson(String)} already reads ({@code "annotation"} →
+     * {@code FieldConstraint.annotation}) — the document is the reader's contract, not a second
+     * spelling. The argument text is the source text, unparsed, so a consumer sees exactly what the
+     * author wrote: {@code "min = 1, max = 64"} rather than a re-rendered approximation.</p>
+     *
+     * <p>Only written when the field has at least one constraint, so an unconstrained field's document
+     * is unchanged and the common case costs no keys.</p>
+     */
+    private static void appendJsonConstraints(StringBuilder sb,
+                                              List<FieldConstraint> constraints,
+                                              int indent) {
+        String pad = " ".repeat(indent);
+        sb.append(pad).append("\"constraints\": [\n");
+        for (int i = 0; i < constraints.size(); i++) {
+            FieldConstraint constraint = constraints.get(i);
+            sb.append(pad).append("  { \"annotation\": \"").append(escapeJson(constraint.simpleName()))
+                    .append("\", \"arguments\": \"").append(escapeJson(constraint.arguments()))
+                    .append("\" }")
+                    .append(i < constraints.size() - 1 ? "," : "")
+                    .append("\n");
+        }
+        sb.append(pad).append("],\n");
+    }
+
+    /**
      * Escapes a value for the hand-rolled JSON writer.
      *
      * <p>Public because the class index writes its own table with the same escaping ({@link ClassIndex}
@@ -3583,7 +3618,7 @@ public class EntityMetadataGenerator {
      * The creator expression for a view with no concrete record: the array-backed read proxy, which
      * is what {@code META}/{@code WRITABLE} levels materialize on.
      */
-    private static String proxyCreatorBody(ViewMeta view) {
+    static String proxyCreatorBody(ViewMeta view) {
         return "(Object[] values) -> ArrayBackedViewProxyFactory.createRead("
                 + view.name() + ".class, "
                 + "new EntityReadArray<" + view.name() + ", " + view.name() + "_>("

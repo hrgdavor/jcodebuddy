@@ -32,10 +32,10 @@ revision on 2026-10-09 corrected the same class of mistake twice more: `Type div
   tested — see [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) item 2 and the new plan step 6.9
 - [ ] Projection + DTO marker pattern for SQL/NoSQL direct JSON output
   **-> closed in step 6.5** (done 2026-10-09: `@View(dto = true)`, `ViewJsonGenerator`, the example, 6 tests)
-- [ ] Annotation metadata exposure in generated view enums (FieldAnnotation) — **partly done** (step 6.1): DEC-047,
-  `FieldAnnotation`, `FieldDef.annotations()` and the emitter are in with their tests; **the example half is not**,
-  and it is blocked on a source → metadata JSON pass that the CLI path cannot reach — see
-  [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) item 1
+- [x] Annotation metadata exposure in generated view enums (FieldAnnotation) — **done 2026-10-26 (step 6.10)**:
+  DEC-047, `FieldAnnotation`, `FieldDef.annotations()` and the emitter are in; the example carries the annotation
+  (step 6.1), and the metadata JSON now carries the per-field `constraints` a document consumer needs. The "CLI is
+  the JSON path" premise was corrected in [§ 6](#6-decisions-from-the-steps-61-65-refinement-2026-10-09) item 1.
 - [ ] API/core module responsibility split enforced by generator — **deliberately deferred**: S3/X1 keep
   the tracking contract in `hipster-entity-core` for this release, so a generated tracking builder
   depends on `core` (plan.dsflash § 4.4). Not a gap, a recorded scope decision.
@@ -256,10 +256,15 @@ one section's remainder, since § 5 is the section that named the question.
 
 **Still open, and deliberately not answered here:**
 
-- **6.1's example half.** It needs a source → metadata JSON pass to exist before an example accessor can carry an
-  annotation at all; `bun scripts/gen.js` runs the CLI, whose input JSON is stale (measured in the step's own
-  record). Whether that pass is part of 6.1's remainder or its own step is not decided.
+- **6.1's example half — closed 2026-10-26 (step 6.10).** The premise measured on 2026-10-08 was wrong:
+  `bun scripts/gen.js` runs `EntityMetadataGenerator`'s **source** path, not a JSON-reading CLI, and the example has
+  carried `@NotNull` since step 6.1's Done record. The real gap was the JSON writer, which omitted the
+  `constraints` the pass had already resolved; it now writes them, and `MetadataJsonAnnotationTest` asserts the
+  document's property list emits the same `FieldAnnotation` metadata as the source path. No separate source → JSON
+  CLI was needed.
 - **6.9's manifest path** is derived from the output root the pass already knows (item 1), but the exact
   `.jcodebuddy/` subtree it lands in is left to the step, because DEC-026's rule and the gate's words point at
   different folders and the step is where that is resolved with the pass in front of it.
+
+**Item 1 above was closed on 2026-10-26 (step 6.10); item 2 remains the subject of step 6.9.**
 

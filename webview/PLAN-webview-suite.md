@@ -7,9 +7,11 @@ parts this line used to call "not started" have since landed — the JetBrains a
 [`kit/examples/with-assets/assets/webview-client.js`](kit/examples/with-assets/assets/webview-client.js) with
 [`kit/examples/webview-client.test.mjs`](kit/examples/webview-client.test.mjs) driving it against a live
 `webviewd`, and the extension's `process:exec` half was **dropped, not deferred** (2026-09-26; Phase 4 below).
-What is genuinely open: **Phase 6** (headless parity as a build gate) and the **ACP go/no-go** spike's written
-verdict, plus § 10 **Q3/Q5** — Q2 is answered by delivery, since the write verbs landed in every host. All of
-it is scheduled in [`../plans/unified-plan.md`](../plans/unified-plan.md). Phase 0's results and
+What is genuinely open: the **ACP go/no-go** spike's written verdict (step 5.3). **Phase 6 is delivered**
+(step 5.1: the headless parity test drives every verb), and the § 10 questions that were open are answered — **Q3 on
+2026-10-26: the hosts keep their in-process implementations over the shared core, and proxying adapters remain
+a later option**; Q5 is settled by delivery and the earlier clients' deletion. Open work is step 5.3 in
+[`../plans/unified-plan.md`](../plans/unified-plan.md). Phase 0's results and
 two corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); the hosts and their
 contracts are in [`doc/webview-host-api.md`](doc/webview-host-api.md) and
 [`kit/doc/edit-api.md`](kit/doc/edit-api.md).
@@ -670,7 +672,7 @@ The Eclipse IDE host is planned and gated under its own plan, [`PLAN-eclipse-hos
 | Gradle needs `C:\Users\hrg\.gradle`, JDK 25 is not the default `java`                        | Host plugin builds fail confusingly                        | Every command in the phase notes pins `org.gradle.java.home` / `JAVA_HOME=…jdk-25`; already pinned in `gradle.properties` |
 | There is no supported headless SWT, so the Eclipse host's workbench half cannot run in a build (its plan's R22) | The fifth host's editor behaviour is not provable by tests | Narrow seams (`WorkspaceFiles`, `EclipseDocumentEditor`) with hand-written fakes; every workbench behaviour is an outstanding *observation* recorded in `doc/ide-observation-checklist.md` § 1a/§ 2a — claimed nowhere as observed |
 
-## 10. Open questions (answer before the phase that needs them)
+## 10. Questions, with their answers
 
 1. **What does "trigger file changes" mean?** ANSWERED 2026-09-25 — **(c) then (a)**: the page asks for a
    proposal, the host answers with a unified diff (and, when it can, shows it in the editor's own diff view), and
@@ -679,10 +681,13 @@ The Eclipse IDE host is planned and gated under its own plan, [`PLAN-eclipse-hos
    builder from a page — is *not* this verb; it stays a separate tool face (Phase 5's ACP spike is where it
    belongs, if anywhere). Phase 3 may start, and it must implement the diff step as the default flow rather than
    as an option.
-2. **Which hosts are in scope for the write verbs?** JetBrains + VS Code + headless, or headless only for now?
+2. **Which hosts are in scope for the write verbs?** **ANSWERED by delivery (2026-10-26)** — every host declares
+   and serves them.
 3. **Should the JetBrains and VS Code plugins become proxying adapters** (talk to `webviewd` for everything) or
-   keep their in-process implementations and merely share the extracted core? This plan assumes shared core, which
-   is the smaller change; proxying is a later option that would make the "one implementation" claim absolute.
+   keep their in-process implementations and merely share the extracted core? **ANSWERED 2026-10-26 — no:
+   both keep their in-process implementations and share `webview-core`.** That is the boundary the hosts already
+   have; proxying would make the "one implementation" claim absolute but is a later option, and it would need its
+   own decision and steps rather than a change of this plan's assumption.
 4. **Is `webviewd` a separate binary** (shaded jar, like `jwa-sidecar` today) **or the same jar as the LSP
    sidecar** started with a flag (`--host`, `--lsp`, `--acp`)? This plan assumes one shaded jar, three modes.
    **Interim answer, 2026-09-25:** Phase 2 shipped it as its own module with its own shaded `webviewd.jar`,
@@ -692,9 +697,10 @@ The Eclipse IDE host is planned and gated under its own plan, [`PLAN-eclipse-hos
    navigation from a page needs a shared secret configured at the sidecar's spawn *and* passed to `webviewd`
    (see the Phase 5 record), because the sidecar refuses unconfigured callers by design; one process holding the
    HTTP surface and the LSP connection would need no handshake, no `/jump` hop and no token in two places.
-5. **Which of `vscode-jwa`/`vscode-jswa`/`intellij-jwa`/`intellij-jswa` also move under `webview/`?** They are
-   sidecar clients and would use the same host adapters, but they belong to the JWA/JSWA products. This plan moves
-   only `jwa-sidecar`.
+5. **Which of `vscode-jwa`/`vscode-jswa`/`intellij-jwa`/`intellij-jswa` also move under `webview/`?**
+   **ANSWERED 2026-10-26 — settled by delivery:** they did move under `webview/` (DEC-039's amendment), and steps
+   3.0p/3.0q merged the two capabilities worth keeping into the hosts this reactor ships and deleted the earlier
+   client attempts. `jwa-sidecar` remains the only sidecar here.
 
 ## 11. Verification commands (for whoever implements this)
 

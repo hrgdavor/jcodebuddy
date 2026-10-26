@@ -13,11 +13,12 @@ an older install exists (`D:\programs\eclipse`, core runtime 3.34.200, a 2025-12
 build the gate claims (§ 9, "the machine"). The outstanding observations are enumerated in
 [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) § 1a and § 2a.
 
-**Open, and scheduled (2026-10-01).** **Phase 5** (the Tycho/p2 update site) is not started and is gated on
-**Q2**, which is still open; **Q8** stays open too — no `EdgeDataDir` and no allowed-origins preference, so
-R11's contention is documented rather than configurable (the deviation recorded below). Nothing else in this
-plan is unfinished. Those two, together with the human-observation gates, are steps 5.4 and 8.2 of
-[`../plans/unified-plan.md`](../plans/unified-plan.md).
+**Phase 5 declined 2026-10-26; Q8 remains open, as does Q6 (no known consumer), and nothing else here is
+unfinished.** **Q2** is answered — `dropins/` is acceptable for the first release — so the optional Tycho/p2
+update site (Phase 5) is **declined**, recorded in § 7 Phase 5 and in § 10 below; the 4.41 dropins layout is
+still an outstanding *observation* (8.2). **Q8** stays open — no `EdgeDataDir` and no allowed-origins preference,
+so R11's contention is documented rather than configurable (the deviation recorded below). The human-observation
+gates are step 8.2 of [`../plans/unified-plan.md`](../plans/unified-plan.md).
 
 Measurement words, used precisely, as everywhere in this folder: **documented** = a named source says so;
 **implemented** = code exists and its tests pass; **observed** = someone ran it against that host on the build
@@ -42,7 +43,8 @@ named and reported the result.
 > **Gates still outstanding — they need Eclipse 4.41 and a human**, and are claimed nowhere as observed:
 > the caret landing (Phase 1), the live two-hosts-on-one-project claim and the browser-beside-Eclipse page
 > (Phase 2 gates (a)/(d)/(e)), the unsaved buffer edit and the single `Ctrl+Z` (Phase 3), and which dropins
-> layout p2 accepts (Q2). Run sheet: [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) § 1a.
+> layout Eclipse 4.41 accepts (the observation in step 8.2 — Q2 itself is answered: dropins is the
+> first-release path). Run sheet: [`doc/ide-observation-checklist.md`](doc/ide-observation-checklist.md) § 1a.
 >
 > **Deviations, recorded honestly.** (1) § 11.6's literal "no document for the path → 409 `no-buffer-edit`"
 > cannot arise from the shared `WriteSurface` for a Java host: a per-path refusal is the seam's `false`, and
@@ -175,7 +177,7 @@ confirm it), **rests on R…** (its reason is a documented finding, cited by id)
 | E2  | Embedded engine                                         | create the `Browser` with **`SWT.EDGE`** explicitly, then **ask** `Browser.getBrowserType()` and `org.eclipse.swt.browser.EdgeVersion` what was obtained, and treat anything that is not `edge` as a reported, degraded state | `SWT.NONE` on Windows has *already* meant Edge since SWT 4.35, so `SWT.EDGE` is explicitness plus support back to 4.19 (R3). What happens **without** the WebView2 runtime is documented two ways (R4) and both are bad: IE breaks the pages' modern JavaScript, a thrown constructor means no view. The host never assumes; it reports | rests on R2, R3; **R4 is still unconfirmed — Phase 0's A2 was not run; A1 measured `edge` with runtime 154.0.4258.37 on this machine** |
 | E3  | How the page talks to Java                              | a **`BrowserFunction`** — a real JS function backed by a Java method — with `InjectedBridge.script(transport)` supplying `window.openFile` on top of it | the platform's supported Java↔JS channel; no socket needed; visible in the top window and all child frames; on WebView2 SWT registers it *before page scripts run* on every future document (R7, R8). Its restrictions shape the bridge: UI thread, narrow argument list, explicit `dispose()` | rests on R7, R8 |
 | E4  | Build **and reactor membership**                        | **plain Maven**, module `webview/eclipse/webview-eclipse`, Eclipse bundles `provided`-scope from Maven Central; **listed in the root POM's `<modules>`**, unlike the two existing editor hosts | the repo's toolchain is `bun scripts/mvn-jdk25.js` and the gate runs with `-o`; Tycho resolves against a **p2** target platform and exists to build features and update sites, which is packaging (Phase 5) — R22. The root POM's comment explains that `webview-jetbrains` and `webview-vscode` are absent **because they are not Maven builds**; that reason does not apply, and the reactor already resolves third-party artifacts (`org.eclipse.jdt:ecj` in `java-watch-run`, LSP4J, JGit, Jackson), so Eclipse Platform bundles are not a new class of dependency. Membership also avoids the documented "install `webview-core` to `mavenLocal` first" footgun the Gradle host has. The cost is paid in the same commit: the `<modules>` comment, the root README's module count, and `MigrationCompletenessTest.MODULES` (§ 13) | **corrected 2026-09-27** (membership); rests on R1, R22 |
-| E5  | Distribution, first release                             | install by **copying the built bundle into `<eclipse>/dropins/`**, documented step by step | no feature, no `category.xml`, no p2 metadata. A p2 update site is the *supported* route (R21) and is Phase 5, optional, with its cost stated there. The exact dropins layout in 4.41 is unconfirmed, so Phase 1 tries the simple form and, if p2 ignores it, `dropins/webview/plugins/<symbolicName>_<version>.jar`, and **records which one worked** | rests on R21 (unconfirmed detail) |
+| E5  | Distribution, first release                             | install by **copying the built bundle into `<eclipse>/dropins/`**, documented step by step | no feature, no `category.xml`, no p2 metadata. A p2 update site is the *supported* route (R21) and was Phase 5, optional until **Q2 was answered "`dropins/`" on 2026-10-26**, when the phase was declined. The exact dropins layout in 4.41 is unconfirmed, so Phase 1 tries the simple form and, if p2 ignores it, `dropins/webview/plugins/<symbolicName>_<version>.jar`, and **records which one worked** | rests on R21 (unconfirmed detail) |
 | E6  | The port                                                | request **18883** (JetBrains 18881, VS Code 18882), resolved and claimed through `HostPortClaim`/`HostConfig`, published in the served project's `.jcodebuddy/webview/host.json` | one more host needs one more conventional request; the claim rule is not re-implemented, and the listed port is a *request* (DEC-033) | proposed |
 | E7  | Which "project" a host serves                           | the bridge is **per Eclipse project** (`IProject`), bound to the project that owns the page being viewed; first bind wins and is logged; `/health` names that project's directory | a workspace is a *set* of projects whose locations may be anywhere, and the workbench page's input is the **workspace root**, not a project (R15). `HostPortClaim` decides "another host for **my** project" by comparing `project`, so a workspace-root answer would collide with `webviewd` and lie about what it serves | rests on R15 |
 | E8  | Write verbs                                             | the change goes to the **editor's buffer** by default (`target: buffer`), inside one `IRewriteTarget` compound change so one `Ctrl+Z` takes it back; disk writes delegate to core's `EditService` with **persistent** checkpoints under `.jcodebuddy/webview/checkpoints/`; a file the platform holds no document for is **refused** with `409 no-buffer-edit` | same contract and statuses as the other hosts: `WriteSurface` decides, not the plugin. `IRewriteTarget` is the documented one-undo-step route (R16). The refusal rule is the capability rule's second half — "impossible ⇒ refused with a reason" — and is what VS Code already does for an unopened file. Persistent checkpoints are a deliberate improvement on the JetBrains host's in-memory store, whose consequence `doc/webview-host-api.md` § 8 already documents | rests on R16; the UI-thread half on R19 |
@@ -479,10 +481,15 @@ merely an allowed origin.
   capability the honesty run covers, or a dated, version-named observation; and DEC-033 plus the index no longer
   say "four hosts" anywhere.
 
-### Phase 5 — distribution as an installable update site (optional, 1–2 days)
+### Phase 5 — distribution as an installable update site (optional, **declined 2026-10-26**)
 
 A Tycho build (R22) of a feature + p2 update site (`category.xml`) so the host installs through
 *Help → Install New Software* rather than by copying a jar.
+
+**Declined 2026-10-26 — Q2 answered "`dropins/` is acceptable for the first release".** The dropins install is
+the first-release path; a p2 update site remains a possible later distribution step, but it is not part of this
+plan and would need its own decision and steps if it is ever taken. The dropins layout itself is still observed
+in step 8.2.
 
 - **Why it is last and optional:** it introduces p2 resolution and a second build system for a packaging benefit
   only, and it must never become the thing that makes the host buildable (E4/E5). If taken, it stays a separate
@@ -564,7 +571,7 @@ decision above does, and the row says which half still needs a measurement.
 | #   | Question | State                                                                                        |
 | --- | -------- | -------------------------------------------------------------------------------------------- |
 | Q1  | **Which Eclipse is the target — the 2026-09 train or the installed IDE?** This plan pins the 2026-09 train and Java 21 (R1, R21). Supporting 2025-03 or 2024-12 changes a build detail (the engine stays Edge only because `SWT.EDGE` is explicit) but is a decision about the supported range | **settled by construction, 2026-09-27** — Phases 1–3 built against the pinned 2026-09 train and Java 21; the supported *range* below it is untested and remains a release decision |
-| Q2  | **Is a `dropins` install acceptable for the first release** (E5, R21), or is a p2 update site required from day one? If the latter, Phase 5 moves ahead of Phase 4 and the product pays for p2 (and Tycho) immediately | **open** — settle before Phase 5, and it decides whether Phase 5 is "optional"; the dropins install itself is also an outstanding *observation* (checklist § 1a, step 1: record which layout p2 accepted) |
+| Q2  | **Is a `dropins` install acceptable for the first release** (E5, R21), or is a p2 update site required from day one? If the latter, Phase 5 moves ahead of Phase 4 and the product pays for p2 (and Tycho) immediately | **ANSWERED 2026-10-26 — `dropins/` is acceptable for the first release.** Phase 5 is declined; the 4.41 dropins layout is still an outstanding *observation* (checklist § 1a, step 1: record which layout the workbench accepted) |
 | Q3  | **Does the view serve its pages, or load them from disk?** E12 says serve, same-origin, and `serveFile` is declared | **answered by E12 and built** — Phase 2 serves `/page/` with the injected bridge and declares `serveFile`; the measurement left is Phase 2's gate (e), a browser beside Eclipse |
 | Q4  | **Does the Eclipse plugin own bytes on disk** (core's `EditService`, checkpoints, `/undo`), or refuse disk writes like `webview-vscode` and point a page at `webviewd`? The hazard is specific: writing a file that is open in an editor fights the buffer (R17), so "buffer only" is defensible rather than a shortfall | **settled yes, 2026-09-27 (Phase 3)** — the host owns both halves: the buffer half through the `EclipseDocumentEditor` seam (a refusal there falls through to disk), the disk half through core's `EditService` with a **persistent** `CheckpointStore`, so `/undo` survives a restart (headless-tested). R17 is met by the seam's rules: a buffer edit never saves, and one compound change means one `Ctrl+Z` |
 | Q5  | **How is the host scoped to a project?** E7 binds per `IProject`. The alternative — one workspace-level bridge serving the workspace directory — is simpler but makes `project` a directory that is not a project (R15) | **answered by E7**; confirm in Phase 2's gate (a) |
@@ -618,7 +625,7 @@ node scripts/check-repo-links.mjs
 
 ## 12. Suggested order of work, in one line
 
-Phase 0 → Phase 1a → Phase 1 → Phase 2 → Phase 3 → Phase 4 → *(optional)* Phase 5.
+Phase 0 → Phase 1a → Phase 1 → Phase 2 → Phase 3 → Phase 4 → *(optional, declined 2026-10-26)* Phase 5.
 
 Phase 0 is first because one Eclipse source contradicts another about the engine the whole host depends on, and
 because `BrowserFunction`'s threading, re-injection and return semantics shape the bridge. Phase 1a is second

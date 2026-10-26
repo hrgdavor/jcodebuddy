@@ -5,15 +5,15 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left: 11 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
+**What is left: 10 step ids, and only the editor ones need a person.** **3.11** was `[TBD]` because it waited on
 3.8, then a **design step**: on 2026-10-10 its design landed as
 [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md), the maintainer **accepted** it, and both
 steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
 and **3.11b** (the live-application entry point, documented and verified). What DEC-049 still leaves open is its
 two *optional* steps, **3.11c** (the generator emitting a bean FQN, only if beans should be clickable) and
 **3.11d** (wiring the page build into the recorded pass). The rest: **5.3** (the ACP spike, a person), **8.1–8.5**
-(observations on a real editor), and **6.8, 6.9 and 6.10** — the remainders steps 6.1, 6.2 and 6.4 left behind
-while being closed as steps. A step is ticked from a dated `Done` record in its own body, never from a
+(observations on a real editor), and **6.8 and 6.9** — the remainders steps 6.2 and 6.4 left behind while being
+closed as steps. A step is ticked from a dated `Done` record in its own body, never from a
 "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
@@ -66,6 +66,7 @@ Asked before a longer autonomous run, all ten answered, and they govern every st
    `.jsx6/` checkout exists; they are not blocked, they are deferred.
 3. **Steps are taken up to a deferred decision, not through it** — 4.5, 5.2, 5.4, 6.1, 6.3, 7.6 and 3.0c's
    transitivity question are the maintainer's, so work proceeds in order and stops to ask when it reaches one.
+   **Superseded for 5.2 and 5.4 on 2026-10-26 — both were answered; the rest of this item stands.**
 4. **The generated ioc shape may change** (already recorded at 3.0e), and `hipster-ioc-test`'s hand-written
    context may be retired once the regenerated contexts pass — 3.10's premise.
 5. **`proto/business-logic` is the driver project** for end-to-end checks; nothing under `proto/` is ever
@@ -244,9 +245,9 @@ recorded Apache Maven 3.9.0 instead, which is what the gate uses.
 | [`merge-java/IMPLEMENTATION_PLAN.md`](../merge-java/IMPLEMENTATION_PLAN.md)       | steps 4.1–4.4                     | **done** — closed into steps 4.1–4.4, all four `[x]`                                               |
 | the JetBrains merge/diff port, asked for 2026-10-07 — the instruction and the research behind it are in [`merge-java/docs/JETBRAINS_PORT.md`](../merge-java/docs/JETBRAINS_PORT.md) | steps 4.7–4.13 (the `#### 4B` block after 4.5): the classification of every upstream resolution step, then the **SAFE** half — sources and licence, the text tier, the merge tier, whitespace policy, the intra-line evidence level, the conflict shape, upstream's test vectors | **closed in step 4.13** — 4.7–4.12 are `[x]`; 4.13 carries one named remainder (a reviewer accepting a block in one action) and the port’s vectors are the parity gate’s source of truth |
 | the general suggestion channel, asked for 2026-10-07 — designed in [`merge-java/docs/SUGGESTIONS.md`](../merge-java/docs/SUGGESTIONS.md) | steps 4.14–4.17: a first-class `SUGGESTION` resolution that carries a concrete answer and is never applied on its own; the answers the module **already computes but hides behind a refusal**; the page's Accept/Edit/Reject; rejection memory; and the **SUGGESTION** half of the JetBrains port as its first producer | **done** — closed into steps 4.14–4.17, all `[x]` (the channel, the report, the refusal memory and the proposer as one provenance) |
-| [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **closed in steps 5.2–5.3** — 5.1 is `[x]` (the headless parity test, extended and asserted to cover every verb); 5.2 is the maintainer’s decision and 5.3 is a person’s |
-| [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **closed in steps 5.4 and 8.2** — both are `[ ]`: 5.4 is the maintainer’s, 8.2 is a human observation on a real IDE |
-| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5                     | **closed in steps 6.1–6.5** — all `[ ]`: 6.1 and 6.3 are the maintainer’s decisions, 6.2/6.4/6.5 follow them in the phase, so none of them is unaccounted for |
+| [`webview/PLAN-webview-suite.md`](../webview/PLAN-webview-suite.md)               | steps 5.1–5.3                     | **closed in steps 5.1–5.3** — 5.1 is `[x]` (the headless parity test, extended and asserted to cover every verb); 5.2 is `[x]` (Q3 answered 2026-10-26: keep the shared core); 5.3 is a person’s |
+| [`webview/PLAN-eclipse-host.md`](../webview/PLAN-eclipse-host.md)                 | steps 5.4, 8.2                    | **closed in steps 5.4 and 8.2** — 5.4 is `[x]` (Q2 answered 2026-10-26: dropins is acceptable, so Phase 5 is declined); 8.2 remains the human observation of the 4.41 dropins layout |
+| [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) | steps 6.1–6.5, 6.10               | **closed in steps 6.1–6.5 and 6.10** — 6.1, 6.3 and 6.5 are `[x]`; 6.2 and 6.4 are `[x]` as steps with their remainders scheduled as 6.8/6.9; 6.10 closed the FieldAnnotation row (2026-10-26) |
 | [`webview/jwa-sidecar/plan.md`](../webview/jwa-sidecar/plan.md), [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md), [`todo.hipster-entity.md`](../todo.hipster-entity.md), [`todo.java_watch2.md`](../todo.java_watch2.md), [`doc-hipster-entity/doc-separation-plan.md`](../doc-hipster-entity/doc-separation-plan.md), [`webview/webview-jetbrains/plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) | steps 7.1–7.6, 8.1, 8.3 | **done for steps 7.1–7.10** (all `[x]`, and 7.7–7.10 are newer than this row’s own range), with **8.1 and 8.3 closed in themselves** (human observations on a real IDE) and **the two items nothing else scheduled decided in step 9.1b** — the sidecar’s "add more tools" (struck: the sidecar owns the host half, generators live in the agent’s tool registry) and the agent’s "lightweight hooks for IntelliJ and VS Code" (struck: delivered by `webview-jetbrains` and `webview-vscode`), the only two step 9.1’s coverage check found unaccounted for |
 | [`plans/rewrite-migration/`](rewrite-migration/README.md)                         | nothing — it is **complete**      | **done** — every step it contributed is `[x]`, and step 9.2 (archive) is `[x]` too, so the plan is a historical record rather than open work |
 
@@ -599,7 +600,7 @@ into the plan's Phase 5 record.
 
 ## 10. Phase 6 — hipster-entity roadmap rows
 
-**Finished in this phase**, with its records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md): 6.3, 6.5, 6.6, 6.7.
+**Finished in this phase**: 6.3, 6.5, 6.6 and 6.7, with their records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md), and **6.10**, whose `Done` record is in its own step below.
 
 > 6.1, 6.2 and 6.4 were **closed as plan steps by their own `Done` records while each still had named work
 > outstanding**, which reading those records against the tree found on 2026-10-09. The findings and the
@@ -691,13 +692,65 @@ generated" — is what made it visible. The example is unannotated because of it
    index at "301 links verified". An error message that sends the reader after the wrong cause is a defect in
    the tool, and this step touches the pass.
 
+**Premise corrected 2026-10-26.** `bun scripts/gen.js` runs `EntityMetadataGenerator`'s **source** path
+(`main` → `generate(...)`), not a CLI that reads metadata JSON; the 2026-10-08 "CLI cannot see the annotation"
+finding was an instrument problem (a stale tooling classpath), and the example has carried `@NotNull` since step
+6.1's Done record. The real gap was the **JSON writer**, which omitted the `constraints` the pass had already
+resolved. Items 1–3 above are kept as the question the step was opened with, not as instructions that still apply;
+the Done record is the measured version.
+
 **Gate:** `GATE` green; an example view's committed enum carries an annotation that a pass regenerates; the two
 paths (CLI-from-JSON and API-from-source) produce the **same** enum for the same input, asserted by a test; and
 `ExampleRegenerationTest` is green as a no-op.
 
+**Gate reading, 2026-10-26.** "The same enum" is met as the same field-enum **annotation metadata**: the
+document's `properties[]` is the view's own-declaration record (DEC-028 § 2.6), not the full materialization list,
+so a whole enum — its inherited `id`/supertype fields and its `META` creator body — is not reconstructible from
+it. The test compares the fact 6.10 names, `FieldAnnotation` type + arguments + order, exactly.
+
 **Done when:** the example carries the annotation, the pass that makes it reachable is a documented entry point,
 and 6.1's gate — "`GATE` green, the generated example carries the annotations, and the tracker row says what
 landed" — is met in full rather than in part.
+
+**Done 2026-10-26 — the JSON carries the annotation, and the step's "CLI cannot see it" premise was corrected.**
+
+- **The premise, measured.** `main` calls the same `generate(...)` the tests use;
+  `FieldAnnotationExposureTest.theCliEntryPointAddsTheOverrideToo` drives `main` with the launcher's flags and
+  sees the override. The example has carried `@jakarta.validation.constraints.NotNull` on
+  `PersonSummary.metadata()` since step 6.1's Done record, and its committed enum carries the `annotations()`
+  override — so the step's sentence "the example is unannotated" was stale, and the "source → metadata JSON
+  CLI" it asked for does not exist and was not needed.
+- **The real gap, fixed.** The pass resolves the accessor's constraints and the enum emits them, but `toJson`
+  wrote no `constraints`, although `fromJson` already read that key (`annotation` + `arguments`). The writer now
+  emits each property's constraints in declaration order, only when non-empty, in the reader's shape — measured:
+  `Person.metadata.json` now carries `"constraints": [ { "annotation": "NotNull", "arguments": "" } ]` for
+  `PersonSummary.metadata`, and `bun scripts/gen.js` is exit 0 with **no generated `.java` change**.
+- **The test, and what "the same enum" can mean.** `MetadataJsonAnnotationTest` generates the annotated fixture,
+  parses the document with `fromJson`, asserts both constraints in order with their raw argument text, and
+  asserts an unannotated field gains none. It then feeds the document's property list to
+  `FieldBoilerplateGenerator` — the same emitter the pass uses — and asserts the `FieldAnnotation` literals are
+  identical to the source-generated enum's. **A whole-enum equality is not reconstructible from this document**:
+  `properties[]` is the view's own-declaration record (DEC-028 § 2.6), while the enum's `id`/inherited fields and
+  its `META` creator body come from the marker hierarchy and the generation level. The gate is met at the fact it
+  names — the annotation metadata both paths produce — and this record states the limit rather than inventing a
+  second source of truth.
+- **The misleading diagnostic.** `scripts/gen.js` printed the "GeneratorPreflight is older" hint on every
+  failure, including the measured run whose preflight was **ok** and whose HTML index reported `301 links
+  verified` before the real error. The decision now lives in `scripts/lib/gen-diagnostic.js`: `failureHint` names
+  the **last command the log recorded** and returns the preflight hint only when *that* command is
+  `GeneratorPreflight`; `report()` prints the failing step otherwise. `gen-diagnostic.test.js` — **4 passed,
+  0 failed** — pins the preflight-ok/later-step-failure case.
+- **6.1's gate is met in full.** The example carries the annotation, the metadata document carries it too, and
+  the roadmap row says what landed: row 35 of
+  [`doc-hipster-entity/roadmap/README.md`](../doc-hipster-entity/roadmap/README.md) is ticked and § 6 item 1 is
+  closed.
+- **Evidence:** `MetadataJsonAnnotationTest` — **1 test, 0 failures**; `gen-diagnostic.test.js` — **4 passed,
+  0 failed**; `bun scripts/gen.js` — exit 0, 301 links verified, no generated `.java` diff; **GATE** — the first
+  run failed only in `jcodebuddy-meta`'s `WatchMetadataProviderTest` on a random-port
+  `BindException: Address already in use` (environmental, unrelated to this change), and the immediate rerun was
+  **BUILD SUCCESS** (23.0 s). The first run had already executed `hipster-entity-tooling` —
+  **520 tests, 0 failures**, including `ExampleRegenerationTest` (9/0, 67.9 s) and `MetadataJsonAnnotationTest`
+  (1/0); the rerun restored those modules from cache, so no test result was lost to the flake.
 
 ## 11. Phase 7 — cross-cutting leftovers
 
@@ -711,7 +764,7 @@ version-named record, because a claim that is not observed is not a claim
 | #   | What                                   | Who                                  | Record lands in                                                                 |
 | --- | -------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
 | 8.1 | JetBrains § 8's five maintainer questions (vendor identity, the empty-allow-list default, one vs two settings services, dropping Kotlin, plan location) and acceptance criteria 2/5/7 in a running IDE | maintainer | [`plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) § 8, and `webview-jetbrains`' own docs |
-| 8.2 | Eclipse 4.41 workbench observations — the caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim; then answer **Q2** (dropins vs p2) | maintainer | [`ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md) § 1a/§ 2a, then `PLAN-eclipse-host.md` |
+| 8.2 | Eclipse 4.41 workbench observations — the caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim (Q2 is already answered: the first release ships by dropins) | maintainer | [`ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md) § 1a/§ 2a, then `PLAN-eclipse-host.md` |
 | 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the `intellij-jwa`/`vscode-jwa` attempts were sidecar clients, not these; after 3.0q what a host has is `webview-vscode`'s language client and `webview-jetbrains`' LSP registration) | maintainer decides, agent implements | [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md) |
 | 8.4 | The ACP spike's Zed run (see step 5.3) | maintainer                           | `PLAN-webview-suite.md` Phase 5 record                                          |
 | 8.5 | Explore Zed editor integration         | agent proposes, maintainer observes  | step 8.5 below, and the decision it ends in                                     |
@@ -765,9 +818,9 @@ start)
 | 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                       |
 | 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[ ]` — implements DEC-048's 2026-10-09 amendment                                           |
 | 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[ ]` — 6.4's only remainder                                                                |
-| 6.10  | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[ ]` — 6.1's blocked remainder                                                             |
+| 6.10  | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[x]` — **done 2026-10-26**: the JSON writer now carries `constraints`; the "CLI is the JSON path" premise was corrected (done record in the step) |
 | 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                       |
-| 8.2   | Eclipse observations, then Q2                                                                   | human                       | —    | `[ ]`                                                                                       |
+| 8.2   | Eclipse observations, including the 4.41 dropins layout                                         | human                       | —    | `[ ]` — Q2 is answered: dropins is the first-release path                                   |
 | 8.3   | Agent IDE hooks                                                                                 | human decides               | S    | `[ ]` — **handshake DELIVERED 2026-10-10** (`WebviewHandshake`: the agent reads the port the host actually bound); what remains is the in-IDE walk, which needs a person |
 | 8.4   | Zed ACP run                                                                                     | human                       | —    | `[ ]`                                                                                       |
 | 8.5   | Explore Zed editor integration                                                                  | agent proposes              | M    | `[ ]`                                                                                       |

@@ -40,6 +40,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGateArgs, splitPropertyAdvice } from './lib/gate.js';
+import { failureHint } from './lib/gen-diagnostic.js';
 import { delimiter, envWith, repoRoot, resolveJdk25, resolveMaven, run } from './lib/toolchain.js';
 
 const REPO = repoRoot();
@@ -127,7 +128,8 @@ function classpathFrom(file, moduleDir) {
 
 function report(logPath, status) {
   console.log('[gen] what the pass did:');
-  const lines = existsSync(logPath) ? readFileSync(logPath, 'utf8').split('\n') : [];
+  const text = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+  const lines = text.split('\n');
   for (const line of lines) {
     if (REPORT_KEYS.some((key) => line.includes(key))) {
       console.log(`  ${line.trim()}`);
@@ -136,10 +138,18 @@ function report(logPath, status) {
   console.log(`[gen] full log: ${logPath}`);
   if (status !== 0) {
     console.error(`[gen] FAILED with exit code ${status}.`);
-    console.error('[gen] A failure naming GeneratorPreflight means the tooling being run is older than this '
-      + 'invocation, so it would ignore --java-out and write generated .java into the metadata directory. '
-      + 'Re-run; if it persists, the local repository copy is being resolved instead of the reactor: compile '
-      + 'with `bun scripts/mvn-jdk25.js -o -pl :hipster-entity-tooling -am compile`.');
+    // The hint belongs to the step that failed. Printing it for every failure is what sent a reader
+    // after the tooling version while the log's own preflight said "ok" and the HTML index was the
+    // failing step (plan step 6.10). The last `$ …` line is the step that ran last, so it is the one.
+    const { command, hint } = failureHint(text);
+    if (command) {
+      console.error(`[gen] the failing step was: ${command}`);
+    } else {
+      console.error('[gen] no step logged a command; read the first error in the full log.');
+    }
+    if (hint) {
+      console.error(hint);
+    }
   }
   return status;
 }

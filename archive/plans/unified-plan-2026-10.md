@@ -4671,6 +4671,17 @@ attempts). Update the plan's § 10 with the answer and drop the questions that a
 **Gate:** `LINKS` green; the plan's status line no longer lists Q3/Q5 as open.
 
 **Done when:** no open question in the plan lacks an answer or a named owner.
+
+**Done 2026-10-26 — Q3 answered "keep the shared core", and Q5 was already settled by delivery.** The
+maintainer's answer to Q3: the JetBrains and VS Code hosts **keep their in-process implementations and share
+`webview-core`**; becoming proxying adapters is a later option that would need its own decision and steps, not a
+change of this plan's assumption. Q5 is settled by delivery — the earlier client attempts did move under
+`webview/` and steps 3.0p/3.0q merged the capabilities worth keeping before deleting them — so Q3 was the one
+question the status line still had to stop listing, and it no longer does. The answers are recorded where they
+bind: [`PLAN-webview-suite.md`](../../webview/PLAN-webview-suite.md)'s status line and § 10, whose Q2/Q3/Q5 rows
+now carry their dates. Q4 keeps its recorded interim answer (one shaded jar, three modes) and is a packaging
+decision, not a boundary this step changes. **Gate:** `LINKS` green — `node scripts/check-repo-links.mjs` and
+`node webview/check-links.mjs`.
 ### 5.4 — Eclipse Phase 5: the p2 update site (optional, gated on Q2)
 **Who:** agent, after a human answers Q2 · **Size:** M
 
@@ -4686,6 +4697,15 @@ outcome either way.
 
 **Done when:** either the site is delivered, or Q2 was answered "dropins" and the phase is closed as
 declined.
+
+**Done 2026-10-26 — Q2 answered "`dropins/` is acceptable for the first release", so the phase is declined
+and the step closes by its own Done-when.** No Tycho build and no p2 update site are taken: the first-release
+install stays the dropins copy documented in [`PLAN-eclipse-host.md`](../../webview/PLAN-eclipse-host.md) (E5,
+Phase 5 now marked declined, Q2 answered). The dropins *layout* on Eclipse 4.41 is still unobserved and remains
+part of step 8.2's run sheet, so declining the packaging does not turn the install path into a verified claim.
+**Gate:** not applicable by this step's own Done-when ("either the site is delivered, or Q2 was answered
+'dropins' and the phase is closed as declined"); `LINKS` green — `node scripts/check-repo-links.mjs` and
+`node webview/check-links.mjs`.
 
 ---
 
