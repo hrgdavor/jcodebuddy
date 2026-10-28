@@ -18,10 +18,11 @@ unfinished.** **Q2** is answered — `dropins/` is acceptable for the first rele
 update site (Phase 5) is **declined**, recorded in § 7 Phase 5 and in § 10 below; the 4.41 dropins layout is
 still an outstanding *observation* (8.2). **Q8** stays open — no `EdgeDataDir` and no allowed-origins preference,
 so R11's contention is documented rather than configurable (the deviation recorded below). The human-observation
-gates are step 8.2 of [`../plans/unified-plan.md`](../plans/unified-plan.md).
+gates are step 8.2, now in [`../plans/tbd.md`](../plans/tbd.md).
 
-**The 4.41 observations are blocked (2026-10-28) on an interested Eclipse user**: the maintainer will run them if
-one is found; until then the host stays implemented and headless-tested, and nothing here is claimed as observed.
+**The 4.41 observations were moved to [`../plans/tbd.md`](../plans/tbd.md) on 2026-10-28**: no interested Eclipse
+user is available; the maintainer will run them if one is found. Until then the host stays implemented and
+headless-tested, and nothing here is claimed as observed.
 
 Measurement words, used precisely, as everywhere in this folder: **documented** = a named source says so;
 **implemented** = code exists and its tests pass; **observed** = someone ran it against that host on the build

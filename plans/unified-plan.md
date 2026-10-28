@@ -5,17 +5,17 @@
 answers what is left, and a plan that carries its own history makes every reader walk past work already done.
 Each phase names the steps of it that were archived, so nothing is silently missing.
 
-**What is left here: 4 step ids, and only the editor ones need a person; two more (5.3 and 8.4) are in
+**What is left here: 2 step ids, and only 8.1 needs a person; four more (5.3, 8.2, 8.3 and 8.4) are in
 [`tbd.md`](tbd.md).** **3.11** was `[TBD]` because it waited on
 3.8, then a **design step**: on 2026-10-10 its design landed as
 [DEC-049](../doc-hipster-entity/architecture/decisions/DEC-049.md), the maintainer **accepted** it, and both
 steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
 and **3.11b** (the live-application entry point, documented and verified). Its optional **3.11c** (the generator
-emitting a bean FQN) and **3.11d** (the page build in the recorded pass) were both closed on 2026-10-26. The rest
-here: **8.1–8.5** (observations on a real editor). 8.1's five maintainer questions were answered on 2026-10-28;
-8.2 is blocked on an interested Eclipse user, and 8.5's only open item is the ACP path — ACP (5.3, 8.4 and 8.5's
-item 3) was moved to [`tbd.md`](tbd.md) for later on 2026-10-28. A step is ticked from a dated `Done` record in
-its own body, never from a "**Done when:**" criterion.
+emitting a bean FQN) and **3.11d** (the page build in the recorded pass) were both closed on 2026-10-26. What
+remains here: **8.1** (the JetBrains questions are answered; the running-IDE observations remain) and **8.5**
+(whose only open item is the ACP path in [`tbd.md`](tbd.md)). **8.2, 8.3, 5.3 and 8.4 were moved to
+[`tbd.md`](tbd.md) on 2026-10-28** — Eclipse has no interested user, and the 8.3 walk and ACP need a person at an
+editor. A step is ticked from a dated `Done` record in its own body, never from a "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still
@@ -850,15 +850,15 @@ landed" — is met in full rather than in part.
 **Finished in this phase**, with its records in [the 2026-10 archive](../archive/plans/unified-plan-2026-10.md): 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10.
 ## 12. Phase 8 — human-gated observations (no code; a checklist)
 
-These are not "later"; they are the only deliverable that needs a person. Each ends in a dated,
-version-named record, because a claim that is not observed is not a claim
-([`doc/ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md)).
+These are not "later" for the two that remain here; they are the only deliverable that needs a person. Each ends in a
+dated, version-named record, because a claim that is not observed is not a claim
+([`doc/ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md)). **8.2 and 8.3 were moved to
+[`tbd.md`](tbd.md) on 2026-10-28** — 8.2 has no interested Eclipse user, and the 8.3 walk needs a running editor —
+so this table lists only the two live steps.
 
 | #   | What                                   | Who                                  | Record lands in                                                                 |
 | --- | -------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
 | 8.1 | JetBrains § 8's five maintainer questions (vendor identity, the empty-allow-list default, one vs two settings services, dropping Kotlin, plan location) and acceptance criteria 2/5/7 in a running IDE | maintainer | [`plan.reimplement.md`](../webview/webview-jetbrains/plan.reimplement.md) § 8, and `webview-jetbrains`' own docs |
-| 8.2 | Eclipse 4.41 workbench observations — the caret landing, the unsaved buffer edit and the single `Ctrl+Z`, the dropins install layout, the two-live-hosts claim (Q2 is already answered: the first release ships by dropins) | maintainer | [`ide-observation-checklist.md`](../webview/doc/ide-observation-checklist.md) § 1a/§ 2a, then `PLAN-eclipse-host.md` |
-| 8.3 | `java-watch-agent` Phase 4's lightweight IntelliJ/VS Code hooks (the `intellij-jwa`/`vscode-jwa` attempts were sidecar clients, not these; after 3.0q what a host has is `webview-vscode`'s language client and `webview-jetbrains`' LSP registration) | maintainer decides, agent implements | [`jcodebuddy/jcodebuddy-agent/plan.md`](../jcodebuddy/jcodebuddy-agent/plan.md) |
 | 8.5 | Explore Zed editor integration         | agent proposes, maintainer observes  | step 8.5 below, and the decision it ends in                                     |
 
 ---
@@ -922,37 +922,10 @@ start)
 | 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[x]` — **done 2026-10-26**: `.jcodebuddy/conf/converters.json` is sorted, byte-reproducible, and compared with a fresh pass (done record in the step) |
 | 6.10  | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[x]` — **done 2026-10-26**: the JSON writer now carries `constraints`; the "CLI is the JSON path" premise was corrected (done record in the step) |
 | 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]` — **five decisions answered 2026-10-28** (vendor Davor Hrg; empty allow-list keeps `/open` disabled; one settings service; Kotlin dropped; plan stays in the module); the running-IDE observations remain |
-| 8.2   | Eclipse observations, including the 4.41 dropins layout                                         | human                       | —    | `[~]` — **blocked 2026-10-28**: no Eclipse 4.41 user available; the maintainer will test it if an interested Eclipse user is found. Q2 is already answered (dropins) |
-| 8.3   | Agent IDE hooks                                                                                 | human decides               | S    | `[ ]` — **handshake DELIVERED 2026-10-10** (`WebviewHandshake`: the agent reads the port the host actually bound); **the maintainer will do the in-IDE walk (2026-10-28)**, which is what remains |
 | 8.5   | Explore Zed editor integration                                                                  | agent proposes              | M    | `[~]` — **survey written 2026-10-28**: no Zed extension/page host; the ACP item is in [tbd.md](tbd.md) (see `webview/doc/zed-integration.md`) |
 
-**5.3 (the ACP spike) and 8.4 (the Zed ACP run) were moved to [`tbd.md`](tbd.md) on 2026-10-28**; they are
-deliberately not on this schedule. The only part of 8.5 still waiting is its ACP item, also recorded there.
-
-**8.3, what was built on 2026-10-10 — the handshake, because a reading of the code narrowed the step.**
-The step's text said "lightweight IntelliJ/VS Code hooks"; reading the tree showed most of what that meant
-already exists, and one load-bearing piece missing:
-
-- **Existing**: the agent serves `POST /jump` and relays the sidecar's outcome (502 "sidecar unreachable" rather
-  than a false success); the sidecar owns the editor's LSP connection and serves `GET /jump?uri=…&line=…`.
-- **Missing, and it was a defect rather than a gap**: an IDE host binds the port it *can* — `jwa.sidecar.jumpPort`
-  is a request, and when it is taken the next free port is used and **published** to
-  `<project>/.jcodebuddy/webview/host.json`, keyed by project. The agent resolved the port from the system
-  property alone, so a host on the next free port was **unreachable from the dashboard** — the exact case the
-  handshake (§ 1.8's "Instance Discovery") exists for.
-
-`WebviewHandshake` (agent, `server/`) now resolves it: a published descriptor that names **this project** and
-comes from a **live pid** wins; anything else — no file, another project, a dead pid, truncated JSON — falls
-back to the system property, else 7979. The token is read from the descriptor's `tokenPath` when that file
-exists. The descriptor's format is read by name rather than modelled, so this module keeps **no dependency on
-the webview stack** (it would have pulled gson in for a port number); the test pins the keys against the shape
-`HostDescriptor` serialises, and says so where a reader would look.
-
-**Measured**: agent module **30 tests, 0 failures** with the build cache disabled (9 new in
-`WebviewHandshakeTest`; `RemoteJumpTest`'s 2 unchanged, which is what proves the property fallback still works).
-
-**What remains here is the human half, and it needs a running editor**: with a host live on a *non-default*
-port, open the agent dashboard and use a "jump to source" action, then confirm the caret lands. The expected
-evidence is the port the dashboard used (the descriptor's, not 7979) and the editor's own tab. `describe()` and
-the per-jump debug line exist to make "which port did it choose" answerable when it does not.
+**5.3 (the ACP spike), 8.2 (Eclipse observations), 8.3 (the in-IDE handshake walk) and 8.4 (the Zed ACP run) were
+moved to [`tbd.md`](tbd.md) on 2026-10-28**; they are deliberately not on this schedule. The only part of 8.5 still
+waiting is its ACP item, also recorded there. 8.3's built record — the delivered `WebviewHandshake` and its 30/0
+agent tests — is in [`tbd.md`](tbd.md).
 

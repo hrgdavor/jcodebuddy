@@ -167,8 +167,9 @@ For complex refactorings and large-scale migrations, we propose integrating [Ope
 >   started. The representation decision that would govern it is
 >   [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md).
 >
-> Both are scheduled in [`plans/unified-plan.md`](../../plans/unified-plan.md), with the IDE-hook half
-> marked as needing a human with a running IDE.
+> Both are scheduled in [`plans/unified-plan.md`](../../plans/unified-plan.md); the IDE-hook half (8.3) was moved
+> to [`plans/tbd.md`](../../plans/tbd.md) on 2026-10-28 because its walk needs a human with a running IDE, and the
+> handshake code half is already delivered.
 
 ---
 
