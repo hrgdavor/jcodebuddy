@@ -11,8 +11,10 @@ Each phase names the steps of it that were archived, so nothing is silently miss
 steps it scheduled were **done the same day** — **3.11a** (the graph page joins the class index and navigates)
 and **3.11b** (the live-application entry point, documented and verified). Its optional **3.11c** (the generator
 emitting a bean FQN) and **3.11d** (the page build in the recorded pass) were both closed on 2026-10-26. The rest:
-**5.3** (the ACP spike, a person) and **8.1–8.5** (observations on a real editor). A step is ticked from a dated
-`Done` record in its own body, never from a "**Done when:**" criterion.
+**5.3** (the ACP spike, a person) and **8.1–8.5** (observations on a real editor). 8.1's five maintainer
+questions were answered on 2026-10-28; 8.2 is blocked on an interested Eclipse user, and 8.5 is blocked on 5.3's
+ACP verdict, with both reasons in [§ Progress](#progress). A step is ticked from a dated `Done` record in its own
+body, never from a "**Done when:**" criterion.
 
 This file exists because the repository had several plans, and the useful question — "what is left?" — had no
 single answer: every open item in them was already planned but not done. It replaces the "which plan is still
@@ -897,6 +899,12 @@ done.
 
 **Depends on:** 5.3 (the ACP verdict) for item 3. Items 1, 2 and 4 do not wait on it.
 
+**Survey 2026-10-28 — items 1, 2 and 4 answered; item 3 pending 5.3.** See
+[`webview/doc/zed-integration.md`](../webview/doc/zed-integration.md): Zed's extension features do not include a
+page/panel, so no extension and no new Zed page host are worth building; the existing browser + `webviewd` path
+(`LspHost` for the caret, `ZedCliHost` for opening the file) is the supported experience. If 5.3 says ACP works,
+the ACP bridge is its own plan beside the command layer; if not, that verdict is recorded here.
+
 **Done when:** the decision is recorded and, if positive, its steps exist. This is the last editor in the suite
 to get an answer, and the plan should not close with it unexamined.
 
@@ -914,15 +922,15 @@ start)
 | 3.11b | The outside-the-browser entry point is documented and verified                                  | agent                       | S    | `[x]` — **done 2026-10-10** (`webview-host-api.md` § 4c and `check-open-route.js`: 18 assertions, 0 failed; done record in the step) |
 | 3.11c | Optional: the generator emits a bean FQN, so beans navigate                                     | agent, only if asked        | S    | `[x]` — **done 2026-10-26**: `contexts.json` carries the bean FQN and the page joins it       |
 | 3.11d | The graph build is part of the recorded pass                                                    | agent                       | S    | `[x]` — **done 2026-10-26**: `ioc-gen.js --graph` regenerates and `--check` verifies the page |
-| 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]`                                                                                         |
+| 5.3   | ACP go/no-go spike                                                                              | human                       | S    | `[ ]` — **the maintainer will run the Zed 1.21 spike (2026-10-28)**; the written verdict is the remaining output |
 | 6.8   | Nested, collection and polymorphic patch application                                            | agent                       | L    | `[x]` — **done 2026-10-26**: builders implement `Write`, recursion goes through child builders, and the root family has a generated dispatcher (done record in the step) |
 | 6.9   | The converter manifest, generated and committed                                                 | agent                       | M    | `[x]` — **done 2026-10-26**: `.jcodebuddy/conf/converters.json` is sorted, byte-reproducible, and compared with a fresh pass (done record in the step) |
 | 6.10  | The source → metadata JSON pass, so an annotation can reach a generated enum                    | agent                       | M    | `[x]` — **done 2026-10-26**: the JSON writer now carries `constraints`; the "CLI is the JSON path" premise was corrected (done record in the step) |
-| 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]`                                                                                         |
-| 8.2   | Eclipse observations, including the 4.41 dropins layout                                         | human                       | —    | `[ ]` — Q2 is answered: dropins is the first-release path                                     |
-| 8.3   | Agent IDE hooks                                                                                 | human decides               | S    | `[ ]` — **handshake DELIVERED 2026-10-10** (`WebviewHandshake`: the agent reads the port the host actually bound); what remains is the in-IDE walk, which needs a person |
+| 8.1   | JetBrains maintainer questions + IDE observations                                               | human                       | —    | `[ ]` — **five decisions answered 2026-10-28** (vendor Davor Hrg; empty allow-list keeps `/open` disabled; one settings service; Kotlin dropped; plan stays in the module); the running-IDE observations remain |
+| 8.2   | Eclipse observations, including the 4.41 dropins layout                                         | human                       | —    | `[~]` — **blocked 2026-10-28**: no Eclipse 4.41 user available; the maintainer will test it if an interested Eclipse user is found. Q2 is already answered (dropins) |
+| 8.3   | Agent IDE hooks                                                                                 | human decides               | S    | `[ ]` — **handshake DELIVERED 2026-10-10** (`WebviewHandshake`: the agent reads the port the host actually bound); **the maintainer will do the in-IDE walk (2026-10-28)**, which is what remains |
 | 8.4   | Zed ACP run                                                                                     | human                       | —    | `[ ]`                                                                                         |
-| 8.5   | Explore Zed editor integration                                                                  | agent proposes              | M    | `[ ]`                                                                                         |
+| 8.5   | Explore Zed editor integration                                                                  | agent proposes              | M    | `[~]` — **survey written 2026-10-28**: no Zed extension/page host; ACP item waits for 5.3 (see `webview/doc/zed-integration.md`) |
 
 **8.3, what was built on 2026-10-10 — the handshake, because a reading of the code narrowed the step.**
 The step's text said "lightweight IntelliJ/VS Code hooks"; reading the tree showed most of what that meant

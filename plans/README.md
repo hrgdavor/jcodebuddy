@@ -30,7 +30,8 @@ navigates; `hipster-ioc-graph/src/locations.js` + `navigate.js`) and **3.11b** (
 point, documented in `webview-host-api.md` § 4c and verified by `webview/tools/check-open-route.js`). What
 DEC-049's two optional steps, **3.11c** (bean types as FQNs) and **3.11d** (the page build in the recorded pass),
 were both closed on 2026-10-26. The rest: an ACP spike (5.3, a person) and five human observations on a real editor
-(8.1–8.5). The last agent remainder, **6.9** (the converter manifest), was closed on 2026-10-26.
+(8.1–8.5); 8.1's five decisions were answered on 2026-10-28, 8.2 is blocked on an interested Eclipse user, and 8.5 is
+blocked on 5.3's ACP verdict. The last agent remainder, **6.9** (the converter manifest), was closed on 2026-10-26.
 
 Step 8.5 (Zed editor integration) was added the same day: Zed is the one editor in the suite that is neither
 JetBrains nor VS Code, and the only one with a first-class agent protocol, so it gets its own survey and decision.

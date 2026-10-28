@@ -20,6 +20,9 @@ still an outstanding *observation* (8.2). **Q8** stays open — no `EdgeDataDir`
 so R11's contention is documented rather than configurable (the deviation recorded below). The human-observation
 gates are step 8.2 of [`../plans/unified-plan.md`](../plans/unified-plan.md).
 
+**The 4.41 observations are blocked (2026-10-28) on an interested Eclipse user**: the maintainer will run them if
+one is found; until then the host stays implemented and headless-tested, and nothing here is claimed as observed.
+
 Measurement words, used precisely, as everywhere in this folder: **documented** = a named source says so;
 **implemented** = code exists and its tests pass; **observed** = someone ran it against that host on the build
 named and reported the result.
