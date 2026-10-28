@@ -1,12 +1,14 @@
 # Zed integration — a survey and a decision
 
-**Status: 2026-10-28 — survey written; items 1, 2 and 4 answered. Item 3 (ACP) waits for step 5.3's verdict, so
-the decision below is provisional on that one point.** This is plan step 8.5; it is a survey, not an integration
-plan, and it deliberately ends in "not now" rather than "possible".
+**Status: 2026-10-28 — survey written; items 1, 2 and 4 answered. Item 3 (ACP) was moved to
+[`../../plans/tbd.md`](../../plans/tbd.md) for later on 2026-10-28**, so it is deliberately not answered here. This
+is plan step 8.5; it is a survey, not an integration plan, and it deliberately ends in "not now" rather than
+"possible".
 
 Zed is the one editor in the suite that is neither JetBrains nor VS Code. It is also the only one with a
-first-class agent protocol (ACP), which is why step 5.3 spikes ACP and 8.4 runs it. The question here is different:
-what does a person using Zed get from JCodeBuddy once that spike has an answer?
+first-class agent protocol (ACP), which is why step 5.3 and its Zed run (8.4) are now deferred in
+[`../../plans/tbd.md`](../../plans/tbd.md). The question here is different: what does a person using Zed get from
+JCodeBuddy apart from that one deferred item?
 
 ## 1. What Zed can host today
 
@@ -40,12 +42,13 @@ us it would have to do one of three things, and none of them is a page host:
 **Decision consequence:** an extension is not worth its cost for (1) alone, since the sidecar path already works
 without it, and (2) is a convenience a shell alias or task can provide. There is no shape (3) to build.
 
-## 3. The ACP path — pending step 5.3
+## 3. The ACP path — moved to TBD (2026-10-28)
 
-ACP is the one surface that is genuinely new, and it is deliberately not decided here. Step 5.3 runs the spike:
-register `webviewd --acp` as a custom agent (`agent_servers` with `type: "custom"`), answer `initialize` /
-`session/new` / `session/prompt`, and expose one tool that calls the same command layer as `/api/v1`. The verdict
-is the input this item needs.
+ACP is the one surface that is genuinely new, and it is **deferred for later** rather than decided here: step 5.3
+and its Zed run (8.4) were moved to [`../../plans/tbd.md`](../../plans/tbd.md) on 2026-10-28, together with this
+item. If it is ever picked up, 5.3 runs the spike: register `webviewd --acp` as a custom agent (`agent_servers` with
+`type: "custom"`), answer `initialize` / `session/new` / `session/prompt`, and expose one tool that calls the same
+command layer as `/api/v1`.
 
 What is already clear and does not depend on the verdict:
 
@@ -76,9 +79,10 @@ the shape:
 
 **No Zed extension and no new Zed page host. The supported Zed experience is the existing browser + `webviewd`
 path: open the report page in a browser beside Zed; the sidecar's LSP `window/showDocument` moves the caret, and
-`ZedCliHost` opens the file when the LSP path is not attached.** ACP is **pending step 5.3**: if the spike says
-yes, the ACP bridge is scheduled as its own steps beside the command layer; if it says no, that verdict is recorded
-there and no Zed work is scheduled.
+`ZedCliHost` opens the file when the LSP path is not attached.** ACP is **deferred in
+[`../../plans/tbd.md`](../../plans/tbd.md)** (5.3, 8.4 and this item's ACP half moved there on 2026-10-28): if it is
+later taken, the ACP bridge is scheduled as its own steps beside the command layer; otherwise that file records the
+verdict.
 
 This is deliberately a "not now" for a native page host, with the reason named: **the surface does not exist**, and
 the two surfaces that do exist are already implemented and measured.

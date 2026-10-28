@@ -7,11 +7,12 @@ parts this line used to call "not started" have since landed — the JetBrains a
 [`kit/examples/with-assets/assets/webview-client.js`](kit/examples/with-assets/assets/webview-client.js) with
 [`kit/examples/webview-client.test.mjs`](kit/examples/webview-client.test.mjs) driving it against a live
 `webviewd`, and the extension's `process:exec` half was **dropped, not deferred** (2026-09-26; Phase 4 below).
-What is genuinely open: the **ACP go/no-go** spike's written verdict (step 5.3). **Phase 6 is delivered**
+What is genuinely open: **nothing in this plan is scheduled**; the **ACP go/no-go** spike's written verdict
+(step 5.3) was **moved to [`../plans/tbd.md`](../plans/tbd.md) on 2026-10-28 for later**. **Phase 6 is delivered**
 (step 5.1: the headless parity test drives every verb), and the § 10 questions that were open are answered — **Q3 on
 2026-10-26: the hosts keep their in-process implementations over the shared core, and proxying adapters remain
-a later option**; Q5 is settled by delivery and the earlier clients' deletion. Open work is step 5.3 in
-[`../plans/unified-plan.md`](../plans/unified-plan.md). Phase 0's results and
+a later option**; Q5 is settled by delivery and the earlier clients' deletion. When ACP is resumed, 5.3 is the
+step; until then it is deliberately not on the live schedule. Phase 0's results and
 two corrections to this plan are in [`PHASE0-ZED-FINDINGS.md`](PHASE0-ZED-FINDINGS.md); the hosts and their
 contracts are in [`doc/webview-host-api.md`](doc/webview-host-api.md) and
 [`kit/doc/edit-api.md`](kit/doc/edit-api.md).
@@ -550,7 +551,7 @@ Source reading says the LSP path works (§5.5); the point of this phase is to se
 > and port 7979 refused connections), so "closing the window stops it" is measured rather than assumed — Zed owns
 > the child process.
 
-### Phase 5 — LSP sidecar parity, the ZED LSP host, + ACP exploration (2–3 days, partially spiked)
+### Phase 5 — LSP sidecar parity, the ZED LSP host, + ACP exploration (ACP deferred to [`plans/tbd.md`](../plans/tbd.md), 2026-10-28)
 - Finish `LspHost` (the send side, started in Phase 2): `window/showDocument` for navigation and
   `workspace/applyEdit` for edits, with the reference host being the sidecar itself. Answer
   `experimental/runnables` with an array and tolerate Zed's worktree-trust delay (Phase 0).
