@@ -1,6 +1,7 @@
 package hr.hrg.jcodebuddy.automation.ioc;
 
 import hr.hrg.jcodebuddy.automation.watch.WatchedRegeneration;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -113,8 +114,8 @@ public final class IocRegenerationWatcher implements AutoCloseable {
     }
 
     /** One batch, decided and acted on. The seam a test drives without a filesystem watcher. */
-    public WatchedRegeneration.Pass onBatch(hr.hrg.watch2.core.ChangeSet changeSet) {
-        return watch.onBatch(changeSet);
+    public WatchedRegeneration.Pass onBatch(WatchBatch batch) {
+        return watch.onBatch(batch);
     }
 
     /**

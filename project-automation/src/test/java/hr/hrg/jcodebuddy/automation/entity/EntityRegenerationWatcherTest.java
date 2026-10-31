@@ -1,7 +1,7 @@
 package hr.hrg.jcodebuddy.automation.entity;
 
 import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
-import hr.hrg.watch2.core.ChangeSet;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -60,18 +60,27 @@ class EntityRegenerationWatcherTest {
      * A batch naming one file, with absolute paths — which is what the real watcher delivers, and
      * what the relativization has to cope with.
      */
-    private static ChangeSet changed(Tree tree, Path... files) {
-        return new ChangeSet(java.util.Arrays.stream(files)
-                .map(path -> path.toAbsolutePath().normalize())
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new)),
-                Set.of(), System.currentTimeMillis());
+    private static WatchBatch changed(Tree tree, Path... files) {
+        return new WatchBatch(names(tree, files), Set.of(), false);
     }
 
-    private static ChangeSet deleted(Path... files) {
-        return new ChangeSet(Set.of(), java.util.Arrays.stream(files)
-                .map(path -> path.toAbsolutePath().normalize())
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new)),
-                System.currentTimeMillis());
+    private static WatchBatch changed(Tree tree, Set<Path> files) {
+        return new WatchBatch(names(tree, files), Set.of(), false);
+    }
+
+    private static WatchBatch deleted(Tree tree, Path... files) {
+        return new WatchBatch(Set.of(), names(tree, files), false);
+    }
+
+    private static Set<String> names(Tree tree, Path... files) {
+        return names(tree, java.util.Arrays.stream(files).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    private static Set<String> names(Tree tree, Set<Path> files) {
+        return files.stream()
+                .map(path -> tree.sourceRoot().relativize(path.toAbsolutePath().normalize())
+                        .toString().replace('\\', '/'))
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     @Test
@@ -121,8 +130,7 @@ class EntityRegenerationWatcherTest {
         }
         Assertions.assertFalse(generated.isEmpty(), "the pass must have written something to echo");
 
-        EntityRegenerationWatcher.Pass echo = watcher.onBatch(new ChangeSet(generated, Set.of(),
-                System.currentTimeMillis()));
+        EntityRegenerationWatcher.Pass echo = watcher.onBatch(changed(tree, generated));
 
         Assertions.assertFalse(echo.regenerated(),
                 "a batch made only of the watcher's own output must not regenerate");
@@ -148,13 +156,11 @@ class EntityRegenerationWatcherTest {
         // emit this file; the interesting unbounded case is a generated file the pass created but no
         // batch named. Name one now.
         Set<Path> unnamed = Set.of(tree.packageDir().resolve("PersonSummary_.java"));
-        Assertions.assertTrue(watcher.onBatch(new ChangeSet(unnamed, Set.of(),
-                System.currentTimeMillis())).regenerated() == false,
+        Assertions.assertTrue(watcher.onBatch(changed(tree, unnamed)).regenerated() == false,
                 "the enum was already snapshotted at the end of the pass, so it is not 'new'");
         Assertions.assertFalse(Files.exists(binder));
 
-        EntityRegenerationWatcher.Pass afterwards = watcher.onBatch(new ChangeSet(unnamed, Set.of(),
-                System.currentTimeMillis()));
+        EntityRegenerationWatcher.Pass afterwards = watcher.onBatch(changed(tree, unnamed));
         Assertions.assertFalse(afterwards.regenerated(), "and it stays quiet");
         Assertions.assertEquals(1, watcher.passCount(), "exactly one pass for the whole sequence");
     }
@@ -187,7 +193,7 @@ class EntityRegenerationWatcherTest {
         long after = watcher.passCount();
 
         Files.delete(scratch);
-        Assertions.assertTrue(watcher.onBatch(deleted(scratch)).regenerated(),
+        Assertions.assertTrue(watcher.onBatch(deleted(tree, scratch)).regenerated(),
                 "a deletion always matters: the generator may need to drop or recreate a file");
         Assertions.assertEquals(after + 1, watcher.passCount());
     }
@@ -198,7 +204,7 @@ class EntityRegenerationWatcherTest {
         EntityRegenerationWatcher watcher = new EntityRegenerationWatcher(
                 EntityRegenerationWatcher.Config.of(tree.sourceRoot()));
 
-        ChangeSet overflow = new ChangeSet(Set.of(), Set.of(), true, System.currentTimeMillis());
+        WatchBatch overflow = new WatchBatch(Set.of(), Set.of(), true);
 
         Assertions.assertTrue(watcher.onBatch(overflow).regenerated(),
                 "an OS queue overflow means 'you may have missed events', so the only safe answer is "

@@ -9,7 +9,7 @@ app module never depends on this one.
 ## The regeneration watcher
 
 [`EntityRegenerationWatcher`](src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java)
-pairs `java-watch-core`'s batched filesystem watcher with **`fs-meta`'s trio/diff state** and
+pairs **`jcodebuddy-watch`'s** WatchService event source with **`fs-meta`'s trio/diff state** and
 `EntityMetadataGenerator`, takes its flags from the same CLI surface the
 generator uses, and breaks the self-write loop with a **content** check
 rather than a timing flag — filesystem events arrive asynchronously, and a

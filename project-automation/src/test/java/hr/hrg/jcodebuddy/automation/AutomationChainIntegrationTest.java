@@ -3,7 +3,7 @@ package hr.hrg.jcodebuddy.automation;
 import hr.hrg.jcodebuddy.engine.source.SourceReader;
 import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import hr.hrg.jcodebuddy.automation.entity.EntityRegenerationWatcher;
-import hr.hrg.watch2.core.ChangeSet;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -89,7 +89,7 @@ class AutomationChainIntegrationTest {
         EntityRegenerationWatcher watcher = new EntityRegenerationWatcher(
                 new EntityRegenerationWatcher.Config(sourceRoot, sourceRoot.resolveSibling("reports"),
                         List.of("chain.hr"), false, List.of(), 50));
-        return watcher.onBatch(new ChangeSet(Set.of(), Set.of(), true, System.currentTimeMillis()));
+        return watcher.onBatch(new WatchBatch(Set.of(), Set.of(), true));
     }
 
     @Test

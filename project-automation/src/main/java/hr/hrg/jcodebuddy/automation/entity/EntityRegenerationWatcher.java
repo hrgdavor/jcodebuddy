@@ -4,7 +4,7 @@ import hr.hrg.hipster.entity.tooling.DivergenceReporter;
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
 import hr.hrg.jcodebuddy.automation.watch.WatchedRegeneration;
 import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
-import hr.hrg.watch2.core.ChangeSet;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,7 +18,7 @@ import java.util.Set;
  *
  * <h3>What this is, and what it is not</h3>
  * <p>It is the watcher half of the dev-time loop: it pairs {@code java-watch-core}'s debounced,
- * batched {@link BatchedFileWatcher} with {@code hipster-entity-tooling}'s generator, so editing a
+ * batched {@link hr.hrg.jcodebuddy.watch.FileWatch} with {@code hipster-entity-tooling}'s generator, so editing a
  * view interface regenerates its enum, builders, adapters and mappers without a build. It decides
  * nothing about <em>policy</em> — the packages, adapters and mappers are the same CLI-style flags the
  * generator takes, passed through unchanged, so a watched run and a manually invoked run cannot
@@ -220,8 +220,8 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
      * regenerate if it does. The decision is {@link WatchedRegeneration}'s; this method only translates its verdict
      * into this watcher's own {@link Pass} so the API callers already use keeps working.
      */
-    public Pass onBatch(ChangeSet changeSet) {
-        WatchedRegeneration.Pass shared = watch.onBatch(changeSet);
+    public Pass onBatch(WatchBatch batch) {
+        WatchedRegeneration.Pass shared = watch.onBatch(batch);
         return new Pass(shared.sequence(), shared.regenerated(), shared.triggeringFiles(), shared.divergences());
     }
 

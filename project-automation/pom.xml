@@ -24,7 +24,7 @@
         </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>java-watch-core</artifactId>
+            <artifactId>jcodebuddy-watch</artifactId>
         </dependency>
         <!-- The state half of the watcher: the trio/diff contract, consumed from its own project (DEC-050's
              standalone-package rule), not from a copy in this checkout. Version is explicit because the root POM
@@ -36,7 +36,7 @@
         </dependency>
         <!-- `SourceFiles` matches with git's wildmatch, from the project that owns it (DEC-051), the
              same artifact `fs-meta` consumes. Declared here because this module imports it directly,
-             rather than relying on `java-watch-core`'s transitive use of it. -->
+             rather than relying on a transitive use by `jcodebuddy-watch` or `fs-meta`. -->
         <dependency>
             <groupId>hr.hrg</groupId>
             <artifactId>gitignore</artifactId>

@@ -9,9 +9,9 @@ import hr.hrg.fsmeta.FsMetaPair;
 import hr.hrg.fsmeta.FsMetaScanOptions;
 import hr.hrg.fsmeta.FsMetaScanner;
 import hr.hrg.fsmeta.FsMetaWriter;
-import hr.hrg.watch2.core.BatchedFileWatcher;
-import hr.hrg.watch2.core.ChangeSet;
-import hr.hrg.watch2.core.FileFilter;
+import hr.hrg.jcodebuddy.watch.FileWatch;
+import hr.hrg.jcodebuddy.watch.PathFilter;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,7 +48,7 @@ import java.util.stream.Stream;
  * mentions them runs a pass, that pass changes nothing because generation is idempotent, and the watcher then goes
  * quiet), and <strong>a save with unchanged content does nothing</strong> — an editor that rewrites a file with
  * identical bytes, or a touched timestamp, does not start a pass. The state half is {@code fs-meta}; the event source
- * is still the frozen {@code java-watch} for this step.</p>
+ * is {@code jcodebuddy-watch}.</p>
  */
 public final class WatchedRegeneration implements AutoCloseable {
 
@@ -77,17 +77,16 @@ public final class WatchedRegeneration implements AutoCloseable {
     }
 
     private final Path sourceRoot;
-    private final long debounceMs;
-    private final FileFilter fileFilter;
+    private final PathFilter filter;
     private final FsMetaScanOptions scanOptions;
     private final Path stateDirectory;
     private final Regenerator regenerator;
     private final Consumer<Pass> observer;
+    private final FileWatch watcher;
 
     /** The shared trio/diff state as of the end of the last decision. Null means "fall back to a pass". */
     private FsMetaPair state;
 
-    private BatchedFileWatcher watcher;
     private long sequence;
     private long passes;
 
@@ -106,12 +105,12 @@ public final class WatchedRegeneration implements AutoCloseable {
             throw new IllegalArgumentException("a source root is required");
         }
         this.sourceRoot = sourceRoot.toAbsolutePath().normalize();
-        this.debounceMs = debounceMs <= 0 ? 300 : debounceMs;
         this.regenerator = regenerator;
         this.observer = observer == null ? pass -> { } : observer;
-        this.fileFilter = new FileFilter(this.sourceRoot, includes, excludes);
+        this.filter = PathFilter.of(includes, excludes);
         this.scanOptions = scanOptions(excludes);
         this.stateDirectory = this.sourceRoot.resolve(".jcodebuddy").resolve("cache").resolve("watch-fs-meta");
+        this.watcher = new FileWatch(this.sourceRoot, filter, debounceMs, this::onBatch);
         // Seed the state at construction, so the first batch is judged against the tree as the watcher found it.
         // Doing it here rather than in start() also means the decision logic is exercisable without a real
         // filesystem watcher, which is how the tests assert it.
@@ -120,19 +119,12 @@ public final class WatchedRegeneration implements AutoCloseable {
 
     /** Starts watching asynchronously. Returns immediately; batches are handled on the watcher's thread. */
     public void start() throws IOException {
-        if (watcher != null) {
-            return;
-        }
-        watcher = new BatchedFileWatcher(sourceRoot, fileFilter, debounceMs, this::onBatch);
         watcher.start();
     }
 
     /** Stops watching. Safe to call twice, and safe to call without {@link #start()}. */
     public void stop() {
-        if (watcher != null) {
-            watcher.stop();
-            watcher = null;
-        }
+        watcher.stop();
     }
 
     @Override
@@ -161,15 +153,15 @@ public final class WatchedRegeneration implements AutoCloseable {
      * <p>Synchronized, so a pass is never concurrent with another: the tree is one resource and a generator's
      * configuration may be process-global.</p>
      */
-    public synchronized Pass onBatch(ChangeSet changeSet) {
+    public synchronized Pass onBatch(WatchBatch batch) {
         sequence++;
-        Set<String> triggering = relativePaths(changeSet);
+        Set<String> triggering = relativePaths(batch);
 
-        if (!changeSet.fullRecompile()) {
+        if (!batch.overflow()) {
             triggering = contentChanges(triggering);
         }
 
-        if (triggering.isEmpty() && !changeSet.fullRecompile()) {
+        if (triggering.isEmpty() && !batch.overflow()) {
             Pass ignored = new Pass(sequence, false, triggering, List.of());
             observer.accept(ignored);
             return ignored;
@@ -202,7 +194,7 @@ public final class WatchedRegeneration implements AutoCloseable {
                 Path absolute = sourceRoot.resolve(relative);
                 if (Files.isRegularFile(absolute)) {
                     Optional<FsMetaFile> scanned = FsMetaScanner.scanFile(sourceRoot, absolute, scanOptions);
-                    if (scanned.isPresent() && fileFilter.shouldInclude(absolute)) {
+                    if (scanned.isPresent() && filter.shouldInclude(relative)) {
                         replace(files, scanned.get());
                     } else {
                         remove(files, relative);
@@ -246,7 +238,7 @@ public final class WatchedRegeneration implements AutoCloseable {
             try (Stream<Path> walk = Files.walk(sourceRoot)) {
                 for (Path path : walk.filter(Files::isRegularFile)
                         .filter(file -> file.getFileName().toString().endsWith(".java"))
-                        .filter(fileFilter::shouldInclude)
+                        .filter(file -> filter.shouldInclude(sourceRoot, file))
                         .toList()) {
                     FsMetaScanner.scanFile(sourceRoot, path, scanOptions).ifPresent(files::add);
                 }
@@ -306,20 +298,10 @@ public final class WatchedRegeneration implements AutoCloseable {
         return options;
     }
 
-    private Set<String> relativePaths(ChangeSet changeSet) {
-        Set<String> relatives = new LinkedHashSet<>();
-        for (Path path : changeSet.changed()) {
-            relatives.add(relative(path));
-        }
-        for (Path path : changeSet.deleted()) {
-            relatives.add(relative(path));
-        }
+    private Set<String> relativePaths(WatchBatch batch) {
+        Set<String> relatives = new LinkedHashSet<>(batch.changed());
+        relatives.addAll(batch.deleted());
         return relatives;
-    }
-
-    private String relative(Path path) {
-        Path absolute = path.toAbsolutePath().normalize();
-        return sourceRoot.relativize(absolute).toString().replace('\\', '/');
     }
 
     /** SHA-1 of a file's bytes, or {@code "unknown"} when it cannot be read. Kept for callers that report hashes. */

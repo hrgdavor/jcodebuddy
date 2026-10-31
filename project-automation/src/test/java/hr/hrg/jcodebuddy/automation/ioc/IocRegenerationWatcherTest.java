@@ -1,7 +1,7 @@
 package hr.hrg.jcodebuddy.automation.ioc;
 
 import hr.hrg.jcodebuddy.automation.watch.WatchedRegeneration;
-import hr.hrg.watch2.core.ChangeSet;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -62,10 +62,10 @@ class IocRegenerationWatcherTest {
         return dir;
     }
 
-    private static ChangeSet changed(Path... files) {
-        return new ChangeSet(Arrays.stream(files)
-                .map(path -> path.toAbsolutePath().normalize())
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new)), Set.of(), 0);
+    private static WatchBatch changed(Path root, Path... files) {
+        return new WatchBatch(Arrays.stream(files)
+                .map(path -> root.relativize(path.toAbsolutePath().normalize()).toString().replace('\\', '/'))
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new)), Set.of(), false);
     }
 
     /**
@@ -90,7 +90,7 @@ class IocRegenerationWatcherTest {
                 "nothing is generated until something changes");
 
         edit(sourceRoot.resolve("src/ioc/fixture/AppContext.java"), "\n// a genuine edit\n");
-        WatchedRegeneration.Pass pass = watcher.onBatch(changed(sourceRoot.resolve("src/ioc/fixture/AppContext.java")));
+        WatchedRegeneration.Pass pass = watcher.onBatch(changed(sourceRoot, sourceRoot.resolve("src/ioc/fixture/AppContext.java")));
 
         Assertions.assertTrue(pass.regenerated(), "a real content change must regenerate: " + pass.divergences());
         Assertions.assertEquals(Set.of("src/ioc/fixture/AppContext.java"), pass.triggeringFiles(),
@@ -109,7 +109,7 @@ class IocRegenerationWatcherTest {
         IocRegenerationWatcher watcher = watcherOf(sourceRoot, dir);
 
         edit(sourceRoot.resolve("src/ioc/fixture/AppContext.java"), "\n// a genuine edit\n");
-        Assertions.assertTrue(watcher.onBatch(changed(sourceRoot.resolve("src/ioc/fixture/AppContext.java")))
+        Assertions.assertTrue(watcher.onBatch(changed(sourceRoot, sourceRoot.resolve("src/ioc/fixture/AppContext.java")))
                 .regenerated(), "the first pass runs");
         Assertions.assertEquals(1, watcher.passCount());
 
@@ -119,10 +119,7 @@ class IocRegenerationWatcherTest {
         }
         Assertions.assertFalse(generated.isEmpty(), "the pass must have written something to echo");
 
-        WatchedRegeneration.Pass echo = watcher.onBatch(new ChangeSet(
-                generated.stream().map(path -> path.toAbsolutePath().normalize())
-                        .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new)),
-                Set.of(), 0));
+        WatchedRegeneration.Pass echo = watcher.onBatch(changed(sourceRoot, generated.toArray(Path[]::new)));
 
         Assertions.assertFalse(echo.regenerated(),
                 "the echo of its own output must be ignored, or the watcher never becomes quiescent: " + echo);
@@ -140,7 +137,8 @@ class IocRegenerationWatcherTest {
         // the file was there, so its absence is a change the pass must see.
         Path removed = sourceRoot.resolve("src/ioc/fixture/Greeting.java");
         Files.delete(removed);
-        WatchedRegeneration.Pass pass = watcher.onBatch(new ChangeSet(Set.of(), Set.of(removed.toAbsolutePath()), 0));
+        WatchedRegeneration.Pass pass = watcher.onBatch(new WatchBatch(Set.of(),
+                Set.of("src/ioc/fixture/Greeting.java"), false));
 
         Assertions.assertTrue(pass.regenerated(), "a deleted file is never a no-op");
     }

@@ -1,12 +1,13 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-10-31 — W1 and W5a done; W2–W4, W5b and W6 open.** W1 measured the consumers, added the check
-script, settled the event-source shape, and spiked the smallest stateful unit (`WatchedRegeneration`) against
-`fs-meta`. W5a then moved that unit's real loop state onto `fs-meta`; `java-watch` remains only for the event
-source. This plan is the inventory and the standalone steps for the rule in root
-[`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a watcher need goes to **`fs-meta`**, not into the
-frozen group. It is deliberately not a single “remove the dependency” task: the dependency is six modules, and
-`java-watch-core` bundles three unrelated APIs.
+**Status: 2026-10-31 — W1, W3, W5a and W5b done; W2, W4 and W6 open.** W1 measured the consumers, added the
+check script, settled the event-source shape, and spiked the smallest stateful unit (`WatchedRegeneration`) against
+`fs-meta`. W5a moved that unit's loop state onto `fs-meta`; W3 added `jcodebuddy-watch`; W5b replaced the
+`java-watch` event source and removed it from project-automation. The five remaining consumers are the agent
+(watcher), the three code-edit consumers and the unused hipster-ioc dependency. This plan is the inventory and the
+standalone steps for the rule in root [`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a watcher need
+goes to **`fs-meta`**, not into the frozen group. It is deliberately not a single “remove the dependency” task: the
+dependency was six modules, and `java-watch-core` bundles three unrelated APIs.
 
 ## 1. The constraint
 
@@ -28,14 +29,14 @@ frozen group. It is deliberately not a single “remove the dependency” task: 
 
 The six JCodeBuddy consumers of the `java-watch-core` artifact:
 
-| Module                            | POM                                                              | What it uses                                                              | Target                                               |
-| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Module                            | POM                                                              | What it uses                                                              | Target                                                 |
+| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `jcodebuddy-agent`                | [`pom.xml:22`](../jcodebuddy/jcodebuddy-agent/pom.xml#L22)       | [`ProjectWatcher`](../jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/ProjectWatcher.java#L5-L6) uses `FileFilter` and `ManagedFileWatcher`; [`ToolSetAgent`](../jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/ToolSetAgent.java#L29-L40) uses `FileFilter` | event port + wildmatch filter + `fs-meta` state (W4) |
-| `project-automation`              | [`pom.xml:27`](../project-automation/pom.xml#L27)                | [`WatchedRegeneration`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/watch/WatchedRegeneration.java#L3-L5) uses `BatchedFileWatcher`, `ChangeSet`, `FileFilter`; [`EntityRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java#L7) and [`IocRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/ioc/IocRegenerationWatcher.java#L116) consume `ChangeSet`; three tests construct it | state half done in W5a; event source remains (W5b) |
+| `project-automation`              | [`pom.xml:27`](../project-automation/pom.xml#L27)                | [`WatchedRegeneration`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/watch/WatchedRegeneration.java#L3-L5) uses `BatchedFileWatcher`, `ChangeSet`, `FileFilter`; [`EntityRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java#L7) and [`IocRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/ioc/IocRegenerationWatcher.java#L116) consume `ChangeSet`; three tests construct it | **resolved 2026-10-31** (W5a state + W5b event source) |
 | `jcodebuddy-builder`              | [`pom.xml:53`](../jcodebuddy/jcodebuddy-builder/pom.xml#L53)     | [`BuilderTransformationEngine`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/BuilderTransformationEngine.java#L5-L6) uses `CodeEdit`, `TransformationResult`; [`LineLookup`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/LineLookup.java#L72) names `CodeEdit` in javadoc; two tests use `CodeEdit`/`CodeEditApplier` | JCodeBuddy-owned code-edit types (W2) |
 | `jcodebuddy-watch-tools`          | [`pom.xml:44`](../jcodebuddy/jcodebuddy-watch-tools/pom.xml#L44) | [`RecordBuilderGenerator`](../jcodebuddy/jcodebuddy-watch-tools/src/main/java/hr/hrg/jcodebuddy/watchtools/RecordBuilderGenerator.java#L8-L11) uses `ActionTool` (from the agent, not `core`), `CodeEditApplier`, `TransformationResult` | code-edit types (W2); the agent port stays |
 | `webview/jwa-sidecar`             | [`pom.xml:32`](../webview/jwa-sidecar/pom.xml#L32)               | [`JwaTextDocumentService`](../webview/jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java#L148-L158) uses `TransformationResult`, `CodeEdit` | code-edit types (W2) |
-| `hipster-ioc/hipster-ioc-tooling` | [`pom.xml:39`](../hipster-ioc/hipster-ioc-tooling/pom.xml#L39)   | **No source reference** to `hr.hrg.watch2.core`; the dependency is unused | remove the dependency (W6)                           |
+| `hipster-ioc/hipster-ioc-tooling` | [`pom.xml:39`](../hipster-ioc/hipster-ioc-tooling/pom.xml#L39)   | **No source reference** to `hr.hrg.watch2.core`; the dependency is unused | remove the dependency (W6)                             |
 
 The one-file sample that consumes `ChangeSet` in tests is
 [`AutomationChainIntegrationTest`](../project-automation/src/test/java/hr/hrg/jcodebuddy/automation/AutomationChainIntegrationTest.java#L6);
@@ -90,11 +91,11 @@ as an ADR if it changes a public boundary).
 
 **Done 2026-10-31.**
 
-- **The check exists and matches the table**: `bun scripts/check-java-watch-consumers.js` reports **6 consumer
-  modules, 0 unexpected** (858 files, **68 ms**); it prints the POM dependency and the Java files that reference
-  `hr.hrg.watch2.core` for each. `--strict` exits 1 while any consumer remains, which is the W6 gate. It finds the
-  fully-qualified use in `JwaTextDocumentService` that an import-only scan would miss, and it excludes the agent's
-  `.watch/` audit copies.
+- **The check exists and matches the table**: `bun scripts/check-java-watch-consumers.js` reported **6 consumer
+  modules, 0 unexpected** (858 files, **68 ms**) at W1; W5b has since resolved project-automation, so it now reports
+  **5**. It prints the POM dependency and the Java references to `hr.hrg.watch2.core` for each. `--strict` exits 1
+  while any consumer remains, which is the W6 gate. It finds the fully-qualified use in `JwaTextDocumentService` that
+  an import-only scan would miss, and it excludes the agent's `.watch/` audit copies.
 - **Event source settled: a new tiny `jcodebuddy-watch` module** (W3), not a port inside a consumer.
   `jcodebuddy-core` must stay watcher-free (DEC-037, `EngineHasNoWatcherTest`), and `project-automation` must not
   depend on the runtime agent; a leaf both can depend on is the only shape that does not invert a boundary. It uses
@@ -145,7 +146,7 @@ Define `CodeEdit` and `TransformationResult` in `jcodebuddy-builder-api`, and `C
 **Gate:** the three modules build and their tests pass; no `hr.hrg.watch2.core` reference remains in them; the
 generated builder output is byte-identical; `java-watch-core` is gone from their POMs.
 
-### W3 — Add the JCodeBuddy event source (M)
+### W3 — Add the JCodeBuddy event source (M) — done 2026-10-31
 **Who:** agent · **Depends:** W1
 
 Create the `jcodebuddy/jcodebuddy-watch` module settled in W1: a `WatchService`-based loop, debounce and batch
@@ -155,6 +156,13 @@ is the state half. It must not depend on `java-watch*` or on `jcodebuddy-core` (
 
 **Gate:** unit tests for create/modify/delete, debounce, stop/restart and an ignored path; no `java-watch*`
 artifact or `hr.hrg.watch2.core` reference in the new code; `jcodebuddy-core` still has no watcher.
+
+**Done 2026-10-31.** The module is [`jcodebuddy/jcodebuddy-watch`](../jcodebuddy/jcodebuddy-watch): `FileWatch`
+registers a tree with `WatchService`, debounces the first event, applies `PathFilter` (the `gitignore`/wildmatch
+authority) and emits a `WatchBatch`; queue overflow is carried as `WatchBatch.overflow()`. Tests **4/0** —
+`PathFilterTest` for include/exclude/wildmatch and `FileWatchTest` for create/modify/delete plus start/stop
+idempotence. It is in `GATE_MODULES` and in the module map, and it has no `java-watch*` or `jcodebuddy-core`
+dependency. **Gate**: the module's tests are **4/0** and the full gate (8:37) includes it.
 
 ### W4 — Move the agent's watcher to the event source + `fs-meta` (M)
 **Who:** agent · **Depends:** W3
@@ -201,7 +209,7 @@ the state trio exists and validates; `java-watch-core` remains only for the even
   project-automation **114 tests, 0 failures**. The state is written under `.jcodebuddy/cache/watch-fs-meta`; the
   event source is still `java-watch-core`, which is exactly what W5b removes.
 
-### W5b — Remove the event source from project-automation (M)
+### W5b — Remove the event source from project-automation (M) — done 2026-10-31
 **Who:** agent · **Depends:** W3, W5a
 
 Replace `BatchedFileWatcher`/`ChangeSet`/`FileFilter` with the W3 batch and `wildmatch` filters. The two
@@ -210,6 +218,15 @@ regeneration watchers and their tests move from `ChangeSet` to the new batch typ
 
 **Gate:** the watcher, entity and IOC tests pass; the loop breaker still ignores a self-write and a same-content
 save; no `hr.hrg.watch2.core` reference; POM has no `java-watch*`.
+
+**Done 2026-10-31.** project-automation now depends only on `jcodebuddy-watch` + `fs-meta`; `FileFilter`,
+`BatchedFileWatcher` and `ChangeSet` are gone from its sources and POM. `WatchedRegeneration` takes a
+`WatchBatch`, and both wrappers expose `onBatch(WatchBatch)`; their tests use relative-path batches (create, modify,
+delete, overflow). The 114 project-automation tests pass, and the W1 check now reports project-automation as
+**resolved** — five consumers remain. The module's test `WatchedRegenerationFsMetaTest` still proves the state half,
+now with the JCodeBuddy event source in front of it.
+**Gate**: `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (8:37), with `jcodebuddy-watch` **4/0** newly in
+`GATE_MODULES` and project-automation **114/0**; `GateContractTest` was updated in the same change.
 
 ### W6 — Remove the unused dependency and enforce the boundary (S)
 **Who:** agent · **Depends:** W2, W4, W5b

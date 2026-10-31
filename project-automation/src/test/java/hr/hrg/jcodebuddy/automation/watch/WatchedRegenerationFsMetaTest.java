@@ -2,7 +2,7 @@ package hr.hrg.jcodebuddy.automation.watch;
 
 import hr.hrg.fsmeta.FsMetaLoad;
 import hr.hrg.fsmeta.FsMetaPair;
-import hr.hrg.watch2.core.ChangeSet;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -43,12 +43,12 @@ class WatchedRegenerationFsMetaTest {
         assertTrue(seeded.pair().contains("src/A.java"), "the watched .java file must be in the trio");
 
         // Same bytes, new mtime: fs-meta calls it TOUCHED, so the loop breaker must not pass.
-        watcher.onBatch(new ChangeSet(Set.of(source), Set.of(), 0));
+        watcher.onBatch(new WatchBatch(Set.of("src/A.java"), Set.of(), false));
         assertFalse(seen.get(seen.size() - 1).regenerated(), "a same-content save must not regenerate");
 
         // A real content change: the pass runs and the trio reflects the post-pass tree.
         Files.writeString(source, "class A { int value; }\n");
-        WatchedRegeneration.Pass pass = watcher.onBatch(new ChangeSet(Set.of(source), Set.of(), 0));
+        WatchedRegeneration.Pass pass = watcher.onBatch(new WatchBatch(Set.of("src/A.java"), Set.of(), false));
         assertTrue(pass.regenerated(), "a content change must regenerate");
         assertTrue(FsMetaPair.loadIfPresent(state).ok(), "the post-pass state must still validate");
     }
