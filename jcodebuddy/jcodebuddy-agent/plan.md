@@ -17,18 +17,24 @@ Encourage folks to contiuously reduce need for cloud AI
 
 Strict GPLV3 license for start.
 
+> **Status 2026-10-31 — watcher direction.** The passive trigger's monitoring is moving to **`fs-meta`**, the
+> shared change-tracking primitive; `java-watch*` is frozen (root `AGENTS.md` § 2). A need that would have changed
+> the watcher goes to `fs-meta` (or an adapter over it), not into `java-watch-core`. The current
+> `ManagedFileWatcher` wiring is the legacy implementation, kept as the record of what was built rather than as a
+> place for new work.
+
 ## 1. Core Architecture
 
 ### 1.1 Dual-Trigger Architecture
 Both triggers have equal priority, routing to the same underlying tools:
-- **Comment-Driven (Passive)**: Monitors files via `java-watch-core`. Markers like `// @gen builder` trigger specific tools. An empty `// @gen` triggers the **Contextual Discovery** menu.
+- **Comment-Driven (Passive)**: Monitors files via **`fs-meta`** (the direction; the current legacy wiring uses the frozen `java-watch-core`). Markers like `// @gen builder` trigger specific tools. An empty `// @gen` triggers the **Contextual Discovery** menu.
 - **API-Driven (Active)**: A JSON-RPC/HTTP server allows IDEs to trigger actions or request discovery suggestions for the current cursor position.
 
 ### 1.2 Modular Tool Registry & Configuration
 - **Interface-First**: Every action (Builder, DTO, etc.) is a standalone implementation of an `ActionTool`.
 - **ToolSet Configuration**: Tools are organized into "ToolSets" defined in `.watch_agent.conf`.
     - Each ToolSet has a name (e.g., "java-core", "maven").
-    - Each ToolSet defines **Scope**: Glob patterns for inclusion (`include`) and exclusion (`exclude`).
+    - Each ToolSet defines **Scope**: **`wildmatch` patterns** (gitignore syntax; `glob` is being purged) for inclusion (`include`) and exclusion (`exclude`).
     - Each ToolSet defines **Active Tools**: Specific tools enabled for that scope.
     - Toolsets should not overlap in which files they match (nto a hard requirement, user should take care, we may display warning) 
 - **Portability**: Tools are independent of the UI, allowing them to be reused by other systems like `opencode`.
