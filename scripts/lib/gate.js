@@ -57,6 +57,7 @@
 export const GATE_MODULES = [
   'jcodebuddy-core',
   'jcodebuddy-generated',
+  'jcodebuddy-watch',
   'jcodebuddy-meta',
   'jcodebuddy-meta-mcp',
   'hipster-entity-api',

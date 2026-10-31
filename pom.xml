@@ -69,6 +69,7 @@
         <module>webview/core/webviewd</module>
         <module>jcodebuddy/jcodebuddy-builder-api</module>
         <module>jcodebuddy/jcodebuddy-builder</module>
+        <module>jcodebuddy/jcodebuddy-watch</module>
         <!-- The LSP sidecar lives with the webview product, not at the repository root: it is the same
              product (pages, navigation, edits), reached over LSP instead of over a webview. See
              webview/PLAN-webview-suite.md, decision D9. -->
@@ -337,6 +338,11 @@
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>jcodebuddy-builder</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-watch</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

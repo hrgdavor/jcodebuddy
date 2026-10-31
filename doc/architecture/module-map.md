@@ -23,6 +23,7 @@ jcodebuddy-parent (POM)
 ├── jcodebuddy/                the JCodeBuddy libraries, the engine and the tools
 │   ├── jcodebuddy-core        the engine: one parse path, the model, the index, the queries, freshness
 │   ├── jcodebuddy-generated   the marker vocabulary and its parser — a leaf (DEC-035, step 3.0l)
+│   ├── jcodebuddy-watch       the event source: WatchService + wildmatch + debounce; state is fs-meta's
 │   ├── jcodebuddy-agent       the code-action server (was `java-watch-agent`; it left `watch/` at 3.0s)
 │   ├── jcodebuddy-watch-tools
 │   ├── jcodebuddy-builder

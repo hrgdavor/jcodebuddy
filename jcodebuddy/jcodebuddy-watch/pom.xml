@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jcodebuddy-watch</artifactId>
+    <name>JCodeBuddy Watch</name>
+    <description>The event half of the dev-time loop: WatchService, debounce and gitignore/wildmatch filters. State and diffing are fs-meta's half.</description>
+
+    <dependencies>
+        <!-- DEC-051: wildmatch, not globs. This module carries no matcher of its own. -->
+        <dependency>
+            <groupId>hr.hrg</groupId>
+            <artifactId>gitignore</artifactId>
+            <version>0.3.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>
