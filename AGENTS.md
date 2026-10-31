@@ -353,10 +353,12 @@ satisfiable because the artifact was being installed. Either one alone would hav
   `CORE.md` names the building blocks — [`gitignore`](https://github.com/hrgdavor/gitignore),
   [`WyHash`](https://github.com/hrgdavor/wyhash), [`fs-meta`](https://github.com/hrgdavor/fs-meta) and
   [`socutil`](https://github.com/hrgdavor/socutil). Four consequences bind this repository:
-  - **`java-watch*` is frozen for changes.** Do not add features to it, refactor it, or extend it to solve a
-    JCodeBuddy need. A fix that a live JCodeBuddy step genuinely requires is the only exception, and the step that
-    needed it says so; everything else is deferred to `core`. JCodeBuddy will **slowly move off `java-watch*`**,
-    and new watching work goes to `core`, not into the frozen group.
+  - **`java-watch*` is frozen for changes — a live step needing it is not an exception.** Do not add features to
+    it, refactor it, or extend it to solve a JCodeBuddy need. **A step that appears to need a `java-watch*` change
+    is the signal to move that need to `fs-meta`** (or to a JCodeBuddy adapter over `fs-meta`), and to record the
+    move; it is not a reason to edit the frozen group. If the need cannot be moved, stop and record the conflict
+    rather than changing `java-watch*`. JCodeBuddy will **slowly move off `java-watch*`**, and new watching work
+    goes to `core`, not into the frozen group.
   - **The direction is `gitignore`/`wildmatch`, not globs.** `core` records that `gitignore` covers what globs
     were used for; that is the same rule as DEC-051 and the `glob` bullet below. **Globs are to be purged**, and
     no new glob dialect, dependency or call site is accepted here.
@@ -793,10 +795,14 @@ canonical statement of a boundary that has no other home.
   covered. **A port the watcher needs must be the watcher's own** (`ActionTool` is); an adapter that bridges it
   to a JCodeBuddy SPI belongs in a module that legitimately depends on both.
 
-  **Frozen 2026-10-31 — see the `core` bullet above.** `java-watch*` is **frozen for changes**: no new features,
-  no refactors, and no extending it to solve a JCodeBuddy need. A fix that a live JCodeBuddy step genuinely
-  requires is the only exception, and that step records why; new watching work goes to `D:/wrk/core`, because
-  JCodeBuddy is moving off `java-watch*` slowly.
+  **Frozen 2026-10-31 — see the `core` bullet above; the direction for a watching need is `fs-meta`, not a
+  `java-watch*` change.** `java-watch*` is **frozen for changes**: no new features, no refactors, and no
+  extending it to solve a JCodeBuddy need. **A live step needing it does not lift the freeze**: move the need to
+  `fs-meta` (or a JCodeBuddy adapter over it) and record the move; if it cannot be moved, stop and record the
+  conflict. `fs-meta` is the target because it owns reliable change tracking (content hash, batching, git
+  cooperation), and `D:/wrk/core/fs-meta` is its checkout; a `watch/*` module may depend on it under the
+  standalone-package permission below, and an adapter that bridges it to a JCodeBuddy SPI belongs in a module that
+  legitimately depends on both.
 
   **The boundary is the `watch/` group, and moving a module into the right group is a fix too.** A module that
   needs Jackson, `jcodebuddy-builder` or another workspace artifact to do JCodeBuddy's work does not belong in
