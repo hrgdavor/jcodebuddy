@@ -348,11 +348,33 @@ satisfiable because the artifact was being installed. Either one alone would hav
 
 ## 2. Other rules you are expected to follow
 
+- **The folder-watching facility is the separate `core` checkout at `D:/wrk/core`, and `java-watch*` is frozen while
+  JCodeBuddy moves off it.** This checkout does not own that machinery: it depends on `D:/wrk/core`, whose
+  `CORE.md` names the building blocks — [`gitignore`](https://github.com/hrgdavor/gitignore),
+  [`WyHash`](https://github.com/hrgdavor/wyhash), [`fs-meta`](https://github.com/hrgdavor/fs-meta) and
+  [`socutil`](https://github.com/hrgdavor/socutil). Four consequences bind this repository:
+  - **`java-watch*` is frozen for changes.** Do not add features to it, refactor it, or extend it to solve a
+    JCodeBuddy need. A fix that a live JCodeBuddy step genuinely requires is the only exception, and the step that
+    needed it says so; everything else is deferred to `core`. JCodeBuddy will **slowly move off `java-watch*`**,
+    and new watching work goes to `core`, not into the frozen group.
+  - **The direction is `gitignore`/`wildmatch`, not globs.** `core` records that `gitignore` covers what globs
+    were used for; that is the same rule as DEC-051 and the `glob` bullet below. **Globs are to be purged**, and
+    no new glob dialect, dependency or call site is accepted here.
+  - **`WyHash` and `fs-meta` are the shared watching/incremental primitives.** `core` provides WyHash for content
+    hashing and `fs-meta` for reliable change tracking (content hash, batching, and cooperation with git so a large
+    git operation does not produce many batches). They exist so multiple tools can share **combinable file
+    watching and optimized incremental builds** instead of each tool carrying its own change-tracking logic; use
+    them rather than inventing another tracker.
+  - **The existing standalone-package permission is how this repository consumes them.** `hr.hrg:fs-meta` and
+    `hr.hrg:wyhash` are not packages in this checkout (see the `java-watch*` bullet below); `D:/wrk/core/fs-meta`
+    and the `wyhash` project are their checkouts. Consume the artifacts or the checkout — never a copy.
+
 - **`glob` is abandoned and strictly not supported; `wildmatch` is the only wildcard syntax.** The ecosystem rule, as
   given: wildcard file matching uses git's `wildmatch` semantics as implemented by the `gitignore` project
   (DEC-051), in `jcodebuddy` as well as in `fs-meta` and `gitignore`. No glob dialect — braces, extglob, PCRE — is
-  accepted anywhere; a pattern that looks like one is read by `wildmatch`'s rules. `java-watch*` predates the decision
-  and is exempt for now.
+  accepted anywhere; a pattern that looks like one is read by `wildmatch`'s rules. `java-watch*` predates the decision;
+  because it is frozen, its remaining glob call sites are purged as the move to `core` retires them, not by new work
+  there.
 
 Most of these come from existing project files and are recorded here as a
 reminder with pointers rather than as new policy; the `proto/` rule is the
@@ -771,6 +793,11 @@ canonical statement of a boundary that has no other home.
   covered. **A port the watcher needs must be the watcher's own** (`ActionTool` is); an adapter that bridges it
   to a JCodeBuddy SPI belongs in a module that legitimately depends on both.
 
+  **Frozen 2026-10-31 — see the `core` bullet above.** `java-watch*` is **frozen for changes**: no new features,
+  no refactors, and no extending it to solve a JCodeBuddy need. A fix that a live JCodeBuddy step genuinely
+  requires is the only exception, and that step records why; new watching work goes to `D:/wrk/core`, because
+  JCodeBuddy is moving off `java-watch*` slowly.
+
   **The boundary is the `watch/` group, and moving a module into the right group is a fix too.** A module that
   needs Jackson, `jcodebuddy-builder` or another workspace artifact to do JCodeBuddy's work does not belong in
   `watch/`: `java-watch-agent` was exactly that — JCodeBuddy's code-action server, with an HTTP command server
@@ -793,13 +820,14 @@ canonical statement of a boundary that has no other home.
 
   - **`hr.hrg:fs-meta`** ([github.com/hrgdavor/fs-meta](https://github.com/hrgdavor/fs-meta)) — the file-system state
     trio a watcher maintains and every other tool reads. **Since 2026-10-23 it is not a package in this checkout**:
-    the project has its own repository, as `wyhash` does, and is consumed as an artifact or a checkout. The watcher is
-    the *writer* of that trio, so this is the dependency the rule would otherwise forbid by accident.
+    the project has its own repository, as `wyhash` does, and is consumed as an artifact; `D:/wrk/core/fs-meta` is
+    its checkout. The watcher is the *writer* of that trio, so this is the dependency the rule would otherwise
+    forbid by accident.
   - **`hr.hrg:wyhash`** — one hash, one definition, ports aligned by shared vectors;
     `hr.hrg:wyhash:1.0.0` is already what `java-watch-core` hashes with. **Since 2026-10-16 it is not a
     package in this checkout**: the project has its own repository ([github.com/hrgdavor/wyhash](https://github.com/hrgdavor/wyhash))
     and is consumed as an artifact — a *stronger* version of the same permission rather than a narrower one.
-    See DEC-050.
+    `D:/wrk/core/CORE.md` names it as one of the shared building blocks. See DEC-050.
 
   A `watch/*` module may therefore depend on those two, and on nothing else from this checkout. Neither is built
   here any more: what makes the dependency legal is that it names no `jcodebuddy`/`hipster` type and resolves no
