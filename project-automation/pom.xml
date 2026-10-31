@@ -26,12 +26,21 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>java-watch-core</artifactId>
         </dependency>
+        <!-- The state half of the watcher: the trio/diff contract, consumed from its own project (DEC-050's
+             standalone-package rule), not from a copy in this checkout. Version is explicit because the root POM
+             deliberately does not manage `hr.hrg:fs-meta` (it versions on its own). -->
+        <dependency>
+            <groupId>hr.hrg</groupId>
+            <artifactId>fs-meta</artifactId>
+            <version>0.3.6</version>
+        </dependency>
         <!-- `SourceFiles` matches with git's wildmatch, from the project that owns it (DEC-051), the
              same artifact `fs-meta` consumes. Declared here because this module imports it directly,
              rather than relying on `java-watch-core`'s transitive use of it. -->
         <dependency>
             <groupId>hr.hrg</groupId>
             <artifactId>gitignore</artifactId>
+            <version>0.3.5</version>
         </dependency>
         <!-- The dev-time pass drives the hipster-ioc generator (DEC-036 § 11, plan step 3.9). One direction only:
              the generator's module must never depend on a project-automation module (AGENTS.md § 1.1). -->

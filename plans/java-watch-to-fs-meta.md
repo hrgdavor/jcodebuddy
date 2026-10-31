@@ -1,8 +1,9 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-10-31 — W1 done; W2–W6 open.** W1 measured the consumers, added the check script, settled the
-event-source shape, and spiked the smallest stateful unit (`WatchedRegeneration`) against `fs-meta`. No production
-dependency has moved yet. This plan is the inventory and the standalone steps for the rule in root
+**Status: 2026-10-31 — W1 and W5a done; W2–W4, W5b and W6 open.** W1 measured the consumers, added the check
+script, settled the event-source shape, and spiked the smallest stateful unit (`WatchedRegeneration`) against
+`fs-meta`. W5a then moved that unit's real loop state onto `fs-meta`; `java-watch` remains only for the event
+source. This plan is the inventory and the standalone steps for the rule in root
 [`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a watcher need goes to **`fs-meta`**, not into the
 frozen group. It is deliberately not a single “remove the dependency” task: the dependency is six modules, and
 `java-watch-core` bundles three unrelated APIs.
@@ -30,7 +31,7 @@ The six JCodeBuddy consumers of the `java-watch-core` artifact:
 | Module                            | POM                                                              | What it uses                                                              | Target                                               |
 | --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------- |
 | `jcodebuddy-agent`                | [`pom.xml:22`](../jcodebuddy/jcodebuddy-agent/pom.xml#L22)       | [`ProjectWatcher`](../jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/ProjectWatcher.java#L5-L6) uses `FileFilter` and `ManagedFileWatcher`; [`ToolSetAgent`](../jcodebuddy/jcodebuddy-agent/src/main/java/hr/hrg/watch2/agent/ToolSetAgent.java#L29-L40) uses `FileFilter` | event port + wildmatch filter + `fs-meta` state (W4) |
-| `project-automation`              | [`pom.xml:27`](../project-automation/pom.xml#L27)                | [`WatchedRegeneration`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/watch/WatchedRegeneration.java#L3-L5) uses `BatchedFileWatcher`, `ChangeSet`, `FileFilter`; [`EntityRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java#L7) and [`IocRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/ioc/IocRegenerationWatcher.java#L116) consume `ChangeSet`; three tests construct it | event port + `fs-meta` diff/reconcile (W5) |
+| `project-automation`              | [`pom.xml:27`](../project-automation/pom.xml#L27)                | [`WatchedRegeneration`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/watch/WatchedRegeneration.java#L3-L5) uses `BatchedFileWatcher`, `ChangeSet`, `FileFilter`; [`EntityRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java#L7) and [`IocRegenerationWatcher`](../project-automation/src/main/java/hr/hrg/jcodebuddy/automation/ioc/IocRegenerationWatcher.java#L116) consume `ChangeSet`; three tests construct it | state half done in W5a; event source remains (W5b) |
 | `jcodebuddy-builder`              | [`pom.xml:53`](../jcodebuddy/jcodebuddy-builder/pom.xml#L53)     | [`BuilderTransformationEngine`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/BuilderTransformationEngine.java#L5-L6) uses `CodeEdit`, `TransformationResult`; [`LineLookup`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/LineLookup.java#L72) names `CodeEdit` in javadoc; two tests use `CodeEdit`/`CodeEditApplier` | JCodeBuddy-owned code-edit types (W2) |
 | `jcodebuddy-watch-tools`          | [`pom.xml:44`](../jcodebuddy/jcodebuddy-watch-tools/pom.xml#L44) | [`RecordBuilderGenerator`](../jcodebuddy/jcodebuddy-watch-tools/src/main/java/hr/hrg/jcodebuddy/watchtools/RecordBuilderGenerator.java#L8-L11) uses `ActionTool` (from the agent, not `core`), `CodeEditApplier`, `TransformationResult` | code-edit types (W2); the agent port stays |
 | `webview/jwa-sidecar`             | [`pom.xml:32`](../webview/jwa-sidecar/pom.xml#L32)               | [`JwaTextDocumentService`](../webview/jwa-sidecar/src/main/java/hr/hrg/watch2/sidecar/JwaTextDocumentService.java#L148-L158) uses `TransformationResult`, `CodeEdit` | code-edit types (W2) |
@@ -70,8 +71,9 @@ or the trio, never an assumed mtime.
 
 ## 4. Standalone steps
 
-Each step is one commit with its own gate. W2 and W3 are independent and may be taken in either order; W4 and W5
-depend on W3. W1 added the check and a spike; it changed no production dependency.
+Each step is one commit with its own gate. W2 and W3 are independent and may be taken in either order; W4 and W5b
+depend on W3. W1 added the check; W5a added the first real `fs-meta` consumer, with `java-watch` still the event
+source.
 
 ### W1 — Baseline the consumers and settle the event-source shape (S) — done 2026-10-31
 **Who:** agent · **Depends:** none
@@ -121,12 +123,12 @@ What the spike proved, and what it found:
 3. **`fs-meta` has no event API.** The event source is W3's job; the spike supplied the batch paths directly.
 4. **Two integration obligations, not blocking `fs-meta` gaps:**
    - The caller must carry the `List<FsMetaFile>` itself: replace a changed name with `scanFile`, remove a deleted
-     one, add a generated one, and publish. There is no “apply this event set” helper; the W5 adapter owns that
+     one, add a generated one, and publish. There is no “apply this event set” helper; the W5b adapter owns that
      small loop (and can be shared with W4 if the agent needs it).
    - A custom trio directory must be excluded from the scan. The default skips `.fs-meta` and `.git`; a consumer
      that stores the trio under `.jcodebuddy/` must pass `FsMetaScanOptions.ignoring(...)` (or use `.fs-meta`).
 5. **No `fs-meta` change is required for the first use-case.** The one improvement worth considering later is a
-   batch-apply helper (`FsMetaPair` + changed paths → next `List<FsMetaFile>`) because W4/W5 would otherwise write
+   batch-apply helper (`FsMetaPair` + changed paths → next `List<FsMetaFile>`) because W4/W5b would otherwise write
    the same loop twice. It is a convenience, not a blocker; the plan does not schedule an `fs-meta` change until the
    second consumer proves the duplication.
 6. **`batching` is still the event source's job.** `fs-meta` has generations and diffs, not a debounce window; W3
@@ -165,21 +167,52 @@ here.
 **Gate:** agent tests pass (the current suite is 30/0, including the handshake); a live on-change dispatch still
 reaches a tool; no `hr.hrg.watch2.core` reference; POM has no `java-watch*`.
 
-### W5 — Move project-automation's loop to the event source + `fs-meta` (M/L)
-**Who:** agent · **Depends:** W3
+### W5a — `WatchedRegeneration`'s state half on `fs-meta` (M) — done 2026-10-31
+**Who:** agent · **Depends:** W1
 
-Keep `WatchedRegeneration`'s public `Pass`/`Regenerator` contract and its one-no-op-pass loop breaker. Replace
-`BatchedFileWatcher`/`ChangeSet`/`FileFilter` with the W3 batch and `fs-meta`: seed the state from
-`FsMetaPair.load` (or `FsMetaScanner.scan` on first start), use `FsMetaDiff.between`/`scanFile` to decide whether
-a batch is real, and publish the next trio after a pass. The two regeneration watchers and their tests move from
-`ChangeSet` to the new batch type. The W1 spike's two obligations apply: the adapter carries the `List<FsMetaFile>`
-(and scans the generator's own output into it), and it must ignore `TOUCHED`. Drop `java-watch-core` from the POM.
+Replace the private SHA-1 map with the `fs-meta` trio while keeping `WatchedRegeneration`'s public
+`Pass`/`Regenerator` contract and its one-no-op-pass loop breaker. This is the first real consumer: seed the state
+from `FsMetaPair.loadIfPresent` (or `FsMetaScanner.scan` on first start), apply a batch's paths with `scanFile`,
+decide with `FsMetaDiff.between`, ignore `TOUCHED`, and rescan after a pass so the generator's own output is in the
+state.
+
+**Gate:** the watcher, entity and IOC tests pass; a same-content save is ignored and a self-write echo is ignored;
+the state trio exists and validates; `java-watch-core` remains only for the event source (W5b).
+
+**Done 2026-10-31.**
+
+- **The real class now stores its loop state in `fs-meta`**: `WatchedRegeneration` seeds
+  `<source>/.jcodebuddy/cache/watch-fs-meta` at construction, filters the trio to the watched `.java` files, applies
+  a batch with `FsMetaScanner.scanFile`, diffs with `FsMetaDiff.between`, ignores `TOUCHED`, and full-rescans after a
+  pass. `FsMetaScanOptions.ignoring(".jcodebuddy")` keeps the state out of its own scan. The public `sha1` helper is
+  kept for callers that report hashes, but the loop no longer uses it.
+- **POM**: `hr.hrg:fs-meta:0.3.6` added (explicit version; the root POM deliberately does not manage it) and
+  `hr.hrg:gitignore` moved to `0.3.5`, the version `fs-meta` consumes. `java-watch-core` remains because the event
+  source has not moved yet.
+- **Tests**: project-automation **114 tests, 0 failures**, including a new
+  [`WatchedRegenerationFsMetaTest`](../project-automation/src/test/java/hr/hrg/jcodebuddy/automation/watch/WatchedRegenerationFsMetaTest.java)
+  that asserts the seeded trio validates, contains the watched file, ignores a same-content save, and runs a pass on
+  a real content change. The first run found one real edge: a full-recompile batch with an empty changed set is
+  still a pass (four tests failed until the empty-triggering guard was scoped to non-full batches).
+- **No `fs-meta` source change was needed** for this use-case; the two integration obligations from W1 (carry the
+  `FsMetaFile` list, include generated output in the state) are implemented here. A batch-apply helper remains an
+  optional later improvement.
+- **Gate**: `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (20.4 s with the unchanged modules cached),
+  project-automation **114 tests, 0 failures**. The state is written under `.jcodebuddy/cache/watch-fs-meta`; the
+  event source is still `java-watch-core`, which is exactly what W5b removes.
+
+### W5b — Remove the event source from project-automation (M)
+**Who:** agent · **Depends:** W3, W5a
+
+Replace `BatchedFileWatcher`/`ChangeSet`/`FileFilter` with the W3 batch and `wildmatch` filters. The two
+regeneration watchers and their tests move from `ChangeSet` to the new batch type; `WatchedRegeneration` keeps its
+`fs-meta` state half unchanged. Drop `java-watch-core` from the POM.
 
 **Gate:** the watcher, entity and IOC tests pass; the loop breaker still ignores a self-write and a same-content
 save; no `hr.hrg.watch2.core` reference; POM has no `java-watch*`.
 
 ### W6 — Remove the unused dependency and enforce the boundary (S)
-**Who:** agent · **Depends:** W2, W4, W5
+**Who:** agent · **Depends:** W2, W4, W5b
 
 Remove `java-watch-core` from `hipster-ioc-tooling` (no source reference), make
 `scripts/check-java-watch-consumers.js` a gate check (not report-only), and update the module map/READMEs that

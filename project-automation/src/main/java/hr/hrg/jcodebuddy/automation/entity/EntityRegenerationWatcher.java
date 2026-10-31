@@ -28,7 +28,7 @@ import java.util.Set;
  * <p>Generation is in place (the committed source is the source of truth — AGENTS.md § 1), so every
  * pass rewrites files under the watched root. A naive wiring therefore regenerates on its own output
  * and never becomes quiescent. This class breaks the loop with a <strong>content check</strong> rather
- * than a timing heuristic: after every pass it records the SHA-1 of every {@code .java} file under the
+ * than a timing heuristic: after every pass it records the {@code fs-meta} trio of every {@code .java} file under the
  * root, and a batch whose changed files all still hash to the recorded values is ignored. A timing
  * flag ("ignore events while generating") was rejected because filesystem events arrive
  * asynchronously and can land after the flag clears, which is exactly when the loop would restart.</p>
@@ -36,9 +36,9 @@ import java.util.Set;
  * <p>Two consequences follow from that choice, and both are deliberate:</p>
  * <ul>
  *   <li><strong>At most one no-op pass per generated-file set.</strong> Files the generator wrote but
- *       that were not in the triggering batch have no recorded hash yet, so the first batch that
+ *       that were not in the triggering batch have no trio entry yet, so the first batch that
  *       mentions them runs a pass. That pass changes nothing (generation is idempotent —
- *       {@code ExampleRegenerationTest} asserts it byte-for-byte), and after it every file has a hash,
+ *       {@code ExampleRegenerationTest} asserts it byte-for-byte), and after it every file has an entry,
  *       so the watcher then goes quiet. {@code EntityRegenerationWatcherTest} asserts exactly this
  *       bound rather than assuming it.</li>
  *   <li><strong>A save with unchanged content does nothing.</strong> That is a feature: an editor that
