@@ -3,7 +3,7 @@
 package hr.hrg.jcodebuddy.builder;
 
 import org.junit.Test;
-import hr.hrg.watch2.core.TransformationResult;
+import hr.hrg.jcodebuddy.builder.api.edit.TransformationResult;
 import static org.junit.Assert.*;
 
 public class BuilderTransformationEngineTest {

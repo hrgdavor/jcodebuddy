@@ -49,10 +49,6 @@
              (`RecordBuilderProcessorTest`, 5 tests) is green without it. A module that still declares a
              parser it no longer imports is a dependency the next reader will assume is load-bearing. -->
         <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>java-watch-core</artifactId>
-        </dependency>
-        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>

@@ -7,8 +7,8 @@ import java.util.List;
 
 import hr.hrg.watch2.agent.tools.ActionTool;
 import hr.hrg.jcodebuddy.builder.BuilderTransformationEngine;
-import hr.hrg.watch2.core.CodeEditApplier;
-import hr.hrg.watch2.core.TransformationResult;
+import hr.hrg.jcodebuddy.builder.api.edit.TransformationResult;
+import hr.hrg.jcodebuddy.builder.edit.CodeEditApplier;
 
 /**
  * Generates or updates a fluent builder for a Java record, as a tool the watcher can run: it drives

@@ -145,7 +145,7 @@ public class JwaTextDocumentService implements TextDocumentService {
                 server.getFormatting().insertSpaces() ? indent.length() + " spaces" : "one tab");
         hr.hrg.jcodebuddy.builder.BuilderTransformationEngine engine =
                 new hr.hrg.jcodebuddy.builder.BuilderTransformationEngine(indent);
-        hr.hrg.watch2.core.TransformationResult result = engine.generate(uri, text, line);
+        hr.hrg.jcodebuddy.builder.api.edit.TransformationResult result = engine.generate(uri, text, line);
 
         if (result.edits().isEmpty()) {
             log.info("No changes needed for builder at {} line {}", uri, line);
@@ -155,7 +155,7 @@ public class JwaTextDocumentService implements TextDocumentService {
         log.info("Applying {} edits to {}", result.edits().size(), uri);
 
         List<TextEdit> textEdits = new java.util.ArrayList<>();
-        for (hr.hrg.watch2.core.CodeEdit edit : result.edits()) {
+        for (hr.hrg.jcodebuddy.builder.api.edit.CodeEdit edit : result.edits()) {
             Range range = new Range(
                     new Position(edit.startLine() - 1, edit.startCol() - 1),
                     new Position(edit.endLine() - 1, edit.endCol()));

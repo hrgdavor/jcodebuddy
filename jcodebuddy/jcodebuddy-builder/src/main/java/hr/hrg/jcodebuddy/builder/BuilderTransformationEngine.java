@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.jcodebuddy.builder;
 
-import hr.hrg.watch2.core.CodeEdit;
-import hr.hrg.watch2.core.TransformationResult;
+import hr.hrg.jcodebuddy.builder.api.edit.CodeEdit;
+import hr.hrg.jcodebuddy.builder.api.edit.TransformationResult;
 
 import java.util.List;
 import java.util.Map;

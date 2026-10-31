@@ -29,10 +29,6 @@
         </dependency>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>java-watch-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>jcodebuddy-builder-api</artifactId>
         </dependency>
         <dependency>

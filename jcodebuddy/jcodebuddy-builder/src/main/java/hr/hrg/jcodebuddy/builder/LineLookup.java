@@ -69,7 +69,7 @@ final class LineLookup {
      * Resolve a declaration's byte span and line numbers, or {@code null} when it is not found.
      *
      * <p>One javac pass answers everything the engine needs: the span to replace, the line to select
-     * by, and the coordinates the {@link hr.hrg.watch2.core.CodeEdit} contract is expressed in.</p>
+     * by, and the coordinates the {@link hr.hrg.jcodebuddy.builder.api.edit.CodeEdit} contract is expressed in.</p>
      */
     static Span spanOf(String source, String simpleName) {
         if (source == null || source.isBlank() || simpleName == null || COMPILER == null) {

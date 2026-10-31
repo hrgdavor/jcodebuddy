@@ -1,13 +1,13 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-10-31 — W1, W3, W5a and W5b done; W2, W4 and W6 open.** W1 measured the consumers, added the
+**Status: 2026-10-31 — W1, W2, W3, W5a and W5b done; W4 and W6 open.** W1 measured the consumers, added the
 check script, settled the event-source shape, and spiked the smallest stateful unit (`WatchedRegeneration`) against
 `fs-meta`. W5a moved that unit's loop state onto `fs-meta`; W3 added `jcodebuddy-watch`; W5b replaced the
-`java-watch` event source and removed it from project-automation. The five remaining consumers are the agent
-(watcher), the three code-edit consumers and the unused hipster-ioc dependency. This plan is the inventory and the
-standalone steps for the rule in root [`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a watcher need
-goes to **`fs-meta`**, not into the frozen group. It is deliberately not a single “remove the dependency” task: the
-dependency was six modules, and `java-watch-core` bundles three unrelated APIs.
+`java-watch` event source and removed it from project-automation; W2 moved the code-edit types into the builder.
+The two remaining consumers are the agent (watcher) and the unused hipster-ioc dependency. This plan is the inventory
+and the standalone steps for the rule in root [`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a
+watcher need goes to **`fs-meta`**, not into the frozen group. It is deliberately not a single “remove the dependency”
+task: the dependency was six modules, and `java-watch-core` bundles three unrelated APIs.
 
 ## 1. The constraint
 
@@ -135,7 +135,7 @@ What the spike proved, and what it found:
 6. **`batching` is still the event source's job.** `fs-meta` has generations and diffs, not a debounce window; W3
    provides the batch boundary that `WatchedRegeneration` currently gets from `BatchedFileWatcher`.
 
-### W2 — Own the code-edit API (M)
+### W2 — Own the code-edit API (M) — done 2026-10-31
 **Who:** agent · **Depends:** W1
 
 Define `CodeEdit` and `TransformationResult` in `jcodebuddy-builder-api`, and `CodeEditApplier` in
@@ -145,6 +145,19 @@ Define `CodeEdit` and `TransformationResult` in `jcodebuddy-builder-api`, and `C
 
 **Gate:** the three modules build and their tests pass; no `hr.hrg.watch2.core` reference remains in them; the
 generated builder output is byte-identical; `java-watch-core` is gone from their POMs.
+
+**Done 2026-10-31.** The values are
+[`CodeEdit`](../jcodebuddy/jcodebuddy-builder-api/src/main/java/hr/hrg/jcodebuddy/builder/api/edit/CodeEdit.java)
+and
+[`TransformationResult`](../jcodebuddy/jcodebuddy-builder-api/src/main/java/hr/hrg/jcodebuddy/builder/api/edit/TransformationResult.java)
+in `hr.hrg.jcodebuddy.builder.api.edit`; the applier is
+[`CodeEditApplier`](../jcodebuddy/jcodebuddy-builder/src/main/java/hr/hrg/jcodebuddy/builder/edit/CodeEditApplier.java)
+in `hr.hrg.jcodebuddy.builder.edit`. The builder, watch-tools, the sidecar and their tests use them; all three POMs
+no longer name `java-watch-core`, and no `hr.hrg.watch2.core` reference remains in their sources. The builder tests are
+**20/0**, the sidecar **26/0**, and the module set builds; the W1 check now reports **two consumers** (agent and the
+unused hipster-ioc dependency). The frozen `java-watch-core` keeps its own copies for `watch/*`.
+**Gate**: `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (33.8 s), with the builder's 20 and project-automation's 114
+tests run; the sidecar's 26 tests run in its own module set.
 
 ### W3 — Add the JCodeBuddy event source (M) — done 2026-10-31
 **Who:** agent · **Depends:** W1

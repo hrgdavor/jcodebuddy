@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Davor Hrg
 package hr.hrg.jcodebuddy.builder;
 
-import hr.hrg.watch2.core.TransformationResult;
+import hr.hrg.jcodebuddy.builder.api.edit.TransformationResult;
+import hr.hrg.jcodebuddy.builder.edit.CodeEditApplier;
 import static org.junit.Assert.*;
 
 import org.junit.Test;
@@ -72,8 +73,8 @@ public class RecordBuilderFormattingTest {
         TransformationResult result = engine.generate("TestRecord.java", code, 1);
 
         // Calculate the full code after application
-        java.util.List<hr.hrg.watch2.core.CodeEdit> edits = result.edits();
-        String applied = hr.hrg.watch2.core.CodeEditApplier.applyStyles(code, edits);
+        java.util.List<hr.hrg.jcodebuddy.builder.api.edit.CodeEdit> edits = result.edits();
+        String applied = CodeEditApplier.applyStyles(code, edits);
 
         System.out.println("--- CODE AFTER ---");
         System.out.println(applied);
@@ -91,8 +92,8 @@ public class RecordBuilderFormattingTest {
         TransformationResult result = engine.generate("Test.java", code, 2);
 
         // Calculate the full code after application
-        java.util.List<hr.hrg.watch2.core.CodeEdit> edits = result.edits();
-        String applied = hr.hrg.watch2.core.CodeEditApplier.applyStyles(code, edits);
+        java.util.List<hr.hrg.jcodebuddy.builder.api.edit.CodeEdit> edits = result.edits();
+        String applied = CodeEditApplier.applyStyles(code, edits);
 
         System.out.println("--- NESTED ---");
         System.out.println(applied);
