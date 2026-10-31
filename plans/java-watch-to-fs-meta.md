@@ -1,13 +1,13 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-10-31 — W1, W2, W3, W5a and W5b done; W4 and W6 open.** W1 measured the consumers, added the
-check script, settled the event-source shape, and spiked the smallest stateful unit (`WatchedRegeneration`) against
-`fs-meta`. W5a moved that unit's loop state onto `fs-meta`; W3 added `jcodebuddy-watch`; W5b replaced the
-`java-watch` event source and removed it from project-automation; W2 moved the code-edit types into the builder.
-The two remaining consumers are the agent (watcher) and the unused hipster-ioc dependency. This plan is the inventory
-and the standalone steps for the rule in root [`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a
-watcher need goes to **`fs-meta`**, not into the frozen group. It is deliberately not a single “remove the dependency”
-task: the dependency was six modules, and `java-watch-core` bundles three unrelated APIs.
+**Status: 2026-10-31 — W1–W6 done; no JCodeBuddy consumer of `java-watch*` remains.** W1 measured the consumers,
+added the check script and settled the event-source shape. W2 moved the code-edit types to the builder. W3 added
+`jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to `fs-meta` and its events
+to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part of the gate. The
+frozen `watch/*` modules are untouched. This plan is the inventory and the standalone steps for the rule in root
+[`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a watcher need goes to **`fs-meta`**, not into the
+frozen group. It was deliberately not a single “remove the dependency” task: the dependency was six modules, and
+`java-watch-core` bundled three unrelated APIs.
 
 ## 1. The constraint
 
@@ -177,7 +177,7 @@ authority) and emits a `WatchBatch`; queue overflow is carried as `WatchBatch.ov
 idempotence. It is in `GATE_MODULES` and in the module map, and it has no `java-watch*` or `jcodebuddy-core`
 dependency. **Gate**: the module's tests are **4/0** and the full gate (8:37) includes it.
 
-### W4 — Move the agent's watcher to the event source + `fs-meta` (M)
+### W4 — Move the agent's watcher to the event source + `fs-meta` (M) — done 2026-10-31
 **Who:** agent · **Depends:** W3
 
 Replace `ProjectWatcher`'s `ManagedFileWatcher` and `ToolSetAgent`'s `FileFilter` with the W3 event source and
@@ -187,6 +187,14 @@ here.
 
 **Gate:** agent tests pass (the current suite is 30/0, including the handshake); a live on-change dispatch still
 reaches a tool; no `hr.hrg.watch2.core` reference; POM has no `java-watch*`.
+
+**Done 2026-10-31.** `ProjectWatcher` creates a `FileWatch` with a pass-all `PathFilter` and dispatches each
+`WatchBatch.changed()` path; `ToolSetAgent` uses `PathFilter` and `shouldInclude(root, path)`. The agent POM drops
+`java-watch-core`, adds `jcodebuddy-watch`, and now declares `hr.hrg:wyhash` explicitly — `AuditManager` and
+`MetadataCache` had been getting it transitively, so the removal exposed the hidden dependency. Tests **30/0**
+(`RemoteJumpTest`, `WebviewHandshakeTest`, `RenameMemberToolTest`, `ToolSeamTest`); the consumer check drops the
+agent, leaving only the unused hipster-ioc dependency. **Gate**: the agent module set is **30/0**; the recorded gate
+(12:53) covers the shared builder and project-automation, and the agent is outside `GATE_MODULES` as before.
 
 ### W5a — `WatchedRegeneration`'s state half on `fs-meta` (M) — done 2026-10-31
 **Who:** agent · **Depends:** W1
@@ -241,7 +249,7 @@ now with the JCodeBuddy event source in front of it.
 **Gate**: `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (8:37), with `jcodebuddy-watch` **4/0** newly in
 `GATE_MODULES` and project-automation **114/0**; `GateContractTest` was updated in the same change.
 
-### W6 — Remove the unused dependency and enforce the boundary (S)
+### W6 — Remove the unused dependency and enforce the boundary (S) — done 2026-10-31
 **Who:** agent · **Depends:** W2, W4, W5b
 
 Remove `java-watch-core` from `hipster-ioc-tooling` (no source reference), make
@@ -251,6 +259,13 @@ still describe `java-watch-core` as the watcher for these modules. `watch/*` sta
 **Gate:** the check passes over the tree; no JCodeBuddy POM depends on a `java-watch*` artifact and no JCodeBuddy
 source references `hr.hrg.watch2.core`; full `bun scripts/mvn-jdk25.js` green; the module's own tests and
 `check-watch-standalone.js` still pass.
+
+**Done 2026-10-31.** `hipster-ioc-tooling` no longer declares `java-watch-core`; no source used it. The consumer
+check with `--strict` reports **0 modules, 0 unexpected; all six baseline entries resolved**. `mvn-jdk25.js` now runs
+that check after a successful Maven build, so the boundary is enforced by the recorded gate rather than by a
+document. The module map's dependency table/description was updated for the builder, sidecar, watch-tools, agent and
+project-automation; `watch/*` was not touched. **Gate**: full `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (12:53),
+and the new post-Maven check printed **0 consumer modules, 6 of the baseline resolved**.
 
 ## 5. Done when
 

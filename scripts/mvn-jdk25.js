@@ -28,6 +28,8 @@
  * reactor, where an unrelated module's failure looks like the recorded gate failing.
  */
 
+import { join } from 'node:path';
+
 import { INCREMENTAL_OFF, buildGateArgs, splitPropertyAdvice } from './lib/gate.js';
 import { envWith, repoRoot, resolveJdk25, resolveMaven, run } from './lib/toolchain.js';
 
@@ -40,8 +42,9 @@ function usage() {
   bun scripts/mvn-jdk25.js -o -pl <mods> -am test a free-form Maven invocation with the JDK pinned
 
   Every invocation passes ${INCREMENTAL_OFF}.
-  The default (no arguments) also cleans: the recorded gate is \`clean test\`, because F-47 found it
-  satisfiable by a previous revision's class files.
+  After a successful Maven run it also runs \`scripts/check-java-watch-consumers.js --strict\`, so a new
+  JCodeBuddy consumer of the frozen java-watch* fails the gate. The default (no arguments) also cleans: the
+  recorded gate is \`clean test\`, because F-47 found it satisfiable by a previous revision's class files.
 
   Environment: JCODEBUDDY_JDK25, JCODEBUDDY_MVN, JCODEBUDDY_HE_MODULES`);
 }
@@ -79,7 +82,19 @@ function main() {
     console.error(`[mvn-jdk25] ERROR: could not run ${maven.command}: ${result.error.message}`);
     return 1;
   }
-  return result.status;
+  if (result.status !== 0) {
+    return result.status;
+  }
+
+  // The migration boundary is part of the gate: a JCodeBuddy module that starts depending on the frozen
+  // java-watch* again fails here, after Maven has finished. `--strict` is zero-consumer by design (W6).
+  const consumers = run(process.execPath, [join(repoRoot(), 'scripts', 'check-java-watch-consumers.js'), '--strict'],
+    { stdio: 'inherit', env: envWith(jdk) });
+  if (consumers.error) {
+    console.error(`[mvn-jdk25] ERROR: could not run the java-watch consumer check: ${consumers.error.message}`);
+    return 1;
+  }
+  return consumers.status ?? 1;
 }
 
 process.exit(main());

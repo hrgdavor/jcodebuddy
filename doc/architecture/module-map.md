@@ -79,7 +79,7 @@ These modules depend on Layer 1:
 | Module                   | Depends On                                          |
 | ------------------------ | --------------------------------------------------- |
 | `hipster-entity-core`    | `hipster-entity-api`                                |
-| `jcodebuddy-builder`     | `jcodebuddy-builder-api` + `java-watch-core`        |
+| `jcodebuddy-builder`     | `jcodebuddy-builder-api`                            |
 | `hipster-entity-tooling` | `hipster-entity-api` + `hipster-entity-core` (test) |
 | `hipster-ioc-api`        | `hipster-entity-api`                                |
 | `jcodebuddy-core`        | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25` — DEC-030's one representation) and Jackson (`tools.jackson.core:jackson-databind`, the metadata JSON); JUnit in test scope |
@@ -99,11 +99,11 @@ These modules depend on Layer 1 and/or Layer 2, or are applications built from t
 | `java-watch-scp`         | `java-watch-core`                                                                                  |
 | `java-watch-run`         | `java-watch-core`, `ecj`, `polyglot`                                                               |
 | `java-watch-run-sample`  | `java-watch-run` (provided)                                                                        |
-| `jwa-sidecar`            | `java-watch-core`, `jcodebuddy-builder-api`, `jcodebuddy-builder`                                  |
-| `jcodebuddy-agent`       | `java-watch-core`, `jcodebuddy-builder-api`, `jcodebuddy-builder`, `jackson-databind`, `slf4j` (it was `java-watch-agent`, and it left `watch/` at step 3.0s) |
-| `jcodebuddy-watch-tools` | `jcodebuddy-agent`, `java-watch-core`, `jcodebuddy-builder`, `jcodebuddy-builder-api`, `slf4j`     |
+| `jwa-sidecar`            | `jcodebuddy-builder-api`, `jcodebuddy-builder`                                                     |
+| `jcodebuddy-agent`       | `jcodebuddy-watch`, `jcodebuddy-builder-api`, `jcodebuddy-builder`, `jackson-databind`, `slf4j`, `hr.hrg:wyhash` (it was `java-watch-agent`, and it left `watch/` at step 3.0s) |
+| `jcodebuddy-watch-tools` | `jcodebuddy-agent`, `jcodebuddy-builder`, `jcodebuddy-builder-api`, `slf4j`                        |
 | `jcodebuddy-meta-mcp`    | `jcodebuddy-meta` and the `mcp` library — the MCP tool surface over the metadata server (was `metadata-mcp-server`; step 3.0m) |
-| `hipster-ioc-tooling`    | `hipster-ioc-api`, `hipster-entity-tooling`, `java-watch-core`, `jcodebuddy-core`                  |
+| `hipster-ioc-tooling`    | `hipster-ioc-api`, `hipster-entity-tooling`, `jcodebuddy-core`                                     |
 | `merge-java`             | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
 | `webviewd`               | `webview-core` — the reference host of the webview contract, and the only one that needs no editor |
 | `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core`                                                        |
@@ -120,7 +120,7 @@ change — which is what did not happen for `java-watch-agent`'s rename, three s
 
 ### `project-automation` — Dev-Time Only, and Strictly Private
 - **This module is the ORCHESTRATOR.** It wires together generators from `jcodebuddy-agent` and `hipster-entity-tooling`.
-- It has compile-scope dependencies on `hipster-entity-api`, `java-watch-core`, `fs-meta` (the loop state since W5a), `jcodebuddy-builder`, `hipster-entity-tooling`, `jcodebuddy-core`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md). *(The engine replaced the SPI module here at step 3.0i; `jcodebuddy-core` is what `MetadataTypeResolver` extends, and it is also where the `SourceReader`/`TreeQueries` this module uses already came from — previously by inheritance through `hipster-entity-tooling`.)*
+- It has compile-scope dependencies on `hipster-entity-api`, `jcodebuddy-watch`, `fs-meta` (the loop state since W5a), `jcodebuddy-builder`, `hipster-entity-tooling`, `jcodebuddy-core`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md). *(The engine replaced the SPI module here at step 3.0i; `jcodebuddy-core` is what `MetadataTypeResolver` extends, and it is also where the `SourceReader`/`TreeQueries` this module uses already came from — previously by inheritance through `hipster-entity-tooling`.)*
 - **It must NOT be a transitive dependency of any production/runtime module.**
 - **No module may depend on it at all** — not in this reactor, not from a driver project. It is one
   project's own assistant, not a library; see [AGENTS.md § 1.1](../../AGENTS.md) and

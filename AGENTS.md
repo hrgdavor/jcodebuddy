@@ -348,8 +348,9 @@ satisfiable because the artifact was being installed. Either one alone would hav
 
 ## 2. Other rules you are expected to follow
 
-- **The folder-watching facility is the separate `core` checkout at `D:/wrk/core`, and `java-watch*` is frozen while
-  JCodeBuddy moves off it.** This checkout does not own that machinery: it depends on `D:/wrk/core`, whose
+- **The folder-watching facility is the separate `core` checkout at `D:/wrk/core`, and `java-watch*` is frozen;
+  JCodeBuddy's own modules no longer depend on it (2026-10-31).** This checkout does not own that machinery: it
+  depends on `D:/wrk/core`, whose
   `CORE.md` names the building blocks — [`gitignore`](https://github.com/hrgdavor/gitignore),
   [`WyHash`](https://github.com/hrgdavor/wyhash), [`fs-meta`](https://github.com/hrgdavor/fs-meta) and
   [`socutil`](https://github.com/hrgdavor/socutil). The measured inventory and standalone steps are in
@@ -358,7 +359,7 @@ satisfiable because the artifact was being installed. Either one alone would hav
     it, refactor it, or extend it to solve a JCodeBuddy need. **A step that appears to need a `java-watch*` change
     is the signal to move that need to `fs-meta`** (or to a JCodeBuddy adapter over `fs-meta`), and to record the
     move; it is not a reason to edit the frozen group. If the need cannot be moved, stop and record the conflict
-    rather than changing `java-watch*`. JCodeBuddy will **slowly move off `java-watch*`**, and new watching work
+    rather than changing `java-watch*`. The JCodeBuddy modules have moved off `java-watch*`; new watching work
     goes to `core`, not into the frozen group.
   - **The direction is `gitignore`/`wildmatch`, not globs.** `core` records that `gitignore` covers what globs
     were used for; that is the same rule as DEC-051 and the `glob` bullet below. **Globs are to be purged**, and

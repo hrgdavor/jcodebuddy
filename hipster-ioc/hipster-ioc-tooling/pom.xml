@@ -34,11 +34,6 @@
             <artifactId>hipster-entity-tooling</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>java-watch-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
 
         <!--
             The engine: the metadata model and, since 2026-10-03, the generator SPI. `IocContextGenerator`
