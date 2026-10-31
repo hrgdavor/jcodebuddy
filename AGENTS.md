@@ -352,7 +352,8 @@ satisfiable because the artifact was being installed. Either one alone would hav
   JCodeBuddy moves off it.** This checkout does not own that machinery: it depends on `D:/wrk/core`, whose
   `CORE.md` names the building blocks — [`gitignore`](https://github.com/hrgdavor/gitignore),
   [`WyHash`](https://github.com/hrgdavor/wyhash), [`fs-meta`](https://github.com/hrgdavor/fs-meta) and
-  [`socutil`](https://github.com/hrgdavor/socutil). Four consequences bind this repository:
+  [`socutil`](https://github.com/hrgdavor/socutil). The measured inventory and standalone steps are in
+  [`plans/java-watch-to-fs-meta.md`](plans/java-watch-to-fs-meta.md). Four consequences bind this repository:
   - **`java-watch*` is frozen for changes — a live step needing it is not an exception.** Do not add features to
     it, refactor it, or extend it to solve a JCodeBuddy need. **A step that appears to need a `java-watch*` change
     is the signal to move that need to `fs-meta`** (or to a JCodeBuddy adapter over `fs-meta`), and to record the
