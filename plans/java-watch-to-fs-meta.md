@@ -1,13 +1,15 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-10-31 — W1–W6 done; no JCodeBuddy consumer of `java-watch*` remains.** W1 measured the consumers,
-added the check script and settled the event-source shape. W2 moved the code-edit types to the builder. W3 added
-`jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to `fs-meta` and its events
-to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part of the gate. The
-frozen `watch/*` modules are untouched. This plan is the inventory and the standalone steps for the rule in root
-[`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**, and a watcher need goes to **`fs-meta`**, not into the
-frozen group. It was deliberately not a single “remove the dependency” task: the dependency was six modules, and
-`java-watch-core` bundled three unrelated APIs.
+**Status: 2026-11-01 — W1–W6 done (the `java-watch*` dependency is gone); W7 open (the Zig daemon/socket cutover).**
+W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
+to the builder. W3 added `jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to
+`fs-meta` and its events to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part
+of the gate. The frozen `watch/*` modules are untouched. **`jcodebuddy-watch` and the Java `FsMetaWriter` usage are
+transitional**: the intended watcher is fs-meta's Zig daemon, with tools as clients over its Unix socket (W7), because
+one native watch loop shared by several active processes is the lightest and fastest arrangement. This plan is the
+inventory and the standalone steps for the rule in root [`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**,
+and a watcher need goes to **`fs-meta`**, not into the frozen group. It was deliberately not a single “remove the
+dependency” task: the dependency was six modules, and `java-watch-core` bundled three unrelated APIs.
 
 ## 1. The constraint
 
@@ -267,6 +269,25 @@ document. The module map's dependency table/description was updated for the buil
 project-automation; `watch/*` was not touched. **Gate**: full `bun scripts/mvn-jdk25.js` **BUILD SUCCESS** (12:53),
 and the new post-Maven check printed **0 consumer modules, 6 of the baseline resolved**.
 
+### W7 — Use fs-meta's Zig daemon over its Unix socket (M/L)
+**Who:** agent · **Depends:** W6
+
+The current `jcodebuddy-watch` + Java `FsMetaWriter` path is transitional, not the intended architecture. `fs-meta`
+AGENTS § 1 says the Zig engine is the only writer and watcher; tools are clients. This step cuts JCodeBuddy over:
+
+- start or attach to one `fsmeta daemon` per watched root; discover its Unix socket from the daemon's own host state
+  (never from the trio);
+- speak `FORMAT.socket.md` `SUBSCRIBE` / `CHANGE_ENTRY`, including replay from the last generation and the
+  `batch-gap` / `batch-too-old` outcomes;
+- replace `FileWatch` as `WatchedRegeneration`'s event source and remove the Java `FsMetaWriter.publish` calls; read
+  the trio for state and batches for the change stream;
+- keep a read-only trio fallback when no daemon is running, so a page or tool still works standalone;
+- confirm several clients can subscribe to one daemon and that no JCodeBuddy process writes the trio.
+
+**Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
+trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a
+`batch-gap`/`batch-too-old` is handled explicitly; the agent and project-automation tests pass; full gate green.
+
 ## 5. Done when
 
 - The check script reports **0 JCodeBuddy consumers** outside `watch/`.
@@ -274,6 +295,8 @@ and the new post-Maven check printed **0 consumer modules, 6 of the baseline res
 - The agent and project-automation use the event source + `fs-meta`; the code-edit types live in
   `jcodebuddy-builder-api`/`jcodebuddy-builder`.
 - `fs-meta` is the only state/diff authority; the event source owns events and policy stays in the consumers.
+- **W7:** the event/state path is the Zig daemon over its Unix socket; no production Java writer or in-process
+  watcher remains.
 - Full gate green, and the `watch/*` modules are byte-identical to their frozen state (no edits to them).
 
 ## 6. How the inventory is measured

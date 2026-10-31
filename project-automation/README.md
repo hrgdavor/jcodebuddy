@@ -17,6 +17,11 @@ flag clears too early. The loop state is `<source>/.jcodebuddy/cache/watch-fs-me
 `TOUCHED` and ignored, while a modification, addition or deletion runs a pass. It runs at most one no-op pass per
 generated-file set, then goes quiet.
 
+> **Transitional path:** `jcodebuddy-watch` and the Java `FsMetaWriter` calls above are the current local
+> implementation. The intended watcher is **fs-meta's Zig daemon**, with tools as clients over its Unix socket
+> (plan W7), because one native watcher shared by several active tools is the lightest and fastest arrangement.
+> Do not grow the Java event source or the Java trio writer as if they were the target.
+
 ### Running its tests
 
 ```bash

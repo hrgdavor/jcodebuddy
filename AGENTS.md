@@ -354,13 +354,20 @@ satisfiable because the artifact was being installed. Either one alone would hav
   `CORE.md` names the building blocks — [`gitignore`](https://github.com/hrgdavor/gitignore),
   [`WyHash`](https://github.com/hrgdavor/wyhash), [`fs-meta`](https://github.com/hrgdavor/fs-meta) and
   [`socutil`](https://github.com/hrgdavor/socutil). The measured inventory and standalone steps are in
-  [`plans/java-watch-to-fs-meta.md`](plans/java-watch-to-fs-meta.md). Four consequences bind this repository:
+  [`plans/java-watch-to-fs-meta.md`](plans/java-watch-to-fs-meta.md). Five consequences bind this repository:
   - **`java-watch*` is frozen for changes — a live step needing it is not an exception.** Do not add features to
     it, refactor it, or extend it to solve a JCodeBuddy need. **A step that appears to need a `java-watch*` change
     is the signal to move that need to `fs-meta`** (or to a JCodeBuddy adapter over `fs-meta`), and to record the
     move; it is not a reason to edit the frozen group. If the need cannot be moved, stop and record the conflict
     rather than changing `java-watch*`. The JCodeBuddy modules have moved off `java-watch*`; new watching work
     goes to `core`, not into the frozen group.
+  - **The intended watcher is `fs-meta`'s Zig daemon, and tools talk to it over a Unix socket.** One long-lived
+    `fsmeta daemon` serves each watched root on its own socket; multiple tools subscribe to the live change stream
+    instead of each running a watcher. The Zig engine is the intended implementation because one native watch loop,
+    scan, hash and batch stream shared by several active Java, Bun and editor processes is the lightest and fastest
+    arrangement. The Java/Bun ports are readers/clients, not watchers. `jcodebuddy-watch` and the Java
+    `FsMetaWriter` usage in `WatchedRegeneration` are **transitional** until the daemon-socket cutover (W7 in the
+    migration plan): do not grow either, and do not treat the current Java event source as the target.
   - **The direction is `gitignore`/`wildmatch`, not globs.** `core` records that `gitignore` covers what globs
     were used for; that is the same rule as DEC-051 and the `glob` bullet below. **Globs are to be purged**, and
     no new glob dialect, dependency or call site is accepted here.

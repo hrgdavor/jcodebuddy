@@ -48,7 +48,8 @@ import java.util.stream.Stream;
  * mentions them runs a pass, that pass changes nothing because generation is idempotent, and the watcher then goes
  * quiet), and <strong>a save with unchanged content does nothing</strong> — an editor that rewrites a file with
  * identical bytes, or a touched timestamp, does not start a pass. The state half is {@code fs-meta}; the event source
- * is {@code jcodebuddy-watch}.</p>
+ * is {@code jcodebuddy-watch}. Both are <strong>transitional</strong>: the intended watcher is fs-meta's Zig daemon,
+ * with tools as socket clients (W7); this class's Java publish path goes away in that cutover.</p>
  */
 public final class WatchedRegeneration implements AutoCloseable {
 

@@ -26,6 +26,11 @@ import java.util.function.Consumer;
  * not hash, diff or decide whether a pass is useful — that is the consumer's policy, and in this repository it is
  * {@code fs-meta}'s trio.</p>
  *
+ * <p><strong>Transitional.</strong> The intended watcher is {@code fs-meta}'s Zig daemon, with JCodeBuddy tools as
+ * clients over its Unix socket; one native watch loop shared by several active processes is the lightest and fastest
+ * arrangement. This class is the current local event source until that cutover (W7), and it should not grow features
+ * that belong to the daemon.</p>
+ *
  * <p>A single daemon thread polls the service. The first event starts the debounce window; further events in that
  * window join the batch. A queue overflow is carried as {@link WatchBatch#overflow()}, not hidden.</p>
  */
