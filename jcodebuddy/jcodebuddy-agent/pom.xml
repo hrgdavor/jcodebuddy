@@ -19,7 +19,13 @@
     <dependencies>
         <dependency>
             <groupId>hr.hrg.jcodebuddy</groupId>
-            <artifactId>java-watch-core</artifactId>
+            <artifactId>jcodebuddy-watch</artifactId>
+        </dependency>
+        <!-- AuditManager and MetadataCache hash content directly. It used to arrive transitively through
+             java-watch-core; the explicit declaration is the correct dependency now that the watcher is gone. -->
+        <dependency>
+            <groupId>hr.hrg</groupId>
+            <artifactId>wyhash</artifactId>
         </dependency>
 
         <dependency>

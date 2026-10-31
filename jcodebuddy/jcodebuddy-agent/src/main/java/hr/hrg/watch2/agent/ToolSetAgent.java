@@ -26,7 +26,7 @@ public class ToolSetAgent {
     private final MetadataCache cache;
     private final AuditManager auditManager;
     private final ActionEngine engine;
-    private final hr.hrg.watch2.core.FileFilter filter;
+    private final hr.hrg.jcodebuddy.watch.PathFilter filter;
     private final ContextualAnalyzer analyzer;
     private final DependencyTracker dependencyTracker;
     private Consumer<PendingAction> actionCallback;
@@ -37,7 +37,7 @@ public class ToolSetAgent {
         this.cache = new MetadataCache(root, config.getName());
         this.auditManager = new AuditManager(root, config.getName());
         this.engine = new ActionEngine(globalRegistry, auditManager);
-        this.filter = new hr.hrg.watch2.core.FileFilter(root, config.getInclude(), config.getExclude());
+        this.filter = hr.hrg.jcodebuddy.watch.PathFilter.of(config.getInclude(), config.getExclude());
         this.analyzer = new ContextualAnalyzer();
         this.dependencyTracker = new DependencyTracker();
     }
@@ -86,7 +86,7 @@ public class ToolSetAgent {
                 || filename.equals(".git") || filename.equals("target"))
             return;
 
-        if (!filter.shouldInclude(path))
+        if (!filter.shouldInclude(root, path))
             return;
 
         String relPath = root.relativize(path).toString().replace('\\', '/');
