@@ -22,9 +22,11 @@
  *
  * TWO THINGS LEARNED BY RUNNING IT, both of which cost a broken build before being written down:
  *
- *   1. **The goal is `package`, not `test`.** A cached module restored without a JAR cannot be depended on by the
- *      next module in the reactor: the build fails with "Could not find artifact <sibling>:jar". `package` runs the
- *      tests anyway, and it is what puts the JAR in `target/`.
+ *   1. **The default goal is `package`, not `test`.** A cached module restored without a JAR cannot be depended on
+ *      by the next module in the reactor: the build fails with "Could not find artifact <sibling>:jar". `package`
+ *      runs the tests anyway, and it is what puts the JAR in `target/`. **`--fast` is the one deliberate
+ *      exception**: it is the edit-loop lane, where the modules are already there, so it runs `test` with no
+ *      `clean` and no jar — see the usage.
  *   2. **Never populate the cache with a phase that produces nothing.** A `mvn … validate` run stores an entry per
  *      module whose output tree is next to empty, and a later `package` build that HITS such an entry then
  *      compiles a sibling against a module with no classes — which reads as "cannot find symbol" on sources that
@@ -36,14 +38,17 @@
  * is not part of the cache checksum, so a run that executes ONE test class and saves would leave an entry that a
  * later FULL run hits — and that run then reports SUCCESS with surefire skipped and no tests executed (cache on:
  * zero tests, SUCCESS; cache off: 468 tests, one failure, FAILURE). The remedy is `-Dmaven.build.cache.skipSave=true`
- * on `--tests` and `--no-clean` runs: they still READ the cache (so a module whose inputs are unchanged, and whose
- * every test passed in a previous full run, resolves instantly), they simply never WRITE. Disabling the cache would
- * have thrown away the mechanism that makes iteration fast; withholding the save keeps it and closes the hole.
+ * on `--tests`, `--fast` and `--no-clean` runs: they still READ the cache (so a module whose inputs are unchanged,
+ * and whose every test passed in a previous full run, resolves instantly), they simply never WRITE. Disabling the
+ * cache would have thrown away the mechanism that makes iteration fast; withholding the save keeps it and closes
+ * the hole.
  *
  * Usage:
- *   bun scripts/mvn-fast.js                          the recorded module set, `clean test`, cached
+ *   bun scripts/mvn-fast.js                          the recorded module set, `clean package`, cached
+ *   bun scripts/mvn-fast.js --fast                   the fast lane: `-Pfast-tests test`, no clean, save withheld
  *   bun scripts/mvn-fast.js --tests MarkersTest      the same, narrowed to one test class
  *   bun scripts/mvn-fast.js --tests 'Marker*Test'    surefire patterns work; quote them for your shell
+ *   bun scripts/mvn-fast.js --fast --tests X         the fast lane, one unit test class
  *   bun scripts/mvn-fast.js --no-clean --tests X     no clean at all
  *   bun scripts/mvn-fast.js -pl :hipster-ioc-tooling -am test   a free-form Maven invocation, cached
  *   bun scripts/mvn-fast.js --off-cache              bypass the cache but keep the rest of the fast path
@@ -56,6 +61,15 @@ import { envWith, repoRoot, resolveJdk25, resolveMaven, run } from './lib/toolch
 
 const CACHE_OFF = '-Dmaven.build.cache.enabled=false';
 const CACHE_SKIP_SAVE = '-Dmaven.build.cache.skipSave=true';
+const FAST_PROFILE = '-Pfast-tests';
+const PARALLEL_TESTS_PROFILE = '-Pparallel-tests';
+/**
+ * The fast lane's module set: the generator module and the dependencies `-am` needs. It is deliberately
+ * narrower than the gate's set — the edit loop is usually about the tooling, and pulling project-automation
+ * and the other consumers into a unit-only run spends time on code the change cannot have affected. The
+ * full gate still uses [`GATE_MODULES`].
+ */
+const FAST_MODULES = 'hipster-entity-tooling';
 const PARALLEL = '-T';
 const PARALLEL_FACTOR = '1C';
 const NO_TESTS_SPECIFIED = '-Dsurefire.failIfNoSpecifiedTests=false';
@@ -68,35 +82,50 @@ const LIFECYCLE_PHASES = new Set([
 function usage() {
     console.log(`mvn-fast.js — the cached iteration build (the recorded gate is mvn-jdk25.js)
 
-  bun scripts/mvn-fast.js                        the recorded module set, clean package, build cache on
-  bun scripts/mvn-fast.js --tests SomeTest       the same narrowed to one test class (cache off: see below)
-  bun scripts/mvn-fast.js --no-clean             reuse the tree as it is (cache off: see below)
-  bun scripts/mvn-fast.js --off-cache            full no-reuse run
-  bun scripts/mvn-fast.js --no-parallel          one module at a time
-  bun scripts/mvn-fast.js -pl :module -am package   a free-form Maven invocation
+  bun scripts/mvn-fast.js                          the recorded module set, clean package, build cache on
+  bun scripts/mvn-fast.js --fast                   the fast lane: tooling + deps, -Pfast-tests test, no clean
+  bun scripts/mvn-fast.js --parallel-tests         the opt-in surefire fork lane (see F4)
+  bun scripts/mvn-fast.js --tests SomeTest         the same narrowed to one test class (save withheld: see below)
+  bun scripts/mvn-fast.js --fast --tests SomeTest  the fast lane, one unit test class
+  bun scripts/mvn-fast.js --no-clean               reuse the tree as it is (save withheld: see below)
+  bun scripts/mvn-fast.js --off-cache              full no-reuse run
+  bun scripts/mvn-fast.js --no-parallel            one module at a time
+  bun scripts/mvn-fast.js -pl :module -am package  a free-form Maven invocation
 
   Differences from the recorded gate: build cache ON, incremental compilation at Maven's default, -T 1C.
-  The gate stays \`clean test\`, cache off, incremental off — run it before a commit.
+  The gate stays \`clean package\`, incremental off, cache on — run it before a commit.
 
-  --tests and --no-clean force the cache OFF. A narrowed run shares a cache key with a full one (the -Dtest
-  property is not hashed), so allowing it to populate the cache lets a later full run hit evidence from one test
-  class and report SUCCESS without running anything.`);
+  --tests narrows the default run to one test class; --fast activates the fast-tests profile, which excludes the
+  generator, compiler and completeness test groups, and runs \`test\` with no \`clean\` because the edit loop needs
+  no jar. The fast lane's module set is the tooling module plus its \`-am\` dependencies, not the gate's full set.
+  Combine --fast with --tests for one unit class. --parallel-tests selects the surefire fork profile.
+
+  --tests, --fast and --no-clean withhold the cache SAVE (-Dmaven.build.cache.skipSave=true); the cache is still
+  READ, never turned off. A narrowed run shares a cache key with a full one (-Dtest= is not hashed), so an entry
+  saved from one test class would be trusted by a later full run and report SUCCESS without running anything.
+  Withholding the save closes that while keeping every read.`);
 }
 
 /** Splits this script's own options from the Maven arguments that follow them. */
 function parse(argv) {
     const maven = [];
-    const options = { tests: null, clean: true, cache: true, parallel: true, help: false };
+    const options = { tests: null, fast: false, clean: true, cache: true, parallel: true,
+        parallelTests: false, help: false };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i];
         if (arg === '--help' || arg === '-h') {
             options.help = true;
+        } else if (arg === '--fast') {
+            options.fast = true;
         } else if (arg === '--no-clean') {
             options.clean = false;
         } else if (arg === '--off-cache') {
             options.cache = false;
         } else if (arg === '--no-parallel') {
             options.parallel = false;
+        } else if (arg === '--parallel-tests') {
+            // Surefire's opt-in two/four-fork lane; distinct from -T, which parallelises modules.
+            options.parallelTests = true;
         } else if (arg === '--tests') {
             options.tests = argv[++i] ?? '';
         } else if (arg.startsWith('--tests=')) {
@@ -110,8 +139,9 @@ function parse(argv) {
     // SUCCESS with surefire skipped and nothing executed. skipSave lets the narrowed run use the cache (a module
     // whose inputs are unchanged resolves instantly from a previous full run) without defining any.
     // `--no-clean` gets the same treatment: an entry saved from a tree that was not cleaned can carry outputs the
-    // run did not produce.
-    if (options.tests !== null || !options.clean) {
+    // run did not produce. `--fast` never cleans either, so it joins them: a test-only lane must not define the
+    // entry a later full `package` run trusts.
+    if (options.tests !== null || options.fast || !options.clean) {
         options.skipSave = true;
     }
     return { maven, options };
@@ -147,6 +177,16 @@ function main() {
     } else if (options.skipSave) {
         extraOptions.push(CACHE_SKIP_SAVE);
     }
+    if (options.fast) {
+        // F1 owns the profile: it excludes the generator/compiler/completeness groups in the root POM. This script
+        // only forwards it, so the lane definition stays in one place.
+        extraOptions.push(FAST_PROFILE);
+    }
+    if (options.parallelTests) {
+        // F4's surefire profile: two/four forks, generator statics isolated per JVM. It is opt-in; the
+        // serial run remains the default.
+        extraOptions.push(PARALLEL_TESTS_PROFILE);
+    }
     if (options.parallel && !maven.some((arg) => arg === PARALLEL || arg.startsWith(PARALLEL))) {
         extraOptions.push(PARALLEL, PARALLEL_FACTOR);
     }
@@ -158,9 +198,9 @@ function main() {
     let args;
     if (freeForm) {
         const firstPhase = maven.findIndex((arg) => LIFECYCLE_PHASES.has(arg));
-        if (options.tests && firstPhase < 0) {
-            // `--tests` needs a phase to attach to; the explicit list avoids guessing whether a token is a goal,
-            // because an option's value (`-pl :module`) also does not start with a dash.
+        if ((options.tests || options.fast) && firstPhase < 0) {
+            // `--tests` and `--fast` need a phase to attach to; the explicit list avoids guessing whether a token is
+            // a goal, because an option's value (`-pl :module`) also does not start with a dash.
             maven.push('test');
         }
         const at = maven.findIndex((arg) => LIFECYCLE_PHASES.has(arg));
@@ -173,22 +213,32 @@ function main() {
             args.unshift('-o');
         }
     } else {
-        args = ['-o', '-pl', moduleSelectors(GATE_MODULES), '-am', ...extraOptions, ...testArgs];
-        if (options.clean) {
+        const modules = options.fast ? FAST_MODULES : GATE_MODULES;
+        args = ['-o', '-pl', moduleSelectors(modules), '-am', ...extraOptions, ...testArgs];
+        if (options.clean && !options.fast) {
             args.push('clean');
         }
-        // `package`, not `test`: `package` runs the tests anyway, and it is what puts a JAR in each module's
-        // `target/`. With `test` alone a cached module is restored with its classes but no artifact, and the next
-        // module in the reactor then fails with "Could not find artifact <sibling>:jar" — a cached module that
-        // cannot be depended on is not a module this build can use. Measured, not assumed: that was the first
-        // version's failure.
-        args.push('package');
+        if (options.fast) {
+            // The fast lane is the edit loop, not a build: `test` with no `clean` is enough, and a jar is not
+            // needed. The default path keeps `package` for the reason below.
+            args.push('test');
+        } else {
+            // `package`, not `test`: `package` runs the tests anyway, and it is what puts a JAR in each module's
+            // `target/`. With `test` alone a cached module is restored with its classes but no artifact, and the
+            // next module in the reactor then fails with "Could not find artifact <sibling>:jar" — a cached module
+            // that cannot be depended on is not a module this build can use. Measured, not assumed: that was the
+            // first version's failure.
+            args.push('package');
+        }
     }
 
     if (process.env.JCODEBUDDY_QUIET !== '1') {
         console.error(`[mvn-fast] JDK ${jdk.version}; ${mavenLauncher.distribution}`);
         console.error(`[mvn-fast] repo: ${repoRoot()}`);
-        console.error(`[mvn-fast] cache: ${options.cache ? 'ON (.mvn/extensions.xml)' : 'OFF (-Dmaven.build.cache.enabled=false)'}`);
+        console.error(`[mvn-fast] cache: ${options.cache ? 'ON (.mvn/extensions.xml)' : 'OFF (-Dmaven.build.cache.enabled=false)'}` +
+            `${options.skipSave ? ', save withheld (-Dmaven.build.cache.skipSave=true)' : ''}`);
+        console.error(`[mvn-fast] lane: ${options.fast ? 'FAST (-Pfast-tests: unit subset; test, no clean)' : 'default'}` +
+            `${options.tests ? `; tests: ${options.tests}` : ''}`);
         console.error('[mvn-fast] this is NOT the recorded gate: for a commit, run `bun scripts/mvn-jdk25.js`');
     }
 

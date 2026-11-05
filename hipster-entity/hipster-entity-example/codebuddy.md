@@ -148,6 +148,32 @@ generated tree is `ExampleRegenerationTest`: it regenerates a **copy** of the
 committed tree and asserts the result is byte-identical. If it goes red, the fix
 is **regenerate and commit**, not "adjust the test" (§ 4.3).
 
+### 3.2.1 The fast lane — iteration, not the gate
+
+While you are editing a view or the generator, use the fast lane:
+
+```bat
+bun scripts/mvn-fast.js --fast                             the unit subset, no clean
+bun scripts/mvn-fast.js --fast --tests SomeTest            one unit test class
+bun scripts/test-cost.js --module hipster-entity-tooling   where the last run's time went
+```
+
+`--fast` runs the `test` phase with no `clean`, on the tooling module plus its `-am`
+dependencies, and activates the Maven profile `fast-tests`, which excludes the
+`generator`, `compiler` and `completeness` test groups: the tests that run a full
+pass, invoke javac, or walk the reactor. That makes it the right command for the
+edit loop and **not the recorded gate** — `bun scripts/mvn-jdk25.js` still runs
+every test, the excluded groups included, and is what to run before a commit. The
+byte-identical check in § 3.2 is one of the `generator` tests, so the fast lane
+skips it; run § 3.2 (or the gate) before committing a generator change. `--fast`
+also withholds the build cache's *save* (`-Dmaven.build.cache.skipSave=true`); the
+cache itself is never turned off.
+
+Measured on 2026-11-05: the fast lane is **45.6 s** (264 tooling unit tests plus
+the dependency modules), and `--fast --tests ContentHashTest` is **1.3 s**. For the
+full 542-test tooling suite use `bun scripts/mvn-fast.js --parallel-tests` (the
+opt-in four-fork profile; about **1:50** on this machine) or the recorded gate.
+
 ### 3.3 Verify only that regeneration is byte-identical
 
 ```bat

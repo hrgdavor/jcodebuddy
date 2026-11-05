@@ -88,12 +88,16 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 | `scripts/mvn-jdk25.js hipster-entity install` | install the six modules into the local repository                                                   |
 | `scripts/mvn-jdk25.js -o -pl <mods> -am test` | a free-form Maven invocation with the JDK pinned                                                    |
 | `scripts/mvn-fast.js`                         | **the cached iteration build** — the same module set, `clean package`, with the Maven build cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default and `-T 1C`. **Not the gate**: see below |
+| `scripts/mvn-fast.js --fast`                  | **the fast lane** for the edit loop — the tooling module plus its `-am` dependencies, `-Pfast-tests test` with no `clean`: the `generator`, `compiler` and `completeness` test groups are excluded by the profile, and the cache save is withheld. The cache is read, never turned off. **Not the gate**: `scripts/mvn-jdk25.js` still runs every test |
+| `scripts/mvn-fast.js --fast --tests SomeTest` | the fast lane narrowed to one unit test class                                                       |
+| `scripts/mvn-fast.js --parallel-tests`        | opt in to the surefire fork lane (`-Pparallel-tests`, four forks) for the full tooling suite; generator statics are isolated per JVM |
 | `scripts/mvn-fast.js --tests SomeTest`        | the same, narrowed to one test class (adds `-Dtest=` and `-Dsurefire.failIfNoSpecifiedTests=false`; the cache is still read, just never written) |
 | `scripts/mvn-fast.js --no-clean`              | iterate without letting Maven touch the tree (likewise: reads cached, never saves)                  |
 | `scripts/mvn-fast.js --off-cache`             | no cache reuse at all, for when a result surprises you                                              |
 | `scripts/gen.js`                              | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
 | `scripts/gen.js with-tests`                   | the same pass, then the entity test set                                                             |
 | `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop)                         |
+| `scripts/test-cost.js`                        | read `target/surefire-reports/TEST-*.xml` (no Maven, no Java parsing) and report per-module classes, tests and seconds plus the slowest classes and methods. `--module <name>` narrows the set; `--json` prints a machine-readable object |
 | `scripts/run-demo.js`                         | builds and runs `PersonDemo`, the end-to-end walk (row array → view → JSON → tracking builder → JSON change set → changed columns → no-op write) |
 | `scripts/entity-html/index.js`                | render the HTML entity index from the JSON a pass wrote (DEC-027); `--module <dir>` for another module |
 | `scripts/jcodebuddy.js`                       | the `jcodebuddy` command line. `… metadata parse <file>` prints one file's metadata as one line of JSON, with no daemon, no cache folder and no prior `scan` — DEC-W008's manual-mode path (plan step 7.7); exit `0` with the entry, `2` with the reason on stderr. `… metadata stale <file\|directory>` asks *is this stale, and why?* through the one staleness gate (plan step 6.6): a file prints its verdict, tier and cause, a directory sweeps and summarises, and `--cached-only` narrows the sweep to the items that have an entry; exit `0` nothing to rebuild, `1` something, `2` a usage error |
@@ -114,13 +118,15 @@ commands.
 There are two build entry points, and the difference between them is deliberate rather than an oversight:
 
 - **`bun scripts/mvn-jdk25.js` is the gate.** `clean package`, `-Dmaven.compiler.useIncrementalCompilation=false`, and
-  the build cache **off**. Nothing it reports can have been reused from an earlier revision, which is the whole
-  point: F-47 is the scar where a build was satisfied by a previous revision's class files and reported SUCCESS.
+  the build cache **on** — a hit means these exact inputs were already built and tested. F-47 is the scar where a
+  build was satisfied by a previous revision's class files and reported SUCCESS; `clean` and the incremental flag are
+  what keep the run honest.
 - **`bun scripts/mvn-fast.js` is for iterating.** The same module set, with the Maven build cache
   (`.mvn/extensions.xml`, `org.apache.maven.extensions:maven-build-cache-extension`) **on**, incremental
   compilation at Maven's default, and modules built in parallel. An unchanged module's compile *and test* phases are
   restored instead of re-run — and test execution is where the time goes: a warm `-pl <mods> -am test` of the ioc
-  tooling measured 12:43 with the cache off, almost all of it tests.
+  tooling measured 12:43 with the cache off, almost all of it tests. `--fast` narrows that further to the edit loop:
+  `-Pfast-tests test`, no `clean`, cache save withheld.
 
 Both use the cache; what differs is how much they re-run. `mvn-jdk25.js` is the gate — `clean package`, incremental
 compilation off — and it **keeps the build cache on**, by the maintainer's decision of 2026-10-03: the cache
@@ -131,16 +137,19 @@ safety of a hit was verified rather than argued when the cache was added: turnin
 produced a **new checksum, a miss, and a failing test that failed the build** — a cache may not answer with a stale
 SUCCESS.
 
-**Two rules the fast path enforces, both learned by getting them wrong.** Its goal is `package` rather than `test`,
-because a cached module restored without a JAR cannot be depended on by the next module in the reactor. And it
-withholds the *save* — never the cache — for `--tests` and `--no-clean` runs, through the extension's own
-`-Dmaven.build.cache.skipSave=true`: a command-line test filter is not part of the checksum, so a run that executed
-one test class and saved would leave an entry a later **full** run hits — reporting SUCCESS with surefire skipped and
-no tests executed (measured: cache on, zero tests, SUCCESS; cache off, 468 tests, one failure, FAILURE). Withholding
-the save closes that while keeping every read: a narrowed run still resolves unchanged modules instantly from a
-previous full run. The same rule binds anyone running Maven by hand: **populate the cache only with a full `package`
-run**, and if a build reports impossible symbol errors, delete `~/.m2/build-cache` — it is a cache, and deleting it
-is a cache, and deleting it is always safe.
+**The rules the fast path enforces, all learned by getting them wrong.** Its *default* goal is `package` rather
+than `test`, because a cached module restored without a JAR cannot be depended on by the next module in the reactor.
+`--fast` is the deliberate exception: it is the edit loop, so it runs `test` with no `clean` — the modules are
+already built and no jar is needed — and activates the `fast-tests` profile, which excludes the `generator`,
+`compiler` and `completeness` test groups. **It is not the gate**: `mvn-jdk25.js` still runs every test. And the
+script withholds the *save* — never the cache — for `--tests`, `--fast` and `--no-clean` runs, through the
+extension's own `-Dmaven.build.cache.skipSave=true`: a command-line test filter is not part of the checksum, so a
+run that executed one test class and saved would leave an entry a later **full** run hits — reporting SUCCESS with
+surefire skipped and no tests executed (measured: cache on, zero tests, SUCCESS; cache off, 468 tests, one failure,
+FAILURE). Withholding the save closes that while keeping every read: a narrowed run still resolves unchanged modules
+instantly from a previous full run. The same rule binds anyone running Maven by hand: **populate the cache only with
+a full `package` run**, and if a build reports impossible symbol errors, delete `~/.m2/build-cache` — it is a cache,
+and deleting it is always safe.
 
 **Use the fast path while working, the gate before a commit.** The cache lives in the user's Maven repository
 (`~/.m2/build-cache`), not in the workspace: it is a fact about one machine, and deleting it is always safe.

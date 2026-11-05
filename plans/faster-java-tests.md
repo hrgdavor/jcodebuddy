@@ -1,9 +1,11 @@
 # Faster Java tests — measured plan
 
-**Status: 2026-11-05 — proposed; baseline measured, no step started.** This plan makes the Java test
-loop fast enough to use while editing, without deleting tests or weakening the recorded gate. The hot
-spot is `hipster-entity-tooling`: **542 tests, 490.8 s of class time**, of which **310.4 s (63%) is six
-classes that each run the same full generation pass once per test method**.
+**Status: 2026-11-05 — implemented (F0–F6 done).** This plan makes the Java test loop fast enough to use
+while editing, without deleting tests or weakening the recorded gate. The hot spot was
+`hipster-entity-tooling`: **542 tests, 490.8 s**, of which **309.9 s (63%) was six classes that each ran
+the same full generation pass once per test method**. After the work: **272.0 s serial / 1:49–1:55 with the
+four-fork profile**, the six baseline classes **73.6 s**, fast lane **45.6 s**, single class **10.5 s**, all
+**542** tests still green.
 
 The plan is deliberately ordered by measured payoff: share the expensive fixture first (F2), then keep
 the one-time completeness sweep out of the edit loop (F3), then try parallel forks only after the work
@@ -34,7 +36,7 @@ The tooling module **is** the test suite for this purpose. Its slowest classes:
 | `MetadataSourcePathTest`               | 9      | 45.0 s      | runs a pass per test method (8 + rename passes)    |
 | `MetadataLocationsTest`                | 4      | 31.0 s      | copies the example and runs a pass (4 passes)      |
 | `ExampleDivergenceReportTest`          | 4      | 24.0 s      | copies the example and runs a pass (4 passes)      |
-| **top six**                            | **36** | **310.4 s** | **63% of the module**                              |
+| **top six (baseline classes)**         | **36** | **309.9 s** | **63% of the module**                              |
 
 The slowest single methods make the cause unambiguous: every one of them is a full example pass
 (`regenerationIsAlsoIdempotentOnASecondPass` 16.7 s, `theIndexIsDeterministic` 23.0 s,
@@ -60,13 +62,14 @@ source changed — and that is the loop this plan targets.
 
 Targets for this machine, measured with the same test count and assertions:
 
-| Lane / metric                                | Baseline | Target      | Why                                                                            |
-| -------------------------------------------- | -------- | ----------- | ------------------------------------------------------------------------------ |
-| Top six slow classes                         | 310.4 s  | **≤ 90 s**  | share one pass per class (and one second pass only where determinism needs it) |
-| Full tooling suite                           | 490.8 s  | **≤ 240 s** | fixture reuse plus the completeness cache; optional forks can go lower         |
-| Fast lane (`bun scripts/mvn-fast.js --fast`) | n/a      | **≤ 60 s**  | excludes `generator`, `compiler`, `completeness` tags                          |
-| Single-class loop                            | n/a      | **≤ 30 s**  | one class, no clean, narrowed run with `skipSave`                              |
-| Full test count                              | 542      | **542**     | no test removed or silently skipped by the default gate                        |
+| Lane / metric                                | Baseline | Target      | Result (2026-11-05)                                               |
+| -------------------------------------------- | -------- | ----------- | ----------------------------------------------------------------- |
+| Baseline six classes                         | 309.9 s  | **≤ 90 s**  | **73.6 s** — met (32.8 + 12.0 + 9.7 + 9.0 + 10.0 + 0.08)          |
+| Full tooling suite, serial                   | 490.8 s  | **≤ 240 s** | **272.0 s class time / 4:32 wall** — serial target missed; see F4 |
+| Full tooling suite, four-fork profile        | n/a      | **≤ 240 s** | **1:49–1:55** across three runs — met                             |
+| Fast lane (`bun scripts/mvn-fast.js --fast`) | n/a      | **≤ 60 s**  | **45.6 s** — met                                                  |
+| Single-class loop                            | n/a      | **≤ 30 s**  | **10.5 s** (`--tests EntityBuildStateTest`) — met                 |
+| Full test count                              | 542      | **542**     | **542** — met                                                     |
 
 The targets are acceptance aims, not promises. The plan records the measured before/after; a step that
 does not reach its target either reports why or is split rather than quietly declared done.
@@ -158,7 +161,7 @@ Convert, in this order, measuring after each:
 Do not share a mutable tree blindly: each class's tests must either be read-only on the fixture or
 request their own copy. The fixture's javadoc states which one it guarantees.
 
-**Gate:** the six classes drop from 310.4 s to **≤ 90 s**; the full tooling suite is **≤ 300 s**; the
+**Gate:** the six classes drop from 309.9 s to **≤ 90 s**; the full tooling suite is **≤ 300 s**; the
 generated bytes and all assertions are unchanged; the test count is still 542; three consecutive full
 runs are green.
 
@@ -283,3 +286,22 @@ the fast lane is green and under its target (or the miss is reported with the re
 - `MigrationCompletenessTest` is ≤ 30 s and still asserts its three properties.
 - `bun scripts/mvn-fast.js --fast` and `--tests` are documented and used by the module's runbook.
 - The full recorded gate is green, and no test was deleted, disabled, or weakened to get there.
+
+---
+
+## 8. Implementation record (2026-11-05)
+
+| Step | Result                                                                                  | Evidence                                                                             |
+| ---- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| F0   | `scripts/test-cost.js` reads Surefire XML, reports totals/rankings, supports `--module`, `--json`, `--top`; duration last line | 542 / 490.8 s baseline reproduced; `--top 6 of 83` verified |
+| F1   | `generator` / `compiler` / `completeness` tags; root `fast-tests` profile (`excludedGroups`); `mvn-fast --fast` | 542 tests in the default suite; fast lane ran 264 tooling unit tests + dependencies |
+| F2   | `ExamplePassFixture` shared once per JVM; five classes converted (plus `ExampleConverterManifestTest` tagged only) | Baseline six **309.9 s → 73.6 s**; all 33 five-class tests preserved; full suite 542 |
+| F3   | `MigrationCompletenessTest` parses the reactor once in `@BeforeAll`                     | **62.2 s → 30.1 s**; three tests unchanged                                           |
+| F4   | `parallel-tests` profile, `forkCount=4`, `reuseForks=true`; `mvn-fast --parallel-tests` | three consecutive green runs: **1:55, 1:51, 1:49** (542 tests each)                  |
+| F5   | `--fast` scoped to the tooling module + `-am` deps; `--parallel-tests`; root README and `codebuddy.md` updated | fast lane **45.6 s**; `--fast --tests ContentHashTest` **1.3 s**; `--tests EntityBuildStateTest` **10.5 s** |
+| F6   | measured budget recorded here and in the module docs                                    | serial class time **272.0 s**; parallel wall **1:49–1:55**; no test removed          |
+
+**The one target that moved:** the plan's full-suite target was 240 s. The **serial** suite is 272.0 s of
+class time (4:32 wall), because the remaining generator/compiler tests are individually small but numerous.
+The four-fork profile meets 240 s (1:49–1:55) and is the measured opt-in lane, not the default: a 4-fork
+JVM set is not free on a smaller machine. The daily loop is the fast lane (45.6 s), not the full suite.
