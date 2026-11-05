@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -34,6 +35,7 @@ import java.util.Map;
  * kept exactly as written and the finding is named. Dropping it or inventing a package would both be
  * worse than the incomplete text.</p>
  */
+@Tag("generator")
 class AnnotationArgumentsTest {
 
     private static final String MARKER = """

@@ -4,6 +4,7 @@ import hr.hrg.hipster.entity.api.ViewMeta;
 import hr.hrg.hipster.entity.api.ViewReader;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
@@ -44,6 +45,8 @@ import java.util.Map;
  * only the methods the generated code calls and throw for anything else, so a change in what the
  * adapter calls shows up as a failure rather than as a silently ignored interaction.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class GeneratedAdapterRoundTripTest {
 
     private static final String MARKER = """

@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -28,6 +29,7 @@ import java.util.List;
  * that misses leaves a valid, unchanged file, and the test then passes for the wrong reason. Each
  * damage is asserted to have matched before the pass runs.</p>
  */
+@Tag("generator")
 class ParseGuardTest {
 
     private static final String MARKER = """

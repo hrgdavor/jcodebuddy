@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -35,6 +36,7 @@ import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
  * document, and pretending otherwise would test a second source of truth. The annotation metadata is the
  * part 6.10 is about, and it is compared exactly — type, arguments and declaration order.</p>
  */
+@Tag("generator")
 class MetadataJsonAnnotationTest {
 
     @TempDir

@@ -3,6 +3,7 @@
 package com.codebuddy.merge;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -42,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that difference is the row: not "the tool can resolve types", but "the tool <em>says</em> whether it resolved the
  * project's own types".
  */
+@Tag("compiler")
 class ProjectTypesLevelTest {
 
     @TempDir

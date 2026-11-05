@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,6 +19,7 @@ import java.util.List;
  * same mapper request {@code scripts/gen.js} makes, and compares the generated manifest with the committed one.
  * Line endings are normalised because a checkout may store either; the manifest's own format uses {@code \n}.</p>
  */
+@Tag("generator")
 class ExampleConverterManifestTest {
 
     @TempDir

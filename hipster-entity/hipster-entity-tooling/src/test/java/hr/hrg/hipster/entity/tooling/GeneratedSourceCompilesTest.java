@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker;
@@ -20,6 +21,8 @@ import java.util.stream.Collectors;
  * <strong>zero diagnostics</strong>. Every generator level in Phase 3 grows this matrix; the
  * {@code META} row below is the level that exists today.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class GeneratedSourceCompilesTest {
 
     private static final String MARKER = """

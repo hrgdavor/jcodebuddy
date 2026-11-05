@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,6 +19,7 @@ import java.util.List;
  * field matches by name with a different type. That is the shape the todo describes ("merge fields with identical
  * name and type"), and each of the four cases has a different correct outcome — merged, silent, silent, diagnostic.
  */
+@Tag("generator")
 class ViewMergeWiringTest {
 
     @TempDir

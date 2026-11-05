@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,7 @@ import java.util.List;
  * true, and is it wired at the ordinal the runtime expects?</b> Until now the only materializations were the array path
  * and a hand-written fixture, which is exactly the gap DEC-024 names.</p>
  */
+@Tag("generator")
 class GeneratedDeepIndexTest {
 
     @TempDir

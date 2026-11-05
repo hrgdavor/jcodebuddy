@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -25,6 +26,8 @@ import java.nio.file.Path;
  *       the projection path exists to skip materialization, not to produce different JSON.</li>
  * </ul>
  */
+@Tag("generator")
+@Tag("compiler")
 class ViewJsonGeneratorTest {
 
     /**

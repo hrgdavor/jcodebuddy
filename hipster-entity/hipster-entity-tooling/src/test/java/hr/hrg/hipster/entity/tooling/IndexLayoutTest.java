@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -32,6 +33,7 @@ import java.util.stream.Stream;
  * <p>The module is synthetic and in a temp directory, so the test states the layout contract instead of
  * depending on the committed example having been generated recently.</p>
  */
+@Tag("generator")
 class IndexLayoutTest {
 
     /** A minimal but real entity package: a marker and one view derived from it. */

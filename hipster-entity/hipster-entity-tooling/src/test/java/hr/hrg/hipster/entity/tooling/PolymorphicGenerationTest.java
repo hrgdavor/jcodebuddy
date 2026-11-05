@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -26,6 +27,8 @@ import java.util.List;
  * together), and generation contributes only the value, read from the subclass's own
  * {@code default kind()} accessor. That is exactly the contract the committed example uses.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class PolymorphicGenerationTest {
 
     /**

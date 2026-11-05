@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -20,6 +21,8 @@ import java.nio.file.Path;
  *       a silent mis-construction (§ 4.5/G1).</li>
  * </ol>
  */
+@Tag("generator")
+@Tag("compiler")
 class ViewRecordGeneratorTest {
 
     private static final String MARKER = """

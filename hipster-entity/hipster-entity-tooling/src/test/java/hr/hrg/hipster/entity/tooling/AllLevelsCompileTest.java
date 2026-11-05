@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling;
 import hr.hrg.hipster.entity.api.GenLevel;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -22,6 +23,8 @@ import java.util.List;
  * stays at {@code WRITABLE} falls back to the array-backed updatable proxy, so it must compile on
  * the {@code META} shape.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class AllLevelsCompileTest {
 
     private static final String MARKER = """

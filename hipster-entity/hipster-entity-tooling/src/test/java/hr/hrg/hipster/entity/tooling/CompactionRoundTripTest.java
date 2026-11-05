@@ -4,6 +4,7 @@ import hr.hrg.hipster.entity.tooling.validation.EnumCompactionCli;
 import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -33,6 +34,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * renumbers a <em>live</em> field, or one that leaves the file in a shape the generator then
  * re-expands.</p>
  */
+@Tag("generator")
 class CompactionRoundTripTest {
 
     private static final String MARKER = """

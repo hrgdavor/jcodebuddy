@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -23,6 +24,8 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  *       and inherited run, skipping collisions, and appends nothing to a sibling view.</li>
  * </ol>
  */
+@Tag("generator")
+@Tag("compiler")
 class AddonAndInheritanceTest {
 
     private static final String MARKER = """

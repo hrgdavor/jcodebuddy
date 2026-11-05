@@ -6,6 +6,7 @@ import hr.hrg.hipster.entity.core.FieldChange;
 import hr.hrg.hipster.entity.core.ViewChangeTracking;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import javax.tools.JavaCompiler;
@@ -39,6 +40,8 @@ import java.util.stream.Collectors;
  * runtime behaviour is driven through the parent-loader {@link ViewChangeTracking} interface, which
  * the generated class genuinely implements because that interface comes from the parent loader.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class GeneratedTrackingBuilderContractTest {
 
     private static final String MARKER = """

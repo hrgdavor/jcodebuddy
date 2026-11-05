@@ -4,6 +4,7 @@ import hr.hrg.fsmeta.FsMetaFormat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -26,6 +27,7 @@ import java.util.List;
  * {@code main} resets most of them but not every one (notably {@code --dto-projections}), so every test
  * resets the whole surface before and after itself.</p>
  */
+@Tag("generator")
 class EntityBuildStateTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

@@ -11,6 +11,7 @@ import com.codebuddy.merge.ConflictResolution.ResolutionStrategy;
 import com.codebuddy.merge.MergeFileTool.Outcome;
 import com.codebuddy.merge.MergeFileTool.Result;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -40,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * stays marked, and that everything which stays becomes a prepared fixture
  * case with the layout {@code docs/CONFLICT_FILE_TOOL.md} prescribes.
  */
+@Tag("compiler")
 class MergeFileToolTest {
 
     @TempDir

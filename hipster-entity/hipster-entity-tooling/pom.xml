@@ -226,5 +226,26 @@
                 <activeByDefault>true</activeByDefault>
             </activation>
         </profile>
+        <!--
+            The opt-in parallel test lane from plans/faster-java-tests.md F4. Surefire's default is
+            one fork; two forks isolate the generator's process-global static configuration per JVM
+            while spreading independent test classes. It is a profile rather than the default so a
+            machine with little memory can keep the serial run.
+        -->
+        <profile>
+            <id>parallel-tests</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <forkCount>4</forkCount>
+                            <reuseForks>true</reuseForks>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

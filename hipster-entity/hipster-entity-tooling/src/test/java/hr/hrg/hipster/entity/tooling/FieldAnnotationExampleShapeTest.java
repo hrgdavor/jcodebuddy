@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,6 +24,7 @@ import java.nio.file.Path;
  *   <li>the view carries a <b>nested record</b> and a <b>nested interface</b> (the example's {@code Record}/{@code Write}).</li>
  * </ul>
  */
+@Tag("generator")
 class FieldAnnotationExampleShapeTest {
 
     @TempDir

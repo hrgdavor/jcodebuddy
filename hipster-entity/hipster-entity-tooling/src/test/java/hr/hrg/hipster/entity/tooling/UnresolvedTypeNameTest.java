@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -24,6 +25,8 @@ import java.util.Set;
  * literal and must NOT be reported, which is why {@link TypeLiterals.Resolution} exists rather than a
  * comparison against the literal.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class UnresolvedTypeNameTest {
 
     private static final String MARKER = """

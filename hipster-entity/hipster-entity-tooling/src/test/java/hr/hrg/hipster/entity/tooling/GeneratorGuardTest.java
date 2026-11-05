@@ -2,6 +2,7 @@ package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -22,6 +23,7 @@ import java.util.List;
  * <em>wrong</em> place is refused, at every entry point — CLI, script, watcher — rather than only on
  * whatever path happened to be exercised last.</p>
  */
+@Tag("generator")
 class GeneratorGuardTest {
 
     @BeforeEach

@@ -6,6 +6,7 @@ import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -14,6 +15,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
+@Tag("generator")
+@Tag("compiler")
 public class EntityMetadataGeneratorTest {
 
     @Test

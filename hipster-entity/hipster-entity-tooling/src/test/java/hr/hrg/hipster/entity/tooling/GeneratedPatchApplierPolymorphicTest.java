@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,8 @@ import tools.jackson.databind.node.JsonNodeFactory;
  * declared value, and calls that view's own applier — a direct call per arm, which is the property
  * {@code PaymentMethodController} hand-writes today and DEC-019 exists to keep.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class GeneratedPatchApplierPolymorphicTest {
 
     @TempDir

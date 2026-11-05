@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -15,6 +16,8 @@ import java.nio.file.Path;
  * {@code S} is the {@code EEnumSet} interface, both accessors derive from the one {@code mf} field,
  * setters use ordinal <em>literals</em>, and only {@code COLUMN} fields get setters.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class ViewTrackingBuilderGeneratorTest {
 
     private static final String MARKER = """

@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -24,6 +25,8 @@ import java.util.Set;
  * checked "no new constant appeared" would pass for a file that had been re-emitted without changes, which
  * is the failure mode being fixed.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class CooperativeCodegenEnabledTest {
 
     /** A generated enum whose header takes it out of the generator's hands. */

@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -30,6 +31,7 @@ import java.util.List;
  * ({@code nested_record_reused}) to check. Asserting on a kind that fires <em>every</em> pass is what
  * makes the assertion meaningful rather than vacuous.</p>
  */
+@Tag("generator")
 class MarkerClaimedViewReportingTest {
 
     private static final String COMPANY_MARKER = """

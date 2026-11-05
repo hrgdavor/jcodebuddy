@@ -553,5 +553,28 @@
         <profile>
             <id>junit5</id>
         </profile>
+
+        <!--
+            The fast lane: `-Pfast-tests` runs only the unit subset. The three excluded
+            groups are the cost tags of plans/faster-java-tests.md F1 — `generator` (a full
+            EntityMetadataGenerator pass), `compiler` (javac, through CompileHarness or
+            directly) and `completeness` (the reactor-wide migration sweep). No profile is
+            active by default, so `mvn test`/`package` still runs every test; the fast lane
+            is a convenience, never the recorded gate.
+        -->
+        <profile>
+            <id>fast-tests</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <excludedGroups>generator,compiler,completeness</excludedGroups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

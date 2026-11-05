@@ -4,6 +4,7 @@ import hr.hrg.hipster.entity.tooling.DivergenceReporter;
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.jcodebuddy.engine.index.ClassRecord;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.ObjectMapper;
@@ -29,6 +30,7 @@ import java.util.stream.Stream;
  * a file no compiler accepts — and the fixture covers the two shapes most likely to produce that: a factory
  * the interface inherits from a package-private module, and a factory parameter the context itself provides.</p>
  */
+@Tag("compiler")
 class IocContextGeneratorTest {
 
     private static final String GADGET = """

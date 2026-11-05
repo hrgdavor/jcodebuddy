@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -23,6 +24,8 @@ import java.util.List;
  *       diagnostic, it is a broken build.</li>
  * </ul>
  */
+@Tag("generator")
+@Tag("compiler")
 class ViewMapperGeneratorTest {
 
     private static final String MARKER = """

@@ -4,6 +4,7 @@ import hr.hrg.hipster.entity.core.FieldChange;
 import hr.hrg.hipster.entity.core.ViewChangeTracking;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -53,6 +54,8 @@ import java.util.regex.Pattern;
  * reactor modules and the Jackson jars the adapter needs. Running the module's tests is the only
  * prerequisite; no install and no driver project is involved.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class MvpAcceptanceTest {
 
     /** A consumer's entity marker: no accessors of its own, just the identity contract. */

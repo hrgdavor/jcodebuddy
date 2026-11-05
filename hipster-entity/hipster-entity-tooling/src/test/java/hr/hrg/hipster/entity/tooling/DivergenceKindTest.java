@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -28,6 +29,7 @@ import java.util.List;
  * {@code aCleanPass...} guard at the end of this class exists to catch that mistake for the whole
  * file.</p>
  */
+@Tag("generator")
 class DivergenceKindTest {
 
     private static final String MARKER = """

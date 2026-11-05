@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -29,6 +30,8 @@ import java.util.List;
  * project adds for itself — so a library that only uses the entities never gains a validation
  * dependency.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class ValidationGeneratorTest {
 
     private static final String MARKER = """

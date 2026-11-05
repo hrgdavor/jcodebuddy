@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,6 +28,7 @@ import java.util.List;
  *       is asserted by counting occurrences rather than by inspecting one constant.</li>
  * </ul>
  */
+@Tag("generator")
 class FieldAnnotationExposureTest {
 
     @TempDir

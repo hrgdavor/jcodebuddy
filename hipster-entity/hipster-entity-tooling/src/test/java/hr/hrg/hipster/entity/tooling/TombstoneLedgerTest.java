@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -33,6 +34,8 @@ import java.util.List;
  * read accessor and no column. The class asserts the whole chain, ending with a compile gate,
  * because the compiler is the only artifact that can check all of it at once.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class TombstoneLedgerTest {
 
     private static final String MARKER = """

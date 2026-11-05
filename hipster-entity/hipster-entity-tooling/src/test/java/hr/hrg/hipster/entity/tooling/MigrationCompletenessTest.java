@@ -1,6 +1,8 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.openrewrite.java.tree.J;
 
@@ -44,6 +46,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * the repository: it is the phase's completeness evidence, and it fails with the offending paths named,
  * which is what makes it usable.</p>
  */
+@Tag("completeness")
 class MigrationCompletenessTest {
 
     /**
@@ -94,25 +97,71 @@ class MigrationCompletenessTest {
         return files;
     }
 
+    /**
+     * One file's facts, computed once by {@link #readTheReactorOnce()}.
+     *
+     * <p>The sweep used to walk the reactor and re-read/re-parse every file inside each of the three
+     * test methods — three full passes for one set of properties. The facts are immutable, so the
+     * three tests can assert over the same copy: {@code source} and {@code lines} are the text the
+     * position checks compare against, {@code javacParses} is the {@link JavaSyntaxCheck} verdict,
+     * {@code read} is the one OpenRewrite read (whose {@code readable()} is the F-34 channel), and
+     * {@code check} is the one javac position parse, which also carries the syntactic-validity
+     * verdict.</p>
+     */
+    private record SourceFacts(String path, String source, String[] lines, boolean javacParses,
+                               SourceReader.Read read, JavaSyntaxCheck.FileCheck check) {
+    }
+
+    /** Every committed source's facts, read once for the class rather than once per test method. */
+    private static List<SourceFacts> FACTS;
+
+    /**
+     * Reads the committed sources and parses each of them <strong>once</strong>, for the whole class.
+     *
+     * <p>{@link #committedSources()} keeps its two guards — every {@link #MODULES} name resolves, and
+     * the sweep really sees more than 250 files — and is called only here now, so a broken module
+     * name or a shrunken sweep fails the class once instead of once per test method.</p>
+     *
+     * <p>The cost is the point: each file is read once, parsed once by OpenRewrite and once by javac
+     * (the two channels {@link SourceReader} itself consults), instead of three reactor walks and
+     * several parses per test. No test mutates the facts, so sharing them cannot couple the
+     * assertions.</p>
+     */
+    @BeforeAll
+    static void readTheReactorOnce() {
+        Path repoRoot = CompileHarness.findRepoRoot();
+        List<SourceFacts> collected = new ArrayList<>();
+        for (Path file : committedSources()) {
+            String source = read(file);
+            JavaSyntaxCheck.FileCheck check = JavaSyntaxCheck.inspect(source);
+            SourceReader.Read readResult = SourceReader.readText(source);
+            collected.add(new SourceFacts(
+                    repoRoot.relativize(file).toString().replace('\\', '/'),
+                    source,
+                    source.split("\\R", -1),
+                    check.syntacticallyValid(),
+                    readResult,
+                    check));
+        }
+        FACTS = List.copyOf(collected);
+    }
+
     @Test
     void everyCommittedSourceIsEitherReadableOrHonestlyReportedAsNot() {
         List<String> unreadable = new ArrayList<>();
         List<String> silentlyRecovered = new ArrayList<>();
         int checked = 0;
 
-        for (Path file : committedSources()) {
-            String source = read(file);
+        for (SourceFacts facts : FACTS) {
             checked++;
-            boolean javacParses = JavaSyntaxCheck.isSyntacticallyValid(source);
-            SourceReader.Read read = SourceReader.readText(source);
-            if (javacParses && !read.readable()) {
-                unreadable.add(relativize(file));
+            if (facts.javacParses() && !facts.read().readable()) {
+                unreadable.add(facts.path());
             }
             // The other direction is the F-34 case: javac rejects the text and the read still hands back a
             // tree. SourceReader checks both channels, so this must never happen - and if the check is
             // ever removed, this is the assertion that notices.
-            if (!javacParses && read.readable()) {
-                silentlyRecovered.add(relativize(file));
+            if (!facts.javacParses() && facts.read().readable()) {
+                silentlyRecovered.add(facts.path());
             }
         }
 
@@ -132,14 +181,14 @@ class MigrationCompletenessTest {
         int members = 0;
         int annotations = 0;
 
-        for (Path file : committedSources()) {
-            String source = read(file);
-            JavaSyntaxCheck.FileCheck check = JavaSyntaxCheck.inspect(source);
+        for (SourceFacts facts : FACTS) {
+            JavaSyntaxCheck.FileCheck check = facts.check();
             if (!check.syntacticallyValid()) {
                 continue;
             }
-            String[] lines = source.split("\\R", -1);
-            String where = relativize(file);
+            String[] lines = facts.lines();
+            String where = facts.path();
+            String source = facts.source();
 
             for (JavaSyntaxCheck.TypePosition type : check.types()) {
                 types++;
@@ -201,22 +250,21 @@ class MigrationCompletenessTest {
         List<String> unparsed = new ArrayList<>();
         int files = 0;
 
-        for (Path file : committedSources()) {
-            String source = read(file);
-            J.CompilationUnit cu = SourceReader.readSourceText(source);
+        for (SourceFacts facts : FACTS) {
+            J.CompilationUnit cu = facts.read().unit();
             files++;
             if (cu == null) {
                 // Not a mismatch: SourceReader refuses a file javac recovers from, and this sweep is not
                 // where that decision is argued. It is counted, so a regression cannot hide by shrinking
                 // the sample.
-                unparsed.add(relativize(file));
+                unparsed.add(facts.path());
                 continue;
             }
-            JavaSyntaxCheck.FileCheck check = JavaSyntaxCheck.inspect(source);
+            JavaSyntaxCheck.FileCheck check = facts.check();
             if (!check.syntacticallyValid()) {
                 continue;
             }
-            String where = relativize(file);
+            String where = facts.path();
 
             int lstTypes = TreeQueries.typeDeclarations(cu).size();
             if (lstTypes != check.types().size()) {
@@ -238,10 +286,6 @@ class MigrationCompletenessTest {
     }
 
     // ------------------------------------------------------------------ helpers ---
-
-    private static String relativize(Path file) {
-        return CompileHarness.findRepoRoot().relativize(file).toString().replace('\\', '/');
-    }
 
     private static String read(Path file) {
         try {

@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -17,6 +18,7 @@ import java.util.List;
  * constant with no matching accessor, so the tombstone logic is exercised here rather than through
  * the general emission path.</p>
  */
+@Tag("generator")
 class FieldEnumLedgerRegenerationTest {
 
     private static final String MARKER = """

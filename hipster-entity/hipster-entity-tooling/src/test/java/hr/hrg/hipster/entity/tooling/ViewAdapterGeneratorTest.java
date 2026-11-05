@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -23,6 +24,8 @@ import java.nio.file.Path;
  * {@link #sqlGenerationIsOptInAndOffByDefault()}, which pins the rule that a future SQL generator
  * must also obey: nothing is emitted unless a project asks for it.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class ViewAdapterGeneratorTest {
 
     private static final String MARKER_SOURCE = """

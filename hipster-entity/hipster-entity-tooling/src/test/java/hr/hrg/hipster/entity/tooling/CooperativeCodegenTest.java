@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -22,6 +23,8 @@ import java.util.List;
  * point, so a regeneration loop cannot erode the user's code one pass at a time — which is the
  * failure mode a whole-file emitter has without cooperative recognition.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class CooperativeCodegenTest {
 
     private static final String MARKER = """

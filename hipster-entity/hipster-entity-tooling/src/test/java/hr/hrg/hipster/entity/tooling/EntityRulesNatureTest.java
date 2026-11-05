@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,7 @@ import hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator;
  * asserted rather than left to a reader), and <b>what a policy does with them</b> (behaviour, so it is exercised: a
  * contract violation must fail a strict pass, and a convention violation must not fail it in any policy).</p>
  */
+@Tag("generator")
 class EntityRulesNatureTest {
 
     @TempDir

@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,6 +19,7 @@ import java.util.List;
  * succeeds. The decision's amendment classifies it as a **contract**-class finding, so it fails the same way the entity
  * rules do — through `STRICT` and the policy machinery step 6.3 built, not through a second mechanism.</p>
  */
+@Tag("generator")
 class MapperConverterContractTest {
 
     @TempDir

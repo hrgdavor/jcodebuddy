@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -14,6 +15,8 @@ import java.nio.file.Path;
  * the level below — the nested {@code Record} when the view declares one, the emitted
  * {@code <View>Record} otherwise — rather than falling back to an array-backed proxy.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class ViewBuilderGeneratorTest {
 
     private static final String MARKER = """

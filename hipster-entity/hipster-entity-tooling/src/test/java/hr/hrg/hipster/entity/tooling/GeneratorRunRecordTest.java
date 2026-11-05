@@ -2,6 +2,7 @@ package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -24,6 +25,7 @@ import java.util.List;
  * written for a <strong>failed</strong> pass as well as a successful one, because a failure is the run
  * somebody will want to read.</p>
  */
+@Tag("generator")
 class GeneratorRunRecordTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

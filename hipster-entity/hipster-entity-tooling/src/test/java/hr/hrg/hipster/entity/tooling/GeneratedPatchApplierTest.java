@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -17,6 +18,8 @@ import java.util.List;
  * operation reach a setter an IDE can follow. This class pins the two properties that matter — <b>it compiles</b>, and
  * it <b>reports</b> every operation it cannot apply instead of guessing.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class GeneratedPatchApplierTest {
 
     @TempDir

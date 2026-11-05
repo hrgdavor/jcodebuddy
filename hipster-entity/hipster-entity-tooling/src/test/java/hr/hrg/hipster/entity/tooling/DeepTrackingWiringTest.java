@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -28,6 +29,8 @@ import java.util.List;
  * core module's own deep tests use, so the two agreement points (§ 6.7's parity) are checked from
  * both sides.</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class DeepTrackingWiringTest {
 
     private static final String MARKER = """

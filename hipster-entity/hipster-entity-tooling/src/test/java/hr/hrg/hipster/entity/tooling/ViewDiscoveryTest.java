@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
  * generated file list — the failure mode the plan records as having produced the orphan
  * {@code Write_.java} and the missing {@code PersonCreateForm_}.</p>
  */
+@Tag("generator")
 class ViewDiscoveryTest {
 
     /** The fixture package marker. */

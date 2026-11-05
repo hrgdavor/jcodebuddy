@@ -3,6 +3,7 @@
 package com.codebuddy.merge;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.openrewrite.java.JavaParser;
@@ -37,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Each case is asserted against the <em>rendered</em> resolved type, so a pass means the
  * type came back fully qualified rather than merely present.
  */
+@Tag("compiler")
 class ProjectClasspathResolutionTest {
 
     private static final String DECLARATION = "class A { com.example.Gadget value = null; }";

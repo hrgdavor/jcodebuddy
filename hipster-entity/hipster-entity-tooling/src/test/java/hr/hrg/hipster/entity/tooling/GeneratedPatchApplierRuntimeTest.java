@@ -2,6 +2,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -33,6 +34,8 @@ import tools.jackson.databind.node.JsonNodeFactory;
  * in one map — and no test stub can accidentally satisfy the applier by being permissive. (A proxy in a test is not the
  * reflective dispatch DEC-019 forbids in generated code; it is how a test observes a generated call.)</p>
  */
+@Tag("generator")
+@Tag("compiler")
 class GeneratedPatchApplierRuntimeTest {
 
     @TempDir
