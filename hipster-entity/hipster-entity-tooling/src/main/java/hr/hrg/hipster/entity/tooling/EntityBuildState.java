@@ -205,18 +205,27 @@ final class EntityBuildState {
     }
 
     /**
-     * The state directory for a pass: the nearest marker at or above the report directory, then the source
-     * root, then the documented {@code <sourceRoot>/.jcodebuddy} fallback.
+     * The state directory for a pass: the `.jcodebuddy` component of the report path, then the nearest
+     * marker at or above the source root, then the documented {@code <sourceRoot>/.jcodebuddy} fallback.
      *
-     * <p>The report directory is asked first for the reason {@code EntityMetadataGenerator.resolveModuleRoot}
+     * <p>The report path is asked first for the reason {@code EntityMetadataGenerator.resolveModuleRoot}
      * gives: the pass already writes its metadata there, so the module that owns the report owns the state.
-     * A report directory outside the module (a temp directory, a test) still resolves to the module's
-     * marker, and only a tree with no marker anywhere falls back to the source root.</p>
+     * It is matched as a <em>path component</em>, not as an existing directory, because the first pass
+     * creates it: an existing-directory test would put the first state under the source root and the second
+     * under the module. A report directory outside the module (a temp directory, a test) still resolves to
+     * the module's marker, and only a tree with no marker anywhere falls back to the source root.</p>
      */
     static Path stateDirectory(Path sourceRoot, Path metadataOutput) {
-        Path marker = JcodebuddyDirectory.nearestMarker(metadataOutput);
+        // The report directory's path names the module even before the first pass creates the
+        // `.jcodebuddy` directory. Asking only for an existing marker made the first pass fall back to
+        // `<sourceRoot>/.jcodebuddy`, and the second pass — now that the module marker existed — look for
+        // the state somewhere else. The path is stable across that creation, so ask it first.
+        Path marker = markerFromPath(metadataOutput);
         if (marker == null) {
             marker = JcodebuddyDirectory.nearestMarker(sourceRoot);
+        }
+        if (marker == null) {
+            marker = JcodebuddyDirectory.nearestMarker(metadataOutput);
         }
         if (marker != null) {
             return marker.resolve(CACHE_DIRECTORY).resolve(STATE_DIRECTORY);
@@ -228,6 +237,19 @@ final class EntityBuildState {
                 .resolve(JcodebuddyDirectory.DIR)
                 .resolve(CACHE_DIRECTORY)
                 .resolve(STATE_DIRECTORY);
+    }
+
+    /** The `.jcodebuddy` component of a path, whether or not that directory exists yet. */
+    private static Path markerFromPath(Path path) {
+        if (path == null) {
+            return null;
+        }
+        for (Path at = path.toAbsolutePath().normalize(); at != null; at = at.getParent()) {
+            if (at.getFileName() != null && JcodebuddyDirectory.DIR.equals(at.getFileName().toString())) {
+                return at;
+            }
+        }
+        return null;
     }
 
     /** The state directory this instance reads and writes. */

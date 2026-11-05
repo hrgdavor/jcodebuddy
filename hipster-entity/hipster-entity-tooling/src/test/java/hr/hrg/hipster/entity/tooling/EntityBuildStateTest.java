@@ -302,6 +302,20 @@ class EntityBuildStateTest {
                 "with no marker, the source root is the documented fallback");
     }
 
+    @Test
+    void aReportPathNamesTheModuleBeforeTheMarkerExists() throws Exception {
+        // A consumer project has no `.jcodebuddy` before its first pass. The report path still says
+        // where the module is, and using it keeps the first and second pass on the same state.
+        Path module = Files.createTempDirectory("entity-build-first-pass");
+        Path sourceRoot = module.resolve("src/main/java");
+        Files.createDirectories(sourceRoot);
+        Path report = module.resolve(".jcodebuddy/metadata/entity");
+
+        Assertions.assertEquals(module.resolve(".jcodebuddy/cache/entity-build"),
+                EntityBuildState.stateDirectory(sourceRoot, report),
+                "the report path names the module even before `.jcodebuddy` exists");
+    }
+
     // ── the CLI wiring, in-process ───────────────────────────────────────────
 
     /**

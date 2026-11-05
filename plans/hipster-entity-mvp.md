@@ -1,6 +1,6 @@
 # hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
 
-**Status: 2026-11-05 — E0–E7 done; E8 next.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-05 — E0–E8 done; E9 next.** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
 practical. **Watch mode is deliberately out of scope**: the existing watcher path
@@ -418,6 +418,16 @@ repository path as a shortcut: the point is the consumer's view.
 durations and the number of emitted/reused views; it prints an actionable message when JDK 25, Maven or
 the installed artifacts are missing; it is documented in the root README's script table. It is a recorded
 check, not part of the Maven gate, because it needs an install.
+
+**Done 2026-11-05.** Added [`scripts/check-entity-mvp.js`](../scripts/check-entity-mvp.js) and a committed
+consumer fixture under `hipster-entity-tooling/src/test/resources/mvp-consumer/`. The run resolved the
+installed entity artifacts from `~/.m2` (not reactor `target/classes`), built the consumer, ran the
+generated `Main`, edited `PersonDetail`, ran `--incremental`, ran the main again and finished `--check`.
+Measured: full **3064 ms**, incremental **4313 ms** with `emitted 1, reused 1`, check **4952 ms**, total
+**20.3 s**; the last line is the timing report. The check also exposed and fixed a real consumer bug:
+`EntityBuildState.stateDirectory` preferred an existing `.jcodebuddy` marker, so the first pass put the
+state under `src/main/java` and the second looked for it under the module. It now matches the report path's
+`.jcodebuddy` component even before the directory exists.
 
 ### E9 — Declare the MVP (S)
 **Who:** agent · **Depends:** E8
