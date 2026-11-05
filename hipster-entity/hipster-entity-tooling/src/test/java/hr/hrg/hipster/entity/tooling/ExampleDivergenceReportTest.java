@@ -1,10 +1,10 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,11 +28,15 @@ import java.util.TreeSet;
  * assertion fails on an unexpected kind and on a missing one, because "some entries" is not a gate
  * and an explicitly empty expectation would hide a legitimate steady-state entry.</p>
  */
+@Tag("generator")
 class ExampleDivergenceReportTest {
 
-    private static final List<String> GENERATED_PACKAGES = List.of(
-            "hr.hrg.hipster.entityexample.person.entity",
-            "hr.hrg.hipster.entityexample.paymentMethod.entity");
+    private static ExamplePassFixture fixture;
+
+    @BeforeAll
+    static void generateOnce() throws Exception {
+        fixture = ExamplePassFixture.shared();
+    }
 
     /**
      * The kinds a default (non-{@code --adapters}) pass over the committed example produces.
@@ -65,31 +69,6 @@ class ExampleDivergenceReportTest {
             "nested_record_reused",
             "addon_field_collision");
 
-    /** A default pass over a copy of the committed example, with the report kept. */
-    private static DivergenceReporter regenerateWithReport() throws Exception {
-        Path exampleRoot = CompileHarness.findRepoRoot().resolve("hipster-entity/hipster-entity-example/src/main/java");
-        Assertions.assertTrue(Files.exists(exampleRoot), "the example source root must exist");
-
-        Path tree = Files.createTempDirectory("example-report");
-        for (Path source : CompileHarness.javaSourcesUnder(exampleRoot)) {
-            Path target = tree.resolve(exampleRoot.relativize(source).toString());
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target);
-        }
-
-        DivergenceReporter reporter = new DivergenceReporter();
-        EntityMetadataGenerator.setGenerationPackages(GENERATED_PACKAGES);
-        // The example does not opt into SQL generation (D-17); a default pass is what is measured.
-        EntityMetadataGenerator.setGenerateAdapters(false);
-        try {
-            EntityMetadataGenerator.generate(tree, tree, tree, reporter);
-        } finally {
-            EntityMetadataGenerator.setGenerationPackages(List.of());
-            EntityMetadataGenerator.setGenerateAdapters(false);
-        }
-        return reporter;
-    }
-
     /** The kinds named by a report, deduplicated and sorted, so a diff is readable. */
     private static Set<String> kindsOf(List<String> entries) {
         Set<String> kinds = new TreeSet<>();
@@ -105,7 +84,7 @@ class ExampleDivergenceReportTest {
 
     @Test
     void aDefaultPassOverTheExampleReportsExactlyTheKnownKinds() throws Exception {
-        DivergenceReporter reporter = regenerateWithReport();
+        DivergenceReporter reporter = fixture.divergences();
         Set<String> actual = kindsOf(reporter.entries());
 
         Set<String> unexpected = new TreeSet<>(actual);
@@ -124,7 +103,7 @@ class ExampleDivergenceReportTest {
 
     @Test
     void noEntryInTheExampleReportIsRepeated() throws Exception {
-        DivergenceReporter reporter = regenerateWithReport();
+        DivergenceReporter reporter = fixture.divergences();
 
         Assertions.assertEquals(reporter.entries().size(),
                 new LinkedHashSet<>(reporter.entries()).size(),
@@ -230,7 +209,7 @@ class ExampleDivergenceReportTest {
 
     @Test
     void everyKindNamedByTheMapIsActuallyProducedInTheTree() throws Exception {
-        DivergenceReporter reporter = regenerateWithReport();
+        DivergenceReporter reporter = fixture.divergences();
         Set<String> actual = kindsOf(reporter.entries());
 
         // The map's entries that name this class as the producer must be in the report it just

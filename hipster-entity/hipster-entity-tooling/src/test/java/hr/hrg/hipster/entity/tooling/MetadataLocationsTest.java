@@ -5,6 +5,8 @@ import hr.hrg.hipster.entity.tooling.meta.EntityMeta;
 import hr.hrg.hipster.entity.tooling.meta.ViewFieldMeta;
 import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -14,7 +16,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 /**
  * Every field of every view carries <strong>all</strong> its locations, and every location is true
@@ -33,14 +34,19 @@ import java.util.stream.Stream;
  * is the configuration the real pass uses: the generated artifacts must be under the module root for
  * the index to be able to name them, and a copy keeps the committed tree untouched.</p>
  */
+@Tag("generator")
 class MetadataLocationsTest {
 
-    private static final List<String> GENERATED_PACKAGES = List.of(
-            "hr.hrg.hipster.entityexample.person.entity",
-            "hr.hrg.hipster.entityexample.paymentMethod.entity");
+    private static Pass pass;
 
-    /** One pass's output: the module it ran in, the class index it wrote, and the documents it produced. */
-    private record Pass(Path moduleRoot, Map<String, String> classes, Map<String, EntityMeta> markers) {
+    @BeforeAll
+    static void generateOnce() throws Exception {
+        ExamplePassFixture fixture = ExamplePassFixture.shared();
+        pass = new Pass(fixture.moduleRoot(), fixture.markers());
+    }
+
+    /** One pass's output: the module it ran in and the documents it produced. */
+    private record Pass(Path moduleRoot, Map<String, EntityMeta> markers) {
 
         ViewMeta view(String marker, String view) {
             EntityMeta meta = markers.get(marker);
@@ -81,61 +87,6 @@ class MetadataLocationsTest {
     }
 
     /**
-     * Copies the committed example into a temp module and runs a real pass in place there.
-     *
-     * <p>In place is the configuration DEC-028 is about: the generated siblings must sit beside the view
-     * so the pass can read them back and record where each field landed inside them.</p>
-     */
-    private static Pass run() throws Exception {
-        Path exampleModule = CompileHarness.findRepoRoot().resolve("hipster-entity/hipster-entity-example");
-        Path exampleRoot = exampleModule.resolve("src/main/java");
-        Path tree = Files.createTempDirectory("metadata-locations");
-        for (Path source : CompileHarness.javaSourcesUnder(exampleRoot)) {
-            // Relativised against the MODULE, so the copy keeps the `src/main/java/…` layout the recorded
-            // paths are written in.
-            Path target = tree.resolve(exampleModule.relativize(source).toString());
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target);
-        }
-        // A module has a `.jcodebuddy/`; creating one is what makes the module root — and therefore the
-        // index location — the temp tree rather than whatever directory happens to be above it.
-        Path reportDir = tree.resolve(".jcodebuddy/metadata/entity");
-        Files.createDirectories(reportDir);
-
-        EntityMetadataGenerator.setGenerationPackages(GENERATED_PACKAGES);
-        EntityMetadataGenerator.setGenerateAdapters(false);
-        try {
-            EntityMetadataGenerator.generate(tree.resolve("src/main/java"), reportDir,
-                    tree.resolve("src/main/java"));
-        } finally {
-            EntityMetadataGenerator.setGenerationPackages(List.of());
-            EntityMetadataGenerator.setGenerateAdapters(false);
-        }
-
-        Map<String, String> classes = new LinkedHashMap<>();
-        // The class index lands in the MODULE's `.jcodebuddy/index/`, beside `metadata/` — not inside the
-        // report directory, which is the layout the real pass produces (DEC-026/DEC-029).
-        Path indexFile = tree.resolve(".jcodebuddy/index/classes.json");
-        Assertions.assertTrue(Files.exists(indexFile), "the pass must write " + indexFile);
-        tools.jackson.databind.JsonNode index = new tools.jackson.databind.ObjectMapper()
-                .readTree(Files.readString(indexFile));
-        for (var it = index.path("classes").propertyStream().iterator(); it.hasNext(); ) {
-            var entry = it.next();
-            classes.put(entry.getKey(), entry.getValue().path("path").asText());
-        }
-
-        Map<String, EntityMeta> markers = new LinkedHashMap<>();
-        try (Stream<Path> documents = Files.list(reportDir)) {
-            for (Path document : documents.filter(p -> p.toString().endsWith(".metadata.json")).toList()) {
-                EntityMeta meta = EntityMetadataGenerator.fromJson(Files.readString(document), classes);
-                markers.put(meta.entityName(), meta);
-            }
-        }
-        Assertions.assertFalse(markers.isEmpty(), "the pass must write at least one document");
-        return new Pass(tree, classes, markers);
-    }
-
-    /**
      * A {@code DERIVED} field carries every role it has, and none it does not.
      *
      * <p>{@code PersonSummary.age} is the richest case: an annotated, non-writable field of a
@@ -146,7 +97,7 @@ class MetadataLocationsTest {
      */
     @Test
     void aDerivedFieldCarriesEveryRoleItHasAndNoSetter() throws Exception {
-        Pass pass = run();
+        // The shared pass; see generateOnce().
         ViewFieldMeta age = pass.field("Person", "PersonSummary", "age");
 
         ArtifactMeta view = pass.artifact("Person", "PersonSummary", "PersonSummary");
@@ -188,7 +139,7 @@ class MetadataLocationsTest {
      */
     @Test
     void anInheritedFieldRecordsTheDeclaringInterface() throws Exception {
-        Pass pass = run();
+        // The shared pass; see generateOnce().
         ViewMeta details = pass.view("Person", "PersonDetails");
         ViewFieldMeta firstName = pass.field("Person", "PersonDetails", "firstName");
 
@@ -216,7 +167,7 @@ class MetadataLocationsTest {
      */
     @Test
     void theSameFieldNameHasADifferentLocationPerView() throws Exception {
-        Pass pass = run();
+        // The shared pass; see generateOnce().
         String summaryFile = pass.artifact("Person", "PersonSummary", "PersonSummary_").file();
         String dtoFile = pass.artifact("Person", "PersonDto", "PersonDto_").file();
         Assertions.assertNotEquals(summaryFile, dtoFile,
@@ -248,7 +199,7 @@ class MetadataLocationsTest {
      */
     @Test
     void everyRecordedLocationIsTrue() throws Exception {
-        Pass pass = run();
+        // The shared pass; see generateOnce().
         List<String> problems = new ArrayList<>();
         int checked = 0;
 

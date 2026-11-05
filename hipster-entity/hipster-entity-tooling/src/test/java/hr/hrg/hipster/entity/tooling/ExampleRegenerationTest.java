@@ -1,13 +1,14 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * The Phase 4.1 acceptance test of {@code plan.dsflash.md} § 9.
@@ -26,12 +27,20 @@ import java.util.stream.Collectors;
  * <p>The test also pins the two intentional absences § 9/4.1 calls out: the orphan {@code Write_}
  * is gone and not regenerated ({@code PersonSummary.Write} is a framework surface, G8 rule 1), and
  * the two stale {@code example/} enums are gone (G7/DR-5).</p>
+ *
+ * <p>All tests read one shared pass over a temporary copy of the committed example, except
+ * {@link #regenerationIsAlsoIdempotentOnASecondPass()}, which asks the fixture for a second pass over
+ * an independent copy of that output.</p>
  */
+@Tag("generator")
 class ExampleRegenerationTest {
 
-    private static final List<String> GENERATED_PACKAGES = List.of(
-            "hr.hrg.hipster.entityexample.person.entity",
-            "hr.hrg.hipster.entityexample.paymentMethod.entity");
+    private static ExamplePassFixture fixture;
+
+    @BeforeAll
+    static void generateOnce() throws Exception {
+        fixture = ExamplePassFixture.shared();
+    }
 
     private Path exampleSourceRoot() {
         Path repoRoot = CompileHarness.findRepoRoot();
@@ -40,55 +49,14 @@ class ExampleRegenerationTest {
         return root;
     }
 
-    /**
-     * Copies the committed example source tree into a temp directory and generates
-     * <strong>in place</strong> there, returning the tree.
-     *
-     * <p>In-place is the configuration the plan actually specifies (§ 4.1/S2: generated source is
-     * committed into {@code src/main/java}), and it is the only configuration in which cooperative
-     * codegen can work at all: recognition reads the previous revision of the very file it is about
-     * to replace. Generating into a clean output directory instead makes every generated file look
-     * brand new, so a user-added member inside one of them — the example's hand-written
-     * {@code TrackingStrict}, plan § 4.5/G3 — cannot be carried through and the no-op assertion
-     * would fail for a reason that has nothing to do with the generator being wrong.</p>
-     *
-     * <p>Working on a copy rather than on the committed tree keeps the test free of side effects
-     * while still exercising the real path; {@link #exampleSourceRoot()} stays the comparison
-     * baseline.</p>
-     */
-    private Path regenerate() throws Exception {
-        Path tree = Files.createTempDirectory("example-regen");
-        for (Path source : CompileHarness.javaSourcesUnder(exampleSourceRoot())) {
-            Path target = tree.resolve(exampleSourceRoot().relativize(source).toString());
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target);
-        }
-        EntityMetadataGenerator.setGenerationPackages(GENERATED_PACKAGES);
-        // The example deliberately does NOT enable SQL generation: the generated `<View>RowAdapter` /
-        // `<View>Binder` pair is a draft/exploration in the tooling and is strictly opt-in, so the
-        // committed example contains no such class and the comparison below must not create one. The
-        // opt-in rule itself is pinned by ViewAdapterGeneratorTest.
-        EntityMetadataGenerator.setGenerateAdapters(false);
-        try {
-            EntityMetadataGenerator.generate(tree, tree);
-        } finally {
-            EntityMetadataGenerator.setGenerationPackages(List.of());
-            EntityMetadataGenerator.setGenerateAdapters(false);
-        }
-        return tree;
-    }
-
     @Test
     void regeneratingTheExampleIsAByteIdenticalNoOp() throws Exception {
-        Path outputRoot = regenerate();
-
         List<String> differences = new ArrayList<>();
-        for (Path generated : CompileHarness.javaSourcesUnder(outputRoot)) {
-            String relative = outputRoot.relativize(generated).toString();
+        for (String relative : fixture.javaFileNames()) {
             Path committed = exampleSourceRoot().resolve(relative);
             if (!Files.exists(committed)) {
                 differences.add("MISSING from the committed tree: " + relative);
-            } else if (!Files.readString(generated).equals(Files.readString(committed))) {
+            } else if (!fixture.readSource(relative).equals(Files.readString(committed))) {
                 differences.add("DIFFERS: " + relative);
             }
         }
@@ -101,32 +69,21 @@ class ExampleRegenerationTest {
 
     @Test
     void regenerationIsAlsoIdempotentOnASecondPass() throws Exception {
-        Path first = regenerate();
-        Path second = regenerate();
+        ExamplePassFixture second = fixture.secondPass();
 
-        List<String> firstFiles = relativeNames(first);
-        List<String> secondFiles = relativeNames(second);
+        List<String> firstFiles = fixture.javaFileNames();
+        List<String> secondFiles = second.javaFileNames();
         Assertions.assertEquals(firstFiles, secondFiles, "two passes must emit the same file set");
         for (String relative : firstFiles) {
-            Assertions.assertEquals(Files.readString(first.resolve(relative)),
-                    Files.readString(second.resolve(relative)),
+            Assertions.assertEquals(fixture.readSource(relative), second.readSource(relative),
                     "generation must be byte-identical across passes: " + relative);
         }
     }
 
-    private static List<String> relativeNames(Path root) throws Exception {
-        return CompileHarness.javaSourcesUnder(root).stream()
-                .map(p -> root.relativize(p).toString())
-                .sorted()
-                .collect(Collectors.toList());
-    }
-
     @Test
     void theOrphanWriteEnumIsDeletedAndNotRegenerated() throws Exception {
-        Path outputRoot = regenerate();
-
         Assertions.assertFalse(
-                Files.exists(outputRoot.resolve(
+                Files.exists(fixture.sourceRoot().resolve(
                         "hr/hrg/hipster/entityexample/person/entity/Write_.java")),
                 "PersonSummary.Write is a framework surface (G8 rule 1), so no `Write_` may be "
                         + "generated — the orphan is deleted outright, not tombstoned (§ 9/4.1)");
@@ -150,8 +107,8 @@ class ExampleRegenerationTest {
 
     @Test
     void thePaymentMethodHierarchyIsGenerated() throws Exception {
-        Path outputRoot = regenerate();
-        Path packageDir = outputRoot.resolve("hr/hrg/hipster/entityexample/paymentMethod/entity");
+        Path packageDir = fixture.sourceRoot()
+                .resolve("hr/hrg/hipster/entityexample/paymentMethod/entity");
 
         for (String subclass : List.of("BankTransferPaymentMethod", "PayPalPaymentMethod",
                 "CreditCardPaymentMethod", "CryptoPaymentMethod")) {
@@ -165,15 +122,14 @@ class ExampleRegenerationTest {
      *
      * <p>A generation into a clean tree legitimately creates the file, so asserting its absence
      * would be wrong. The invariant that matters is the one § 9/4.9 states: the root's
-     * discriminator wiring — its permitted-subtype list — is never derived or overwritten. This
-     * test therefore regenerates over a copy of the committed tree and asserts the file is
-     * byte-identical afterwards, and separately asserts the committed file still carries the
-     * wiring.</p>
+     * discriminator wiring — its permitted-subtype list — is never derived or overwritten. The shared
+     * fixture regenerates over a copy of the committed tree, and this asserts the file is byte-identical
+     * afterwards, and separately asserts the committed file still carries the wiring.</p>
      */
     @Test
     void theHandWrittenPolymorphicRootEnumIsNeverOverwritten() throws Exception {
-        Path committed = exampleSourceRoot().resolve(
-                "hr/hrg/hipster/entityexample/paymentMethod/entity/PaymentMethod_.java");
+        String relative = "hr/hrg/hipster/entityexample/paymentMethod/entity/PaymentMethod_.java";
+        Path committed = exampleSourceRoot().resolve(relative);
         Assertions.assertTrue(Files.exists(committed), "the hand-written root enum must be present");
         String before = Files.readString(committed);
         Assertions.assertTrue(before.contains("BankTransferPaymentMethod.class"),
@@ -181,43 +137,22 @@ class ExampleRegenerationTest {
         Assertions.assertTrue(before.contains("PaymentMethod_.type"),
                 "including the discriminator field constant");
 
-        // Regenerate over a copy of the committed tree, which is the real in-place situation.
-        Path tree = Files.createTempDirectory("example-inplace");
-        for (Path source : CompileHarness.javaSourcesUnder(exampleSourceRoot())) {
-            Path target = tree.resolve(exampleSourceRoot().relativize(source).toString());
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target);
-        }
-        EntityMetadataGenerator.setGenerationPackages(GENERATED_PACKAGES);
-        // No SQL generation: see regenerate() — the adapters are opt-in and the example does not opt in.
-        EntityMetadataGenerator.setGenerateAdapters(false);
-        try {
-            EntityMetadataGenerator.generate(tree, tree);
-        } finally {
-            EntityMetadataGenerator.setGenerationPackages(List.of());
-            EntityMetadataGenerator.setGenerateAdapters(false);
-        }
-
-        Path regenerated = tree.resolve(
-                "hr/hrg/hipster/entityexample/paymentMethod/entity/PaymentMethod_.java");
-        Assertions.assertEquals(before, Files.readString(regenerated),
+        // The fixture is a copy in which the pass ran in place, which is the real in-place situation.
+        Assertions.assertEquals(before, fixture.readSource(relative),
                 "in-place regeneration must leave the polymorphic root completely untouched");
 
         // The protection is the marker exclusion of § 4.5/G8 rule 0: `PaymentMethod` IS the package
         // marker, so it is never discovered as a view and no enum is generated for it in the first
         // place. `FieldBoilerplateGenerator.isPolymorphicRootEnum` is a second, structural line of
         // defence for the case where a root enum does reach the emitter.
-        Assertions.assertFalse(Files.exists(
-                        tree.resolve("hr/hrg/hipster/entityexample/paymentMethod/entity/PaymentMethod_.java.bak")),
+        Assertions.assertFalse(Files.exists(fixture.sourceRoot().resolve(relative + ".bak")),
                 "nothing is written beside the root enum");
     }
 
     @Test
     void personCreateFormIsEmittedBecauseOfTheViewSeed() throws Exception {
-        Path outputRoot = regenerate();
-
         Assertions.assertTrue(
-                Files.exists(outputRoot.resolve(
+                Files.exists(fixture.sourceRoot().resolve(
                         "hr/hrg/hipster/entityexample/person/entity/PersonCreateForm_.java")),
                 "PersonCreateForm extends NOTHING, so only the @View half of the discovery predicate "
                         + "finds it (§ 4.5/G8 rule 0, task 3.2a)");
@@ -225,9 +160,7 @@ class ExampleRegenerationTest {
 
     @Test
     void theFieldEnumsCarryTheR1MarkerAndAreAppendOnlyLedgers() throws Exception {
-        Path outputRoot = regenerate();
-
-        Path summaryEnum = outputRoot.resolve(
+        Path summaryEnum = fixture.sourceRoot().resolve(
                 "hr/hrg/hipster/entityexample/person/entity/PersonSummary_.java");
         String source = Files.readString(summaryEnum);
 
@@ -245,8 +178,8 @@ class ExampleRegenerationTest {
 
     @Test
     void theTrackingBuilderIsGeneratedForTheBuilderAllView() throws Exception {
-        Path outputRoot = regenerate();
-        Path packageDir = outputRoot.resolve("hr/hrg/hipster/entityexample/person/entity");
+        Path packageDir = fixture.sourceRoot()
+                .resolve("hr/hrg/hipster/entityexample/person/entity");
 
         Assertions.assertTrue(Files.exists(packageDir.resolve("PersonSummaryBuilder.java")),
                 "PersonSummary is @View(gen = BUILDER_ALL), so both builders are emitted");

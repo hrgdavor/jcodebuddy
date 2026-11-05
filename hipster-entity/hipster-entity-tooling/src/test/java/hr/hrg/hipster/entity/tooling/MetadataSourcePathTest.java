@@ -5,13 +5,14 @@ import hr.hrg.hipster.entity.tooling.meta.EntityMeta;
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import hr.hrg.hipster.entity.tooling.meta.ViewMeta;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,9 +35,11 @@ import java.util.Map;
  *   <li><strong>a location, not content</strong>: the metadata names files, it never quotes them.</li>
  * </ul>
  *
- * <p>The pass is run here rather than read from the committed {@code .jcodebuddy/metadata} tree, so the
- * test states the contract instead of whatever a previous pass happened to leave on disk.</p>
+ * <p>The pass is run once in the shared {@link ExamplePassFixture} over a temporary copy of the module
+ * rather than read from the committed {@code .jcodebuddy/metadata} tree, so the test states the contract
+ * instead of whatever a previous pass happened to leave on disk.</p>
  */
+@Tag("generator")
 class MetadataSourcePathTest {
 
     private static final List<String> MARKERS = List.of("Auditable", "PaymentMethod", "Person");
@@ -47,16 +50,21 @@ class MetadataSourcePathTest {
             "src/main/java/hr/hrg/hipster/entityexample/person/entity/PersonSummary.java",
             "src/main/java/hr/hrg/hipster/entityexample/paymentMethod/entity/PaymentMethodAuditable.java");
 
-    /** One pass's roots, the class index it wrote, and the FQN table that index holds. */
-    private record Pass(Path moduleRoot, Path sourceRoot, Path reportDir, Map<String, String> fqnToPath) {
+    private static ExamplePassFixture fixture;
+    private static Pass pass;
 
-        Path indexFile() {
-            return reportDir.resolve("index/classes.json");
-        }
+    @BeforeAll
+    static void generateOnce() throws Exception {
+        fixture = ExamplePassFixture.shared();
+        pass = new Pass(fixture.moduleRoot(), fixture.reportDir(), fixture.indexFile(), fixture.classes());
+    }
+
+    /** One pass's roots, the class index it wrote, and the FQN table that index holds. */
+    private record Pass(Path moduleRoot, Path reportDir, Path indexFile, Map<String, String> fqnToPath) {
 
         String indexJson() throws Exception {
-            Assertions.assertTrue(Files.exists(indexFile()), "the pass must write " + indexFile());
-            return new String(Files.readAllBytes(indexFile()), StandardCharsets.UTF_8);
+            Assertions.assertTrue(Files.exists(indexFile), "the pass must write " + indexFile);
+            return new String(Files.readAllBytes(indexFile), StandardCharsets.UTF_8);
         }
 
         String json(String marker) throws Exception {
@@ -69,44 +77,10 @@ class MetadataSourcePathTest {
             return EntityMetadataGenerator.fromJson(json(marker), fqnToPath);
         }
 
-        /** The index's own `classes` table, read straight from its JSON. */
-        Map<String, String> classes() throws Exception {
-            tools.jackson.databind.JsonNode root =
-                    new tools.jackson.databind.ObjectMapper().readTree(indexJson());
-            Map<String, String> classes = new LinkedHashMap<>();
-            for (var it = root.path("classes").propertyStream().iterator(); it.hasNext(); ) {
-                var entry = it.next();
-                classes.put(entry.getKey(), entry.getValue().path("path").asText());
-            }
-            return classes;
+        /** The index's own `classes` table the pass parsed. */
+        Map<String, String> classes() {
+            return fqnToPath;
         }
-    }
-
-    /**
-     * Runs a real pass over the committed example into a temp report directory.
-     *
-     * <p>The report directory is deliberately outside the module: the module root is then resolved from
-     * the marker above the <em>source root</em>, which is the path DEC-026 § 2 says must win — a nearer
-     * {@code pom.xml} or a report directory somewhere else must not move the base. Generated source goes
-     * to its own temp root, because a report directory holds metadata and never a copy of a source file
-     * ({@code GeneratorGuardTest} asserts that).</p>
-     *
-     * <p>That temp java-output root is also why this pass reports {@code artifact_outside_module} for the
-     * files it emits: an artifact outside the module has no module-relative path, so it is absent from
-     * the index rather than named by a path that would be wrong. The paths this test checks are all
-     * declared under the source root and are unaffected.</p>
-     */
-    private static Pass runPass() throws Exception {
-        Path moduleRoot = CompileHarness.findRepoRoot().resolve("hipster-entity/hipster-entity-example");
-        Path sourceRoot = moduleRoot.resolve("src/main/java");
-        Path reportDir = Files.createTempDirectory("source-path-report");
-        Path javaOut = Files.createTempDirectory("source-path-java");
-        EntityMetadataGenerator.generate(sourceRoot, reportDir, javaOut);
-
-        Map<String, String> fqnToPath = new LinkedHashMap<>();
-        Pass probe = new Pass(moduleRoot, sourceRoot, reportDir, fqnToPath);
-        fqnToPath.putAll(probe.classes());
-        return probe;
     }
 
     /** Checks one recorded path, collecting the reason instead of failing on the first one. */
@@ -164,7 +138,7 @@ class MetadataSourcePathTest {
      */
     @Test
     void theMetadataRecordsPathsNotSourceContent() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         for (String marker : MARKERS) {
             String json = pass.json(marker);
             for (String sourceText : List.of("\\n", "@Override", "public interface ", "public enum ",
@@ -186,7 +160,7 @@ class MetadataSourcePathTest {
     /** Every path the index carries is module-relative and inside the module. */
     @Test
     void everyIndexPathIsModuleRelative() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         List<String> problems = new ArrayList<>();
         int checked = 0;
         for (Map.Entry<String, String> entry : pass.classes().entrySet()) {
@@ -216,7 +190,7 @@ class MetadataSourcePathTest {
      */
     @Test
     void everyRecordedPathIsModuleRelativeAndDeclaresItsOwner() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         List<String> problems = new ArrayList<>();
         int checked = 0;
 
@@ -265,7 +239,7 @@ class MetadataSourcePathTest {
      */
     @Test
     void anInheritedOrAddonFieldCarriesItsOwnDeclaringFile() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         EntityMeta person = pass.meta("Person");
 
         ViewMeta details = person.views().stream()
@@ -294,7 +268,7 @@ class MetadataSourcePathTest {
      */
     @Test
     void aViewOutsideItsMarkersPackageKeepsItsOwnPath() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         EntityMeta auditable = pass.meta("Auditable");
 
         Assertions.assertTrue(auditable.markerSourcePath().endsWith("example/Auditable.java"),
@@ -317,7 +291,7 @@ class MetadataSourcePathTest {
      */
     @Test
     void thePathsAreInTheIndexAndSurviveBeingReadBack() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         String json = pass.json("Person");
         // No document carries a path; each carries a pointer to the table that does.
         for (String key : List.of("\"markerSourcePath\"", "\"sourcePath\"")) {
@@ -344,7 +318,7 @@ class MetadataSourcePathTest {
     /** Without the table the references stay unresolved rather than becoming invented paths. */
     @Test
     void withoutTheIndexReferencesStayUnresolved() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         EntityMeta unresolved = EntityMetadataGenerator.fromJson(pass.json("Person"));
         Assertions.assertNull(unresolved.markerSourcePath(),
                 "a reference with no table to resolve it is not a path, and guessing one would be a wrong "
@@ -364,7 +338,7 @@ class MetadataSourcePathTest {
      */
     @Test
     void aLegacyDocumentIsStillRead() throws Exception {
-        Pass pass = runPass();
+        // The shared pass; see generateOnce().
         // The pre-index spelling: a plain path under the old key.
         String legacyPath = pass.json("Person")
                 .replaceAll("\"markerFile\": \"[^\"]*\"",
@@ -391,22 +365,15 @@ class MetadataSourcePathTest {
         return text.split("\\R", -1).length;
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void renamingATypeUpdatesEveryReferenceThePassWrites() throws Exception {
-        Path moduleRoot = CompileHarness.findRepoRoot().resolve("hipster-entity/hipster-entity-example");
-        Path sourceRoot = moduleRoot.resolve("src/main/java");
-        Path tree = Files.createTempDirectory("source-path-rename");
-        for (Path source : CompileHarness.javaSourcesUnder(sourceRoot)) {
-            Path target = tree.resolve(moduleRoot.relativize(source).toString());
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target);
-        }
-        Path reportDir = tree.resolve(".jcodebuddy/metadata/entity");
-        Files.createDirectories(reportDir);
-        Path renamedRoot = tree.resolve("src/main/java");
+        // A fresh copy, because this test mutates the tree: the shared fixture is read-only, and a rename
+        // and a second pass must never be visible to a test that reads the shared output.
+        ExamplePassFixture renamed = fixture.copyOfShared();
+        Path renamedRoot = renamed.sourceRoot();
+        Path reportDir = renamed.reportDir();
 
         // Before: the type is `PersonDetails`, and the documents name it.
-        EntityMetadataGenerator.generate(renamedRoot, reportDir, renamedRoot);
         String before = Files.readString(reportDir.resolve("Person.metadata.json"), StandardCharsets.UTF_8);
         Assertions.assertTrue(before.contains(".PersonDetails\""),
                 "the fixture must reference the type before the rename, or this test proves nothing");
@@ -434,7 +401,7 @@ class MetadataSourcePathTest {
         Files.move(renamedRoot.resolve("hr/hrg/hipster/entityexample/person/entity/PersonDetails.java"),
                 renamedRoot.resolve("hr/hrg/hipster/entityexample/person/entity/PersonOverview.java"));
 
-        EntityMetadataGenerator.generate(renamedRoot, reportDir, renamedRoot);
+        renamed.runPass();
         String after = Files.readString(reportDir.resolve("Person.metadata.json"), StandardCharsets.UTF_8);
         Assertions.assertFalse(after.contains("PersonDetails"),
                 "no document may keep naming a type that no longer exists: a stale FQN is a dead link the "
@@ -445,7 +412,7 @@ class MetadataSourcePathTest {
                 "which includes the `views[].file` reference, not only the surface name");
 
         // The index followed too: one row for the new FQN on the moved file, and none for the old name.
-        String index = Files.readString(tree.resolve(".jcodebuddy/index/classes.json"), StandardCharsets.UTF_8);
+        String index = Files.readString(renamed.indexFile(), StandardCharsets.UTF_8);
         Assertions.assertFalse(index.contains("PersonDetails"),
                 "the class index is regenerated from the tree, so the old row is gone");
         Assertions.assertTrue(index.contains(".PersonOverview"), "and the new row is there");

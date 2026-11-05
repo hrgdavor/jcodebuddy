@@ -1,20 +1,19 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
-import java.util.stream.Stream;
 
 /**
  * The module's class index is the <strong>only</strong> place a source path is written, and every
@@ -39,13 +38,22 @@ import java.util.stream.Stream;
  *       packages rather than by a hash, a counter or a positional index.</li>
  * </ol>
  */
+@Tag("generator")
 class MetadataFileIdsTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static ExamplePassFixture fixture;
+    private static Module module;
 
-    private static final List<String> GENERATED_PACKAGES = List.of(
-            "hr.hrg.hipster.entityexample.person.entity",
-            "hr.hrg.hipster.entityexample.paymentMethod.entity");
+    @BeforeAll
+    static void generateOnce() throws Exception {
+        fixture = ExamplePassFixture.shared();
+        module = moduleOf(fixture);
+    }
+
+    private static Module moduleOf(ExamplePassFixture source) {
+        return new Module(source.moduleRoot(), source.reportDir(), source.indexFile(), source.index(),
+                source.classes(), source.documents());
+    }
 
     /** One module tree a pass ran in, with the index and documents it left behind. */
     private record Module(Path root, Path reportDir, Path indexFile, JsonNode index,
@@ -58,77 +66,9 @@ class MetadataFileIdsTest {
         }
     }
 
-    /**
-     * Copies the committed example into a temp <em>module</em>, with its {@code src/main/java} layout.
-     *
-     * <p>Relativising against the module (not against the source root) is what keeps the recorded paths
-     * in the {@code src/main/java/…} form the contract specifies — and therefore what lets this test
-     * compare two tables byte for byte: a copy that lost the layout would produce different paths, not a
-     * different answer.</p>
-     */
-    private static Path copyExample(Path parent, String name) throws Exception {
-        Path exampleModule = CompileHarness.findRepoRoot().resolve("hipster-entity/hipster-entity-example");
-        Path exampleRoot = exampleModule.resolve("src/main/java");
-        Path tree = parent.resolve(name);
-        for (Path source : CompileHarness.javaSourcesUnder(exampleRoot)) {
-            Path target = tree.resolve(exampleModule.relativize(source).toString());
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target);
-        }
-        Files.createDirectories(tree.resolve(".jcodebuddy/metadata/entity"));
-        Assertions.assertTrue(Files.isDirectory(tree.resolve("src/main/java")),
-                "the copy must keep the module layout, or the recorded paths are not module-relative: "
-                        + tree);
-        return tree;
-    }
-
-    private static void runPass(Path tree) throws Exception {
-        EntityMetadataGenerator.setGenerationPackages(GENERATED_PACKAGES);
-        EntityMetadataGenerator.setGenerateAdapters(false);
-        try {
-            EntityMetadataGenerator.generate(tree.resolve("src/main/java"),
-                    tree.resolve(".jcodebuddy/metadata/entity"), tree.resolve("src/main/java"));
-        } finally {
-            EntityMetadataGenerator.setGenerationPackages(List.of());
-            EntityMetadataGenerator.setGenerateAdapters(false);
-        }
-    }
-
-    private static Module read(Path tree) throws Exception {
-        Path reportDir = tree.resolve(".jcodebuddy/metadata/entity");
-        Path indexFile = tree.resolve(".jcodebuddy/index/classes.json");
-        Assertions.assertTrue(Files.exists(indexFile), "the pass must write " + indexFile);
-        JsonNode index = MAPPER.readTree(Files.readString(indexFile));
-
-        Map<String, String> classes = new LinkedHashMap<>();
-        for (var it = index.path("classes").propertyStream().iterator(); it.hasNext(); ) {
-            var entry = it.next();
-            classes.put(entry.getKey(), entry.getValue().path("path").asText());
-        }
-
-        Map<String, JsonNode> documents = new LinkedHashMap<>();
-        try (Stream<Path> entries = Files.list(reportDir)) {
-            for (Path document : entries.filter(p -> p.toString().endsWith(".metadata.json")).toList()) {
-                documents.put(document.getFileName().toString(),
-                        MAPPER.readTree(Files.readString(document)));
-            }
-        }
-        Assertions.assertFalse(documents.isEmpty(), "the pass must write documents");
-        return new Module(tree, reportDir, indexFile, index, classes, documents);
-    }
-
-    private static Module pass(Path parent, String name) throws Exception {
-        Path tree = copyExample(parent, name);
-        runPass(tree);
-        return read(tree);
-    }
-
     /** Every reference a document uses resolves in the table, and the table's header is right. */
     @Test
     void everyReferenceResolvesAndTheIndexDescribesItself() throws Exception {
-        Path parent = Files.createTempDirectory("metadata-file-ids");
-        Module module = pass(parent, "hipster-entity-example");
-
         Assertions.assertEquals(ClassIndexAccess.FORMAT, module.index().path("format").asInt(-1),
                 "the table states the version of its own meaning, so a consumer can refuse an unknown one");
         Assertions.assertEquals("hipster-entity-example", module.index().path("module").asText(),
@@ -158,9 +98,6 @@ class MetadataFileIdsTest {
     /** A source path appears in the index — and nowhere else. */
     @Test
     void noSourcePathAppearsOutsideTheIndex() throws Exception {
-        Path parent = Files.createTempDirectory("metadata-no-paths");
-        Module module = pass(parent, "hipster-entity-example");
-
         for (Map.Entry<String, JsonNode> document : module.documents().entrySet()) {
             List<String> problems = new ArrayList<>();
             walk(document.getValue(), document.getKey(), problems);
@@ -183,9 +120,6 @@ class MetadataFileIdsTest {
     /** Each document points at that same table, and the pointer resolves from the document's own directory. */
     @Test
     void everyDocumentPointersAtTheIndex() throws Exception {
-        Path parent = Files.createTempDirectory("metadata-pointer");
-        Module module = pass(parent, "hipster-entity-example");
-
         for (String document : module.documents().keySet()) {
             String pointer = module.documents().get(document).path("classIndex").asText(null);
             Assertions.assertNotNull(pointer, document + " must carry a classIndex pointer");
@@ -237,24 +171,21 @@ class MetadataFileIdsTest {
      */
     @Test
     void theIndexIsDeterministic() throws Exception {
-        Path parent = Files.createTempDirectory("metadata-determinism");
-        Module first = pass(parent.resolve("a"), "hipster-entity-example");
-        byte[] before = Files.readAllBytes(first.indexFile());
+        byte[] before = Files.readAllBytes(module.indexFile());
 
-        runPass(first.root());
-        assertSameBytes(before, Files.readAllBytes(first.indexFile()),
+        Module second = moduleOf(fixture.secondPass());
+        assertSameBytes(before, Files.readAllBytes(second.indexFile()),
                 "a second pass over an unchanged tree must be byte-identical — including every "
                         + "hashCalculatedAt, which is carried forward from the previous table — or a project "
                         + "that commits its metadata gets diff noise from a pass that changed nothing");
 
-        // A fresh copy in a different parent directory, with the same directory name: every row must be
-        // keyed and described identically there.
-        Module second = pass(parent.resolve("b"), "hipster-entity-example");
-        Assertions.assertEquals(normaliseTimestamps(module1Json(first)),
+        // The second pass runs in a different parent directory, with the same module name: every row must
+        // be keyed and described identically there.
+        Assertions.assertEquals(normaliseTimestamps(module1Json(module)),
                 normaliseTimestamps(module1Json(second)),
                 "the table must not depend on visit order or on the absolute location of the tree: the only "
                         + "value allowed to differ is a first-hash timestamp, and it is normalised here");
-        Assertions.assertTrue(normalisedTimestampCount(module1Json(first)) > 30,
+        Assertions.assertTrue(normalisedTimestampCount(module1Json(module)) > 30,
                 "and the normalisation must apply to real rows rather than to an empty table");
     }
 
@@ -282,9 +213,6 @@ class MetadataFileIdsTest {
      */
     @Test
     void sameNamedTypesAreDistinguishedByTheirPackage() throws Exception {
-        Path parent = Files.createTempDirectory("metadata-disambiguation");
-        Module module = pass(parent, "hipster-entity-example");
-
         Map<String, String> expected = Map.of(
                 "hr.hrg.hipster.entityexample.person.entity.Person",
                 "src/main/java/hr/hrg/hipster/entityexample/person/entity/Person.java",
@@ -307,9 +235,6 @@ class MetadataFileIdsTest {
     /** A declared member type is its own row, so a document may reference it by FQN. */
     @Test
     void memberTypesHaveTheirOwnRows() throws Exception {
-        Path parent = Files.createTempDirectory("metadata-member-types");
-        Module module = pass(parent, "hipster-entity-example");
-
         String nested = "hr.hrg.hipster.entityexample.person.entity.PersonSummary.Record";
         JsonNode row = module.index().path("classes").path(nested);
         Assertions.assertFalse(row.isMissingNode(),
@@ -386,8 +311,6 @@ class MetadataFileIdsTest {
     /** Guard against a silently empty table: at least one row per document's own marker. */
     @Test
     void theIndexIsNotATruncatedTable() throws Exception {
-        Path parent = Files.createTempDirectory("metadata-index-size");
-        Module module = pass(parent, "hipster-entity-example");
         for (Map.Entry<String, JsonNode> document : module.documents().entrySet()) {
             String markerFqn = document.getValue().path("markerFile").asText(null);
             Assertions.assertNotNull(markerFqn, document.getKey() + " must name its marker by FQN");
