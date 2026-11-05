@@ -296,12 +296,13 @@ the fast lane is green and under its target (or the miss is reported with the re
 | F0   | `scripts/test-cost.js` reads Surefire XML, reports totals/rankings, supports `--module`, `--json`, `--top`; duration last line | 542 / 490.8 s baseline reproduced; `--top 6 of 83` verified |
 | F1   | `generator` / `compiler` / `completeness` tags; root `fast-tests` profile (`excludedGroups`); `mvn-fast --fast` | 542 tests in the default suite; fast lane ran 264 tooling unit tests + dependencies |
 | F2   | `ExamplePassFixture` shared once per JVM; five classes converted (plus `ExampleConverterManifestTest` tagged only) | Baseline six **309.9 s → 73.6 s**; all 33 five-class tests preserved; full suite 542 |
-| F3   | `MigrationCompletenessTest` parses the reactor once in `@BeforeAll`                     | **62.2 s → 30.1 s**; three tests unchanged                                           |
+| F3   | `MigrationCompletenessTest` parses the reactor once in `@BeforeAll`                     | **62.2 s → 30.1–32.8 s** across runs (the ≤30 s aim is at the edge of the variance); three tests unchanged |
 | F4   | `parallel-tests` profile, `forkCount=4`, `reuseForks=true`; `mvn-fast --parallel-tests` | three consecutive green runs: **1:55, 1:51, 1:49** (542 tests each)                  |
 | F5   | `--fast` scoped to the tooling module + `-am` deps; `--parallel-tests`; root README and `codebuddy.md` updated | fast lane **45.6 s**; `--fast --tests ContentHashTest` **1.3 s**; `--tests EntityBuildStateTest` **10.5 s** |
 | F6   | measured budget recorded here and in the module docs                                    | serial class time **272.0 s**; parallel wall **1:49–1:55**; no test removed          |
 
 **The one target that moved:** the plan's full-suite target was 240 s. The **serial** suite is 272.0 s of
-class time (4:32 wall), because the remaining generator/compiler tests are individually small but numerous.
+class time (4:32 wall; recorded gate **4:59** including all 18 modules), because the remaining
+generator/compiler tests are individually small but numerous.
 The four-fork profile meets 240 s (1:49–1:55) and is the measured opt-in lane, not the default: a 4-fork
 JVM set is not free on a smaller machine. The daily loop is the fast lane (45.6 s), not the full suite.
