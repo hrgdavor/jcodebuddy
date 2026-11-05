@@ -67,13 +67,15 @@ const TOOLING = join(REPO, 'hipster-entity', 'hipster-entity-tooling');
 /** The lines worth showing after a pass; the full log stays on disk. */
 const REPORT_KEYS = [
   'preflight ok', 'source root', 'Writing generated java', 'HTML entity index',
-  'Link check', 'Divergences:', 'Validation:', 'divergences', 'BUILD',
+  'Link check', 'Divergences:', 'Validation:', 'divergences', 'BUILD', 'check:',
 ];
 
 function usage() {
   console.log(`gen.js — run the entity generator as a side tool (not a build step)
 
   bun scripts/gen.js                   regenerate, then render the HTML entity index
+  bun scripts/gen.js --full            force a full pass
+  bun scripts/gen.js --check           verify in a temp tree without writing
   bun scripts/gen.js with-tests        regenerate, then the entity test set
   bun scripts/gen.js watch             regenerate now, then on every save (Ctrl+C stops it)
   bun scripts/gen.js <maven args...>   forwarded to the entity module set
@@ -177,6 +179,10 @@ function main() {
 
   const isWatch = argv[0] === 'watch';
   const isTests = argv[0] === 'with-tests';
+  const isCheck = argv.includes('--check');
+  const isFull = argv.includes('--full');
+  const modeArgs = argv.filter((arg) => arg === '--check' || arg === '--full' || arg === '--incremental');
+  const forwarded = argv.filter((arg) => !modeArgs.includes(arg));
 
   const logPath = join(AGENT_STATE, isWatch ? 'watch.log' : 'gen.log');
   writeFileSync(logPath, `[gen] ${new Date().toISOString()}  bun ${Bun.version}\n`);
@@ -209,8 +215,8 @@ function main() {
   }
 
   // --- forwarded arguments: the gate's shortcut with the caller's goals ---------------------------
-  if (!isTests && argv.length > 0) {
-    const gate = buildGateArgs(['hipster-entity', ...argv]);
+  if (!isTests && !isCheck && forwarded.length > 0) {
+    const gate = buildGateArgs(['hipster-entity', ...forwarded]);
     if (gate.error) {
       console.error(splitPropertyAdvice('gen', gate.error));
       return 2;
@@ -264,9 +270,29 @@ function main() {
     SOURCE_ROOT, METADATA_DIR, '--java-out', SOURCE_ROOT, '--packages', PACKAGES, '--validate=STRICT',
     '--dto-projections',
     '--mapper', 'PersonSummary:PersonDto',
+    ...(isCheck ? ['--check'] : isFull ? ['--full'] : ['--incremental']),
     '--run-record', join(METADATA_DIR, 'generation.json')], { logPath, env });
   if (status !== 0) {
     return report(logPath, status);
+  }
+  if (isCheck) {
+    return report(logPath, status);
+  }
+
+  // An incremental no-op must not re-render the HTML index: the page reads the metadata JSON, which
+  // the no-op deliberately left alone. Re-rendering would turn a one-line "no changes" into a full
+  // page generation and hide the fact that nothing ran.
+  const recordPath = join(METADATA_DIR, 'generation.json');
+  if (existsSync(recordPath)) {
+    const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+    if (record.mode === 'noop') {
+      console.log('[gen] generation: no-op; HTML index left unchanged');
+      return report(logPath, status);
+    }
+    if (record.mode) {
+      console.log(`[gen] generation: ${record.mode}`
+        + (record.emitted != null ? `, emitted ${record.emitted}, reused ${record.reused}` : ''));
+    }
   }
 
   return report(logPath, htmlIndex(logPath));

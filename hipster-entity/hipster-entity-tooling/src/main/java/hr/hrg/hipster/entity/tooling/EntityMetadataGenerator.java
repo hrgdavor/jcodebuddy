@@ -67,7 +67,7 @@ public class EntityMetadataGenerator {
     public static final List<String> SUPPORTED_FLAGS = List.of(
             "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper", "--merge",
             "--adapters", "--patch-appliers", "--dto-projections", "--run-record", "--force",
-            "--incremental", "--full", "--version");
+            "--incremental", "--full", "--check", "--version");
 
     /**
      * The flags every documented invocation of this generator passes.
@@ -838,6 +838,7 @@ public class EntityMetadataGenerator {
         Path runRecord = null;
         boolean incrementalRequested = false;
         boolean fullRequested = false;
+        boolean checkRequested = false;
         long startedAt = System.currentTimeMillis();
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -909,6 +910,10 @@ public class EntityMetadataGenerator {
                 // never implied — losing a developer's edit to a generated block is silent. See
                 // CooperativeCodegen.setForce.
                 CooperativeCodegen.setForce(true);
+            } else if ("--check".equals(arg)) {
+                // The dry run a driver project's CI needs: a full reference pass into a temporary copy,
+                // compared with the committed generated source and manifest. It writes nothing here.
+                checkRequested = true;
             } else if ("--incremental".equals(arg)) {
                 // Plan step E2: answer from the fs-meta build state before any parse. The pass that runs
                 // when the state says either "incremental" or "full" is still the existing full pass in
@@ -933,7 +938,9 @@ public class EntityMetadataGenerator {
 
         if (positional.size() < 2) {
             printUsage();
-            System.exit(1);
+            // Usage is distinct from a stale tree: a caller that scripts --check needs to tell them
+            // apart, and the generator's own contract says 2 for usage.
+            System.exit(2);
         }
 
         Path inputPath = Path.of(positional.get(0));
@@ -944,6 +951,11 @@ public class EntityMetadataGenerator {
         Path javaOutputRoot = inputPath.toString().endsWith(".java")
                 ? sourceRoot
                 : (javaOutputOverride != null ? javaOutputOverride : outputDir);
+
+        if (checkRequested) {
+            // `--check` is a comparison, not a pass: the temporary tree is the only thing written.
+            System.exit(checkGeneratedSource(sourceRoot, outputDir, javaOutputRoot));
+        }
         // The incremental decision needs every output-changing flag, so it is built here and asked before
         // the pass (and therefore before runValidation or any parse). `--incremental`/`--full` are
         // invocation-local values, not static flags: a watcher or a test that calls main() in-process must
@@ -1672,6 +1684,119 @@ public class EntityMetadataGenerator {
             return report;
         } finally {
             activeDivergences = null;
+        }
+    }
+
+    /**
+     * Plan E5's `--check`: a full reference pass into a temporary copy, compared with the committed
+     * generated source and the tracked converter manifest. Nothing under the real source or
+     * {@code .jcodebuddy/} is written.
+     *
+     * @return {@code 0} when current, {@code 1} when any file differs or is missing
+     */
+    public static int checkGeneratedSource(Path sourceRoot, Path outputDir, Path javaOutputRoot) {
+        Path temp = null;
+        try {
+            temp = Files.createTempDirectory("entity-check-");
+            Path tempSource = temp.resolve("src");
+            Path tempReport = temp.resolve(".jcodebuddy").resolve("metadata").resolve("entity");
+            copyJavaTree(sourceRoot, tempSource);
+            // Generate in place inside the temporary module: an output tree outside the module is
+            // refused by the class index, and the comparison needs the artifacts registered there.
+            generate(tempSource, tempReport, tempSource);
+
+            List<String> differences = new ArrayList<>();
+            Map<String, byte[]> generated = readJavaTree(javaOutputRoot);
+            generated.entrySet().removeIf(entry -> !isGeneratedSource(
+                    new String(entry.getValue(), java.nio.charset.StandardCharsets.UTF_8)));
+            Map<String, byte[]> reference = readJavaTree(tempSource);
+            reference.entrySet().removeIf(entry -> !isGeneratedSource(
+                    new String(entry.getValue(), java.nio.charset.StandardCharsets.UTF_8)));
+            for (Map.Entry<String, byte[]> entry : reference.entrySet()) {
+                byte[] committed = generated.get(entry.getKey());
+                if (committed == null) {
+                    differences.add("missing committed generated file: " + entry.getKey());
+                } else if (!java.util.Arrays.equals(committed, entry.getValue())) {
+                    differences.add("generated source differs: " + entry.getKey());
+                }
+            }
+            for (Map.Entry<String, byte[]> entry : generated.entrySet()) {
+                if (!reference.containsKey(entry.getKey())) {
+                    differences.add("stale generated file (no longer produced): " + entry.getKey());
+                }
+            }
+
+            Path tempConf = temp.resolve(".jcodebuddy").resolve("conf").resolve("converters.json");
+            Path committedConf = jcodebuddyRoot(outputDir) == null
+                    ? null
+                    : jcodebuddyRoot(outputDir).resolve("conf").resolve("converters.json");
+            byte[] tempManifest = Files.isRegularFile(tempConf) ? Files.readAllBytes(tempConf) : null;
+            byte[] committedManifest = committedConf != null && Files.isRegularFile(committedConf)
+                    ? Files.readAllBytes(committedConf) : null;
+            if (!java.util.Arrays.equals(tempManifest, committedManifest)) {
+                differences.add("tracked converter manifest differs: conf/converters.json");
+            }
+
+            if (differences.isEmpty()) {
+                System.out.println("check: generated source and converter manifest are current");
+                return 0;
+            }
+            for (String difference : differences) {
+                System.out.println("check: " + difference);
+            }
+            System.out.println("check: " + differences.size() + " difference(s); run the generator without --check");
+            return 1;
+        } catch (IOException | RuntimeException failure) {
+            System.err.println("check: could not complete the reference pass: " + failure.getMessage());
+            return 1;
+        } finally {
+            deleteTree(temp);
+        }
+    }
+
+    private static void copyJavaTree(Path from, Path to) throws IOException {
+        try (var walk = Files.walk(from)) {
+            for (Path file : walk.filter(path -> path.toString().endsWith(".java")).toList()) {
+                Path target = to.resolve(from.relativize(file).toString());
+                Files.createDirectories(target.getParent());
+                Files.copy(file, target);
+            }
+        }
+    }
+
+    private static Map<String, byte[]> readJavaTree(Path root) throws IOException {
+        Map<String, byte[]> files = new TreeMap<>();
+        if (!Files.isDirectory(root)) {
+            return files;
+        }
+        try (var walk = Files.walk(root)) {
+            for (Path file : walk.filter(path -> path.toString().endsWith(".java")).toList()) {
+                String relative = root.relativize(file).toString().replace('\\', '/');
+                files.put(relative, Files.readAllBytes(file));
+            }
+        }
+        return files;
+    }
+
+    private static Path jcodebuddyRoot(Path start) {
+        for (Path at = start == null ? null : start.toAbsolutePath(); at != null; at = at.getParent()) {
+            if (at.getFileName() != null && ".jcodebuddy".equals(at.getFileName().toString())) {
+                return at;
+            }
+        }
+        return null;
+    }
+
+    private static void deleteTree(Path root) {
+        if (root == null || !Files.exists(root)) {
+            return;
+        }
+        try (var walk = Files.walk(root)) {
+            for (Path path : walk.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException ignored) {
+            // A temp directory that cannot be removed is not a result; the comparison already ran.
         }
     }
 

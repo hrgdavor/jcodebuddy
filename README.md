@@ -94,7 +94,9 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 | `scripts/mvn-fast.js --tests SomeTest`        | the same, narrowed to one test class (adds `-Dtest=` and `-Dsurefire.failIfNoSpecifiedTests=false`; the cache is still read, just never written) |
 | `scripts/mvn-fast.js --no-clean`              | iterate without letting Maven touch the tree (likewise: reads cached, never saves)                  |
 | `scripts/mvn-fast.js --off-cache`             | no cache reuse at all, for when a result surprises you                                              |
-| `scripts/gen.js`                              | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install` |
+| `scripts/gen.js`                              | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install`. Passes `--incremental` by default; a no-op does not re-render the HTML index |
+| `scripts/gen.js --full`                       | force a full pass instead of the incremental default                                                |
+| `scripts/gen.js --check`                      | verify the committed generated source and converter manifest in a temporary tree; write nothing, exit `0` current / `1` stale |
 | `scripts/gen.js with-tests`                   | the same pass, then the entity test set                                                             |
 | `scripts/gen.js watch`                        | the same pass, then regenerate on every save (long-running, Ctrl+C to stop)                         |
 | `scripts/test-cost.js`                        | read `target/surefire-reports/TEST-*.xml` (no Maven, no Java parsing) and report per-module classes, tests and seconds plus the slowest classes and methods. `--module <name>` narrows the set; `--json` prints a machine-readable object |

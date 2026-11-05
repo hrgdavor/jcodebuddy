@@ -1,6 +1,6 @@
 # hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
 
-**Status: 2026-11-05 — E0–E4 done; E5 next.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-05 — E0–E5 done; E6 next.** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
 practical. **Watch mode is deliberately out of scope**: the existing watcher path
@@ -351,6 +351,13 @@ Complete the command surface:
 **Gate:** `bun scripts/gen.js` twice leaves the second run a no-op; `--check` exits 0 on the committed
 example and 1 after a deliberate generated-file edit, with the file named; `--full` still regenerates;
 `--run-record` carries `mode`, `changed`, `affected`, `emitted`, `reused` and `fallbackReason`.
+
+**Done 2026-11-05.** `--check` copies the `.java` tree into a temp module, runs a full pass there, and
+compares the generated files (DEC-021 header only) and `conf/converters.json`; `CheckCommandTest` proves a
+current tree is 0, an edited view is 1, and the committed file is untouched. `scripts/gen.js` now passes
+`--incremental` by default, forwards `--full`, passes `--check` through, and skips the HTML render on a
+no-op. The example's first run records `full, emitted 12, reused 0`, the second `no-op` with no HTML
+rewrite, and `--check` exits 0 on the committed tree.
 
 ### E6 — Prove the fallback matrix and byte-equality (M)
 **Who:** agent · **Depends:** E5
