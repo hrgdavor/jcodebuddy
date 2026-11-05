@@ -1,6 +1,6 @@
 # hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
 
-**Status: 2026-11-05 — E0–E6 done; E7 next.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-05 — E0–E7 done; E8 next.** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
 practical. **Watch mode is deliberately out of scope**: the existing watcher path
@@ -397,6 +397,13 @@ Write the user-facing half:
 
 **Gate:** `node scripts/check-repo-links.mjs` passes; the documented commands are the ones the E5/E8
 checks run; the tables are normalised with `md-fix-tables` (or the run reports that the tool was missing).
+
+**Done 2026-11-05.** Added [`user/incremental-build.md`](../doc-hipster-entity/user/incremental-build.md)
+(state, modes, fallback matrix, `--check`, postponed watch mode) and
+[`user/mvp-surface.md`](../doc-hipster-entity/user/mvp-surface.md) (what the MVP proves, what stays
+opt-in or draft). Updated the user index, both getting-started guides, the example's `codebuddy.md`, the
+root README's status links and DEC-052's fallback/inputs wording. Link check: 299 files, all relative links
+resolve; tables normalised.
 
 ### E8 — Clean-consumer acceptance (M)
 **Who:** agent · **Depends:** E7

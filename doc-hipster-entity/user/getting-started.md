@@ -109,10 +109,16 @@ this repository the one-command way is
 [`bun scripts/gen.js`](../../bun scripts/gen.js):
 
 ```bat
-bun scripts/gen.js              rem regenerate (compile-only: no jars, no install)
+bun scripts/gen.js              rem incremental (first run is full) + HTML index
+bun scripts/gen.js --full       rem force the reference pass
+bun scripts/gen.js --check      rem verify in a temp tree; writes nothing
 bun scripts/gen.js with-tests   rem regenerate, then run the entity test set
 bun scripts/gen.js watch        rem regenerate on every save (Ctrl+C stops it)
 ```
+
+`gen.js` passes `--incremental` by default. An unchanged tree is a one-line no-op and does not re-render the
+HTML index; a changed existing file emits only the views that name it. The fallback rules, the state
+directory and the postponed watch mode are in [Incremental generation](incremental-build.md).
 
 The script compiles the tooling in the reactor, exports the classpath with
 Maven's `dependency:build-classpath` (which maps a reactor dependency to
@@ -146,6 +152,10 @@ who already has a jar.)
 - `--packages a.b,c.d` restricts **generation** to those packages (it
   does not restrict indexing, so cross-package supertypes and addons
   stay resolvable). Omitting it generates everything.
+- `--incremental` answers from the one-shot state before parsing: unchanged tree is a no-op, an existing
+  file change emits only affected views, and an add/remove/rename or a changed flag falls back to a full
+  pass. `--full` forces the reference pass. `--check` runs a full pass into a temp tree and compares the
+  committed output without writing. See [Incremental generation](incremental-build.md).
 - `--adapters` additionally emits the positional JDBC adapter and
   binder classes next to each view. This one is **[draft/exploration,
   opt-in]**: SQL generation is not a supported generator, it runs only

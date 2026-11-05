@@ -132,10 +132,24 @@ generator, pipes the pass to `.jcodebuddy/agent-state/gen.log`, and prints just
 the lines that matter — the preflight, the resolved root, where the Java went, the
 validation result, the divergence count, and the build status.
 
-A pass prints `Generating only for packages: …`, `Writing generated java to: …`,
-`[index] N type(s) in classes.json — a added, c content change(s), r removed, n renamed`,
-`Validation: no issues in …`, rewrites the 15 generated files in place, the class index and the
-metadata JSON, and leaves `git status` clean when nothing changed.
+The generator is **incremental by default** here: `gen.js` passes `--incremental`, and an unchanged tree
+prints a one-line no-op and does not re-render the HTML index. An existing-file edit emits only the views
+whose `views[].inputs` name the changed FQNs. A pass prints `Generating only for packages: …`,
+`Writing generated java to: …`, `[index] N type(s) in classes.json — a added, c content change(s), r removed, n renamed`,
+`Validation: no issues in …`, rewrites the affected generated files in place, the class index and the
+metadata JSON, and leaves `git status` clean when nothing changed. Use `bun scripts/gen.js --full` for the
+reference pass; the state and fallback matrix are in
+[`doc-hipster-entity/user/incremental-build.md`](../../doc-hipster-entity/user/incremental-build.md).
+
+### 3.1.1 Verify without writing
+
+```bat
+bun scripts/gen.js --check
+```
+
+Copies the `.java` tree into a temporary module, runs a full reference pass there, and compares the
+generated files and `.jcodebuddy/conf/converters.json` with the committed tree. Exit `0` is current, `1`
+is stale and names the files; nothing in this module is written.
 
 ### 3.2 Regenerate *and* verify
 
@@ -163,10 +177,12 @@ dependencies, and activates the Maven profile `fast-tests`, which excludes the
 `generator`, `compiler` and `completeness` test groups: the tests that run a full
 pass, invoke javac, or walk the reactor. That makes it the right command for the
 edit loop and **not the recorded gate** — `bun scripts/mvn-jdk25.js` still runs
-every test, the excluded groups included, and is what to run before a commit. The
-byte-identical check in § 3.2 is one of the `generator` tests, so the fast lane
-skips it; run § 3.2 (or the gate) before committing a generator change. `--fast`
-also withholds the build cache's *save* (`-Dmaven.build.cache.skipSave=true`); the
+every test, the excluded groups included. A generator change still gets its
+targeted test classes (`generator`/`compiler`) before commit; the **full suite is
+on request only** under the AGENTS affected-test policy. The byte-identical check
+in § 3.2 is one of the `generator` tests, so the fast lane skips it; run § 3.2 (or
+the affected generator set) before committing a generator change. `--fast` also
+withholds the build cache's *save* (`-Dmaven.build.cache.skipSave=true`); the
 cache itself is never turned off.
 
 Measured on 2026-11-05: the fast lane is **45.6 s** (264 tooling unit tests plus

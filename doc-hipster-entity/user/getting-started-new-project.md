@@ -203,8 +203,8 @@ java -cp hipster-entity-tooling.jar hr.hrg.hipster.entity.tooling.EntityMetadata
      --packages com.example.person.entity
 ```
 
-| Argument                             | Meaning |
-| ------------------------------------ | ------- |
+| Argument                             | Meaning                                                                                 |
+| ------------------------------------ | --------------------------------------------------------------------------------------- |
 | positional 1                         | the source root, or a single `.java` file — for a file, the tool searches upward for `src/main/java` or `src/test/java` to derive the root |
 | positional 2                         | the output directory for the metadata JSON. The convention is the module's own `.jcodebuddy/metadata/entity` — the `.jcodebuddy/` directory is the marker that says "this module uses JCodeBuddy", and only modules that apply `project-automation` have one |
 | `--java-out <dir>`                   | **where the generated `.java` goes.** Without it, generated source is written into positional 2 — the *metadata* directory — which is almost never what you want. Passing your source root here is what makes the generated files land next to the view; it is the flag every pass passes, including this repository's `bun scripts/gen.js` |
@@ -212,6 +212,9 @@ java -cp hipster-entity-tooling.jar hr.hrg.hipster.entity.tooling.EntityMetadata
 | `--validate[=OFF\|REPORT\|STRICT]`   | run the entity rules before writing anything. Bare `--validate` = `REPORT` (print the issues, keep going); `STRICT` refuses to write until they are fixed; `OFF` is the default for a library caller |
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two views. Repeatable; defaults to class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
 | `--adapters`                         | **[draft/exploration, opt-in]** also emit the JDBC `<View>RowAdapter` and `<View>Binder` classes. Off unless given; not a supported generator — see [the JDBC pattern](patterns/jdbc-row-adapter.md) |
+| `--incremental`                      | use the disposable `fs-meta` state: no-op when unchanged, selective emission for an existing-file edit, full pass for an add/remove/rename, a changed flag or a hand-edited generated file |
+| `--full`                             | force the reference pass (also the generator's default when neither mode flag is given) |
+| `--check`                            | run a full pass into a temporary copy and compare the committed generated `.java` and `conf/converters.json`; write nothing, exit `0` current / `1` stale |
 
 Generated **Java** goes back into the source tree next to the view when
 `--java-out` points there, using the underscore-suffix convention:
@@ -224,6 +227,11 @@ The metadata JSON is named after the entity's marker and written to positional 2
 
 Flags may appear anywhere after the two positionals, and
 `--packages=a.b` is accepted too.
+
+For the edit loop, `--incremental` (or `bun scripts/gen.js`, which passes it) is the default in this
+repository; `--full` is the escape hatch and `--check` is the CI form. The state is disposable and ignored,
+and an incremental result is expected to be byte-identical to a full pass. See
+[Incremental generation](incremental-build.md).
 
 **How this fits a Maven build.** The generator is a **side tool**: it uses no
 annotation processing and no compile hook, and nothing is bound to a

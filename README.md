@@ -21,7 +21,9 @@ Two audiences read this repository, and neither should have to guess which half 
   [`getting-started-new-project.md`](doc-hipster-entity/user/getting-started-new-project.md) to add it to an
   existing build. The guide is indexed in [`user/README.md`](doc-hipster-entity/user/README.md), with recipes under
   [`user/patterns/`](doc-hipster-entity/user/patterns/README.md) (builders, CRUD views, Jackson, JDBC, deep change
-  tracking) and answers in [`user/faq.md`](doc-hipster-entity/user/faq.md).
+  tracking) and answers in [`user/faq.md`](doc-hipster-entity/user/faq.md). The current MVP surface and the
+  incremental edit loop are in [`user/mvp-surface.md`](doc-hipster-entity/user/mvp-surface.md) and
+  [`user/incremental-build.md`](doc-hipster-entity/user/incremental-build.md).
 - **Working on JCodeBuddy itself** — the architecture half is
   [`doc-hipster-entity/architecture/README.md`](doc-hipster-entity/architecture/README.md), its table of contents is
   [`architecture/TOC.md`](doc-hipster-entity/architecture/TOC.md), and the decisions that govern a change are indexed

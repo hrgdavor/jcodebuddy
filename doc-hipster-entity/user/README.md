@@ -15,6 +15,8 @@ Use this folder for guides that help users adopt and use the library, including:
 - [Why hipster-entity](why-hipster-entity.md)
 - [Getting Started](getting-started.md)
 - [Getting started in a new project](getting-started-new-project.md)
+- [Incremental generation](incremental-build.md)
+- [The MVP surface](mvp-surface.md)
 - [Core Concepts](core-concepts.md)
 - [Materialization Guide](materialization-guide.md)
 - [Patterns and examples](patterns/README.md)
