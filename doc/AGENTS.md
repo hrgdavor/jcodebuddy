@@ -36,12 +36,29 @@ gate lives in `scripts/lib/gate.js`, and `GateContractTest` asserts it — and
 asserts, deliberately, that the gate does **not** switch the build cache off (the maintainer's decision of
 2026-10-03, with the reasoning at `BUILD_CACHE_NOTE` in that file).
 
-**Iterate with `bun scripts/mvn-fast.js`; verify with the gate.** The fast path is the same module set with the build
+**Iterate with `bun scripts/mvn-fast.js`; verify with the gate — except for hipster-entity work, where
+the default is the affected test lane and the full suite is on request.** The fast path is the same module set with the build
 cache on (`.mvn/extensions.xml`), incremental compilation at Maven's default, and modules built in parallel. It
 exists because test execution dominates a warm run — measured at 12:43 for `-pl <mods> -am test` with the cache off —
 and because a cached module's compile, test and jar phases are restored instead of re-run. Its goal is `package`, not
 `test`: `package` runs the tests anyway, and it is what puts a JAR in `target/`, without which the next module in the
 reactor cannot resolve its sibling.
+
+**Hipster-entity work is test-selective; the full suite is on demand.** The rule is stated in
+[`AGENTS.md`](../AGENTS.md) § 2, "Testing hipster-entity: affected tests by default, the full suite on request".
+For work confined to `hipster-entity/` and the changes whose blast radius is confined to it:
+
+- default to `bun scripts/test-affected.js` once T4 of
+  [`plans/incremental-test-selection.md`](../plans/incremental-test-selection.md) lands; until then use
+  `bun scripts/mvn-fast.js --fast` and `--tests <Class>` for the changed surface;
+- do **not** run `bun scripts/mvn-jdk25.js` speculatively, and do not run it merely because a plan step's gate
+  names the full suite — record the full gate as **not run, on demand** and report the targeted/affected tests
+  that did run;
+- run the full gate when the user explicitly asks in the current turn (including "the gate" or "the full
+  suite"), and record its result;
+- never call a run "gate green" unless `bun scripts/mvn-jdk25.js` actually ran.
+
+This does not change the gate's definition, only **when** it is invoked.
 
 **Scratch goes in `.tmp/` at the repository root — never under `target/`.** `clean` runs on every gate invocation, so
 a scratch script written under `target/` is deleted by the very command that verifies the work it enabled; `.tmp/` is

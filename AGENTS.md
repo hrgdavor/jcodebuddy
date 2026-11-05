@@ -418,6 +418,20 @@ canonical statement of a boundary that has no other home.
   [`doc/AGENTS.md`](doc/AGENTS.md): a command-line `-Dtest=` filter is **not** part of the checksum, so a narrowed run
   must withhold the *save* (`-Dmaven.build.cache.skipSave=true`) rather than the cache; and a run that produces nothing
   (`validate`) must not populate it.
+
+### Testing hipster-entity: affected tests by default, the full suite on request
+
+While working on `hipster-entity/` (and supporting changes whose blast radius is confined to it), the default
+test loop is **incremental and affected**, not the full gate. This is the maintainer's rule of 2026-11-05 and it
+supersedes the "iterate fast, then verify with the gate" habit **for this scope**.
+
+- **Default loop:** run `bun scripts/test-affected.js` once the incremental selector exists ([plan T4](plans/incremental-test-selection.md)). Until then, run `bun scripts/mvn-fast.js --fast`; when a known class is touched, narrow it with `bun scripts/mvn-fast.js --tests <Class>`. Use `bun scripts/test-cost.js --module hipster-entity-tooling` to choose what to run.
+- **The full suite is on request only.** `bun scripts/mvn-jdk25.js` is not run speculatively. Run it only when the user explicitly asks for the full suite or "the gate" in the current turn. **A plan step's gate that names the full suite is not itself a request**: run the affected/targeted tests, record the full gate as **not run, on demand**, and say so in the result. When the user asks, run it and record the result.
+- **A generator or compiler change still gets its own tests.** The affected-unit selector is not a substitute for a generator pass; run the relevant `@Tag("generator")` / `@Tag("compiler")` classes with `--tests` (or the fast lane if the change is broad). The point is to avoid the full 18-module suite, not to avoid test evidence.
+- **Report honestly.** Name the tests that ran and state that the full suite was not run. Never say "gate green" unless `bun scripts/mvn-jdk25.js` actually ran.
+- **No watcher.** `test-affected` is one-shot; do not start a watch loop. Watch mode remains postponed.
+- **Scope.** This changes the default for hipster-entity work. A change to a shared build, gate or test-selection file still uses the affected/targeted suite by default; the full suite stays an on-demand action. A release or merge request that explicitly asks for the full suite is the normal moment to run it.
+
 - **`proto/` holds driver projects, and it is not part of this
   repository.** It exists because JCodeBuddy is under heavy
   development and is driven through **real projects**. A driver

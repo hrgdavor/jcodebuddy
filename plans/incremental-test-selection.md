@@ -1,9 +1,9 @@
 # Incremental unit-test selection — a test dependency index over `fs-meta`
 
-**Status: 2026-11-05 — proposed; inventory measured, no step started.** This plan makes the edit loop
-retest **only the unit tests that depend on the files that changed**, using the same content hashes and
-change-set primitives as the incremental entity build. It does not replace the fast lane or the gate: it
-adds a narrower, dependency-aware layer for the tests that are genuinely local.
+**Status: 2026-11-05 — proposed; inventory measured, no step started.** The policy is now recorded in
+[`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to the affected/fast lane, and the full suite is
+run only on request. This plan builds the selector that makes "affected" precise. It does not replace the
+fast lane or the gate: it adds a narrower, dependency-aware layer for the tests that are genuinely local.
 
 The problem is not "tests are slow" any more ([`faster-java-tests.md`](faster-java-tests.md) cut the
 baseline six classes from 309.9 s to 73.6 s). The remaining problem is that the fast lane still runs every
