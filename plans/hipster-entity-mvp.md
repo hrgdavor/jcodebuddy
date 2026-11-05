@@ -1,6 +1,6 @@
 # hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
 
-**Status: 2026-11-05 — E0–E5 done; E6 next.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-05 — E0–E6 done; E7 next.** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
 practical. **Watch mode is deliberately out of scope**: the existing watcher path
@@ -371,6 +371,15 @@ write counter or mtime check proving that an unaffected file is not rewritten.
 
 **Gate:** every row of the matrix has a test; every incremental result is byte-identical to a full pass;
 the tests name the fallback reason; the tooling README and DEC-052 carry the same matrix.
+
+**Done 2026-11-05.** The state rows were already `EntityBuildStateTest` (add/delete/corrupt/unknown
+format/fingerprint/`--adapters`, validation clean/reported); E6 adds the generated-file row in
+`IncrementalFallbackTest` (a hand-edited `PersonDetails_` forces a full pass, names the reason and is
+restored) and a mapper-endpoint incremental case in `IncrementalEmissionTest` (the mapper is re-emitted and
+the tree matches a following full pass byte-for-byte). DEC-052's matrix and prose now say a missing or
+hand-edited artifact is a **full pass**, matching the implementation, and the tooling README's
+`--incremental` row says the same. Add/delete/rename, an unparseable file and a changed emitter flag are
+the existing state/path rows; the full suite was not run per the AGENTS affected-test policy.
 
 ### E7 — The MVP surface and the incremental guide (M)
 **Who:** agent · **Depends:** E6

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -67,6 +68,45 @@ class IncrementalEmissionTest {
         for (Path file : full.keySet()) {
             Assertions.assertArrayEquals(full.get(file), incremental.get(file),
                     "the incremental tree must be byte-identical to a full pass: " + file);
+        }
+    }
+
+    @Test
+    void aMapperEndpointStaysIncrementalAndTheMapperIsReEmitted() throws Exception {
+        ExamplePassFixture fixture = ExamplePassFixture.create();
+        Path sourceRoot = fixture.sourceRoot();
+        EntityMetadataGenerator.setGenerateDtoProjections(true);
+        EntityMetadataGenerator.setMapperRequests(List.of("PersonSummary:PersonDto"));
+        try {
+            EntityMetadataGenerator.generate(sourceRoot, fixture.reportDir(), sourceRoot);
+            Path mapper = sourceRoot.resolve(
+                    "hr/hrg/hipster/entityexample/person/entity/PersonSummaryToPersonDtoMapper.java");
+            byte[] mapperBefore = Files.readAllBytes(mapper);
+
+            Path view = sourceRoot.resolve(
+                    "hr/hrg/hipster/entityexample/person/entity/PersonSummary.java");
+            String source = Files.readString(view);
+            Files.writeString(view, source.replace("    // generated boilerplate, for better dev experience",
+                    "    String nickname();\n\n    // generated boilerplate, for better dev experience"));
+
+            EntityMetadataGenerator.GenerationReport report = EntityMetadataGenerator.generateIncremental(
+                    sourceRoot, fixture.reportDir(), sourceRoot,
+                    Set.of("hr/hrg/hipster/entityexample/person/entity/PersonSummary.java"),
+                    new DivergenceReporter());
+            Assertions.assertEquals("incremental", report.mode());
+            Assertions.assertFalse(java.util.Arrays.equals(mapperBefore, Files.readAllBytes(mapper)),
+                    "the mapper whose target/source view changed is re-emitted");
+
+            Map<Path, byte[]> incremental = snapshot(sourceRoot);
+            EntityMetadataGenerator.generate(sourceRoot, fixture.reportDir(), sourceRoot);
+            Map<Path, byte[]> full = snapshot(sourceRoot);
+            for (Path file : full.keySet()) {
+                Assertions.assertArrayEquals(full.get(file), incremental.get(file),
+                        "the incremental tree must be byte-identical to a full pass: " + file);
+            }
+        } finally {
+            EntityMetadataGenerator.setGenerateDtoProjections(false);
+            EntityMetadataGenerator.setMapperRequests(List.of());
         }
     }
 
