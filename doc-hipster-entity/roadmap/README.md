@@ -2,6 +2,39 @@
 
 This document tracks roadmap progress, current work, and changes in direction for the hipster-entity project.
 
+## 0. The usable MVP — declared 2026-11-05
+
+**Yes, `hipster-entity` has a usable MVP.** A consumer-shaped project can add a marker and a view, run one
+command to generate committed Java, compile it, run it, edit a view, and run again incrementally — locally,
+with no daemon, no watch loop and no Maven Central release. The batch plan is
+[`plans/hipster-entity-mvp.md`](../../plans/hipster-entity-mvp.md); its steps E0–E8 are done.
+
+| Measured                                        | Result                                  |
+| ----------------------------------------------- | --------------------------------------- |
+| Clean consumer, full pass                       | **3.1 s**                               |
+| Clean consumer, one-view edit + `--incremental` | **4.3 s**, `emitted 1, reused 1`        |
+| Clean consumer, `--check`                       | **5.0 s**                               |
+| Whole clean-consumer check                      | **20.3 s** (includes compile/run twice) |
+| Example, second `bun scripts/gen.js`            | **no-op**, no HTML re-render            |
+
+**In the MVP:** markers and `@View` discovery; `GenLevel.META`/`RECORD`/`BUILDER`/`BUILDER_TRACKED`/
+`BUILDER_ALL`; field kinds, `@FieldSource` and addons; the generated field enum, `META`, record, builders and
+tracking builder; `META.create`, array-backed read/update, `ViewChangeTracking`/`EEnumSet`; Jackson
+read/change-set output; validation; metadata JSON and the class index; **one-shot `--incremental`**,
+`--full` and `--check`; DTO projections and mappers as opt-in but incremental features.
+
+**Not in the MVP, deliberately:** watch mode (W7b); parse reuse (E10, the post-MVP scale step); a daemon;
+Maven Central or semver; SQL generation as a supported output (the JDBC adapter/binder is draft and opt-in);
+patch appliers and merge are available but force a full pass. The current status page is
+[`user/mvp-surface.md`](../user/mvp-surface.md); the incremental contract is
+[DEC-052](../architecture/decisions/DEC-052.md).
+
+**Verification.** The recorded full gate is an explicit on-demand action under the repository's
+affected-test policy. The MVP batch records the targeted entity/tooling suites, the six metadata
+regeneration classes, the E3–E6 incremental tests, and the clean-consumer check
+[`scripts/check-entity-mvp.js`](../../scripts/check-entity-mvp.js); the full 18-module gate is not claimed
+here as having run in this batch.
+
 > **This file is the status tracker; the schedule is [`plans/unified-plan.md`](../../plans/unified-plan.md).**
 > (2026-10-01) The unchecked rows of § 1 and the `Proposed` rows of § 3 are the open work recorded here.
 > The unified plan orders that work against everything else open in the repository, one gated step at a
@@ -84,12 +117,13 @@ revision on 2026-10-09 corrected the same class of mistake twice more: `Type div
 
 ## 2. Milestone status
 
-| Milestone                     | Owner     | Status      | Notes                       |
-| ----------------------------- | --------- | ----------- | --------------------------- |
-| `EntityBase` marker API       | Core team | Done        | In `hipster-entity-api`     |
-| Converter manifest proposal   | Core team | In progress | Design in `doc/brainstorm`  |
-| SQL/Mongo projection pipeline | TBD       | Draft       | Begin in `doc/brainstorm`   |
-| Roadmap/architecture split    | Infra     | Done        | Folder restructure complete |
+| Milestone                     | Owner     | Status       | Notes                                                  |
+| ----------------------------- | --------- | ------------ | ------------------------------------------------------ |
+| Usable MVP (E0–E8)            | Core team | **Declared** | Full/incremental/`--check` + clean-consumer check; § 0 |
+| `EntityBase` marker API       | Core team | Done         | In `hipster-entity-api`                                |
+| Converter manifest proposal   | Core team | In progress  | Design in `doc/brainstorm`                             |
+| SQL/Mongo projection pipeline | TBD       | Draft        | Begin in `doc/brainstorm`                              |
+| Roadmap/architecture split    | Infra     | Done         | Folder restructure complete                            |
 
 ## 3. Decision traceability
 

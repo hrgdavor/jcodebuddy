@@ -1,6 +1,7 @@
 # hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
 
-**Status: 2026-11-05 — E0–E8 done; E9 next.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-05 — E0–E9 done (the MVP is declared); the full gate is on demand. E10 is the post-MVP
+scale step.** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
 practical. **Watch mode is deliberately out of scope**: the existing watcher path
@@ -440,6 +441,13 @@ DEC-052 from the roadmap and the tooling README.
 **Gate:** full recorded gate (`bun scripts/mvn-jdk25.js`) green; docs links pass; the roadmap and plan
 agree; no code changed except the status records. The step is done when a reader can answer "is this MVP,
 and what is not in it?" from the roadmap alone.
+
+**Done 2026-11-05, with the full gate on demand.** The roadmap's new § 0 declares the MVP, records the
+measured full/incremental/no-op/`--check` timings from E8, lists the supported surface and what is out of
+scope, and links DEC-052; the root README and the plan index point at it. The **full 18-module gate was not
+run** under the AGENTS affected-test policy: the evidence recorded here is the targeted entity/tooling
+suites, the E3–E6 incremental tests and the clean-consumer check. When the full gate is requested, its
+result belongs in this paragraph rather than in a new claim.
 
 ### E10 — Parse reuse (post-MVP scale step, L)
 **Who:** agent · **Depends:** E9

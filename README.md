@@ -36,6 +36,13 @@ JCodeBuddy is designed as a **project automation and boilerplate generation** en
 
 The project is currently in **early development**. What was originally intended as separate ecosystem projects — namely the **`hipster-entity`** (entity/DTO generation) and **`hipster-ioc`** (dependency injection container) modules — are temporarily integrated into this repository for faster iteration. Both modules are designed to use JCodeBuddy as their development-assistance engine, leveraging the cooperative code generation and live-watch capabilities to drive their own scaffolding and infrastructure code.
 
+**`hipster-entity` has a declared usable MVP (2026-11-05).** A consumer can generate, compile and run a
+view, then edit it and regenerate incrementally; one-shot `--incremental`, `--full` and `--check` are
+documented in [`user/incremental-build.md`](doc-hipster-entity/user/incremental-build.md), and the exact
+supported/out-of-scope surface is in [`user/mvp-surface.md`](doc-hipster-entity/user/mvp-surface.md) and the
+[roadmap](doc-hipster-entity/roadmap/README.md) § 0. Watch mode, parse reuse and Maven Central remain out of
+scope for the MVP.
+
 Once the core framework stabilizes, these modules will be extracted back into dedicated repositories.
 
 ### JCodeBuddy is expected to change until a major release
