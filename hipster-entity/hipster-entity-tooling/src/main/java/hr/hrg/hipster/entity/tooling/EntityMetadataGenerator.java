@@ -64,7 +64,8 @@ public class EntityMetadataGenerator {
     /** Every CLI flag this build understands; {@code --version} prints it. */
     public static final List<String> SUPPORTED_FLAGS = List.of(
             "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper", "--merge",
-            "--adapters", "--patch-appliers", "--dto-projections", "--run-record", "--force", "--version");
+            "--adapters", "--patch-appliers", "--dto-projections", "--run-record", "--force",
+            "--incremental", "--full", "--version");
 
     /**
      * The flags every documented invocation of this generator passes.
@@ -833,6 +834,8 @@ public class EntityMetadataGenerator {
         List<String> merges = new ArrayList<>();
         Path javaOutputOverride = null;
         Path runRecord = null;
+        boolean incrementalRequested = false;
+        boolean fullRequested = false;
         long startedAt = System.currentTimeMillis();
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -904,6 +907,16 @@ public class EntityMetadataGenerator {
                 // never implied — losing a developer's edit to a generated block is silent. See
                 // CooperativeCodegen.setForce.
                 CooperativeCodegen.setForce(true);
+            } else if ("--incremental".equals(arg)) {
+                // Plan step E2: answer from the fs-meta build state before any parse. The pass that runs
+                // when the state says either "incremental" or "full" is still the existing full pass in
+                // E2 — selective emission is E4 — but the decision, and the no-op, are this flag's.
+                incrementalRequested = true;
+            } else if ("--full".equals(arg)) {
+                // The explicit override. Naming both is not an error: a `--full` that wins is the same
+                // answer either way, and a build script that appends `--full` to a shared argument list
+                // must not have to remove `--incremental` first.
+                fullRequested = true;
             } else {
                 positional.add(arg);
             }
@@ -911,6 +924,10 @@ public class EntityMetadataGenerator {
         setGenerationPackages(packages);
         setMapperRequests(mappers);
         setMergeRequests(merges);
+        if (fullRequested) {
+            // `--full` wins when both are named; see the parse arm above.
+            incrementalRequested = false;
+        }
 
         if (positional.size() < 2) {
             printUsage();
@@ -925,6 +942,17 @@ public class EntityMetadataGenerator {
         Path javaOutputRoot = inputPath.toString().endsWith(".java")
                 ? sourceRoot
                 : (javaOutputOverride != null ? javaOutputOverride : outputDir);
+        // The incremental decision needs every output-changing flag, so it is built here and asked before
+        // the pass (and therefore before runValidation or any parse). `--incremental`/`--full` are
+        // invocation-local values, not static flags: a watcher or a test that calls main() in-process must
+        // not inherit the previous invocation's mode.
+        EntityBuildState.Config buildConfig = new EntityBuildState.Config(outputDir, javaOutputRoot, packages,
+                isGenerateAdapters(), isGenerateDtoProjections(), mappers, merges,
+                isGeneratePatchAppliers(), CooperativeCodegen.isForce(), validationPolicy);
+        EntityBuildState buildState = EntityBuildState.forPass(sourceRoot, outputDir);
+        String passMode = incrementalRequested ? "incremental" : "full";
+        List<String> changed = List.of();
+        String fallbackReason = null;
         // Identity first, on every run: when a build misbehaves, the first question is which
         // generator revision ran, and this line answers it without a second invocation.
         System.out.println(generatorIdentity());
@@ -939,14 +967,43 @@ public class EntityMetadataGenerator {
             System.out.println("Writing generated java to: " + javaOutputOverride);
         }
         try {
+            if (incrementalRequested) {
+                EntityBuildState.Decision decision = buildState.decide(buildConfig);
+                if (decision.mode() == EntityBuildState.Mode.NOOP) {
+                    // A no-op is the whole of this flag's first deliverable: no parse, no validation, no
+                    // generated output and no state write. Printing the reason is what distinguishes it
+                    // from a pass that silently did nothing.
+                    System.out.println("Incremental: no-op — " + decision.reason());
+                    writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
+                            mappers, startedAt, args,
+                            new PassReport("noop", decision.changed(), List.of(), 0, 0, decision.reason()));
+                    return;
+                }
+                changed = decision.changed();
+                if (decision.mode() == EntityBuildState.Mode.FULL) {
+                    // E2 has no selective emission, so an "incremental" decision and a full pass are the
+                    // same work; the mode is still recorded, because E4 changes only the work.
+                    passMode = "full";
+                    fallbackReason = decision.reason();
+                    System.out.println("Incremental: full pass — " + decision.reason());
+                } else {
+                    passMode = "incremental";
+                    System.out.println("Incremental: " + decision.reason());
+                }
+            }
             generate(sourceRoot, outputDir, javaOutputRoot);
+            // State after the pass, never before it: the pass's own writes belong in the snapshot, and a
+            // failed pass must leave the previous state alone so the next run retries the same work.
+            publishBuildState(buildState, buildConfig);
             writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
-                    mappers, startedAt, args);
+                    mappers, startedAt, args,
+                    new PassReport(passMode, changed, null, null, null, fallbackReason));
         } catch (IOException | RuntimeException failure) {
             // A failed pass is the run a reader most wants a record of, so the record is written
             // before the failure is rethrown.
             writeRunRecord(runRecord, "failed", failure, sourceRoot, outputDir, javaOutputRoot, packages,
-                    mappers, startedAt, args);
+                    mappers, startedAt, args,
+                    new PassReport(passMode, changed, null, null, null, fallbackReason));
             throw failure;
         } finally {
             // Reset the policy so a second pass in the same JVM (a test, a watcher run) does not
@@ -964,6 +1021,36 @@ public class EntityMetadataGenerator {
     }
 
     /**
+     * What an invocation decided, for the run record (plan § 3.6).
+     *
+     * <p>{@code affected}, {@code emitted} and {@code reused} are non-null only on the no-op record in
+     * E2: the reference pass does not count artifacts, and E4 is the step that can report selective
+     * emission. A record that invented those counts now would be worse than a record that omits them, so
+     * the null fields are left out of the JSON rather than written as zero.</p>
+     */
+    private record PassReport(String mode, List<String> changed, List<String> affected,
+                              Integer emitted, Integer reused, String fallbackReason) {
+    }
+
+    /**
+     * Publishes the incremental build state, treating a write failure as a warning.
+     *
+     * <p>The generation itself already succeeded; failing the invocation because a cache could not be
+     * refreshed would turn a disposable artifact into a correctness input in the other direction. A
+     * missing state costs the next {@code --incremental} run one full pass, which is the safe direction,
+     * and the run record still says the pass succeeded.</p>
+     */
+    private static void publishBuildState(EntityBuildState state, EntityBuildState.Config config) {
+        try {
+            state.publish(config, EntityBuildState.validationOutcome(validationPolicy));
+        } catch (IOException | RuntimeException publishFailure) {
+            System.err.println("warning: the incremental build state at " + state.directory()
+                    + " was not published (" + publishFailure.getMessage()
+                    + "); the next --incremental run will do a full pass.");
+        }
+    }
+
+    /**
      * Writes the opt-in run record ({@code --run-record <file>}).
      *
      * <p>It is the answer to "what generated this tree, with which flags, from which artifact, and
@@ -977,7 +1064,8 @@ public class EntityMetadataGenerator {
      */
     private static void writeRunRecord(Path recordFile, String status, Exception failure, Path sourceRoot,
                                        Path outputDir, Path javaOutputRoot, List<String> packages,
-                                       List<String> mappers, long startedAt, String[] args)
+                                       List<String> mappers, long startedAt, String[] args,
+                                       PassReport report)
             throws IOException {
         if (recordFile == null) {
             return;
@@ -999,9 +1087,33 @@ public class EntityMetadataGenerator {
         record.put("dtoProjections", generateDtoProjections);
         record.put("validate", validationPolicy.name());
         record.put("args", List.of(args));
+        if (report != null) {
+            record.put("mode", report.mode());
+            record.put("changed", report.changed());
+            if (report.affected() != null) {
+                record.put("affected", report.affected());
+            }
+            if (report.emitted() != null) {
+                record.put("emitted", report.emitted());
+            }
+            if (report.reused() != null) {
+                record.put("reused", report.reused());
+            }
+            if (report.fallbackReason() != null) {
+                record.put("fallbackReason", report.fallbackReason());
+            }
+        }
         if (failure == null) {
-            record.put("validationIssues", lastValidationIssues.size());
-            record.put("divergences", lastDivergences.entries());
+            if (report != null && "noop".equals(report.mode())) {
+                // No pass ran, so this invocation has no validation or divergence report of its own.
+                // Writing the previous invocation's counts here would attribute them to a tree that was
+                // never parsed.
+                record.put("validationIssues", 0);
+                record.put("divergences", List.of());
+            } else {
+                record.put("validationIssues", lastValidationIssues.size());
+                record.put("divergences", lastDivergences.entries());
+            }
         } else {
             // No divergence report exists for a pass that threw, but the reason must not be lost.
             record.put("failure", failure.getClass().getName() + ": " + failure.getMessage());
@@ -1042,6 +1154,11 @@ public class EntityMetadataGenerator {
         System.err.println("                        trying an emitter change in the output before changing the generator.");
         System.err.println("                        It discards edits to generated members, silently, so it is never");
         System.err.println("                        implied by another flag.");
+        System.err.println("  --incremental         answer from the fs-meta build state before running: a no-op");
+        System.err.println("                        when no .java file changed, the normal pass otherwise. The state");
+        System.err.println("                        lives in <module>/.jcodebuddy/cache/entity-build.");
+        System.err.println("  --full                force the normal pass and refresh the build state; this is also");
+        System.err.println("                        the default when neither --incremental nor --full is given.");
         System.err.println("  --version             print the generator identity and its flag surface, then stop.");
         System.err.println();
         System.err.println("Generated .java is never written under a .jcodebuddy/ directory: that is the");

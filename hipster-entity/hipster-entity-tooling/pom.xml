@@ -45,6 +45,17 @@
             <artifactId>hipster-entity-core</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- The one-shot build state behind the incremental flag (plans/hipster-entity-mvp.md E2): the
+             fs-meta trio/diff contract, consumed from the project that owns it rather than from a copy
+             in this checkout (the standalone-package rule; `hr.hrg:fs-meta` versions on its own, which
+             is why the root POM deliberately does not manage it). Compile scope, not `provided`:
+             `java -jar hipster-entity-tooling.jar` is the documented one-command path, so the shaded
+             jar must carry fs-meta and its own transitive dependencies. -->
+        <dependency>
+            <groupId>hr.hrg</groupId>
+            <artifactId>fs-meta</artifactId>
+            <version>0.3.7</version>
+        </dependency>
         <!-- OpenRewrite, arriving as JavaParser leaves (Phase 6 of the
              rewrite-migration plan). `rewrite-java` is a facade: it needs exactly
              one version-specific parser implementation on the classpath, and this
