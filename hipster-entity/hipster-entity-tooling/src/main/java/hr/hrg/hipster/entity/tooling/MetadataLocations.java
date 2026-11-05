@@ -339,7 +339,12 @@ public final class MetadataLocations {
         // so, and it declares the types a document will name — including any nested type the view's field
         // map keys on, which is why every declaration is registered and not just the top-level one.
         J.CompilationUnit unit = read.unit();
-        index.addTypes(moduleRelative, unit, source, true);
+        if (index.byPath(moduleRelative).isEmpty()) {
+            // A file the walk did not see because this pass just emitted it (a renamed or new
+            // artifact). Existing generated files are already in the table with their DEC-021 flag,
+            // so adding again would duplicate the by-path rows without adding a fact.
+            index.addTypes(moduleRelative, unit, source, true);
+        }
         String headerDescription = dec021Description(source);
         boolean generated = headerDescription != null;
         // The arm pairing is file-wide by construction, so it is computed once per file rather than

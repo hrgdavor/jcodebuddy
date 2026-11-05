@@ -225,13 +225,13 @@ The reserved `hashes.json` is **cashed in, not still outstanding**: it was reser
 `plan.metadata-locations.md` § 2.3.2 and now lands as the row's `checksum`/`hashCalculatedAt`/`size`
 columns plus the `mtimes.json` sidecar, rather than as a second table.
 
-**Reserved, not implemented.** The directory is a directory of tables on purpose, so these can be
-added without changing any consumer's contract: the `generator` header value (the tooling revision
-and the flags that change output — defined, not written until something consumes it, following the
-same "options are part of the fingerprint" rule the `hash` header already follows), the dependency
-edges (`artifacts[].inputs` — per emitted artifact, the FQNs it was generated *from*), and a pointer
-in a generated artifact's DEC-021 header naming the class index row it came from. None is written
-today; they are what a watcher or an incremental pass would need, and
+**Partly implemented, partly reserved.** The directory is a directory of tables on purpose, so these can
+be added without changing any consumer's contract. The dependency edges are **written** since MVP step
+E3: `views[].inputs` is the view's generated-from FQN set, and `artifacts[].inputs` repeats it for each
+emitted artifact (the FQNs it was generated *from*). Still reserved: the `generator` header value (the
+tooling revision and the flags that change output — defined, not written until something consumes it,
+following the same "options are part of the fingerprint" rule the `hash` header already follows), and a
+pointer in a generated artifact's DEC-021 header naming the class index row it came from.
 `metadata/watch/<toolSet>/metadata.db` (DEC-026 § 3) remains the watch agent's own cache rather than
 being replaced by the index.
 
@@ -290,8 +290,8 @@ java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir>
 | `--mapper <Src>:<Tgt>[:<ClassName>]` | also emit a statically-dispatched mapper between two **views**. Repeatable. Defaults: class `<Src>To<Tgt>Mapper`, method `to<Tgt>` |
 | `--validate[=OFF\|REPORT\|STRICT]`   | run the entity rules over the source root **before** writing anything. Bare `--validate` means `REPORT`: print every issue and continue. `STRICT` refuses to write until they are fixed, so a violating tree is never half-regenerated. `OFF` is the default for a library caller, so introducing validation cannot change an unrelated build. Warnings (the R1 `allowReorder` escape hatch) do not fail a pass unless `STRICT` |
 | `--run-record <file>`                | also write what this pass ran with — generator revision, the artifact its classes came from, resolved roots, flags, validation count, divergences, and `status` (`ok` / `failed`) — as JSON. Opt-in, so a library caller and the existing tests are unaffected. The example's pass — `bun scripts/gen.js` — writes `.jcodebuddy/metadata/entity/generation.json` |
-| `--incremental`                      | answer from the one-shot `fs-meta` build state in `<module>/.jcodebuddy/cache/entity-build/` **before** validation or parsing: unchanged tree + matching fingerprint is a no-op; an existing-file change runs the pass (selective emission is E4); an add/remove/rename, a stale/corrupt state, or a changed fingerprint falls back to a full pass. See [DEC-052](../../doc-hipster-entity/architecture/decisions/DEC-052.md) |
-| `--full`                             | force the normal pass and refresh the build state. This is also the default when neither flag is given, so `--incremental` is the opt-in mode until E5 decides the default |
+| `--incremental`                      | answer from the one-shot `fs-meta` build state in `<module>/.jcodebuddy/cache/entity-build/` **before** validation or parsing: unchanged tree + matching fingerprint is a no-op; an existing-file change runs the pass and emits only the views whose `views[].inputs` intersect the changed FQNs; an add/remove/rename, a stale/corrupt state, or a changed fingerprint falls back to a full pass. See [DEC-052](../../doc-hipster-entity/architecture/decisions/DEC-052.md) |
+| `--full`                             | force the normal pass and refresh the build state. This is also the default when neither flag is given |
 | `--version`                          | print the generator identity (name, revision, and the artifact the classes came from) plus its flag surface, then stop. This is the first thing to run when a pass appears to have mis-generated a tree |
 
 Flags may appear anywhere after the two positionals, and `--packages=a.b`

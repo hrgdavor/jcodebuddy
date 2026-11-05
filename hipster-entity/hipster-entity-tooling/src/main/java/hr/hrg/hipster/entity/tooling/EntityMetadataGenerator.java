@@ -6,6 +6,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassRecord;
 import hr.hrg.hipster.entity.tooling.meta.EntityFieldMeta;
 import hr.hrg.hipster.entity.tooling.meta.EntityMeta;
 import hr.hrg.hipster.entity.tooling.meta.FieldConstraint;
@@ -27,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -991,13 +993,15 @@ public class EntityMetadataGenerator {
                     System.out.println("Incremental: " + decision.reason());
                 }
             }
-            generate(sourceRoot, outputDir, javaOutputRoot);
+            GenerationReport report = generateIncremental(sourceRoot, outputDir, javaOutputRoot,
+                    "incremental".equals(passMode) ? new HashSet<>(changed) : null);
             // State after the pass, never before it: the pass's own writes belong in the snapshot, and a
             // failed pass must leave the previous state alone so the next run retries the same work.
             publishBuildState(buildState, buildConfig);
             writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
                     mappers, startedAt, args,
-                    new PassReport(passMode, changed, null, null, null, fallbackReason));
+                    new PassReport(passMode, changed, report.affected(), report.emitted(), report.reused(),
+                            fallbackReason));
         } catch (IOException | RuntimeException failure) {
             // A failed pass is the run a reader most wants a record of, so the record is written
             // before the failure is rethrown.
@@ -1023,10 +1027,9 @@ public class EntityMetadataGenerator {
     /**
      * What an invocation decided, for the run record (plan § 3.6).
      *
-     * <p>{@code affected}, {@code emitted} and {@code reused} are non-null only on the no-op record in
-     * E2: the reference pass does not count artifacts, and E4 is the step that can report selective
-     * emission. A record that invented those counts now would be worse than a record that omits them, so
-     * the null fields are left out of the JSON rather than written as zero.</p>
+     * <p>{@code affected}, {@code emitted} and {@code reused} come from the pass's
+     * {@link GenerationReport}; a no-op writes an empty affected list and zero counts, a full pass
+     * writes the total as emitted, and an incremental pass records what it reused.</p>
      */
     private record PassReport(String mode, List<String> changed, List<String> affected,
                               Integer emitted, Integer reused, String fallbackReason) {
@@ -1644,15 +1647,64 @@ public class EntityMetadataGenerator {
 
     public static void generate(Path sourceRoot, Path outputDir, Path javaOutputRoot, DivergenceReporter divergences)
             throws IOException {
+        generateIncremental(sourceRoot, outputDir, javaOutputRoot, null, divergences);
+    }
+
+    /**
+     * One pass that may emit only the views whose recorded inputs intersect {@code changedPaths}
+     * (plan E4). A {@code null} set is the reference full pass; a non-null set is the source-root-relative
+     * change list {@code EntityBuildState} produced.
+     *
+     * <p>The pass still parses the whole source set in the MVP — E10 is the parse-reuse step — but it does
+     * not run an emitter for a view that cannot have changed. The class index and the documents are still
+     * written, so the result is the same complete metadata with less writing.</p>
+     */
+    public static GenerationReport generateIncremental(Path sourceRoot, Path outputDir, Path javaOutputRoot,
+                                                       Set<String> changedPaths, DivergenceReporter divergences)
+            throws IOException {
         activeDivergences = divergences;
         parsedCompilationUnits.clear();
         typeDivergences.clear();
         try {
-            generateInternal(sourceRoot, outputDir, javaOutputRoot, divergences);
+            GenerationReport report = generateInternal(sourceRoot, outputDir, javaOutputRoot, divergences,
+                    changedPaths);
             writeConverterManifest(outputDir);
+            return report;
         } finally {
             activeDivergences = null;
         }
+    }
+
+    /**
+     * The validated form of {@link #generateIncremental(Path, Path, Path, Set, DivergenceReporter)}, for
+     * the CLI and for tests that want the same validation gate as a full pass.
+     */
+    public static GenerationReport generateIncremental(Path sourceRoot, Path outputDir, Path javaOutputRoot,
+                                                       Set<String> changedPaths) throws IOException {
+        runValidation(sourceRoot);
+        DivergenceReporter divergences = new DivergenceReporter();
+        try {
+            GenerationReport report = generateIncremental(sourceRoot, outputDir, javaOutputRoot, changedPaths,
+                    divergences);
+            failOnContractDivergences(divergences);
+            return report;
+        } finally {
+            reportDivergences(divergences);
+        }
+    }
+
+    /**
+     * What one pass emitted or reused (plan E4, § 3.6 step 8).
+     *
+     * @param mode           {@code full} or {@code incremental}
+     * @param changed        source-root-relative paths the run was given, empty on a full pass
+     * @param affected       qualified view names selected for emission
+     * @param emitted        views whose emitters ran
+     * @param reused         views whose existing artifacts and metadata were reused
+     * @param fallbackReason why an incremental request became a full pass, or {@code null}
+     */
+    public record GenerationReport(String mode, List<String> changed, List<String> affected,
+                                   int emitted, int reused, String fallbackReason) {
     }
 
     /**
@@ -1760,8 +1812,9 @@ public class EntityMetadataGenerator {
         typeDivergences.add(divergence);
     }
 
-    private static void generateInternal(Path sourceRoot, Path outputDir, Path javaOutputRoot,
-                                         DivergenceReporter divergences) throws IOException {
+    private static GenerationReport generateInternal(Path sourceRoot, Path outputDir, Path javaOutputRoot,
+                                                     DivergenceReporter divergences, Set<String> changedPaths)
+            throws IOException {
         // Before the first write, and before anything is parsed: generated source must never land in
         // a module's metadata root, whatever entry point asked for it.
         rejectJavaOutputUnderJcodebuddy(javaOutputRoot);
@@ -1803,6 +1856,18 @@ public class EntityMetadataGenerator {
         // source scan, which is exactly what this change deletes.
         List<EntityMeta> pendingDocuments = new ArrayList<>();
 
+        // E4's selection state. `changedPaths` is source-root-relative (the fs-meta state is scanned
+        // there); the class index is module-relative, so a changed path is translated once below.
+        boolean full = changedPaths == null;
+        String fallbackReason = null;
+        Set<String> changedFqns = new java.util.TreeSet<>();
+        Set<String> affectedKeys = new LinkedHashSet<>();
+        List<String> affectedNames = new ArrayList<>();
+        Map<String, String> sourceByPath = new HashMap<>();
+        Set<String> generatedPaths = new HashSet<>();
+        int totalViews = 0;
+        int emittedCount = 0;
+
         // Pass 1: parse every file. Reading an interface is deferred to pass 2 because a property's
         // type may be declared in a file this walk has not reached yet, and the resolution that needs
         // is against the whole source set (plan.dsflash § 8.2/3.6).
@@ -1838,6 +1903,10 @@ public class EntityMetadataGenerator {
                         // records where each class and each accessor is declared, and only the walk knows
                         // the file a declaration came from (DEC-027's amendment).
                         String unitPath = moduleRelativePath(moduleRoot, filePath);
+                        sourceByPath.put(unitPath, source);
+                        if (isGeneratedSource(source)) {
+                            generatedPaths.add(unitPath);
+                        }
                         // Every file the pass read is named by the class index, before its types are
                         // known: a file that declares no type (a package-info.java) or could not be read
                         // is then reported rather than silently absent from the pass's own record. A file
@@ -1847,7 +1916,9 @@ public class EntityMetadataGenerator {
                             classIndex.addFile(unitPath);
                             // The LST path, with the source it was parsed from: the index refuses a
                             // JavaParser unit now, and the source is what its line numbers come from.
-                            classIndex.addTypes(unitPath, cu, source, false);
+                            // The DEC-021 header is the generated flag: the walk is also how a file a
+                            // selective pass did not emit remains in the table with the right owner.
+                            classIndex.addTypes(unitPath, cu, source, isGeneratedSource(source));
                         }
                         units.add(new ParsedUnit(packageName, importTableOf(cu), cu, unitPath, source));
 
@@ -1860,11 +1931,49 @@ public class EntityMetadataGenerator {
         // name, so the index is consulted with the accessor's own package, never the view's.
         Map<String, List<String>> declaredTypes = declaredTypesBySimpleName(units);
 
+        // The same import tables, keyed by the file they belong to, for the input-set writer (E3). A
+        // property's source path is its declaring file, so a view inheriting an accessor from another
+        // package resolves that accessor's types against the declaring unit, not the view's.
+        Map<String, Map<String, String>> importTablesByPath = new HashMap<>();
+        for (ParsedUnit unit : units) {
+            importTablesByPath.put(unit.sourcePath(), unit.importTable());
+        }
+
         // The pass's type-parameter index (follow-up plan § 2.1). Computed here, from the units just
         // parsed, so a bare name that is a type parameter is recognized without a hand-maintained
         // list: `ID` was special-cased by name, and a list of one is the shape that produced F-43.
         typeParameterNames = TypeLiterals.typeParameterNames(
                 units.stream().map(ParsedUnit::cu).toList());
+
+        // E4: turn the change list into class-index FQNs before any emitter can run. An add/delete/rename
+        // already fell back in E2; a generated file or a path with no type is also a full pass here,
+        // because the class index cannot attribute it to a view without guessing.
+        if (!full) {
+            for (String changed : changedPaths) {
+                String moduleRelative = classIndex.byPath(changed).isEmpty()
+                        ? moduleRelativePath(moduleRoot, sourceRoot.resolve(changed))
+                        : changed;
+                if (generatedPaths.contains(moduleRelative)) {
+                    full = true;
+                    fallbackReason = "a generated source file changed: " + changed;
+                    break;
+                }
+                List<ClassRecord> rows = classIndex.byPath(moduleRelative);
+                if (rows.isEmpty()) {
+                    full = true;
+                    fallbackReason = "the changed file has no class-index row: " + changed;
+                    break;
+                }
+                for (ClassRecord row : rows) {
+                    changedFqns.add(row.fqn());
+                }
+                if (changedFqns.isEmpty()) {
+                    full = true;
+                    fallbackReason = "the changed file has no type FQN: " + changed;
+                    break;
+                }
+            }
+        }
 
         // Pass 2: read every interface the pass parsed.
         for (ParsedUnit unit : units) {
@@ -2066,6 +2175,29 @@ public class EntityMetadataGenerator {
                 // and every dropped type parameter twice (§ 4.5 trap c, § 4.8).
                 Map<String, List<Property>> unionPropertiesByView = new LinkedHashMap<>();
 
+                if (!full) {
+                    // The pre-emission model has no artifact inventory yet, and does not need one: a view's
+                    // source inputs are what decide whether it is affected. Generated-file changes already
+                    // forced a full pass above.
+                    EntityMeta pre = new EntityMeta(entityName, marker.packageName(), marker.name(),
+                            marker.entityBaseIdType(), views, List.of(), marker.sourcePath(),
+                            markerLineOf(marker));
+                    Map<String, ViewInputs.Inputs> inputs = ViewInputs.collect(pre, interfaceMap, classIndex,
+                            importTablesByPath, mapperRequests, mergeRequests, divergences);
+                    for (ViewMeta view : views) {
+                        ViewInputs.Inputs viewInputs = inputs.get(ViewInputs.key(view));
+                        boolean hit = viewInputs == null || !viewInputs.resolved()
+                                || viewInputs.inputs().stream().anyMatch(changedFqns::contains);
+                        if (hit) {
+                            affectedKeys.add(ViewInputs.key(view));
+                            InterfaceInfo info = ViewInputs.infoOf(interfaceMap, view);
+                            String pkg = info != null ? info.packageName() : marker.packageName();
+                            affectedNames.add(getQualifiedName(pkg, view.name()));
+                            affectedNames.add(view.name());
+                        }
+                    }
+                }
+
                 for (ViewMeta view : views) {
                     InterfaceInfo viewInfo = findViewInfo(interfaceMap, marker.packageName(), view.name());
                     List<Property> fullProperties = collectViewProperties(viewInfo, marker, interfaceMap);
@@ -2081,6 +2213,11 @@ public class EntityMetadataGenerator {
                     // and addons resolved.
                     if (!isGenerationTarget(viewPackage)) {
                         continue;
+                    }
+                    totalViews++;
+                    boolean emit = full || affectedKeys.contains(ViewInputs.key(view));
+                    if (emit) {
+                        emittedCount++;
                     }
 
                     // The materialization is chosen from the resolved GenLevel, never hardcoded
@@ -2140,7 +2277,9 @@ public class EntityMetadataGenerator {
                             || isDerivedFromMarker(viewInfo, marker, interfaceMap);
 
                     String creatorBody;
-                    if (wantsRecord || !hasEntityRoot) {
+                    if (!emit) {
+                        creatorBody = "";
+                    } else if (wantsRecord || !hasEntityRoot) {
                         if (nestedRecordUsable) {
                             creatorBody = nestedRecordCreatorBody(view, ordinalProperties);
                         } else {
@@ -2152,10 +2291,12 @@ public class EntityMetadataGenerator {
                         creatorBody = proxyCreatorBody(view);
                     }
 
-                    generateViewPropertyEnum(javaOutputRoot, viewPackage, view, fullProperties,
-                            creatorBody, divergences, viewInfo, interfaceMap);
+                    if (emit) {
+                        generateViewPropertyEnum(javaOutputRoot, viewPackage, view, fullProperties,
+                                creatorBody, divergences, viewInfo, interfaceMap);
+                    }
 
-                    if (generateDtoProjections && view.dto()) {
+                    if (emit && generateDtoProjections && view.dto()) {
                         // The read-projection writer (DEC-003/DEC-007, plan step 6.5): both halves are
                         // required — the pass opt-in and the view's own marker — so a project that never
                         // asks gains no Jackson dependency, and a marked view in a pass that did not ask
@@ -2165,7 +2306,7 @@ public class EntityMetadataGenerator {
                         ViewJsonGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
                                 divergences);
                     }
-                    if (generateAdapters) {
+                    if (emit && generateAdapters) {
                         // DRAFT / EXPLORATION, and opt-in only: reached exclusively through
                         // `--adapters`. Generated adapters are ordinary committed Java in the view's
                         // own package (G5) and use java.sql only, so no JDBC driver or connection-pool
@@ -2179,7 +2320,7 @@ public class EntityMetadataGenerator {
                     Path viewSource = view.sourcePath() == null || view.sourcePath().isBlank()
                             ? null
                             : moduleRoot.resolve(view.sourcePath());
-                    if (generatePatchAppliers
+                    if (emit && generatePatchAppliers
                             && (view.gen() == GenLevel.BUILDER
                                     || view.gen() == GenLevel.BUILDER_TRACKED
                                     || view.gen() == GenLevel.BUILDER_ALL)) {
@@ -2213,7 +2354,7 @@ public class EntityMetadataGenerator {
                                     ViewPatchApplierGenerator.writableOf(ordinalProperties), viewNames, divergences);
                         }
                     }
-                    if (wantsTrackingBuilder) {
+                    if (emit && wantsTrackingBuilder) {
                         ViewTrackingBuilderGenerator.generate(javaOutputRoot, viewPackage, view,
                                 ordinalProperties, trackableTypes, nonTrackableViewNames, divergences);
                     }
@@ -2222,9 +2363,9 @@ public class EntityMetadataGenerator {
                     // includes tracking must not DROP the untracked builder a lower level provides —
                     // that is what the cumulative-ladder assertion in AllLevelsCompileTest checks,
                     // and BUILDER_ALL is documented as "both builders in one pass" (§ 8.6/3.17).
-                    if (view.gen() == GenLevel.BUILDER
+                    if (emit && (view.gen() == GenLevel.BUILDER
                             || view.gen() == GenLevel.BUILDER_TRACKED
-                            || view.gen() == GenLevel.BUILDER_ALL) {
+                            || view.gen() == GenLevel.BUILDER_ALL)) {
                         ViewBuilderGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
                                 nestedRecordUsable, List.of(), divergences, viewSource);
                     }
@@ -2232,21 +2373,24 @@ public class EntityMetadataGenerator {
                     // between two views, and the partner may be resolved after this one, so the pass records the
                     // inputs now and applies the merges once every view is known - the same "after all views" shape
                     // the mapper requests already use.
-                    mergeModels.put(view.name(), new MergeModel(viewPackage, view, ordinalProperties,
-                            nestedRecordUsable, trackableTypes, nonTrackableViewNames, wantsTrackingBuilder,
-                            viewSource));
-                    // § 8.2/G2 + § 8.6/3.17a: the two builder entry points are `default` methods on
-                    // the VIEW interface — the one file the developer owns. The emitter recognises an
-                    // existing method by shape and only writes when one is actually missing, so a
-                    // hand-written pair (the example's) survives regeneration byte for byte. The view
-                    // file is looked up under `sourceRoot`, not `javaOutputRoot`, because the view's
-                    // interface is indexed input, not generated output.
-                    ViewInterfaceGenerator.generate(sourceRoot, viewPackage, view.name(),
-                            ViewInterfaceGenerator.entryPointsFor(view.gen(), view.name()), divergences);
+                    if (emit) {
+                        mergeModels.put(view.name(), new MergeModel(viewPackage, view, ordinalProperties,
+                                nestedRecordUsable, trackableTypes, nonTrackableViewNames, wantsTrackingBuilder,
+                                viewSource));
+                        // § 8.2/G2 + § 8.6/3.17a: the two builder entry points are `default` methods on
+                        // the VIEW interface — the one file the developer owns. The emitter recognises an
+                        // existing method by shape and only writes when one is actually missing, so a
+                        // hand-written pair (the example's) survives regeneration byte for byte. The view
+                        // file is looked up under `sourceRoot`, not `javaOutputRoot`, because the view's
+                        // interface is indexed input, not generated output.
+                        ViewInterfaceGenerator.generate(sourceRoot, viewPackage, view.name(),
+                                ViewInterfaceGenerator.entryPointsFor(view.gen(), view.name()), divergences);
 
-                    // § 12.3/7.11: the imperative half of the validation contract. Emitted only when
-                    // there is something mechanical to check, so an unconstrained view gains no file.
-                    ValidationGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties, divergences);
+                        // § 12.3/7.11: the imperative half of the validation contract. Emitted only when
+                        // there is something mechanical to check, so an unconstrained view gains no file.
+                        ValidationGenerator.generate(javaOutputRoot, viewPackage, view, ordinalProperties,
+                                divergences);
+                    }
 
                     // The mapper phase's catalogue entry (§ 12.2/7.5). `recordConstruction` is the only
                     // thing a mapper needs to know about the target's materialization, and it is known
@@ -2310,7 +2454,7 @@ public class EntityMetadataGenerator {
             ViewPatchApplierGenerator.generateDispatcher(javaOutputRoot, family, divergences);
         }
 
-        generateRequestedMappers(javaOutputRoot, emittedViews, divergences);
+        generateRequestedMappers(javaOutputRoot, emittedViews, full, affectedNames, divergences);
 
         // Plan step 7.3: the merges, once every view is resolved - a merge names two views, and the partner may be
         // resolved after the host.
@@ -2345,8 +2489,23 @@ public class EntityMetadataGenerator {
         for (EntityMeta entityMeta : pendingDocuments) {
             Files.createDirectories(outputDir);
             Path outFile = outputDir.resolve(entityMeta.entityName() + ".metadata.json");
-            Files.writeString(outFile, toJson(entityMeta, classIndex));
+            Map<String, ViewInputs.Inputs> inputs = ViewInputs.collect(entityMeta, interfaceMap, classIndex,
+                    importTablesByPath, mapperRequests, mergeRequests, divergences);
+            Files.writeString(outFile, toJson(entityMeta, classIndex, inputs));
         }
+        return new GenerationReport(full ? "full" : "incremental",
+                changedPaths == null ? List.of() : List.copyOf(changedPaths),
+                List.copyOf(affectedNames), emittedCount, Math.max(0, totalViews - emittedCount),
+                fallbackReason);
+    }
+
+    /**
+     * Whether a source file carries DEC-021's file header. The walk uses this to keep the class index's
+     * {@code generated} flag true for a file a selective pass did not rewrite; the spelling is the
+     * marker vocabulary's, so a second recognizer cannot drift from it.
+     */
+    private static boolean isGeneratedSource(String source) {
+        return source != null && source.stripLeading().startsWith("// @generated file ");
     }
 
     /**
@@ -2391,6 +2550,8 @@ public class EntityMetadataGenerator {
      */
     private static void generateRequestedMappers(Path javaOutputRoot,
                                                  Map<String, ViewMapperGenerator.ViewRef> emittedViews,
+                                                 boolean full,
+                                                 List<String> affectedViews,
                                                  DivergenceReporter divergences) throws IOException {
         for (String request : mapperRequests) {
             String[] parts = request.split(":");
@@ -2417,6 +2578,13 @@ public class EntityMetadataGenerator {
                         "no view of that name was emitted in this pass",
                         targetName, "an emitted view",
                         "check the name and the --packages filter");
+                continue;
+            }
+            if (!full && !affectedViews.contains(sourceName) && !affectedViews.contains(targetName)
+                    && !affectedViews.contains(source.qualifiedName())
+                    && !affectedViews.contains(target.qualifiedName())) {
+                // Neither endpoint was selected by E4, so the mapper's inputs are unchanged and its
+                // existing class remains the answer. A full pass still emits every mapper.
                 continue;
             }
             String className = parts.length > 2 && !parts[2].isBlank()
@@ -3441,7 +3609,8 @@ public class EntityMetadataGenerator {
      * rule the index exists to keep and would leave a consumer with two sources of truth that can
      * disagree.</p>
      */
-    private static String toJson(EntityMeta entityMeta, ClassIndex index) {
+    private static String toJson(EntityMeta entityMeta, ClassIndex index,
+                                 Map<String, ViewInputs.Inputs> inputsByView) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         appendJsonField(sb, "entityName", entityMeta.entityName(), true);
@@ -3472,6 +3641,7 @@ public class EntityMetadataGenerator {
             sb.append(view.addons().stream().map(EntityMetadataGenerator::escapeJson).map(s -> "\"" + s + "\"").collect(Collectors.joining(", ")));
             sb.append("],\n");
             appendJsonField(sb, "dto", view.dto(), true, 6);
+            appendJsonInputs(sb, "inputs", inputsByView.get(ViewInputs.key(view)), true, 6);
             sb.append("      \"properties\": [\n");
             for (int j = 0; j < view.properties().size(); j++) {
                 Property prop = view.properties().get(j);
@@ -3508,7 +3678,8 @@ public class EntityMetadataGenerator {
                 sb.append("\n");
             }
             sb.append("      ],\n");
-            appendJsonArtifacts(sb, view.artifacts(), index);
+            appendJsonArtifacts(sb, view.artifacts(), index,
+                    inputsByView.get(ViewInputs.key(view)));
             sb.append(",\n");
             appendJsonViewFields(sb, view.fields(), index);
             sb.append("\n");
@@ -3584,7 +3755,7 @@ public class EntityMetadataGenerator {
      * header is the only source of a description.</p>
      */
     private static void appendJsonArtifacts(StringBuilder sb, List<hr.hrg.hipster.entity.tooling.meta.ArtifactMeta> artifacts,
-                                            ClassIndex index) {
+                                            ClassIndex index, ViewInputs.Inputs inputs) {
         sb.append("      \"artifacts\": [");
         if (artifacts.isEmpty()) {
             sb.append("]");
@@ -3603,6 +3774,7 @@ public class EntityMetadataGenerator {
             if (artifact.header() != null) {
                 sb.append(", \"header\": \"").append(escapeJson(artifact.header())).append("\"");
             }
+            appendJsonInputsInline(sb, "inputs", inputs);
             sb.append(" }");
             sb.append(i < artifacts.size() - 1 ? ",\n" : "\n");
         }
@@ -3690,6 +3862,42 @@ public class EntityMetadataGenerator {
 
     private static void appendJsonField(StringBuilder sb, String key, String value, boolean trailingComma) {
         appendJsonField(sb, key, value, trailingComma, 2);
+    }
+
+    /**
+     * The view's generated-from set (plan E3), written as a sorted FQN array.
+     *
+     * <p>Ordering is part of the format: two passes over the same tree must produce byte-identical
+     * documents, and an FQN set that comes out in hash order would not. An unresolved set is still
+     * written — E4 treats such a view as always affected — so an empty array means "fully resolved",
+     * not "not computed".</p>
+     */
+    private static void appendJsonInputs(StringBuilder sb, String key, ViewInputs.Inputs inputs,
+                                         boolean trailingComma, int indent) {
+        sb.append(" ".repeat(indent)).append('"').append(escapeJson(key)).append("\": [");
+        appendInputValues(sb, inputs);
+        sb.append(']').append(trailingComma ? "," : "").append('\n');
+    }
+
+    /** The same array as an inline object member: {@code , "inputs": [ ... ]}. */
+    private static void appendJsonInputsInline(StringBuilder sb, String key, ViewInputs.Inputs inputs) {
+        sb.append(", \"").append(escapeJson(key)).append("\": [");
+        appendInputValues(sb, inputs);
+        sb.append(']');
+    }
+
+    private static void appendInputValues(StringBuilder sb, ViewInputs.Inputs inputs) {
+        if (inputs == null || inputs.inputs().isEmpty()) {
+            return;
+        }
+        List<String> values = new ArrayList<>(inputs.inputs());
+        java.util.Collections.sort(values);
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append('"').append(escapeJson(values.get(i))).append('"');
+        }
     }
 
     private static void appendJsonField(StringBuilder sb, String key, String value, boolean trailingComma, int indent) {
