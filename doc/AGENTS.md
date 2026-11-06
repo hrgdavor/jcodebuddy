@@ -48,9 +48,10 @@ reactor cannot resolve its sibling.
 [`AGENTS.md`](../AGENTS.md) § 2, "Testing hipster-entity: affected tests by default, the full suite on request".
 For work confined to `hipster-entity/` and the changes whose blast radius is confined to it:
 
-- default to `bun scripts/test-affected.js` once T4 of
-  [`plans/incremental-test-selection.md`](../plans/incremental-test-selection.md) lands; until then use
-  `bun scripts/mvn-fast.js --fast` and `--tests <Class>` for the changed surface;
+- default to `bun scripts/test-affected.js`, which landed in T4 of
+  [`plans/incremental-test-selection.md`](../plans/incremental-test-selection.md) on 2026-11-06: it selects only the
+  unit tests the changed files reach and runs them through `mvn-fast --fast`, and an unchanged tree is a no-op;
+  use `bun scripts/mvn-fast.js --fast` and `--tests <Class>` when the selector cannot help;
 - do **not** run `bun scripts/mvn-jdk25.js` speculatively, and do not run it merely because a plan step's gate
   names the full suite — record the full gate as **not run, on demand** and report the targeted/affected tests
   that did run;

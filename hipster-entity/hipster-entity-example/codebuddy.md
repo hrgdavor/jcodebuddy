@@ -162,33 +162,47 @@ generated tree is `ExampleRegenerationTest`: it regenerates a **copy** of the
 committed tree and asserts the result is byte-identical. If it goes red, the fix
 is **regenerate and commit**, not "adjust the test" (§ 4.3).
 
-### 3.2.1 The fast lane — iteration, not the gate
+### 3.2.1 The affected lane — iteration, not the gate
 
-While you are editing a view or the generator, use the fast lane:
+While you are editing a view or the generator, start with the affected lane:
 
 ```bat
-bun scripts/mvn-fast.js --fast                             the unit subset, no clean
-bun scripts/mvn-fast.js --fast --tests SomeTest            one unit test class
+bun scripts/test-affected.js                               only the unit tests your change reaches; no-op when clean
+bun scripts/test-affected.js --all-unit                    every unit test (94 tests in 11 classes)
+bun scripts/test-affected.js --explain                     changed file -> class -> test; run nothing
+bun scripts/test-affected.js --include-component           also select affected component tests
+bun scripts/mvn-fast.js --fast                             the fast lane, when the selector cannot help
+bun scripts/mvn-fast.js --fast --tests SomeTest            one test class the selector cannot pick
 bun scripts/test-cost.js --module hipster-entity-tooling   where the last run's time went
 ```
 
-`--fast` runs the `test` phase with no `clean`, on the tooling module plus its `-am`
-dependencies, and activates the Maven profile `fast-tests`, which excludes the
-`generator`, `compiler` and `completeness` test groups: the tests that run a full
-pass, invoke javac, or walk the reactor. That makes it the right command for the
-edit loop and **not the recorded gate** — `bun scripts/mvn-jdk25.js` still runs
-every test, the excluded groups included. A generator change still gets its
-targeted test classes (`generator`/`compiler`) before commit; the **full suite is
-on request only** under the AGENTS affected-test policy. The byte-identical check
-in § 3.2 is one of the `generator` tests, so the fast lane skips it; run § 3.2 (or
-the affected generator set) before committing a generator change. `--fast` also
-withholds the build cache's *save* (`-Dmaven.build.cache.skipSave=true`); the
-cache itself is never turned off.
+`test-affected` reads the generated test index (`tests.json`) and the `fs-meta`
+change set, so it runs only the unit tests that depend on what changed. Measured
+on 2026-11-06: a no-op is **~0.5 s** and starts no Maven; `--all-unit` is
+**94 tests in 11 classes, 21.9 s**; and a `ContentHash` edit selects exactly
+`ContentHashTest` (6 tests, 9.3–10.0 s in T4), not the parser or generator tests.
+It is one-shot — watch mode is still later — and it is **not the recorded gate**.
+
+The fast lane is the fallback for what the selector cannot run: it excludes the
+`generator`, `compiler` and `completeness` groups, so use it (or `--fast --tests`)
+for a non-unit test, a generator/compiler change, or a shared build file. A
+generator change still gets its targeted `generator`/`compiler` classes; the
+**full suite is on request only** under the AGENTS affected-test policy. The
+byte-identical check in § 3.2 is one of the `generator` tests, so the fast lane
+skips it — run § 3.2 (or the affected generator set) when the change touches a
+view or the generator. `--fast` also withholds the build cache's *save*
+(`-Dmaven.build.cache.skipSave=true`); the cache itself is never turned off.
+
+**A new test gets a lane.** Tag a new test class `@Tag("unit")` only if it meets
+the contract (≤3 production classes, no integration surface), otherwise
+`@Tag("component")`; `bun scripts/check-test-lanes.js` fails when a test has no
+lane, so the lane cannot shrink silently.
 
 Measured on 2026-11-05: the fast lane is **45.6 s** (264 tooling unit tests plus
 the dependency modules), and `--fast --tests ContentHashTest` is **1.3 s**. For the
-full 542-test tooling suite use `bun scripts/mvn-fast.js --parallel-tests` (the
-opt-in four-fork profile; about **1:50** on this machine) or the recorded gate.
+full tooling suite use `bun scripts/mvn-fast.js --parallel-tests` (the opt-in
+four-fork profile; about **1:50** on this machine) or the recorded gate when it is
+asked for.
 
 ### 3.3 Verify only that regeneration is byte-identical
 
@@ -209,8 +223,9 @@ bun scripts/mvn-jdk25.js
 `mvn -o -pl <the recorded module set> -am clean test`. This is the gate: it
 compiles everything and runs the tests, `ExampleRegenerationTest` included. It
 does **not** regenerate, because nothing is bound to the lifecycle any more — so
-run § 3.2 (or § 3.1 and then the gate) when you have changed a view or the
-generator.
+run § 3.2 (or § 3.1 and then the affected/targeted tests) when you have changed a
+view or the generator. The gate itself is run **on request**, not before every
+commit; `bun scripts/test-affected.js` is the default edit loop (§ 3.2.1).
 
 ### 3.5 Live watch — regenerate on every save
 

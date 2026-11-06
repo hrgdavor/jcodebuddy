@@ -103,6 +103,9 @@ the Maven process). The committed launchers set `JAVA_HOME` for you:
 | `scripts/mvn-fast.js --tests SomeTest`        | the same, narrowed to one test class (adds `-Dtest=` and `-Dsurefire.failIfNoSpecifiedTests=false`; the cache is still read, just never written) |
 | `scripts/mvn-fast.js --no-clean`              | iterate without letting Maven touch the tree (likewise: reads cached, never saves)                  |
 | `scripts/mvn-fast.js --off-cache`             | no cache reuse at all, for when a result surprises you                                              |
+| `scripts/test-affected.js`                    | **the hipster-entity edit loop** — select the unit tests the changed files actually reach (from the generated `tests.json` and the `fs-meta` change set) and run only those through `mvn-fast --fast --tests`. No-op when nothing changed; publishes its state only after a successful run. **Not the gate**: the full suite stays on demand (AGENTS § 2) |
+| `scripts/test-affected.js --all-unit`         | run the whole `unit` lane (94 tests in 11 classes) and publish the state on success                 |
+| `scripts/test-affected.js --explain`          | print the changed file → FQN → test chains; run nothing and write nothing                           |
 | `scripts/gen.js`                              | run the generator as a **side tool** (not a build step): regenerate the example's committed entity output. Compile-only — no jars, no `mvn install`. Passes `--incremental` by default; a no-op does not re-render the HTML index |
 | `scripts/gen.js --full`                       | force a full pass instead of the incremental default                                                |
 | `scripts/gen.js --check`                      | verify the committed generated source and converter manifest in a temporary tree; write nothing, exit `0` current / `1` stale |
@@ -163,7 +166,13 @@ instantly from a previous full run. The same rule binds anyone running Maven by 
 a full `package` run**, and if a build reports impossible symbol errors, delete `~/.m2/build-cache` — it is a cache,
 and deleting it is always safe.
 
-**Use the fast path while working, the gate before a commit.** The cache lives in the user's Maven repository
+**Use the affected lane while working — the fast path when the selector cannot help — and the gate on request.**
+For work on `hipster-entity/`, the edit loop is `bun scripts/test-affected.js`: it selects the unit tests the
+changed files reach and runs only those through `mvn-fast --fast`, so an untouched tree is a no-op that starts no
+Maven. Use `mvn-fast.js --fast` (or `--tests <Class>`) when the selector cannot help — a non-unit test, a
+generator/compiler change, or a shared build file — and give a generator/compiler change its targeted
+`generator`/`compiler` classes. The full suite, `bun scripts/mvn-jdk25.js`, runs when the user asks for it rather
+than speculatively; AGENTS § 2 records that policy. The cache lives in the user's Maven repository
 (`~/.m2/build-cache`), not in the workspace: it is a fact about one machine, and deleting it is always safe.
 
 ### `proto/` — the driver projects are not part of this build

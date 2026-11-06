@@ -1,9 +1,10 @@
 # Incremental unit-test selection — a test dependency index over `fs-meta`
 
-**Status: 2026-11-06 — T0–T4 done; T5 next.** The policy is now recorded in
-[`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to the affected/fast lane, and the full suite is
-run only on request. This plan builds the selector that makes "affected" precise. It does not replace the
-fast lane or the gate: it adds a narrower, dependency-aware layer for the tests that are genuinely local.
+**Status: 2026-11-06 — T0–T6 done; the affected lane is the default and the full suite is on demand.** The policy
+is recorded in [`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to `bun scripts/test-affected.js`
+(and to the fast lane when the selector cannot help), and the full suite is run only on request. This plan built
+the selector that makes "affected" precise. It does not replace the fast lane or the gate: it adds a narrower,
+dependency-aware layer for the tests that are genuinely local. Watch mode remains out of scope (§ 7).
 
 The problem is not "tests are slow" any more ([`faster-java-tests.md`](faster-java-tests.md) cut the
 baseline six classes from 309.9 s to 73.6 s). The remaining problem is that the fast lane still runs every
@@ -44,16 +45,16 @@ Three things make this trustworthy rather than another selector that guesses:
 
 ## 2. Current inventory
 
-Measured on 2026-11-06 by `bun scripts/test-lanes.js` (83 test classes at T0; now **84** after T3 added
-`TestSelectorTest`, a component test: 11 unit / 21 component / 28 generator / 23 compiler / 1 completeness).
-The plan-time tree was 78 — five test classes landed with the MVP's E3–E6 work. **The direct-dependency
-distribution in the earlier revision of this section could not be reproduced**, so it is replaced by the
-probe's measured values; the plan-time column is the same rule over the 78-class tree, and confirms the
-totals are right even though the old buckets were not.
+Measured on 2026-11-06 by `bun scripts/test-lanes.js` (83 test classes at T0; now **85** after T3 added
+`TestSelectorTest` and T4 added `TestRunStateTest`, both component: 11 unit / 22 component / 28 generator /
+23 compiler / 1 completeness, **571** test methods). The plan-time tree was 78 — five test classes landed with
+the MVP's E3–E6 work. **The direct-dependency distribution in the earlier revision of this section could not be
+reproduced**, so it is replaced by the probe's measured values; the plan-time column is the same rule over the
+78-class tree, and confirms the totals are right even though the old buckets were not.
 
-- **83 test classes**, **542 test methods**; **52** carry a heavy tag (`generator` 28, `compiler` 23,
-  `completeness` 1). **11** classes / **94** methods meet the `unit` rule; **20** classes / **176** methods
-  are `component`; **0** are unclassified.
+- **85 test classes**, **571 test methods** (83 / 542 at T0); **52** carry a heavy tag (`generator` 28,
+  `compiler` 23, `completeness` 1). **11** classes / **94** methods meet the `unit` rule; **22** classes /
+  **205** methods are `component`; **0** are unclassified.
 - Direct project-class references per test class (measured from the constant pool, nested types folded to
   their top-level class):
 
@@ -366,6 +367,33 @@ state byte-identical. Index is now **85 rows / 11 unit / 22 component**. Full ga
 **Gate:** every probe is green; no full-suite count changes; docs links resolve; `test-affected` is
 measured (no-op, one-file, all-unit).
 
+**Done 2026-11-06.** The loop and the safety net were measured on the real tooling module, in this order; no
+source file was edited to force a change (a changed path is passed to the selector, never written):
+
+- `bun scripts/check-test-lanes.js` — **green**: 85 rows, **11 unit / 22 component / 28 generator / 23 compiler /
+  1 completeness**, no untagged test and no unit row over the threshold, **2.0 s**.
+- `bun scripts/test-affected.js` — **no-op**, `no test input changed since the last successful run`, **0.53 s**
+  (wall 0.56 s), exit 0, no Maven process, no state write.
+- `bun scripts/test-affected.js --all-unit` — **11 classes / 94 tests, 0 failures**, **21.9 s** (wall 21.97 s;
+  Maven's own reactor total 18.06 s), exit 0, state published.
+- Changed-tree probe: the top-level script has no `--changed`, and its `--explain` reads only the state's
+  change set, so this half uses the selector CLI documented in T3/T4 —
+  `TestSelector --index … --changed … --explain`. For the real
+  `jcodebuddy/jcodebuddy-core/src/main/java/hr/hrg/jcodebuddy/engine/index/ContentHash.java` it prints exactly
+  `ContentHash.java → ContentHash → ContentHashTest [unit, direct-production]`, selects **1** runnable test in
+  **0.55 s**, and the state directory's mtime is unchanged — **nothing written**. The fixture-level half is
+  `TestSelectorTest` (T3, **15/15**), which asserts the direct/indirect/test-support/POM/unmapped/stale
+  selection sets over a synthetic index.
+- `bun scripts/test-affected.js` again — **no-op**, **0.54 s**, so the `--all-unit` publish did not make the
+  next run re-select.
+- `node scripts/check-repo-links.mjs` — **ALL RELATIVE LINKS RESOLVE**: 299 Markdown files, 217 with 2032
+  relative links, **138 ms**, exit 0.
+
+`test-affected` is not the gate: the recorded full suite was **not run, on demand** (AGENTS § 2). No test was
+deleted, disabled or weakened; the only full-suite change is the two test classes T3 and T4 added. Docs updated:
+root `README.md` (command table and edit-loop prose), `codebuddy.md` § 3.2.1 and § 3.4, root `AGENTS.md` § 2,
+and `doc/AGENTS.md`.
+
 ### T6 — Measure and close (S)
 **Who:** agent · **Depends:** T5
 
@@ -375,6 +403,28 @@ lane” rule to the test docs.
 
 **Gate:** the recorded numbers are reproducible; the full gate is green at 542 tests; no test deleted,
 disabled or weakened.
+
+**Done 2026-11-06.** Final, measured numbers (this plan's inventory moved past 542 when T3 added
+`TestSelectorTest` and T4 added `TestRunStateTest`):
+
+| Measurement                        | Result                                                                            |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| Test classes / methods             | **85 / 571**                                                                      |
+| `unit` lane                        | **11 classes / 94 methods**                                                       |
+| `component` lane                   | **22 classes / 205 methods**                                                      |
+| No-op (`test-affected`)            | **0.53 s**, **0.54 s** and **0.72 s** across three runs; no Maven, no state write |
+| One-file selection (`--explain`)   | **0.55 s**, exactly `ContentHashTest`; the T4 run took **9.3–10.0 s**             |
+| Whole unit lane (`--all-unit`)     | **94 tests in 11 classes, 21.9 s**, 0 failures                                    |
+| Lane contract                      | green at 11 / 22 / 28 / 23 / 1, **2.0 s**                                         |
+
+A typical one-class edit runs **6 of the 94 unit tests** (`ContentHashTest`), so it skips **88 unit methods**
+and every one of the **52 heavy-tagged classes** (272 generator/compiler/completeness methods) that this lane
+never runs. The two no-op runs agree, and the lane contract's counts (11 / 22 / 28 / 23 / 1) match the committed
+T2/T4 records, so the numbers are reproducible. The **full gate was not run — it is on demand** (AGENTS § 2); the
+T6 gate's "542 tests" is the T2 baseline, and the current lane probe reports 571 methods after T3/T4's two test
+classes. No test was deleted, disabled or weakened. The "new test gets a lane" rule was added to
+[`codebuddy.md`](../hipster-entity/hipster-entity-example/codebuddy.md) § 3.2.1, and the README/AGENTS status
+now records `test-affected` as the default.
 
 ---
 
