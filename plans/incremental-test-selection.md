@@ -1,6 +1,6 @@
 # Incremental unit-test selection — a test dependency index over `fs-meta`
 
-**Status: 2026-11-06 — T0–T3 done; T4 next.** The policy is now recorded in
+**Status: 2026-11-06 — T0–T4 done; T5 next.** The policy is now recorded in
 [`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to the affected/fast lane, and the full suite is
 run only on request. This plan builds the selector that makes "affected" precise. It does not replace the
 fast lane or the gate: it adds a narrower, dependency-aware layer for the tests that are genuinely local.
@@ -343,6 +343,15 @@ test; the T2 contract remains green.
 **Gate:** first run selects and runs; second no-op; a one-file change selects only its dependents; a
 failed test leaves the state so the next run selects it again; a POM change selects all unit tests; the
 script prints its duration last.
+
+**Done 2026-11-06.** `TestRunState` owns the `fs-meta` trio + `run.json` under
+`.jcodebuddy/cache/test-affected/`, scanning the module's sources/resources/POM and every indexed workspace
+source root; `TestRunStateTest` is **14/14**. `scripts/test-affected.js` selects through `TestSelector`, runs
+the existing fast lane with `--fast --tests`, publishes only on success, and prints its duration last. The
+final `--all-unit` run was **94 tests, 0 failures**; the no-op is **0.5 s** with no Maven and no state write;
+a temporary `ContentHash` edit selected exactly `ContentHashTest` and ran 6 tests in 9.3–10.0 s; a POM edit
+selected all 11 unit classes; a non-unit test edit is reported as not runnable; a failed run leaves the
+state byte-identical. Index is now **85 rows / 11 unit / 22 component**. Full gate not run.
 
 ### T5 — Prove the loop and the safety net (M)
 **Who:** agent · **Depends:** T4
