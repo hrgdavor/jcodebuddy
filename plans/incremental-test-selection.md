@@ -1,6 +1,6 @@
 # Incremental unit-test selection — a test dependency index over `fs-meta`
 
-**Status: 2026-11-05 — proposed; inventory measured, no step started.** The policy is now recorded in
+**Status: 2026-11-06 — T0 and T1 done; T2 next.** The policy is now recorded in
 [`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to the affected/fast lane, and the full suite is
 run only on request. This plan builds the selector that makes "affected" precise. It does not replace the
 fast lane or the gate: it adds a narrower, dependency-aware layer for the tests that are genuinely local.
@@ -272,6 +272,14 @@ right, the per-bucket counts were not). No test was changed, no Maven run, no fu
 
 **Gate:** the index is generated for the tooling module; every test class has a row; the known row is
 exact; the index is deterministic across two runs; deleting it costs one regeneration.
+
+**Done 2026-11-06.** `TestIndexGenerator` (JDK 25 `java.lang.classfile`) and `scripts/test-index.js` write
+`.jcodebuddy/index/tests.json`: **83 test rows, 134 production rows, 222 files**, byte-identical across two
+runs. `TestIndexGeneratorTest` is **6/6**; `ContentHashTest` has exactly
+`hr.hrg.jcodebuddy.engine.index.ContentHash` in `productionDeps`, with the real cross-module source path and
+the transitive `Wyhash64` closure. The module's `.jcodebuddy/.gitignore` keeps the table derived. Integrating
+it exposed `GeneratorGuardTest`'s assumption that `index/` always has `classes.json`; the guard now allows
+the declared `tests.json` and only scans `classes.json` when it exists (**6/6**).
 
 ### T2 — Add the `unit` lane and its contract test (M)
 **Who:** agent · **Depends:** T1

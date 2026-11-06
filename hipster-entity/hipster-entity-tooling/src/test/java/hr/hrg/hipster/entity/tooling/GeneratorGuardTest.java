@@ -177,13 +177,19 @@ class GeneratorGuardTest {
     }
 
     /**
-     * Every committed {@code .jcodebuddy/index/} in this repository holds the class index and nothing
-     * else — in particular no DEC-028 {@code files.json} left behind by an older pass.
+     * Every committed {@code .jcodebuddy/index/} in this repository holds the class index and its declared
+     * sidecars — plus the generated test dependency table when the module has one — and nothing else. In
+     * particular no DEC-028 {@code files.json} left behind by an older pass.
      *
      * <p>{@code IndexLayoutTest} asserts this contract on a module it generates itself; this asserts it on
      * the tree that is actually committed. The two are not the same claim: a stale table is git-ignored
      * and therefore invisible to {@code git status}, while a consumer following a document's
      * {@code classIndex} pointer would find a directory that also holds a table nothing maintains.</p>
+     *
+     * <p>{@code tests.json} is derived and ignored too, but it is a declared table rather than stale
+     * residue: {@code scripts/test-index.js} writes it after {@code test-compile} (T1 of
+     * {@code plans/incremental-test-selection.md}). Its presence does not imply a <em>class</em> index has
+     * been generated yet, so the class-index content scan is conditional on that file existing.</p>
      */
     @Test
     void everyCommittedIndexDirectoryHoldsTheClassIndexAndNothingElse() throws Exception {
@@ -209,18 +215,24 @@ class GeneratorGuardTest {
                                 // to the FILE while a row belongs to a type, and repeating it per row is the copy
                                 // problem the same decision rejects.
                                 || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.IMPORTS_FILE_NAME)
-                                || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.README_NAME);
+                                || name.equals(hr.hrg.jcodebuddy.engine.index.ClassIndex.README_NAME)
+                                // The generated test dependency table (plan T1); derived, ignored, and
+                                // declared, so it is not the stale-table residue this guard is about.
+                                || name.equals(hr.hrg.hipster.entity.tooling.index.TestIndexGenerator.FILE_NAME);
                         if (!allowed) {
                             problems.add(repoRoot.relativize(entry).toString().replace('\\', '/'));
                         }
                     }
                 }
-                String text = Files.readString(
-                        indexDir.resolve(hr.hrg.jcodebuddy.engine.index.ClassIndex.FILE_NAME));
-                for (String contentish : List.of("sourcesContent", "\"content\":", "package ")) {
-                    if (text.contains(contentish)) {
-                        problems.add(repoRoot.relativize(indexDir).toString().replace('\\', '/')
-                                + " carries " + contentish);
+                Path classIndexFile = indexDir.resolve(
+                        hr.hrg.jcodebuddy.engine.index.ClassIndex.FILE_NAME);
+                if (Files.isRegularFile(classIndexFile)) {
+                    String text = Files.readString(classIndexFile);
+                    for (String contentish : List.of("sourcesContent", "\"content\":", "package ")) {
+                        if (text.contains(contentish)) {
+                            problems.add(repoRoot.relativize(indexDir).toString().replace('\\', '/')
+                                    + " carries " + contentish);
+                        }
                     }
                 }
             }
@@ -229,8 +241,8 @@ class GeneratorGuardTest {
                 "the repository has a module with a .jcodebuddy/index/, or this guard asserts nothing");
         Assertions.assertEquals(List.of(), problems,
                 "a module's index directory holds the class index, its two sidecars (the working-tree mtime and "
-                        + "the file's import lines, DEC-029/DEC-040) and the README; a stale files.json is a second "
-                        + "table nothing maintains, and the class index records names, paths and hashes rather than "
-                        + "content");
+                        + "the file's import lines, DEC-029/DEC-040), the README, and the declared test index; a "
+                        + "stale files.json is a second table nothing maintains, and the class index records names, "
+                        + "paths and hashes rather than content");
     }
 }

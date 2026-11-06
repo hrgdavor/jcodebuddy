@@ -1,0 +1,9 @@
+# This module's .jcodebuddy/ holds derived output only. `index/tests.json` is written by
+# scripts/test-index.js after test-compile (plans/incremental-test-selection.md § 4, T1); it is a fact
+# about one compiled test classpath, regenerable, and never committed. `conf/` is the reserved tracked
+# subtree if this module ever needs configuration that must survive a clone (DEC-026).
+*
+!.gitignore
+!README.md
+!conf/
+!conf/**
