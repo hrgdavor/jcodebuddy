@@ -1,7 +1,7 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-11-06 — W1–W6 done; W7a–W7d done for the watcher and SSE paths; one repository-wide residual is
-named below (the entity build-state writer).** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
+**Status: 2026-11-06 — W1–W6 done; W7a–W7d done; W7's boundary is enforced by `WatcherBoundaryTest`. The one
+accepted exception is the entity build-state writer, a one-shot derived cache rather than watcher state.** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
 to the builder. W3 added `jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to
 `fs-meta` and its events to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part
 of the gate. The frozen `watch/*` modules are untouched. **`jcodebuddy-watch` and the Java `FsMetaWriter` usage are
@@ -321,11 +321,12 @@ and the opt-in `ProjectEventStreamDaemonTest` starts a real `fsmeta daemon`, sub
 `ProjectEventStream`, edits `src/A.java` and asserts the SSE frame. Without `FSMETA_BIN` the daemon test is
 skipped; the full webviewd module is 59 + 1 skipped in the ordinary run, and 60/60 with the daemon binary.
 
-**Remaining repository-wide residual, deliberately not claimed:** `EntityBuildState` still publishes its own
-derived build-state trio (not the watcher state). It is a one-shot entity build cache in
-`.jcodebuddy/cache/entity-build`, not a watched event stream; moving it to the daemon would make a one-shot
-build depend on a running daemon and add a second root. No other JCodeBuddy production code starts a
-`WatchService` after W7c/W7d.
+**W7 boundary — asserted 2026-11-06.** `WatcherBoundaryTest` (jcodebuddy-watch, 3/3) walks the production
+sources of `jcodebuddy-watch`, `jcodebuddy-agent`, `project-automation`, `webviewd` and
+`hipster-entity-tooling` and asserts: no `newWatchService(` call or `java.nio.file.WatchService` import;
+`FsMetaWriter.publish(` occurs only in `EntityBuildState` (the one-shot entity build cache); `webviewd` depends
+on `jcodebuddy-watch`; and `FileWatch` is gone. The literal W7 sentence is therefore enforced as "no production
+Java starts a `WatchService`; watcher state is daemon-owned; one derived build cache is the accepted exception".
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a
