@@ -5,6 +5,8 @@ import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
 import org.openrewrite.java.tree.J;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
+import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.ContentHash;
 import hr.hrg.hipster.entity.tooling.meta.ArtifactMeta;
 import hr.hrg.hipster.entity.tooling.meta.InterfaceInfo;
 import hr.hrg.hipster.entity.tooling.meta.Property;
@@ -106,6 +108,33 @@ public final class MetadataLocations {
     }
 
     private MetadataLocations() {
+    }
+
+    /**
+     * Whether the table's rows for {@code moduleRelative} describe a revision other than the file's.
+     *
+     * <p>A row's checksum is what says which revision it describes (DEC-041 D3), so a mismatch means the
+     * pass rewrote the file after the walk read it and the row must be replaced. An empty checksum is a
+     * row written by a path that did not record one, which counts as stale for the same reason: re-reading
+     * costs a parse, and guessing costs correctness.</p>
+     */
+    private static boolean staleRow(ClassIndex index, String moduleRelative, Path file) {
+        List<ClassRecord> rows = index.byPath(moduleRelative);
+        if (rows.isEmpty()) {
+            return true;
+        }
+        String checksum;
+        try {
+            checksum = ContentHash.of(file);
+        } catch (IOException unreadable) {
+            return true;
+        }
+        for (ClassRecord row : rows) {
+            if (!checksum.equals(row.checksum())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -339,10 +368,13 @@ public final class MetadataLocations {
         // so, and it declares the types a document will name — including any nested type the view's field
         // map keys on, which is why every declaration is registered and not just the top-level one.
         J.CompilationUnit unit = read.unit();
-        if (index.byPath(moduleRelative).isEmpty()) {
-            // A file the walk did not see because this pass just emitted it (a renamed or new
-            // artifact). Existing generated files are already in the table with their DEC-021 flag,
-            // so adding again would duplicate the by-path rows without adding a fact.
+        if (index.byPath(moduleRelative).isEmpty() || staleRow(index, moduleRelative, candidate)) {
+            // A file the walk did not see because this pass just emitted it (a renamed or new artifact) —
+            // or one this pass REWROTE, whose row still describes the revision the pass read at the start
+            // of the walk. Re-registering replaces the row in place, so the table describes the file that
+            // is on disk now rather than the one it replaced (DEC-041 D3: the checksum is what says which
+            // revision a row describes). An artifact the pass rewrote identically is skipped, which is the
+            // common case and the reason this test is on content and not on "was it written".
             index.addTypes(moduleRelative, unit, source, true);
         }
         String headerDescription = dec021Description(source);

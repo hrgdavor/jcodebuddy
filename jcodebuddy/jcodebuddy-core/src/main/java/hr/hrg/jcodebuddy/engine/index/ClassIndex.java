@@ -449,8 +449,15 @@ public final class ClassIndex {
                     + "the same type — resolve it (drop one root, or rename one type) rather than "
                     + "letting the pass pick a winner by iteration order.");
         }
+        // One FQN per path, whatever order the rows arrive in. Re-registering a file is a normal event —
+        // a pass that rewrote an artifact re-reads it, and a base entry absorbed at the start of a pass
+        // may be replaced later in the same pass — so the reverse map must be a set, not an append-only
+        // list: a duplicate here makes `byPath` report one file's types twice.
         byFqn.put(row.fqn(), row);
-        byPath.computeIfAbsent(row.path(), __ -> new ArrayList<>()).add(row.fqn());
+        List<String> fqns = byPath.computeIfAbsent(row.path(), __ -> new ArrayList<>());
+        if (!fqns.contains(row.fqn())) {
+            fqns.add(row.fqn());
+        }
     }
 
     private void requireModuleRelative(String moduleRelativePath) {
@@ -476,6 +483,13 @@ public final class ClassIndex {
      */
     public void absorb(FileMetadata entry) {
         requireModuleRelative(entry.path());
+        if (entry.types().isEmpty()) {
+            // The same bookkeeping `addTypes` does, so absorbing an entry leaves the table in the state a
+            // parse would: a file that declares no type is reported, and one that declares types is not.
+            typeLessFiles.add(entry.path());
+        } else {
+            typeLessFiles.remove(entry.path());
+        }
         for (ClassRecord row : entry.types()) {
             put(row);
         }
@@ -1379,7 +1393,16 @@ public final class ClassIndex {
             return null;
         }
 
-        ClassIndex index = new ClassIndex(reportDir.resolve(INDEX_DIR_NAME), reportDir, moduleRoot,
+        // Where the table lives, found the way a pass finds it: beside the module's `.jcodebuddy/`, not
+        // under the directory a caller happens to pass as `reportDir`. The sidecars are read from beside
+        // the table (`mtimes.json`, `imports.json`), so a reader that resolved the directory differently
+        // would read the table and silently miss both — which is what happened to the entity pass, whose
+        // report directory is `.jcodebuddy/metadata/entity` while the table is in `.jcodebuddy/index`.
+        Path jcodebuddy = nearestJcodebuddy(reportDir);
+        Path indexDir = jcodebuddy != null
+                ? jcodebuddy.resolve(INDEX_DIR_NAME)
+                : reportDir.resolve(INDEX_DIR_NAME);
+        ClassIndex index = new ClassIndex(indexDir, reportDir, moduleRoot,
                 root.path("module").asText(""), root.path("sourceRoot").asText(""),
                 false, Clock.systemUTC());
         for (Map.Entry<String, JsonNode> entry : root.path("classes").properties()) {

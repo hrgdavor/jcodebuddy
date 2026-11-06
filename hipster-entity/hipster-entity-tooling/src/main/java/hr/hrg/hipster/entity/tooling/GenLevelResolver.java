@@ -92,49 +92,84 @@ public final class GenLevelResolver {
         if (level != GenLevel.DEFAULT) {
             return new Resolved(level, List.of());
         }
-
-        List<String> diagnostics = new ArrayList<>();
-
         // Rule 1: a nested record with a matching component list means the author wants a record.
         // Only direct members are inspected: `getMembers()` was the direct-member list, and a
         // nested type inside a nested type is not a declaration of this view.
         for (J.ClassDeclaration nested : directMembers(decl)) {
-            if (!TreeQueries.isKind(nested, J.ClassDeclaration.Kind.Type.Record)) {
-                continue;
+            if (TreeQueries.isKind(nested, J.ClassDeclaration.Kind.Type.Record)) {
+                return resolveDefault(recordComponentNames(nested), nested.getSimpleName(),
+                        hasNestedWrite(decl), fieldNames);
             }
-            List<String> components = recordComponentNames(nested);
+        }
+        return resolveDefault(null, null, hasNestedWrite(decl), fieldNames);
+    }
+
+    /**
+     * The same resolution from facts instead of a declaration: the shape a view reconstructed from its
+     * file's base entry has (E10).
+     *
+     * <p>There is one rule and this is its other door, not a second rule: {@link #resolve(GenLevel, J.ClassDeclaration, List)}
+     * hands the declaration's own answers to this method. A reconstructed view supplies the nested
+     * record's component names from the range the entry recorded and the nested {@code Write} from the
+     * nested type's own row, which is how the same decision is reached without a syntax tree.</p>
+     *
+     * @param requested              the level from {@code @View(gen = …)}, or {@code null} for "no marker"
+     * @param nestedRecordComponents the components of the first nested record, or {@code null} when there
+     *                               is none
+     * @param nestedRecordName       that record's simple name, for the diagnostic
+     * @param hasNestedWrite         whether the view declares a nested interface named {@code Write}
+     */
+    public static Resolved resolve(GenLevel requested, List<String> nestedRecordComponents,
+                                   String nestedRecordName, boolean hasNestedWrite, List<String> fieldNames) {
+        GenLevel level = requested == null ? GenLevel.DEFAULT : requested;
+        if (level != GenLevel.DEFAULT) {
+            return new Resolved(level, List.of());
+        }
+        return resolveDefault(nestedRecordComponents, nestedRecordName, hasNestedWrite, fieldNames);
+    }
+
+    /** The {@code DEFAULT} resolution itself, over facts rather than a declaration. */
+    public static Resolved resolveDefault(List<String> nestedRecordComponents, String nestedRecordName,
+                                          boolean hasNestedWrite, List<String> fieldNames) {
+        List<String> diagnostics = new ArrayList<>();
+
+        if (nestedRecordComponents != null) {
             if (fieldNames == null || fieldNames.isEmpty()) {
-                diagnostics.add("default_level_unresolved: nested record " + nested.getSimpleName()
+                diagnostics.add("default_level_unresolved: nested record " + nestedRecordName
                         + " found but the view's field list is not known yet; falling back to META");
                 return new Resolved(GenLevel.META, diagnostics);
             }
-            if (components.equals(fieldNames) || components.equals(withInheritedId(fieldNames))) {
+            if (nestedRecordComponents.equals(fieldNames)
+                    || nestedRecordComponents.equals(withInheritedId(fieldNames))) {
                 return new Resolved(GenLevel.RECORD, diagnostics);
             }
             // "If the two disagree (a stale record), emit the DEC-022 divergence diagnostic and
             // fall back to META rather than generating a create() that would not compile."
-            diagnostics.add("nested_record_mismatch: nested record " + nested.getSimpleName()
-                    + " has components " + components + " but the view's fields are "
+            diagnostics.add("nested_record_mismatch: nested record " + nestedRecordName
+                    + " has components " + nestedRecordComponents + " but the view's fields are "
                     + withInheritedId(fieldNames)
                     + "; falling back to META");
             return new Resolved(GenLevel.META, diagnostics);
         }
 
         // Rule 2: a nested Write interface means the author wants a builder.
-        boolean hasWrite = false;
-        for (J.ClassDeclaration nested : directMembers(decl)) {
-            if (TreeQueries.isKind(nested, J.ClassDeclaration.Kind.Type.Interface)
-                    && "Write".equals(nested.getSimpleName())) {
-                hasWrite = true;
-                break;
-            }
-        }
-        if (hasWrite) {
+        if (hasNestedWrite) {
             return new Resolved(GenLevel.BUILDER, diagnostics);
         }
 
         // Rule 3.
         return new Resolved(GenLevel.META, diagnostics);
+    }
+
+    /** Whether the declaration has a direct member that is an interface named {@code Write}. */
+    private static boolean hasNestedWrite(J.ClassDeclaration decl) {
+        for (J.ClassDeclaration nested : directMembers(decl)) {
+            if (TreeQueries.isKind(nested, J.ClassDeclaration.Kind.Type.Interface)
+                    && "Write".equals(nested.getSimpleName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Convenience: resolve without any field-name information for rule 1. */

@@ -80,14 +80,16 @@ tracked `.jcodebuddy/conf/converters.json` with the committed tree. It writes no
 - exit `1`: a file differs or is missing; every difference is named;
 - exit `2`: usage error.
 
-## What the MVP does not do
+## What remains out of scope
 
 - **No watcher.** Watch mode is deliberately postponed. When it lands it will call the same pass and reuse
   the same state; it will not add a second dependency graph or a second state directory.
 - **No daemon.** The state is written by `fs-meta`'s Java writer for now; the daemon cutover is a separate
   plan (W7b).
-- **No parse reuse.** The MVP parses the whole source set even when only one view emits. Parse caching is
-  the post-MVP E10 step.
+- **Parse reuse is implemented, with counted fallbacks.** A warm pass over an unchanged tree parses nothing
+  on the example; a one-file edit parses that file. The cache can still fall back to a parse when a view
+  needs a fact the base layer cannot supply; the reason is printed and counted. See E10 in
+  [`plans/hipster-entity-mvp.md`](../../plans/hipster-entity-mvp.md).
 - **No per-file emission cache.** The unit of emission is a view, not a file; an emitted view rewrites all
   of its artifacts.
 

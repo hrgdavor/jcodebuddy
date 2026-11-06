@@ -272,6 +272,73 @@ public final class ViewAnnotationReader {
         return parse(view).attributes();
     }
 
+    /**
+     * Parses a {@code @View} whose arguments are already <strong>written text</strong> instead of nodes.
+     *
+     * <p>A view reconstructed from its file's base entry (E10) has the annotation's name and its arguments
+     * as the source wrote them ({@code gen = GenLevel.BUILDER_ALL}) and no syntax tree to hand. The
+     * decoding is the shared one below, so the two paths cannot read one annotation differently: an
+     * attribute means what this class says it means, whichever way its text arrived.</p>
+     *
+     * <p>The distinction the node path draws between "bare {@code @View}" and "{@code @View()}" is
+     * preserved by the argument list, exactly as it is there: the base layer skips the empty placeholder,
+     * so both forms arrive as no arguments and both mean "all defaults".</p>
+     */
+    public static Parsed parseText(List<String> writtenArguments) {
+        List<String> diagnostics = new ArrayList<>();
+        ViewAttributes defaults = new ViewAttributes(GenLevel.DEFAULT, "", List.of());
+        if (writtenArguments == null || writtenArguments.isEmpty()) {
+            return new Parsed(defaults, diagnostics);
+        }
+
+        GenLevel gen = GenLevel.DEFAULT;
+        String discriminatorField = "";
+        List<String> addons = new ArrayList<>();
+        boolean dto = false;
+        boolean named = false;
+
+        for (String argument : writtenArguments) {
+            int assignment = assignmentSplit(argument);
+            if (assignment < 0) {
+                continue;
+            }
+            named = true;
+            String name = argument.substring(0, assignment).trim();
+            String value = argument.substring(assignment + 1).trim();
+            switch (name) {
+                case "gen" -> gen = genLevelFromText(value, diagnostics);
+                case "discriminatorField" -> discriminatorField = stringLiteralFromText(value);
+                case "addons" -> addons.addAll(addonNamesFromText(value, diagnostics));
+                case "dto" -> dto = booleanFromText(value, diagnostics);
+                default -> diagnostics.add("unknown_view_attribute: @" + name
+                        + " is not a member of @View and is ignored");
+            }
+        }
+
+        if (!named) {
+            diagnostics.add("unsupported_view_annotation_form: @View(" + String.join(", ", writtenArguments)
+                    + ") has no matching annotation member; treating gen as DEFAULT");
+            return new Parsed(defaults, diagnostics);
+        }
+        return new Parsed(new ViewAttributes(gen, discriminatorField, addons, dto), diagnostics);
+    }
+
+    /** The index of the {@code =} that names an annotation argument, or {@code -1}. */
+    private static int assignmentSplit(String argument) {
+        int depth = 0;
+        for (int i = 0; i < argument.length(); i++) {
+            char c = argument.charAt(i);
+            if (c == '(' || c == '{' || c == '[' || c == '<') {
+                depth++;
+            } else if (c == ')' || c == '}' || c == ']' || c == '>') {
+                depth = Math.max(0, depth - 1);
+            } else if (c == '=' && depth == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     // --------------------------------------------- shared attribute decoding ---
     //
     // These three run on a *rendered* attribute value, so the LST path and the
@@ -300,6 +367,20 @@ public final class ViewAnnotationReader {
             return text.substring(1, text.length() - 1);
         }
         return rendered;
+    }
+
+    /** The value of a {@code boolean} annotation member, from its written text. */
+    private static boolean booleanFromText(String rendered, List<String> diagnostics) {
+        String text = rendered.trim();
+        if ("true".equals(text)) {
+            return true;
+        }
+        if ("false".equals(text)) {
+            return false;
+        }
+        diagnostics.add("unresolved_view_attribute: '" + rendered
+                + "' is not a boolean literal; @View(dto) falls back to false");
+        return false;
     }
 
     /** Simple class names from a rendered {@code {A.class, B.class}}, or from a single class literal. */

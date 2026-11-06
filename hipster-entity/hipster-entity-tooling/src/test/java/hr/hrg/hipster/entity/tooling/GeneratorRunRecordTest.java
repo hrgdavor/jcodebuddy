@@ -128,12 +128,15 @@ class GeneratorRunRecordTest {
             // The run record is opt-in, so no `generation.json` appears. The module index does: DEC-028's
             // location rule puts the table beside the documents when the report directory is not inside a
             // `.jcodebuddy/`, because a temp directory has no module layout to put it in — and a document
-            // whose ids resolve nowhere is not a report.
-            Assertions.assertEquals(List.of("Thing.metadata.json", "index"),
+            // whose ids resolve nowhere is not a report. `cache` is the per-file base cache (DEC-041, plan
+            // step E10): derived output that lives beside the pass's other derived output, never source and
+            // never a document.
+            Assertions.assertEquals(List.of("Thing.metadata.json", "cache", "index"),
                     files.map(p -> p.getFileName().toString()).sorted().toList(),
-                    "the pass writes its metadata and the index its file ids resolve through, and "
-                            + "nothing else: the run record is opt-in, and a report directory still holds "
-                            + "JSON metadata rather than source (GeneratorGuardTest asserts the contents)");
+                    "the pass writes its metadata, the index its file ids resolve through, and its base"
+                            + " cache, and nothing else: the run record is opt-in, and a report directory"
+                            + " still holds derived output rather than source (GeneratorGuardTest asserts"
+                            + " the contents)");
         }
     }
 }

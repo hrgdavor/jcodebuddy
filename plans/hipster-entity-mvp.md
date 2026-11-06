@@ -1,7 +1,7 @@
 # hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
 
-**Status: 2026-11-05 — E0–E9 done (the MVP is declared); the full gate is on demand. E10 is the post-MVP
-scale step.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-06 — E0–E10 done (the MVP is declared and parse reuse is implemented); the full gate is on
+demand.** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
 practical. **Watch mode is deliberately out of scope**: the existing watcher path
@@ -466,6 +466,19 @@ the MVP makes it **correct**.
 class index and metadata are byte-identical to a cold pass; the E6 fallback matrix still passes; the
 example's regeneration test is green. If the base entries cannot reconstruct a view faithfully, the step
 stops and records the exact fact that is missing rather than adding it to the base layer (DEC-041 D6).
+
+**Done 2026-11-06.** `BaseLayerReconstructionProbeTest` proved 22/24 view facts come straight from
+`FileMetadata`; the other two — nested-record components and a discriminator's returned literal — are
+decoded from recorded spans plus the checksum-matched source. Declared type parameters, the one fact with no
+base field, are now decoded from `ClassRecord`/`MemberRecord` spans by a strict `DeclarationReader`; no
+`FileMetadata` field was added. `ParseReuseTest` measures **cold 42 parses**, **warm 0 parses / 0
+fallbacks / 42 hits (25 stat hits)**, and a one-file `PersonDetails` edit as **1 miss / 1 parse / 0
+fallbacks**. The independent cold copy produces the same generated source, metadata documents, imports
+sidecar and converter manifest byte-for-byte; `classes.json` rows are field-identical apart from
+`hashCalculatedAt` and `mtimes.json` for the two rows the edited pass re-hashed — wall-clock readings, the
+same exception `MetadataFileIdsTest` documents, and no other difference is excused. `TypeParameterRangeDecoderTest`
+is 6/6, the probe 2/2, and the tooling suite (590 tests) plus the affected core index tests are green;
+`bun scripts/gen.js` twice is a clean no-op. Full gate remains **not run, on demand**.
 
 ### E11 — Watch mode (explicitly not scheduled here)
 The watch path remains [`java-watch-to-fs-meta.md`](java-watch-to-fs-meta.md)'s W7b. When it lands, it

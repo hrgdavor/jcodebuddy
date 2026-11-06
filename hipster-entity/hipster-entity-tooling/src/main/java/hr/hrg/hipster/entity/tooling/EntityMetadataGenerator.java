@@ -7,6 +7,13 @@ import tools.jackson.databind.ObjectMapper;
 
 import hr.hrg.jcodebuddy.engine.index.ClassIndex;
 import hr.hrg.jcodebuddy.engine.index.ClassRecord;
+import hr.hrg.jcodebuddy.engine.index.ContentHash;
+import hr.hrg.jcodebuddy.engine.index.FileMetadata;
+import hr.hrg.jcodebuddy.engine.index.MemberRecord;
+import hr.hrg.jcodebuddy.engine.index.MetadataCache;
+import hr.hrg.jcodebuddy.engine.index.TypeAnnotation;
+import hr.hrg.jcodebuddy.engine.index.TypeFacts;
+import hr.hrg.jcodebuddy.engine.index.TypeRelation;
 import hr.hrg.hipster.entity.tooling.meta.EntityFieldMeta;
 import hr.hrg.hipster.entity.tooling.meta.EntityMeta;
 import hr.hrg.hipster.entity.tooling.meta.FieldConstraint;
@@ -990,7 +997,8 @@ public class EntityMetadataGenerator {
                     System.out.println("Incremental: no-op — " + decision.reason());
                     writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
                             mappers, startedAt, args,
-                            new PassReport("noop", decision.changed(), List.of(), 0, 0, decision.reason()));
+                            new PassReport("noop", decision.changed(), List.of(), 0, 0, decision.reason(),
+                                    ParseReuse.none()));
                     return;
                 }
                 changed = decision.changed();
@@ -1013,13 +1021,13 @@ public class EntityMetadataGenerator {
             writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
                     mappers, startedAt, args,
                     new PassReport(passMode, changed, report.affected(), report.emitted(), report.reused(),
-                            fallbackReason));
+                            fallbackReason, report.parseReuse()));
         } catch (IOException | RuntimeException failure) {
             // A failed pass is the run a reader most wants a record of, so the record is written
             // before the failure is rethrown.
             writeRunRecord(runRecord, "failed", failure, sourceRoot, outputDir, javaOutputRoot, packages,
                     mappers, startedAt, args,
-                    new PassReport(passMode, changed, null, null, null, fallbackReason));
+                    new PassReport(passMode, changed, null, null, null, fallbackReason, null));
             throw failure;
         } finally {
             // Reset the policy so a second pass in the same JVM (a test, a watcher run) does not
@@ -1044,7 +1052,8 @@ public class EntityMetadataGenerator {
      * writes the total as emitted, and an incremental pass records what it reused.</p>
      */
     private record PassReport(String mode, List<String> changed, List<String> affected,
-                              Integer emitted, Integer reused, String fallbackReason) {
+                              Integer emitted, Integer reused, String fallbackReason,
+                              ParseReuse parseReuse) {
     }
 
     /**
@@ -1116,6 +1125,20 @@ public class EntityMetadataGenerator {
             }
             if (report.fallbackReason() != null) {
                 record.put("fallbackReason", report.fallbackReason());
+            }
+            // E10's measurement: what the base cache answered for this pass's files. Written as the same
+            // object the report returns, so a reader of the run record and a caller of the API cannot see
+            // two different numbers for one pass.
+            ParseReuse parseReuse = report.parseReuse();
+            if (parseReuse != null) {
+                Map<String, Object> reuse = new LinkedHashMap<>();
+                reuse.put("files", parseReuse.parses() + parseReuse.hits());
+                reuse.put("parses", parseReuse.parses());
+                reuse.put("hits", parseReuse.hits());
+                reuse.put("statHits", parseReuse.statHits());
+                reuse.put("misses", parseReuse.misses());
+                reuse.put("fallbacks", parseReuse.fallbacks());
+                record.put("parseReuse", reuse);
             }
         }
         if (failure == null) {
@@ -1568,6 +1591,27 @@ public class EntityMetadataGenerator {
      */
     private static DivergenceReporter activeDivergences;
 
+    /**
+     * The class table of the pass that is running, or {@code null} outside a pass (E10).
+     *
+     * <p>It is pass state for one reason: {@link #declaresAbstractAccessor} needs an interface's
+     * <em>members</em>, and a cached view has no syntax tree to read them from. The table is the same
+     * projection of the same entries, so asking it is not a second source of truth — it is the source
+     * (DEC-041 D8). A parsed interface answers from its tree, unchanged.</p>
+     */
+    private static ClassIndex activeClassIndex;
+
+    /**
+     * The discriminator each cached view declares, keyed by qualified name (E10).
+     *
+     * <p>A discriminator's value is a method <strong>body</strong>, which the base layer does not store;
+     * the reconstruction recovers it from the member's recorded range. It is resolved <em>after</em> the
+     * interface map is complete because deciding whether the accessor really is a discriminator needs the
+     * supertype chain — the same rule for a parsed and a reconstructed view, so a cached view's value is
+     * kept here rather than guessed at its emitter. Empty for a full pass over parsed files.</p>
+     */
+    private static Map<String, Discriminator> activeDiscriminators = Map.of();
+
     /** Every compilation unit the current pass parsed, retained for lookups that need a non-interface. */
     private static final List<J.CompilationUnit> parsedCompilationUnits = new ArrayList<>();
 
@@ -1608,28 +1652,12 @@ public class EntityMetadataGenerator {
      * <p>Keys are simple names and values are fully-qualified names, nested types included
      * ({@code p.Outer.Inner} is indexed under {@code Inner}), sorted so a report is reproducible.</p>
      */
-    private static Map<String, List<String>> declaredTypesBySimpleName(List<ParsedUnit> units) {
+    private static Map<String, List<String>> declaredTypesBySimpleName(List<ClassRecord> rows) {
         Map<String, TreeSet<String>> byName = new TreeMap<>();
-        for (ParsedUnit unit : units) {
-            // The FQN is composed from the package and the enclosing chain, which is what replaces
-            // JavaParser's `getFullyQualifiedName()` — the LST has no such accessor, and a node does not
-            // know its own ancestry (MIGRATION-CAVEATS.md § 4.5). Nested types are included, as the old
-            // `findAll(TypeDeclaration.class)` included them.
-            String packageName = unit.packageName();
-            for (TreeQueries.EnclosedType enclosed : TreeQueries.typesWithEnclosing(unit.cu())) {
-                StringBuilder chain = new StringBuilder();
-                if (packageName != null && !packageName.isEmpty()) {
-                    chain.append(packageName).append('.');
-                }
-                for (J.ClassDeclaration enclosing : enclosed.enclosing()) {
-                    chain.append(enclosing.getSimpleName()).append('.');
-                }
-                chain.append(enclosed.declaration().getSimpleName());
-                String fqn = chain.toString();
-                String simpleName = enclosed.declaration().getSimpleName();
-                if (!simpleName.isEmpty()) {
-                    byName.computeIfAbsent(simpleName, __ -> new TreeSet<>()).add(fqn);
-                }
+        for (ClassRecord row : rows) {
+            String simpleName = simpleNameOf(row.fqn());
+            if (!simpleName.isEmpty()) {
+                byName.computeIfAbsent(simpleName, __ -> new TreeSet<>()).add(row.fqn());
             }
         }
         Map<String, List<String>> index = new TreeMap<>();
@@ -1677,6 +1705,7 @@ public class EntityMetadataGenerator {
         activeDivergences = divergences;
         parsedCompilationUnits.clear();
         typeDivergences.clear();
+        activeDiscriminators = Map.of();
         try {
             GenerationReport report = generateInternal(sourceRoot, outputDir, javaOutputRoot, divergences,
                     changedPaths);
@@ -1684,6 +1713,8 @@ public class EntityMetadataGenerator {
             return report;
         } finally {
             activeDivergences = null;
+            activeClassIndex = null;
+            activeDiscriminators = Map.of();
         }
     }
 
@@ -1827,9 +1858,35 @@ public class EntityMetadataGenerator {
      * @param emitted        views whose emitters ran
      * @param reused         views whose existing artifacts and metadata were reused
      * @param fallbackReason why an incremental request became a full pass, or {@code null}
+     * @param parseReuse     what the base cache answered about the files this pass read (E10)
      */
     public record GenerationReport(String mode, List<String> changed, List<String> affected,
-                                   int emitted, int reused, String fallbackReason) {
+                                   int emitted, int reused, String fallbackReason,
+                                   ParseReuse parseReuse) {
+    }
+
+    /**
+     * The parse-reuse counters of one pass (E10): the measurement the step's gate is stated in.
+     *
+     * <p>A <strong>warm</strong> pass over unchanged files reports {@code parses == 0} and its hits equal
+     * to its file count; a one-file edit reports exactly one parse. They are reported rather than
+     * asserted because a cache that silently stopped working looks exactly like one that works — which is
+     * the failure DEC-041's acceptance criteria exist to make visible.</p>
+     *
+     * @param parses    files this pass read through the parser
+     * @param hits      files whose stored facts described their current content
+     * @param statHits  of the hits, those decided by a `stat` alone — no read and no hash
+     * @param misses    files with no usable entry, so a parse was the only answer
+     * @param fallbacks of the misses, files whose entry WAS current but could not supply a fact the view
+     *                  needs — the reason is printed once per file, and every one of them is a fact
+     *                  DEC-041's base layer does not hold
+     */
+    public record ParseReuse(int parses, int hits, int statHits, int misses, int fallbacks) {
+
+        /** The counters of a run that parsed nothing because it ran no pass at all. */
+        public static ParseReuse none() {
+            return new ParseReuse(0, 0, 0, 0, 0);
+        }
     }
 
     /**
@@ -1970,6 +2027,10 @@ public class EntityMetadataGenerator {
                 : null;
         ClassIndex classIndex = ClassIndex.forPass(outputDir, moduleRoot, sourceRoot)
                 .merge(previousIndex);
+        // The table is this pass's projection of the base entries (DEC-041 D8), so the rules that need an
+        // interface's MEMBERS can ask it instead of a syntax tree — which is what lets a view
+        // reconstructed from its entry answer the same question a parsed one does (E10).
+        activeClassIndex = classIndex;
         // The detail the emission loop produces per view, keyed by the view's qualified name. Each view
         // is emitted exactly once for the whole pass (the `alreadyFound` set below), so the key is
         // unique; a view skipped by the `--packages` filter gets an empty detail, which is the honest
@@ -1988,26 +2049,82 @@ public class EntityMetadataGenerator {
         Set<String> changedFqns = new java.util.TreeSet<>();
         Set<String> affectedKeys = new LinkedHashSet<>();
         List<String> affectedNames = new ArrayList<>();
-        Map<String, String> sourceByPath = new HashMap<>();
         Set<String> generatedPaths = new HashSet<>();
         int totalViews = 0;
         int emittedCount = 0;
 
-        // Pass 1: parse every file. Reading an interface is deferred to pass 2 because a property's
-        // type may be declared in a file this walk has not reached yet, and the resolution that needs
-        // is against the whole source set (plan.dsflash § 8.2/3.6).
+        // Pass 1: every file's facts — parsed, or reconstructed from its base entry (E10).
+        //
+        // The unit of reuse is the file, which is the unit DEC-041 defines: `MetadataCache.entryFor`
+        // decides from the file's own content hash whether the facts stored for it still describe it,
+        // and a miss is the only thing that costs a parse. A cache is an optimisation and nothing else,
+        // so every branch that cannot answer from the entry parses instead — the answer is the same
+        // either way, and only the work differs.
+        //
+        // Reading an interface is still deferred to pass 2 because a property's type may be declared in a
+        // file this walk has not reached yet, and the resolution that needs is against the whole source
+        // set (plan.dsflash § 8.2/3.6).
         List<ParsedUnit> units = new ArrayList<>();
-        // Files JavaParser could not read cleanly. Collected rather than reported inline so the
+        // One entry per file whose facts were reused. Its source text is kept because the base layer
+        // stores RANGES, not text (DEC-041 D2): a nested record's components and a discriminator's
+        // literal are recovered by slicing the file at the range the entry recorded, and the checksum
+        // the cache already matched is what makes the slice trustworthy.
+        List<FileMetadata> reusedEntries = new ArrayList<>();
+        Map<String, String> reusedSourceByPath = new LinkedHashMap<>();
+        // The type-parameter names the REUSED files declare, decoded from their recorded declaration
+        // ranges as each file is reused. They are unioned with the parsed units' names below, because the
+        // pass-wide set must describe the whole source set whether a file was read as a tree or
+        // reconstructed from its entry — a name missing from it turns a bare type into `<Name>.class`.
+        Set<String> decodedTypeParameterNames = new LinkedHashSet<>();
+        // Files the parse path could not read cleanly. Collected rather than reported inline so the
         // report is emitted once per file, not once per marker iteration — and collected at all
         // because the silent version of this skip is the failure F-23 records: an unparseable file
         // contributes no interfaces and no declared types, so the pass produces a PARTIAL tree with
         // no error and the only symptom is an absent file in a diff.
         List<String> unparsedFiles = new ArrayList<>();
+        // The parse counters this step's gate is measured by: a warm pass over unchanged files must
+        // report zero parses, and one edit must report exactly one. They are printed at the end of the
+        // pass and written to the run record, so the claim is a measurement rather than a description.
+        // Counters the walk increments from a lambda, read once it finishes.
+        java.util.concurrent.atomic.AtomicInteger parsedCount = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger fallbackCount = new java.util.concurrent.atomic.AtomicInteger();
+        MetadataCache cache = MetadataCache.beside(outputDir);
         Files.walk(sourceRoot)
                 .filter(p -> p.toString().endsWith(".java"))
                 .forEach(filePath -> {
                     try {
+                        String unitPath = moduleRelativePath(moduleRoot, filePath);
                         String source = Files.readString(filePath);
+                        FileMetadata entry = cache.entryFor(unitPath, filePath, indexProblems);
+                        // An entry is reused only when every view fact it must supply can be reached
+                        // from what it stores — a stored field, or a range pointing at the file. When it
+                        // cannot, the file is parsed (the safe direction) and the reason counted, so a
+                        // project whose sources use a shape the base layer does not hold still gets the
+                        // right answer and a visible reason.
+                        //
+                        // The check also answers which type-parameter names the file declares, decoded
+                        // from its own declaration ranges: a decidable answer is the file's contribution
+                        // to the pass-wide set below, and an undecidable one is a parse (the names are then
+                        // the parser's to supply).
+                        ReuseCheck reuseCheck = entry == null ? null : checkReuse(entry, source);
+                        if (entry != null && reuseCheck.reusable()) {
+                            reusedEntries.add(entry);
+                            reusedSourceByPath.put(unitPath, source);
+                            decodedTypeParameterNames.addAll(reuseCheck.typeParameters());
+                            if (entry.generated()) {
+                                generatedPaths.add(unitPath);
+                            }
+                            if (ClassIndex.isModuleRelative(unitPath)) {
+                                classIndex.addFile(unitPath);
+                                classIndex.absorb(entry);
+                            }
+                            return;
+                        }
+                        if (entry != null) {
+                            fallbackCount.incrementAndGet();
+                            System.out.println("[parse] " + unitPath + ": parsed because " + reuseCheck.problem());
+                        }
+                        parsedCount.incrementAndGet();
                         SourceReader.Read read = SourceReader.readText(source);
                         if (!read.readable()) {
                             // Fail safe: the file contributes nothing, and the report says which one.
@@ -2027,9 +2144,8 @@ public class EntityMetadataGenerator {
                         // The unit's module-relative path travels with it for the same reason: the JSON
                         // records where each class and each accessor is declared, and only the walk knows
                         // the file a declaration came from (DEC-027's amendment).
-                        String unitPath = moduleRelativePath(moduleRoot, filePath);
-                        sourceByPath.put(unitPath, source);
-                        if (isGeneratedSource(source)) {
+                        boolean generated = isGeneratedSource(source);
+                        if (generated) {
                             generatedPaths.add(unitPath);
                         }
                         // Every file the pass read is named by the class index, before its types are
@@ -2039,11 +2155,17 @@ public class EntityMetadataGenerator {
                         // fail loudly rather than write a path into a document.
                         if (ClassIndex.isModuleRelative(unitPath)) {
                             classIndex.addFile(unitPath);
-                            // The LST path, with the source it was parsed from: the index refuses a
-                            // JavaParser unit now, and the source is what its line numbers come from.
-                            // The DEC-021 header is the generated flag: the walk is also how a file a
-                            // selective pass did not emit remains in the table with the right owner.
-                            classIndex.addTypes(unitPath, cu, source, isGeneratedSource(source));
+                            // One entry for the file, and the table is a PROJECTION of it (DEC-041 D8):
+                            // the entry is stored for the next pass and absorbed into this pass's table,
+                            // so a parsed file and a reused one leave the index in exactly the same state
+                            // — rows that carry the checksum of the revision they describe. That checksum
+                            // is what lets a later step notice that this pass rewrote the file.
+                            FileMetadata parsedEntry = FileMetadata.of(unitPath, ContentHash.of(filePath),
+                                    Files.size(filePath), Files.getLastModifiedTime(filePath).toMillis(),
+                                    generated, ClassIndex.factsOf(cu, source),
+                                    TreeQueries.importLines(cu));
+                            cache.store(parsedEntry, indexProblems);
+                            classIndex.absorb(parsedEntry);
                         }
                         units.add(new ParsedUnit(packageName, importTableOf(cu), cu, unitPath, source));
 
@@ -2053,8 +2175,12 @@ public class EntityMetadataGenerator {
                 });
 
         // The pass-wide type index. Only the declaring package can disambiguate an unimported simple
-        // name, so the index is consulted with the accessor's own package, never the view's.
-        Map<String, List<String>> declaredTypes = declaredTypesBySimpleName(units);
+        // name, so the index is consulted with the accessor's own package, never the view's. Built from
+        // the completed table rather than from the parsed units, because a reconstructed file's types
+        // are in the table too and a cached view's accessor may name one of them.
+        int parsedFiles = parsedCount.get();
+        int fallbackFiles = fallbackCount.get();
+        Map<String, List<String>> declaredTypes = declaredTypesBySimpleName(classIndex.rows());
 
         // The same import tables, keyed by the file they belong to, for the input-set writer (E3). A
         // property's source path is its declaring file, so a view inheriting an accessor from another
@@ -2063,12 +2189,28 @@ public class EntityMetadataGenerator {
         for (ParsedUnit unit : units) {
             importTablesByPath.put(unit.sourcePath(), unit.importTable());
         }
+        for (FileMetadata entry : reusedEntries) {
+            importTablesByPath.put(entry.path(), importTableOf(entry.imports()));
+        }
 
-        // The pass's type-parameter index (follow-up plan § 2.1). Computed here, from the units just
-        // parsed, so a bare name that is a type parameter is recognized without a hand-maintained
-        // list: `ID` was special-cased by name, and a list of one is the shape that produced F-43.
-        typeParameterNames = TypeLiterals.typeParameterNames(
+        // The pass's type-parameter index (follow-up plan § 2.1): computed from the units just parsed, so a
+        // bare name that is a type parameter is recognized without a hand-maintained list — `ID` was
+        // special-cased by name, and a list of one is the shape that produced F-43 — and then UNIONED with
+        // the names decoded from the reused files' declaration ranges. The union is what makes a warm pass
+        // resolve a bare name exactly as a cold pass over the same tree does: a file the parse path would
+        // have contributed names from is either parsed (so `TreeQueries` counts it) or reused (so its
+        // decoded set is added here), never neither. A file whose decode was undecidable was parsed for
+        // exactly this reason (see `checkReuse`).
+        Set<String> parsedTypeParameterNames = TypeLiterals.typeParameterNames(
                 units.stream().map(ParsedUnit::cu).toList());
+        if (decodedTypeParameterNames.isEmpty()) {
+            typeParameterNames = parsedTypeParameterNames;
+        } else {
+            Set<String> allTypeParameterNames = new LinkedHashSet<>(parsedTypeParameterNames);
+            allTypeParameterNames.addAll(decodedTypeParameterNames);
+            typeParameterNames = allTypeParameterNames;
+        }
+
 
         // E4: turn the change list into class-index FQNs before any emitter can run. An add/delete/rename
         // already fell back in E2; a generated file or a path with no type is also a full pass here,
@@ -2147,6 +2289,33 @@ public class EntityMetadataGenerator {
             }
         }
 
+        // Pass 2b: every interface whose file was reused — reconstructed from its base entry.
+        //
+        // The reconstruction produces the SAME InterfaceInfo the parse path produces, from the facts
+        // DEC-041 stores plus the ranges it stores instead of text. It cannot invent a fact: anything it
+        // cannot read faithfully made the walk parse the file instead (`cannotReconstruct`), so a view
+        // here has every fact its emitters ask for. The only components that differ are the two that
+        // only a syntax tree can hold — `declaration` is null, and the discriminator (a method body) is
+        // resolved below from `reusedDiscriminatorCandidates`.
+        Map<String, List<Discriminator>> reusedDiscriminatorCandidates = new LinkedHashMap<>();
+        for (FileMetadata entry : reusedEntries) {
+            String source = reusedSourceByPath.get(entry.path());
+            for (ClassRecord row : entry.types()) {
+                if (!"interface".equals(row.kind()) || row.depth() != 0) {
+                    continue;
+                }
+                InterfaceInfo info = reconstructInterface(entry, row, source, declaredTypes,
+                        reusedDiscriminatorCandidates);
+                interfaceMap.put(getQualifiedName(info.packageName(), info.name()), info);
+            }
+        }
+
+        // A cached view's discriminator, resolved once the whole interface map exists: whether a
+        // literal-carrying `default` accessor is the family's discriminator depends on an accessor a
+        // MARKER declares, and that marker may be in another file and therefore in another entry.
+        activeDiscriminators = resolveReconstructedDiscriminators(reusedDiscriminatorCandidates,
+                interfaceMap);
+
         // Sorted, so two runs over the same tree visit the markers in the same order. A HashMap here
         // made the pass order depend on hash iteration: the SAME view can be claimed by more than one
         // marker (the discovery predicate's `@View` half admits an annotated view to every marker's
@@ -2155,6 +2324,8 @@ public class EntityMetadataGenerator {
         // `PersonSummary_.id` alternate between `Long.class` (the real marker's type) and
         // `Object.class` (the doc-sample `Auditable<ID>` marker's type parameter) from run to run.
         Map<String, List<InterfaceInfo>> packageToMarkers = new java.util.TreeMap<>();
+
+
 
         // A marker is an interface that reaches `EntityBase` WITHOUT passing through another marker.
         // That is the precise reading of "the package's marker" (§ 4.5/G8 rule 0), and it is what
@@ -2611,6 +2782,16 @@ public class EntityMetadataGenerator {
             System.out.println("[index] no type declared in " + typeLess
                     + ", so the class index has no row for it (the table's key space is types)");
         }
+        // The parse-reuse measurement (E10). Printed on every pass, because the number a reader cares
+        // about — how much work the cache actually saved — is invisible otherwise, and a cache nobody
+        // measures is a cache that stops working without a symptom. A fallback is subtracted from the
+        // hits: its entry WAS current, but the file was parsed anyway, so counting it as a parse avoided
+        // would make the one number this step is measured by mean two things.
+        int reusedCount = cache.hits() - fallbackFiles;
+        System.out.println("[parse-reuse] " + (reusedCount + parsedFiles) + " file(s): "
+                + reusedCount + " reused (" + cache.statHits() + " decided by stat), "
+                + cache.misses() + " missing entr(ies), " + parsedFiles + " parse(s), "
+                + fallbackFiles + " fallback(s)");
         for (EntityMeta entityMeta : pendingDocuments) {
             Files.createDirectories(outputDir);
             Path outFile = outputDir.resolve(entityMeta.entityName() + ".metadata.json");
@@ -2621,7 +2802,9 @@ public class EntityMetadataGenerator {
         return new GenerationReport(full ? "full" : "incremental",
                 changedPaths == null ? List.of() : List.copyOf(changedPaths),
                 List.copyOf(affectedNames), emittedCount, Math.max(0, totalViews - emittedCount),
-                fallbackReason);
+                fallbackReason,
+                new ParseReuse(parsedFiles, Math.max(0, cache.hits() - fallbackFiles), cache.statHits(),
+                        cache.misses(), fallbackFiles));
     }
 
     /**
@@ -3166,6 +3349,1408 @@ public class EntityMetadataGenerator {
         return table;
     }
 
+    // ── E10: a view reconstructed from its file's base entry ──────────────────────────────────────
+    //
+    // The parse path reads a syntax tree per file. This path reads the file's BASE ENTRY instead — the
+    // strict file-local subset DEC-041 stores — and produces the same InterfaceInfo. It is the same model
+    // from a second source, not a second model: every fact below comes from a stored field or from a
+    // RANGE the entry recorded, sliced out of the file the entry's checksum already matched (DEC-041 D2:
+    // the entry carries positions, the hash says whether they describe the file, and the slice is the
+    // read).
+    //
+    // Two facts the generator needs are NOT stored, and both are reached through a range:
+    //
+    //   - a nested record's component names (a record's primary-constructor parameters are not members,
+    //     so no MemberRecord holds them; the nested type's own row holds its declaration range);
+    //   - a discriminator's value (a method BODY is not metadata; the member's range covers the whole
+    //     declaration, body included).
+    //
+    // Both are decoded by the narrow scanners in this block, and "narrow" is the contract:
+    // a shape a scanner cannot read makes the file be PARSED rather than reused (see
+    // cannotReconstruct), so the reuse path can be wrong about speed and never about the answer.
+    //
+    // One fact is absent from the base layer as a *field*: a declaration's type-parameter names
+    // (`TreeQueries.typeParameterNames`). It is recoverable the same way the two above are, from the
+    // ranges the entry already records: a type's `span()` covers its declaration header, so
+    // `interface Auditable<ID> extends EntityBase<ID>` carries `<ID>` in the slice, and a generic
+    // method's `<T>` sits inside the member's own span. `decodeDeclaredTypeParameters` reads those lists
+    // with a STRICT header reader (see `DeclarationReader`) and returns an undecidable answer — never an
+    // empty one — for any shape it cannot read, which is the only case that keeps the old fallback.
+    //
+    // The decoded names go into the pass-wide set the emitters consult (`TypeLiterals.typeParameterNames`
+    // unioned with the decoded per-file sets), so a reconstructed file's bare type name resolves exactly
+    // as the parse path would resolve it: `EntityBase<ID>` is `java.lang.Object` and its class literal
+    // agrees with the pass that parsed the same tree. A file whose decode is undecidable is PARSED rather
+    // than reused, because the union would otherwise be missing a name the parse path would have found —
+    // the direction is fixed: a false decode is a wrong answer, a false fallback is only a parse.
+
+    /**
+     * A file's declared type-parameter names, decoded from the declaration ranges its base entry records.
+     *
+     * @param names   every name the file declares, on a type or on one of its methods/constructors
+     * @param problem why the ranges could not be read, or {@code null} when the set is complete
+     */
+    private record DeclaredTypeParameters(Set<String> names, String problem) {
+
+        static DeclaredTypeParameters decided(Set<String> names) {
+            return new DeclaredTypeParameters(java.util.Collections.unmodifiableSet(names), null);
+        }
+
+        static DeclaredTypeParameters undecidable(String problem) {
+            return new DeclaredTypeParameters(Set.of(), problem);
+        }
+
+        /** Whether the set is complete, which is the only condition under which it may be reused. */
+        boolean decidable() {
+            return problem == null;
+        }
+    }
+
+    /**
+     * The declared type-parameter names of one file, read from the ranges its entry records.
+     *
+     * <p>Every named type of the file is a {@link ClassRecord} row, so every type-level list is reachable
+     * from a row's {@link ClassRecord#span()}; every method and constructor of those types is a
+     * {@link MemberRecord}, so every method-level list is reachable from a member's
+     * {@link MemberRecord#span()}. A range that is absent or unreadable makes the answer
+     * <strong>undecidable</strong>, never partially empty: the caller then parses the file, whose tree
+     * supplies the names {@code TreeQueries.typeParameterNames} reads. The one shape this cannot see is a
+     * type parameter declared by a method inside an anonymous class — no row describes an anonymous class
+     * — and that name is never in scope for an accessor's declared type, which is the only place the set
+     * is consulted.</p>
+     */
+    private static DeclaredTypeParameters decodeDeclaredTypeParameters(FileMetadata entry, String source) {
+        Set<String> names = new LinkedHashSet<>();
+        for (ClassRecord row : entry.types()) {
+            String simpleName = simpleNameOf(row.fqn());
+            String declaration = slice(source, row.span());
+            if (declaration == null) {
+                return DeclaredTypeParameters.undecidable("the declaration of `" + simpleName
+                        + "` records no readable range, so the file's type parameters cannot be decoded");
+            }
+            List<String> typeParameters = DeclarationReader.typeParameters(declaration, simpleName, row.kind());
+            if (typeParameters == null) {
+                return DeclaredTypeParameters.undecidable("the declaration range of `" + simpleName
+                        + "` does not read as a " + row.kind() + " declaration, so the file's type"
+                        + " parameters cannot be decoded");
+            }
+            names.addAll(typeParameters);
+            for (MemberRecord member : row.members()) {
+                if (member.kind() != MemberRecord.Kind.METHOD
+                        && member.kind() != MemberRecord.Kind.CONSTRUCTOR) {
+                    // Only a callable can declare type parameters of its own.
+                    continue;
+                }
+                String memberDeclaration = slice(source, member.span());
+                if (memberDeclaration == null) {
+                    return DeclaredTypeParameters.undecidable("the declaration of `" + simpleName + "."
+                            + member.name() + "` records no readable range, so the file's type parameters"
+                            + " cannot be decoded");
+                }
+                List<String> callableParameters = DeclarationReader.callableTypeParameters(memberDeclaration);
+                if (callableParameters == null) {
+                    return DeclaredTypeParameters.undecidable("the declaration range of `" + simpleName + "."
+                            + member.name() + "` does not read as a method or constructor declaration, so the"
+                            + " file's type parameters cannot be decoded");
+                }
+                names.addAll(callableParameters);
+            }
+        }
+        return DeclaredTypeParameters.decided(names);
+    }
+
+    /**
+     * A strict reader for the declaration headers a type-parameter list can sit in.
+     *
+     * <p>It reads exactly two shapes and refuses everything else. A type declaration is an annotation and
+     * modifier prefix, then {@code class}/{@code interface}/{@code enum}/{@code record} (or
+     * {@code @interface}) and the declared name, then an optional {@code <…>} list, then the header token
+     * that must follow it ({@code {}}, {@code (}, {@code extends}, {@code implements} or
+     * {@code permits}). A callable is an annotation and modifier prefix, then an optional {@code <…>}
+     * list, then a return type or the type's own name.</p>
+     *
+     * <p><strong>Only the names are taken; bounds are skipped.</strong> {@code <K, V extends Map<String,
+     * List<Long>>>} yields {@code K} and {@code V} — a bound is not a name and cannot become one, and a
+     * bound's nested {@code >} must not end the list. Every entry is validated as an identifier, and the
+     * text after the list is validated as a header token, so a range that points into something else is
+     * <strong>undecidable</strong> rather than an empty list. Strings, chars, comments and balanced
+     * parentheses are handled where an annotation or a bound can contain them; a text block is refused
+     * rather than guessed at, and an unterminated comment is refused rather than read past. This class
+     * exists instead of a regex for the reason the E10 note gives: a false decode is a wrong answer, and
+     * a false fallback is only a parse.</p>
+     *
+     * <p>Package-private rather than private so the decoder's own tests can exercise the shapes it must
+     * read and the shapes it must refuse without building a whole {@code FileMetadata} for each one.</p>
+     */
+    static final class DeclarationReader {
+
+        /** The keywords that begin a type declaration. */
+        private static final Set<String> TYPE_KEYWORDS = Set.of("class", "interface", "enum", "record");
+
+        /**
+         * The modifier keywords a declaration can carry — types and callables together, because the same
+         * prefix reader is used for both. A word that is neither a modifier nor a type keyword ends the
+         * prefix, which is what makes {@code String value()} a callable with no type parameters.
+         */
+        private static final Set<String> MODIFIERS = Set.of(
+                "public", "protected", "private", "abstract", "static", "final", "sealed", "strictfp",
+                "default", "synchronized", "native", "transient", "volatile");
+
+        private final String text;
+        private int at;
+
+        private DeclarationReader(String text) {
+            this.text = text;
+        }
+
+        /**
+         * The type-parameter names a type declaration's header carries.
+         *
+         * @param simpleName the name the row recorded, which must be the name the header declares
+         * @param kind       the row's kind ({@code class}/{@code interface}/{@code enum}/{@code record}/
+         *                   {@code annotation}); the keyword must agree with it
+         * @return the names (empty when the declaration declares none), or {@code null} when the text is
+         *         not that declaration
+         */
+        static List<String> typeParameters(String declaration, String simpleName, String kind) {
+            return new DeclarationReader(declaration).typeDeclaration(simpleName, kind);
+        }
+
+        /** The type-parameter names a method or constructor declares, or {@code null} when unreadable. */
+        static List<String> callableTypeParameters(String declaration) {
+            return new DeclarationReader(declaration).callable();
+        }
+
+        private List<String> typeDeclaration(String simpleName, String kind) {
+            while (true) {
+                if (!skipTrivia() || atEnd()) {
+                    return null;
+                }
+                char c = peek();
+                if (c == '@') {
+                    // `@interface` is the annotation-type keyword; anything else is an annotation to skip.
+                    int mark = at;
+                    at++;
+                    if (!skipTrivia()) {
+                        return null;
+                    }
+                    if ("interface".equals(identifier())) {
+                        return annotationTypeDeclaration(simpleName, kind);
+                    }
+                    at = mark;
+                    if (!skipAnnotation()) {
+                        return null;
+                    }
+                    continue;
+                }
+                if (c == 'n' && text.startsWith("non-sealed", at)) {
+                    // A hyphenated modifier, which `identifier()` would read as the word `non`.
+                    at += "non-sealed".length();
+                    continue;
+                }
+                if (!Character.isJavaIdentifierStart(c)) {
+                    return null;
+                }
+                String word = identifier();
+                if (word == null) {
+                    return null;
+                }
+                if (MODIFIERS.contains(word)) {
+                    continue;
+                }
+                if (!TYPE_KEYWORDS.contains(word) || !kindMatches(word, kind)) {
+                    return null;
+                }
+                if (!skipTrivia()) {
+                    return null;
+                }
+                String name = identifier();
+                if (name == null || !name.equals(simpleName)) {
+                    return null;
+                }
+                return typeParametersThen(true);
+            }
+        }
+
+        /** {@code @interface Name { … }}: the only header an annotation type has, and it has no type parameters. */
+        private List<String> annotationTypeDeclaration(String simpleName, String kind) {
+            if (!"annotation".equals(kind)) {
+                return null;
+            }
+            // `at` sits just past the word `interface`, after the `@`.
+            if (!skipTrivia()) {
+                return null;
+            }
+            String name = identifier();
+            if (name == null || !name.equals(simpleName)) {
+                return null;
+            }
+            if (!skipTrivia() || atEnd()) {
+                return null;
+            }
+            // An annotation type cannot declare type parameters, so a `{` is the only valid follower.
+            return peek() == '{' ? List.of() : null;
+        }
+
+        private List<String> callable() {
+            while (true) {
+                if (!skipTrivia() || atEnd()) {
+                    return null;
+                }
+                char c = peek();
+                if (c == '@') {
+                    if (!skipAnnotation()) {
+                        return null;
+                    }
+                    continue;
+                }
+                if (c == '<') {
+                    List<String> names = new ArrayList<>();
+                    if (!readTypeParameterList(names)) {
+                        return null;
+                    }
+                    // The list is this callable's own only if a return type (or the constructor's type name)
+                    // follows it; a type-use annotation there is a shape this reader refuses.
+                    if (!skipTrivia() || atEnd() || !Character.isJavaIdentifierStart(peek())) {
+                        return null;
+                    }
+                    return List.copyOf(names);
+                }
+                if (c == 'n' && text.startsWith("non-sealed", at)) {
+                    at += "non-sealed".length();
+                    continue;
+                }
+                if (!Character.isJavaIdentifierStart(c)) {
+                    return null;
+                }
+                String word = identifier();
+                if (word == null) {
+                    return null;
+                }
+                if (MODIFIERS.contains(word)) {
+                    continue;
+                }
+                // The first non-modifier word is the return type (or a constructor's type name): no list.
+                return List.of();
+            }
+        }
+
+        /**
+         * The optional {@code <…>} list after a type's declared name, then the header token that must
+         * follow it.
+         *
+         * @param requireHeader whether the token after the list must be one a type header can carry — the
+         *                      check that turns a range pointing at something else into an undecidable
+         *                      answer instead of a silent "no type parameters"
+         */
+        private List<String> typeParametersThen(boolean requireHeader) {
+            if (!skipTrivia() || atEnd()) {
+                return null;
+            }
+            List<String> names = new ArrayList<>();
+            if (peek() == '<') {
+                if (!readTypeParameterList(names)) {
+                    return null;
+                }
+                if (!skipTrivia() || atEnd()) {
+                    return null;
+                }
+            }
+            if (requireHeader && !isTypeHeaderToken()) {
+                return null;
+            }
+            return List.copyOf(names);
+        }
+
+        /** Whether the reader is at {@code {}}, {@code (}, {@code extends}, {@code implements} or {@code permits}. */
+        private boolean isTypeHeaderToken() {
+            char c = peek();
+            if (c == '{' || c == '(') {
+                return true;
+            }
+            if (!Character.isJavaIdentifierStart(c)) {
+                return false;
+            }
+            int mark = at;
+            String word = identifier();
+            at = mark;
+            return "extends".equals(word) || "implements".equals(word) || "permits".equals(word);
+        }
+
+        /**
+         * Read one {@code <…>} type-parameter list at {@code at}, adding its declared names to
+         * {@code into}; {@code false} when the text is not a list this reader can read faithfully.
+         */
+        private boolean readTypeParameterList(List<String> into) {
+            if (atEnd() || peek() != '<') {
+                return false;
+            }
+            at++;
+            while (true) {
+                if (!skipTrivia() || atEnd()) {
+                    return false;
+                }
+                String name = identifier();
+                // A keyword, an annotation on the parameter (`<@NonNull T>`) or anything else that is not a
+                // plain identifier is a shape this reader refuses rather than guesses at.
+                if (name == null || MODIFIERS.contains(name) || TYPE_KEYWORDS.contains(name)) {
+                    return false;
+                }
+                into.add(name);
+                if (!skipTrivia() || atEnd()) {
+                    return false;
+                }
+                if (peek() == '>') {
+                    at++;
+                    return true;
+                }
+                if (peek() != ',') {
+                    String word = Character.isJavaIdentifierStart(peek()) ? identifier() : null;
+                    if (!"extends".equals(word)) {
+                        return false;
+                    }
+                    if (!skipBound()) {
+                        return false;
+                    }
+                    while (true) {
+                        if (!skipTrivia() || atEnd()) {
+                            return false;
+                        }
+                        if (peek() != '&') {
+                            break;
+                        }
+                        at++;
+                        if (!skipBound()) {
+                            return false;
+                        }
+                    }
+                    if (!skipTrivia() || atEnd()) {
+                        return false;
+                    }
+                }
+                if (peek() == ',') {
+                    at++;
+                    continue;
+                }
+                if (peek() == '>') {
+                    at++;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /**
+         * Skip one type after {@code extends}: a (possibly generic or qualified) type name, up to the
+         * top-level {@code &}, {@code ,} or {@code >} that the caller handles. Anything that is not type
+         * syntax is refused.
+         */
+        private boolean skipBound() {
+            int depth = 0;
+            boolean sawTypeName = false;
+            while (!atEnd()) {
+                char c = peek();
+                if (c == '"') {
+                    if (!skipStringLiteral()) {
+                        return false;
+                    }
+                    continue;
+                }
+                if (c == '\'') {
+                    if (!skipCharacterLiteral()) {
+                        return false;
+                    }
+                    continue;
+                }
+                if (c == '/' && at + 1 < text.length()
+                        && (text.charAt(at + 1) == '/' || text.charAt(at + 1) == '*')) {
+                    if (!skipTrivia()) {
+                        return false;
+                    }
+                    continue;
+                }
+                if (depth > 0) {
+                    // Inside a type-argument list only the angle brackets carry structure.
+                    if (c == '<') {
+                        depth++;
+                    } else if (c == '>') {
+                        depth--;
+                    }
+                    at++;
+                    continue;
+                }
+                if (c == '<') {
+                    depth++;
+                    at++;
+                    continue;
+                }
+                if (c == '>') {
+                    return sawTypeName;
+                }
+                if (c == ',' || c == '&') {
+                    return sawTypeName;
+                }
+                if (Character.isJavaIdentifierStart(c)) {
+                    identifier();
+                    sawTypeName = true;
+                    continue;
+                }
+                if (c == '?' || c == '.' || c == '[' || c == ']' || Character.isWhitespace(c)) {
+                    at++;
+                    continue;
+                }
+                return false;
+            }
+            return false;
+        }
+
+        /** Skip {@code @Name}, {@code @a.b.Name} and a parenthesised argument list; {@code at} is the {@code @}. */
+        private boolean skipAnnotation() {
+            at++;
+            if (!skipTrivia() || qualifiedIdentifier() == null) {
+                return false;
+            }
+            if (!skipTrivia()) {
+                return false;
+            }
+            return atEnd() || peek() != '(' || skipBalanced('(', ')');
+        }
+
+        private String qualifiedIdentifier() {
+            String first = identifier();
+            if (first == null) {
+                return null;
+            }
+            StringBuilder name = new StringBuilder(first);
+            while (true) {
+                int mark = at;
+                if (!skipTrivia()) {
+                    return null;
+                }
+                if (atEnd() || peek() != '.') {
+                    at = mark;
+                    return name.toString();
+                }
+                at++;
+                if (!skipTrivia()) {
+                    return null;
+                }
+                String next = identifier();
+                if (next == null) {
+                    return null;
+                }
+                name.append('.').append(next);
+            }
+        }
+
+        /** Skip a balanced {@code open}…{@code close} pair, strings, chars and comments included. */
+        private boolean skipBalanced(char open, char close) {
+            int depth = 0;
+            while (!atEnd()) {
+                char c = peek();
+                if (c == '"') {
+                    if (!skipStringLiteral()) {
+                        return false;
+                    }
+                } else if (c == '\'') {
+                    if (!skipCharacterLiteral()) {
+                        return false;
+                    }
+                } else if (c == '/' && at + 1 < text.length()
+                        && (text.charAt(at + 1) == '/' || text.charAt(at + 1) == '*')) {
+                    if (!skipTrivia()) {
+                        return false;
+                    }
+                } else if (c == open) {
+                    depth++;
+                    at++;
+                } else if (c == close) {
+                    depth--;
+                    at++;
+                    if (depth == 0) {
+                        return true;
+                    }
+                } else {
+                    at++;
+                }
+            }
+            return false;
+        }
+
+        /** Skip a single-line or block comment and the whitespace around it; {@code false} when unterminated. */
+        private boolean skipTrivia() {
+            while (!atEnd()) {
+                char c = peek();
+                if (Character.isWhitespace(c)) {
+                    at++;
+                } else if (c == '/' && at + 1 < text.length() && text.charAt(at + 1) == '/') {
+                    int newline = text.indexOf('\n', at + 2);
+                    at = newline < 0 ? text.length() : newline + 1;
+                } else if (c == '/' && at + 1 < text.length() && text.charAt(at + 1) == '*') {
+                    int close = text.indexOf("*/", at + 2);
+                    if (close < 0) {
+                        return false;
+                    }
+                    at = close + 2;
+                } else {
+                    break;
+                }
+            }
+            return true;
+        }
+
+        /** Skip one string literal; {@code false} for a text block or an unterminated literal. */
+        private boolean skipStringLiteral() {
+            if (text.startsWith("\"\"\"", at)) {
+                // A text block's value depends on incidental indentation and escapes; refused, not guessed.
+                return false;
+            }
+            at++;
+            while (!atEnd()) {
+                char c = text.charAt(at);
+                if (c == '\\') {
+                    at += 2;
+                } else {
+                    at++;
+                    if (c == '"') {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /** Skip one character literal; {@code false} when unterminated. */
+        private boolean skipCharacterLiteral() {
+            at++;
+            while (!atEnd()) {
+                char c = text.charAt(at);
+                if (c == '\\') {
+                    at += 2;
+                } else {
+                    at++;
+                    if (c == '\'') {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /** Read a Java identifier, or {@code null} when the next character does not start one. */
+        private String identifier() {
+            if (atEnd() || !Character.isJavaIdentifierStart(peek())) {
+                return null;
+            }
+            int start = at++;
+            while (!atEnd() && Character.isJavaIdentifierPart(peek())) {
+                at++;
+            }
+            return text.substring(start, at);
+        }
+
+        private static boolean kindMatches(String keyword, String kind) {
+            return switch (keyword) {
+                case "class" -> "class".equals(kind);
+                case "interface" -> "interface".equals(kind);
+                case "enum" -> "enum".equals(kind);
+                case "record" -> "record".equals(kind);
+                default -> false;
+            };
+        }
+
+        private boolean atEnd() {
+            return at >= text.length();
+        }
+
+        private char peek() {
+            return text.charAt(at);
+        }
+    }
+
+    /**
+     * The reuse decision for one file: whether its entry may be reused, why not when it may not, and the
+     * type-parameter names it declares when it may.
+     *
+     * <p>Two answers in one value on purpose: the decoded names are what the pass-wide set needs, and a
+     * file whose names are undecidable is exactly the file that must be parsed to obtain them.</p>
+     */
+    private record ReuseCheck(Set<String> typeParameters, String problem) {
+
+        static ReuseCheck reuse(Set<String> typeParameters) {
+            return new ReuseCheck(typeParameters, null);
+        }
+
+        static ReuseCheck parse(String problem) {
+            return new ReuseCheck(Set.of(), problem);
+        }
+
+        /** Whether the file's facts may be reconstructed instead of parsed. */
+        boolean reusable() {
+            return problem == null;
+        }
+    }
+
+    /**
+     * Whether a file whose base entry is current may be reused, and if not, why.
+     *
+     * <p>It answers two things the walk needs together: whether the entry can supply every fact the
+     * reconstruction reads, and, when it can, which type-parameter names it declares — the second being
+     * the file's contribution to the pass-wide set the emitters resolve bare names against. A decode that
+     * is undecidable is a parse, never a partial set.</p>
+     */
+    private static ReuseCheck checkReuse(FileMetadata entry, String source) {
+        DeclaredTypeParameters declared = decodeDeclaredTypeParameters(entry, source);
+        if (!declared.decidable()) {
+            return ReuseCheck.parse(declared.problem());
+        }
+        String structural = cannotReconstruct(entry, declared.names(), source);
+        return structural == null ? ReuseCheck.reuse(declared.names()) : ReuseCheck.parse(structural);
+    }
+
+    /**
+     * Why a file whose base entry is current cannot be reused, or {@code null} when it can.
+     *
+     * <p>The check is the contract the reuse path depends on: every fact {@link #reconstructInterface}
+     * reads must either be stored or be readable at a recorded range, and a fact it cannot read is a
+     * parse rather than an approximation. It is deliberately conservative — a false "no" costs a parse,
+     * a false "yes" costs a wrong generated tree.</p>
+     *
+     * @param declaredTypeParameters the names this file declares, decoded from its own declaration ranges
+     *                               by {@link #decodeDeclaredTypeParameters}; a bare name's class literal
+     *                               depends on whether it is one of them
+     */
+    private static String cannotReconstruct(FileMetadata entry, Set<String> declaredTypeParameters,
+                                            String source) {
+        for (ClassRecord row : entry.types()) {
+            if (row.depth() != 0 || !"interface".equals(row.kind())) {
+                continue;
+            }
+            String reason = cannotReconstruct(entry, row, declaredTypeParameters, source);
+            if (reason != null) {
+                return reason;
+            }
+        }
+        return null;
+    }
+
+    private static String cannotReconstruct(FileMetadata entry, ClassRecord row,
+                                            Set<String> declaredTypeParameters, String source) {
+        String view = simpleNameOf(row.fqn());
+        if (row.span() == null) {
+            return "the declaration of " + view + " records no range, so its recorded line is not recoverable";
+        }
+        for (TypeRelation relation : row.relations()) {
+            String written = slice(source, relation.span());
+            if (written == null) {
+                return "the supertype " + relation.name() + " of " + view + " records no written range";
+            }
+            // The range must still name the relation the row records, or it points at something else.
+            if (!TypeFacts.withoutTypeArguments(written.trim()).equals(relation.name())) {
+                return "the recorded range of " + view + "'s supertype " + relation.name()
+                        + " does not contain it";
+            }
+            if ("EntityBase".equals(simpleNameOf(relation.name()))) {
+                String argument = typeArgument(written);
+                if (argument == null || argument.contains("<") || argument.contains(",")) {
+                    return "the id type of " + view + " is a type argument the base layer does not store"
+                            + " and this range cannot read faithfully";
+                }
+                // The id type becomes a class literal (`toFullTypeName`), and a BARE name's literal
+                // depends on the pass's type-parameter names. The names this file declares were decoded
+                // from its declaration ranges, so `EntityBase<ID>` in a file that declares `<ID>` is
+                // decided; a bare name that is NOT one of this file's type parameters is not, because
+                // the pass-wide set also holds names declared in other files (and in an anonymous
+                // class's methods, which no row describes). See the note at the head of this block.
+                if (TypeLiterals.resolutionOf(argument, declaredTypeParameters)
+                        == TypeLiterals.Resolution.DECLARED) {
+                    return "the id type `" + argument + "` of " + view + " is a bare name that this file"
+                            + " does not declare as a type parameter, so its class literal cannot be"
+                            + " decided from the recorded ranges";
+                }
+            }
+        }
+        for (MemberRecord member : row.members()) {
+            if (!isFieldAccessor(member)) {
+                continue;
+            }
+            for (TypeAnnotation annotation : member.annotations()) {
+                if ("FieldSource".equals(annotation.simpleName())
+                        || ValidationGenerator.RECOGNISED.contains(annotation.simpleName())) {
+                    continue;
+                }
+                // An annotation outside the recognised constraint vocabulary is read for its NAMESPACE,
+                // which the entry does not store: only the range knows whether it was written qualified.
+                if (annotation.span() == null) {
+                    return "the annotation @" + annotation.simpleName() + " on " + view + "." + member.name()
+                            + " records no range, so its namespace is not recoverable";
+                }
+            }
+            // The same fact as the marker's id type: a bare type name's class literal depends on whether
+            // it is a declared type parameter. The names this file declares were decoded, so a name that is
+            // one of them is decided; one that is not may still be a type parameter of another file in the
+            // pass-wide set, so it keeps the fallback.
+            if (TypeLiterals.resolutionOf(member.type(), declaredTypeParameters)
+                    == TypeLiterals.Resolution.DECLARED) {
+                return "the declared type `" + member.type() + "` of " + view + "." + member.name()
+                        + " is a bare name that this file does not declare as a type parameter, so its"
+                        + " resolution cannot be decided from the recorded ranges";
+            }
+        }
+        for (MemberRecord member : row.members()) {
+            if (!isDiscriminatorCandidate(member)) {
+                continue;
+            }
+            String declarationText = slice(source, member.span());
+            if (declarationText == null) {
+                return "the body of " + view + "." + member.name()
+                        + " records no range, so its discriminator value is not recoverable";
+            }
+            if (!returnedStringLiteral(declarationText).decidable()) {
+                return "the body of " + view + "." + member.name()
+                        + " is a returned string literal this build cannot read, so its discriminator"
+                        + " value is not recoverable";
+            }
+        }
+        ClassRecord nestedRecord = nestedRecordRow(entry, row.fqn());
+        if (nestedRecord != null) {
+            String header = slice(source, nestedRecord.span());
+            if (header == null || recordComponents(header) == null) {
+                return "the component list of the nested record " + nestedRecord.fqn()
+                        + " is not readable from its recorded range";
+            }
+        }
+        return null;
+    }
+
+    /** Whether a member is a {@code default}, no-argument, non-void method — the shape a discriminator has. */
+    private static boolean isDiscriminatorCandidate(MemberRecord member) {
+        return member.kind() == MemberRecord.Kind.METHOD
+                && member.parameters().isEmpty()
+                && !"void".equals(member.type())
+                && member.modifiers().contains("default")
+                && member.hasBody();
+    }
+
+    /** The record {@code outerFqn} declares as a direct member, or {@code null}. */
+    private static ClassRecord nestedRecordRow(FileMetadata entry, String outerFqn) {
+        for (ClassRecord row : entry.types()) {
+            if (outerFqn.equals(row.enclosing()) && "record".equals(row.kind())) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a member is a view field accessor, read from its base-layer facts (see {@link #isFieldAccessor}). */
+    private static boolean isFieldAccessor(MemberRecord member) {
+        if (member.kind() != MemberRecord.Kind.METHOD || !member.parameters().isEmpty()) {
+            return false;
+        }
+        if ("void".equals(member.type())) {
+            return false;
+        }
+        if (member.modifiers().contains("default") || member.modifiers().contains("static")) {
+            return false;
+        }
+        return !FRAMEWORK_ACCESSORS.contains(member.name());
+    }
+
+    /**
+     * The {@link InterfaceInfo} one base-entry row describes, with the property and attribute rules the
+     * parse path applies — reached through {@link #reconstructProperty} and
+     * {@link #reconstructViewAttributes}, so a rule has one owner and two sources.
+     */
+    private static InterfaceInfo reconstructInterface(FileMetadata entry, ClassRecord row, String source,
+                                                     Map<String, List<String>> declaredTypes,
+                                                     Map<String, List<Discriminator>> candidates) {
+        String name = simpleNameOf(row.fqn());
+        String packageName = packageOfFqn(row.fqn(), name);
+        Map<String, String> importTable = importTableOf(entry.imports());
+
+        List<MemberRecord> accessors = new ArrayList<>();
+        for (MemberRecord member : row.members()) {
+            if (isFieldAccessor(member)) {
+                accessors.add(member);
+            }
+        }
+        List<Property> properties = new ArrayList<>(accessors.size());
+        for (MemberRecord accessor : accessors) {
+            properties.add(reconstructProperty(entry, name, packageName, accessor, source, importTable,
+                    declaredTypes));
+        }
+
+        List<Discriminator> declared = new ArrayList<>();
+        for (MemberRecord member : row.members()) {
+            if (!isDiscriminatorCandidate(member)) {
+                continue;
+            }
+            String literal = returnedStringLiteral(slice(source, member.span())).value();
+            if (literal != null) {
+                declared.add(new Discriminator(member.name(), literal));
+            }
+        }
+        if (!declared.isEmpty()) {
+            candidates.put(row.fqn(), declared);
+        }
+
+        List<String> supertypes = new ArrayList<>(row.relations().size());
+        for (TypeRelation relation : row.relations()) {
+            supertypes.add(slice(source, relation.span()));
+        }
+        ClassRecord nestedRecord = nestedRecordRow(entry, row.fqn());
+        return new InterfaceInfo(packageName, name, supertypes, properties,
+                reconstructViewAttributes(entry, row, accessors, source), entityBaseIdType(row, source),
+                row.span() == null ? -1 : lineAt(source, row.span().start()),
+                nestedRecord == null ? null : recordComponents(slice(source, nestedRecord.span())),
+                row.modifiers().contains("public"), null, entry.path());
+    }
+
+    /** {@code hr.a.b.Outer} → {@code hr.a.b}, given the row's own simple name. */
+    private static String packageOfFqn(String fqn, String simpleName) {
+        return fqn.length() > simpleName.length() ? fqn.substring(0, fqn.length() - simpleName.length() - 1) : "";
+    }
+
+    /**
+     * The {@code EntityBase<Id>} type argument, read from the written supertype the row's range points at.
+     *
+     * <p>{@code cannotReconstruct} has already refused a file whose argument is not a plain type name, so
+     * this cannot disagree with the parse path's {@code arguments.get(0).toString()}.</p>
+     */
+    private static String entityBaseIdType(ClassRecord row, String source) {
+        for (TypeRelation relation : row.relations()) {
+            if (!"EntityBase".equals(simpleNameOf(relation.name()))) {
+                continue;
+            }
+            String argument = typeArgument(slice(source, relation.span()));
+            if (argument != null) {
+                return argument;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * One accessor's {@link Property}, from its base-layer member row.
+     *
+     * <p>The {@code @FieldSource} decoding is the parse path's rule expressed over written argument text:
+     * a named argument is {@code name = value}, an unnamed one is the retired single-member form whose
+     * single value is the kind. {@code typeImportsFor} is the same method the parse path calls, with the
+     * same import table (from {@code imports.json} / the entry) and the same declared-type index.</p>
+     */
+    private static Property reconstructProperty(FileMetadata entry, String declaringName,
+                                                String declaringPackage,
+                                                MemberRecord member, String source,
+                                                Map<String, String> importTable,
+                                                Map<String, List<String>> declaredTypes) {
+        String name = member.name();
+        String type = member.type();
+        String fieldKind = null;
+        String column = null;
+        String relation = null;
+        String expression = null;
+        int annotationLine = -1;
+
+        TypeAnnotation fieldSource = annotationNamed(member.annotations(), "FieldSource");
+        if (fieldSource != null) {
+            annotationLine = fieldSource.span() == null ? -1 : lineAt(source, fieldSource.span().start());
+            boolean named = false;
+            for (Argument argument : arguments(fieldSource.arguments())) {
+                if (argument.name() == null) {
+                    continue;
+                }
+                named = true;
+                String value = argument.value();
+                switch (argument.name()) {
+                    case "kind" -> fieldKind = extractEnumValue(value);
+                    case "column" -> column = stripQuotes(value);
+                    case "relation" -> relation = stripQuotes(value);
+                    case "expression" -> expression = stripQuotes(value);
+                    default -> { }
+                }
+            }
+            if (!named) {
+                for (Argument argument : arguments(fieldSource.arguments())) {
+                    if (argument.name() == null) {
+                        fieldKind = extractEnumValue(argument.value());
+                        break;
+                    }
+                }
+            }
+        }
+
+        List<hr.hrg.jcodebuddy.engine.meta.SourceLocation> locations = new ArrayList<>();
+        locations.add(new hr.hrg.jcodebuddy.engine.meta.SourceLocation(
+                declaringName, "accessor", entry.path(), member.line()));
+        if (annotationLine > 0) {
+            locations.add(new hr.hrg.jcodebuddy.engine.meta.SourceLocation(
+                    declaringName, "annotation", entry.path(), annotationLine));
+        }
+        return new Property(name, type, fieldKind, column, relation, expression, member.line(),
+                reconstructConstraints(member, source, importTable, declaringName + "." + name),
+                typeImportsFor(name, type, declaringPackage, importTable, declaredTypes),
+                entry.path(), locations);
+    }
+
+    /**
+     * The constraint annotations on one accessor, rebuilt from the stored names and argument text.
+     *
+     * <p>The namespace is the one part a stored name does not carry (the entry keeps the SIMPLE name), so
+     * an annotation outside the recognised vocabulary is looked up at its own range — that is the fact
+     * that decides whether a constraint the generator has no semantics for is still reported as one. The
+     * recognition rule itself stays in {@link ValidationGenerator}.</p>
+     */
+    private static List<FieldConstraint> reconstructConstraints(MemberRecord member, String source,
+                                                               Map<String, String> importTable,
+                                                               String location) {
+        List<FieldConstraint> constraints = new ArrayList<>();
+        for (TypeAnnotation annotation : member.annotations()) {
+            FieldConstraint constraint = ValidationGenerator.constraintOfWritten(
+                    writtenAnnotationName(annotation, source), renderedArguments(annotation.arguments()),
+                    importTable, location, activeDivergences);
+            if (constraint != null) {
+                constraints.add(constraint);
+            }
+        }
+        return constraints;
+    }
+
+    /**
+     * The annotation's name as the source spells it: the stored simple name, or — when the entry recorded
+     * a range — the qualified name read back from the file, which is the only way the namespace survives.
+     */
+    private static String writtenAnnotationName(TypeAnnotation annotation, String source) {
+        String written = slice(source, annotation.span());
+        if (written == null) {
+            return annotation.name();
+        }
+        String text = written.trim();
+        if (text.startsWith("@")) {
+            text = text.substring(1).trim();
+        }
+        int end = 0;
+        while (end < text.length() && (Character.isJavaIdentifierPart(text.charAt(end)) || text.charAt(end) == '.')) {
+            end++;
+        }
+        return end == 0 ? annotation.name() : text.substring(0, end);
+    }
+
+    /**
+     * A view's {@code @View} attributes, decoded from the stored annotation arguments.
+     *
+     * <p>The shape is the one the parse path sees: a named argument is {@code name = value}, and an
+     * argument with no name is the form the real annotation does not declare. {@code DEFAULT} is still
+     * resolved by {@link GenLevelResolver} — never here — so validation and generation cannot disagree
+     * about a level.</p>
+     */
+    private static ViewAttributes reconstructViewAttributes(FileMetadata entry, ClassRecord row,
+                                                           List<MemberRecord> accessors, String source) {
+        TypeAnnotation view = annotationNamed(row.annotations(), "View");
+        if (view == null) {
+            return null;
+        }
+        ViewAnnotationReader.Parsed parsed = ViewAnnotationReader.parseText(view.arguments());
+        ViewAttributes attributes = parsed.attributes();
+        List<String> fieldNames = new ArrayList<>(accessors.size());
+        for (MemberRecord accessor : accessors) {
+            fieldNames.add(accessor.name());
+        }
+        ClassRecord nestedRecord = nestedRecordRow(entry, row.fqn());
+        boolean hasWrite = false;
+        for (ClassRecord nested : entry.types()) {
+            if (row.fqn().equals(nested.enclosing()) && "interface".equals(nested.kind())
+                    && "Write".equals(simpleNameOf(nested.fqn()))) {
+                hasWrite = true;
+                break;
+            }
+        }
+        GenLevelResolver.Resolved resolved = GenLevelResolver.resolve(attributes.gen(),
+                nestedRecord == null ? null : recordComponents(slice(source, nestedRecord.span())),
+                nestedRecord == null ? null : simpleNameOf(nestedRecord.fqn()),
+                hasWrite, fieldNames);
+        return new ViewAttributes(resolved.level(), attributes.discriminatorField(), attributes.addons(),
+                attributes.dto());
+    }
+
+    /**
+     * The discriminators the reconstructed views declare, resolved once the whole interface map exists.
+     *
+     * <p>The rule is {@link #discriminatorOf}'s, in its order: an explicit
+     * {@code @View(discriminatorField = …)} names the accessor, otherwise the accessor must override an
+     * abstract one a marker declares — a question about the view's supertype chain, which is why this
+     * cannot be answered while a file is being reconstructed on its own.</p>
+     */
+    private static Map<String, Discriminator> resolveReconstructedDiscriminators(
+            Map<String, List<Discriminator>> candidates, Map<String, InterfaceInfo> interfaceMap) {
+        if (candidates.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Discriminator> resolved = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Discriminator>> entry : candidates.entrySet()) {
+            InterfaceInfo view = interfaceMap.get(entry.getKey());
+            if (view == null) {
+                continue;
+            }
+            String explicit = view.view() == null ? null : view.view().discriminatorField();
+            boolean explicitGiven = explicit != null && !explicit.isBlank();
+            for (Discriminator candidate : entry.getValue()) {
+                if (explicitGiven ? candidate.field().equals(explicit)
+                        : overridesMarkerAccessor(view, candidate.field(), interfaceMap)) {
+                    resolved.put(entry.getKey(), candidate);
+                    break;
+                }
+            }
+        }
+        return resolved;
+    }
+
+    /** A written annotation argument: its attribute name, or {@code null} for the unnamed member form. */
+    private record Argument(String name, String value) {
+    }
+
+    /** The written arguments of an annotation, split into {@code name = value} pairs the way they were written. */
+    private static List<Argument> arguments(List<String> written) {
+        List<Argument> arguments = new ArrayList<>(written.size());
+        for (String argument : written) {
+            int assignment = assignmentSplit(argument);
+            arguments.add(assignment < 0 ? new Argument(null, argument.trim())
+                    : new Argument(argument.substring(0, assignment).trim(),
+                            argument.substring(assignment + 1).trim()));
+        }
+        return arguments;
+    }
+
+    /** The index of the {@code =} that makes an annotation argument a named one, or {@code -1}. */
+    private static int assignmentSplit(String argument) {
+        int depth = 0;
+        for (int i = 0; i < argument.length(); i++) {
+            char c = argument.charAt(i);
+            if (c == '(' || c == '{' || c == '[' || c == '<') {
+                depth++;
+            } else if (c == ')' || c == '}' || c == ']' || c == '>') {
+                depth = Math.max(0, depth - 1);
+            } else if (c == '=' && depth == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Annotation argument text in the rendered form {@code ValidationGenerator} qualifies. */
+    private static String renderedArguments(List<String> written) {
+        StringBuilder sb = new StringBuilder();
+        for (Argument argument : arguments(written)) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            if (argument.name() != null) {
+                sb.append(argument.name()).append(" = ");
+            }
+            sb.append(argument.value());
+        }
+        return sb.toString();
+    }
+
+    /** The named annotation on a member, by simple name, or {@code null}. */
+    private static TypeAnnotation annotationNamed(List<TypeAnnotation> annotations, String simpleName) {
+        for (TypeAnnotation annotation : annotations) {
+            if (annotation.simpleName().equals(simpleName)) {
+                return annotation;
+            }
+        }
+        return null;
+    }
+
+    /** The text {@code span} names, or {@code null} when the entry recorded no usable range (DEC-040 D4). */
+    private static String slice(String source, TreeQueries.SourceSpan span) {
+        if (source == null || span == null || span.start() < 0 || span.end() > source.length()
+                || span.end() < span.start()) {
+            return null;
+        }
+        return source.substring(span.start(), span.end());
+    }
+
+    /** The 1-based line {@code offset} sits on, or {@code -1} when it is outside the text. */
+    private static int lineAt(String source, int offset) {
+        if (source == null || offset < 0 || offset > source.length()) {
+            return -1;
+        }
+        int line = 1;
+        for (int i = 0; i < offset; i++) {
+            if (source.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
+    }
+
+    /** {@code EntityBase<Long>} → {@code Long}; {@code null} when the written form declares no type argument. */
+    private static String typeArgument(String written) {
+        if (written == null) {
+            return null;
+        }
+        String text = written.trim();
+        int generic = text.indexOf('<');
+        if (generic < 0 || !text.endsWith(">")) {
+            return null;
+        }
+        String argument = text.substring(generic + 1, text.length() - 1).trim();
+        return argument.isEmpty() ? null : argument;
+    }
+
+    /**
+     * A record header's component names, decoded from the declaration slice.
+     *
+     * <p>Narrow by contract: it splits the parenthesised list at TOP-LEVEL commas only (so a generic
+     * component's {@code Map<String, List<Long>>} stays one entry) and takes the last identifier of each
+     * entry as the name (so an annotation or a modifier does not matter). {@code null} means "this build
+     * cannot read it", which makes the file be parsed instead — never an empty or partial list.</p>
+     */
+    private static List<String> recordComponents(String header) {
+        if (header == null) {
+            return null;
+        }
+        int open = indexOfTopLevel(header, '(', 0);
+        if (open < 0) {
+            return null;
+        }
+        int close = matching(header, open, '(', ')');
+        if (close < 0) {
+            return null;
+        }
+        List<String> names = new ArrayList<>();
+        for (String entry : splitTopLevel(header.substring(open + 1, close))) {
+            String name = lastIdentifier(entry);
+            if (name == null) {
+                return null;
+            }
+            names.add(name);
+        }
+        return names;
+    }
+
+    /**
+     * What a method declaration's body returns, as three answers rather than two.
+     *
+     * @param value     the returned string literal, when the body is exactly one {@code return "…";}
+     * @param decidable {@code false} when this build cannot read the body, which is the only case that
+     *                  makes the caller parse the file; {@code true} with a {@code null} value means the
+     *                  body is definitely NOT a discriminator — the same answer the parse path reaches
+     *                  for every shape that is not a single returned string literal
+     */
+    private record Returned(String value, boolean decidable) {
+    }
+
+    private static Returned returnedStringLiteral(String declarationText) {
+        if (declarationText == null) {
+            return new Returned(null, false);
+        }
+        int brace = indexOfTopLevel(declarationText, '{', 0);
+        if (brace < 0) {
+            return new Returned(null, true);
+        }
+        int close = matching(declarationText, brace, '{', '}');
+        if (close < 0) {
+            return new Returned(null, false);
+        }
+        String body = stripComments(declarationText.substring(brace + 1, close)).trim();
+        if (!body.startsWith("return") || !body.endsWith(";")) {
+            // More than one statement, or no return at all: the parse path requires exactly one
+            // statement and it must be a return, so this is a definite "not a discriminator".
+            return new Returned(null, true);
+        }
+        String statement = body.substring("return".length()).trim();
+        statement = statement.substring(0, statement.length() - 1).trim();
+        if (indexOfTopLevel(statement, ';', 0) >= 0) {
+            return new Returned(null, true);
+        }
+        return stringLiteral(statement);
+    }
+
+    /**
+     * The value of a single Java string literal expression, or a definite "not one".
+     *
+     * <p>A text block is reported as undecidable rather than guessed at: the parse path would accept it
+     * (it is a {@code J.Literal} whose value is a String), and an incidental-indentation rule guessed
+     * wrong would silently emit a different discriminator.</p>
+     */
+    private static Returned stringLiteral(String expression) {
+        if (!expression.startsWith("\"")) {
+            return new Returned(null, true);
+        }
+        if (expression.startsWith("\"\"\"")) {
+            return new Returned(null, false);
+        }
+        int end = -1;
+        for (int i = 1; i < expression.length(); i++) {
+            char c = expression.charAt(i);
+            if (c == '\\') {
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                end = i;
+                break;
+            }
+        }
+        if (end != expression.length() - 1) {
+            // Not one literal on its own: a concatenation, or text after the closing quote.
+            return new Returned(null, end >= 0);
+        }
+        String value = unescape(expression.substring(1, end));
+        // A literal whose escapes this build cannot read is UNDECIDABLE (value null, decidable false);
+        // `unescape` answering null is the only way a real string literal fails to decode here.
+        return new Returned(value, value != null);
+    }
+
+    private static String unescape(String literal) {
+        StringBuilder out = new StringBuilder(literal.length());
+        for (int i = 0; i < literal.length(); i++) {
+            char c = literal.charAt(i);
+            if (c != '\\' || i + 1 >= literal.length()) {
+                out.append(c);
+                continue;
+            }
+            char next = literal.charAt(++i);
+            switch (next) {
+                case 'n' -> out.append('\n');
+                case 't' -> out.append('\t');
+                case 'r' -> out.append('\r');
+                case 'b' -> out.append('\b');
+                case 'f' -> out.append('\f');
+                case 's' -> out.append(' ');
+                case '"' -> out.append('"');
+                case '\'' -> out.append('\'');
+                case '\\' -> out.append('\\');
+                case 'u' -> {
+                    if (i + 4 >= literal.length()) {
+                        return null;
+                    }
+                    out.append((char) Integer.parseInt(literal.substring(i + 1, i + 5), 16));
+                    i += 4;
+                }
+                // An octal escape or an escape this build does not know: the literal is real and its
+                // value is not readable here, so it is UNDECIDABLE rather than "not a discriminator".
+                default -> {
+                    return null;
+                }
+            }
+        }
+        return out.toString();
+    }
+
+    /** The index of {@code wanted} at bracket depth zero, or {@code -1}. */
+    private static int indexOfTopLevel(String text, char wanted, int from) {
+        int depth = 0;
+        for (int i = from; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (depth == 0 && c == wanted) {
+                return i;
+            }
+            if (c == '(' || c == '<' || c == '[' || c == '{') {
+                depth++;
+            } else if (c == ')' || c == '>' || c == ']' || c == '}') {
+                depth = Math.max(0, depth - 1);
+            }
+        }
+        return -1;
+    }
+
+    /** The index of the bracket that closes the one at {@code open}, or {@code -1}. */
+    private static int matching(String text, int open, char opening, char closing) {
+        int depth = 0;
+        for (int i = open; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == opening) {
+                depth++;
+            } else if (c == closing) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /** A comma-separated list split at bracket depth zero. */
+    private static List<String> splitTopLevel(String text) {
+        List<String> entries = new ArrayList<>();
+        int depth = 0;
+        StringBuilder current = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '(' || c == '<' || c == '[' || c == '{') {
+                depth++;
+            } else if (c == ')' || c == '>' || c == ']' || c == '}') {
+                depth = Math.max(0, depth - 1);
+            }
+            if (c == ',' && depth == 0) {
+                entries.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+            current.append(c);
+        }
+        if (!current.toString().isBlank()) {
+            entries.add(current.toString());
+        }
+        return entries;
+    }
+
+    /** The last identifier in an entry — a record component's name, whatever precedes it. */
+    private static String lastIdentifier(String entry) {
+        String text = stripComments(entry).trim();
+        int end = text.length();
+        while (end > 0 && !Character.isJavaIdentifierPart(text.charAt(end - 1))) {
+            end--;
+        }
+        int start = end;
+        while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) {
+            start--;
+        }
+        return start == end ? null : text.substring(start, end);
+    }
+
+    /** The text without its comments — so a comma or a brace inside one cannot be read as structure. */
+    private static String stripComments(String text) {
+        return text.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("//[^\\n]*", " ");
+    }
+
+    /**
+     * The same table, built from the import LINES the base layer stores.
+     *
+     * <p>{@code FileMetadata.imports} is {@code TreeQueries.importLines}'s output — {@code import a.b.C;}
+     * / {@code import static …;} / {@code import a.b.*;} — so this reads the same rule back rather than
+     * inventing a second one: a static or wildcard import contributes no simple-name entry, exactly as
+     * {@link #importTableOf(J.CompilationUnit)} decides. It exists because a reconstructed view (E10) has
+     * the lines and no unit.</p>
+     */
+    private static Map<String, String> importTableOf(List<String> importLines) {
+        Map<String, String> table = new LinkedHashMap<>();
+        if (importLines == null) {
+            return table;
+        }
+        for (String line : importLines) {
+            String text = line == null ? "" : line.trim();
+            if (!text.startsWith("import ")) {
+                continue;
+            }
+            text = text.substring("import ".length()).trim();
+            if (text.endsWith(";")) {
+                text = text.substring(0, text.length() - 1).trim();
+            }
+            if (text.startsWith("static ") || text.endsWith(".*")) {
+                continue;
+            }
+            int dot = text.lastIndexOf('.');
+            if (dot > 0) {
+                table.put(text.substring(dot + 1), text);
+            }
+        }
+        return table;
+    }
+
     private static String extractEnumValue(String value) {
         // Handle FieldKind.DERIVED or just DERIVED
         int dot = value.lastIndexOf('.');
@@ -3500,8 +5085,14 @@ public class EntityMetadataGenerator {
     }
 
     private static Discriminator discriminatorOf(InterfaceInfo view, Map<String, InterfaceInfo> interfaceMap) {
-        if (view == null || view.declaration() == null) {
+        if (view == null) {
             return null;
+        }
+        if (view.declaration() == null) {
+            // A view reconstructed from its base entry (E10): the literal was recovered from the member's
+            // recorded range, and whether it really is the discriminator was decided once the interface
+            // map existed — by this same method's rule, in `resolveReconstructedDiscriminators`.
+            return activeDiscriminators.get(getQualifiedName(view.packageName(), view.name()));
         }
         String explicit = view.view() == null ? null : view.view().discriminatorField();
         boolean explicitGiven = explicit != null && !explicit.isBlank();
@@ -3573,8 +5164,31 @@ public class EntityMetadataGenerator {
 
     /** Whether the interface declares the named accessor with no body — i.e. requires an answer. */
     private static boolean declaresAbstractAccessor(InterfaceInfo info, String methodName) {
+        if (info == null) {
+            return false;
+        }
         J.ClassDeclaration decl = info.declaration();
         if (decl == null) {
+            // A reconstructed interface has no tree; its members come from the base entry, which records
+            // the same facts this loop tests (modifiers, parameters, return type, whether there is a
+            // body). The class table is that projection, so this asks the same model (DEC-041 D8).
+            ClassRecord row = activeClassIndex == null ? null
+                    : activeClassIndex.row(getQualifiedName(info.packageName(), info.name()));
+            if (row == null) {
+                return false;
+            }
+            for (MemberRecord member : row.members()) {
+                if (!member.name().equals(methodName)
+                        || member.kind() != MemberRecord.Kind.METHOD
+                        || member.modifiers().contains("default")
+                        || member.modifiers().contains("static")
+                        || member.hasBody()
+                        || !member.parameters().isEmpty()
+                        || "void".equals(member.type())) {
+                    continue;
+                }
+                return true;
+            }
             return false;
         }
         for (J.MethodDeclaration method : TreeQueries.methodsOf(decl)) {
@@ -4347,16 +5961,13 @@ public class EntityMetadataGenerator {
     private static InterfaceInfo discriminatorRoot(InterfaceInfo view, String field,
                                                    Map<String, InterfaceInfo> interfaceMap) {
         for (InterfaceInfo candidate : interfaceMap.values()) {
-            if (candidate == view || candidate.declaration() == null || !isDerivedFrom(view, candidate, interfaceMap)) {
+            if (candidate == view || !isDerivedFrom(view, candidate, interfaceMap)) {
                 continue;
             }
-            for (J.MethodDeclaration method : TreeQueries.methodsOf(candidate.declaration())) {
-                if (method.getSimpleName().equals(field)
-                        && TreeQueries.hasNoParameters(method)
-                        && !TreeQueries.isDefaultMethod(method)
-                        && !TreeQueries.isVoidReturn(method)) {
-                    return candidate;
-                }
+            // `declaresAbstractAccessor` answers from a syntax tree or, for a view reconstructed from its
+            // base entry, from the class table — one rule, two sources (E10).
+            if (declaresAbstractAccessor(candidate, field)) {
+                return candidate;
             }
         }
         return null;

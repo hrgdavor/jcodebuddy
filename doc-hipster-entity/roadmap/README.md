@@ -23,9 +23,11 @@ tracking builder; `META.create`, array-backed read/update, `ViewChangeTracking`/
 read/change-set output; validation; metadata JSON and the class index; **one-shot `--incremental`**,
 `--full` and `--check`; DTO projections and mappers as opt-in but incremental features.
 
-**Not in the MVP, deliberately:** watch mode (W7b); parse reuse (E10, the post-MVP scale step); a daemon;
-Maven Central or semver; SQL generation as a supported output (the JDBC adapter/binder is draft and opt-in);
-patch appliers and merge are available but force a full pass. The current status page is
+**Not in the MVP, deliberately:** watch mode (W7b); a daemon; Maven Central or semver; SQL generation as a
+supported output (the JDBC adapter/binder is draft and opt-in); patch appliers and merge are available but
+force a full pass. **Parse reuse (E10) landed after the MVP declaration on 2026-11-06:** a warm pass over the
+example parses nothing and a one-file edit parses one, with a printed/counted fallback when a view needs a
+fact the base layer cannot supply. The current status page is
 [`user/mvp-surface.md`](../user/mvp-surface.md); the incremental contract is
 [DEC-052](../architecture/decisions/DEC-052.md).
 

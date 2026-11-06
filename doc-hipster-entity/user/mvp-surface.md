@@ -5,23 +5,23 @@ replace the feature guides; it is the status page a reader checks before assumin
 
 ## What the MVP gate exercises
 
-| Capability                                            | State                         | Where it is proved                                                |
-| ----------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------- |
-| A marker, its derived views, and their generated Java | **Stable**                    | `ExampleRegenerationTest`, the example's committed sources        |
-| Metadata documents and the class index                | **Stable**                    | `MetadataFileIdsTest`, `MetadataSourcePathTest`, `ClassIndexTest` |
-| `--check` (full pass into a temp tree, no writes)     | **Stable**                    | `CheckCommandTest`, `bun scripts/gen.js --check`                  |
-| One-shot `--incremental` with a no-op                 | **Stable**                    | `EntityBuildStateTest`, `MvpAcceptanceTest`                       |
-| Selective emission for an existing-file change        | **Stable (MVP)**              | `IncrementalEmissionTest`                                         |
-| Generated-file/fallback matrix                        | **Stable (MVP)**              | `IncrementalFallbackTest`, `EntityBuildStateTest`                 |
-| DTO projection (`--dto-projections`)                  | **Stable, opt-in**            | `ExampleConverterManifestTest`, `ViewJsonGeneratorTest`           |
-| Mapper (`--mapper`)                                   | **Stable, opt-in**            | `ViewMapperGeneratorTest`, the mapper incremental test            |
-| Validation (`--validate[=OFF/REPORT/STRICT]`)         | **Stable**                    | the validation test set                                           |
-| SQL row adapter / binder (`--adapters`)               | **Draft/experimental**        | `ViewAdapterGeneratorTest`; not a supported generator             |
-| Patch appliers (`--patch-appliers`)                   | **Draft/experimental**        | `GeneratedPatchApplierTest`                                       |
-| Merge (`--merge`)                                     | **Full-pass only in the MVP** | merge tests; a merge is family-wide                               |
-| Watch mode                                            | **Postponed**                 | no watcher in this batch; W7b owns the daemon cutover             |
-| Parse reuse                                           | **Post-MVP (E10)**            | the incremental pass still parses the whole set                   |
-| SQL generation as a supported output                  | **Not supported**             | the JDBC pattern is hand-written; adapters are an exploration     |
+| Capability                                            | State                           | Where it is proved                                                                       |
+| ----------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------- |
+| A marker, its derived views, and their generated Java | **Stable**                      | `ExampleRegenerationTest`, the example's committed sources                               |
+| Metadata documents and the class index                | **Stable**                      | `MetadataFileIdsTest`, `MetadataSourcePathTest`, `ClassIndexTest`                        |
+| `--check` (full pass into a temp tree, no writes)     | **Stable**                      | `CheckCommandTest`, `bun scripts/gen.js --check`                                         |
+| One-shot `--incremental` with a no-op                 | **Stable**                      | `EntityBuildStateTest`, `MvpAcceptanceTest`                                              |
+| Selective emission for an existing-file change        | **Stable (MVP)**                | `IncrementalEmissionTest`                                                                |
+| Generated-file/fallback matrix                        | **Stable (MVP)**                | `IncrementalFallbackTest`, `EntityBuildStateTest`                                        |
+| DTO projection (`--dto-projections`)                  | **Stable, opt-in**              | `ExampleConverterManifestTest`, `ViewJsonGeneratorTest`                                  |
+| Mapper (`--mapper`)                                   | **Stable, opt-in**              | `ViewMapperGeneratorTest`, the mapper incremental test                                   |
+| Validation (`--validate[=OFF/REPORT/STRICT]`)         | **Stable**                      | the validation test set                                                                  |
+| SQL row adapter / binder (`--adapters`)               | **Draft/experimental**          | `ViewAdapterGeneratorTest`; not a supported generator                                    |
+| Patch appliers (`--patch-appliers`)                   | **Draft/experimental**          | `GeneratedPatchApplierTest`                                                              |
+| Merge (`--merge`)                                     | **Full-pass only in the MVP**   | merge tests; a merge is family-wide                                                      |
+| Watch mode                                            | **Postponed**                   | no watcher in this batch; W7b owns the daemon cutover                                    |
+| Parse reuse                                           | **Implemented (E10, post-MVP)** | warm pass parses zero on the example; a one-file edit parses one, with counted fallbacks |
+| SQL generation as a supported output                  | **Not supported**               | the JDBC pattern is hand-written; adapters are an exploration                            |
 
 ## What "opt-in" means
 

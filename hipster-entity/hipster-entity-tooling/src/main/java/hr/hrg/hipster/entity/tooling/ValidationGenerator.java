@@ -148,6 +148,30 @@ public final class ValidationGenerator {
     }
 
     /**
+     * The constraint an annotation describes, from its <strong>written</strong> name and argument text.
+     *
+     * <p>The same recognition rule and the same argument qualification as {@link #constraintsOn}, for the
+     * caller that has an annotation's facts rather than an annotation node — a view reconstructed from its
+     * file's base entry (E10), whose stored name is the simple name and whose namespace therefore comes
+     * from the range the entry recorded. Two callers, one rule: a constraint this generator recognises must
+     * not depend on which of the two read it.</p>
+     *
+     * @param writtenName the annotation's name as written (qualified when the source was)
+     * @param arguments   its arguments in the rendered {@code name = value} form, or {@code ""}
+     * @return the constraint, or {@code null} when this is not a validation annotation
+     */
+    public static FieldConstraint constraintOfWritten(String writtenName, String arguments,
+                                                      Map<String, String> importTable, String location,
+                                                      DivergenceReporter divergences) {
+        FieldConstraint constraint = constraintOf(writtenName, arguments);
+        if (constraint == null) {
+            return null;
+        }
+        return new FieldConstraint(constraint.simpleName(),
+                AnnotationArguments.qualify(arguments, importTable, location, divergences));
+    }
+
+    /**
      * The constraint an annotation describes, or {@code null} when it is not one this generator knows.
      *
      * <p>The whole recognition rule, taking the annotation's name as the source spells it. It lived
