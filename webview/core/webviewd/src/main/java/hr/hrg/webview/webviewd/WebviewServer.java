@@ -556,16 +556,19 @@ public final class WebviewServer implements AutoCloseable {
         if (!requireGet(exchange)) {
             return;
         }
+        ProjectEventStream events;
+        try {
+            events = ProjectEventStream.of(project);
+        } catch (IOException noDaemon) {
+            // fs-meta is a hard requirement for live events. Do not open an SSE stream that can never update.
+            send(exchange, 503, "text/plain", bytes(noDaemon.getMessage()));
+            return;
+        }
         exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.getResponseHeaders().set("Connection", "keep-alive");
         exchange.sendResponseHeaders(200, 0);
-        try (OutputStream out = exchange.getResponseBody();
-             ProjectEventStream events = ProjectEventStream.of(project)) {
-            if (events.truncated()) {
-                note("the project has more than " + ProjectEventStream.MAX_DIRECTORIES
-                        + " directories; the event stream watches the first " + events.watchedDirectoryCount());
-            }
+        try (OutputStream out = exchange.getResponseBody(); events) {
             while (true) {
                 String frame = events.awaitFrame(EVENT_KEEPALIVE_MS);
                 out.write(frame.getBytes(StandardCharsets.UTF_8));

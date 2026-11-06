@@ -1,7 +1,7 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-11-06 — W1–W6 done; W7a and W7b done for the watcher cutover; repository-wide residuals are named
-below.** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
+**Status: 2026-11-06 — W1–W6 done; W7a–W7d done for the watcher and SSE paths; one repository-wide residual is
+named below (the entity build-state writer).** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
 to the builder. W3 added `jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to
 `fs-meta` and its events to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part
 of the gate. The frozen `watch/*` modules are untouched. **`jcodebuddy-watch` and the Java `FsMetaWriter` usage are
@@ -312,10 +312,18 @@ dependency for host-state discovery. Tests: `jcodebuddy-watch` **18** (1 daemon 
 `FSMETA_BIN`), `project-automation` **26** (1 skipped without the daemon), `jcodebuddy-agent` **32/32**
 including a fake-daemon `ProjectWatcherTest`; with `FSMETA_BIN`, the two-client daemon tests pass.
 
-**Repository-wide residuals, deliberately not claimed by W7b/W7c:** `webviewd`'s `ProjectEventStream` has its
-own pre-existing `WatchService` (a separate webview subsystem, not the watcher path); `EntityBuildState` still
-publishes its own derived build-state trio (not the watcher state). With `FileWatch` deleted, no other
-JCodeBuddy production code starts a `WatchService`.
+**W7d — webviewd SSE is daemon-only (done 2026-11-06).** `ProjectEventStream` no longer starts a
+`WatchService`; it discovers the daemon with `FsMetaDaemonDiscovery`, subscribes with
+`FsMetaDaemonWatch` at `LATEST`, maps batches to SSE frames, and answers `503` with the `fsmeta daemon start`
+/ `fsmeta root add` setup when no daemon serves the project. `webviewd` gained the `jcodebuddy-watch`
+dependency; there is no WatchService fallback. Tests: `ProjectEventStreamTest` 7/7 and `WriteApiTest` 13/13
+in the webviewd module, including the no-daemon `503` and overflow/keep-alive frame paths.
+
+**Remaining repository-wide residual, deliberately not claimed:** `EntityBuildState` still publishes its own
+derived build-state trio (not the watcher state). It is a one-shot entity build cache in
+`.jcodebuddy/cache/entity-build`, not a watched event stream; moving it to the daemon would make a one-shot
+build depend on a running daemon and add a second root. No other JCodeBuddy production code starts a
+`WatchService` after W7c/W7d.
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a

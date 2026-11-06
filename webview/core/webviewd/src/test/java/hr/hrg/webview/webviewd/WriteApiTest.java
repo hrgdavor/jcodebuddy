@@ -309,7 +309,7 @@ class WriteApiTest {
     }
 
     @Test
-    void theEventStreamAnswersWithSseHeadersAndStaysOpen() throws Exception {
+    void theEventStreamFailsClosedWithoutAnFsMetaDaemon() throws Exception {
         write("src/A.java", "one\n");
         start();
 
@@ -319,9 +319,11 @@ class WriteApiTest {
                         .header("X-WebView-Token", TOKEN).GET().build(),
                 HttpResponse.BodyHandlers.ofInputStream());
 
-        assertEquals(200, response.statusCode());
-        assertEquals("text/event-stream",
-                response.headers().firstValue("Content-Type").orElse(""));
+        assertEquals(503, response.statusCode(),
+                "fs-meta is a hard requirement for the live stream, not a Java WatchService fallback");
+        assertTrue(new String(response.body().readAllBytes(), StandardCharsets.UTF_8)
+                        .contains("fs-meta daemon is required"),
+                "the refusal names the missing daemon");
         response.body().close();
     }
 }

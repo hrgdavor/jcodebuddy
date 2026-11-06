@@ -1,22 +1,19 @@
 package hr.hrg.webview.webviewd;
 
+import hr.hrg.jcodebuddy.watch.FsMetaClient;
+import hr.hrg.jcodebuddy.watch.FsMetaDaemonDiscovery;
+import hr.hrg.jcodebuddy.watch.FsMetaDaemonWatch;
+import hr.hrg.jcodebuddy.watch.PathFilter;
+import hr.hrg.jcodebuddy.watch.WatchBatch;
+
 import java.io.IOException;
-import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -25,75 +22,82 @@ import java.util.concurrent.TimeUnit;
  * editor work).
  *
  * <p>Frames are produced by {@link #awaitFrame(long)} rather than inside the HTTP handler, so the interesting
- * part — which changes become which frame — is testable without a socket or a sleeping test.
+ * part — which changes become which frame — is testable without a socket or a sleeping test.</p>
  *
- * <p>Noise control is explicit: the directories a project generates (`.git`, `.jcodebuddy`, `node_modules`,
- * `target`, `build`, `.gradle`) are not watched, because a page cares that its sources changed, not that a
- * build wrote a hundred class files. Watching is recursive by walking the tree at construction, with a cap, and
- * directories created later are registered as they appear — otherwise a page would stop seeing new files the
- * moment the first one was added.
+ * <p><strong>The event source is the fs-meta Zig daemon, not a Java watcher.</strong> {@code webviewd} discovers
+ * the daemon that serves the project through {@link FsMetaDaemonDiscovery} and subscribes with
+ * {@link FsMetaDaemonWatch}. There is no {@link java.nio.file.WatchService} fallback: fs-meta is a hard
+ * requirement for the live stream. {@link #of(Path)} fails with an actionable message when no daemon is
+ * attached, and the HTTP handler answers {@code 503} rather than pretending a stream that cannot update.</p>
  *
- * <p>One frame per poll, not one per event: a save that touches a dozen files is one thing that happened, and a
- * page re-renders once.
+ * <p>Noise control is explicit: the daemon subscription filters the directories a project generates
+ * ({@code .git}, {@code .jcodebuddy}, {@code node_modules}, {@code target}, …), because a page cares that its
+ * sources changed, not that a build wrote a hundred class files. One frame per batch, not one per event: a save
+ * that touches a dozen files is one thing that happened, and a page re-renders once.</p>
  */
 final class ProjectEventStream implements AutoCloseable {
 
-    /** Directories a page never wants noise from. */
-    private static final Set<String> IGNORED = Set.of(
-            ".git", ".jcodebuddy", ".gradle", "node_modules", "target", "build", "out", ".idea");
+    /** Directories a page never wants noise from. Kept as one list for the daemon filter and the frame guard. */
+    private static final List<String> IGNORED_PATTERNS = List.of(
+            ".git/**", "**/.git/**",
+            ".jcodebuddy/**", "**/.jcodebuddy/**",
+            ".gradle/**", "**/.gradle/**",
+            "node_modules/**", "**/node_modules/**",
+            "target/**", "**/target/**",
+            "build/**", "**/build/**",
+            "out/**", "**/out/**",
+            ".idea/**", "**/.idea/**");
 
-    /** How many directories are registered; beyond this a project is too large for a watcher to be honest. */
-    static final int MAX_DIRECTORIES = 2000;
+    /** The daemon-side filter; the same paths are guarded again when a frame is built. */
+    private static final PathFilter FILTER = PathFilter.of(List.of("**/*"), IGNORED_PATTERNS);
 
     private final Path project;
-    private final WatchService watchService;
-    private final Map<WatchKey, Path> watched = new HashMap<>();
-    private boolean truncated;
+    private final FsMetaDaemonWatch watch;
+    private final BlockingQueue<WatchBatch> batches;
 
-    private ProjectEventStream(Path project, WatchService watchService) {
+    private ProjectEventStream(Path project, FsMetaDaemonWatch watch, BlockingQueue<WatchBatch> batches) {
         this.project = project;
-        this.watchService = watchService;
+        this.watch = watch;
+        this.batches = batches;
     }
 
+    /**
+     * Attach to the fs-meta daemon serving {@code project} and start its live subscription.
+     *
+     * @throws IOException when no daemon is attached, or when the subscription cannot be opened; the message
+     *                     names the exact {@code fsmeta daemon start} / {@code fsmeta root add} setup
+     */
     static ProjectEventStream of(Path project) throws IOException {
-        WatchService service = FileSystems.getDefault().newWatchService();
-        ProjectEventStream stream = new ProjectEventStream(project, service);
-        stream.registerTree(project);
-        return stream;
+        FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discover(project);
+        if (!attach.attached()) {
+            throw new IOException("the fs-meta daemon is required for the live event stream: "
+                    + attach.problem() + " (run `fsmeta daemon start` and `fsmeta root add "
+                    + project.toAbsolutePath().normalize() + "`)");
+        }
+        BlockingQueue<WatchBatch> batches = new LinkedBlockingQueue<>();
+        FsMetaDaemonWatch watch = new FsMetaDaemonWatch(FILTER, attach.location().socket(),
+                FsMetaClient.LATEST, batches::offer);
+        try {
+            watch.start();
+        } catch (IOException failed) {
+            watch.close();
+            throw new IOException("could not subscribe to the fs-meta daemon at "
+                    + attach.location().socket() + ": " + failed.getMessage(), failed);
+        }
+        return new ProjectEventStream(project, watch, batches);
     }
 
-    private void registerTree(Path root) throws IOException {
-        Files.walkFileTree(root, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                if (!dir.equals(root) && IGNORED.contains(dir.getFileName().toString())) {
-                    return FileVisitResult.SKIP_SUBTREE;
-                }
-                if (watched.size() >= MAX_DIRECTORIES) {
-                    truncated = true;
-                    return FileVisitResult.TERMINATE;
-                }
-                register(dir);
-                return FileVisitResult.CONTINUE;
-            }
-        });
+    /**
+     * A test seam: the same frame conversion, with batches supplied by the caller and no daemon subscription.
+     * This is not a second production event source — {@link #of(Path)} is the only production constructor.
+     */
+    static ProjectEventStream forTesting(Path project) {
+        return new ProjectEventStream(project, null, new LinkedBlockingQueue<>());
     }
 
-    private void register(Path directory) throws IOException {
-        WatchKey key = directory.register(watchService,
-                StandardWatchEventKinds.ENTRY_CREATE,
-                StandardWatchEventKinds.ENTRY_MODIFY,
-                StandardWatchEventKinds.ENTRY_DELETE);
-        watched.put(key, directory);
-    }
-
-    /** True when the project had more directories than {@link #MAX_DIRECTORIES} and watching is partial. */
-    boolean truncated() {
-        return truncated;
-    }
-
-    int watchedDirectoryCount() {
-        return watched.size();
+    /** Offer a batch to a {@link #forTesting(Path)} stream. */
+    void offer(WatchBatch batch) {
+        batches.offer(batch);
     }
 
     /**
@@ -101,60 +105,28 @@ final class ProjectEventStream implements AutoCloseable {
      * timeout passes with nothing to report. Never null — a stream that produced nothing would look closed.
      */
     String awaitFrame(long timeoutMillis) throws InterruptedException {
-        WatchKey key = watchService.poll(timeoutMillis, TimeUnit.MILLISECONDS);
-        if (key == null) {
+        WatchBatch batch = batches.poll(timeoutMillis, TimeUnit.MILLISECONDS);
+        if (batch == null) {
             return ": keep-alive\n\n";
         }
         Set<String> changed = new LinkedHashSet<>();
-        List<Path> newDirectories = new ArrayList<>();
-        for (WatchEvent<?> event : key.pollEvents()) {
-            if (event.kind() == StandardWatchEventKinds.OVERFLOW) {
-                changed.add("*");
-                continue;
-            }
-            Path directory = watched.get(key);
-            if (directory == null) {
-                continue;
-            }
-            Path updated = directory.resolve(String.valueOf(event.context()));
-            if (IGNORED.contains(updated.getFileName().toString())) {
-                continue;
-            }
-            if (Files.isDirectory(updated)) {
-                // Directories are registered but never reported. Windows reports a child's change against the
-                // parent's *entry* as well (its timestamp moved), so forwarding directories would tell a page
-                // that "src" changed when the thing that changed was "src/A.java" - and the page would have
-                // nothing to re-render. A new directory is registered below so files inside it are seen.
-                if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE) {
-                    newDirectories.add(updated);
+        if (batch.overflow()) {
+            // The daemon refused a replay; the page must re-render everything rather than miss a change.
+            changed.add("*");
+        } else {
+            List<String> paths = new ArrayList<>(batch.changed());
+            paths.addAll(batch.deleted());
+            for (String path : paths) {
+                String relative = path.replace('\\', '/').replaceFirst("^/+", "");
+                if (FILTER.shouldInclude(relative)) {
+                    changed.add(relative);
                 }
-                continue;
             }
-            changed.add(relative(updated));
-        }
-        for (Path directory : newDirectories) {
-            try {
-                registerTree(directory);
-            } catch (IOException ignored) {
-                // Losing a subtree is worth a missing event, not a broken stream.
-            }
-        }
-        boolean valid = key.reset();
-        if (!valid) {
-            watched.remove(key);
         }
         if (changed.isEmpty()) {
             return ": keep-alive\n\n";
         }
         return "event: change\ndata: " + frameData(changed) + "\n\n";
-    }
-
-    /** The page sees project-relative, forward-slashed paths: the same spelling it links with. */
-    private String relative(Path file) {
-        String path = file.toAbsolutePath().normalize().toString();
-        String root = project.toAbsolutePath().normalize().toString();
-        String relative = path.startsWith(root) ? path.substring(root.length()) : path;
-        return relative.replace('\\', '/').replaceFirst("^/+", "");
     }
 
     private static String frameData(Set<String> paths) {
@@ -172,11 +144,9 @@ final class ProjectEventStream implements AutoCloseable {
 
     @Override
     public void close() {
-        try {
-            watchService.close();
-        } catch (IOException ignored) {
-            // Closing a watcher cannot fail in a way a caller can act on.
+        if (watch != null) {
+            watch.stop();
         }
-        watched.clear();
+        batches.clear();
     }
 }

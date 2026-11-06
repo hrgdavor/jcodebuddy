@@ -30,6 +30,12 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>webview-core</artifactId>
         </dependency>
+        <!-- The live event stream is an fs-meta daemon client. fs-meta is a hard runtime requirement for
+             `/api/v1/events`; there is no Java WatchService fallback. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-watch</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
