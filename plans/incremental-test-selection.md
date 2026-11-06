@@ -44,23 +44,32 @@ Three things make this trustworthy rather than another selector that guesses:
 
 ## 2. Current inventory
 
-Measured on 2026-11-05 from the compiled `hipster-entity-tooling` test classes:
+Measured on 2026-11-06 by `bun scripts/test-lanes.js` (83 test classes; the plan-time tree was 78 —
+five test classes landed with the MVP's E3–E6 work). **The direct-dependency distribution in the earlier
+revision of this section could not be reproduced**, so it is replaced by the probe's measured values; the
+plan-time column is the same rule over the 78-class tree, and confirms the totals are right even though the
+old buckets were not.
 
-- **78 test classes**; **71 class tags** already exist (`generator`, `compiler`, `completeness`).
-- Direct project-class references per test class:
+- **83 test classes**, **542 test methods**; **52** carry a heavy tag (`generator` 28, `compiler` 23,
+  `completeness` 1). **11** classes / **94** methods meet the `unit` rule; **20** classes / **176** methods
+  are `component`; **0** are unclassified.
+- Direct project-class references per test class (measured from the constant pool, nested types folded to
+  their top-level class):
 
-| Direct project deps | Test classes |
-| ------------------- | ------------ |
-| 1                   | 11           |
-| 2                   | 12           |
-| 3                   | 19           |
-| 4–5                 | 15           |
-| 6+                  | 21           |
+| Direct project deps | Test classes (83) | Plan-time 78 |
+| ------------------- | ----------------- | ------------ |
+| 0                   | 5                 | 4            |
+| 1                   | 28                | 26           |
+| 2                   | 23                | 21           |
+| 3                   | 13                | 13           |
+| 4–5                 | 12                | 12           |
+| 6+                  | 2                 | 2            |
 
-The low-dependency band is the unit candidate pool, but it is **not** the unit lane by itself: several
-of those classes are generator tests (`EntityMetadataGenerator` is one dependency), some use
-`CompileHarness` (the compiler surface), and some read repository files. The lane rule below is what
-separates them.
+The low-dependency band is the unit candidate pool, but it is **not** the unit lane by itself: **42 of the
+52 heavy-tagged classes have ≤3 direct production deps**, and **none of those 42 would become `unit`** even
+if the tag were ignored — every one names a forbidden integration surface or a file/resource/environment
+API. The heavy tags are therefore not hiding unit-eligible tests; the unit lane (11 classes / 94 methods) is
+the pure-rule plus validation subset.
 
 Today `bun scripts/mvn-fast.js --fast` excludes `generator`, `compiler` and `completeness` and runs the
 rest — a good fast lane, but still all-or-nothing inside the unit/component band. There is no per-test
@@ -239,6 +248,13 @@ Each step is one commit with its own gate.
 - Write the lane rules into the plan (or a short DEC if the lane tags become a repository-wide contract).
 
 **Gate:** the probe's counts match § 2; every current tag is classified; no test changed.
+
+**Done 2026-11-06.** `bun scripts/test-lanes.js` is the read-only probe: it reads `target/test-classes`
+with `javap -v`, classifies dependencies against every module's `target/classes` / `target/test-classes`,
+and reports tags, lanes, the histogram and hidden low-dependency classes. Measured 83 classes / 542
+methods: **11 unit, 20 component, 28 generator, 23 compiler, 1 completeness**. The § 2 table was corrected
+to the measured distribution; the earlier buckets were unsupported (the plan-time 78-class totals were
+right, the per-bucket counts were not). No test was changed, no Maven run, no full suite.
 
 ### T1 — Generate the test dependency index (M)
 **Who:** agent · **Depends:** T0
