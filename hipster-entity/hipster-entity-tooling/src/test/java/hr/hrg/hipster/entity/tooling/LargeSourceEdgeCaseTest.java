@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.openrewrite.java.tree.J;
 
@@ -41,6 +42,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * {@code doc/brainstorm/rewrite-migration/07-testing/benchmarks/BenchmarkReport.md}, produced by the JMH
  * benchmarks under the {@code jmh} profile, where a number means something.</p>
  */
+@Tag("component")
 class LargeSourceEdgeCaseTest {
 
     /** Enough members that the file passes 32 767 characters twice over. */

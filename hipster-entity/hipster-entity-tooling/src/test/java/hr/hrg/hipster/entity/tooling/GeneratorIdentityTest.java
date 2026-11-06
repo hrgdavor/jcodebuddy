@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -27,6 +28,7 @@ import java.util.regex.Pattern;
  * subset of the flags this build understands — the invariant {@link GeneratorPreflight} checks
  * before a pass starts, held here too so a mismatch fails a unit test as well.</p>
  */
+@Tag("component")
 class GeneratorIdentityTest {
 
     @Test

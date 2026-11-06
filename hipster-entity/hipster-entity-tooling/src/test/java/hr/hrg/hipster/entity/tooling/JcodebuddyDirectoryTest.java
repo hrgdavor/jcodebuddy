@@ -1,5 +1,6 @@
 package hr.hrg.hipster.entity.tooling;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -24,6 +25,7 @@ import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
  * report into the served project's tree instead of the module's, in a directory that module's
  * {@code .gitignore} does not cover.
  */
+@Tag("unit")
 class JcodebuddyDirectoryTest {
 
     private static Path marker(Path parent) throws IOException {

@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling.index;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -29,6 +30,7 @@ import hr.hrg.jcodebuddy.engine.index.Wyhash64;
  * DEC-029, must be revisited with it. A self-derived vector would prove nothing, which is why this test
  * does not compute its expectations.</p>
  */
+@Tag("unit")
 class ContentHashTest {
 
     /** The fixture text of the large vector: 900 repetitions of {@code 0123456789ab}, i.e. 10 800 bytes. */

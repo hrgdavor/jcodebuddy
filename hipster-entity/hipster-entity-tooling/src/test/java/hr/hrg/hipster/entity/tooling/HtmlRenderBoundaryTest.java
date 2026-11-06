@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,7 @@ import java.util.List;
  * but unasserted decays into a rule that is false. These tests read the tree as text, which is what
  * makes them cheap enough to run in the normal gate.</p>
  */
+@Tag("component")
 class HtmlRenderBoundaryTest {
 
     /** The renderer, and the docs a reader is sent to from `AGENTS.md` and the ADR. */

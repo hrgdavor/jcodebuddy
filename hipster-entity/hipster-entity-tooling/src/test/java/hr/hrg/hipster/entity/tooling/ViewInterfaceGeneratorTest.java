@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -18,6 +19,7 @@ import java.util.List;
  * this generator's normal case. The port replaced that with a text splice, and these tests pin the
  * property the splice is for.</p>
  */
+@Tag("component")
 class ViewInterfaceGeneratorTest {
 
     /** A hand-written interface keeps every byte of its own formatting. */

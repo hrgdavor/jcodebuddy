@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling;
 
 import hr.hrg.hipster.entity.tooling.meta.Property;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import java.util.List;
  * that a field absent from the other view is left alone <b>silently</b> (that is the feature, not a defect), and that
  * a name-only match is a DEC-022 diagnostic which copies nothing.
  */
+@Tag("unit")
 class ViewMergeGeneratorTest {
 
     private static final String BUILDER = "PersonSummaryBuilder";

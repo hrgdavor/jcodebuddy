@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling.index;
 import hr.hrg.jcodebuddy.engine.MetadataJson;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
@@ -44,6 +45,7 @@ import java.util.stream.Stream;
  * <p>It also pins one tag row: {@code CompactionRoundTripTest} is a real {@code @Tag("generator")} class
  * in this module, so its row proves the class-file annotation read without a second source parse.</p>
  */
+@Tag("component")
 class TestIndexGeneratorTest {
 
     private static final String CONTENT_HASH_TEST = "hr.hrg.hipster.entity.tooling.index.ContentHashTest";

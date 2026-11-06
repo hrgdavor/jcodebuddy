@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.openrewrite.java.tree.J;
 
@@ -40,6 +41,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * now reads the package through {@link TreeQueries} instead of JavaParser's
  * {@code getPackageDeclaration().orElseThrow()}.</p>
  */
+@Tag("component")
 class SourceReaderTest {
 
     @Test

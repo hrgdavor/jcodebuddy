@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -32,6 +33,7 @@ import java.util.List;
  * is what matters here, and no compiler or classpath check can tell you that a {@code provided}
  * dependency did not become a {@code compile} one.</p>
  */
+@Tag("component")
 class DependencyBoundaryTest {
 
     /** The modules that may never carry a JDBC or validation dependency. */

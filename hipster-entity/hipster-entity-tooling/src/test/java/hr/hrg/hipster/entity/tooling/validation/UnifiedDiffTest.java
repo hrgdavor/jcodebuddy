@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -19,6 +20,7 @@ import java.util.Map;
  * line endings, hunk arithmetic) are exactly what an earlier hand-written applier got wrong three
  * times over.</p>
  */
+@Tag("component")
 class UnifiedDiffTest {
 
     private static final String BASELINE = """

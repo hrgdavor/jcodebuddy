@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -21,6 +22,7 @@ import java.util.List;
  * <p>Both are asserted here as properties, because the generator-level test
  * ({@code MarkerClaimedViewReportingTest}) can only show the symptom, not the rule.</p>
  */
+@Tag("unit")
 class DivergenceReporterTest {
 
     @Test

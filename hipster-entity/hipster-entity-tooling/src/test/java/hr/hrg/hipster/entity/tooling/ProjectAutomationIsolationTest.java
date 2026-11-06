@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ import java.util.stream.Stream;
  * build enforces its own copy of the rule, and this test cannot see into another project's git. What it
  * <i>can</i> do is refuse to let this repository break the rule again.
  */
+@Tag("component")
 class ProjectAutomationIsolationTest {
 
     /** The suffix that makes a module private, whichever project it belongs to. */

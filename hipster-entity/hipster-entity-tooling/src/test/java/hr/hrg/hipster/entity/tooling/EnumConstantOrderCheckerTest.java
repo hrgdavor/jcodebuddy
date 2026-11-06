@@ -6,6 +6,7 @@ import hr.hrg.hipster.entity.tooling.validation.EnumConstantOrderChecker.OrderVe
 import hr.hrg.hipster.entity.tooling.validation.EntityFieldEnumOrderRule;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
 /**
  * Tests 20–24 of plan.dsflash § 6.4: the R1 append-only rule and its opt-in checker (§ 4.6/R1.3).
  */
+@Tag("unit")
 class EnumConstantOrderCheckerTest {
 
     private static final String HEADER_MARKED =

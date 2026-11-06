@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -15,6 +16,7 @@ import java.util.List;
  * small and dull by design: drop tombstones, keep the survivors in order, say which ordinals moved.
  * The negative cases are where the damage would be.</p>
  */
+@Tag("component")
 class EnumCompactionCliTest {
 
     private static final String MARKED_HEADER =

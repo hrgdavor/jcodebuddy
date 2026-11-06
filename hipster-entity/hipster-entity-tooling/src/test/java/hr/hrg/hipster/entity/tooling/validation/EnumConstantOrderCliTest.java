@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling.validation;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -22,6 +23,7 @@ import java.util.List;
  * never "the previous run" — which is also why this is the one tooling test that shells out to
  * {@code git}.</p>
  */
+@Tag("component")
 class EnumConstantOrderCliTest {
 
     private static final String MARKED =

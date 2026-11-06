@@ -4,6 +4,7 @@ import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
 import hr.hrg.jcodebuddy.engine.source.SourceReader;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ import hr.hrg.jcodebuddy.engine.index.ContentHash;
  *   <li>a duplicate FQN fails loudly instead of letting the pass pick a winner by iteration order.</li>
  * </ul>
  */
+@Tag("component")
 class ClassIndexTest {
 
     /** A fixed instant, so a table written by this test states a timestamp the test can assert. */

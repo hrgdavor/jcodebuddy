@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -31,6 +32,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * <p>Package-private like the class - it is not visible outside {@code hr.hrg.hipster.entity.tooling},
  * which is itself worth writing down where a reader will look.</p>
  */
+@Tag("unit")
 class JavaSyntaxCheckTest {
 
     private static JavaSyntaxCheck.FileCheck inspect(String source) {

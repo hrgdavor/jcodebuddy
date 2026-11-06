@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.openrewrite.java.tree.Expression;
 import org.openrewrite.java.tree.J;
@@ -35,6 +36,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * class against an author's idea of what the parser produces, which is precisely the mistake the traps
  * describe.</p>
  */
+@Tag("component")
 class TreeQueriesTest {
 
     /** Parses a fixture and fails the test if the fixture itself is not readable. */

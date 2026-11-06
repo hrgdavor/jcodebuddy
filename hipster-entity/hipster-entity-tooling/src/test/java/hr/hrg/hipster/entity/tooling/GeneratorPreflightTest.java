@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
  * here is the invariant the in-process half checks: the invocation's flags are a subset of this
  * build's flags, and the check runs cleanly and says so.</p>
  */
+@Tag("component")
 class GeneratorPreflightTest {
 
     @Test

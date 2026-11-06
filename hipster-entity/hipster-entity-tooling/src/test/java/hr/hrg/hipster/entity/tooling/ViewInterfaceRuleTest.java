@@ -2,6 +2,7 @@ package hr.hrg.hipster.entity.tooling;
 
 import hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -20,6 +21,7 @@ import java.util.List;
  * <p>The cases below are the two accepted conventions, the `@View`-seeded case, and the shapes that
  * must still be reported.</p>
  */
+@Tag("unit")
 public class ViewInterfaceRuleTest {
 
     private static Path tree(String... nameToSource) throws Exception {

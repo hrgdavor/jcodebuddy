@@ -1,6 +1,7 @@
 package hr.hrg.hipster.entity.tooling;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -30,6 +31,7 @@ import java.util.stream.Stream;
  * is true but unasserted decays into a rule which is false), and it asserts the property that makes the old
  * divergence impossible: there is no second launcher to diverge from, in any shell.</p>
  */
+@Tag("component")
 class GateContractTest {
 
     private static final List<String> GATE_MODULES = List.of(

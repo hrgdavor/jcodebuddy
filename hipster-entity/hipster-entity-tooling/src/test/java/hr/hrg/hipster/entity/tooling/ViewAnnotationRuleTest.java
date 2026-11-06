@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling;
 import hr.hrg.hipster.entity.tooling.validation.EntityRulesValidator;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -17,6 +18,7 @@ import java.util.List;
  * {@code @View(read = …, write = …)} form. The rule and the generator must now agree on every
  * shape, so the matrix below covers all of them.</p>
  */
+@Tag("unit")
 public class ViewAnnotationRuleTest {
 
     private static final String MARKER =

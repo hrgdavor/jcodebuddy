@@ -5,6 +5,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
 import org.openrewrite.java.tree.J;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ import hr.hrg.jcodebuddy.engine.index.TypeFacts;
  * a member type is nested, an annotation type is neither a class nor an interface), and {@code kind} must
  * be the tooling's one resolver rather than a second opinion.</p>
  */
+@Tag("component")
 class TypeFactsTest {
 
     private static final String UNIT = """

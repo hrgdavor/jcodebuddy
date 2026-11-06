@@ -1,6 +1,6 @@
 # Incremental unit-test selection — a test dependency index over `fs-meta`
 
-**Status: 2026-11-06 — T0 and T1 done; T2 next.** The policy is now recorded in
+**Status: 2026-11-06 — T0–T2 done; T3 next.** The policy is now recorded in
 [`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to the affected/fast lane, and the full suite is
 run only on request. This plan builds the selector that makes "affected" precise. It does not replace the
 fast lane or the gate: it adds a narrower, dependency-aware layer for the tests that are genuinely local.
@@ -295,7 +295,17 @@ the declared `tests.json` and only scans `classes.json` when it exists (**6/6**)
   contract, not a target count, decides.
 
 **Gate:** every test has a lane; the contract is green; the fast lane still runs the same tests it did
-before plus the new tags; the full suite still reports 542 tests.
+before plus the new tags; the full suite still reports 542 JUnit methods (557 Surefire executions once
+parameterized/nested expansion is counted).
+
+**Done 2026-11-06.** Tagged exactly the 11 measured `unit` classes and the 20 `component` classes
+(62 insertion lines; no heavy class re-tagged). `scripts/check-test-lanes.js` compares the measured lanes,
+the `tests.json` tags and the ≤3-production-dependency threshold; it is green at **11/20/28/23/1** with no
+untagged row. Regenerating the index was required — the contract correctly failed all 31 new tags before
+that, which proves it is reading the source state rather than the old table. The uncached fast lane ran
+**557 Surefire executions, 0 failures/errors**, and an all-83-class comparison found only
+`AllLevelsCompileTest` differing (3 `@ParameterizedTest` methods expanding to 18 `@EnumSource`
+invocations, +15); 542 is the method count, not a lost test. The full gate was not run.
 
 ### T3 — Implement the selector (M)
 **Who:** agent · **Depends:** T1, T2

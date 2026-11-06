@@ -6,6 +6,7 @@ import hr.hrg.hipster.entity.api.GenLevel;
 import hr.hrg.hipster.entity.tooling.meta.ViewAttributes;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -27,6 +28,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  * unchanged: the shapes, the two {@code gen} spellings, the fallbacks and the four diagnostics are the
  * reader's contract, and none of them depends on which parser produced the tree.</p>
  */
+@Tag("component")
 class ViewAnnotationReaderTest {
 
     /**

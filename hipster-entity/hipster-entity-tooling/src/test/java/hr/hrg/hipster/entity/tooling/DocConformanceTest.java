@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling;
 import hr.hrg.jcodebuddy.generated.GeneratedCodeMarkers;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -28,6 +29,7 @@ import java.util.regex.Pattern;
  * launcher, or the POM. The pattern is the one this project keeps rediscovering (F-43, F-47): a rule
  * that is true but unasserted decays into a rule that is false.</p>
  */
+@Tag("component")
 class DocConformanceTest {
 
     private static Path repoRoot() {

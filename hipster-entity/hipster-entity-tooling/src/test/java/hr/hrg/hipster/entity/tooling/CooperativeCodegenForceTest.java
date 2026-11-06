@@ -3,6 +3,7 @@ package hr.hrg.hipster.entity.tooling;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,6 +26,7 @@ import java.util.Set;
  * generation pass. That is deliberate: the mechanism is what is under test, and a pass would also be
  * asserting the emitter, the validation policy and the file walk — none of which this mode touches.
  */
+@Tag("component")
 class CooperativeCodegenForceTest {
 
     private static final String TYPE = "ThingBuilder";
