@@ -299,16 +299,23 @@ event source and Java `FsMetaWriter.publish` with the daemon socket and a read-o
 `FsMetaDaemonWatch` uses the W7a `FsMetaClient`, handles replay, batch-gap/batch-too-old by one full pass then
 `LATEST`, reconnects three times, and keeps the old `Pass`/`onBatch` contract. Production Java in
 `project-automation` no longer publishes the trio and starts no `WatchService`; `.jcodebuddy/cache/watch-fs-meta`
-is read-only legacy. `FileWatch` is retained because `jcodebuddy-agent`'s `ProjectWatcher` still uses it; it
-is not permission for a new consumer. Tests: `jcodebuddy-watch` **9/9** with `FSMETA_BIN` (8 + 1 skip without),
+is read-only legacy. Tests: `jcodebuddy-watch` **9/9** with `FSMETA_BIN` (8 + 1 skip without),
 project-automation targeted **43/43** with the daemon, including two concurrent clients on one root; the
 agent module **30/30**; `check-java-watch-consumers --strict` 0 consumers. Full gate not run.
 
-**Repository-wide residuals, deliberately not claimed by W7b:** `jcodebuddy-agent`'s `ProjectWatcher` still
-starts `FileWatch`; `webviewd`'s `ProjectEventStream` has its own pre-existing `WatchService`;
-`EntityBuildState` still publishes its own derived build-state trio (not the watcher state). The literal
-W7 sentence "no JCodeBuddy code starts a `WatchService` / no production Java publishes a trio" is therefore
-true for `project-automation`/`WatchedRegeneration`, not yet for the whole repository.
+**W7c — promote the client, move the agent, retire `FileWatch` (done 2026-11-06).**
+`FsMetaDaemonDiscovery`/`FsMetaDaemonWatch` moved into `jcodebuddy-watch` (`hr.hrg.jcodebuddy.watch`);
+`ProjectWatcher` discovers and subscribes with `LATEST`, dispatches batches to its agents, stays inactive with
+the exact `attachProblem()` when no daemon is running, and no longer starts a `WatchService`. `FileWatch` and
+its test were deleted because no production consumer remained. `jcodebuddy-watch` added the managed Jackson
+dependency for host-state discovery. Tests: `jcodebuddy-watch` **18** (1 daemon test skipped without
+`FSMETA_BIN`), `project-automation` **26** (1 skipped without the daemon), `jcodebuddy-agent` **32/32**
+including a fake-daemon `ProjectWatcherTest`; with `FSMETA_BIN`, the two-client daemon tests pass.
+
+**Repository-wide residuals, deliberately not claimed by W7b/W7c:** `webviewd`'s `ProjectEventStream` has its
+own pre-existing `WatchService` (a separate webview subsystem, not the watcher path); `EntityBuildState` still
+publishes its own derived build-state trio (not the watcher state). With `FileWatch` deleted, no other
+JCodeBuddy production code starts a `WatchService`.
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a

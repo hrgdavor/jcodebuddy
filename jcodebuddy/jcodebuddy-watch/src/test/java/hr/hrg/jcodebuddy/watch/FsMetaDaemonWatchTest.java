@@ -1,8 +1,5 @@
-package hr.hrg.jcodebuddy.automation.watch;
+package hr.hrg.jcodebuddy.watch;
 
-import hr.hrg.jcodebuddy.watch.FsMetaClient;
-import hr.hrg.jcodebuddy.watch.PathFilter;
-import hr.hrg.jcodebuddy.watch.WatchBatch;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 

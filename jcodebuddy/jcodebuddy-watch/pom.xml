@@ -13,7 +13,7 @@
 
     <artifactId>jcodebuddy-watch</artifactId>
     <name>JCodeBuddy Watch</name>
-    <description>The fs-meta socket client (binary protocol, batches, replay refusals) and the gitignore/wildmatch path filter. The daemon is the watcher; FileWatch remains for the agent until its own cutover.</description>
+    <description>The fs-meta socket client (binary protocol, batches, replay refusals, daemon discovery), the gitignore/wildmatch path filter and the batch type. The daemon is the watcher; this module starts none.</description>
 
     <dependencies>
         <!-- DEC-051: wildmatch, not globs. This module carries no matcher of its own. -->
@@ -21,6 +21,15 @@
             <groupId>hr.hrg</groupId>
             <artifactId>gitignore</artifactId>
             <version>0.3.5</version>
+        </dependency>
+        <!--
+            `FsMetaDaemonDiscovery` reads the daemon's durable root list (`roots.json`) to find the socket
+            that serves a root. That is the `tools.jackson` line the rest of this reactor uses; the version
+            comes from the parent POM's dependencyManagement and is deliberately not repeated here.
+        -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

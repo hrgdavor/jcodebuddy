@@ -18,7 +18,7 @@ import java.util.Set;
  *
  * <h3>What this is, and what it is not</h3>
  * <p>It is the watcher half of the dev-time loop: it pairs the <strong>fs-meta daemon's batch stream</strong> (see
- * {@link hr.hrg.jcodebuddy.automation.watch.FsMetaDaemonWatch}) with {@code hipster-entity-tooling}'s generator, so
+ * {@link hr.hrg.jcodebuddy.watch.FsMetaDaemonWatch}) with {@code hipster-entity-tooling}'s generator, so
  * editing a view interface regenerates its enum, builders, adapters and mappers without a build. It decides
  * nothing about <em>policy</em> — the packages, adapters and mappers are the same CLI-style flags the
  * generator takes, passed through unchanged, so a watched run and a manually invoked run cannot

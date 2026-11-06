@@ -8,6 +8,8 @@ import hr.hrg.fsmeta.FsMetaLoad;
 import hr.hrg.fsmeta.FsMetaPair;
 import hr.hrg.fsmeta.FsMetaScanOptions;
 import hr.hrg.fsmeta.FsMetaScanner;
+import hr.hrg.jcodebuddy.watch.FsMetaDaemonDiscovery;
+import hr.hrg.jcodebuddy.watch.FsMetaDaemonWatch;
 import hr.hrg.jcodebuddy.watch.PathFilter;
 import hr.hrg.jcodebuddy.watch.WatchBatch;
 

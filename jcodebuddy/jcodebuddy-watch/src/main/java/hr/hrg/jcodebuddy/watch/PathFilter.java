@@ -12,6 +12,9 @@ import java.util.List;
  * <p>This is the filter the old {@code FileFilter} supplied: the includes decide what is interesting (empty means
  * everything), and an exclude always wins. The patterns are matched with git's wildmatch semantics, never the JDK's
  * glob engine (DEC-051).</p>
+ *
+ * <p>{@link FsMetaDaemonWatch} applies it to every daemon batch, and a consumer that must filter again — the agent's
+ * {@code ToolSetAgent} does, per toolset — asks the same class rather than carrying a matcher of its own.</p>
  */
 public final class PathFilter {
 

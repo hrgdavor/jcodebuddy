@@ -21,8 +21,12 @@ runs a pass. It runs at most one no-op pass per generated-file set, then goes qu
 > its host-state `roots.json`; `FsMetaDaemonWatch` uses `FsMetaClient` and handles replay, batch-gap and
 > batch-too-old by one full pass then `LATEST`. With no daemon, the watcher stays a read-only trio consumer,
 > `live()` is false and `attachProblem()` names the `fsmeta daemon start` / `fsmeta root add` commands.
-> `jcodebuddy-watch`'s `FileWatch` remains only for the agent's `ProjectWatcher`, which has not been cut
-> over; do not grow it as if it were the target.
+>
+> **W7c: both classes were promoted to `jcodebuddy-watch`** (`hr.hrg.jcodebuddy.watch`) once the agent became a
+> second consumer — `ProjectWatcher` now discovers the daemon and subscribes with the same code, so
+> `jcodebuddy-watch` starts no watcher of its own. `FileWatch` (the `WatchService` event source) had no consumer
+> left and was retired with its test; `WatchBatch` is the module's public batch type and the daemon is its only
+> producer.
 
 ### Running its tests
 

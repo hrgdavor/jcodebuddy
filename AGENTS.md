@@ -366,10 +366,11 @@ satisfiable because the artifact was being installed. Either one alone would hav
     instead of each running a watcher. The Zig engine is the intended implementation because one native watch loop,
     scan, hash and batch stream shared by several active Java, Bun and editor processes is the lightest and fastest
     arrangement. The Java/Bun ports are readers/clients, not watchers. **W7b (2026-11-06) cut
-    `WatchedRegeneration` over to the daemon socket**, so `project-automation` no longer publishes the watcher
-    trio or starts a `WatchService`; `jcodebuddy-watch`'s `FileWatch` remains only because the agent's
-    `ProjectWatcher` still uses it. Repository-wide residuals (agent watcher, webviewd's own event stream,
-    the entity build-state writer) are named in the W7b record: do not grow them as if they were the target.
+    `WatchedRegeneration` over to the daemon socket, and W7c moved `ProjectWatcher` onto the promoted
+    `jcodebuddy-watch` client and retired `FileWatch`.** No JCodeBuddy production code starts a
+    `WatchService` now except webviewd's pre-existing `ProjectEventStream`; `EntityBuildState` still
+    publishes its own derived build-state trio (not the watcher state). Those residuals are named in the
+    W7b/W7c record: do not grow them as if they were the target.
   - **The direction is `gitignore`/`wildmatch`, not globs.** `core` records that `gitignore` covers what globs
     were used for; that is the same rule as DEC-051 and the `glob` bullet below. **Globs are to be purged**, and
     no new glob dialect, dependency or call site is accepted here.

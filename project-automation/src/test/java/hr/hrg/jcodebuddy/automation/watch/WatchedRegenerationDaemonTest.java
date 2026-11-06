@@ -87,7 +87,8 @@ class WatchedRegenerationDaemonTest {
 
                 Files.writeString(source, "class A { int value; }\n");
 
-                await(() -> first.passCount() > firstBaseline && second.passCount() > secondBaseline, 30_000,
+                await(() -> first.passCount() > firstBaseline && second.passCount() > secondBaseline
+                                && !firstSeen.isEmpty() && !secondSeen.isEmpty(), 30_000,
                         "both clients to run a pass for the edit");
                 assertEquals(firstBaseline + 1, first.passCount(),
                         "one edit is one pass for the first client: " + firstSeen);

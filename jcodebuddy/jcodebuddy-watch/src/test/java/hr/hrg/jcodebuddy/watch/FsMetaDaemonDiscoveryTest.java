@@ -1,4 +1,4 @@
-package hr.hrg.jcodebuddy.automation.watch;
+package hr.hrg.jcodebuddy.watch;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,6 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The rules asserted here are {@code FORMAT.daemon.md} § 1: the runtime and config directories per platform and
  * per {@code FSMETA_*} override, the record in {@code roots.json} being the authority for a root's socket, and a
  * missing daemon being a normal, explained answer rather than an exception.</p>
+ *
+ * <p>Lives in {@code jcodebuddy-watch} with the class it tests: discovery was promoted out of
+ * {@code project-automation} when the agent became a second consumer.</p>
  */
 class FsMetaDaemonDiscoveryTest {
 

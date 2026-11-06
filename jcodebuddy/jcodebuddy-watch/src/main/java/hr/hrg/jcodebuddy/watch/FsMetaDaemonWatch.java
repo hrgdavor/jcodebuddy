@@ -1,8 +1,4 @@
-package hr.hrg.jcodebuddy.automation.watch;
-
-import hr.hrg.jcodebuddy.watch.FsMetaClient;
-import hr.hrg.jcodebuddy.watch.PathFilter;
-import hr.hrg.jcodebuddy.watch.WatchBatch;
+package hr.hrg.jcodebuddy.watch;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -11,7 +7,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * The live event source for {@link WatchedRegeneration}: one subscription to the fs-meta daemon serving a root.
+ * The live event source for a consumer of the fs-meta daemon: one subscription to the daemon serving a root.
  *
  * <p>It is a transport and a policy seam, nothing more. {@link FsMetaClient} speaks {@code FORMAT.socket.md};
  * this class decides what a batch means for one consumer:</p>
@@ -29,7 +25,9 @@ import java.util.function.Consumer;
  * </ul>
  *
  * <p>Only the daemon batches; this class never starts a watcher, never publishes a trio and never implements a
- * scheduler — {@code FORMAT.daemon.md} makes the Zig daemon the sole owner of all three.</p>
+ * scheduler — {@code FORMAT.daemon.md} makes the Zig daemon the sole owner of all three. It is the watcher library's
+ * own class (promoted from {@code project-automation} when the agent became a second consumer), so both the
+ * regeneration loop and the agent subscribe with the same code.</p>
  */
 public final class FsMetaDaemonWatch implements AutoCloseable {
 

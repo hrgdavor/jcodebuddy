@@ -1,4 +1,4 @@
-package hr.hrg.jcodebuddy.automation.watch;
+package hr.hrg.jcodebuddy.watch;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -38,6 +38,10 @@ import java.util.Map;
  *
  * <p>The environment and the platform are parameters rather than ambient facts so the rules above can be asserted
  * on any host; {@link #discover(Path)} uses this process's environment.</p>
+ *
+ * <p>This is the watcher library's own class (promoted from {@code project-automation} once the agent became a
+ * second consumer); it depends on nothing but Jackson and the JDK, so a module that only needs to <em>find</em> a
+ * daemon does not have to take the regeneration loop with it.</p>
  */
 public final class FsMetaDaemonDiscovery {
 
