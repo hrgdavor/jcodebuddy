@@ -1,6 +1,6 @@
 # Incremental unit-test selection — a test dependency index over `fs-meta`
 
-**Status: 2026-11-06 — T0–T2 done; T3 next.** The policy is now recorded in
+**Status: 2026-11-06 — T0–T3 done; T4 next.** The policy is now recorded in
 [`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to the affected/fast lane, and the full suite is
 run only on request. This plan builds the selector that makes "affected" precise. It does not replace the
 fast lane or the gate: it adds a narrower, dependency-aware layer for the tests that are genuinely local.
@@ -44,11 +44,12 @@ Three things make this trustworthy rather than another selector that guesses:
 
 ## 2. Current inventory
 
-Measured on 2026-11-06 by `bun scripts/test-lanes.js` (83 test classes; the plan-time tree was 78 —
-five test classes landed with the MVP's E3–E6 work). **The direct-dependency distribution in the earlier
-revision of this section could not be reproduced**, so it is replaced by the probe's measured values; the
-plan-time column is the same rule over the 78-class tree, and confirms the totals are right even though the
-old buckets were not.
+Measured on 2026-11-06 by `bun scripts/test-lanes.js` (83 test classes at T0; now **84** after T3 added
+`TestSelectorTest`, a component test: 11 unit / 21 component / 28 generator / 23 compiler / 1 completeness).
+The plan-time tree was 78 — five test classes landed with the MVP's E3–E6 work. **The direct-dependency
+distribution in the earlier revision of this section could not be reproduced**, so it is replaced by the
+probe's measured values; the plan-time column is the same rule over the 78-class tree, and confirms the
+totals are right even though the old buckets were not.
 
 - **83 test classes**, **542 test methods**; **52** carry a heavy tag (`generator` 28, `compiler` 23,
   `completeness` 1). **11** classes / **94** methods meet the `unit` rule; **20** classes / **176** methods
@@ -320,6 +321,15 @@ invocations, +15); 542 is the method count, not a lost test. The full gate was n
 **Gate:** a change to `ContentHash` selects `ContentHashTest` and no parser/generator test; a change to a
 helper selects its dependents; an unrelated file selects none; `--explain` names the chain; no files
 written in explain/dry-run.
+
+**Done 2026-11-06.** `TestSelector` (test-scoped, CLI in the same package) implements direct and indirect
+production closure hits, test/test-support hits, changed test files, POM and unmapped fallbacks, stale /
+missing / corrupt index fallbacks, `--all-unit`, `--include-component`, `--explain` and `--json`.
+`TestSelectorTest` is **15/15** (21 with the T1 test), and the real index selects exactly
+`ContentHashTest` for `ContentHash.java` with the chain
+`ContentHash.java → ContentHash → ContentHashTest [unit, direct-production]`; no generator/parser test is
+selected. The index is now **84 rows / 11 unit / 21 component** because the selector test is a component
+test; the T2 contract remains green.
 
 ### T4 — Add the state and the Bun runner (M)
 **Who:** agent · **Depends:** T3
