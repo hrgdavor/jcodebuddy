@@ -1,7 +1,7 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-11-01 — W1–W6 done (the `java-watch*` dependency is gone); W7a done; W7b open (the cutover).**
-W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
+**Status: 2026-11-06 — W1–W6 done; W7a and W7b done for the watcher cutover; repository-wide residuals are named
+below.** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
 to the builder. W3 added `jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to
 `fs-meta` and its events to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part
 of the gate. The frozen `watch/*` modules are untouched. **`jcodebuddy-watch` and the Java `FsMetaWriter` usage are
@@ -293,9 +293,22 @@ module's 4 existing tests plus this one); without it the test is skipped, so the
 toolchain. The full gate is **BUILD SUCCESS** (9:27); the integration test's opt-in skip is the only difference
 between that run and the local daemon run.
 
-**W7b — the cutover (open).** Replace `WatchedRegeneration`'s `FileWatch` event source and Java `FsMetaWriter.publish`
-with the daemon socket and the trio/read-only path, and keep the standalone fallback for a tool with no daemon. Also
-decide whether `jcodebuddy-watch`'s `FileWatch` is deleted or retained only as a test helper.
+**W7b — the cutover (done 2026-11-06, for `WatchedRegeneration`).** Replaced `WatchedRegeneration`'s `FileWatch`
+event source and Java `FsMetaWriter.publish` with the daemon socket and a read-only trio fallback.
+`FsMetaDaemonDiscovery` resolves the socket from the daemon's `roots.json` host state (never the trio);
+`FsMetaDaemonWatch` uses the W7a `FsMetaClient`, handles replay, batch-gap/batch-too-old by one full pass then
+`LATEST`, reconnects three times, and keeps the old `Pass`/`onBatch` contract. Production Java in
+`project-automation` no longer publishes the trio and starts no `WatchService`; `.jcodebuddy/cache/watch-fs-meta`
+is read-only legacy. `FileWatch` is retained because `jcodebuddy-agent`'s `ProjectWatcher` still uses it; it
+is not permission for a new consumer. Tests: `jcodebuddy-watch` **9/9** with `FSMETA_BIN` (8 + 1 skip without),
+project-automation targeted **43/43** with the daemon, including two concurrent clients on one root; the
+agent module **30/30**; `check-java-watch-consumers --strict` 0 consumers. Full gate not run.
+
+**Repository-wide residuals, deliberately not claimed by W7b:** `jcodebuddy-agent`'s `ProjectWatcher` still
+starts `FileWatch`; `webviewd`'s `ProjectEventStream` has its own pre-existing `WatchService`;
+`EntityBuildState` still publishes its own derived build-state trio (not the watcher state). The literal
+W7 sentence "no JCodeBuddy code starts a `WatchService` / no production Java publishes a trio" is therefore
+true for `project-automation`/`WatchedRegeneration`, not yet for the whole repository.
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a

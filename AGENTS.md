@@ -365,9 +365,11 @@ satisfiable because the artifact was being installed. Either one alone would hav
     `fsmeta daemon` serves each watched root on its own socket; multiple tools subscribe to the live change stream
     instead of each running a watcher. The Zig engine is the intended implementation because one native watch loop,
     scan, hash and batch stream shared by several active Java, Bun and editor processes is the lightest and fastest
-    arrangement. The Java/Bun ports are readers/clients, not watchers. `jcodebuddy-watch` and the Java
-    `FsMetaWriter` usage in `WatchedRegeneration` are **transitional** until the daemon-socket cutover (W7 in the
-    migration plan): do not grow either, and do not treat the current Java event source as the target.
+    arrangement. The Java/Bun ports are readers/clients, not watchers. **W7b (2026-11-06) cut
+    `WatchedRegeneration` over to the daemon socket**, so `project-automation` no longer publishes the watcher
+    trio or starts a `WatchService`; `jcodebuddy-watch`'s `FileWatch` remains only because the agent's
+    `ProjectWatcher` still uses it. Repository-wide residuals (agent watcher, webviewd's own event stream,
+    the entity build-state writer) are named in the W7b record: do not grow them as if they were the target.
   - **The direction is `gitignore`/`wildmatch`, not globs.** `core` records that `gitignore` covers what globs
     were used for; that is the same rule as DEC-051 and the `glob` bullet below. **Globs are to be purged**, and
     no new glob dialect, dependency or call site is accepted here.

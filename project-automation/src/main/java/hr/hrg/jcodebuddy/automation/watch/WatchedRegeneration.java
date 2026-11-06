@@ -1,6 +1,6 @@
 package hr.hrg.jcodebuddy.automation.watch;
 
-import hr.hrg.fsmeta.FsMetaDiff;
+import hr.hrg.fsmeta.FsMetaConfig;
 import hr.hrg.fsmeta.FsMetaEntry;
 import hr.hrg.fsmeta.FsMetaFile;
 import hr.hrg.fsmeta.FsMetaHashMode;
@@ -8,25 +8,26 @@ import hr.hrg.fsmeta.FsMetaLoad;
 import hr.hrg.fsmeta.FsMetaPair;
 import hr.hrg.fsmeta.FsMetaScanOptions;
 import hr.hrg.fsmeta.FsMetaScanner;
-import hr.hrg.fsmeta.FsMetaWriter;
-import hr.hrg.jcodebuddy.watch.FileWatch;
 import hr.hrg.jcodebuddy.watch.PathFilter;
 import hr.hrg.jcodebuddy.watch.WatchBatch;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.math.BigInteger;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 /**
  * The watch half of a dev-time loop, with the one hazard that matters already solved: <strong>a generator writes into
@@ -37,21 +38,40 @@ import java.util.stream.Stream;
  * a duplicate). It decides nothing about policy: what to generate is the {@link Regenerator}'s business, and the
  * generator's own configuration is the caller's — this class only decides <em>when</em> a pass runs.</p>
  *
- * <h3>The loop breaker is a content check, not a timing heuristic</h3>
- * <p>After every pass it records the {@code fs-meta} trio for every watched {@code .java} file, and a batch whose
- * changed files all still hash to the recorded values is ignored. A timing flag ("ignore events while generating")
- * was rejected because filesystem events arrive asynchronously and can land after the flag clears — which is exactly
- * when the loop would restart.</p>
+ * <h3>The event source is fs-meta's Zig daemon, and nothing here writes the trio</h3>
+ * <p>The intended (and now the only) watcher is {@code fsmeta daemon}: one native process per served root, found
+ * through its own host state ({@link FsMetaDaemonDiscovery}), subscribed over its Unix socket with
+ * {@link hr.hrg.jcodebuddy.watch.FsMetaClient} ({@code FORMAT.socket.md}). Batches are the change stream; the trio
+ * under {@code <root>/.fs-meta} is the state the daemon publishes, and this class only <em>reads</em> it. There is no
+ * {@code FsMetaWriter.publish} call and no in-process {@code WatchService}: the engine is the only writer, so two
+ * JCodeBuddy processes watching one root cannot fight over the trio.</p>
+ *
+ * <p>The daemon's batch is already content-classified by the engine (a same-content save is {@code TOUCHED} and
+ * produces no batch at all), but that alone does not break the loop: the generator's own output arrives as a batch
+ * too, and it must not start another pass. So this class keeps the trio's <em>fingerprints</em> in memory — seeded
+ * from the daemon's trio at construction, advanced by each delivered batch, and re-read from the tree after every
+ * pass — and a batch whose files still hash to the recorded values is ignored. That is the same content check W5a
+ * had, moved to a client that never writes.</p>
+ *
+ * <h3>Standalone: a read-only trio fallback</h3>
+ * <p>When no daemon serves the root there is no live event source. The class still seeds its state from the trio (the
+ * daemon's {@code <root>/.fs-meta}, or the W5a location {@code <root>/.jcodebuddy/cache/watch-fs-meta} as a
+ * <em>read-only</em> legacy baseline), and {@link #poll()} answers "did the tree change since the state?" for a
+ * one-shot tool. What it cannot do without a daemon is deliver events: {@link #start()} then leaves {@link #live()}
+ * false and {@link #attachProblem()} explains what to start, rather than pretending to watch.</p>
  *
  * <p>Two consequences follow, and both are deliberate: <strong>at most one no-op pass per generated-file set</strong>
  * (files the generator wrote but that were not in the triggering batch have no entry yet, so the first batch that
  * mentions them runs a pass, that pass changes nothing because generation is idempotent, and the watcher then goes
- * quiet), and <strong>a save with unchanged content does nothing</strong> — an editor that rewrites a file with
- * identical bytes, or a touched timestamp, does not start a pass. The state half is {@code fs-meta}; the event source
- * is {@code jcodebuddy-watch}. Both are <strong>transitional</strong>: the intended watcher is fs-meta's Zig daemon,
- * with tools as socket clients (W7); this class's Java publish path goes away in that cutover.</p>
+ * quiet), and <strong>a save with unchanged content does nothing</strong>.</p>
  */
 public final class WatchedRegeneration implements AutoCloseable {
+
+    /** The daemon's trio for a served root ({@code FORMAT.md}: the state directory is {@code <root>/.fs-meta}). */
+    public static final String DAEMON_STATE_DIRECTORY = ".fs-meta";
+
+    /** The W5a Java-writer location, read only as a legacy baseline and never written again. */
+    public static final String LEGACY_STATE_DIRECTORY = ".jcodebuddy/cache/watch-fs-meta";
 
     /**
      * One decision point.
@@ -79,29 +99,57 @@ public final class WatchedRegeneration implements AutoCloseable {
 
     private final Path sourceRoot;
     private final PathFilter filter;
-    private final FsMetaScanOptions scanOptions;
+    private final FsMetaScanOptions baseScanOptions;
     private final Path stateDirectory;
+    private final Path legacyStateDirectory;
     private final Regenerator regenerator;
     private final Consumer<Pass> observer;
-    private final FileWatch watcher;
+    private final FsMetaDaemonDiscovery.Attach attach;
+    private final FsMetaDaemonWatch watch;
 
-    /** The shared trio/diff state as of the end of the last decision. Null means "fall back to a pass". */
-    private FsMetaPair state;
+    /**
+     * The loop state: name → the fingerprint fs-meta last recorded for it. Seeded from the daemon's trio, advanced by
+     * every delivered batch, and refreshed from the tree after a pass. Null means "not readable", which degrades to a
+     * pass on the next batch — never to a missed one.
+     */
+    private Map<String, FsMetaFile> state;
+
+    /** The generation the state was seeded from, or 0 when there was no usable trio. Reported, never written. */
+    private final long seededGeneration;
+
+    /** The scan controls, which adopt the trio's hash mode once the trio has been read. */
+    private FsMetaScanOptions scanOptions;
 
     private long sequence;
     private long passes;
+    private volatile boolean live;
+    private volatile String attachProblem = "";
 
     /**
      * @param sourceRoot   the tree that is both watched and written into
-     * @param includes     glob patterns that decide what counts as a source worth reacting to
-     * @param excludes     glob patterns for build output and tool state, which must never re-enter the loop
-     * @param debounceMs   quiet window before a batch is delivered; a non-positive value means the default
+     * @param includes     wildmatch patterns that decide what counts as a source worth reacting to
+     * @param excludes     wildmatch patterns for build output and tool state, which must never re-enter the loop
+     * @param debounceMs   retained for source compatibility; the daemon owns the batch boundary now, so this value no
+     *                     longer starts a local debounce window
      * @param regenerator  what to run when the content really changed
      * @param observer     called after every decision, including the ignored ones, so a caller can log "saw a
      *                     change, nothing to do" instead of guessing why nothing happened
      */
     public WatchedRegeneration(Path sourceRoot, List<String> includes, List<String> excludes, long debounceMs,
                                Regenerator regenerator, Consumer<Pass> observer) {
+        this(sourceRoot, includes, excludes, regenerator, observer, FsMetaDaemonDiscovery.discover(sourceRoot));
+    }
+
+    /** The injectable-discovery form, for a test that runs a daemon under its own runtime/config directories. */
+    WatchedRegeneration(Path sourceRoot, List<String> includes, List<String> excludes, Regenerator regenerator,
+                        Consumer<Pass> observer, Map<String, String> discoveryEnv, boolean windows) {
+        this(sourceRoot, includes, excludes, regenerator, observer,
+                FsMetaDaemonDiscovery.discover(sourceRoot, discoveryEnv, windows));
+    }
+
+    private WatchedRegeneration(Path sourceRoot, List<String> includes, List<String> excludes,
+                                Regenerator regenerator, Consumer<Pass> observer,
+                                FsMetaDaemonDiscovery.Attach attach) {
         if (sourceRoot == null) {
             throw new IllegalArgumentException("a source root is required");
         }
@@ -109,28 +157,89 @@ public final class WatchedRegeneration implements AutoCloseable {
         this.regenerator = regenerator;
         this.observer = observer == null ? pass -> { } : observer;
         this.filter = PathFilter.of(includes, excludes);
-        this.scanOptions = scanOptions(excludes);
-        this.stateDirectory = this.sourceRoot.resolve(".jcodebuddy").resolve("cache").resolve("watch-fs-meta");
-        this.watcher = new FileWatch(this.sourceRoot, filter, debounceMs, this::onBatch);
-        // Seed the state at construction, so the first batch is judged against the tree as the watcher found it.
-        // Doing it here rather than in start() also means the decision logic is exercisable without a real
-        // filesystem watcher, which is how the tests assert it.
-        this.state = seedState();
+        this.baseScanOptions = scanOptions(excludes);
+        this.scanOptions = baseScanOptions;
+        this.stateDirectory = this.sourceRoot.resolve(DAEMON_STATE_DIRECTORY);
+        this.legacyStateDirectory = this.sourceRoot.resolve(LEGACY_STATE_DIRECTORY);
+        this.attach = attach == null ? new FsMetaDaemonDiscovery.Attach(null, "discovery did not run") : attach;
+        this.attachProblem = this.attach.attached()
+                ? "the fs-meta daemon has not been subscribed yet (call start())"
+                : this.attach.problem();
+        // Seed before subscribing: the state is what decides whether an arriving batch contains real changes, and a
+        // batch that arrives before the seed would be judged against nothing.
+        FsMetaPair trio = readTrio(stateDirectory);
+        boolean daemonTrio = trio != null;
+        if (trio == null) {
+            // Read-only legacy baseline: the W5a writer's trio is still a truthful record of the tree it described.
+            // It is never written again, and it is only consulted when the daemon has published no trio.
+            trio = readTrio(legacyStateDirectory);
+        }
+        this.state = trio != null ? entriesOf(trio) : scanTree();
+        this.seededGeneration = trio == null ? 0L : trio.config().generation();
+        if (trio != null) {
+            adoptHashMode(trio.config());
+        }
+        // Subscribe from the generation the state describes, not from zero: the seed already reflects it, and a
+        // replay of older batches would be a no-op that only costs a socket's worth of names. A legacy trio's
+        // generation belongs to a different writer and says nothing about the daemon's sequence, so that case
+        // subscribes from zero and lets a replay refusal take the full-read path.
+        long fromBatch = daemonTrio ? seededGeneration : 0L;
+        this.watch = this.attach.attached()
+                ? new FsMetaDaemonWatch(filter, this.attach.location().socket(), fromBatch, this::onBatch)
+                : null;
     }
 
-    /** Starts watching asynchronously. Returns immediately; batches are handled on the watcher's thread. */
+    /**
+     * Attaches to the daemon serving the root and starts delivering batches asynchronously.
+     *
+     * <p>No daemon is not an error: the class keeps its read-only state and {@link #live()} says whether events will
+     * actually arrive. A caller that wants a live loop must check it and tell its user what to start.</p>
+     */
     public void start() throws IOException {
-        watcher.start();
+        if (watch == null) {
+            live = false;
+            attachProblem = attach.problem();
+            return;
+        }
+        try {
+            watch.start();
+            live = watch.isRunning();
+            if (!live) {
+                attachProblem = "the fsmeta daemon socket " + watch.socket() + " could not be subscribed: "
+                        + watch.lastError();
+            }
+        } catch (IOException failed) {
+            live = false;
+            attachProblem = "cannot attach to the fsmeta daemon at " + watch.socket() + ": " + failed.getMessage();
+        }
     }
 
     /** Stops watching. Safe to call twice, and safe to call without {@link #start()}. */
     public void stop() {
-        watcher.stop();
+        live = false;
+        if (watch != null) {
+            watch.stop();
+        }
     }
 
     @Override
     public void close() {
         stop();
+    }
+
+    /** Whether a daemon subscription is delivering batches right now. */
+    public boolean live() {
+        return live && watch != null && watch.isRunning();
+    }
+
+    /** Why no live event source is running, or an empty string when {@link #live()} is true. */
+    public String attachProblem() {
+        return live() ? "" : attachProblem;
+    }
+
+    /** The daemon socket this watcher attached to, empty in the read-only fallback. */
+    public Optional<Path> daemonSocket() {
+        return watch == null ? Optional.empty() : Optional.of(watch.socket());
     }
 
     /** How many batches were delivered, and how many of them ran a pass. */
@@ -142,9 +251,24 @@ public final class WatchedRegeneration implements AutoCloseable {
         return passes;
     }
 
+    /** How many times the daemon refused a replay and the watcher recovered with a full pass. */
+    public long recoveryCount() {
+        return watch == null ? 0 : watch.recoveries();
+    }
+
     /** The root being watched and written into. */
     public Path sourceRoot() {
         return sourceRoot;
+    }
+
+    /** The daemon's trio this watcher reads; it is never written by this class. */
+    public Path stateDirectory() {
+        return stateDirectory;
+    }
+
+    /** The generation the loop state was seeded from, or 0 when there was no usable trio. */
+    public long seededGeneration() {
+        return seededGeneration;
     }
 
     /**
@@ -152,18 +276,18 @@ public final class WatchedRegeneration implements AutoCloseable {
      * regenerate if it does.
      *
      * <p>Synchronized, so a pass is never concurrent with another: the tree is one resource and a generator's
-     * configuration may be process-global.</p>
+     * configuration may be process-global. The daemon's reader thread calls this; a test may call it directly, which
+     * is how the decision logic is exercised without a native daemon.</p>
      */
     public synchronized Pass onBatch(WatchBatch batch) {
         sequence++;
         Set<String> triggering = relativePaths(batch);
+        Set<String> changed = batch.overflow() || state == null
+                ? triggering
+                : contentChanges(triggering);
 
-        if (!batch.overflow()) {
-            triggering = contentChanges(triggering);
-        }
-
-        if (triggering.isEmpty() && !batch.overflow()) {
-            Pass ignored = new Pass(sequence, false, triggering, List.of());
+        if (changed.isEmpty() && !batch.overflow()) {
+            Pass ignored = new Pass(sequence, false, changed, List.of());
             observer.accept(ignored);
             return ignored;
         }
@@ -171,117 +295,214 @@ public final class WatchedRegeneration implements AutoCloseable {
         List<String> divergences = regenerator.regenerate();
         passes++;
         // The generator writes into the tree it watches. Rescan after the pass so its own output is in the state;
-        // that is what makes the next batch for those files a TOUCHED echo rather than a second pass.
-        this.state = scanAndPublish();
-        Pass pass = new Pass(sequence, true, triggering, divergences);
+        // that is what makes the next batch for those files a TOUCHED echo rather than a second pass. Nothing is
+        // published: the daemon owns the trio, and our state is the in-memory copy of what it last showed us.
+        state = scanTree();
+        Pass pass = new Pass(sequence, true, changed, divergences);
         observer.accept(pass);
         return pass;
     }
 
     /**
-     * Applies the batch's paths to the state and returns the names whose <em>content</em> changed.
-     *
-     * <p>fs-meta's own diff decides this, not a timestamp: a same-content save is {@link FsMetaDiff.Kind#TOUCHED}
-     * and is deliberately filtered out, while a modification, an addition and a deletion are real. The state is
-     * advanced even for an ignored batch, so the echo is not seen again.</p>
+     * The one-shot, read-only check a tool uses when no daemon is running: compare the tree with the current state
+     * and run a pass when the content changed. It never writes the trio, and it is safe to call in a loop a caller
+     * owns — this class does not start a watcher for it.
      */
-    private Set<String> contentChanges(Set<String> triggering) {
-        if (state == null) {
-            return triggering;
+    public synchronized Pass poll() {
+        sequence++;
+        Map<String, FsMetaFile> current = scanTree();
+        Set<String> changed = differences(state, current);
+        state = current;
+        if (changed.isEmpty()) {
+            Pass ignored = new Pass(sequence, false, changed, List.of());
+            observer.accept(ignored);
+            return ignored;
         }
-        try {
-            List<FsMetaFile> files = toFiles(state);
-            for (String relative : triggering) {
-                Path absolute = sourceRoot.resolve(relative);
-                if (Files.isRegularFile(absolute)) {
-                    Optional<FsMetaFile> scanned = FsMetaScanner.scanFile(sourceRoot, absolute, scanOptions);
-                    if (scanned.isPresent() && filter.shouldInclude(relative)) {
-                        replace(files, scanned.get());
-                    } else {
-                        remove(files, relative);
-                    }
-                } else {
-                    remove(files, relative);
-                }
-            }
-            FsMetaPair after = publishState(files);
-            Set<String> changed = new LinkedHashSet<>();
-            for (FsMetaDiff.Change change : FsMetaDiff.between(state, after)) {
-                if (change.kind() != FsMetaDiff.Kind.TOUCHED && change.kind() != FsMetaDiff.Kind.UNKNOWN) {
-                    changed.add(change.name());
-                }
-            }
-            state = after;
-            return changed;
-        } catch (IOException unreadable) {
-            // A state that cannot be read or published is not a correctness failure: the safe direction is one
-            // extra idempotent pass, never a missed one.
-            state = null;
-            return triggering;
-        }
+        List<String> divergences = regenerator.regenerate();
+        passes++;
+        state = scanTree();
+        Pass pass = new Pass(sequence, true, changed, divergences);
+        observer.accept(pass);
+        return pass;
     }
 
-    private FsMetaPair seedState() {
+    /**
+     * Applies the batch's paths to the in-memory state and returns the names whose <em>content</em> changed.
+     *
+     * <p>The classification is fs-meta's {@code FORMAT.md} § 11, the same one {@code FsMetaDiff} applies: a
+     * different {@code contentHash}/{@code sizeBytes} is a real change, equal content with a moved mtime is
+     * {@code TOUCHED} and is deliberately ignored, and an entry without a usable fingerprint is unknown and is
+     * treated as a change (the safe direction). The state is advanced even for an ignored batch, so the echo is not
+     * seen again.</p>
+     */
+    private Set<String> contentChanges(Set<String> triggering) {
+        Set<String> changed = new LinkedHashSet<>();
+        Map<String, FsMetaFile> next = new LinkedHashMap<>(state);
+        for (String relative : triggering) {
+            FsMetaFile before = state.get(relative);
+            Path absolute = insideRoot(relative);
+            if (absolute == null || !Files.isRegularFile(absolute)) {
+                next.remove(relative);
+                if (before != null) {
+                    changed.add(relative);
+                }
+                continue;
+            }
+            FsMetaFile after;
+            try {
+                after = FsMetaScanner.scanFile(sourceRoot, absolute, scanOptions).orElse(null);
+            } catch (IOException unreadable) {
+                // Unknown, not unchanged: one extra idempotent pass is the safe direction.
+                next.remove(relative);
+                changed.add(relative);
+                continue;
+            }
+            if (after == null || !filter.shouldInclude(relative)) {
+                next.remove(relative);
+                if (before != null) {
+                    changed.add(relative);
+                }
+                continue;
+            }
+            next.put(relative, after);
+            if (before == null || !before.contentKnown() || !after.contentKnown()
+                    || before.contentHash() != after.contentHash()
+                    || before.sizeBytes() != after.sizeBytes()) {
+                changed.add(relative);
+            }
+        }
+        state = next;
+        return changed;
+    }
+
+    /** Every name whose content differs between two in-memory states, by the same rule as {@link #contentChanges}. */
+    private static Set<String> differences(Map<String, FsMetaFile> before, Map<String, FsMetaFile> after) {
+        Set<String> changed = new LinkedHashSet<>();
+        if (after == null) {
+            if (before != null) {
+                changed.addAll(before.keySet());
+            }
+            return changed;
+        }
+        if (before == null) {
+            changed.addAll(after.keySet());
+            return changed;
+        }
+        for (Map.Entry<String, FsMetaFile> entry : after.entrySet()) {
+            FsMetaFile previous = before.get(entry.getKey());
+            FsMetaFile current = entry.getValue();
+            if (previous == null || !previous.contentKnown() || !current.contentKnown()
+                    || previous.contentHash() != current.contentHash()
+                    || previous.sizeBytes() != current.sizeBytes()) {
+                changed.add(entry.getKey());
+            }
+        }
+        for (String name : before.keySet()) {
+            if (!after.containsKey(name)) {
+                changed.add(name);
+            }
+        }
+        return changed;
+    }
+
+    /** Reads the trio in {@code directory}, or null when it is absent or not usable. Never writes. */
+    private static FsMetaPair readTrio(Path directory) {
         try {
-            FsMetaLoad existing = FsMetaPair.loadIfPresent(stateDirectory);
+            FsMetaLoad existing = FsMetaPair.loadIfPresent(directory);
             if (existing != null && existing.ok()) {
                 return existing.pair();
             }
-            return scanAndPublish();
+            return null;
         } catch (IOException unreadable) {
             return null;
         }
     }
 
-    private FsMetaPair scanAndPublish() {
-        try {
-            List<FsMetaFile> files = new ArrayList<>();
-            try (Stream<Path> walk = Files.walk(sourceRoot)) {
-                for (Path path : walk.filter(Files::isRegularFile)
-                        .filter(file -> file.getFileName().toString().endsWith(".java"))
-                        .filter(file -> filter.shouldInclude(sourceRoot, file))
-                        .toList()) {
-                    FsMetaScanner.scanFile(sourceRoot, path, scanOptions).ifPresent(files::add);
-                }
-            }
-            return publishState(files);
-        } catch (IOException unreadable) {
-            return null;
-        }
-    }
-
-    private FsMetaPair publishState(List<FsMetaFile> files) throws IOException {
-        FsMetaLoad load = FsMetaWriter.publish(stateDirectory, files, FsMetaHashMode.TEXT,
-                "jcodebuddy-watched-regeneration/1", sourceRoot.toString());
-        if (!load.ok()) {
-            throw new IOException(load.describe());
-        }
-        return load.pair();
-    }
-
-    private static List<FsMetaFile> toFiles(FsMetaPair pair) {
-        List<FsMetaFile> files = new ArrayList<>();
+    /** The trio's entries as this watcher's state: watched names only, no directories, fingerprints preserved. */
+    private Map<String, FsMetaFile> entriesOf(FsMetaPair pair) {
+        Map<String, FsMetaFile> files = new LinkedHashMap<>();
         for (int index = 0; index < pair.size(); index++) {
             FsMetaEntry entry = pair.entry(index);
             String name = pair.name(index);
-            files.add(entry.contentKnown()
+            if (entry.directory() || !filter.shouldInclude(name)) {
+                continue;
+            }
+            files.put(name, entry.contentKnown()
                     ? new FsMetaFile(name, entry.mtimeNs(), entry.sizeBytes(), entry.contentHash(), entry.flags())
                     : FsMetaFile.listingOnly(name));
         }
         return files;
     }
 
-    private static void replace(List<FsMetaFile> files, FsMetaFile replacement) {
-        remove(files, replacement.name());
-        files.add(replacement);
-        files.sort(Comparator.comparing(FsMetaFile::name));
+    /** Adopts the hash mode the trio records, so a comparison of the same bytes cannot disagree with the daemon. */
+    private void adoptHashMode(FsMetaConfig config) {
+        String recorded = config.hashNormalize();
+        FsMetaHashMode mode = FsMetaHashMode.fromWire(recorded).orElse(null);
+        if (mode != null) {
+            scanOptions = baseScanOptions.hashing(mode);
+        }
     }
 
-    private static void remove(List<FsMetaFile> files, String name) {
-        files.removeIf(file -> file.name().equals(name));
+    /** Hashes every watched file under the root, read-only — the state a pass leaves behind. Null when unreadable. */
+    private Map<String, FsMetaFile> scanTree() {
+        Map<String, FsMetaFile> files = new LinkedHashMap<>();
+        try {
+            Files.walkFileTree(sourceRoot, new SimpleFileVisitor<>() {
+
+                @Override
+                public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+                    if (directory.equals(sourceRoot)) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    String relative = relativeName(directory);
+                    if (scanOptions.ignoredDirectoryNames().contains(directory.getFileName().toString())
+                            || !filter.shouldEnter(relative)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                    if (!attributes.isRegularFile()) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    String relative = relativeName(file);
+                    if (!filter.shouldInclude(relative)) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    try {
+                        FsMetaScanner.scanFile(sourceRoot, file, scanOptions)
+                                .ifPresent(scanned -> files.put(scanned.name(), scanned));
+                    } catch (IOException unreadable) {
+                        // Leave this file out of the state: the next batch that names it is then a change, which is
+                        // the safe direction. An unreadable file must not make the whole state unusable.
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException failure) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+            return files;
+        } catch (IOException | UncheckedIOException failure) {
+            return null;
+        }
     }
 
-    /** The scan controls: the caller's directory excludes plus the watcher's own state directory. */
+    /** The absolute path for a wire name, or null when the name would escape the root. */
+    private Path insideRoot(String relative) {
+        Path absolute = sourceRoot.resolve(relative).normalize();
+        return absolute.startsWith(sourceRoot) ? absolute : null;
+    }
+
+    private String relativeName(Path path) {
+        return sourceRoot.relativize(path).toString().replace('\\', '/');
+    }
+
+    /** The scan controls: the caller's directory excludes, plus tool state that must never be scanned. */
     private static FsMetaScanOptions scanOptions(List<String> excludes) {
         FsMetaScanOptions options = FsMetaScanOptions.defaults().ignoring(".jcodebuddy");
         for (String pattern : excludes) {

@@ -9,18 +9,20 @@ app module never depends on this one.
 ## The regeneration watcher
 
 [`EntityRegenerationWatcher`](src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java)
-pairs **`jcodebuddy-watch`'s** WatchService event source with **`fs-meta`'s trio/diff state** and
+pairs **fs-meta's Zig daemon** event stream with **`fs-meta`'s trio/diff state** and
 `EntityMetadataGenerator`, takes its flags from the same CLI surface the
 generator uses, and breaks the self-write loop with a **content** check
 rather than a timing flag — filesystem events arrive asynchronously, and a
-flag clears too early. The loop state is `<source>/.jcodebuddy/cache/watch-fs-meta`; a same-content save is
-`TOUCHED` and ignored, while a modification, addition or deletion runs a pass. It runs at most one no-op pass per
-generated-file set, then goes quiet.
+flag clears too early. The daemon owns the trio at `<source>/.fs-meta`; the watcher reads it, subscribes over
+the Unix socket, and a same-content save is `TOUCHED` and ignored, while a modification, addition or deletion
+runs a pass. It runs at most one no-op pass per generated-file set, then goes quiet.
 
-> **Transitional path:** `jcodebuddy-watch` and the Java `FsMetaWriter` calls above are the current local
-> implementation. The intended watcher is **fs-meta's Zig daemon**, with tools as clients over its Unix socket
-> (plan W7), because one native watcher shared by several active tools is the lightest and fastest arrangement.
-> Do not grow the Java event source or the Java trio writer as if they were the target.
+> **W7b (2026-11-06): the watcher is a socket client.** `FsMetaDaemonDiscovery` finds the daemon's socket from
+> its host-state `roots.json`; `FsMetaDaemonWatch` uses `FsMetaClient` and handles replay, batch-gap and
+> batch-too-old by one full pass then `LATEST`. With no daemon, the watcher stays a read-only trio consumer,
+> `live()` is false and `attachProblem()` names the `fsmeta daemon start` / `fsmeta root add` commands.
+> `jcodebuddy-watch`'s `FileWatch` remains only for the agent's `ProjectWatcher`, which has not been cut
+> over; do not grow it as if it were the target.
 
 ### Running its tests
 

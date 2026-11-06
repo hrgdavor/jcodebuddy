@@ -3,10 +3,12 @@ package hr.hrg.jcodebuddy.watch;
 import java.util.Set;
 
 /**
- * One debounced batch from {@link FileWatch}.
+ * One batch of file changes, as either event source delivers it.
  *
- * <p>Paths are relative to the watched root, POSIX-separated. {@code overflow} is the OS queue-overflow signal: the
- * event list may be incomplete, so a consumer must treat it as a full recompile request.</p>
+ * <p>{@link FileWatch} produces it from a debounced {@code WatchService} queue (the agent's path), and the
+ * project-automation loop produces it from an fs-meta daemon subscription, where a protocol replay refusal becomes
+ * {@code overflow} — the same "the set may be incomplete, run a full pass" signal. Paths are relative to the watched
+ * root, POSIX-separated.</p>
  */
 public record WatchBatch(Set<String> changed, Set<String> deleted, boolean overflow) {
 

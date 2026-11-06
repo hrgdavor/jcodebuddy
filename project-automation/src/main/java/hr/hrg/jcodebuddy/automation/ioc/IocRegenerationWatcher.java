@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <p><strong>What this is:</strong> the pass ({@link IocRegeneration}) run on every save, so editing a context
  * interface rewrites its implementation without a build. <strong>What it is not:</strong> a second copy of the
- * watcher. The mechanism that makes this safe — the debounced batch watcher and the content-hash check that stops a
+ * watcher. The mechanism that makes this safe — the fs-meta daemon's batch stream and the content check that stops a
  * generator reacting to its own output — is {@link WatchedRegeneration}, shared with
  * {@code EntityRegenerationWatcher}, which is the same loop for the entity generator. Two copies of a subtle loop
  * breaker is how they drift apart; the plan's step 3.9 asks for reuse, and step 3.0n is the precedent.</p>
@@ -101,6 +101,16 @@ public final class IocRegenerationWatcher implements AutoCloseable {
         watch.stop();
     }
 
+    /** Whether the fs-meta daemon subscription is delivering events right now. */
+    public boolean live() {
+        return watch.live();
+    }
+
+    /** What to start when {@link #live()} is false — the standalone, read-only answer. */
+    public String attachProblem() {
+        return watch.attachProblem();
+    }
+
     public long batchCount() {
         return watch.batchCount();
     }
@@ -160,8 +170,15 @@ public final class IocRegenerationWatcher implements AutoCloseable {
                     }
                 });
         watcher.start();
+        if (!watcher.live()) {
+            System.err.println("[ioc-watch] " + watcher.attachProblem());
+            System.err.println("[ioc-watch] not watching: the fs-meta daemon is the event source, and no live"
+                    + " subscription was possible. The generator still works as a one-shot build step.");
+            System.exit(3);
+            return;
+        }
         System.out.println("[ioc-watch] watching " + watcher.config().sourceRoot()
-                + "; press Ctrl+C to stop");
+                + " through the fs-meta daemon; press Ctrl+C to stop");
         Runtime.getRuntime().addShutdownHook(new Thread(watcher::stop));
         Thread.currentThread().join();
     }

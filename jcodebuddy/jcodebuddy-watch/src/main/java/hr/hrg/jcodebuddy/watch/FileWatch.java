@@ -18,18 +18,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * The event source the JCodeBuddy watchers use: a JDK {@link WatchService} with recursive registration, a debounce
- * window and a {@link PathFilter}. It owns events only; the state and its diff are {@code fs-meta}'s.
+ * A local {@link WatchService} event source: recursive registration, a debounce window and a {@link PathFilter}. It
+ * owns events only; the state and its diff are {@code fs-meta}'s.
  *
- * <p>This is the replacement for {@code java-watch-core}'s {@code ManagedFileWatcher}/{@code BatchedFileWatcher}: one
- * class, no dependency on the frozen watcher family, and the batch boundary the consumers need. It deliberately does
- * not hash, diff or decide whether a pass is useful — that is the consumer's policy, and in this repository it is
- * {@code fs-meta}'s trio.</p>
- *
- * <p><strong>Transitional.</strong> The intended watcher is {@code fs-meta}'s Zig daemon, with JCodeBuddy tools as
- * clients over its Unix socket; one native watch loop shared by several active processes is the lightest and fastest
- * arrangement. This class is the current local event source until that cutover (W7), and it should not grow features
- * that belong to the daemon.</p>
+ * <p><strong>Not used by {@code WatchedRegeneration} since W7b.</strong> The intended watcher is {@code fs-meta}'s
+ * Zig daemon, with JCodeBuddy tools as clients over its Unix socket; the project-automation loop now subscribes there
+ * ({@code FsMetaDaemonWatch}) and a client never starts a watcher. This class remains, in production, only for the
+ * agent's {@code ProjectWatcher}, whose own cutover to the daemon is a later step — its presence must not be read as
+ * permission for a new consumer to start a {@code WatchService}. {@code FileWatchTest} keeps it covered.</p>
  *
  * <p>A single daemon thread polls the service. The first event starts the debounce window; further events in that
  * window join the batch. A queue overflow is carried as {@link WatchBatch#overflow()}, not hidden.</p>

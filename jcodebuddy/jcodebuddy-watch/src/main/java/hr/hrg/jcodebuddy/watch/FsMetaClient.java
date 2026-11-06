@@ -21,8 +21,10 @@ import java.util.List;
  * filtering, no diff, no regeneration decision.</p>
  *
  * <p>Only the frames a consumer needs are interpreted. {@code STATE} and {@code GIT_EVENT} are consumed without
- * changing the batch state, {@code PING} is answered, and an {@code ERROR} raises. An unknown kind raises rather
- * than being skipped — the protocol's own rule, because a skipped change entry is a silently wrong index.</p>
+ * changing the batch state, {@code PING} is answered, and an {@code ERROR} raises a {@link ProtocolException} that
+ * carries the numeric code, so a consumer can branch on {@code batch-too-old}/{@code batch-gap} instead of parsing
+ * a message. An unknown kind raises rather than being skipped — the protocol's own rule, because a skipped change
+ * entry is a silently wrong index.</p>
  */
 public final class FsMetaClient implements AutoCloseable {
 
@@ -30,6 +32,13 @@ public final class FsMetaClient implements AutoCloseable {
     public static final int PROTOCOL = 0x0102;
     /** Ask {@link #connect(Path, long)} to subscribe after the daemon's current generation. */
     public static final long LATEST = -1;
+
+    /** {@code ERROR} code 1, {@code protocol}: a malformed frame or an unserviceable {@code SUBSCRIBE}. */
+    public static final int ERROR_PROTOCOL = 1;
+    /** {@code ERROR} code 2, {@code batch-too-old}: the replay cannot start where the client asked. */
+    public static final int ERROR_BATCH_TOO_OLD = 2;
+    /** {@code ERROR} code 3, {@code batch-gap}: a generation in the replay range has no batch. */
+    public static final int ERROR_BATCH_GAP = 3;
 
     private static final int KIND_HELLO = 0x01;
     private static final int KIND_START_BATCH = 0x02;
@@ -173,13 +182,13 @@ public final class FsMetaClient implements AutoCloseable {
 
     private static IOException error(byte[] payload) {
         if (payload.length < 2) {
-            return new IOException("fs-meta: ERROR frame without a code");
+            return new ProtocolException(0, "");
         }
         int code = littleEndian(payload).getShort() & 0xffff;
         String message = payload.length > 2
                 ? new String(payload, 2, payload.length - 2, StandardCharsets.UTF_8)
                 : "";
-        return new IOException("fs-meta: ERROR " + code + (message.isEmpty() ? "" : ": " + message));
+        return new ProtocolException(code, message);
     }
 
     private static byte[] hello(int role) {
@@ -285,5 +294,36 @@ public final class FsMetaClient implements AutoCloseable {
         ADDED,
         CHANGED,
         DELETED
+    }
+
+    /**
+     * An {@code ERROR} frame, with the protocol's numeric code kept so the caller branches on the number and never
+     * on the message text ({@code FORMAT.socket.md} § "Values this implementation pins").
+     *
+     * <p>{@link #code()} is {@link #ERROR_PROTOCOL}, {@link #ERROR_BATCH_TOO_OLD} or {@link #ERROR_BATCH_GAP} for
+     * the three codes the format defines; {@code 0} means the frame carried no code at all (a malformed frame, not
+     * a defined refusal). The consumer's obligation is explicit: a replay that is too old or has a gap falls back
+     * to a full read, never a silently skipped batch.</p>
+     */
+    public static final class ProtocolException extends IOException {
+
+        private static final long serialVersionUID = 1L;
+
+        private final int code;
+
+        public ProtocolException(int code, String message) {
+            super("fs-meta: ERROR " + code + (message == null || message.isEmpty() ? "" : ": " + message));
+            this.code = code;
+        }
+
+        /** The {@code u16} code from the payload, or {@code 0} when the frame did not carry one. */
+        public int code() {
+            return code;
+        }
+
+        /** Whether the replay cannot continue where the client asked, so a full read is the only safe answer. */
+        public boolean needsFullRead() {
+            return code == ERROR_BATCH_TOO_OLD || code == ERROR_BATCH_GAP;
+        }
     }
 }

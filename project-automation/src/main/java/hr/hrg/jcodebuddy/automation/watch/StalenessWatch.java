@@ -21,13 +21,13 @@ import java.util.function.Consumer;
  * {@code metadata stale} command uses rather than by a second opinion invented in the watch loop.</p>
  *
  * <h3>What it adds to a batch that a content snapshot does not</h3>
- * <p>{@link WatchedRegeneration} already decides <em>whether to run a pass</em>, using SHA-1 snapshots held in
- * memory. That is a different question, and this class does not replace it: the snapshot answers "does this tree
- * differ from what my last pass wrote" within one process, while the gate answers "do the stored metadata entries
- * still describe these files" against state on disk that survives the process. A watch loop that only had the
- * snapshot would re-derive everything after a restart, and a tool that only had the gate would regenerate on its
- * own output. Both are wanted, and the split is deliberate: this class decides <em>what is stale</em>, the
- * caller decides what to run.</p>
+ * <p>{@link WatchedRegeneration} already decides <em>whether to run a pass</em>, using the fs-meta trio's content
+ * fingerprints read from the daemon's state and held in memory. That is a different question, and this class does not
+ * replace it: the fingerprint answers "does this tree differ from what my last pass wrote" within one process, while
+ * the gate answers "do the stored metadata entries still describe these files" against state on disk that survives
+ * the process. A watch loop that only had the fingerprint check would re-derive everything after a restart, and a
+ * tool that only had the gate would regenerate on its own output. Both are wanted, and the split is deliberate: this
+ * class decides <em>what is stale</em>, the caller decides what to run.</p>
  *
  * <h3>Deletions and new files</h3>
  * <p>A path that no longer exists, or one that has no entry, must be treated as needing work — a deleted source

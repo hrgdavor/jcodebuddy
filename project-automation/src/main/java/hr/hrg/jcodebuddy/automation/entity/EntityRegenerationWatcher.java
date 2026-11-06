@@ -17,9 +17,9 @@ import java.util.Set;
  * Regenerates the entity views when an entity source changes (plan.dsflash § 12.5/7.17, X4).
  *
  * <h3>What this is, and what it is not</h3>
- * <p>It is the watcher half of the dev-time loop: it pairs {@code java-watch-core}'s debounced,
- * batched {@link hr.hrg.jcodebuddy.watch.FileWatch} with {@code hipster-entity-tooling}'s generator, so editing a
- * view interface regenerates its enum, builders, adapters and mappers without a build. It decides
+ * <p>It is the watcher half of the dev-time loop: it pairs the <strong>fs-meta daemon's batch stream</strong> (see
+ * {@link hr.hrg.jcodebuddy.automation.watch.FsMetaDaemonWatch}) with {@code hipster-entity-tooling}'s generator, so
+ * editing a view interface regenerates its enum, builders, adapters and mappers without a build. It decides
  * nothing about <em>policy</em> — the packages, adapters and mappers are the same CLI-style flags the
  * generator takes, passed through unchanged, so a watched run and a manually invoked run cannot
  * disagree about what gets generated.</p>
@@ -201,6 +201,16 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
         stop();
     }
 
+    /** Whether the fs-meta daemon subscription is delivering events right now. */
+    public boolean live() {
+        return watch.live();
+    }
+
+    /** What to start when {@link #live()} is false — the standalone, read-only answer. */
+    public String attachProblem() {
+        return watch.attachProblem();
+    }
+
     /** How many batches were delivered, and how many of them ran a pass. */
     public long batchCount() {
         return watch.batchCount();
@@ -327,8 +337,15 @@ public final class EntityRegenerationWatcher implements AutoCloseable {
                     }
                 });
         watcher.start();
+        if (!watcher.live()) {
+            System.err.println("[entity-watch] " + watcher.attachProblem());
+            System.err.println("[entity-watch] not watching: the fs-meta daemon is the event source, and no live"
+                    + " subscription was possible. The generator still works as a one-shot build step.");
+            System.exit(3);
+            return;
+        }
         System.out.println("[entity-watch] watching " + watcher.config().sourceRoot()
-                + "; press Ctrl+C to stop");
+                + " through the fs-meta daemon; press Ctrl+C to stop");
 
         Runtime.getRuntime().addShutdownHook(new Thread(watcher::stop));
         // The watcher runs on its own thread; park the main thread so the process stays alive.

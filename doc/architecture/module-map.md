@@ -23,7 +23,7 @@ jcodebuddy-parent (POM)
 ├── jcodebuddy/                the JCodeBuddy libraries, the engine and the tools
 │   ├── jcodebuddy-core        the engine: one parse path, the model, the index, the queries, freshness
 │   ├── jcodebuddy-generated   the marker vocabulary and its parser — a leaf (DEC-035, step 3.0l)
-│   ├── jcodebuddy-watch       the event source: WatchService + wildmatch + debounce; state is fs-meta's
+│   ├── jcodebuddy-watch       the fs-meta daemon client (socket protocol, batches, replay refusals) + wildmatch filters; state is fs-meta's
 │   ├── jcodebuddy-agent       the code-action server (was `java-watch-agent`; it left `watch/` at 3.0s)
 │   ├── jcodebuddy-watch-tools
 │   ├── jcodebuddy-builder
@@ -120,7 +120,7 @@ change — which is what did not happen for `java-watch-agent`'s rename, three s
 
 ### `project-automation` — Dev-Time Only, and Strictly Private
 - **This module is the ORCHESTRATOR.** It wires together generators from `jcodebuddy-agent` and `hipster-entity-tooling`.
-- It has compile-scope dependencies on `hipster-entity-api`, `jcodebuddy-watch`, `fs-meta` (the loop state since W5a), `jcodebuddy-builder`, `hipster-entity-tooling`, `jcodebuddy-core`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md). *(The engine replaced the SPI module here at step 3.0i; `jcodebuddy-core` is what `MetadataTypeResolver` extends, and it is also where the `SourceReader`/`TreeQueries` this module uses already came from — previously by inheritance through `hipster-entity-tooling`.)*
+- It has compile-scope dependencies on `hipster-entity-api`, `jcodebuddy-watch`, `fs-meta` (the loop state since W5a, and since W7b the trio the daemon publishes), `jcodebuddy-builder`, `hipster-entity-tooling`, `jcodebuddy-core`, `jackson-databind`, `metadata-server` and `metadata-mcp-server`. `javaparser-core` was removed on 2026-09-22 (Phase 6 of the rewrite migration); the source-manipulation representation is OpenRewrite's LST — see [DEC-030](../../doc-hipster-entity/architecture/decisions/DEC-030-openrewrite-source-representation.md). *(The engine replaced the SPI module here at step 3.0i; `jcodebuddy-core` is what `MetadataTypeResolver` extends, and it is also where the `SourceReader`/`TreeQueries` this module uses already came from — previously by inheritance through `hipster-entity-tooling`.)*
 - **It must NOT be a transitive dependency of any production/runtime module.**
 - **No module may depend on it at all** — not in this reactor, not from a driver project. It is one
   project's own assistant, not a library; see [AGENTS.md § 1.1](../../AGENTS.md) and
