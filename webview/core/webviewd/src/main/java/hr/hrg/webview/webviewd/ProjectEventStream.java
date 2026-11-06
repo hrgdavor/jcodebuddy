@@ -68,7 +68,11 @@ final class ProjectEventStream implements AutoCloseable {
      *                     names the exact {@code fsmeta daemon start} / {@code fsmeta root add} setup
      */
     static ProjectEventStream of(Path project) throws IOException {
-        FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discover(project);
+        return attach(project, FsMetaDaemonDiscovery.discover(project));
+    }
+
+    /** The attach half, separately callable so a daemon integration test can inject its own environment. */
+    static ProjectEventStream attach(Path project, FsMetaDaemonDiscovery.Attach attach) throws IOException {
         if (!attach.attached()) {
             throw new IOException("the fs-meta daemon is required for the live event stream: "
                     + attach.problem() + " (run `fsmeta daemon start` and `fsmeta root add "

@@ -316,8 +316,10 @@ including a fake-daemon `ProjectWatcherTest`; with `FSMETA_BIN`, the two-client 
 `WatchService`; it discovers the daemon with `FsMetaDaemonDiscovery`, subscribes with
 `FsMetaDaemonWatch` at `LATEST`, maps batches to SSE frames, and answers `503` with the `fsmeta daemon start`
 / `fsmeta root add` setup when no daemon serves the project. `webviewd` gained the `jcodebuddy-watch`
-dependency; there is no WatchService fallback. Tests: `ProjectEventStreamTest` 7/7 and `WriteApiTest` 13/13
-in the webviewd module, including the no-daemon `503` and overflow/keep-alive frame paths.
+dependency; there is no WatchService fallback. Tests: `ProjectEventStreamTest` 7/7, `WriteApiTest` 13/13,
+and the opt-in `ProjectEventStreamDaemonTest` starts a real `fsmeta daemon`, subscribes through the production
+`ProjectEventStream`, edits `src/A.java` and asserts the SSE frame. Without `FSMETA_BIN` the daemon test is
+skipped; the full webviewd module is 59 + 1 skipped in the ordinary run, and 60/60 with the daemon binary.
 
 **Remaining repository-wide residual, deliberately not claimed:** `EntityBuildState` still publishes its own
 derived build-state trio (not the watcher state). It is a one-shot entity build cache in
