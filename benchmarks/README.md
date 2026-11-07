@@ -23,7 +23,8 @@ recorded Eclipse runs for the same sizes. Times are milliseconds, median.
 | 1000    | **1044.0**              | ~1017         | 27.0            | **140**              | 2.28            | **7.5×**           |
 
 fs-meta’s root scheduler now defaults to a **50 ms tick** (per-root, 5–1000 ms; the scheduler’s 25 ms quiet floor
-still applies). With `FSMETA_TICK_MS=10`, the same fixture measured **46 ms** at 42 classes and **47 ms** at 200
+still applies). **The tick should be chosen per editor/SSD rather than globally.** 50 ms is the new default; 10–25 ms is reasonable
+for a fast local editor, while 50–100 ms is safer for many roots or slower storage. With `FSMETA_TICK_MS=10`, the same fixture measured **46 ms** at 42 classes and **47 ms** at 200
 classes for the fs-meta path, so the tick can be tuned down on a fast SSD/editor without changing the compiler.
 
 The Eclipse number is dominated by `AutoBuildJob.computeScheduleDelay()`: the auto-build job waits

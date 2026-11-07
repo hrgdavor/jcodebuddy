@@ -35,6 +35,9 @@ Prerequisites:
 | the fs-meta executable | it is the watcher; `FSMETA_BIN` overrides the default `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe` |
 | fs-meta tick           | `FSMETA_TICK_MS` defaults to 50 ms; valid 5–1000; the scheduler’s 25 ms quiet floor still applies  |
 
+**The tick should be chosen per editor/SSD rather than globally.** 50 ms is the new default; 10–25 ms is reasonable
+for a fast local editor, while 50–100 ms is safer for many roots or slower storage.
+
 ```bash
 bun examples/fsmeta-reload/run.js
 ```

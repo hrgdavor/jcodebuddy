@@ -23,7 +23,9 @@ Each module then filters that one daemon to its own `sourceRoot/**`; a project n
 module. The server-side subfolder filter requires the daemon built from `fs-meta` commit **`2da83ae`**
 (which includes the filter from `f4be95d`; the local checkout's rebuilt binary is
 `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`). A root's scheduler tick is configurable with
-`--tick` / `FSMETA_TICK_MS` (default 50 ms, range 5–1000; the 25 ms quiet floor still applies). An older daemon still works
+`--tick` / `FSMETA_TICK_MS` (default 50 ms, range 5–1000; the 25 ms quiet floor still applies). **The tick should be
+chosen per editor/SSD rather than globally.** 50 ms is the new default; 10–25 ms is reasonable for a fast local
+editor, while 50–100 ms is safer for many roots or slower storage. An older daemon still works
 through the Java client's compatibility fallback, but it filters client-side rather than in the daemon.
 
 Without a daemon the generator still runs a full pass; it cannot claim a no-op, and it records no baseline.
