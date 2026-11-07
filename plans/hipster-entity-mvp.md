@@ -450,7 +450,7 @@ and what is not in it?" from the roadmap alone.
 **Done 2026-11-05, with the full gate now green (2026-11-07).** The roadmap's new § 0 declares the MVP,
 records the measured full/incremental/no-op/`--check` timings from E8, lists the supported surface and what is
 out of scope, and links DEC-052; the root README and the plan index point at it. The full 18-module gate was
-run on 2026-11-07: **BUILD SUCCESS, 7:26 min**, all modules green, with **596 tooling tests** (the evidence
+run on 2026-11-07: **BUILD SUCCESS, 8:29 min**, all modules green, with **609 tooling tests** (the evidence
 for E3–E6 and E10 included).
 
 ### E10 — Parse reuse (post-MVP scale step, L)
@@ -482,8 +482,8 @@ sidecar and converter manifest byte-for-byte; `classes.json` rows are field-iden
 `hashCalculatedAt` and `mtimes.json` for the two rows the edited pass re-hashed — wall-clock readings, the
 same exception `MetadataFileIdsTest` documents, and no other difference is excused. `TypeParameterRangeDecoderTest`
 is 6/6, the probe 2/2, and the tooling suite (590 tests) plus the affected core index tests are green;
-`bun scripts/gen.js` twice is a clean no-op. Full gate **BUILD SUCCESS** on 2026-11-07: 18 modules, **7:26
-min**, **596 tooling tests**, 0 failures.
+`bun scripts/gen.js` twice is a clean no-op. Full gate **BUILD SUCCESS** on 2026-11-07: 18 modules, **8:29
+min**, **609 tooling tests**, 0 failures.
 
 ### E11 — Watch mode (explicitly not scheduled here)
 The watch path remains [`java-watch-to-fs-meta.md`](java-watch-to-fs-meta.md)'s W7b. When it lands, it

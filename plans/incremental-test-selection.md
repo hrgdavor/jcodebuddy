@@ -405,7 +405,7 @@ lane” rule to the test docs.
 weakened.
 
 **Done 2026-11-06; full gate green 2026-11-07.** Final, measured numbers (this plan's inventory moved past
-542 when T3 added `TestSelectorTest` and T4 added `TestRunStateTest`; the gate now runs **596 tooling
+542 when T3 added `TestSelectorTest` and T4 added `TestRunStateTest`; the gate now runs **609 tooling
 tests**):
 
 | Measurement                        | Result                                                                            |
@@ -422,7 +422,7 @@ A typical one-class edit runs **6 of the 94 unit tests** (`ContentHashTest`), so
 and every one of the **52 heavy-tagged classes** (272 generator/compiler/completeness methods) that this lane
 never runs. The two no-op runs agree, and the lane contract's counts (11 / 22 / 28 / 23 / 1) match the committed
 T2/T4 records, so the numbers are reproducible. The **full gate ran on 2026-11-07: BUILD SUCCESS, 18
-modules, 7:26 min, 596 tooling tests, 0 failures**; the T6 gate's original "542 tests" was the T2 baseline.
+modules, 8:29 min, 609 tooling tests, 0 failures**; the T6 gate's original "542 tests" was the T2 baseline.
 No test was deleted, disabled or weakened. The "new test gets a lane" rule was added to
 [`codebuddy.md`](../hipster-entity/hipster-entity-example/codebuddy.md) § 3.2.1, and the README/AGENTS status
 now records `test-affected` as the default.

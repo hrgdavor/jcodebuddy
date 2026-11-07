@@ -337,7 +337,8 @@ protocol's include/exclude patterns, and stores `<module>/.jcodebuddy/cache/enti
 successful daemon generation and fingerprint. `FsMetaClient` sends the extended `SUBSCRIBE`; the daemon-side
 filter was missing and is now implemented in `fs-meta` commit `f4be95d` (both replay and live batches, filtered
 `END_BATCH` counts). A missing daemon is a full pass, never a false no-op. Tests: `EntityBuildStateTest` 30/30,
-opt-in `EntityBuildStateDaemonTest` 3/3, the design-B targeted set 51/51; `WatcherBoundaryTest` 3/3.
+opt-in `EntityBuildStateDaemonTest` 3/3, the design-B targeted set 51/51; `WatcherBoundaryTest` 3/3. The
+recorded gate is **BUILD SUCCESS, 18 modules, 8:29 min, 609 tooling tests**.
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a

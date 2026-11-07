@@ -32,7 +32,7 @@ fact the base layer cannot supply. The current status page is
 [DEC-052](../architecture/decisions/DEC-052.md).
 
 **Verification.** The recorded full gate is green as of **2026-11-07**: `bun scripts/mvn-jdk25.js`,
-**BUILD SUCCESS**, 18 modules, **7:26 min**, **596 tooling tests**, 0 failures. The targeted suites and the
+**BUILD SUCCESS**, 18 modules, **8:29 min**, **609 tooling tests**, 0 failures. The targeted suites and the
 clean-consumer check remain the edit-loop evidence.
 
 > **This file is the status tracker; the schedule is [`plans/unified-plan.md`](../../plans/unified-plan.md).**

@@ -307,11 +307,11 @@ generator/compiler tests are individually small but numerous.
 The four-fork profile meets 240 s (1:49–1:55) and is the measured opt-in lane, not the default: a 4-fork
 JVM set is not free on a smaller machine. The daily loop is the fast lane (45.6 s), not the full suite.
 
-**Follow-up 2026-11-07 — more tests, not slower tests.** The gate after the MVP/incremental/watcher work is
-**7:26** with **596 tooling tests** (395.8 s tooling class time; 112 report files / 748 test executions across
-the modules test-cost sees). That is +54 tooling tests over this plan's 542, including the deliberately
-expensive E5/E10 integration tests: `CheckCommandTest` 49.2 s, `IncrementalEmissionTest` 47.5 s,
-`ParseReuseTest` 37.5 s, `IncrementalFallbackTest` 17.5 s and `BaseLayerReconstructionProbeTest` 11.3 s.
-The before/after line is therefore: **9:27 full gate before this plan → 4:59 after it (542 tests) → 7:26 now
-(596 tests)**. The gate is still **2:01 faster than the pre-plan baseline despite 54 more tests**; the increase
-over 4:59 is added verification coverage, not a regression in the parallel/fixture work.
+**Follow-up 2026-11-07 — more tests, not slower tests.** The gate after the MVP/incremental/watcher/Design-B work
+is **8:29** with **609 tooling tests** (456.8 s tooling class time). That is +67 tooling tests over this plan's
+542, including the deliberately expensive E5/E10 integration tests: `CheckCommandTest` 49.2 s,
+`IncrementalEmissionTest` 47.5 s, `ParseReuseTest` 37.5 s, `IncrementalFallbackTest` 17.5 s and
+`BaseLayerReconstructionProbeTest` 11.3 s. The before/after line is therefore: **9:27 full gate before this plan
+→ 4:59 after it (542 tests) → 8:29 now (609 tests)**. The gate is still **58 s faster than the pre-plan baseline
+despite 67 more tests**; the increase over 4:59 is added verification coverage, not a regression in the
+parallel/fixture work.
