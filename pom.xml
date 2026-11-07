@@ -70,6 +70,11 @@
         <module>jcodebuddy/jcodebuddy-builder-api</module>
         <module>jcodebuddy/jcodebuddy-builder</module>
         <module>jcodebuddy/jcodebuddy-watch</module>
+        <!-- The standalone ECJ incremental compiler, rebuilt from the frozen watch group (step that gave
+             jcodebuddy its own compile helper): a benchmark/dev-time compiler, with no watcher, no relaunch
+             and no java-watch dependency. The change source is fs-meta, and the caller passes the files. -->
+        <module>jcodebuddy/jcodebuddy-compile</module>
+        <module>benchmarks/fsmeta-auto-build</module>
         <!-- The LSP sidecar lives with the webview product, not at the repository root: it is the same
              product (pages, navigation, edits), reached over LSP instead of over a webview. See
              webview/PLAN-webview-suite.md, decision D9. -->

@@ -4,6 +4,7 @@ import hr.hrg.jcodebuddy.engine.MetadataJson;
 import hr.hrg.jcodebuddy.engine.index.ContentHash;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.classfile.Annotation;
 import java.lang.classfile.AnnotationElement;
 import java.lang.classfile.AnnotationValue;
@@ -29,6 +30,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 /**
@@ -463,7 +466,7 @@ public final class TestIndexGenerator {
      * and a workspace jar whose {@code target/classes} is missing means the module was not compiled — both
      * would be silent under-selections if dropped (plan § 5.2).</p>
      */
-    private static Path projectDirectory(Path entry, Path repo) {
+    private static Path projectDirectory(Path entry, Path repo) throws IOException {
         if (Files.isDirectory(entry)) {
             Kind kind = kindOf(entry);
             if (kind == null) {
@@ -495,11 +498,37 @@ public final class TestIndexGenerator {
         }
         Path classes = target.resolve(CLASSES);
         if (!Files.isDirectory(classes)) {
-            throw new IllegalStateException("unresolved project output for " + entry + ": " + classes
-                    + " does not exist, so the module's compiled classes cannot be indexed. Run "
-                    + "test-compile for the module before generating the test index.");
+            return classesFromJar(entry);
         }
         return classes.toAbsolutePath().normalize();
+    }
+
+    /**
+     * A cache restore can leave the module JAR without {@code target/classes} (the whole-module cache is
+     * allowed to restore the packaged output and not the intermediate directory). The test index still needs
+     * the class files, so extract the JAR's entries into a temporary directory rather than failing the gate
+     * on a build-cache detail.
+     */
+    private static Path classesFromJar(Path jar) throws IOException {
+        Path extracted = Files.createTempDirectory("jcodebuddy-index-");
+        try (JarFile archive = new JarFile(jar.toFile())) {
+            var entries = archive.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
+                if (entry.isDirectory() || !entry.getName().endsWith(".class")) {
+                    continue;
+                }
+                Path target = extracted.resolve(entry.getName()).normalize();
+                if (!target.startsWith(extracted)) {
+                    continue;
+                }
+                Files.createDirectories(target.getParent());
+                try (InputStream input = archive.getInputStream(entry)) {
+                    Files.copy(input, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+        return extracted;
     }
 
     /** Two classpath entries with the same directory are one input, not two. */

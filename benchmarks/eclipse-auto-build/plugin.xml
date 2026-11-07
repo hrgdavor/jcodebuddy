@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+  <!-- Application id bench.app.app: what run.js passes as -application. -->
+  <extension point="org.eclipse.core.runtime.applications" id="app">
+    <application cardinality="singleton-global" thread="main">
+      <run class="bench.BenchApplication"/>
+    </application>
+  </extension>
+</plugin>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jcodebuddy-compile</artifactId>
+    <packaging>jar</packaging>
+
+    <name>JCodeBuddy Compile</name>
+    <description>
+        A standalone ECJ incremental compiler for file-change triggered recompiles: one indexed name
+        environment, a fresh ECJ compiler per call and a reused class-file writer. A benchmark and
+        dev-time helper; it starts no watcher. The change source is fs-meta.
+    </description>
+
+    <!--
+        WHY THIS MODULE EXISTS.
+
+        The incremental ECJ compiler was written inside the frozen `watch/java-watch-run` module, where it was
+        welded to a hot-swap daemon, an slf4j logger and code that knows how to relaunch a JVM. The compile step
+        itself is reusable and has none of those needs: a caller hands it the files that changed, it compiles
+        them into a bin directory, and it reports success, a duration and its diagnostics.
+
+        So it was copied here and rebuilt as a standalone library. This module must stay independent, and the
+        POM says so in the only way a build can enforce: it declares ecj and JUnit, and nothing else. There is
+        deliberately no dependency on `java-watch-run`, `java-watch-core` or any `hr.hrg.watch2.*` artifact,
+        because the watching half is now fs-meta's job and this module must not be dragged back into the
+        frozen group.
+
+        Keeping the compile target at the reactor's release 25 is what every other module does; the ECJ
+        compiler options themselves emit Java 21 class files (see `EcjIncrementalCompiler`), which is the
+        level `org.eclipse.jdt:ecj` is expected to compile.
+    -->
+
+    <dependencies>
+        <!-- The compiler. No slf4j, no Jackson, no java-watch: JDK logging is enough for a library that
+             reports through its own accessors. -->
+        <dependency>
+            <groupId>org.eclipse.jdt</groupId>
+            <artifactId>ecj</artifactId>
+        </dependency>
+
+        <!-- Test-only: the fixtures are written to a JUnit @TempDir and compiled at test time. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

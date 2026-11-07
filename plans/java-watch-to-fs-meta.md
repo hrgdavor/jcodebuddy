@@ -338,7 +338,7 @@ successful daemon generation and fingerprint. `FsMetaClient` sends the extended 
 filter was missing and is now implemented in `fs-meta` commit `f4be95d` (both replay and live batches, filtered
 `END_BATCH` counts). A missing daemon is a full pass, never a false no-op. Tests: `EntityBuildStateTest` 30/30,
 opt-in `EntityBuildStateDaemonTest` 3/3, the design-B targeted set 51/51; `WatcherBoundaryTest` 3/3. The
-recorded gate is **BUILD SUCCESS, 18 modules, 7:46 min, 617 tooling tests**.
+recorded gate is **BUILD SUCCESS, 19 modules, 6:49 min, 617 tooling tests** (+ the compile module's 8).
 
 **Daemon pin — 2026-11-07.** The server-side subfolder filter requires `fs-meta` commit **`f4be95d`**; the
 local rebuilt binary is `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe` (Zig 0.17, `zig build`). The Java client
