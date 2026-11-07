@@ -1,7 +1,7 @@
 # hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
 
-**Status: 2026-11-06 — E0–E10 done (the MVP is declared and parse reuse is implemented); the full gate is on
-demand.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-07 — E0–E10 done (the MVP is declared, parse reuse is implemented, and the full gate is
+green); E11 watch mode remains unscheduled.** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
 practical. **Watch mode is deliberately out of scope**: the existing watcher path
@@ -442,12 +442,11 @@ DEC-052 from the roadmap and the tooling README.
 agree; no code changed except the status records. The step is done when a reader can answer "is this MVP,
 and what is not in it?" from the roadmap alone.
 
-**Done 2026-11-05, with the full gate on demand.** The roadmap's new § 0 declares the MVP, records the
-measured full/incremental/no-op/`--check` timings from E8, lists the supported surface and what is out of
-scope, and links DEC-052; the root README and the plan index point at it. The **full 18-module gate was not
-run** under the AGENTS affected-test policy: the evidence recorded here is the targeted entity/tooling
-suites, the E3–E6 incremental tests and the clean-consumer check. When the full gate is requested, its
-result belongs in this paragraph rather than in a new claim.
+**Done 2026-11-05, with the full gate now green (2026-11-07).** The roadmap's new § 0 declares the MVP,
+records the measured full/incremental/no-op/`--check` timings from E8, lists the supported surface and what is
+out of scope, and links DEC-052; the root README and the plan index point at it. The full 18-module gate was
+run on 2026-11-07: **BUILD SUCCESS, 7:26 min**, all modules green, with **596 tooling tests** (the evidence
+for E3–E6 and E10 included).
 
 ### E10 — Parse reuse (post-MVP scale step, L)
 **Who:** agent · **Depends:** E9
@@ -478,7 +477,8 @@ sidecar and converter manifest byte-for-byte; `classes.json` rows are field-iden
 `hashCalculatedAt` and `mtimes.json` for the two rows the edited pass re-hashed — wall-clock readings, the
 same exception `MetadataFileIdsTest` documents, and no other difference is excused. `TypeParameterRangeDecoderTest`
 is 6/6, the probe 2/2, and the tooling suite (590 tests) plus the affected core index tests are green;
-`bun scripts/gen.js` twice is a clean no-op. Full gate remains **not run, on demand**.
+`bun scripts/gen.js` twice is a clean no-op. Full gate **BUILD SUCCESS** on 2026-11-07: 18 modules, **7:26
+min**, **596 tooling tests**, 0 failures.
 
 ### E11 — Watch mode (explicitly not scheduled here)
 The watch path remains [`java-watch-to-fs-meta.md`](java-watch-to-fs-meta.md)'s W7b. When it lands, it

@@ -31,11 +31,9 @@ fact the base layer cannot supply. The current status page is
 [`user/mvp-surface.md`](../user/mvp-surface.md); the incremental contract is
 [DEC-052](../architecture/decisions/DEC-052.md).
 
-**Verification.** The recorded full gate is an explicit on-demand action under the repository's
-affected-test policy. The MVP batch records the targeted entity/tooling suites, the six metadata
-regeneration classes, the E3–E6 incremental tests, and the clean-consumer check
-[`scripts/check-entity-mvp.js`](../../scripts/check-entity-mvp.js); the full 18-module gate is not claimed
-here as having run in this batch.
+**Verification.** The recorded full gate is green as of **2026-11-07**: `bun scripts/mvn-jdk25.js`,
+**BUILD SUCCESS**, 18 modules, **7:26 min**, **596 tooling tests**, 0 failures. The targeted suites and the
+clean-consumer check remain the edit-loop evidence.
 
 > **This file is the status tracker; the schedule is [`plans/unified-plan.md`](../../plans/unified-plan.md).**
 > (2026-10-01) The unchecked rows of § 1 and the `Proposed` rows of § 3 are the open work recorded here.

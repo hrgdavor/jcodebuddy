@@ -1,6 +1,6 @@
 # Incremental unit-test selection — a test dependency index over `fs-meta`
 
-**Status: 2026-11-06 — T0–T6 done; the affected lane is the default and the full suite is on demand.** The policy
+**Status: 2026-11-07 — T0–T6 done; the affected lane is the default and the full gate is green.** The policy
 is recorded in [`AGENTS.md`](../AGENTS.md) § 2: hipster-entity work defaults to `bun scripts/test-affected.js`
 (and to the fast lane when the selector cannot help), and the full suite is run only on request. This plan built
 the selector that makes "affected" precise. It does not replace the fast lane or the gate: it adds a narrower,
@@ -401,11 +401,12 @@ Record: unit/component class counts, no-op time, one-file selection time, all-un
 tests a typical edit skips. Update this plan's status and the README table. Add the “new test gets a
 lane” rule to the test docs.
 
-**Gate:** the recorded numbers are reproducible; the full gate is green at 542 tests; no test deleted,
-disabled or weakened.
+**Gate:** the recorded numbers are reproducible; the full gate is green; no test deleted, disabled or
+weakened.
 
-**Done 2026-11-06.** Final, measured numbers (this plan's inventory moved past 542 when T3 added
-`TestSelectorTest` and T4 added `TestRunStateTest`):
+**Done 2026-11-06; full gate green 2026-11-07.** Final, measured numbers (this plan's inventory moved past
+542 when T3 added `TestSelectorTest` and T4 added `TestRunStateTest`; the gate now runs **596 tooling
+tests**):
 
 | Measurement                        | Result                                                                            |
 | ---------------------------------- | --------------------------------------------------------------------------------- |
@@ -420,9 +421,9 @@ disabled or weakened.
 A typical one-class edit runs **6 of the 94 unit tests** (`ContentHashTest`), so it skips **88 unit methods**
 and every one of the **52 heavy-tagged classes** (272 generator/compiler/completeness methods) that this lane
 never runs. The two no-op runs agree, and the lane contract's counts (11 / 22 / 28 / 23 / 1) match the committed
-T2/T4 records, so the numbers are reproducible. The **full gate was not run — it is on demand** (AGENTS § 2); the
-T6 gate's "542 tests" is the T2 baseline, and the current lane probe reports 571 methods after T3/T4's two test
-classes. No test was deleted, disabled or weakened. The "new test gets a lane" rule was added to
+T2/T4 records, so the numbers are reproducible. The **full gate ran on 2026-11-07: BUILD SUCCESS, 18
+modules, 7:26 min, 596 tooling tests, 0 failures**; the T6 gate's original "542 tests" was the T2 baseline.
+No test was deleted, disabled or weakened. The "new test gets a lane" rule was added to
 [`codebuddy.md`](../hipster-entity/hipster-entity-example/codebuddy.md) § 3.2.1, and the README/AGENTS status
 now records `test-affected` as the default.
 

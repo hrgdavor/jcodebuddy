@@ -1,7 +1,8 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-11-06 — W1–W6 done; W7a–W7d done; W7's boundary is enforced by `WatcherBoundaryTest`. The one
-accepted exception is the entity build-state writer, a one-shot derived cache rather than watcher state.** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
+**Status: 2026-11-07 — W1–W6 done; W7a–W7d done; the full gate is green; `WatcherBoundaryTest` enforces
+the boundary. The one accepted exception is the entity build-state writer, a one-shot derived cache rather than
+watcher state.** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
 to the builder. W3 added `jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to
 `fs-meta` and its events to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part
 of the gate. The frozen `watch/*` modules are untouched. **`jcodebuddy-watch` and the Java `FsMetaWriter` usage are
@@ -327,6 +328,7 @@ sources of `jcodebuddy-watch`, `jcodebuddy-agent`, `project-automation`, `webvie
 `FsMetaWriter.publish(` occurs only in `EntityBuildState` (the one-shot entity build cache); `webviewd` depends
 on `jcodebuddy-watch`; and `FileWatch` is gone. The literal W7 sentence is therefore enforced as "no production
 Java starts a `WatchService`; watcher state is daemon-owned; one derived build cache is the accepted exception".
+The recorded gate ran on 2026-11-07: **BUILD SUCCESS, 18 modules, 7:26 min, 596 tooling tests, 0 failures**.
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a
