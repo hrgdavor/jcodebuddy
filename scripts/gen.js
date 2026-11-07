@@ -3,6 +3,10 @@
  * gen.js — run JCodeBuddy on the side: regenerate this repository's entity output with one command, or watch the
  * sources and regenerate after each save.
  *
+ * Watch mode is the generator's own `--watch` (plan E11): this script forwards the flag, and the fs-meta daemon is
+ * the event source. It is not a second watcher and does not route through `project-automation` any more; without a
+ * daemon the generator prints what to start and exits non-zero.
+ *
  * This replaces `scripts/gen.cmd` (the batch wrapper, now that scripts are Bun JavaScript — AGENTS.md § 2) and a
  * 16-line unreferenced stub that had lived at this path since the initial commit: it parsed `--rec`/`--from`
  * arguments and did nothing with them.
@@ -31,7 +35,8 @@
  * Usage:
  *   bun scripts/gen.js                   regenerate, then render the HTML entity index; tests skipped
  *   bun scripts/gen.js with-tests        regenerate and run the entity test set
- *   bun scripts/gen.js watch             regenerate now, then regenerate on save
+ *   bun scripts/gen.js watch             regenerate now, then regenerate on save (forwarded as --watch)
+ *   bun scripts/gen.js --watch           the same watch mode; the flag is forwarded to the generator CLI
  *   bun scripts/gen.js <maven args...>   forwarded to the entity module set
  *
  * Environment: JCODEBUDDY_JDK25, JCODEBUDDY_MVN, JCODEBUDDY_HE_MODULES.
@@ -78,7 +83,11 @@ function usage() {
   bun scripts/gen.js --check           verify in a temp tree without writing
   bun scripts/gen.js with-tests        regenerate, then the entity test set
   bun scripts/gen.js watch             regenerate now, then on every save (Ctrl+C stops it)
+  bun scripts/gen.js --watch           same as 'watch'; the flag is forwarded to the generator
   bun scripts/gen.js <maven args...>   forwarded to the entity module set
+
+  Watch mode needs an fs-meta daemon serving the project root; the generator never starts a Java watcher.
+  Start one with 'fsmeta daemon start' and register the root with 'fsmeta root add <project root>'.
 
   Environment: JCODEBUDDY_JDK25, JCODEBUDDY_MVN, JCODEBUDDY_HE_MODULES`);
 }
@@ -100,6 +109,22 @@ function step(command, args, { logPath, echo = false, env, cwd }) {
   if (result.stderr) {
     log(result.stderr, logPath, { echo });
   }
+  if (result.error) {
+    log(`\n[gen] could not run ${command}: ${result.error.message}\n`, logPath);
+    return 1;
+  }
+  return result.status;
+}
+
+/**
+ * The same step, but with the child's stdio inherited.
+ *
+ * A watch session is a long-lived process whose whole value is the log it prints while it runs; capturing that
+ * output into a file and showing it only after Ctrl+C would make the loop invisible exactly while it is useful.
+ */
+function liveStep(command, args, { logPath, env }) {
+  log(`\n$ ${command} ${args.join(' ')}\n`, logPath);
+  const result = run(command, args, { stdio: 'inherit', env });
   if (result.error) {
     log(`\n[gen] could not run ${command}: ${result.error.message}\n`, logPath);
     return 1;
@@ -177,45 +202,29 @@ function main() {
   const maven = resolveMaven();
   const env = envWith(jdk);
 
-  const isWatch = argv[0] === 'watch';
+  const isWatch = argv[0] === 'watch' || argv.includes('--watch');
   const isTests = argv[0] === 'with-tests';
   const isCheck = argv.includes('--check');
   const isFull = argv.includes('--full');
-  const modeArgs = argv.filter((arg) => arg === '--check' || arg === '--full' || arg === '--incremental');
-  const forwarded = argv.filter((arg) => !modeArgs.includes(arg));
+  const modeArgs = argv.filter((arg) => arg === '--check' || arg === '--full' || arg === '--incremental'
+    || arg === '--watch');
+  const forwarded = argv.filter((arg) => arg !== 'watch' && !modeArgs.includes(arg));
+
+  if (isWatch && isCheck) {
+    // Usage, like the Java CLI's own refusal: one writes nothing by definition, the other regenerates in place.
+    console.error('[gen] --watch cannot be combined with --check; run the check separately.');
+    return 2;
+  }
+  if (isWatch && isTests) {
+    console.error('[gen] with-tests cannot be combined with --watch; run the watch session and the tests separately.');
+    return 2;
+  }
 
   const logPath = join(AGENT_STATE, isWatch ? 'watch.log' : 'gen.log');
   writeFileSync(logPath, `[gen] ${new Date().toISOString()}  bun ${Bun.version}\n`);
 
-  // --- watch: the same classpath, but project-automation's watcher --------------------------------
-  if (isWatch) {
-    const classpathFile = join(AGENT_STATE, 'watch-classpath.txt');
-    // A stale classpath file is deleted first: it could otherwise be read after a failed export, and the watcher
-    // would run against a previous classpath. Its own log and its own file, so a watch session and a one-shot
-    // pass can run at the same time without truncating each other's log.
-    rmSync(classpathFile, { force: true });
-    const exportStatus = step(maven.command, ['-o', '-pl', ':project-automation', '-am', 'compile',
-      'dependency:build-classpath', `-Dmdep.outputFile=${classpathFile}`], { logPath, env });
-    if (exportStatus !== 0) {
-      console.error(`[gen] could not build the watch classpath; see ${logPath}`);
-      return report(logPath, exportStatus);
-    }
-    let classpath;
-    try {
-      classpath = classpathFrom(classpathFile, join(REPO, 'project-automation'));
-    } catch (error) {
-      console.error(`[gen] ${error.message}`);
-      return report(logPath, 1);
-    }
-    console.log(`[gen] watching ${SOURCE_ROOT} - press Ctrl+C to stop`);
-    const status = run(jdk.java, ['-cp', classpath,
-      'hr.hrg.jcodebuddy.automation.entity.EntityRegenerationWatcher',
-      '--source', SOURCE_ROOT, '--packages', PACKAGES], { stdio: 'inherit', env });
-    return status.status;
-  }
-
   // --- forwarded arguments: the gate's shortcut with the caller's goals ---------------------------
-  if (!isTests && !isCheck && forwarded.length > 0) {
+  if (!isTests && !isCheck && !isWatch && forwarded.length > 0) {
     const gate = buildGateArgs(['hipster-entity', ...forwarded]);
     if (gate.error) {
       console.error(splitPropertyAdvice('gen', gate.error));
@@ -230,7 +239,9 @@ function main() {
   }
 
   // --- the side-car pass -------------------------------------------------------------------------
-  const classpathFile = join(AGENT_STATE, 'gen-classpath.txt');
+  // Its own classpath file for a watch session, so a one-shot pass can run at the same time without
+  // truncating the file a starting watch session is reading.
+  const classpathFile = join(AGENT_STATE, isWatch ? 'watch-classpath.txt' : 'gen-classpath.txt');
   rmSync(classpathFile, { force: true });
   const exportStatus = step(maven.command, ['-o', '-pl',
     ':hipster-entity-tooling,:hipster-entity-example',
@@ -266,16 +277,25 @@ function main() {
   // the example needs a mapping that produces pairs. `PersonSummary -> PersonDto` is the projection pair
   // the pattern documents; its committed `.jcodebuddy/conf/converters.json` is what
   // ExampleConverterManifestTest compares against a fresh pass.
-  status = step(jdk.java, ['-cp', classpath, 'hr.hrg.hipster.entity.tooling.EntityMetadataGenerator',
+  // `--watch` is forwarded to the generator (E11): the fs-meta daemon is the watcher, the CLI owns the initial
+  // pass and the loop, and this script no longer starts project-automation's watcher. The first pass keeps the
+  // usual `--incremental` default (or `--full` when asked), and every pass after a batch is incremental.
+  const generatorArgs = ['-cp', classpath, 'hr.hrg.hipster.entity.tooling.EntityMetadataGenerator',
     SOURCE_ROOT, METADATA_DIR, '--java-out', SOURCE_ROOT, '--packages', PACKAGES, '--validate=STRICT',
     '--dto-projections',
     '--mapper', 'PersonSummary:PersonDto',
     ...(isCheck ? ['--check'] : isFull ? ['--full'] : ['--incremental']),
-    '--run-record', join(METADATA_DIR, 'generation.json')], { logPath, env });
+    ...(isWatch ? ['--watch'] : []),
+    '--run-record', join(METADATA_DIR, 'generation.json')];
+  status = isWatch
+    ? liveStep(jdk.java, generatorArgs, { logPath, env })
+    : step(jdk.java, generatorArgs, { logPath, env });
   if (status !== 0) {
     return report(logPath, status);
   }
-  if (isCheck) {
+  if (isCheck || isWatch) {
+    // A watch session never returns until Ctrl+C, and it writes metadata on every pass; there is no single
+    // "after the pass" moment at which to render the HTML index, exactly as the previous watch mode was.
     return report(logPath, status);
   }
 

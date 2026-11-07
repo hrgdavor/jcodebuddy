@@ -74,7 +74,7 @@ public class EntityMetadataGenerator {
     public static final List<String> SUPPORTED_FLAGS = List.of(
             "<source-root>", "<output-dir>", "--packages", "--java-out", "--validate", "--mapper", "--merge",
             "--adapters", "--patch-appliers", "--dto-projections", "--run-record", "--force",
-            "--incremental", "--full", "--check", "--version");
+            "--incremental", "--full", "--check", "--watch", "--version");
 
     /**
      * The flags every documented invocation of this generator passes.
@@ -828,8 +828,6 @@ public class EntityMetadataGenerator {
         // and the watcher.
         // A flag belongs to one invocation, never to the process: a second pass in the same JVM (a
         // test, a watcher run) must not inherit the first pass's mode.
-        validationPolicy = Policy.OFF;
-        strictWarnings = false;
         // Force mode lives on CooperativeCodegen, which the reconciliation reads directly, so it is reset
         // here with the rest: a `--force` pass followed by a normal one in the same JVM must not leave the
         // second one overwriting members the first was allowed to.
@@ -846,7 +844,13 @@ public class EntityMetadataGenerator {
         boolean incrementalRequested = false;
         boolean fullRequested = false;
         boolean checkRequested = false;
-        long startedAt = System.currentTimeMillis();
+        boolean watchRequested = false;
+        boolean adaptersRequested = false;
+        boolean patchAppliersRequested = false;
+        boolean dtoProjectionsRequested = false;
+        boolean forceRequested = false;
+        Policy validationPolicy = Policy.OFF;
+        boolean strictWarnings = false;
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if ("--version".equals(arg)) {
@@ -868,11 +872,11 @@ public class EntityMetadataGenerator {
                     }
                 }
             } else if ("--patch-appliers".equals(arg)) {
-                generatePatchAppliers = true;
+                patchAppliersRequested = true;
             } else if ("--adapters".equals(arg)) {
-                generateAdapters = true;
+                adaptersRequested = true;
             } else if ("--dto-projections".equals(arg)) {
-                generateDtoProjections = true;
+                dtoProjectionsRequested = true;
             } else if ("--validate".equals(arg)) {
                 validationPolicy = Policy.REPORT;
             } else if (arg.startsWith("--validate=")) {
@@ -916,11 +920,17 @@ public class EntityMetadataGenerator {
                 // large or touches many files, and for testing an emitter change in the output first. It is
                 // never implied — losing a developer's edit to a generated block is silent. See
                 // CooperativeCodegen.setForce.
-                CooperativeCodegen.setForce(true);
+                forceRequested = true;
             } else if ("--check".equals(arg)) {
                 // The dry run a driver project's CI needs: a full reference pass into a temporary copy,
                 // compared with the committed generated source and manifest. It writes nothing here.
                 checkRequested = true;
+            } else if ("--watch".equals(arg)) {
+                // The daemon is the only watcher (E11): this flag subscribes to the fs-meta daemon's
+                // batch stream, runs the same incremental pass, and never starts a Java WatchService.
+                // Combining it with --check is refused below, because one writes nothing by definition
+                // and the other regenerates in place.
+                watchRequested = true;
             } else if ("--incremental".equals(arg)) {
                 // Plan step E2: answer from the fs-meta build state before any parse. The pass that runs
                 // when the state says either "incremental" or "full" is still the existing full pass in
@@ -935,9 +945,13 @@ public class EntityMetadataGenerator {
                 positional.add(arg);
             }
         }
-        setGenerationPackages(packages);
-        setMapperRequests(mappers);
-        setMergeRequests(merges);
+        if (watchRequested && checkRequested) {
+            // One writes nothing by definition, the other regenerates in place: combining them would make
+            // the process's exit status mean two different things. Usage, so 2, like the other parse errors.
+            System.err.println("--watch cannot be combined with --check: --check compares a temporary copy and"
+                    + " writes nothing, while --watch regenerates in place. Run --check separately.");
+            System.exit(2);
+        }
         if (fullRequested) {
             // `--full` wins when both are named; see the parse arm above.
             incrementalRequested = false;
@@ -959,47 +973,88 @@ public class EntityMetadataGenerator {
                 ? sourceRoot
                 : (javaOutputOverride != null ? javaOutputOverride : outputDir);
 
+        // The pass resolves its daemon through `EntityBuildState.forPass`, which keeps the test/CLI seam
+        // (`setDaemonFactory`) working exactly as before. `--watch` needs the daemon eagerly, for discovery and
+        // for the head-settle between passes, so that branch attaches the process daemon explicitly.
+        PassInvocation invocation = new PassInvocation(inputPath, sourceRoot, outputDir, javaOutputRoot,
+                javaOutputOverride, packages, mappers, merges, adaptersRequested, patchAppliersRequested,
+                dtoProjectionsRequested, forceRequested, validationPolicy, strictWarnings, runRecord,
+                null, args);
+
         if (checkRequested) {
             // `--check` is a comparison, not a pass: the temporary tree is the only thing written.
-            System.exit(checkGeneratedSource(sourceRoot, outputDir, javaOutputRoot));
+            int checkStatus;
+            applyPassStatics(invocation);
+            try {
+                checkStatus = checkGeneratedSource(sourceRoot, outputDir, javaOutputRoot);
+            } finally {
+                resetPassStatics();
+            }
+            System.exit(checkStatus);
         }
-        // The incremental decision needs every output-changing flag, so it is built here and asked before
-        // the pass (and therefore before runValidation or any parse). `--incremental`/`--full` are
-        // invocation-local values, not static flags: a watcher or a test that calls main() in-process must
-        // not inherit the previous invocation's mode.
-        EntityBuildState.Config buildConfig = new EntityBuildState.Config(outputDir, javaOutputRoot, packages,
-                isGenerateAdapters(), isGenerateDtoProjections(), mappers, merges,
-                isGeneratePatchAppliers(), CooperativeCodegen.isForce(), validationPolicy);
-        EntityBuildState buildState = EntityBuildState.forPass(sourceRoot, outputDir);
-        String passMode = incrementalRequested ? "incremental" : "full";
+        if (watchRequested) {
+            // E11: the daemon is the watcher. The initial pass honours --full/--incremental (the default is
+            // still the normal pass); every pass after a batch is incremental. The process daemon is attached
+            // explicitly because watch needs it for discovery and for the settle between passes, not only
+            // inside the pass.
+            runWatch(invocation.withDaemon(EntityBuildState.processDaemon(sourceRoot)), incrementalRequested);
+            return;
+        }
+        runPass(invocation, incrementalRequested);
+    }
+
+    /**
+     * One generator pass, callable more than once in a JVM — the one-shot CLI and the watch loop's initial and
+     * subsequent passes all go through here.
+     *
+     * <p>The invocation is a value rather than process-global state, and every flag this pass reads is applied at
+     * the start and reset at the end. That is what lets a watch loop run the same pass on every batch without the
+     * second pass inheriting the first one's mode ({@code --incremental} being the one that matters). Defaults and
+     * output are unchanged from the pre-watch entry point: the identity banner, the decision lines and the run
+     * record are the same text in the same order.</p>
+     *
+     * @param incremental {@code true} for {@code --incremental} semantics, {@code false} for the normal pass
+     */
+    static PassOutcome runPass(PassInvocation invocation, boolean incremental) throws IOException {
+        long startedAt = System.currentTimeMillis();
+        applyPassStatics(invocation);
+        EntityBuildState.Config buildConfig = new EntityBuildState.Config(
+                invocation.outputDir(), invocation.javaOutputRoot(), invocation.packages(),
+                invocation.adapters(), invocation.dtoProjections(), invocation.mappers(), invocation.merges(),
+                invocation.patchAppliers(), invocation.force(), invocation.validationPolicy());
+        EntityBuildState buildState = invocation.daemon() == null
+                ? EntityBuildState.forPass(invocation.sourceRoot(), invocation.outputDir())
+                : EntityBuildState.forPass(invocation.sourceRoot(), invocation.outputDir(), invocation.daemon());
+        String passMode = incremental ? "incremental" : "full";
         List<String> changed = List.of();
         String fallbackReason = null;
         // Identity first, on every run: when a build misbehaves, the first question is which
         // generator revision ran, and this line answers it without a second invocation.
         System.out.println(generatorIdentity());
-        System.out.println("Using source root: " + sourceRoot);
+        System.out.println("Using source root: " + invocation.sourceRoot());
         if (!generationPackages.isEmpty()) {
             System.out.println("Generating only for packages: " + generationPackages);
         }
-        if (javaOutputOverride != null && !inputPath.toString().endsWith(".java")) {
+        if (invocation.javaOutputOverride() != null && !invocation.inputPath().toString().endsWith(".java")) {
             // § 8.8/3.23: a pass regenerates the committed source in place and keeps the
             // metadata JSON in `.jcodebuddy/metadata/entity`, so it never drops untracked files
             // into src/main/java.
-            System.out.println("Writing generated java to: " + javaOutputOverride);
+            System.out.println("Writing generated java to: " + invocation.javaOutputOverride());
         }
         try {
-            if (incrementalRequested) {
+            if (incremental) {
                 EntityBuildState.Decision decision = buildState.decide(buildConfig);
                 if (decision.mode() == EntityBuildState.Mode.NOOP) {
                     // A no-op is the whole of this flag's first deliverable: no parse, no validation, no
                     // generated output and no state write. Printing the reason is what distinguishes it
                     // from a pass that silently did nothing.
                     System.out.println("Incremental: no-op — " + decision.reason());
-                    writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
-                            mappers, startedAt, args,
+                    writeRunRecord(invocation.runRecord(), "ok", null, invocation.sourceRoot(),
+                            invocation.outputDir(), invocation.javaOutputRoot(), invocation.packages(),
+                            invocation.mappers(), startedAt, invocation.args(),
                             new PassReport("noop", decision.changed(), List.of(), 0, 0, decision.reason(),
                                     ParseReuse.none(), null));
-                    return;
+                    return new PassOutcome("noop", null);
                 }
                 changed = decision.changed();
                 if (decision.mode() == EntityBuildState.Mode.FULL) {
@@ -1013,37 +1068,134 @@ public class EntityMetadataGenerator {
                     System.out.println("Incremental: " + decision.reason());
                 }
             }
-            GenerationReport report = generateIncremental(sourceRoot, outputDir, javaOutputRoot,
-                    "incremental".equals(passMode) ? new HashSet<>(changed) : null);
+            GenerationReport report = generateIncremental(invocation.sourceRoot(), invocation.outputDir(),
+                    invocation.javaOutputRoot(), "incremental".equals(passMode) ? new HashSet<>(changed) : null);
             // State after the pass, never before it: the post-pass daemon generation includes the pass's own
             // writes, and a failed pass must leave the previous state alone so the next run retries the same
             // work. A not-recorded result is only a warning for an invocation that wanted the baseline.
             EntityBuildState.Publish published = publishBuildState(buildState, buildConfig,
-                    new EntityBuildState.Selection(passMode, changed, report.affected()), incrementalRequested);
-            writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
-                    mappers, startedAt, args,
+                    new EntityBuildState.Selection(passMode, changed, report.affected()), incremental);
+            writeRunRecord(invocation.runRecord(), "ok", null, invocation.sourceRoot(),
+                    invocation.outputDir(), invocation.javaOutputRoot(), invocation.packages(),
+                    invocation.mappers(), startedAt, invocation.args(),
                     new PassReport(passMode, changed, report.affected(), report.emitted(), report.reused(),
                             fallbackReason, report.parseReuse(), published));
+            return new PassOutcome(passMode, published.recorded() ? published.generation() : null);
         } catch (IOException | RuntimeException failure) {
             // A failed pass is the run a reader most wants a record of, so the record is written
             // before the failure is rethrown.
-            writeRunRecord(runRecord, "failed", failure, sourceRoot, outputDir, javaOutputRoot, packages,
-                    mappers, startedAt, args,
+            writeRunRecord(invocation.runRecord(), "failed", failure, invocation.sourceRoot(),
+                    invocation.outputDir(), invocation.javaOutputRoot(), invocation.packages(),
+                    invocation.mappers(), startedAt, invocation.args(),
                     new PassReport(passMode, changed, null, null, null, fallbackReason, null, null));
             throw failure;
         } finally {
-            // Reset the policy so a second pass in the same JVM (a test, a watcher run) does not
-            // inherit the first pass's mode. Flags belong to one invocation, not to the process —
-            // which goes for the generator's other process-global knobs too, since a caller that
-            // invoked main() in-process must not have its own configuration overwritten afterwards.
-            validationPolicy = Policy.OFF;
-            strictWarnings = false;
-            setGenerationPackages(List.of());
-            setMapperRequests(List.of());
-            setMergeRequests(List.of());
-            setGenerateAdapters(false);
-            setGeneratePatchAppliers(false);
+            resetPassStatics();
         }
+    }
+
+    /** Applies one invocation's flag surface to the generator's process-global knobs. */
+    private static void applyPassStatics(PassInvocation invocation) {
+        validationPolicy = invocation.validationPolicy();
+        strictWarnings = invocation.strictWarnings();
+        setGenerationPackages(invocation.packages());
+        setMapperRequests(invocation.mappers());
+        setMergeRequests(invocation.merges());
+        setGenerateAdapters(invocation.adapters());
+        setGeneratePatchAppliers(invocation.patchAppliers());
+        setGenerateDtoProjections(invocation.dtoProjections());
+        CooperativeCodegen.setForce(invocation.force());
+        // Plan step 7.3: this pass's view inputs for --merge. Cleared per pass, so a pass that throws
+        // leaves nothing behind for the next one to merge against.
+        mergeModels.clear();
+    }
+
+    /**
+     * Resets the knobs a pass applied, so a second pass in the same JVM (a test, a watch iteration) does not
+     * inherit the first pass's mode. {@code dtoProjections} and {@code force} are deliberately not reset here:
+     * the one-shot entry point has always left them as the invocation set them, and the watch loop applies its
+     * own values at the start of every pass.
+     */
+    private static void resetPassStatics() {
+        validationPolicy = Policy.OFF;
+        strictWarnings = false;
+        setGenerationPackages(List.of());
+        setMapperRequests(List.of());
+        setMergeRequests(List.of());
+        setGenerateAdapters(false);
+        setGeneratePatchAppliers(false);
+    }
+
+    /**
+     * Runs {@code --watch}: the initial pass, then the daemon-fed loop (E11).
+     *
+     * <p>The fs-meta daemon is a hard requirement here rather than a fallback: a watch that silently starts a
+     * Java {@code WatchService} would be the second watcher this repository forbids, and a one-shot poll loop
+     * would not be the live stream a developer expects. Without a daemon the command says what to start and
+     * exits non-zero.</p>
+     */
+    private static void runWatch(PassInvocation invocation, boolean initialIncremental) throws IOException {
+        WatchCommand command = new WatchCommand(invocation.daemon(), invocation.sourceRoot(),
+                full -> runPass(invocation, !full), initialIncremental, WatchCommand.DEFAULT_DEBOUNCE_MS);
+        // Ctrl+C closes the loop cleanly. The hook is removed on a normal return, and the IllegalStateException
+        // during shutdown is the expected answer when the hook itself is what is closing the loop.
+        Thread shutdown = new Thread(command::close, "entity-watch-shutdown");
+        Runtime.getRuntime().addShutdownHook(shutdown);
+        try {
+            command.run();
+        } catch (WatchCommand.NoDaemonException noDaemon) {
+            System.err.println("--watch requires an fs-meta daemon serving the project root: "
+                    + noDaemon.getMessage());
+            System.err.println("Start one with `fsmeta daemon start` and register the project root with");
+            System.err.println("`fsmeta root add <project root>`; then re-run with --watch.");
+            System.exit(3);
+        } catch (IOException failure) {
+            System.err.println("[watch] stopped: " + failure.getMessage());
+            System.exit(1);
+        } finally {
+            command.close();
+            try {
+                Runtime.getRuntime().removeShutdownHook(shutdown);
+            } catch (IllegalStateException alreadyShuttingDown) {
+                // The hook is what called close(); there is nothing left to remove during shutdown.
+            }
+        }
+    }
+
+    /**
+     * One invocation's parsed, immutable flag surface.
+     *
+     * <p>It exists so {@link #runPass} can run more than once from the same command line — the watch loop's
+     * initial and subsequent passes — without re-parsing or re-reading process-global statics. The daemon is a
+     * field rather than a factory lookup so a test can attach one under private runtime/config directories.
+     * </p>
+     */
+    record PassInvocation(Path inputPath, Path sourceRoot, Path outputDir, Path javaOutputRoot,
+                          Path javaOutputOverride, List<String> packages, List<String> mappers,
+                          List<String> merges, boolean adapters, boolean patchAppliers,
+                          boolean dtoProjections, boolean force, Policy validationPolicy,
+                          boolean strictWarnings, Path runRecord, EntityBuildState.Daemon daemon,
+                          String[] args) {
+
+        PassInvocation {
+            packages = List.copyOf(packages == null ? List.of() : packages);
+            mappers = List.copyOf(mappers == null ? List.of() : mappers);
+            merges = List.copyOf(merges == null ? List.of() : merges);
+        }
+
+        /** The same invocation with an explicitly attached daemon (the watch branch needs the same one twice). */
+        PassInvocation withDaemon(EntityBuildState.Daemon attached) {
+            return new PassInvocation(inputPath, sourceRoot, outputDir, javaOutputRoot, javaOutputOverride,
+                    packages, mappers, merges, adapters, patchAppliers, dtoProjections, force,
+                    validationPolicy, strictWarnings, runRecord, attached, args);
+        }
+    }
+
+    /**
+     * What one pass did, for the watch loop's log: the mode it settled on, and the daemon generation recorded as
+     * the next baseline ({@code null} for a no-op or a pass that could not record one).
+     */
+    record PassOutcome(String mode, Long generation) {
     }
 
     /**
@@ -1191,6 +1343,7 @@ public class EntityMetadataGenerator {
 
     private static void printUsage() {
         System.err.println("Usage: java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir>");
+        System.err.println("       [--watch] [--incremental|--full] [--check] [--java-out <dir>]");
         System.err.println("If the first argument is a .java file, the tool will locate the source root by searching for src/main/java or src/test/java.");
         System.err.println("Generated view boilerplate for a single Java file is written back into the source tree using the underscore suffix convention.");
         System.err.println();
@@ -1226,6 +1379,11 @@ public class EntityMetadataGenerator {
         System.err.println("                        baseline lives in <module>/.jcodebuddy/cache/entity-build/run.json.");
         System.err.println("  --full                force the normal pass and refresh the build state; this is also");
         System.err.println("                        the default when neither --incremental nor --full is given.");
+        System.err.println("  --watch               run one pass, then subscribe to the fs-meta daemon serving the");
+        System.err.println("                        project root and re-run the incremental pass after each batch of");
+        System.err.println("                        .java changes under the source root. The daemon is required: this");
+        System.err.println("                        flag never starts a Java watcher. Ctrl+C stops it. Cannot be");
+        System.err.println("                        combined with --check.");
         System.err.println("  --version             print the generator identity and its flag surface, then stop.");
         System.err.println();
         System.err.println("Generated .java is never written under a .jcodebuddy/ directory: that is the");

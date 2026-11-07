@@ -19,7 +19,7 @@ replace the feature guides; it is the status page a reader checks before assumin
 | SQL row adapter / binder (`--adapters`)               | **Draft/experimental**          | `ViewAdapterGeneratorTest`; not a supported generator                                    |
 | Patch appliers (`--patch-appliers`)                   | **Draft/experimental**          | `GeneratedPatchApplierTest`                                                              |
 | Merge (`--merge`)                                     | **Full-pass only in the MVP**   | merge tests; a merge is family-wide                                                      |
-| Watch mode                                            | **Postponed**                   | no watcher in this batch; the daemon cutover is done (W7), watch mode is E11             |
+| Watch mode                                            | **Done (E11)**                  | daemon-only `--watch`; sidecar/LSP remain out of scope                                   |
 | Parse reuse                                           | **Implemented (E10, post-MVP)** | warm pass parses zero on the example; a one-file edit parses one, with counted fallbacks |
 | SQL generation as a supported output                  | **Not supported**               | the JDBC pattern is hand-written; adapters are an exploration                            |
 

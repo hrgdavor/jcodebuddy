@@ -23,16 +23,17 @@ tracking builder; `META.create`, array-backed read/update, `ViewChangeTracking`/
 read/change-set output; validation; metadata JSON and the class index; **one-shot `--incremental`**,
 `--full` and `--check`; DTO projections and mappers as opt-in but incremental features.
 
-**Not in the MVP, deliberately:** watch mode (W7b); a daemon; Maven Central or semver; SQL generation as a
-supported output (the JDBC adapter/binder is draft and opt-in); patch appliers and merge are available but
-force a full pass. **Parse reuse (E10) landed after the MVP declaration on 2026-11-06:** a warm pass over the
+**Watch mode is no longer deliberately out:** E11 landed on 2026-11-07 as daemon-only `--watch` (one project-root
+daemon, module source-root subscription, same `EntityBuildState`); it adds no Java `WatchService`. Sidecar/LSP,
+Maven Central/semver and SQL generation as a supported output remain out; patch appliers and merge are available
+but force a full pass. **Parse reuse (E10) landed after the MVP declaration on 2026-11-06:** a warm pass over the
 example parses nothing and a one-file edit parses one, with a printed/counted fallback when a view needs a
 fact the base layer cannot supply. The current status page is
 [`user/mvp-surface.md`](../user/mvp-surface.md); the incremental contract is
 [DEC-052](../architecture/decisions/DEC-052.md).
 
 **Verification.** The recorded full gate is green as of **2026-11-07**: `bun scripts/mvn-jdk25.js`,
-**BUILD SUCCESS**, 18 modules, **8:29 min**, **609 tooling tests**, 0 failures. The targeted suites and the
+**BUILD SUCCESS**, 18 modules, **7:46 min**, **617 tooling tests**, 0 failures. The targeted suites and the
 clean-consumer check remain the edit-loop evidence.
 
 > **This file is the status tracker; the schedule is [`plans/unified-plan.md`](../../plans/unified-plan.md).**

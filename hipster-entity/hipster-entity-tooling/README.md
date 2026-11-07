@@ -276,7 +276,7 @@ kept reproducible.
 ```text
 java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir> [--packages a.b,c.d] [--adapters]
                                     [--dto-projections] [--java-out <dir>] [--mapper <Src>:<Tgt>[:<ClassName>]]
-                                    [--validate[=MODE]] [--run-record <file>] [--version]
+                                    [--validate[=MODE]] [--run-record <file>] [--watch] [--version]
 ```
 
 | Flag                                 | Meaning |
@@ -292,6 +292,7 @@ java -jar hipster-entity-tooling.jar <source-root|java-source-file> <output-dir>
 | `--run-record <file>`                | also write what this pass ran with — generator revision, the artifact its classes came from, resolved roots, flags, validation count, divergences, and `status` (`ok` / `failed`) — as JSON. Opt-in, so a library caller and the existing tests are unaffected. The example's pass — `bun scripts/gen.js` — writes `.jcodebuddy/metadata/entity/generation.json` |
 | `--incremental`                      | answer from the daemon-generation marker in `<module>/.jcodebuddy/cache/entity-build/run.json` **before** validation or parsing: the project-root daemon is at the recorded generation and the fingerprint matches → no-op; a later generation with a changed `.java` under the module source root runs the pass and emits only the views whose `views[].inputs` intersect the changed FQNs; an add/remove/rename, a hand-edited or missing generated artifact, a stale/corrupt/foreign marker, a fingerprint mismatch, a batch gap, or no daemon falls back to a full pass. A module filters a project-root daemon to its own source-root subfolder. `bun scripts/gen.js` passes it by default. See [DEC-052](../../doc-hipster-entity/architecture/decisions/DEC-052.md) |
 | `--full`                             | force the normal pass and refresh the daemon-generation marker when a daemon serves the project root. This is the generator's default when neither flag is given; `bun scripts/gen.js --full` forces it explicitly |
+| `--watch`                            | run one initial pass (honouring `--incremental`/`--full`; the default is still the normal pass), then subscribe to the **fs-meta daemon** serving the project root and re-run the **same incremental pass** after each coalesced batch of `**/*.java` changes under the source root, excluding `.jcodebuddy`. The daemon is **required**: without one the command prints what to start and exits `3`; it never starts a Java watcher. After each pass it stops the watcher, waits for the daemon head to settle (the generated writes), then resubscribes at `LATEST` — that is the loop guard, and the generator's own output cannot trigger another pass. A `batch-too-old`/`batch-gap` overflow is a **full** pass, never a skipped batch. Ctrl+C/shutdown closes the subscription and joins the loop; `--watch` with `--check` is a usage error (`2`). The baseline is the existing `<module>/.jcodebuddy/cache/entity-build/run.json` marker — no second state directory, tracker or `WatchService`. `bun scripts/gen.js watch` (or `bun scripts/gen.js --watch`) forwards this flag |
 | `--check`                            | run a **full** reference pass into a temporary copy and compare the committed generated `.java` and tracked `conf/converters.json` with it; write nothing here. Exit `0` when current, `1` when a file differs or is missing. `bun scripts/gen.js --check` is the wrapper |
 | `--version`                          | print the generator identity (name, revision, and the artifact the classes came from) plus its flag surface, then stop. This is the first thing to run when a pass appears to have mis-generated a tree |
 
@@ -543,10 +544,15 @@ The split is deliberate:
 
 Of those trigger modes only the **pass** is required — running the generator when
 you ask is the whole tool. **Watch mode** (the batched file watcher) is the same
-pass driven continuously, and is what the normal development loop uses. A
-**sidecar / LSP** is a user-friendliness expansion that sits on top of watch mode
-(in-editor diagnostics, code actions, divergence warnings); it consumes what the
-watcher already produces and is not a prerequisite for anything above.
+pass driven continuously, and is what the normal development loop uses. It is the
+generator's own `--watch` flag ([E11](../../plans/hipster-entity-mvp.md)): the
+fs-meta daemon supplies the batch stream, the CLI runs the pass, and the existing
+`EntityBuildState` marker is reused — no second watcher, dependency graph or state
+directory. `project-automation` remains the project-specific orchestrator, but it
+does not own the generator's watch loop. A **sidecar / LSP** is a
+user-friendliness expansion that sits on top of watch mode (in-editor diagnostics,
+code actions, divergence warnings); it consumes what the watcher already produces
+and is not a prerequisite for anything above.
 
 A runtime module therefore depends only on the *generated* source plus
 `hipster-entity-api` / `hipster-entity-core`, never on this module.

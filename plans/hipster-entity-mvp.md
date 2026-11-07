@@ -1,12 +1,12 @@
-# hipster-entity MVP — incremental generation with `fs-meta`, watch mode postponed
+# hipster-entity MVP — incremental generation with `fs-meta`, watch mode on the daemon
 
-**Status: 2026-11-07 — E0–E10 done (the MVP is declared, parse reuse is implemented, and the full gate is
-green); E11 watch mode remains unscheduled.** This plan takes `hipster-entity` from "a
+**Status: 2026-11-07 — E0–E11 done (the MVP is declared, parse reuse is implemented, watch mode is implemented
+on the daemon, and the full gate is green).** This plan takes `hipster-entity` from "a
 feature-complete generator inside this repository" to "a project outside this repository can adopt it and
 work in it", and it schedules the one-shot **incremental** generation pass that makes that workflow
-practical. **Watch mode is deliberately out of scope**: the existing watcher path
-([`java-watch-to-fs-meta.md`](java-watch-to-fs-meta.md), W7b) stays where it is, and the incremental pass
-this plan builds is the thing watch mode will later call — not a second implementation beside it.
+practical. **Watch mode was out of scope for the original batch and is now implemented by E11 on the daemon**
+([`java-watch-to-fs-meta.md`](java-watch-to-fs-meta.md), W7); it calls the incremental pass this plan builds,
+not a second implementation beside it.
 
 The plan is written against the tree at `fc369a5` and the measurements recorded there. It follows the
 repository's step rules: one step per commit, an ADR before code that changes a boundary, and a gate that
@@ -42,7 +42,7 @@ puts a gate around it.
 
 - not a release to Maven Central, and not an API-stability promise (the root README already says no
   compatibility promise is made before a major release);
-- not watch mode, a sidecar/LSP, or an IDE plugin;
+- not a sidecar/LSP or an IDE plugin (watch mode itself is E11 and is implemented);
 - not SQL generation (`--adapters` is still a draft/exploration), patch appliers, merge, or generated
   mappers as part of the acceptance journey — they stay available and opt-in, and incremental support is
   limited to DTO projections and mappers (see § 3.5);
@@ -450,7 +450,7 @@ and what is not in it?" from the roadmap alone.
 **Done 2026-11-05, with the full gate now green (2026-11-07).** The roadmap's new § 0 declares the MVP,
 records the measured full/incremental/no-op/`--check` timings from E8, lists the supported surface and what is
 out of scope, and links DEC-052; the root README and the plan index point at it. The full 18-module gate was
-run on 2026-11-07: **BUILD SUCCESS, 8:29 min**, all modules green, with **609 tooling tests** (the evidence
+run on 2026-11-07: **BUILD SUCCESS, 7:46 min**, all modules green, with **617 tooling tests** (the evidence
 for E3–E6 and E10 included).
 
 ### E10 — Parse reuse (post-MVP scale step, L)
@@ -482,14 +482,17 @@ sidecar and converter manifest byte-for-byte; `classes.json` rows are field-iden
 `hashCalculatedAt` and `mtimes.json` for the two rows the edited pass re-hashed — wall-clock readings, the
 same exception `MetadataFileIdsTest` documents, and no other difference is excused. `TypeParameterRangeDecoderTest`
 is 6/6, the probe 2/2, and the tooling suite (590 tests) plus the affected core index tests are green;
-`bun scripts/gen.js` twice is a clean no-op. Full gate **BUILD SUCCESS** on 2026-11-07: 18 modules, **8:29
-min**, **609 tooling tests**, 0 failures.
+`bun scripts/gen.js` twice is a clean no-op. Full gate **BUILD SUCCESS** on 2026-11-07: 18 modules, **7:46
+min**, **617 tooling tests**, 0 failures.
 
-### E11 — Watch mode (explicitly not scheduled here)
-The watch path remains [`java-watch-to-fs-meta.md`](java-watch-to-fs-meta.md)'s W7b. When it lands, it
-should feed a batch to the same incremental pass E2–E6 build and reuse `EntityBuildState`; it must not add
-a second dependency graph or a second state directory. This plan does not edit `project-automation`, does
-not start a watch loop, and does not cut over the daemon.
+### E11 — Watch mode (done 2026-11-07)
+The watch path is implemented on [`java-watch-to-fs-meta.md`](java-watch-to-fs-meta.md)'s W7 daemon: `--watch`
+runs one initial pass, subscribes at `LATEST` with the module source-root filter, coalesces a burst, stops the
+subscription before each pass, runs the same `runPass`/`EntityBuildState` incremental pass, waits for the daemon
+head to settle, and resubscribes at `LATEST`. Overflow is a full pass; no daemon is an actionable exit 3;
+`--watch --check` is usage exit 2. It adds no second dependency graph, state directory or `WatchService`, and
+does not edit `project-automation`. Tests: `EntityWatchLoopTest` 5, `WatchCommandTest` 3, opt-in
+`EntityWatchDaemonTest` 1, plus the 62-test regression set and 28 guard tests.
 
 ## 5. The MVP surface
 
@@ -509,7 +512,7 @@ not start a watch loop, and does not cut over the daemon.
 | Merge (`--merge`)                                                         | not in E1                       | available, opt-in; forces a full pass incrementally          |
 | SQL adapters (`--adapters`)                                               | not in E1                       | **draft/exploration**, opt-in; forces a full pass            |
 | Patch appliers (`--patch-appliers`)                                       | not in E1                       | available, opt-in; forces a full pass                        |
-| Watch mode / sidecar / LSP                                                | out                             | W7b / `tbd.md`                                               |
+| Watch mode / sidecar / LSP                                                | watch done E11; sidecar/LSP out | `--watch` is daemon-only; sidecar/LSP remain `tbd.md`        |
 | Maven Central / semver                                                    | out                             | local install is the MVP consumption path                    |
 
 "MVP gate" is not a claim that everything outside it is unsupported; it is the list the acceptance test

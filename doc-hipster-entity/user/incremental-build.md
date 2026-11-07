@@ -9,6 +9,38 @@ bun scripts/gen.js --full    # force the reference pass
 bun scripts/gen.js --check   # verify in a temp tree; writes nothing
 ```
 
+## Daemon setup
+
+The state is a **daemon-generation marker**, so incremental/no-op results need an `fsmeta` daemon serving the
+**project root**:
+
+```sh
+fsmeta daemon start
+fsmeta root add /path/to/project
+```
+
+Each module then filters that one daemon to its own `sourceRoot/**`; a project needs one root, not one per
+module. The server-side subfolder filter requires the daemon built from `fs-meta` commit **`f4be95d`** (the
+local checkout's rebuilt binary is `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`). An older daemon still works
+through the Java client's compatibility fallback, but it filters client-side rather than in the daemon.
+
+Without a daemon the generator still runs a full pass; it cannot claim a no-op, and it records no baseline.
+
+## Watch mode
+
+`--watch` uses the same daemon and the same incremental pass; it never starts a Java `WatchService`:
+
+```sh
+bun scripts/gen.js --watch
+```
+
+It runs one initial pass (honouring `--full`/`--incremental`), subscribes at the daemon's latest generation with
+a filter limited to the module's `sourceRoot/**/*.java`, coalesces saves over a 300 ms quiet window, stops the
+subscription before each pass (so generated output cannot trigger another pass), runs the pass, waits for the
+daemon head to settle, and resubscribes at the latest generation. An overflow/`batch-too-old`/gap is a full
+pass. No daemon is exit 3 with the `fsmeta daemon start` / `fsmeta root add` command; `--watch --check` is exit
+2. Ctrl+C stops the subscription and joins the loop.
+
 The same three modes exist on the generator itself, so a consumer does not need this repository's
 wrapper:
 
@@ -56,9 +88,11 @@ The daemon is the only tracker and writer. There is no `files.meta`/`files.txt`/
 correctness input: delete it at any time; the next run does a full pass and records a fresh generation.
 
 **Daemon scanning honours `.gitignore`.** The daemon does not publish a gitignored `.java` file, so an edit
-to one cannot be observed as an incremental change. Keep model sources tracked, or run a full pass after
-editing an ignored source; the old Java state deliberately ignored `.gitignore`, and that difference is a
-known limitation of the daemon-backed state.
+to one cannot be observed as an incremental change. Reproduced on 2026-11-07 against the rebuilt daemon:
+`fsmeta scan` listed 2 names while `fsmeta scan --no-gitignore` listed 3; after editing the ignored
+`.java`, the root's `head_batch` stayed at 1 (pass ran, batch bytes 0), while editing the tracked `.java`
+advanced it to 2. Keep model sources tracked, or run a full pass after editing an ignored source. This is
+the one semantic difference from the retired Java state, which deliberately scanned every `.java`.
 
 ## The fallback matrix
 
