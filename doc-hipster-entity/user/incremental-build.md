@@ -20,8 +20,10 @@ fsmeta root add /path/to/project
 ```
 
 Each module then filters that one daemon to its own `sourceRoot/**`; a project needs one root, not one per
-module. The server-side subfolder filter requires the daemon built from `fs-meta` commit **`f4be95d`** (the
-local checkout's rebuilt binary is `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`). An older daemon still works
+module. The server-side subfolder filter requires the daemon built from `fs-meta` commit **`2da83ae`**
+(which includes the filter from `f4be95d`; the local checkout's rebuilt binary is
+`D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`). A root's scheduler tick is configurable with
+`--tick` / `FSMETA_TICK_MS` (default 50 ms, range 5–1000; the 25 ms quiet floor still applies). An older daemon still works
 through the Java client's compatibility fallback, but it filters client-side rather than in the daemon.
 
 Without a daemon the generator still runs a full pass; it cannot claim a no-op, and it records no baseline.

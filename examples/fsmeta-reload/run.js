@@ -9,7 +9,7 @@
  *   3. builds and installs the example module (and the reactor modules it depends on) offline - the Maven
  *      invocation only compiles the runner, never the project sources; those are compiled at run time;
  *   4. starts a private fs-meta daemon under `.tmp/fsmeta-reload` and registers the example's `project/`
- *      directory with it (`root add ... --mode always --idle 0`), so edits are batched immediately;
+ *      directory with it (`root add ... --mode always --idle 0 --tick 50`), so edits are batched immediately;
  *   5. runs `mvn -o -pl :fsmeta-reload-example exec:java` with the two paths as Maven properties, streaming
  *      its stdio: the runner subscribes to that daemon, then prints the initial app/test output and waits;
  *   6. on exit or Ctrl+C, stops the private daemon.
@@ -21,6 +21,7 @@
  *
  * Environment:
  *   FSMETA_BIN   the fs-meta executable (default `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`)
+ *   FSMETA_TICK_MS  the root scheduler tick (default 50; 5..1000; the scheduler's 25 ms quiet floor applies)
  *   JCODEBUDDY_JDK25 / JCODEBUDDY_MVN   as for every other script in `scripts/`
  */
 
@@ -33,6 +34,7 @@ const HERE = import.meta.dir;
 const REPO = repoRoot();
 const TMP = join(REPO, ".tmp", "fsmeta-reload");
 const FS = process.env.FSMETA_BIN ?? "D:\\wrk\\core\\fs-meta\\zig-out\\bin\\fsmeta.exe";
+const TICK_MS = process.env.FSMETA_TICK_MS ?? "50";
 
 const MODULE = ":fsmeta-reload-example";
 const PROJECT = join(HERE, "project");
@@ -132,7 +134,8 @@ const startedCode = await startDaemon();
 if (startedCode !== 0) {
   fail(`starting the fs-meta daemon failed (exit ${startedCode}); see ${join(DAEMON_BASE, "logs")}`);
 }
-const added = fsmeta(["root", "add", PROJECT, "--mode", "always", "--idle", "0", "--base", DAEMON_BASE]);
+const added = fsmeta(["root", "add", PROJECT, "--mode", "always", "--idle", "0", "--tick", TICK_MS,
+  "--base", DAEMON_BASE]);
 if (added.status !== 0) {
   console.error(added.stdout);
   console.error(added.stderr);
@@ -140,7 +143,7 @@ if (added.status !== 0) {
   fail(`registering ${PROJECT} with the daemon failed`);
 }
 
-step(`watching ${PROJECT} (root: the project directory, filter: src/**/*.java)`);
+step(`watching ${PROJECT} (root: the project directory, filter: src/**/*.java, tick: ${TICK_MS} ms)`);
 step(`edit and save: ${EDIT_ME}`);
 step("Ctrl+C stops the runner and the private daemon");
 

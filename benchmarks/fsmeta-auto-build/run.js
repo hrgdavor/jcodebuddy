@@ -19,6 +19,7 @@ const HERE = import.meta.dir;
 const REPO = join(HERE, "..", "..");
 const TMP = join(REPO, ".tmp", "fsmeta-auto-build");
 const FS = process.env.FSMETA_BIN ?? "D:\\wrk\\core\\fs-meta\\zig-out\\bin\\fsmeta.exe";
+const TICK_MS = process.env.FSMETA_TICK_MS ?? "50";
 const CLASSES = (process.env.BENCH_CLASSES ?? "42").split(",").map(Number);
 const REPEAT = Number(process.env.BENCH_REPEAT ?? "1");
 
@@ -92,7 +93,8 @@ async function runOnce(classes, runIndex, classpath) {
   });
   try {
     await daemon.exited;
-    const add = spawnSync(FS, ["root", "add", root, "--mode", "always", "--idle", "0", "--base", base], {
+    const add = spawnSync(FS, ["root", "add", root, "--mode", "always", "--idle", "0", "--tick", TICK_MS,
+      "--base", base], {
       cwd: root, env: daemonEnv, encoding: "utf8",
     });
     if (add.status !== 0) throw new Error(`root add failed: ${add.stdout}\n${add.stderr}`);

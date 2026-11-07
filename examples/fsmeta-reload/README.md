@@ -33,6 +33,7 @@ Prerequisites:
 | JDK 25                 | the reactor compiles at release 25; `scripts/lib/toolchain.js` resolves and verifies it            |
 | Apache Maven (3.9)     | `exec:java` runs the runner; resolved through `JCODEBUDDY_MVN`, the recorded location, then `PATH` |
 | the fs-meta executable | it is the watcher; `FSMETA_BIN` overrides the default `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe` |
+| fs-meta tick           | `FSMETA_TICK_MS` defaults to 50 ms; valid 5–1000; the scheduler’s 25 ms quiet floor still applies  |
 
 ```bash
 bun examples/fsmeta-reload/run.js
@@ -47,7 +48,7 @@ daemon under `.tmp/fsmeta-reload`, registers `examples/fsmeta-reload/project` wi
 [run] Maven: Apache Maven 3.9.0
 [run] cleaned .../examples/fsmeta-reload/project/classes
 [run] starting a private fs-meta daemon (base .../.tmp/fsmeta-reload/daemon)
-[run] watching .../examples/fsmeta-reload/project (root: the project directory, filter: src/**/*.java)
+[run] watching .../examples/fsmeta-reload/project (root: the project directory, filter: src/**/*.java, tick: 50 ms)
 [run] edit and save: .../project/src/main/java/demo/project/Calculation.java
 [init] daemon: .../.tmp/fsmeta-reload/daemon/roots/<id>.sock
 [init] daemon root: .../examples/fsmeta-reload/project (this project)
@@ -79,8 +80,8 @@ Now edit that file in any editor and save it. One batch later the console shows 
 [test]         org.opentest4j.AssertionFailedError: expected: <42> but was: <43>
 ...
 [test] 1 test(s), 1 failed, 0 skipped in 7ms -> FAILED
-[reload] compile=5.0ms reload=0.7ms app=2.0ms test=7.0ms totalFromSave=224ms
-[reload] fromBatch: compileStart=0.3ms reloaded=6.7ms appDone=9.0ms testDone=16.9ms
+[reload] compile=6.5ms reload=0.8ms app=1.9ms test=6.8ms totalFromSave=113ms
+[reload] fromBatch: compileStart=0.3ms reloaded=7.6ms appDone=9.7ms testDone=17.2ms
 ```
 
 `Ctrl+C` stops the runner (its shutdown hook closes the daemon subscription) and `run.js` then stops the
@@ -99,7 +100,7 @@ touching a developer's own daemons. `run.js` sets them for every command it star
 
 # terminal 1 - a private daemon for this project
 fsmeta daemon start --base .tmp/fsmeta-reload/daemon
-fsmeta root add examples/fsmeta-reload/project --mode always --idle 0 --base .tmp/fsmeta-reload/daemon
+fsmeta root add examples/fsmeta-reload/project --mode always --idle 0 --tick 50 --base .tmp/fsmeta-reload/daemon
 
 # terminal 2 - the runner (the POM supplies <example-root> and <classes-dir> as <arguments>)
 mvn -o -pl :fsmeta-reload-example exec:java
@@ -182,8 +183,8 @@ outside — is why the reload works at all.
 | `test`          | the JUnit launcher is created                         | `execute` returns                    |
 | `totalFromSave` | the **earliest source mtime** of the batch (the save) | the test run finished                |
 
-`totalFromSave` is the number a person actually feels: fs-meta's batch latency (its scan/hash interval) plus
-the compile plus the classload plus both runs. The second line separates the runner's own work from that
+`totalFromSave` is the number a person actually feels: fs-meta's batch latency (its tick + the 25 ms quiet floor)
+plus the compile plus the classload plus both runs. The second line separates the runner's own work from that
 latency:
 
 | field                 | meaning                                                        |

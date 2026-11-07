@@ -19,6 +19,8 @@ The first compiler index and the Eclipse initial build are **outside** the measu
 - Maven on `PATH`.
 - A built `fsmeta` binary for the fs-meta side (`FSMETA_BIN`, default
   `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`).
+- `FSMETA_TICK_MS` (default 50, range 5–1000) is the per-root scheduler tick; the 25 ms quiet floor still
+  applies. Use e.g. `FSMETA_TICK_MS=10` to see the shorter batch window.
 - Eclipse for the auto-build side; `ECLIPSE_HOME` defaults to `D:\programs\eclipse`.
 
 ## Run
