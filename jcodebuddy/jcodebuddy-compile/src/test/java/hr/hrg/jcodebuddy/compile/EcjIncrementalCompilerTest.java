@@ -66,6 +66,27 @@ class EcjIncrementalCompilerTest {
     }
 
     @Test
+    void compilesOneFileForTheStartBatchFastPath() throws IOException {
+        Path hello = write("demo/One.java", """
+                package demo;
+
+                public final class One {
+                    public static int answer() {
+                        return 42;
+                    }
+                }
+                """);
+
+        EcjIncrementalCompiler compiler = newCompiler();
+        compiler.index();
+
+        assertTrue(compiler.compileOne(hello), "one-file compile should succeed: " + compiler.lastErrors());
+        assertTrue(Files.isRegularFile(binDir.resolve("demo").resolve("One.class")),
+                "compileOne writes the class file immediately");
+        assertEquals(List.of(), compiler.lastErrors());
+    }
+
+    @Test
     void compilesOneChangedSourceAndWritesItsClassFile() throws IOException {
         Path hello = write("demo/Hello.java", """
                 package demo;

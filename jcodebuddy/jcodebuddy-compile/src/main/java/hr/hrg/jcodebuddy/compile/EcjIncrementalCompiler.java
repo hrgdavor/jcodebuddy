@@ -125,6 +125,19 @@ public final class EcjIncrementalCompiler {
     // ── Compile ───────────────────────────────────────────────────────────────
 
     /**
+     * Compiles one changed file immediately, before the rest of an fs-meta batch is known.
+     *
+     * <p>This is the START_BATCH fast path: it resolves against the class files already in
+     * {@code binDir}, so it can produce a class for the first changed unit while the remaining
+     * CHANGE_ENTRY frames are still arriving. The caller must still compile the complete changed
+     * set at END_BATCH when more than one file changed, because this call cannot see a sibling
+     * type that is also being changed in the same batch.</p>
+     */
+    public boolean compileOne(Path changedFile) {
+        return compile(Set.of(Objects.requireNonNull(changedFile, "changedFile")));
+    }
+
+    /**
      * Incrementally compiles the given set of changed source files.
      *
      * <p>Exactly the files passed are compiled. A file that is not under the source

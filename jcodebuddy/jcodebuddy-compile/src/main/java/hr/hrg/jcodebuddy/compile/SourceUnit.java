@@ -3,6 +3,8 @@
 package hr.hrg.jcodebuddy.compile;
 
 import org.eclipse.jdt.internal.compiler.env.ICompilationUnit;
+import org.eclipse.jdt.internal.compiler.lookup.LookupEnvironment;
+import org.eclipse.jdt.internal.compiler.lookup.ModuleBinding;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -107,6 +109,17 @@ final class SourceUnit implements ICompilationUnit {
     @Override
     public boolean ignoreOptionalProblems() {
         return false;
+    }
+
+    /**
+     * ECJ 3.46 asks every unit for its module when the environment is not module-aware. These are
+     * classpath sources, not module-path sources, so they belong to the unnamed module. Without this
+     * override ECJ treats the absent module answer as a missing named module and reports a problem for
+     * every file.
+     */
+    @Override
+    public ModuleBinding module(LookupEnvironment environment) {
+        return environment.getModule(ModuleBinding.UNNAMED);
     }
 
     /**

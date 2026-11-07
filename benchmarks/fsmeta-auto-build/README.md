@@ -45,8 +45,8 @@ Both emit one JSON line per run.
 - Eclipse `buildNanos` is the auto-build's `POST_BUILD` interval, so it includes the workspace
   scheduler's delay. It is **not** pure compiler CPU time; that is the point when comparing “how
   fast the editor reacts”.
-- The two paths use different ECJ versions today: Eclipse 4.35/JDT 3.46 and the reactor's
-  `org.eclipse.jdt:ecj:3.37.0`. Treat the comparison as change-detection + compile feedback, not
+- The two paths use different ECJ versions today: Eclipse 4.35/JDT 3.41.50 and the reactor's
+  `org.eclipse.jdt:ecj:3.46.100`. Treat the comparison as change-detection + compile feedback, not
   as a compiler-version benchmark.
 - The fixture is synthetic and independent classes only. The committed example project and a
   multi-file dependency graph are the next extension; they are not claimed here.

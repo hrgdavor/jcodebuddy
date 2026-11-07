@@ -6,10 +6,14 @@ A runnable demonstration of the loop this repository's compiler and watcher libr
 save a .java file
       │
       ▼
-fs-meta daemon: watches the project directory, hashes the file, delivers one batch
+fs-meta daemon: watches the project directory, hashes the file, delivers CHANGE_ENTRY frames
+      │
+      ├─ START_BATCH: compileOne() on each changed unit as it arrives
       │
       ▼
 EcjIncrementalCompiler: compiles exactly the changed files (no full rebuild)
+      │
+      ├─ END_BATCH: one-file batch is done; multi-file batch recompiles the set for cross-checks
       │
       ▼
 ProjectClassLoader: a NEW classloader, seeded with the previous one's bytes for unchanged classes
@@ -83,8 +87,8 @@ Now edit that file in any editor and save it. One batch later the console shows 
 [test]         org.opentest4j.AssertionFailedError: expected: <42> but was: <43>
 ...
 [test] 1 test(s), 1 failed, 0 skipped in 7ms -> FAILED
-[reload] compile=6.5ms reload=0.8ms app=1.9ms test=6.8ms totalFromSave=113ms
-[reload] fromBatch: compileStart=0.3ms reloaded=7.6ms appDone=9.7ms testDone=17.2ms
+[reload] compile=12.5ms reload=0.8ms app=1.9ms test=8.3ms totalFromSave=154ms
+[reload] fromBatch: compileStart=10.5ms reloaded=11.8ms appDone=13.9ms testDone=23.2ms
 ```
 
 `Ctrl+C` stops the runner (its shutdown hook closes the daemon subscription) and `run.js` then stops the
@@ -181,6 +185,7 @@ outside — is why the reload works at all.
 | field           | starts at                                             | ends at                              |
 | --------------- | ----------------------------------------------------- | ------------------------------------ |
 | `compile`       | the first compiler call                               | the last compiler call returns       |
+| `first class`   | the batch's `START_BATCH`                             | the first `compileOne()` returns     |
 | `reload`        | `old.classBytes()` is taken                           | the new loader's constructor returns |
 | `app`           | `App.main` is invoked through reflection              | it returns (or throws)               |
 | `test`          | the JUnit launcher is created                         | `execute` returns                    |
@@ -189,6 +194,12 @@ outside — is why the reload works at all.
 `totalFromSave` is the number a person actually feels: fs-meta's batch latency (its tick + the 25 ms quiet floor)
 plus the compile plus the classload plus both runs. The second line separates the runner's own work from that
 latency:
+
+The runner subscribes with the **streaming** form of `FsMetaDaemonWatch`: `START_BATCH` resets the fast path, each
+accepted `CHANGE_ENTRY` is queued to a single compile worker, and `END_BATCH` is the cross-check point. A one-file
+batch is complete from its early `compileOne()`; a multi-file batch waits for the early workers and recompiles the
+changed set together, because ECJ's public `compile` performs resolution/cross-checks and codegen in one call. The
+`first class from batch start` line is the responsiveness number; `totalFromSave` is the finished-result number.
 
 | field                 | meaning                                                        |
 | --------------------- | -------------------------------------------------------------- |

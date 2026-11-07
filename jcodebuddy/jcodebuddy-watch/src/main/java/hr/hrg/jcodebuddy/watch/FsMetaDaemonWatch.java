@@ -31,12 +31,30 @@ import java.util.function.Consumer;
  */
 public final class FsMetaDaemonWatch implements AutoCloseable {
 
+    /** Stream callbacks for a consumer that wants to begin work before END_BATCH. */
+    public interface BatchObserver {
+
+        /** The no-op observer used by the four-argument constructor. */
+        BatchObserver NONE = new BatchObserver() {
+        };
+
+        default void startBatch(long number, long parent) {
+        }
+
+        default void change(FsMetaClient.Change change) {
+        }
+
+        default void endBatch(WatchBatch batch) {
+        }
+    }
+
     private static final int MAX_RECONNECT_ATTEMPTS = 3;
     private static final long RECONNECT_DELAY_MS = 150;
 
     private final Path socket;
     private final PathFilter filter;
     private final Consumer<WatchBatch> listener;
+    private final BatchObserver observer;
 
     private FsMetaClient client;
     private Thread thread;
@@ -58,12 +76,23 @@ public final class FsMetaDaemonWatch implements AutoCloseable {
      *                  replay was refused and a full pass is the only safe answer
      */
     public FsMetaDaemonWatch(PathFilter filter, Path socket, long fromBatch, Consumer<WatchBatch> listener) {
+        this(filter, socket, fromBatch, listener, BatchObserver.NONE);
+    }
+
+    /**
+     * The streaming form: {@code observer} sees {@code START_BATCH} and each accepted {@code CHANGE_ENTRY} before
+     * the complete {@link WatchBatch} is delivered to {@code listener}. The observer runs on the reader thread, so
+     * it must enqueue work rather than perform a compile there.
+     */
+    public FsMetaDaemonWatch(PathFilter filter, Path socket, long fromBatch, Consumer<WatchBatch> listener,
+                             BatchObserver observer) {
         if (socket == null) {
             throw new IllegalArgumentException("a daemon socket is required");
         }
         this.socket = socket.toAbsolutePath().normalize();
         this.filter = filter == null ? PathFilter.of(java.util.List.of(), java.util.List.of()) : filter;
         this.listener = listener == null ? batch -> { } : listener;
+        this.observer = observer == null ? BatchObserver.NONE : observer;
         this.lastApplied = fromBatch;
     }
 
@@ -168,7 +197,19 @@ public final class FsMetaDaemonWatch implements AutoCloseable {
                     if (current == null) {
                         return;
                     }
-                    batch = current.nextBatch();
+                    batch = current.nextBatch(new FsMetaClient.BatchObserver() {
+                        @Override
+                        public void startBatch(long number, long parent) {
+                            observer.startBatch(number, parent);
+                        }
+
+                        @Override
+                        public void change(FsMetaClient.Change change) {
+                            if (filter.shouldInclude(change.name())) {
+                                observer.change(change);
+                            }
+                        }
+                    });
                 } catch (FsMetaClient.ProtocolException refusal) {
                     if (!recover(refusal)) {
                         return;
@@ -187,6 +228,7 @@ public final class FsMetaDaemonWatch implements AutoCloseable {
                 recoveryUsed = false;
                 lastApplied = Math.max(lastApplied, batch.number());
                 WatchBatch converted = toWatchBatch(batch, filter);
+                observer.endBatch(converted);
                 if (converted.isEmpty()) {
                     continue;
                 }
@@ -221,7 +263,9 @@ public final class FsMetaDaemonWatch implements AutoCloseable {
         }
         recoveries++;
         recoveryUsed = true;
-        listener.accept(new WatchBatch(Set.of(), Set.of(), true));
+        WatchBatch overflow = new WatchBatch(Set.of(), Set.of(), true);
+        observer.endBatch(overflow);
+        listener.accept(overflow);
         return reconnect(FsMetaClient.LATEST);
     }
 

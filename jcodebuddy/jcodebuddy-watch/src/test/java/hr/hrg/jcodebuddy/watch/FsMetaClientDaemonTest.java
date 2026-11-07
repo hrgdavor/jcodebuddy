@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -76,8 +77,8 @@ class FsMetaClientDaemonTest {
                     Thread.sleep(200);
                     Files.writeString(file, "class A { int value; }\n");
 
-                    Future<FsMetaClient.Batch> firstNext = readers.submit(first::nextBatch);
-                    Future<FsMetaClient.Batch> secondNext = readers.submit(second::nextBatch);
+                    Future<FsMetaClient.Batch> firstNext = readers.submit((Callable<FsMetaClient.Batch>) first::nextBatch);
+                    Future<FsMetaClient.Batch> secondNext = readers.submit((Callable<FsMetaClient.Batch>) second::nextBatch);
                     FsMetaClient.Batch firstBatch = firstNext.get(30, TimeUnit.SECONDS);
                     FsMetaClient.Batch secondBatch = secondNext.get(30, TimeUnit.SECONDS);
                     assertLiveChange(firstBatch, head);

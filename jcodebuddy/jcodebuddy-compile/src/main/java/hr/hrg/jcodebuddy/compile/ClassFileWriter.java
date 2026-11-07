@@ -77,8 +77,14 @@ final class ClassFileWriter implements ICompilerRequestor {
         // A unit with errors must not leave class files behind: the next compile would
         // otherwise resolve a type whose source no longer compiles.
         if (!result.hasErrors()) {
-            for (ClassFile classFile : result.getClassFiles()) {
-                writeClassFile(classFile);
+            ClassFile[] classFiles = result.getClassFiles();
+            // ECJ 3.46 can report null here for a unit that produced no code (for
+            // example a package-info or an empty source); older releases returned an
+            // empty array. Both mean "nothing to write".
+            if (classFiles != null) {
+                for (ClassFile classFile : classFiles) {
+                    writeClassFile(classFile);
+                }
             }
         }
     }

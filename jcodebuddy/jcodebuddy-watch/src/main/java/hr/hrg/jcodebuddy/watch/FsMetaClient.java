@@ -139,6 +139,19 @@ public final class FsMetaClient implements AutoCloseable {
      * mid-batch raises, leaving the caller free to reconnect from its last applied batch.
      */
     public Batch nextBatch() throws IOException {
+        return nextBatch(BatchObserver.NONE);
+    }
+
+    /**
+     * Reads until one batch is complete, reporting the stream to {@code observer} as it arrives. A batch is only
+     * returned at {@code END_BATCH}; the observer sees {@code START_BATCH} and each {@code CHANGE_ENTRY} before
+     * that, so a consumer can begin work on the first changed unit without waiting for the rest of the batch.
+     *
+     * <p>The observer runs on this reader thread. It must not block for long; a consumer that needs to do work per
+     * entry should enqueue the entry and let its own worker do it.</p>
+     */
+    public Batch nextBatch(BatchObserver observer) throws IOException {
+        BatchObserver sink = observer == null ? BatchObserver.NONE : observer;
         long number = -1;
         long parent = -1;
         List<Change> changes = new ArrayList<>();
@@ -160,13 +173,20 @@ public final class FsMetaClient implements AutoCloseable {
                     number = payload.getLong();
                     parent = payload.getLong();
                     changes.clear();
+                    sink.startBatch(number, parent);
                 }
-                case KIND_CHANGE_ENTRY -> changes.add(change(frame.payload));
+                case KIND_CHANGE_ENTRY -> {
+                    Change change = change(frame.payload);
+                    changes.add(change);
+                    sink.change(change);
+                }
                 case KIND_END_BATCH -> {
                     if (number < 0) {
                         throw new IOException("fs-meta: END_BATCH without a START_BATCH");
                     }
-                    return committed(number, parent, changes, frame.payload);
+                    Batch batch = committed(number, parent, changes, frame.payload);
+                    sink.endBatch(batch);
+                    return batch;
                 }
                 case KIND_ERROR -> throw error(frame.payload);
                 default -> throw new IOException("fs-meta: unknown frame kind 0x" + Integer.toHexString(frame.kind));
@@ -479,6 +499,26 @@ public final class FsMetaClient implements AutoCloseable {
     }
 
     private record Frame(int kind, byte[] payload) {
+    }
+
+    /** The frames of one batch, observed as they arrive on the reader thread. */
+    public interface BatchObserver {
+
+        /** The no-op observer used by {@link #nextBatch()}. */
+        BatchObserver NONE = new BatchObserver() {
+        };
+
+        /** A batch is starting; no change entries have arrived yet. */
+        default void startBatch(long number, long parent) {
+        }
+
+        /** One change entry arrived; the batch is not complete yet. */
+        default void change(Change change) {
+        }
+
+        /** The batch is complete and has been validated. */
+        default void endBatch(Batch batch) {
+        }
     }
 
     /** One committed generation. */

@@ -28,6 +28,7 @@ Everything is in `hr.hrg.jcodebuddy.compile`; the only public type is `EcjIncrem
 | `EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath)` | source root, class output directory, effective classpath (JARs and directories)                  |
 | `void index()`                                                           | one-time, idempotent index of the classpath JARs and the JDK package set. Called automatically by the first compile if omitted |
 | `boolean compile(Set<Path> changedFiles)`                                | compile exactly these files; `true` when all of them compiled without an error. Never throws for a compile/read/path problem |
+| `boolean compileOne(Path changedFile)`                                   | compile one file immediately for an fs-meta `START_BATCH` fast path; same result contract as `compile(Set)` |
 | `long lastCompileNanos()`                                                | wall-clock duration of the last `compile()`, excluding the index — the number a benchmark quotes |
 | `long lastIndexNanos()`                                                  | duration of the last `index()` call                                                              |
 | `List<String> lastErrors()`                                              | immutable diagnostics of the last compile: `file:line  message`, or a read/write failure         |
@@ -49,6 +50,24 @@ if (!ok) {
 
 `lastCompileNanos()` is measured inside `compile()` around reading the source files and ECJ's compile, so it does
 not include `index()`. The compiler is not thread-safe; use it from one thread.
+
+### Starting before `END_BATCH`
+
+`compileOne(Path)` exists for the stream form of the fs-meta protocol. A consumer that sees `START_BATCH`, then
+each `CHANGE_ENTRY`, can hand the first changed unit to `compileOne()` while the remaining entries are still
+arriving. That call resolves against the classes already in `binDir` (the previous generation), so it is useful
+immediately but is not the whole batch:
+
+- a **one-file** batch is complete after `compileOne()` — there is no sibling change to cross-check;
+- a **multi-file** batch must still call `compile(Set<Path>)` at `END_BATCH`, because ECJ's public
+  `Compiler.compile(...)` is one call for parse + resolve/cross-check + codegen, and it cannot resolve a type
+  that another changed source in the same batch has not yet produced. The end-of-batch call is the authority;
+  the early per-unit call is only responsiveness.
+
+ECJ 3.46.100 is the current dependency. Its `ICompilationUnit` asks for a module binding when the name
+environment is not module-aware; this module's units answer the unnamed module explicitly, because they are
+classpath sources. The compiler still uses ECJ's internal `Compiler` API deliberately, with the
+`ClassFileWriter` null-safe for a unit that produces no code.
 
 ## Why it is incremental
 

@@ -13,6 +13,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -86,6 +87,41 @@ class FsMetaClientProtocolTest {
                             new FsMetaClient.Change("src/B.java", FsMetaClient.Kind.CHANGED),
                             new FsMetaClient.Change("src/C.java", FsMetaClient.Kind.DELETED)),
                     batch.changes());
+        } finally {
+            server.close();
+        }
+    }
+
+    @Test
+    void theObserverSeesStartEntriesAndEnd() throws Exception {
+        FakeServer server = FakeServer.start();
+        server.reply(
+                hello(13),
+                startBatch(14, 13),
+                changeEntry("src/A.java", FsMetaClient.Kind.ADDED),
+                changeEntry("src/B.java", FsMetaClient.Kind.CHANGED),
+                endBatch(14, 1, 1, 0));
+        List<String> events = new ArrayList<>();
+        try (FsMetaClient client = FsMetaClient.connect(server.socket(), FsMetaClient.LATEST)) {
+            FsMetaClient.Batch batch = client.nextBatch(new FsMetaClient.BatchObserver() {
+                @Override
+                public void startBatch(long number, long parent) {
+                    events.add("start:" + number + "/" + parent);
+                }
+
+                @Override
+                public void change(FsMetaClient.Change change) {
+                    events.add("change:" + change.name() + ":" + change.kind());
+                }
+
+                @Override
+                public void endBatch(FsMetaClient.Batch done) {
+                    events.add("end:" + done.number() + "/" + done.changes().size());
+                }
+            });
+            assertEquals(List.of("start:14/13", "change:src/A.java:ADDED", "change:src/B.java:CHANGED",
+                    "end:14/2"), events);
+            assertEquals(14, batch.number());
         } finally {
             server.close();
         }

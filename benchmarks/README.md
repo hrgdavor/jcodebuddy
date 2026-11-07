@@ -12,15 +12,15 @@ to a fresh `.class` file. No entity/code generation is involved.
 
 Environment: Windows, JDK 25, Eclipse 4.35 at `D:\programs\eclipse` (JDT **3.41.50** pinned by
 `bundles.info`), fs-meta daemon from commit `2da83ae` (which includes the filter from `f4be95d`), ECJ
-**3.37.0** for the standalone compiler.
+**3.46.100** for the standalone compiler.
 Synthetic independent classes; one edit (`C0`); three runs per size for the fs-meta side and the
 recorded Eclipse runs for the same sizes. Times are milliseconds, median.
 
 | Classes | Eclipse edit→POST_BUILD | Eclipse queue | Eclipse builder | fs-meta edit→compile | fs-meta compile | End-to-end speedup |
 | ------: | ----------------------: | ------------: | --------------: | -------------------: | --------------: | -----------------: |
-| 42      | **1017.8**              | ~1000         | 24–29           | **103**              | 2.44            | **9.9×**           |
-| 200     | **1024.1**              | ~1000         | 34–43           | **85**               | 2.21            | **12.0×**          |
-| 1000    | **1044.0**              | ~1017         | 27.0            | **140**              | 2.28            | **7.5×**           |
+| 42      | **1017.8**              | ~1000         | 24–29           | **94**               | 2.05            | **10.8×**          |
+| 200     | **1024.1**              | ~1000         | 34–43           | **100**              | 2.01            | **10.2×**          |
+| 1000    | **1044.0**              | ~1017         | 27.0            | **144**              | 2.03            | **7.3×**           |
 
 fs-meta’s root scheduler now defaults to a **50 ms tick** (per-root, 5–1000 ms; the scheduler’s 25 ms quiet floor
 still applies). **The tick should be chosen per editor/SSD rather than globally.** 50 ms is the new default; 10–25 ms is reasonable
@@ -29,8 +29,8 @@ classes for the fs-meta path, so the tick can be tuned down on a fast SSD/editor
 
 The Eclipse number is dominated by `AutoBuildJob.computeScheduleDelay()`: the auto-build job waits
 about **1000 ms** to coalesce changes. The JDT builder's own work is only **24–43 ms**. The fs-meta
-path has no such fixed delay: its end-to-end window is **~0.08–0.14 s** at the default tick, and the warm ECJ
-compile itself is **~2.2–2.4 ms**.
+path has no such fixed delay: its end-to-end window is **~0.09–0.14 s** at the default tick, and the warm ECJ
+compile itself is **~2.0–2.1 ms**.
 
 The standalone compiler's one-time `index()` is ~153 ms and is **excluded** from the measured
 window, as is Eclipse's initial full build.
@@ -38,10 +38,10 @@ window, as is Eclipse's initial full build.
 ### What this does and does not prove
 
 - It proves that in this synthetic, single-edit workload, controlling batching through fs-meta
-  removes Eclipse's ~1 s auto-build coalescing delay and makes the end-to-end feedback **7.5–12×**
+  removes Eclipse's ~1 s auto-build coalescing delay and makes the end-to-end feedback **7.3–10.8×**
   faster at the default 50 ms tick, or more when the tick is lowered.
 - It does **not** compare identical compilers: Eclipse's registered JDT is 3.41.50, the standalone
-  module uses ECJ 3.37.0. The `builder`/`compile` columns are therefore directional, not a
+  module uses ECJ 3.46.100. The `builder`/`compile` columns are therefore directional, not a
   compiler-version verdict.
 - It is **not** the example project and not a multi-file dependency graph. The next extensions are
   the committed `hipster-entity-example` classpath, a burst of N edits, and an ECJ-version-matched

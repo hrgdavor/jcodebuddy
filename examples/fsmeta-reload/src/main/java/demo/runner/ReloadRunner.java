@@ -23,6 +23,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -31,7 +32,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
@@ -95,6 +101,22 @@ public final class ReloadRunner {
     private ProjectClassLoader loader;
 
     private long reloads;
+
+    /**
+     * The START_BATCH fast path. A single worker compiles each changed unit as its CHANGE_ENTRY arrives, while the
+     * watcher reader continues to collect END_BATCH. The final changed-set compile waits for this worker, so the
+     * two compilers never run at the same time.
+     */
+    private final ExecutorService fastCompiler = Executors.newSingleThreadExecutor(thread -> {
+        Thread worker = new Thread(thread, "reload-first-compile");
+        worker.setDaemon(true);
+        return worker;
+    });
+    private final Object compilerLock = new Object();
+    private final List<Future<?>> fastTasks = new ArrayList<>();
+    private final Set<String> fastCompiled = new LinkedHashSet<>();
+    private final AtomicLong batchStartNanos = new AtomicLong();
+    private final AtomicLong firstClassNanos = new AtomicLong();
 
     private ReloadRunner(Path projectRoot, Path classesDir) {
         this.projectRoot = projectRoot;
@@ -213,8 +235,19 @@ public final class ReloadRunner {
 
         // ── The live loop ────────────────────────────────────────────────────────────────────────────────
         BlockingQueue<WatchBatch> batches = new LinkedBlockingQueue<>();
+        FsMetaDaemonWatch.BatchObserver streaming = new FsMetaDaemonWatch.BatchObserver() {
+            @Override
+            public void startBatch(long number, long parent) {
+                beginFastBatch();
+            }
+
+            @Override
+            public void change(FsMetaClient.Change change) {
+                fastChange(change);
+            }
+        };
         FsMetaDaemonWatch watch = new FsMetaDaemonWatch(filter, location.socket(), FsMetaClient.LATEST,
-                batches::add);
+                batches::add, streaming);
         // Ctrl+C (or Maven's own shutdown) must not leave a subscribed client behind. stop() is idempotent.
         Runtime.getRuntime().addShutdownHook(new Thread(watch::stop, "reload-shutdown"));
 
@@ -241,12 +274,70 @@ public final class ReloadRunner {
             Thread.currentThread().interrupt();
         } finally {
             watch.stop();
+            fastCompiler.shutdownNow();
             System.out.printf(Locale.ROOT, "[watch] stopped after %d batch(es), %d reload(s)%n",
                     watch.deliveredBatches(), reloads);
         }
     }
 
     // ── One batch ─────────────────────────────────────────────────────────────
+
+    /** Resets the per-batch fast-path state on START_BATCH. */
+    private void beginFastBatch() {
+        synchronized (fastTasks) {
+            fastTasks.clear();
+            fastCompiled.clear();
+        }
+        batchStartNanos.set(System.nanoTime());
+        firstClassNanos.set(0);
+    }
+
+    /**
+     * Schedules one changed source for immediate compilation, without blocking the daemon reader. The final
+     * changed-set compile waits for these tasks; a single-file batch can use the result directly.
+     */
+    private void fastChange(FsMetaClient.Change change) {
+        Path file = daemonFile(change.name());
+        Path sourceRoot = file.startsWith(mainRoot) ? mainRoot : (file.startsWith(testRoot) ? testRoot : null);
+        if (sourceRoot == null || !Files.isRegularFile(file) || !file.toString().endsWith(".java")) {
+            return;
+        }
+        String fqn = fullyQualifiedName(sourceRoot, file);
+        synchronized (fastTasks) {
+            fastTasks.add(fastCompiler.submit((Runnable) () -> {
+                long started = System.nanoTime();
+                synchronized (compilerLock) {
+                    EcjIncrementalCompiler compiler = sourceRoot.equals(mainRoot) ? mainCompiler : testCompiler;
+                    boolean ok = compiler.compileOne(file);
+                    long elapsed = System.nanoTime() - batchStartNanos.get();
+                    if (ok) {
+                        synchronized (fastTasks) {
+                            fastCompiled.add(fqn);
+                        }
+                        firstClassNanos.accumulateAndGet(elapsed, (previous, candidate) ->
+                                previous == 0 || candidate < previous ? candidate : previous);
+                    }
+                }
+            }));
+        }
+    }
+
+    /** Waits for every START_BATCH fast compile to finish before the changed-set cross-check. */
+    private void awaitFastCompilation() {
+        List<Future<?>> pending;
+        synchronized (fastTasks) {
+            pending = new ArrayList<>(fastTasks);
+            fastTasks.clear();
+        }
+        for (Future<?> task : pending) {
+            try {
+                task.get(10, TimeUnit.SECONDS);
+            } catch (Exception failed) {
+                // The final compile is the authority; a failed first-class attempt is only an early result.
+                System.out.println("[reload] first-class compile failed: " + failed);
+            }
+        }
+    }
 
     private void apply(WatchBatch batch, long receivedNanos, long receivedWall) {
         System.out.println("[reload] batch: changed=" + sorted(batch.changed())
@@ -272,12 +363,28 @@ public final class ReloadRunner {
         }
 
         long saveWall = earliestSourceMtime(mainFiles, testFiles, receivedWall);
+        awaitFastCompilation();
 
         // ── Compile exactly the changed files ─────────────────────────────────────────────────────────────
+        // A one-file batch was already compiled on its CHANGE_ENTRY, against the previous class files. There is
+        // no sibling change for it to cross-check, so the pre-compiled result is the complete result. A batch with
+        // several changed files waits for those early compiles, then recompiles the set together: this is where
+        // ECJ resolves types that changed in the same batch, which the early per-unit compile could not see.
+        boolean singleFast = changedNames.size() + deletedNames.size() == 1
+                && deletedNames.isEmpty()
+                && fastCompiled.containsAll(changedNames);
         long compileStartedNanos = System.nanoTime();
-        boolean mainOk = mainFiles.isEmpty() || mainCompiler.compile(mainFiles);
-        boolean testOk = testFiles.isEmpty() || testCompiler.compile(testFiles);
-        long compileNanos = System.nanoTime() - compileStartedNanos;
+        boolean mainOk = true;
+        boolean testOk = true;
+        if (!singleFast) {
+            synchronized (compilerLock) {
+                mainOk = mainFiles.isEmpty() || mainCompiler.compile(mainFiles);
+                testOk = testFiles.isEmpty() || testCompiler.compile(testFiles);
+            }
+        }
+        long compileNanos = singleFast
+                ? firstClassNanos.get()
+                : System.nanoTime() - compileStartedNanos;
         if (!mainOk || !testOk) {
             // A compile error is not a reload: the previous class files belong to the last good compile, and the
             // loader that is running still describes them. Report and wait for the next batch.
@@ -290,6 +397,10 @@ public final class ReloadRunner {
         }
         if (batch.overflow()) {
             changedNames.addAll(ProjectClassLoader.classNamesIn(classesDir));
+        }
+        if (firstClassNanos.get() > 0) {
+            System.out.printf(Locale.ROOT, "[reload] first class from batch start: %.1fms%s%n",
+                    exactMillis(firstClassNanos.get()), singleFast ? " (final; one-file batch)" : " (early; cross-check follows)");
         }
 
         // ── Reload: a new loader seeded with the old bytes, overwritten where the compile changed them ────
