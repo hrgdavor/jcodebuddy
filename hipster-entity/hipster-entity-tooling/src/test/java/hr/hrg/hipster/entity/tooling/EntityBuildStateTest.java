@@ -1,6 +1,5 @@
 package hr.hrg.hipster.entity.tooling;
 
-import hr.hrg.fsmeta.FsMetaFormat;
 import hr.hrg.jcodebuddy.watch.FsMetaClient;
 import hr.hrg.jcodebuddy.watch.FsMetaDaemonDiscovery;
 import hr.hrg.jcodebuddy.watch.PathFilter;
@@ -278,34 +277,6 @@ class EntityBuildStateTest {
         Assertions.assertTrue(decision.reason().contains("has format"), decision.reason());
     }
 
-    /**
-     * A trio left by a previous tooling revision is never read as a state and never diffed: the pass is full,
-     * the reason says why, and the first successful pass deletes it and writes {@code run.json} instead.
-     */
-    @Test
-    void aLegacyTrioIsReplacedNotRead() throws Exception {
-        Fixture fixture = Fixture.create();
-        FakeDaemon daemon = fixture.daemon();
-        EntityBuildState state = fixture.state(daemon);
-        Files.createDirectories(fixture.stateDirectory());
-        Path legacyMeta = fixture.stateDirectory().resolve(FsMetaFormat.META_FILE);
-        Files.writeString(legacyMeta, "old trio");
-
-        EntityBuildState.Decision decision = state.decide(fixture.config());
-        Assertions.assertEquals(EntityBuildState.Mode.FULL, decision.mode(), decision.reason());
-        Assertions.assertTrue(decision.reason().contains("legacy fs-meta trio"), decision.reason());
-
-        state.publish(fixture.config(), EntityBuildState.ValidationOutcome.NOT_RUN, EntityBuildState.Selection.full());
-
-        Assertions.assertTrue(Files.isRegularFile(fixture.runFile()), "the new state is written");
-        Assertions.assertFalse(Files.exists(legacyMeta), "and the trio-era file is gone");
-        for (String legacy : List.of(FsMetaFormat.TXT_FILE, FsMetaFormat.JSON_FILE,
-                EntityBuildState.LEGACY_FINGERPRINT_FILE)) {
-            Assertions.assertFalse(Files.exists(fixture.stateDirectory().resolve(legacy)),
-                    "the trio era left nothing behind: " + legacy);
-        }
-    }
-
     @Test
     void aChangedFingerprintFallsBackToAFullPass() throws Exception {
         Fixture fixture = Fixture.create();
@@ -430,7 +401,7 @@ class EntityBuildStateTest {
         }
     }
 
-    /** The trio is gone, not merely unused: the first recorded pass leaves three files, and none is a trio. */
+    /** The state is one generation marker, not a Java-written fs-meta trio. */
     @Test
     void aRecordedPassWritesOnlyRunJson() throws Exception {
         Fixture fixture = Fixture.create();
@@ -641,8 +612,6 @@ class EntityBuildStateTest {
         Assertions.assertTrue(record.path("buildState").path("recorded").asBoolean(),
                 "a successful full pass records the baseline it read next time: " + record);
         Assertions.assertTrue(Files.isRegularFile(fixture.runFile()));
-        Assertions.assertFalse(Files.exists(fixture.stateDirectory().resolve(FsMetaFormat.META_FILE)),
-                "the state is run.json, never the trio it replaced");
         Assertions.assertTrue(Files.exists(fixture.sourceRoot().resolve("build/entity/ThingSummary_.java")),
                 "and the normal pass still generated the view");
     }
@@ -676,11 +645,6 @@ class EntityBuildStateTest {
         Assertions.assertFalse(record.path("buildState").path("recorded").asBoolean(),
                 "the record says the baseline was not written: " + record);
         Assertions.assertFalse(Files.exists(fixture.runFile()), "no daemon, no baseline");
-        for (String legacy : List.of(FsMetaFormat.META_FILE, FsMetaFormat.TXT_FILE, FsMetaFormat.JSON_FILE,
-                EntityBuildState.LEGACY_FINGERPRINT_FILE)) {
-            Assertions.assertFalse(Files.exists(fixture.stateDirectory().resolve(legacy)),
-                    "and no trio-era file either: " + legacy);
-        }
         Assertions.assertTrue(Files.exists(fixture.sourceRoot().resolve("build/entity/ThingSummary_.java")),
                 "the full pass still ran and generated the view");
     }

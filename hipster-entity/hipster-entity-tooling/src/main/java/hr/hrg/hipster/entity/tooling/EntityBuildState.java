@@ -1,6 +1,5 @@
 package hr.hrg.hipster.entity.tooling;
 
-import hr.hrg.fsmeta.FsMetaFormat;
 import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
 import hr.hrg.jcodebuddy.watch.FsMetaClient;
 import hr.hrg.jcodebuddy.watch.FsMetaDaemonDiscovery;
@@ -23,9 +22,7 @@ import java.util.Objects;
  * The incremental state behind {@code --incremental} (plan {@code hipster-entity-mvp.md} E2), as a
  * <strong>daemon-generation marker</strong>.
  *
- * <p>The state used to be a Java-written {@code fs-meta} trio. That was always a transitional shape:
- * {@code fs-meta} names the Zig daemon as its only writer, and W7b moved every other consumer onto the
- * daemon. This class is the entity generator's half of that cutover. It keeps one small JSON document —
+ * <p>It keeps one small JSON document —
  * {@code <module>/.jcodebuddy/cache/entity-build/run.json} — and nothing else:</p>
  *
  * <pre>{@code
@@ -108,13 +105,6 @@ final class EntityBuildState {
 
     /** The document's format line; an older or foreign value is a full pass. */
     static final String FORMAT = "jcodebuddy-entity-build/2";
-
-    /** The fingerprint sidecar the trio era wrote; removed on the first successful pass. */
-    static final String LEGACY_FINGERPRINT_FILE = "fingerprint.txt";
-
-    /** The trio the state used to publish; removed on the first successful pass, never read. */
-    private static final List<String> LEGACY_TRIO_FILES = List.of(
-            FsMetaFormat.META_FILE, FsMetaFormat.TXT_FILE, FsMetaFormat.JSON_FILE);
 
     private static final ObjectMapper MAPPER = EntityMetadataGenerator.OBJECT_MAPPER;
 
@@ -536,9 +526,6 @@ final class EntityBuildState {
             return Publish.not("the build state at " + stateFile() + " could not be written ("
                     + message(failure) + ")");
         }
-        // Cleanup only: a leftover trio-era file is untidy, not a state the next run would read, so failing
-        // to delete it must not turn a written, truthful baseline into a "not recorded" result.
-        removeLegacyState();
         return Publish.recorded(generation);
     }
 
@@ -570,19 +557,10 @@ final class EntityBuildState {
 
     /**
      * Reads {@code run.json}, or explains why it cannot be used.
-     *
-     * <p>A legacy trio is recognised on purpose: it is not silently treated as "no state" when it can name
-     * <em>why</em> the next pass is full, because a reader who upgraded the tooling needs to know that the
-     * old state was replaced rather than that their project lost its cache.</p>
      */
     private Loaded loadState() {
         Path file = stateFile();
         if (!Files.isRegularFile(file)) {
-            if (legacyStatePresent()) {
-                return new Loaded(null, "the build state at " + directory + " is a legacy fs-meta trio ("
-                        + String.join(", ", LEGACY_TRIO_FILES) + "), which this version no longer reads;"
-                        + " a successful pass replaces it with " + RUN_FILE);
-            }
             return new Loaded(null, "no build state at " + file);
         }
         JsonNode json;
@@ -679,29 +657,6 @@ final class EntityBuildState {
         document.put("changed", value.changed());
         document.put("affected", value.affected());
         return document;
-    }
-
-    /** Removes the trio era's files after the first successful pass; the state is a cache, so deleting is safe. */
-    private void removeLegacyState() {
-        List<String> legacy = new ArrayList<>(LEGACY_TRIO_FILES);
-        legacy.add(LEGACY_FINGERPRINT_FILE);
-        for (String name : legacy) {
-            try {
-                Files.deleteIfExists(directory.resolve(name));
-            } catch (IOException ignored) {
-                // Cleanup only: the next successful pass tries again, and nothing reads these files any more.
-            }
-        }
-    }
-
-    /** Whether the trio era's state is still on disk. */
-    private boolean legacyStatePresent() {
-        for (String name : LEGACY_TRIO_FILES) {
-            if (Files.isRegularFile(directory.resolve(name))) {
-                return true;
-            }
-        }
-        return Files.isRegularFile(directory.resolve(LEGACY_FINGERPRINT_FILE));
     }
 
     /**
