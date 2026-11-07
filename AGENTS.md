@@ -368,9 +368,11 @@ satisfiable because the artifact was being installed. Either one alone would hav
     arrangement. The Java/Bun ports are readers/clients, not watchers. **W7b (2026-11-06) cut
     `WatchedRegeneration` over to the daemon socket, W7c moved `ProjectWatcher` onto the promoted
     `jcodebuddy-watch` client and retired `FileWatch`, and `webviewd`'s SSE stream now requires the daemon
-    as well.** No JCodeBuddy production code starts a `WatchService`. `EntityBuildState` still publishes
-    its own derived build-state trio (not the watcher state); that one exception is named in the W7 record:
-    do not grow it as if it were the target.
+    as well.** No JCodeBuddy production code starts a `WatchService`. **Design B (2026-11-07) moved
+    `EntityBuildState` to a daemon-generation marker too:** the daemon root is the project root, a module's
+    cache filters the subscription to its source-root subfolder, and
+    `<module>/.jcodebuddy/cache/entity-build/run.json` records the last successful generation. No production
+    JCodeBuddy code publishes an `fs-meta` trio; the Java `FsMetaWriter` remains a test/tool writer only.
   - **The direction is `gitignore`/`wildmatch`, not globs.** `core` records that `gitignore` covers what globs
     were used for; that is the same rule as DEC-051 and the `glob` bullet below. **Globs are to be purged**, and
     no new glob dialect, dependency or call site is accepted here.

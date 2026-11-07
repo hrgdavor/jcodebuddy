@@ -92,6 +92,11 @@ in § 3.5 is part of the decision rather than an implementation detail.
 
 ### 3.2 State: one `fs-meta` trio, written after the pass
 
+> **Superseded 2026-11-07 by Design B.** The state is now a daemon-generation marker
+> (`<module>/.jcodebuddy/cache/entity-build/run.json`); the daemon root is the project root, and the module
+> filters to its source-root subfolder. There is no Java-written trio. The text below records the original E2
+> decision before the daemon cutover.
+
 - Location: `<module>/.jcodebuddy/cache/entity-build/` — a new derived subdirectory beside the existing
   `watch-fs-meta` state, ignored like every other `cache/` subtree (DEC-026). It never holds `.java`.
 - Content: the module-relative paths and content hashes of every `.java` file under the source root,
@@ -222,7 +227,7 @@ both decision indexes, and amend any DEC-029 / DEC-041 text that the implementat
 record decides, at minimum:
 
 - the full pass is the reference and incremental output must be byte-identical;
-- the state is a disposable `fs-meta` trio under `.jcodebuddy/cache/entity-build/`;
+- the state is a daemon-generation marker under `.jcodebuddy/cache/entity-build/run.json` (Design B);
 - the fallback matrix in § 3.5;
 - the input-record shape (`views[].inputs` plus the reserved `artifacts[].inputs`);
 - the emitters incremental does **not** cover (`--adapters`, `--patch-appliers`, `--merge`) force a full
@@ -279,13 +284,13 @@ writes nothing (state validated, `git status` clean); a same-content save is a n
 renamed file falls back to full; a corrupt state falls back to full; a changed generator flag falls back
 to full; the tooling tests and the example's regeneration test are green.
 
-**Done 2026-11-05.** [`EntityBuildState`](../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityBuildState.java)
+**Done 2026-11-05; state superseded 2026-11-07 by Design B.** [`EntityBuildState`](../hipster-entity/hipster-entity-tooling/src/main/java/hr/hrg/hipster/entity/tooling/EntityBuildState.java)
 implements the trio, the fingerprint sidecar, the fallback matrix and the after-success publish;
 `EntityMetadataGenerator` gained `--incremental`/`--full`, the no-op decision before validation/parse, and
-the run-record fields. `EntityBuildStateTest` is **16/16**; the example regeneration test is **9/9**; the
-full tooling suite is green at **542/542**; the shaded jar carries `fs-meta` and a full-then-`--incremental`
-run on a temp tree records `mode: "noop"` and writes nothing. E2 deliberately runs the existing full pass on
-`INCREMENTAL` — selective emission is E4.
+the run-record fields. **Design B replaced the trio with a daemon-generation `run.json` marker and a
+project-root subscription filtered to the module source root; the fallback matrix and byte-identity
+guarantees are unchanged.** `EntityBuildStateTest` is **16/16** at E2; the current design-B suite is
+**31/31** fake-daemon and **3/3** opt-in real-daemon.
 
 ### E3 — Record what each view was generated from (M)
 **Who:** agent · **Depends:** E2
@@ -516,7 +521,7 @@ These are the questions E0 must answer; the recommendation is given so the step 
 
 | #   | Question                                                                   | Recommendation                                                                                      |
 | -   | --------                                                                   | --------------                                                                                      |
-| 1   | Is the transitional Java `FsMetaWriter` acceptable for the one-shot state? | Yes, bounded to `EntityBuildState`; W7b replaces the writer, not the pass. Use the daemon when present if E0 prefers. |
+| 1   | Is the transitional Java `FsMetaWriter` acceptable for the one-shot state? | **No longer applies (Design B, 2026-11-07):** the state is a daemon-generation `run.json` marker; the daemon is the writer, and a missing daemon is a full pass. |
 | 2   | Should `--incremental` be the CLI default?                                 | Not in E2–E5; make it `scripts/gen.js`'s default after E6, keep `--full`.                           |
 | 3   | Is parse reuse part of the MVP?                                            | No — E10 is the scale step. The full pass is the reference and 599 ms is the current measured cost. |
 | 4   | `views[].inputs` or only `artifacts[].inputs`?                             | Both: view-level for the incremental decision, artifact-level for the reserved per-artifact contract. |

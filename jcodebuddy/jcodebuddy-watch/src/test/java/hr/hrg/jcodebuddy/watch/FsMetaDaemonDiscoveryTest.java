@@ -35,12 +35,22 @@ class FsMetaDaemonDiscoveryTest {
 
     /** Writes the durable root list with one record for {@code root}, the way the daemon's registry does. */
     private static void writeRegistry(Path configHome, Path root, Path socket, String id) throws Exception {
-        Path fsmeta = Files.createDirectories(configHome.resolve("fsmeta"));
+        writeRegistry(configHome, List.of(record(root, socket, id)));
+    }
+
+    /** One registry record for {@code root}; the caller composes the list. */
+    private static Map<String, Object> record(Path root, Path socket, String id) throws Exception {
         Map<String, Object> record = new LinkedHashMap<>();
         record.put("id", id);
         record.put("root", root.toRealPath().toString());
         record.put("socket", socket.toString());
-        Map<String, Object> document = Map.of("version", 1, "roots", List.of(record));
+        return record;
+    }
+
+    /** Writes a registry of several records, which is how a project root and a nested module root coexist. */
+    private static void writeRegistry(Path configHome, List<Map<String, Object>> records) throws Exception {
+        Path fsmeta = Files.createDirectories(configHome.resolve("fsmeta"));
+        Map<String, Object> document = Map.of("version", 1, "roots", records);
         Files.writeString(fsmeta.resolve("roots.json"), MAPPER.writeValueAsString(document));
     }
 
@@ -183,5 +193,113 @@ class FsMetaDaemonDiscoveryTest {
 
         assertTrue(attach.attached(), "the record stores a canonical root, so a locator resolves to it");
         assertEquals(socket, attach.location().socket());
+    }
+
+    // ── ancestor discovery: one project root serves many module source roots ──────────────────────────────────
+
+    /**
+     * The module cache's question: a daemon registered for the <strong>project root</strong> must be found from
+     * a source root several levels below it, and the returned root must stay the project root. That is what lets
+     * the cache filter the daemon stream to its own subfolder instead of creating a second root
+     * ({@code EntityBuildState}, Design B).
+     */
+    @Test
+    void aProjectRootServesANestedSourceRoot(@TempDir Path dir) throws Exception {
+        Path runtime = Files.createDirectories(dir.resolve("run"));
+        Path config = Files.createDirectories(dir.resolve("config"));
+        Path project = Files.createDirectories(dir.resolve("project"));
+        Path sourceRoot = Files.createDirectories(project.resolve("module/src/main/java"));
+        Files.writeString(runtime.resolve("daemon.json"), "{\"v\":1,\"pid\":1}");
+        Path socket = Files.createDirectories(runtime.resolve("roots")).resolve("a1b2c3d4.sock");
+        Files.writeString(socket, "");
+        writeRegistry(config, project, socket, "a1b2c3d4");
+
+        FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discoverAncestor(
+                sourceRoot, env(runtime, config), true);
+
+        assertTrue(attach.attached(), attach.problem());
+        assertEquals(project.toRealPath(), attach.location().root(),
+                "the ancestor is the project root; the source root is never the daemon's root");
+        assertEquals(socket, attach.location().socket());
+    }
+
+    @Test
+    void theDeepestAncestorWins(@TempDir Path dir) throws Exception {
+        Path runtime = Files.createDirectories(dir.resolve("run"));
+        Path config = Files.createDirectories(dir.resolve("config"));
+        Path project = Files.createDirectories(dir.resolve("project"));
+        Path module = Files.createDirectories(project.resolve("module"));
+        Path sourceRoot = Files.createDirectories(module.resolve("src/main/java"));
+        Files.writeString(runtime.resolve("daemon.json"), "{\"v\":1,\"pid\":1}");
+        Path projectSocket = Files.createDirectories(runtime.resolve("roots")).resolve("a1b2c3d4.sock");
+        Path moduleSocket = Files.createDirectories(runtime.resolve("roots")).resolve("b1b2c3d4.sock");
+        Files.writeString(projectSocket, "");
+        Files.writeString(moduleSocket, "");
+        writeRegistry(config, List.of(
+                record(project, projectSocket, "a1b2c3d4"),
+                record(module, moduleSocket, "b1b2c3d4")));
+
+        FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discoverAncestor(
+                sourceRoot, env(runtime, config), false);
+
+        assertTrue(attach.attached(), attach.problem());
+        assertEquals(module.toRealPath(), attach.location().root(),
+                "a module root registered inside a project root is the deeper match");
+        assertEquals(moduleSocket, attach.location().socket());
+    }
+
+    @Test
+    void anExactRootIsItsOwnAncestor(@TempDir Path dir) throws Exception {
+        Path runtime = Files.createDirectories(dir.resolve("run"));
+        Path config = Files.createDirectories(dir.resolve("config"));
+        Path root = Files.createDirectories(dir.resolve("root"));
+        Files.writeString(runtime.resolve("daemon.json"), "{\"v\":1,\"pid\":1}");
+        Path socket = Files.createDirectories(runtime.resolve("roots")).resolve("a1b2c3d4.sock");
+        Files.writeString(socket, "");
+        writeRegistry(config, root, socket, "a1b2c3d4");
+
+        FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discoverAncestor(
+                root, env(runtime, config), false);
+
+        assertTrue(attach.attached(), attach.problem());
+        assertEquals(root.toRealPath(), attach.location().root());
+    }
+
+    /**
+     * Ancestry is compared segment by segment, never by string prefix: a path whose name merely starts with a
+     * served root's name is a different directory, and attaching to the wrong daemon would read the wrong tree.
+     */
+    @Test
+    void aSiblingWhoseNameSharesThePrefixIsNotAnAncestor(@TempDir Path dir) throws Exception {
+        Path runtime = Files.createDirectories(dir.resolve("run"));
+        Path config = Files.createDirectories(dir.resolve("config"));
+        Path parent = Files.createDirectories(dir.resolve("a"));
+        Path served = Files.createDirectories(parent.resolve("b"));
+        Path sibling = Files.createDirectories(parent.resolve("bc"));
+        Files.writeString(runtime.resolve("daemon.json"), "{\"v\":1,\"pid\":1}");
+        Path socket = Files.createDirectories(runtime.resolve("roots")).resolve("a1b2c3d4.sock");
+        Files.writeString(socket, "");
+        writeRegistry(config, served, socket, "a1b2c3d4");
+
+        FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discoverAncestor(
+                sibling, env(runtime, config), false);
+
+        assertFalse(attach.attached(), "a/bc is not inside a/b");
+        assertTrue(attach.problem().contains("or any of its ancestors"), attach.problem());
+    }
+
+    @Test
+    void aMissingAncestorRecordExplainsHowToRegisterTheProjectRoot(@TempDir Path dir) throws Exception {
+        Path runtime = Files.createDirectories(dir.resolve("run"));
+        Path config = Files.createDirectories(dir.resolve("config"));
+        Path sourceRoot = Files.createDirectories(dir.resolve("project/module/src/main/java"));
+        Files.createDirectories(config.resolve("fsmeta"));
+        Files.writeString(config.resolve("fsmeta").resolve("roots.json"), "{\"version\":1,\"roots\":[]}");
+
+        FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discoverAncestor(
+                sourceRoot, env(runtime, config), false);
+
+        assertFalse(attach.attached());
+        assertTrue(attach.problem().contains("project root"), attach.problem());
     }
 }

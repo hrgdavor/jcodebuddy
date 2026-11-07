@@ -31,13 +31,23 @@ import java.util.Map;
  * makes discovery succeed and attaching fail with a message naming the socket, and the caller falls back to the
  * read-only path either way.</p>
  *
+ * <h3>Two locators: the exact root, and the nearest ancestor</h3>
+ * <p>{@link #discover(Path)} answers "is this exact path a served root?" — the webview host's question, because it
+ * serves one project directory and must not silently attach to a parent's daemon. {@link #discoverAncestor(Path)}
+ * answers the other question a module cache asks: "which served root contains this directory?" — the <strong>deepest
+ * ancestor</strong> wins, so a source root under {@code <project>/module/src/main/java} attaches to the project root
+ * when the project root is registered, and to a module root only when that module was registered instead. The
+ * returned {@link Location#root()} is the ancestor, never the locator: the consumer filters the daemon stream to its
+ * own subfolder ({@link FsMetaClient#connect(Path, long, java.util.List, java.util.List)}) rather than creating a
+ * second root for it.</p>
+ *
  * <p>The trio is deliberately not consulted: it says what the tree looked like, not where a daemon lives, and
  * {@code FORMAT.md} keeps absolute paths out of it. A missing or dead daemon is a normal answer — the caller falls
  * back to reading the trio without live events — so discovery reports a {@link Attach} with a human-readable
  * {@link Attach#problem()} instead of throwing.</p>
  *
  * <p>The environment and the platform are parameters rather than ambient facts so the rules above can be asserted
- * on any host; {@link #discover(Path)} uses this process's environment.</p>
+ * on any host; {@link #discover(Path)} and {@link #discoverAncestor(Path)} use this process's environment.</p>
  *
  * <p>This is the watcher library's own class (promoted from {@code project-automation} once the agent became a
  * second consumer); it depends on nothing but Jackson and the JDK, so a module that only needs to <em>find</em> a
@@ -83,62 +93,56 @@ public final class FsMetaDaemonDiscovery {
         }
     }
 
-    /** Discovers the daemon serving {@code watchedRoot} from this process's environment and platform. */
+    /** Discovers the daemon serving exactly {@code watchedRoot}, from this process's environment and platform. */
     public static Attach discover(Path watchedRoot) {
         return discover(watchedRoot, System.getenv(), isWindows());
     }
 
     /** The testable form: {@code env} is read as the daemon would read it, and {@code windows} picks the rules. */
     public static Attach discover(Path watchedRoot, Map<String, String> env, boolean windows) {
-        Path root;
-        try {
-            root = watchedRoot.toRealPath();
-        } catch (IOException missing) {
-            root = watchedRoot.toAbsolutePath().normalize();
+        Path root = canonical(watchedRoot);
+        Roots roots = loadRoots(env, windows);
+        String hint = " (no daemon has this root registered; start one with `fsmeta daemon start` and add it with"
+                + " `fsmeta root add " + root + "`)";
+        if (roots.problem() != null) {
+            return new Attach(null, roots.problem() + (missingRootList(roots) ? hint : ""));
         }
-        Path runtimeBase = runtimeBase(env, windows);
-        Path configFile = configFile(env, windows);
-        if (!Files.isRegularFile(configFile)) {
-            return new Attach(null, "no fsmeta root list at " + configFile
-                    + " (no daemon has this root registered; start one with `fsmeta daemon start` and add it with"
-                    + " `fsmeta root add " + root + "`)");
-        }
-
-        JsonNode document;
-        try {
-            document = MAPPER.readTree(Files.readString(configFile, StandardCharsets.UTF_8));
-        } catch (IOException | RuntimeException malformed) {
-            return new Attach(null, "cannot read the fsmeta root list " + configFile + ": "
-                    + malformed.getClass().getSimpleName() + ": " + malformed.getMessage());
-        }
-        if (document == null || !document.isObject()) {
-            return new Attach(null, "the fsmeta root list " + configFile + " is not a JSON object");
-        }
-
-        JsonNode record = recordFor(document.path("roots"), root, windows);
+        JsonNode record = recordFor(roots.document().path("roots"), root, windows);
         if (record == null) {
-            return new Attach(null, "the fsmeta root list " + configFile + " has no record for " + root
+            return new Attach(null, "the fsmeta root list " + roots.configFile() + " has no record for " + root
                     + " (add it with `fsmeta root add " + root + "`)");
         }
-        String id = text(record, "id");
-        String socket = text(record, "socket");
-        if (socket == null || socket.isBlank()) {
-            return new Attach(null, "the fsmeta record for " + root + " in " + configFile
-                    + " has no socket path (the daemon rewrites it on every start)");
+        return attach(record, root, roots);
+    }
+
+    /**
+     * Discovers the daemon serving the <strong>deepest root that contains</strong> {@code path}.
+     *
+     * <p>A module cache uses this form: the daemon root is the project root, and the module's source root is a
+     * subfolder of it. The returned {@link Location#root()} is the ancestor, which is what the filter patterns in
+     * {@link FsMetaClient#connect(Path, long, java.util.List, java.util.List)} are relative to. An exact root is its
+     * own ancestor, so a locator that is itself a served root attaches to that record.</p>
+     */
+    public static Attach discoverAncestor(Path path) {
+        return discoverAncestor(path, System.getenv(), isWindows());
+    }
+
+    /** The testable form of {@link #discoverAncestor(Path)}. */
+    public static Attach discoverAncestor(Path path, Map<String, String> env, boolean windows) {
+        Path child = canonical(path);
+        Roots roots = loadRoots(env, windows);
+        String hint = " (no daemon serves this path or any ancestor; start one with `fsmeta daemon start` and add the"
+                + " project root with `fsmeta root add <project root>`)";
+        if (roots.problem() != null) {
+            return new Attach(null, roots.problem() + (missingRootList(roots) ? hint : ""));
         }
-        Path socketPath;
-        try {
-            socketPath = Path.of(socket);
-        } catch (InvalidPathException malformed) {
-            return new Attach(null, "the fsmeta record for " + root + " names an invalid socket path: " + socket);
+        JsonNode record = recordForAncestor(roots.document().path("roots"), child, windows);
+        if (record == null) {
+            return new Attach(null, "the fsmeta root list " + roots.configFile() + " has no record for " + child
+                    + " or any of its ancestors (add the project root with `fsmeta root add <project root>`)");
         }
-        Path control = runtimeBase.resolve("daemon.json");
-        if (!Files.exists(socketPath)) {
-            return new Attach(null, "the fsmeta daemon is not running: the record for " + root
-                    + " names " + socketPath + ", which does not exist"
-                    + (Files.isRegularFile(control) ? "" : " (and " + control + " is absent too)"));
-        }
-        return new Attach(new Location(runtimeBase, configFile, id == null ? "" : id, root, socketPath), "");
+        Path recorded = recordedRoot(record);
+        return attach(record, recorded == null ? child : recorded, roots);
     }
 
     /**
@@ -183,6 +187,64 @@ public final class FsMetaDaemonDiscovery {
         return Path.of(home(env, windows)).resolve(".config").resolve("fsmeta").resolve("roots.json");
     }
 
+    /**
+     * The root list and the two directories discovery reads, or the reason it has no document.
+     *
+     * <p>The problem text stops before the caller's actionable hint: the exact and ancestor locators name different
+     * roots in that hint ("this root" versus "the project root"), and one shared message would have to drop both.</p>
+     */
+    private record Roots(Path runtimeBase, Path configFile, JsonNode document, String problem) {
+    }
+
+    private static Roots loadRoots(Map<String, String> env, boolean windows) {
+        Path runtimeBase = runtimeBase(env, windows);
+        Path configFile = configFile(env, windows);
+        if (!Files.isRegularFile(configFile)) {
+            return new Roots(runtimeBase, configFile, null, "no fsmeta root list at " + configFile);
+        }
+        JsonNode document;
+        try {
+            document = MAPPER.readTree(Files.readString(configFile, StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException malformed) {
+            return new Roots(runtimeBase, configFile, null, "cannot read the fsmeta root list " + configFile + ": "
+                    + malformed.getClass().getSimpleName() + ": " + malformed.getMessage());
+        }
+        if (document == null || !document.isObject()) {
+            return new Roots(runtimeBase, configFile, null,
+                    "the fsmeta root list " + configFile + " is not a JSON object");
+        }
+        return new Roots(runtimeBase, configFile, document, null);
+    }
+
+    /** Whether the problem is "there is no root list at all", the one a caller can fix by starting a daemon. */
+    private static boolean missingRootList(Roots roots) {
+        return roots.problem() != null && roots.problem().startsWith("no fsmeta root list at ");
+    }
+
+    /** The record for the root, the socket it names, and the attach result — one construction for both locators. */
+    private static Attach attach(JsonNode record, Path root, Roots roots) {
+        String id = text(record, "id");
+        String socket = text(record, "socket");
+        if (socket == null || socket.isBlank()) {
+            return new Attach(null, "the fsmeta record for " + root + " in " + roots.configFile()
+                    + " has no socket path (the daemon rewrites it on every start)");
+        }
+        Path socketPath;
+        try {
+            socketPath = Path.of(socket);
+        } catch (InvalidPathException malformed) {
+            return new Attach(null, "the fsmeta record for " + root + " names an invalid socket path: " + socket);
+        }
+        Path control = roots.runtimeBase().resolve("daemon.json");
+        if (!Files.exists(socketPath)) {
+            return new Attach(null, "the fsmeta daemon is not running: the record for " + root
+                    + " names " + socketPath + ", which does not exist"
+                    + (Files.isRegularFile(control) ? "" : " (and " + control + " is absent too)"));
+        }
+        return new Attach(new Location(roots.runtimeBase(), roots.configFile(), id == null ? "" : id, root,
+                socketPath), "");
+    }
+
     private static JsonNode recordFor(JsonNode roots, Path canonicalRoot, boolean windows) {
         if (roots == null || !roots.isArray()) {
             return null;
@@ -205,10 +267,93 @@ public final class FsMetaDaemonDiscovery {
         return null;
     }
 
+    /**
+     * The deepest record whose canonical root is {@code child} or one of its ancestors.
+     *
+     * <p>Depth is the path's own name count, so {@code /a/b} beats {@code /a}; a tie keeps the first record, which
+     * is the one the daemon registry listed first and matches {@link #recordFor}'s behaviour. A record that no
+     * longer exists on disk is still compared by its recorded path — a missing root is reported by the daemon and
+     * must not make a parent's daemon invisible.</p>
+     */
+    private static JsonNode recordForAncestor(JsonNode roots, Path child, boolean windows) {
+        if (roots == null || !roots.isArray()) {
+            return null;
+        }
+        JsonNode deepest = null;
+        int deepestCount = -1;
+        for (JsonNode record : roots) {
+            Path root = recordedRoot(record);
+            if (root == null || !isAncestor(root, child, windows)) {
+                continue;
+            }
+            int count = root.getNameCount();
+            if (count > deepestCount) {
+                deepest = record;
+                deepestCount = count;
+            }
+        }
+        return deepest;
+    }
+
+    /** A record's canonical root, real-pathed when it still exists and otherwise as the record spells it. */
+    private static Path recordedRoot(JsonNode record) {
+        String recorded = text(record, "root");
+        if (recorded == null || recorded.isBlank()) {
+            return null;
+        }
+        try {
+            Path path = Path.of(recorded).toAbsolutePath().normalize();
+            try {
+                return path.toRealPath();
+            } catch (IOException missing) {
+                return path;
+            }
+        } catch (InvalidPathException malformed) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether {@code parent} is {@code child} or one of its ancestors, compared segment by segment so
+     * {@code /a/bc} is never inside {@code /a/b}. Windows compares case-insensitively and includes the drive or UNC
+     * root; POSIX compares the root and every segment exactly.
+     */
+    private static boolean isAncestor(Path parent, Path child, boolean windows) {
+        Path a = parent.toAbsolutePath().normalize();
+        Path b = child.toAbsolutePath().normalize();
+        Path aRoot = a.getRoot();
+        Path bRoot = b.getRoot();
+        if (aRoot == null || bRoot == null || !sameSegment(aRoot.toString(), bRoot.toString(), windows)) {
+            return false;
+        }
+        if (b.getNameCount() < a.getNameCount()) {
+            return false;
+        }
+        for (int i = 0; i < a.getNameCount(); i++) {
+            if (!sameSegment(a.getName(i).toString(), b.getName(i).toString(), windows)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean sameSegment(String left, String right, boolean windows) {
+        return windows ? left.equalsIgnoreCase(right) : left.equals(right);
+    }
+
     private static boolean samePath(Path left, Path right, boolean windows) {
         Path a = left.toAbsolutePath().normalize();
         Path b = right.toAbsolutePath().normalize();
         return windows ? a.toString().equalsIgnoreCase(b.toString()) : a.equals(b);
+    }
+
+    /** A locator as the daemon recorded its root: canonical when it exists, absolute-normalized otherwise. */
+    private static Path canonical(Path path) {
+        try {
+            return path.toRealPath();
+        } catch (IOException missing) {
+            return path.toAbsolutePath().normalize();
+        }
     }
 
     private static String text(JsonNode node, String field) {

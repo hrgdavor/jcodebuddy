@@ -1,13 +1,14 @@
 # Moving JCodeBuddy off `java-watch`, onto `fs-meta`
 
-**Status: 2026-11-07 — W1–W6 done; W7a–W7d done; the full gate is green; `WatcherBoundaryTest` enforces
-the boundary. The one accepted exception is the entity build-state writer, a one-shot derived cache rather than
-watcher state.** W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
+**Status: 2026-11-07 — W1–W7 done; the full gate is green; `WatcherBoundaryTest` enforces the boundary.
+There is no accepted writer exception: Design B moved `EntityBuildState` to a daemon-generation marker.**
+W1 measured the consumers, added the check script and settled the event-source shape. W2 moved the code-edit types
 to the builder. W3 added `jcodebuddy-watch`; W4 moved the agent onto it; W5a/W5b moved project-automation's state to
 `fs-meta` and its events to `jcodebuddy-watch`; W6 removed the last unused dependency and made the consumer check part
-of the gate. The frozen `watch/*` modules are untouched. **`jcodebuddy-watch` and the Java `FsMetaWriter` usage are
-transitional**: the intended watcher is fs-meta's Zig daemon, with tools as clients over its Unix socket (W7), because
-one native watch loop shared by several active processes is the lightest and fastest arrangement. This plan is the
+of the gate. The frozen `watch/*` modules are untouched. **`jcodebuddy-watch` is the daemon client and the Java
+`FsMetaWriter` is now a test/tool writer only**: the intended watcher is fs-meta's Zig daemon, with tools as clients
+over its Unix socket (W7), because one native watch loop shared by several active processes is the lightest and
+fastest arrangement. This plan is the
 inventory and the standalone steps for the rule in root [`AGENTS.md`](../AGENTS.md) § 2: `java-watch*` is **frozen**,
 and a watcher need goes to **`fs-meta`**, not into the frozen group. It was deliberately not a single “remove the
 dependency” task: the dependency was six modules, and `java-watch-core` bundled three unrelated APIs.
@@ -322,13 +323,21 @@ and the opt-in `ProjectEventStreamDaemonTest` starts a real `fsmeta daemon`, sub
 `ProjectEventStream`, edits `src/A.java` and asserts the SSE frame. Without `FSMETA_BIN` the daemon test is
 skipped; the full webviewd module is 59 + 1 skipped in the ordinary run, and 60/60 with the daemon binary.
 
-**W7 boundary — asserted 2026-11-06.** `WatcherBoundaryTest` (jcodebuddy-watch, 3/3) walks the production
-sources of `jcodebuddy-watch`, `jcodebuddy-agent`, `project-automation`, `webviewd` and
-`hipster-entity-tooling` and asserts: no `newWatchService(` call or `java.nio.file.WatchService` import;
-`FsMetaWriter.publish(` occurs only in `EntityBuildState` (the one-shot entity build cache); `webviewd` depends
-on `jcodebuddy-watch`; and `FileWatch` is gone. The literal W7 sentence is therefore enforced as "no production
-Java starts a `WatchService`; watcher state is daemon-owned; one derived build cache is the accepted exception".
-The recorded gate ran on 2026-11-07: **BUILD SUCCESS, 18 modules, 7:26 min, 596 tooling tests, 0 failures**.
+**W7 boundary — asserted 2026-11-06, exception removed 2026-11-07.** `WatcherBoundaryTest` (jcodebuddy-watch,
+3/3) walks the production sources of `jcodebuddy-watch`, `jcodebuddy-agent`, `project-automation`, `webviewd`
+and `hipster-entity-tooling` and asserts: no `newWatchService(` call or `java.nio.file.WatchService` import; no
+production `FsMetaWriter.publish(` and no import of the writer; `webviewd` depends on `jcodebuddy-watch`; and
+`FileWatch` is gone. The literal W7 sentence is now fully enforced: no production Java publishes a trio, and no
+production code starts a `WatchService`.
+
+**Design B — the entity build cache joins the daemon (done 2026-11-07).** `EntityBuildState` no longer scans,
+diffs or publishes a trio. The daemon root is the project root; a module cache uses
+`FsMetaDaemonDiscovery.discoverAncestor`, filters the subscription to its source-root subfolder with the
+protocol's include/exclude patterns, and stores `<module>/.jcodebuddy/cache/entity-build/run.json` with the last
+successful daemon generation and fingerprint. `FsMetaClient` sends the extended `SUBSCRIBE`; the daemon-side
+filter was missing and is now implemented in `fs-meta` commit `f4be95d` (both replay and live batches, filtered
+`END_BATCH` counts). A missing daemon is a full pass, never a false no-op. Tests: `EntityBuildStateTest` 31/31,
+opt-in `EntityBuildStateDaemonTest` 3/3, the design-B targeted set 52/52; `WatcherBoundaryTest` 3/3.
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a

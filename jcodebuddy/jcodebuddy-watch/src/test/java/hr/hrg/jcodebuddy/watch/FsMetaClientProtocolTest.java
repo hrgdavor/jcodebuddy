@@ -14,9 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -105,12 +107,141 @@ class FsMetaClientProtocolTest {
         }
     }
 
+    // ── the extended SUBSCRIBE: the server-side subfolder filter ────────────────────────────────────────────────
+
+    /**
+     * The one filter this module sends is the protocol's own ({@code FORMAT.socket.md} § SUBSCRIBE filter
+     * patterns): a consumer that wants one module's source root inside a project root must not filter the whole
+     * monorepo stream client-side, and must not invent a second pattern grammar. The payload is asserted byte by
+     * byte against the fake server so a layout drift fails here rather than as a silently unfiltered stream.
+     */
+    @Test
+    void theExtendedSubscribeCarriesTheIncludeAndExcludePatterns() throws Exception {
+        FakeServer server = FakeServer.start();
+        server.reply(hello(3));
+        try (FsMetaClient client = FsMetaClient.connect(server.socket(), 2,
+                List.of("module/src/main/java/**"), List.of("**/.jcodebuddy/**"))) {
+            assertEquals(3, client.serverGeneration());
+            ByteBuffer payload = littleEndian(server.subscribePayload());
+            assertEquals(2L, payload.getLong(), "the from_batch is the first field of both forms");
+            assertEquals(1, payload.getShort() & 0xffff, "one include pattern");
+            assertEquals("module/src/main/java/**", pattern(payload));
+            assertEquals(1, payload.getShort() & 0xffff, "one exclude pattern");
+            assertEquals("**/.jcodebuddy/**", pattern(payload));
+            assertFalse(payload.hasRemaining(), "the extended form ends after the exclude patterns");
+        } finally {
+            server.close();
+        }
+    }
+
+    @Test
+    void anUnfilteredSubscribeKeepsTheOriginalEightByteForm() throws Exception {
+        FakeServer server = FakeServer.start();
+        server.reply(hello(7));
+        try (FsMetaClient client = FsMetaClient.connect(server.socket(), 5)) {
+            byte[] payload = server.subscribePayload();
+            assertEquals(8, payload.length, "both empty is the pass-all form, not an extended header of zeroes");
+            assertEquals(5L, littleEndian(payload).getLong());
+        } finally {
+            server.close();
+        }
+    }
+
+    private static String pattern(ByteBuffer payload) {
+        int length = payload.getShort() & 0xffff;
+        byte[] bytes = new byte[length];
+        payload.get(bytes);
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private static ByteBuffer littleEndian(byte[] payload) {
+        return ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    // ── the one-shot read: a sleeping root's wake scan ──────────────────────────────────────────────────────────
+
+    /**
+     * The correctness case the greeting cannot answer: a root that was asleep says {@code waking} and publishes
+     * its wake scan after the greeting. A one-shot consumer must read that batch, or an edit made while the
+     * daemon slept would be answered "nothing changed".
+     */
+    @Test
+    void aWakingRootsScanIsReadBeforeTheReplaySettles() throws Exception {
+        FakeServer server = FakeServer.start();
+        server.reply(
+                hello(5),
+                state(FsMetaClient.STATE_WAKING, 1, 0, 5),
+                startBatch(6, 5),
+                changeEntry("src/A.java", FsMetaClient.Kind.CHANGED),
+                endBatch(6, 0, 1, 0),
+                state(FsMetaClient.STATE_WATCHING, 4, 0, 6));
+        try (FsMetaClient client = FsMetaClient.connect(server.socket(), 5)) {
+            FsMetaClient.Replay replay = client.replayUntilSettled(5);
+
+            assertEquals(6, replay.head(), "the wake scan's generation is the head the read reaches");
+            assertEquals(List.of(new FsMetaClient.Change("src/A.java", FsMetaClient.Kind.CHANGED)),
+                    replay.changes(), "and its change is read, not missed at the greeted generation");
+            assertEquals(1, replay.batches().size());
+            assertEquals(FsMetaClient.STATE_WATCHING, client.lastState().code());
+        } finally {
+            server.close();
+        }
+    }
+
+    @Test
+    void anAwakeRootWithNothingNewReturnsAtItsSettledState() throws Exception {
+        FakeServer server = FakeServer.start();
+        server.reply(hello(5), state(FsMetaClient.STATE_WATCHING, 0, 0, 5));
+        try (FsMetaClient client = FsMetaClient.connect(server.socket(), 5)) {
+            FsMetaClient.Replay replay = client.replayUntilSettled(5);
+
+            assertEquals(5, replay.head());
+            assertTrue(replay.changes().isEmpty());
+            assertTrue(replay.batches().isEmpty());
+            assertTrue(client.lastState().settled());
+            assertEquals(FsMetaClient.STATE_WATCHING, client.lastState().code());
+            assertEquals(0, client.lastState().reason());
+        } finally {
+            server.close();
+        }
+    }
+
+    @Test
+    void theStateFieldsAreDecoded() throws Exception {
+        FakeServer server = FakeServer.start();
+        server.reply(hello(2), state(FsMetaClient.STATE_ASLEEP, 2, 300_000, 2));
+        try (FsMetaClient client = FsMetaClient.connect(server.socket(), 2)) {
+            client.replayUntilSettled(2);
+
+            FsMetaClient.State state = client.lastState();
+            assertEquals(FsMetaClient.STATE_ASLEEP, state.code());
+            assertEquals(2, state.reason(), "idle timeout");
+            assertEquals(300_000, state.idleTimeoutMs());
+            assertEquals(2, state.headBatch());
+            assertTrue(state.settled(), "nothing is scanning");
+        } finally {
+            server.close();
+        }
+    }
+
+    private static byte[] state(int code, int reason, long idleTimeoutMs, long headBatch) {
+        ByteBuffer payload = frame(14);
+        payload.put((byte) code);
+        payload.put((byte) reason);
+        payload.putInt((int) idleTimeoutMs);
+        payload.putLong(headBatch);
+        return frame(0x09, payload.array());
+    }
+
     // ── a fake daemon on a real Unix socket ──────────────────────────────────────────────────────────────────────
 
     /**
-     * Accepts one connection, sends the greeting and then the prepared frames, and writes nothing else. The client
-     * sends its own {@code HELLO} and {@code SUBSCRIBE} immediately; the server does not need to read them for these
-     * assertions, and the writes fit in the socket buffer.
+     * Accepts one connection, sends the greeting and then the prepared frames, and records the client's
+     * {@code SUBSCRIBE} payload so a test can assert the filter the client actually sent.
+     *
+     * <p>The client greets as soon as it is connected, so the server's own greeting and frames can be written
+     * first (they fit in the socket buffer); after that it reads the client's two frames — {@code HELLO}, then
+     * {@code SUBSCRIBE} — and finally holds the connection open until the client closes it.</p>
      */
     private static final class FakeServer implements AutoCloseable {
 
@@ -118,6 +249,7 @@ class FsMetaClientProtocolTest {
         private final ServerSocketChannel server;
         private final Thread thread;
         private final AtomicReference<Throwable> failure = new AtomicReference<>();
+        private final AtomicReference<byte[]> subscribePayload = new AtomicReference<>();
 
         private FakeServer(Path directory, ServerSocketChannel server) {
             this.directory = directory;
@@ -153,6 +285,23 @@ class FsMetaClientProtocolTest {
             return directory.resolve("s.sock");
         }
 
+        /** The client's {@code SUBSCRIBE} payload, or a failure when it never sent one. */
+        byte[] subscribePayload() throws InterruptedException {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadline) {
+                byte[] payload = subscribePayload.get();
+                if (payload != null) {
+                    return payload;
+                }
+                if (failure.get() != null) {
+                    throw new AssertionError("the fake server failed before reading SUBSCRIBE",
+                            failure.get());
+                }
+                Thread.sleep(10);
+            }
+            throw new AssertionError("the client sent no SUBSCRIBE within 5 s");
+        }
+
         private void serve() {
             try (SocketChannel channel = server.accept()) {
                 for (byte[] frame : frames) {
@@ -161,14 +310,40 @@ class FsMetaClientProtocolTest {
                         channel.write(buffer);
                     }
                 }
-                // Hold the connection open until the client closes it, so a refusal is read as a frame and not as an
-                // EOF the test would misattribute. A Unix-domain SocketChannel has no socket() to half-close.
+                readClientFrames(channel);
+                // Hold the connection open until the client closes it, so a refusal is read as a frame and not
+                // as an EOF the test would misattribute. A Unix-domain SocketChannel has no socket() to
+                // half-close.
                 ByteBuffer sink = ByteBuffer.allocate(256);
                 while (channel.read(sink) >= 0) {
                     sink.clear();
                 }
             } catch (IOException | RuntimeException ignored) {
                 failure.compareAndSet(null, ignored);
+            }
+        }
+
+        /** The client's {@code HELLO} then {@code SUBSCRIBE}; the payload of the latter is kept for assertions. */
+        private void readClientFrames(SocketChannel channel) throws IOException {
+            for (int index = 0; index < 2; index++) {
+                ByteBuffer header = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
+                readFully(channel, header);
+                int kind = header.getShort(0) & 0xffff;
+                int length = header.getInt(4);
+                byte[] payload = new byte[length];
+                readFully(channel, ByteBuffer.wrap(payload));
+                if (kind == 0x06) {
+                    subscribePayload.set(payload);
+                    return;
+                }
+            }
+        }
+
+        private static void readFully(SocketChannel channel, ByteBuffer target) throws IOException {
+            while (target.hasRemaining()) {
+                if (channel.read(target) < 0) {
+                    throw new IOException("the client closed before its SUBSCRIBE");
+                }
             }
         }
 

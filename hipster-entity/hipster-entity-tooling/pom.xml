@@ -45,12 +45,22 @@
             <artifactId>hipster-entity-core</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- The one-shot build state behind the incremental flag (plans/hipster-entity-mvp.md E2): the
-             fs-meta trio/diff contract, consumed from the project that owns it rather than from a copy
-             in this checkout (the standalone-package rule; `hr.hrg:fs-meta` versions on its own, which
-             is why the root POM deliberately does not manage it). Compile scope, not `provided`:
-             `java -jar hipster-entity-tooling.jar` is the documented one-command path, so the shaded
-             jar must carry fs-meta and its own transitive dependencies. -->
+        <!-- The fs-meta daemon client (discovery, the binary protocol, the server-side SUBSCRIBE filter).
+             The incremental flag is a daemon-generation marker: the daemon is the watcher and the only trio
+             writer, and this module only discovers it, replays its batches and records the generation the
+             last pass left behind. Compile scope because the command line is `java -jar
+             hipster-entity-tooling.jar`, so the shaded jar must carry the client. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-watch</artifactId>
+        </dependency>
+        <!-- The one-shot build state behind the incremental flag (plans/hipster-entity-mvp.md E2) no longer
+             publishes a trio; it reads no fs-meta state at all. The artifact stays because the state
+             directory's trio-era files are deleted by their format's own names
+             (`FsMetaFormat.META_FILE`/`TXT_FILE`/`JSON_FILE`), never by a second spelling, and because the
+             test-index run state still publishes through `hr.hrg.fsmeta` (test scope uses it heavily).
+             Compile scope, not `provided`: `java -jar hipster-entity-tooling.jar` is the documented
+             one-command path. -->
         <dependency>
             <groupId>hr.hrg</groupId>
             <artifactId>fs-meta</artifactId>

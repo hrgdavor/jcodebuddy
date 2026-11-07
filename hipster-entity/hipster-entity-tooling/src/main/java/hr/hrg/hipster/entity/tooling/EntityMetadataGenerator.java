@@ -998,7 +998,7 @@ public class EntityMetadataGenerator {
                     writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
                             mappers, startedAt, args,
                             new PassReport("noop", decision.changed(), List.of(), 0, 0, decision.reason(),
-                                    ParseReuse.none()));
+                                    ParseReuse.none(), null));
                     return;
                 }
                 changed = decision.changed();
@@ -1015,19 +1015,21 @@ public class EntityMetadataGenerator {
             }
             GenerationReport report = generateIncremental(sourceRoot, outputDir, javaOutputRoot,
                     "incremental".equals(passMode) ? new HashSet<>(changed) : null);
-            // State after the pass, never before it: the pass's own writes belong in the snapshot, and a
-            // failed pass must leave the previous state alone so the next run retries the same work.
-            publishBuildState(buildState, buildConfig);
+            // State after the pass, never before it: the post-pass daemon generation includes the pass's own
+            // writes, and a failed pass must leave the previous state alone so the next run retries the same
+            // work. A not-recorded result is only a warning for an invocation that wanted the baseline.
+            EntityBuildState.Publish published = publishBuildState(buildState, buildConfig,
+                    new EntityBuildState.Selection(passMode, changed, report.affected()), incrementalRequested);
             writeRunRecord(runRecord, "ok", null, sourceRoot, outputDir, javaOutputRoot, packages,
                     mappers, startedAt, args,
                     new PassReport(passMode, changed, report.affected(), report.emitted(), report.reused(),
-                            fallbackReason, report.parseReuse()));
+                            fallbackReason, report.parseReuse(), published));
         } catch (IOException | RuntimeException failure) {
             // A failed pass is the run a reader most wants a record of, so the record is written
             // before the failure is rethrown.
             writeRunRecord(runRecord, "failed", failure, sourceRoot, outputDir, javaOutputRoot, packages,
                     mappers, startedAt, args,
-                    new PassReport(passMode, changed, null, null, null, fallbackReason, null));
+                    new PassReport(passMode, changed, null, null, null, fallbackReason, null, null));
             throw failure;
         } finally {
             // Reset the policy so a second pass in the same JVM (a test, a watcher run) does not
@@ -1053,25 +1055,35 @@ public class EntityMetadataGenerator {
      */
     private record PassReport(String mode, List<String> changed, List<String> affected,
                               Integer emitted, Integer reused, String fallbackReason,
-                              ParseReuse parseReuse) {
+                              ParseReuse parseReuse, EntityBuildState.Publish published) {
     }
 
     /**
-     * Publishes the incremental build state, treating a write failure as a warning.
+     * Records the incremental baseline, treating "no daemon" or a failed write as a warning.
      *
      * <p>The generation itself already succeeded; failing the invocation because a cache could not be
-     * refreshed would turn a disposable artifact into a correctness input in the other direction. A
-     * missing state costs the next {@code --incremental} run one full pass, which is the safe direction,
-     * and the run record still says the pass succeeded.</p>
+     * refreshed would turn a disposable artifact into a correctness input in the other direction. Without a
+     * baseline the next {@code --incremental} run does a full pass, which is the safe direction, and the run
+     * record still says the pass succeeded. The warning is printed for an {@code --incremental} invocation —
+     * the one that asked for a baseline — so a plain full pass in a project with no daemon stays quiet.</p>
      */
-    private static void publishBuildState(EntityBuildState state, EntityBuildState.Config config) {
+    private static EntityBuildState.Publish publishBuildState(EntityBuildState state,
+                                                              EntityBuildState.Config config,
+                                                              EntityBuildState.Selection selection,
+                                                              boolean warnWhenNotRecorded) {
+        EntityBuildState.Publish published;
         try {
-            state.publish(config, EntityBuildState.validationOutcome(validationPolicy));
-        } catch (IOException | RuntimeException publishFailure) {
-            System.err.println("warning: the incremental build state at " + state.directory()
-                    + " was not published (" + publishFailure.getMessage()
+            published = state.publish(config, EntityBuildState.validationOutcome(validationPolicy), selection);
+        } catch (RuntimeException publishFailure) {
+            published = EntityBuildState.Publish.not("the incremental build state could not be recorded ("
+                    + publishFailure.getMessage() + ")");
+        }
+        if (!published.recorded() && warnWhenNotRecorded) {
+            System.err.println("warning: the incremental baseline at " + state.stateFile()
+                    + " was not recorded (" + published.problem()
                     + "); the next --incremental run will do a full pass.");
         }
+        return published;
     }
 
     /**
@@ -1140,6 +1152,20 @@ public class EntityMetadataGenerator {
                 reuse.put("fallbacks", parseReuse.fallbacks());
                 record.put("parseReuse", reuse);
             }
+            // The daemon generation the pass left behind, for the same reason the flags are here: "what
+            // lets the next --incremental run no-op, and from where?" is the question a stale baseline
+            // raises, and a no-op or a failed ack must be distinguishable in the record rather than by rerun.
+            EntityBuildState.Publish published = report.published();
+            if (published != null) {
+                Map<String, Object> state = new LinkedHashMap<>();
+                state.put("recorded", published.recorded());
+                if (published.recorded()) {
+                    state.put("generation", published.generation());
+                } else {
+                    state.put("problem", published.problem());
+                }
+                record.put("buildState", state);
+            }
         }
         if (failure == null) {
             if (report != null && "noop".equals(report.mode())) {
@@ -1192,9 +1218,12 @@ public class EntityMetadataGenerator {
         System.err.println("                        trying an emitter change in the output before changing the generator.");
         System.err.println("                        It discards edits to generated members, silently, so it is never");
         System.err.println("                        implied by another flag.");
-        System.err.println("  --incremental         answer from the fs-meta build state before running: a no-op");
-        System.err.println("                        when no .java file changed, the normal pass otherwise. The state");
-        System.err.println("                        lives in <module>/.jcodebuddy/cache/entity-build.");
+        System.err.println("  --incremental         answer from the fs-meta daemon's generation before running: a");
+        System.err.println("                        no-op when the daemon is still at the generation the last pass");
+        System.err.println("                        recorded, the normal pass otherwise. The daemon must serve the");
+        System.err.println("                        project root (`fsmeta daemon start` + `fsmeta root add <root>`);");
+        System.err.println("                        without it every --incremental run is a full pass, and the");
+        System.err.println("                        baseline lives in <module>/.jcodebuddy/cache/entity-build/run.json.");
         System.err.println("  --full                force the normal pass and refresh the build state; this is also");
         System.err.println("                        the default when neither --incremental nor --full is given.");
         System.err.println("  --version             print the generator identity and its flag surface, then stop.");

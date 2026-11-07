@@ -1,117 +1,130 @@
 package hr.hrg.hipster.entity.tooling;
 
-import hr.hrg.fsmeta.FsMetaCodec;
-import hr.hrg.fsmeta.FsMetaConfig;
-import hr.hrg.fsmeta.FsMetaDiff;
-import hr.hrg.fsmeta.FsMetaEntry;
-import hr.hrg.fsmeta.FsMetaFile;
 import hr.hrg.fsmeta.FsMetaFormat;
-import hr.hrg.fsmeta.FsMetaHashMode;
-import hr.hrg.fsmeta.FsMetaLoad;
-import hr.hrg.fsmeta.FsMetaPair;
-import hr.hrg.fsmeta.FsMetaScanOptions;
-import hr.hrg.fsmeta.FsMetaScanner;
-import hr.hrg.fsmeta.FsMetaWriter;
 import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
+import hr.hrg.jcodebuddy.watch.FsMetaClient;
+import hr.hrg.jcodebuddy.watch.FsMetaDaemonDiscovery;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * The one-shot build state behind {@code --incremental} (plan {@code hipster-entity-mvp.md} E2).
+ * The incremental state behind {@code --incremental} (plan {@code hipster-entity-mvp.md} E2), as a
+ * <strong>daemon-generation marker</strong>.
  *
- * <p>This is the same {@code fs-meta} load/scan/diff/publish loop
- * {@code WatchedRegeneration} uses, applied once per generator invocation rather than to a live batch.
- * It answers one question before a pass does any work: <strong>does this tree need a pass at all?</strong>
- * The answer is one of three:</p>
+ * <p>The state used to be a Java-written {@code fs-meta} trio. That was always a transitional shape:
+ * {@code fs-meta} names the Zig daemon as its only writer, and W7b moved every other consumer onto the
+ * daemon. This class is the entity generator's half of that cutover. It keeps one small JSON document —
+ * {@code <module>/.jcodebuddy/cache/entity-build/run.json} — and nothing else:</p>
  *
+ * <pre>{@code
+ * {
+ *   "format": "jcodebuddy-entity-build/2",
+ *   "generator": "...",
+ *   "sourceRoot": "/project/module/src/main/java",
+ *   "projectRoot": "/project",
+ *   "daemon": { "id": "a1b2c3d4", "root": "/project", "generation": 12 },
+ *   "validation": "clean",
+ *   "selection": { "mode": "full", "changed": [], "affected": [] },
+ *   "fingerprint": { "generator": "...", "jdk": "25", ... }
+ * }
+ * }</pre>
+ *
+ * <p>There is no {@code files.meta}/{@code files.txt}/{@code files.json} and no {@code FsMetaWriter} call.
+ * The tree's file fingerprints live in the daemon's trio for the daemon root; this document only records
+ * <em>which daemon generation the last successful pass left behind</em>. The daemon is the tracker, and a
+ * second tracker is exactly what this repository does not allow.</p>
+ *
+ * <h3>fs-meta is a hard requirement, and the root is the project root</h3>
+ * <p>{@link #decide} discovers the deepest served ancestor root of the module source root
+ * ({@link FsMetaDaemonDiscovery#discoverAncestor(Path)}) and records that root. The daemon serves the whole
+ * project; a module's cache is <strong>not</strong> a second root — it filters the daemon stream to its own
+ * source-root subfolder with the protocol's own {@code SUBSCRIBE} include patterns
+ * ({@link FsMetaDaemonState#includePatterns(Path, Path)}). Two modules of one project share one daemon, one
+ * event stream and one generation sequence, and each answers only for its own subfolder.</p>
+ *
+ * <h3>The decision, and why a missing daemon can never be a wrong answer</h3>
  * <ul>
- *   <li>{@link Mode#NOOP} — no {@code .java} file's content changed, the pass fingerprint still matches,
- *       and the state was published by a pass whose validation licenses skipping validation again. The
- *       caller returns without parsing, validating or writing anything.</li>
- *   <li>{@link Mode#INCREMENTAL} — existing {@code .java} files changed in place. <strong>E2 has no
- *       selective emission</strong>, so the caller runs the existing full generation pass and publishes
- *       a fresh state; E4 is the step that narrows this to the affected views.</li>
- *   <li>{@link Mode#FULL} — the state is missing/corrupt/foreign, the fingerprint changed, a file was
- *       added or removed, or the recorded validation does not allow a no-op. The existing pass runs
- *       unchanged.</li>
+ *   <li><strong>No daemon</strong> — there is no baseline and no event stream, so the answer is
+ *       {@link Mode#FULL} with an actionable reason. A full pass is the safe fallback, and
+ *       {@code --incremental} never claims a no-op it cannot prove. After the pass nothing is recorded: a
+ *       {@code run.json} written without a daemon would be a baseline that hides the next run.</li>
+ *   <li><strong>No {@code run.json}, an unreadable/foreign one, or a fingerprint mismatch</strong> — the
+ *       reference pass, with the reason naming the state or the key that changed.</li>
+ *   <li><strong>The daemon is at the recorded generation</strong> — {@link Mode#NOOP}. The tree the pass
+ *       read is the tree the daemon's head describes, and nothing has happened since.</li>
+ *   <li><strong>The daemon is later</strong> — connect from the recorded generation with the subfolder
+ *       filter and replay up to the server's own generation. A changed {@code .java} under the source root
+ *       is {@link Mode#INCREMENTAL}; an added or removed one is {@link Mode#FULL} (the old E6 row: a new or
+ *       removed type can change more than its own file); a batch that touches nothing the pass reads is
+ *       {@link Mode#NOOP}.</li>
+ *   <li><strong>{@code batch-too-old}/{@code batch-gap}, a generation that moved backwards, or any
+ *       transport failure</strong> — {@link Mode#FULL}. The daemon's own two refusals mean the replay is
+ *       incomplete, and an incomplete change set is never silently skipped.</li>
  * </ul>
  *
- * <h3>The state is a cache, never a correctness input</h3>
- * <p>Every failure path in {@link #decide} returns {@link Mode#FULL} with a reason; none throws and none
- * guesses. A missing, unreadable, invalid or unknown-format trio costs one full pass, exactly as a
- * fingerprint mismatch does (plan § 3.1). The state never changes an answer, only whether the reference
- * answer has to be recomputed.</p>
+ * <p>A <em>no-op writes nothing</em>: the recorded generation stays where it was, so the same small replay
+ * happens next time and reaches the same answer. That is the conservative direction — the state can cost a
+ * pass, never hide one.</p>
  *
- * <h3>Where it lives, and why not beside {@code src/main/java}</h3>
- * <p>The directory is {@code <marker>/.jcodebuddy/cache/entity-build/}, where {@code <marker>} is the
- * nearest {@link JcodebuddyDirectory#nearestMarker(Path) marker} at or above the report directory and
- * then the source root. That is DEC-026's rule rather than "resolve against the source root": a module's
- * source root is normally {@code <module>/src/main/java}, and putting the state beside it would create a
- * second, module-looking {@code .jcodebuddy/} one level too deep. A project with no marker at all gets
- * {@code <sourceRoot>/.jcodebuddy/cache/entity-build/} as the documented fallback, and the scan ignores
- * every {@code .jcodebuddy} directory so the state never indexes itself.</p>
+ * <h3>The post-pass generation</h3>
+ * <p>{@link #publish} records the generation that includes the pass's own writes. It reads the daemon's head,
+ * waits for it to advance (the pass changed content, so the daemon must publish a batch for it) and then for
+ * the burst to settle, and records that generation. If nothing advances within the bound, the head it read is
+ * already the truthful baseline of an unchanged tree (a rewrite of identical bytes is {@code TOUCHED} and
+ * produces no batch), so it is recorded. A generation read before an unpublished write is the safe direction:
+ * the next run sees the write and does one conservative pass, rather than the write disappearing. When the
+ * daemon cannot be read at all, nothing is written and the previous {@code run.json} (or no state) is left
+ * exactly as it was.</p>
  *
- * <h3>The fingerprint sidecar</h3>
- * <p>{@code fingerprint.txt} records the facts that change output without changing a source byte — the
- * generator identity/version and class source, the JDK major version, the normalized source root, the
- * metadata and {@code --java-out} directories, the package filter, every output-changing flag, the
- * validation policy, and the validation result of the pass that published the state. It is a plain
- * {@code key=value} text file: the trio's {@code writer}/{@code root} fields identify the format, while
- * this sidecar is what makes "the generator changed" or "a flag changed" a full pass instead of a stale
- * one. A missing or unparsable sidecar is a full pass.</p>
- *
- * <h3>One trio, published only after a successful pass</h3>
- * <p>{@link #publish} rescans the source root after the pass, so the generator's own output is already
- * part of the state, and writes the trio with the same {@code TEXT} hash mode, writer id and root this
- * class reads. It is never called from {@link #decide} and never on a failed pass: a half-published state
- * would make the next invocation's diff a guess.</p>
+ * <h3>Where it lives</h3>
+ * <p>The directory is {@code <module>/.jcodebuddy/cache/entity-build/}, where {@code <module>} is the nearest
+ * {@link JcodebuddyDirectory#nearestMarker(Path) marker} at or above the report directory and then the source
+ * root, with {@code <sourceRoot>/.jcodebuddy/} as the documented fallback for a tree with no marker (DEC-026).
+ * A project with one daemon and several modules therefore gets one {@code run.json} per module, not a second
+ * daemon root.</p>
  */
 final class EntityBuildState {
 
     /** The derived subtree below the nearest {@code .jcodebuddy/} marker (DEC-026's {@code cache/} rule). */
     static final String CACHE_DIRECTORY = "cache";
 
-    /** The state directory's own name, beside {@code watch-fs-meta}. */
+    /** The state directory's own name. */
     static final String STATE_DIRECTORY = "entity-build";
 
-    /** The fingerprint sidecar's file name. */
-    static final String FINGERPRINT_FILE = "fingerprint.txt";
+    /** The one state file: a daemon-generation marker, not a trio. */
+    static final String RUN_FILE = "run.json";
 
-    /** The sidecar's format line; an older or unknown value is a full pass. */
-    static final String FINGERPRINT_FORMAT = "jcodebuddy-entity-build-fingerprint/1";
+    /** The document's format line; an older or foreign value is a full pass. */
+    static final String FORMAT = "jcodebuddy-entity-build/2";
 
-    /** The {@code writer} field of the trio, which is how a foreign trio is recognised and rejected. */
-    static final String FS_META_WRITER = "jcodebuddy-entity-build/1";
+    /** The fingerprint sidecar the trio era wrote; removed on the first successful pass. */
+    static final String LEGACY_FINGERPRINT_FILE = "fingerprint.txt";
 
-    /**
-     * The scan options: text-aware hashing so a CRLF and an LF checkout agree, and every
-     * {@code .jcodebuddy} directory skipped so the state cannot index itself.
-     *
-     * <p><strong>{@code .gitignore} is deliberately not honoured here.</strong> The generator reads
-     * every {@code .java} under the source root, including one a project happens to ignore; a state that
-     * skipped such a file would answer "nothing changed" for an edit the pass would have read. The
-     * state's subject is what the pass reads, not what git tracks.</p>
-     */
-    private static final FsMetaScanOptions SCAN_OPTIONS = FsMetaScanOptions.defaults()
-            .ignoring(JcodebuddyDirectory.DIR)
-            .withoutGitignore();
+    /** The trio the state used to publish; removed on the first successful pass, never read. */
+    private static final List<String> LEGACY_TRIO_FILES = List.of(
+            FsMetaFormat.META_FILE, FsMetaFormat.TXT_FILE, FsMetaFormat.JSON_FILE);
+
+    private static final ObjectMapper MAPPER = EntityMetadataGenerator.OBJECT_MAPPER;
 
     /** What the caller should do with this tree. */
     enum Mode {
-        /** No pass: nothing changed and the state licenses skipping validation. */
+        /** No pass: the daemon is at the recorded generation and the recorded validation licenses a no-op. */
         NOOP,
-        /** Existing files changed in place; E2 runs the full pass (selective emission is E4). */
+        /** Existing {@code .java} files changed in place; the pass still emits everything (E2 has no selective emission). */
         INCREMENTAL,
-        /** No usable state or a change the incremental pass cannot attribute; run the reference pass. */
+        /** No usable baseline or an unattributable change; run the reference pass. */
         FULL
     }
 
@@ -120,8 +133,7 @@ final class EntityBuildState {
      *
      * @param mode    what to do
      * @param reason  one line a person can read; never null
-     * @param changed the names whose <em>content</em> changed, relative to the source root and
-     *                {@code /}-separated; {@code TOUCHED} entries are deliberately absent
+     * @param changed the names whose <em>content</em> changed, source-root-relative and {@code /}-separated
      */
     record Decision(Mode mode, String reason, List<String> changed) {
 
@@ -132,7 +144,7 @@ final class EntityBuildState {
             changed = List.copyOf(changed);
         }
 
-        /** A full-pass decision; {@code changed} is empty when the reason is the state or the fingerprint. */
+        /** A full-pass decision; {@code changed} is empty when the reason is the state or the daemon. */
         static Decision full(String reason, List<String> changed) {
             return new Decision(Mode.FULL, reason, changed);
         }
@@ -153,7 +165,7 @@ final class EntityBuildState {
             this.wire = wire;
         }
 
-        /** The value the fingerprint sidecar carries. */
+        /** The value {@code run.json} carries. */
         String wire() {
             return wire;
         }
@@ -162,9 +174,9 @@ final class EntityBuildState {
     /**
      * Everything about an invocation that can change emitted source without changing a byte of it.
      *
-     * <p>Paths are normalized only when the fingerprint is rendered, so a caller may pass the CLI's
-     * relative arguments unchanged. Lists keep the caller's order: the CLI's order is the configuration,
-     * and treating a reordered list as a different configuration can only cost a full pass.</p>
+     * <p>Paths are normalized only when the fingerprint is rendered, so a caller may pass the CLI's relative
+     * arguments unchanged. Lists keep the caller's order: the CLI's order is the configuration, and treating a
+     * reordered list as a different configuration can only cost a full pass.</p>
      */
     record Config(Path metadataOutput, Path javaOutput, List<String> packages,
                   boolean adapters, boolean dtoProjections, List<String> mappers, List<String> merges,
@@ -179,29 +191,137 @@ final class EntityBuildState {
         }
     }
 
+    /** What the pass selected, recorded for a reader of {@code run.json}; never an input to a decision. */
+    record Selection(String mode, List<String> changed, List<String> affected) {
+
+        Selection {
+            mode = mode == null ? "full" : mode;
+            changed = List.copyOf(changed == null ? List.<String>of() : changed);
+            affected = List.copyOf(affected == null ? List.<String>of() : affected);
+        }
+
+        /** The selection of a pass that ran the reference pass. */
+        static Selection full() {
+            return new Selection("full", List.of(), List.of());
+        }
+    }
+
+    /**
+     * The outcome of {@link #publish}: either a recorded generation, or why no baseline was written.
+     *
+     * <p>A not-recorded result is a warning, never a failure: the generation already succeeded, and a cache
+     * that could not be refreshed must not turn a successful pass into a failed build. The caller decides
+     * whether its invocation wanted the baseline ({@code --incremental} does).</p>
+     */
+    record Publish(boolean recorded, long generation, String problem) {
+
+        Publish {
+            problem = problem == null ? "" : problem;
+        }
+
+        static Publish recorded(long generation) {
+            return new Publish(true, generation, "");
+        }
+
+        static Publish not(String problem) {
+            return new Publish(false, 0, problem);
+        }
+    }
+
+    /**
+     * The daemon operations the decision and the post-pass record need.
+     *
+     * <p>A seam, not a second implementation of the protocol: {@link FsMetaDaemonState} is the real one
+     * (discovery, the server-side subfolder filter and the replay through {@link FsMetaClient}), and a test can
+     * substitute an in-process timeline without a native binary. It deliberately exposes no watcher, no
+     * scheduler and no writer — the daemon owns all three.</p>
+     */
+    interface Daemon {
+
+        /** The daemon serving the deepest ancestor root of the source root, or a problem. */
+        FsMetaDaemonDiscovery.Attach discover(Path sourceRoot);
+
+        /** The newest generation the daemon had published when this subscription was made. */
+        long head(FsMetaDaemonDiscovery.Location location) throws IOException;
+
+        /**
+         * Replays every published generation after {@code fromBatch}, up to the generation the daemon reports
+         * when the subscription is made, filtered to the source root.
+         *
+         * <p>The returned names are <strong>source-root-relative</strong>, so they are the same paths the
+         * generator records. A refusal ({@code ProtocolException}) is thrown, never turned into an empty
+         * replay: an empty replay would read as "nothing changed", the one wrong answer.</p>
+         */
+        Replay replay(FsMetaDaemonDiscovery.Location location, long fromBatch) throws IOException;
+
+        /**
+         * Waits until the daemon has published the pass's writes and returns the generation to record, or the
+         * head it read when the tree did not change. Throws when the daemon cannot be read at all.
+         */
+        long acknowledge(FsMetaDaemonDiscovery.Location location, long base) throws IOException;
+
+        /** One replay: the newest published generation and the relevant changes up to it. */
+        record Replay(long head, List<FsMetaClient.Change> changes) {
+
+            public Replay {
+                changes = List.copyOf(changes);
+            }
+        }
+    }
+
+    /** The daemon a CLI invocation talks to: discovery from the process environment, replay over its socket. */
+    static Daemon processDaemon(Path sourceRoot) {
+        return new FsMetaDaemonState(sourceRoot);
+    }
+
+    /**
+     * How {@link #forPass(Path, Path)} obtains its daemon.
+     *
+     * <p>A package-private seam, not a configuration knob: the CLI's decision/publish wiring is the part a test
+     * most wants to drive, and a native daemon is not something a unit suite can require. A test sets a fake here
+     * and resets it to {@code null} afterwards; production always uses {@link #processDaemon(Path)}.</p>
+     */
+    private static java.util.function.Function<Path, Daemon> daemonFactory = EntityBuildState::processDaemon;
+
+    /** Replaces the CLI's daemon source for a test; {@code null} restores the process daemon. */
+    static void setDaemonFactory(java.util.function.Function<Path, Daemon> factory) {
+        daemonFactory = factory == null ? EntityBuildState::processDaemon : factory;
+    }
+
     private final Path sourceRoot;
     private final Path directory;
+    private final Daemon daemon;
 
     /**
      * The state for one invocation.
      *
      * @param sourceRoot the tree the pass reads and writes; normalized here
      * @param directory  the state directory, normally from {@link #stateDirectory(Path, Path)}
+     * @param daemon     the daemon seam; {@code null} is refused, because there is no daemonless state any more
      */
-    EntityBuildState(Path sourceRoot, Path directory) {
+    EntityBuildState(Path sourceRoot, Path directory, Daemon daemon) {
         if (sourceRoot == null) {
             throw new IllegalArgumentException("a source root is required");
         }
         if (directory == null) {
             throw new IllegalArgumentException("a state directory is required");
         }
+        if (daemon == null) {
+            throw new IllegalArgumentException("a daemon seam is required: fs-meta is the tracker, not this class");
+        }
         this.sourceRoot = sourceRoot.toAbsolutePath().normalize();
         this.directory = directory.toAbsolutePath().normalize();
+        this.daemon = daemon;
     }
 
-    /** The state for a pass over {@code sourceRoot} whose reports go to {@code metadataOutput}. */
+    /** The state for a pass over {@code sourceRoot}, talking to the fs-meta daemon of this process's environment. */
     static EntityBuildState forPass(Path sourceRoot, Path metadataOutput) {
-        return new EntityBuildState(sourceRoot, stateDirectory(sourceRoot, metadataOutput));
+        return forPass(sourceRoot, metadataOutput, daemonFactory.apply(sourceRoot));
+    }
+
+    /** The injectable form: a test supplies its own {@link Daemon} (or a real one with a test environment). */
+    static EntityBuildState forPass(Path sourceRoot, Path metadataOutput, Daemon daemon) {
+        return new EntityBuildState(sourceRoot, stateDirectory(sourceRoot, metadataOutput), daemon);
     }
 
     /**
@@ -257,42 +377,30 @@ final class EntityBuildState {
         return directory;
     }
 
+    /** The state file this instance reads and writes. */
+    Path stateFile() {
+        return directory.resolve(RUN_FILE);
+    }
+
     /**
      * Decides what this invocation should do, before validation or parsing.
      *
-     * <p>No branch throws: a state or a scan that cannot be read is a full pass with a reason, which is
-     * the whole point of the state being a cache.</p>
+     * <p>No branch throws: a daemon, a state or a replay that cannot be read is a full pass with a reason,
+     * which is the whole point of the state being a cache. The one exception is a bug in the seam itself,
+     * which surfaces as the same full-pass decision rather than taking the pass down.</p>
      */
     Decision decide(Config config) {
-        FsMetaLoad loaded;
+        FsMetaDaemonDiscovery.Attach attach;
         try {
-            loaded = FsMetaPair.loadIfPresent(directory);
-        } catch (IOException | RuntimeException unreadable) {
-            return Decision.full("the build state at " + directory + " cannot be read ("
-                    + message(unreadable) + ")", List.of());
+            attach = daemon.discover(sourceRoot);
+        } catch (RuntimeException failure) {
+            return Decision.full("the fs-meta daemon lookup failed (" + message(failure) + ")", List.of());
         }
-        if (loaded == null) {
-            return Decision.full("no build state at " + directory, List.of());
-        }
-        if (!loaded.ok() || loaded.pair() == null) {
-            return Decision.full("the build state at " + directory + " is not usable: "
-                    + loaded.describe(), List.of());
-        }
-        FsMetaPair previous = loaded.pair();
-
-        // A trio from another writer, with another hash contract or about another root is not "old": it
-        // is a different state, and diffing it would compare hashes that do not mean the same thing.
-        if (!FS_META_WRITER.equals(loaded.config().writer())) {
-            return Decision.full("the build state at " + directory + " was written by '"
-                    + loaded.config().writer() + "', not " + FS_META_WRITER, List.of());
-        }
-        if (!FsMetaHashMode.TEXT.wire().equals(loaded.config().hashNormalize())) {
-            return Decision.full("the build state at " + directory + " was hashed with '"
-                    + loaded.config().hashNormalize() + "', not " + FsMetaHashMode.TEXT.wire(), List.of());
-        }
-        if (!sourceRoot.toString().equals(loaded.config().root())) {
-            return Decision.full("the build state describes the root '" + loaded.config().root()
-                    + "', not " + sourceRoot, List.of());
+        if (attach == null || !attach.attached()) {
+            return Decision.full("no fs-meta daemon serves " + sourceRoot + ": "
+                    + (attach == null ? "discovery produced no result" : attach.problem())
+                    + "; a full pass is the safe fallback, and --incremental cannot claim a no-op without a"
+                    + " daemon baseline", List.of());
         }
 
         // `--force` is an explicit request for the canonical text, so it may not be answered by "nothing
@@ -301,116 +409,137 @@ final class EntityBuildState {
             return Decision.full("--force requests a full pass", List.of());
         }
 
-        Map<String, String> stored = readFingerprint();
-        if (stored == null) {
-            return Decision.full("the build-state fingerprint at " + directory.resolve(FINGERPRINT_FILE)
-                    + " is missing, unreadable or not understood", List.of());
+        Loaded loaded = loadState();
+        if (loaded.state() == null) {
+            return Decision.full(loaded.problem(), List.of());
         }
-        Map<String, String> current = fingerprint(config);
-        String mismatch = firstMismatch(stored, current);
+        State previous = loaded.state();
+
+        if (!normalized(sourceRoot).equals(previous.sourceRoot())) {
+            return Decision.full("the build state describes the source root '" + previous.sourceRoot()
+                    + "', not " + normalized(sourceRoot), List.of());
+        }
+        String daemonRoot = normalized(attach.location().root());
+        if (!daemonRoot.equals(previous.daemonRoot())) {
+            return Decision.full("the build state records the daemon root '" + previous.daemonRoot()
+                    + "', not " + daemonRoot, List.of());
+        }
+        Map<String, String> current = fingerprint(config, daemonRoot);
+        String mismatch = firstMismatch(previous.fingerprint(), current);
         if (mismatch != null) {
             return Decision.full("the pass fingerprint changed: " + mismatch
-                    + " ('" + stored.getOrDefault(mismatch, "<absent>") + "' -> '"
+                    + " ('" + previous.fingerprint().getOrDefault(mismatch, "<absent>") + "' -> '"
                     + current.getOrDefault(mismatch, "<absent>") + "')", List.of());
         }
-
-        FsMetaPair currentPair;
-        try {
-            currentPair = pairOf(scanJavaFiles());
-        } catch (IOException | RuntimeException unreadable) {
-            return Decision.full("the source root " + sourceRoot + " could not be scanned ("
-                    + message(unreadable) + ")", List.of());
+        // A no-op may skip validation only when the pass that wrote the state validated the same policy
+        // cleanly; with the policy OFF nothing needed validating, which is the one documented exception.
+        if (config.validationPolicy() != EntityMetadataGenerator.Policy.OFF
+                && !ValidationOutcome.CLEAN.wire().equals(previous.validation())) {
+            return Decision.full("no source file changed, but the state records validation '"
+                    + previous.validation() + "' and policy " + config.validationPolicy()
+                    + " permits a no-op only after a clean pass", List.of());
         }
 
-        List<String> changed = new ArrayList<>();
-        int added = 0;
-        int removed = 0;
-        int modified = 0;
-        int unknown = 0;
-        for (FsMetaDiff.Change change : FsMetaDiff.between(previous, currentPair)) {
-            switch (change.kind()) {
-                case ADDED -> {
-                    added++;
-                    changed.add(change.name());
+        try {
+            Daemon.Replay replay = daemon.replay(attach.location(), previous.generation());
+            if (replay.head() < previous.generation()) {
+                return Decision.full("the fs-meta daemon is at generation " + replay.head() + ", before the recorded "
+                        + previous.generation() + " (its history was replaced); a full pass rebuilds the baseline",
+                        List.of());
+            }
+            List<String> changed = new ArrayList<>();
+            int added = 0;
+            int removed = 0;
+            int modified = 0;
+            for (FsMetaClient.Change change : replay.changes()) {
+                String name = change.name();
+                // The pass reads only Java; the daemon tracks every file, and a resource's bytes cannot
+                // change its output. The server already filtered to the source-root subfolder.
+                if (name == null || !name.endsWith(".java")) {
+                    continue;
                 }
-                case REMOVED -> {
-                    removed++;
-                    changed.add(change.name());
-                }
-                case MODIFIED -> {
-                    modified++;
-                    changed.add(change.name());
-                }
-                case UNKNOWN -> {
-                    unknown++;
-                    changed.add(change.name());
-                }
-                // A same-content save is exactly what the state is for: the bytes did not change, so the
-                // derived work is still valid. `WatchedRegeneration` filters TOUCHED the same way.
-                case TOUCHED -> {
+                switch (change.kind()) {
+                    case ADDED -> {
+                        added++;
+                        changed.add(name);
+                    }
+                    case DELETED -> {
+                        removed++;
+                        changed.add(name);
+                    }
+                    case CHANGED -> {
+                        modified++;
+                        changed.add(name);
+                    }
                 }
             }
+            if (added > 0 || removed > 0) {
+                return Decision.full("the source set changed: " + changes(added, removed)
+                        + " (a new or removed type can change more than its own file)", List.copyOf(changed));
+            }
+            if (modified > 0) {
+                return new Decision(Mode.INCREMENTAL,
+                        modified + " existing source file(s) changed since generation " + previous.generation()
+                                + " (E2 runs the existing full pass)",
+                        List.copyOf(changed));
+            }
+            if (replay.head() == previous.generation()) {
+                return new Decision(Mode.NOOP, "the fs-meta daemon is still at generation " + replay.head()
+                        + " and no .java file under " + sourceRoot + " changed", List.of());
+            }
+            return new Decision(Mode.NOOP, "no .java file under " + sourceRoot + " changed in daemon generations "
+                    + (previous.generation() + 1) + ".." + replay.head(), List.of());
+        } catch (FsMetaClient.ProtocolException refusal) {
+            return Decision.full(refusal.needsFullRead()
+                    ? "the fs-meta daemon cannot replay from generation " + previous.generation() + " ("
+                            + refusal.getMessage() + "); a full pass rebuilds the baseline"
+                    : "the fs-meta daemon refused the subscription from generation " + previous.generation() + " ("
+                            + refusal.getMessage() + ")", List.of());
+        } catch (IOException | RuntimeException failure) {
+            return Decision.full("the fs-meta daemon at " + attach.location().socket() + " could not be read ("
+                    + message(failure) + "); a full pass is the safe fallback", List.of());
         }
-
-        if (added > 0 || removed > 0 || unknown > 0) {
-            return Decision.full("the source set changed: " + changes(added, removed, unknown)
-                    + " (a new or removed type can change more than its own file)", List.copyOf(changed));
-        }
-        if (modified > 0) {
-            return new Decision(Mode.INCREMENTAL,
-                    modified + " existing source file(s) changed (E2 runs the existing full pass)",
-                    List.copyOf(changed));
-        }
-
-        // Nothing changed. The state may license a no-op only when the pass that wrote it validated the
-        // same policy cleanly; with the policy OFF nothing needed validating, which is the one exception
-        // the plan states rather than an oversight (an absent `--validate` must stay usable).
-        String validation = stored.get("validation");
-        boolean validationClean = ValidationOutcome.CLEAN.wire().equals(validation);
-        if (config.validationPolicy() != EntityMetadataGenerator.Policy.OFF && !validationClean) {
-            return Decision.full("no source file changed, but the state records validation '"
-                    + (validation == null ? "<absent>" : validation) + "' and policy "
-                    + config.validationPolicy() + " permits a no-op only after a clean pass", List.of());
-        }
-        return new Decision(Mode.NOOP,
-                "no source file changed and the pass fingerprint matches", List.of());
     }
 
     /**
-     * Publishes the state after a successful pass, then records the pass's validation outcome.
+     * Records the daemon generation the successful pass left behind, and the selection that produced it.
      *
-     * <p>The trio is written first and the fingerprint last: a fingerprint that claimed a state which was
-     * not written would be worse than no fingerprint, because the next run would compare the current scan
-     * against an older trio and call the difference a modify instead of the full pass it is. The trio
-     * itself is published by {@link FsMetaWriter}, so its write order and re-read validation are the
-     * format's, not this class's.</p>
-     *
-     * @param config     the invocation that just succeeded
-     * @param validation what its validation policy did
-     * @throws IOException when the trio or the sidecar cannot be written; the caller treats that as a
-     *                     warning, because the generation itself already succeeded
+     * <p>Called only after a successful pass, never from {@link #decide} and never on a failed one. It never
+     * throws for an unavailable daemon: the generation already succeeded, and a baseline that could not be
+     * refreshed is a warning the caller prints, not a failed build. A not-recorded result leaves whatever
+     * {@code run.json} was there untouched, because an older truthful baseline costs one pass while a guessed
+     * newer one would hide the next run.</p>
      */
-    void publish(Config config, ValidationOutcome validation) throws IOException {
-        List<FsMetaFile> files = scanJavaFiles();
-        // The sidecar must never be older than the trio it describes. If writing the new fingerprint
-        // below fails, a sidecar left over from the previous pass could match this invocation's
-        // configuration and record a clean validation for a tree it never validated. Removing it first
-        // makes that failure cost a full pass instead, which is the direction the state is allowed to
-        // be wrong in. (It is also why the trio is published before the sidecar, not after it.)
-        Files.deleteIfExists(directory.resolve(FINGERPRINT_FILE));
-        FsMetaLoad published = FsMetaWriter.publish(directory, files, FsMetaHashMode.TEXT,
-                FS_META_WRITER, sourceRoot.toString());
-        if (!published.ok()) {
-            throw new IOException("the entity build state could not be validated after publishing: "
-                    + published.describe());
+    Publish publish(Config config, ValidationOutcome validation, Selection selection) {
+        FsMetaDaemonDiscovery.Attach attach;
+        try {
+            attach = daemon.discover(sourceRoot);
+        } catch (RuntimeException failure) {
+            return Publish.not("the fs-meta daemon lookup failed (" + message(failure) + ")");
         }
-        StringBuilder text = new StringBuilder();
-        for (Map.Entry<String, String> entry : fingerprint(config).entrySet()) {
-            text.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');
+        if (attach == null || !attach.attached()) {
+            return Publish.not("no fs-meta daemon serves " + sourceRoot + ": "
+                    + (attach == null ? "discovery produced no result" : attach.problem()));
         }
-        text.append("validation=").append(validation.wire()).append('\n');
-        Files.createDirectories(directory);
-        Files.writeString(directory.resolve(FINGERPRINT_FILE), text.toString(), StandardCharsets.UTF_8);
+        FsMetaDaemonDiscovery.Location location = attach.location();
+        long generation;
+        try {
+            long base = daemon.head(location);
+            generation = daemon.acknowledge(location, base);
+        } catch (IOException | RuntimeException failure) {
+            return Publish.not("the fs-meta daemon at " + location.socket()
+                    + " could not confirm the pass (" + message(failure) + ")");
+        }
+        try {
+            writeState(config, validation, selection, location, generation);
+        } catch (IOException | RuntimeException failure) {
+            return Publish.not("the build state at " + stateFile() + " could not be written ("
+                    + message(failure) + ")");
+        }
+        // Cleanup only: a leftover trio-era file is untidy, not a state the next run would read, so failing
+        // to delete it must not turn a written, truthful baseline into a "not recorded" result.
+        removeLegacyState();
+        return Publish.recorded(generation);
     }
 
     /**
@@ -428,58 +557,168 @@ final class EntityBuildState {
                 : ValidationOutcome.REPORTED;
     }
 
-    /** Every {@code .java} file under the source root, as the scanner records it. */
-    private List<FsMetaFile> scanJavaFiles() throws IOException {
-        List<FsMetaFile> java = new ArrayList<>();
-        for (FsMetaFile file : FsMetaScanner.scan(sourceRoot, SCAN_OPTIONS)) {
-            // The generator reads only Java; a resource's bytes cannot change its output, so the state
-            // records only what the pass actually reads.
-            if (file.name().endsWith(".java")) {
-                java.add(file);
+    // ── state I/O ─────────────────────────────────────────────────────────────
+
+    /** A loaded state, or the reason there is none; exactly one of the two is null. */
+    private record Loaded(State state, String problem) {
+    }
+
+    /** The facts a decision reads out of one {@code run.json}. */
+    private record State(String sourceRoot, String daemonRoot, long generation,
+                         Map<String, String> fingerprint, String validation) {
+    }
+
+    /**
+     * Reads {@code run.json}, or explains why it cannot be used.
+     *
+     * <p>A legacy trio is recognised on purpose: it is not silently treated as "no state" when it can name
+     * <em>why</em> the next pass is full, because a reader who upgraded the tooling needs to know that the
+     * old state was replaced rather than that their project lost its cache.</p>
+     */
+    private Loaded loadState() {
+        Path file = stateFile();
+        if (!Files.isRegularFile(file)) {
+            if (legacyStatePresent()) {
+                return new Loaded(null, "the build state at " + directory + " is a legacy fs-meta trio ("
+                        + String.join(", ", LEGACY_TRIO_FILES) + "), which this version no longer reads;"
+                        + " a successful pass replaces it with " + RUN_FILE);
+            }
+            return new Loaded(null, "no build state at " + file);
+        }
+        JsonNode json;
+        try {
+            json = MAPPER.readTree(Files.readString(file, StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException unreadable) {
+            return new Loaded(null, "the build state at " + file + " cannot be read ("
+                    + message(unreadable) + ")");
+        }
+        if (json == null || !json.isObject()) {
+            return new Loaded(null, "the build state at " + file + " is not a JSON object");
+        }
+        String format = text(json, "format");
+        if (!FORMAT.equals(format)) {
+            return new Loaded(null, "the build state at " + file + " has format '" + format + "', not " + FORMAT
+                    + " (a full pass replaces it)");
+        }
+        String sourceRootText = text(json, "sourceRoot");
+        String projectRoot = text(json, "projectRoot");
+        JsonNode daemonNode = json.path("daemon");
+        String daemonRoot = text(daemonNode, "root");
+        long generation = daemonNode.path("generation").asLong(-1);
+        if (sourceRootText == null || projectRoot == null || daemonRoot == null || generation < 0) {
+            return new Loaded(null, "the build state at " + file
+                    + " is missing its source root, project root, daemon root or generation");
+        }
+        Map<String, String> fingerprint = fingerprintOf(json.path("fingerprint"));
+        if (fingerprint == null) {
+            return new Loaded(null, "the build state at " + file + " has no usable fingerprint");
+        }
+        String validation = text(json, "validation");
+        if (validation == null) {
+            return new Loaded(null, "the build state at " + file + " records no validation outcome");
+        }
+        return new Loaded(new State(sourceRootText, daemonRoot, generation, fingerprint, validation), "");
+    }
+
+    /**
+     * The fingerprint object as a string map, or {@code null} when it is absent or a value is not a string.
+     * {@code null} is deliberately not an empty map: "no usable fingerprint" and "a fingerprint that matches"
+     * must not be one step apart.
+     */
+    private static Map<String, String> fingerprintOf(JsonNode node) {
+        if (node == null || !node.isObject()) {
+            return null;
+        }
+        Map<String, String> values = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> entry : node.properties()) {
+            if (entry.getValue() == null || !entry.getValue().isString()) {
+                return null;
+            }
+            values.put(entry.getKey(), entry.getValue().asString());
+        }
+        return values.isEmpty() ? null : values;
+    }
+
+    /** Writes the state atomically: a temporary beside the file, then a rename over it. */
+    private void writeState(Config config, ValidationOutcome validation, Selection selection,
+                            FsMetaDaemonDiscovery.Location location, long generation) throws IOException {
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("format", FORMAT);
+        document.put("generator", EntityMetadataGenerator.generatorIdentity());
+        document.put("sourceRoot", normalized(sourceRoot));
+        document.put("projectRoot", normalized(location.root()));
+        Map<String, Object> daemonDocument = new LinkedHashMap<>();
+        daemonDocument.put("id", location.id());
+        daemonDocument.put("root", normalized(location.root()));
+        daemonDocument.put("generation", generation);
+        document.put("daemon", daemonDocument);
+        document.put("validation", validation.wire());
+        document.put("selection", selectionDocument(selection));
+        document.put("fingerprint", fingerprint(config, normalized(location.root())));
+
+        Files.createDirectories(directory);
+        Path temporary = directory.resolve(RUN_FILE + ".tmp");
+        try {
+            Files.writeString(temporary, MAPPER.writeValueAsString(document) + "\n", StandardCharsets.UTF_8);
+            Path file = stateFile();
+            try {
+                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException unsupported) {
+                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            // A failed write must not leave a half-written candidate beside a truthful state.
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static Map<String, Object> selectionDocument(Selection selection) {
+        Selection value = selection == null ? Selection.full() : selection;
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("mode", value.mode());
+        document.put("changed", value.changed());
+        document.put("affected", value.affected());
+        return document;
+    }
+
+    /** Removes the trio era's files after the first successful pass; the state is a cache, so deleting is safe. */
+    private void removeLegacyState() {
+        List<String> legacy = new ArrayList<>(LEGACY_TRIO_FILES);
+        legacy.add(LEGACY_FINGERPRINT_FILE);
+        for (String name : legacy) {
+            try {
+                Files.deleteIfExists(directory.resolve(name));
+            } catch (IOException ignored) {
+                // Cleanup only: the next successful pass tries again, and nothing reads these files any more.
             }
         }
-        return java;
     }
 
-    /**
-     * The scanned files as a validated in-memory pair, for {@link FsMetaDiff#between}.
-     *
-     * <p>This is the same three steps {@link FsMetaWriter#publish} performs before writing — names,
-     * entries, and the commit document with their sizes and hashes — except that nothing is written. The
-     * alternative, publishing the current scan before deciding, would turn a no-op into a write and would
-     * record files whose generation has not succeeded yet.</p>
-     */
-    private FsMetaPair pairOf(List<FsMetaFile> files) {
-        List<FsMetaFile> ordered = new ArrayList<>(files);
-        ordered.sort(Comparator.comparing(FsMetaFile::name, FsMetaFormat.NAME_ORDER));
-        List<String> names = new ArrayList<>(ordered.size());
-        List<FsMetaEntry> entries = new ArrayList<>(ordered.size());
-        long offset = 0;
-        for (FsMetaFile file : ordered) {
-            names.add(file.name());
-            entries.add(file.toEntry(offset));
-            offset += FsMetaCodec.utf8Length(file.name()) + 1L;
+    /** Whether the trio era's state is still on disk. */
+    private boolean legacyStatePresent() {
+        for (String name : LEGACY_TRIO_FILES) {
+            if (Files.isRegularFile(directory.resolve(name))) {
+                return true;
+            }
         }
-        byte[] txt = FsMetaCodec.encodeNames(names);
-        byte[] meta = FsMetaCodec.encodeEntries(entries);
-        FsMetaConfig config = FsMetaConfig.forPublish(entries.size(), meta, txt, 0L,
-                FsMetaHashMode.TEXT, FS_META_WRITER, sourceRoot.toString(), "", FsMetaConfig.now());
-        return FsMetaPair.of(meta, txt, config);
+        return Files.isRegularFile(directory.resolve(LEGACY_FINGERPRINT_FILE));
     }
 
     /**
-     * The invocation's fingerprint, in the order {@link #publish} writes it.
+     * The invocation's fingerprint, in the order {@code run.json} writes it.
      *
-     * <p>{@link EntityMetadataGenerator#generatorIdentity()} rather than the bare version: which artifact
-     * the classes came from is part of "the same generator", and the identity line already distinguishes an
-     * installed jar from the reactor's {@code target/classes}.</p>
+     * <p>{@link EntityMetadataGenerator#generatorIdentity()} rather than the bare version: which artifact the
+     * classes came from is part of "the same generator", and the identity line already distinguishes an
+     * installed jar from the reactor's {@code target/classes}. {@code projectRoot}/{@code sourceRoot} are in
+     * it because a moved module or a different daemon root describes a different tree.</p>
      */
-    private Map<String, String> fingerprint(Config config) {
+    private Map<String, String> fingerprint(Config config, String projectRoot) {
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("format", FINGERPRINT_FORMAT);
+        values.put("format", FORMAT);
         values.put("generator", EntityMetadataGenerator.generatorIdentity());
         values.put("jdk", Integer.toString(Runtime.version().feature()));
         values.put("sourceRoot", normalized(sourceRoot));
+        values.put("projectRoot", projectRoot);
         values.put("metadataOutput", normalized(config.metadataOutput()));
         values.put("javaOutput", normalized(config.javaOutput()));
         values.put("packages", String.join(",", config.packages()));
@@ -494,38 +733,10 @@ final class EntityBuildState {
     }
 
     /**
-     * The stored fingerprint, or {@code null} when it is absent, unreadable or not a {@code key=value}
-     * document. {@code null} is deliberately not an empty map: "no usable fingerprint" and "a fingerprint
-     * that matches" must not be one step apart.
-     */
-    private Map<String, String> readFingerprint() {
-        Path file = directory.resolve(FINGERPRINT_FILE);
-        if (!Files.isRegularFile(file)) {
-            return null;
-        }
-        try {
-            Map<String, String> values = new LinkedHashMap<>();
-            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                if (line.isBlank()) {
-                    continue;
-                }
-                int equals = line.indexOf('=');
-                if (equals <= 0) {
-                    return null;
-                }
-                values.put(line.substring(0, equals), line.substring(equals + 1));
-            }
-            return values.isEmpty() ? null : values;
-        } catch (IOException unreadable) {
-            return null;
-        }
-    }
-
-    /**
      * The first key whose value differs, including a key present on only one side.
      *
-     * <p>{@code validation} is the one key the current fingerprint does not produce — it describes the
-     * previous pass rather than this invocation — so it is compared by the no-op rule, not here.</p>
+     * <p>{@code validation} is not part of the fingerprint: it describes the previous pass rather than this
+     * invocation, so it is compared by the no-op rule instead.</p>
      */
     private static String firstMismatch(Map<String, String> stored, Map<String, String> current) {
         for (Map.Entry<String, String> entry : current.entrySet()) {
@@ -550,18 +761,20 @@ final class EntityBuildState {
     }
 
     /** A one-line summary of the change counts for a full-pass reason. */
-    private static String changes(int added, int removed, int unknown) {
-        List<String> parts = new ArrayList<>(3);
+    private static String changes(int added, int removed) {
+        List<String> parts = new ArrayList<>(2);
         if (added > 0) {
             parts.add(added + " added");
         }
         if (removed > 0) {
             parts.add(removed + " removed");
         }
-        if (unknown > 0) {
-            parts.add(unknown + " without a usable fingerprint");
-        }
         return String.join(", ", parts);
+    }
+
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node == null ? null : node.path(field);
+        return value != null && value.isString() ? value.asString() : null;
     }
 
     /** An exception's message, or its class name when it has none. */
