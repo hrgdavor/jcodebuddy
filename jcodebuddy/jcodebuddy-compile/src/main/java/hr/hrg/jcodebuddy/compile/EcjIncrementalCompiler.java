@@ -6,6 +6,7 @@ import org.eclipse.jdt.internal.compiler.Compiler;
 import org.eclipse.jdt.internal.compiler.DefaultErrorHandlingPolicies;
 import org.eclipse.jdt.internal.compiler.IErrorHandlingPolicy;
 import org.eclipse.jdt.internal.compiler.IProblemFactory;
+import org.eclipse.jdt.internal.compiler.env.ICompilationUnit;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
 import org.eclipse.jdt.internal.compiler.problem.DefaultProblemFactory;
 
@@ -135,6 +136,111 @@ public final class EcjIncrementalCompiler {
      */
     public boolean compileOne(Path changedFile) {
         return compile(Set.of(Objects.requireNonNull(changedFile, "changedFile")));
+    }
+
+    /**
+     * Starts the internal ECJ phase split for one file: {@code beginToCompile} parses the source and builds its
+     * type bindings immediately, while {@link #completeEarly(EarlyCompilation)} runs ECJ's resolution/cross-check
+     * and codegen later. This is for a one-file fs-meta batch: it overlaps the parse with the rest of the batch
+     * window, not a replacement for the changed-set compile when several files changed.
+     *
+     * <p>This is deliberately opt-in and isolated in {@link PhaseCompiler}: the methods are ECJ internals, not a
+     * stable public API. If a future ECJ changes or removes them, only this adapter needs a fork or a fallback;
+     * the normal {@link #compile(Set)} path is independent of them.</p>
+     *
+     * @return a handle for {@link #completeEarly(EarlyCompilation)}, or {@code null} when the early phase could
+     * not start; {@link #lastErrors()} then explains why and the caller should fall back to {@link #compile(Set)}
+     */
+    public EarlyCompilation beginEarly(Path changedFile) {
+        Objects.requireNonNull(changedFile, "changedFile");
+        long startedAt = System.nanoTime();
+        try {
+            classFileWriter.reset();
+            if (!nameEnvironment.isIndexed()) {
+                index();
+            }
+            SourceUnit unit = new SourceUnit(changedFile, sourceRoot);
+            nameEnvironment.setSourceUnits(new SourceUnit[]{unit});
+            PhaseCompiler compiler = new PhaseCompiler(nameEnvironment, errorPolicy, options,
+                    classFileWriter, problemFactory);
+            compiler.begin(new ICompilationUnit[]{unit});
+            lastErrors = List.of();
+            return new EarlyCompilation(compiler, unit, changedFile, startedAt);
+        } catch (Exception e) {
+            lastErrors = List.of("ECJ early compile failed: " + messageOf(e));
+            nameEnvironment.cleanup();
+            return null;
+        }
+    }
+
+    /**
+     * Completes an {@link #beginEarly(Path)} compilation: ECJ resolves types, reports cross-check problems and
+     * writes the class file. The handle is single-use.
+     */
+    public boolean completeEarly(EarlyCompilation early) {
+        Objects.requireNonNull(early, "early");
+        if (early.completed) {
+            throw new IllegalStateException("this early compilation was already completed");
+        }
+        early.completed = true;
+        try {
+            early.compiler.finish();
+            List<String> problems = new ArrayList<>(classFileWriter.errors());
+            lastErrors = List.copyOf(problems);
+            return !classFileWriter.hasErrors() && problems.isEmpty();
+        } catch (RuntimeException e) {
+            lastErrors = List.of("ECJ early completion failed: " + messageOf(e));
+            return false;
+        } finally {
+            lastCompileNanos = System.nanoTime() - early.startedAt;
+            nameEnvironment.cleanup();
+        }
+    }
+
+    /**
+     * One opt-in early compilation. It owns a dedicated ECJ {@link Compiler}; completing it is the only operation
+     * that writes class files.
+     */
+    public static final class EarlyCompilation {
+
+        private final PhaseCompiler compiler;
+        @SuppressWarnings("unused")
+        private final SourceUnit unit;
+        private final Path file;
+        private final long startedAt;
+        private boolean completed;
+
+        private EarlyCompilation(PhaseCompiler compiler, SourceUnit unit, Path file, long startedAt) {
+            this.compiler = compiler;
+            this.unit = unit;
+            this.file = file;
+            this.startedAt = startedAt;
+        }
+
+        /** The source this early compilation belongs to. */
+        public Path file() {
+            return file;
+        }
+    }
+
+    /**
+     * The one place that depends on ECJ's protected phase methods. A future ECJ that removes them breaks this
+     * adapter at compile time, which is the intended fork boundary: the rest of the compiler does not change.
+     */
+    private static final class PhaseCompiler extends Compiler {
+
+        PhaseCompiler(CachingNameEnvironment nameEnvironment, IErrorHandlingPolicy policy, CompilerOptions options,
+                      ClassFileWriter requestor, IProblemFactory problemFactory) {
+            super(nameEnvironment, policy, options, requestor, problemFactory);
+        }
+
+        void begin(ICompilationUnit[] units) {
+            beginToCompile(units);
+        }
+
+        void finish() {
+            processCompiledUnits(0, false);
+        }
     }
 
     /**

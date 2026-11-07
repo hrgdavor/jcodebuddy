@@ -8,12 +8,12 @@ save a .java file
       ▼
 fs-meta daemon: watches the project directory, hashes the file, delivers CHANGE_ENTRY frames
       │
-      ├─ START_BATCH: compileOne() on each changed unit as it arrives
+      ├─ START_BATCH: opt-in beginEarly() parses/binds the changed units
       │
       ▼
 EcjIncrementalCompiler: compiles exactly the changed files (no full rebuild)
       │
-      ├─ END_BATCH: one-file batch is done; multi-file batch recompiles the set for cross-checks
+      ├─ END_BATCH: completeEarly() for a one-file batch; multi-file batch recompiles the set for cross-checks
       │
       ▼
 ProjectClassLoader: a NEW classloader, seeded with the previous one's bytes for unchanged classes
@@ -38,12 +38,14 @@ Prerequisites:
 | Apache Maven (3.9)     | `exec:java` runs the runner; resolved through `JCODEBUDDY_MVN`, the recorded location, then `PATH` |
 | the fs-meta executable | it is the watcher; `FSMETA_BIN` overrides the default `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe` |
 | fs-meta tick           | `FSMETA_TICK_MS` defaults to 50 ms; valid 5–1000; the scheduler’s 25 ms quiet floor still applies  |
+| early compilation      | `FSMETA_EARLY_COMPILE=1` opts into ECJ’s internal START_BATCH parse/bind phase; default off        |
 
 **The tick should be chosen per editor/SSD rather than globally.** 50 ms is the new default; 10–25 ms is reasonable
 for a fast local editor, while 50–100 ms is safer for many roots or slower storage.
 
 ```bash
 bun examples/fsmeta-reload/run.js
+FSMETA_EARLY_COMPILE=1 bun examples/fsmeta-reload/run.js
 ```
 
 That one command builds and installs the runner module, cleans `project/classes`, starts a **private** fs-meta
@@ -87,9 +89,19 @@ Now edit that file in any editor and save it. One batch later the console shows 
 [test]         org.opentest4j.AssertionFailedError: expected: <42> but was: <43>
 ...
 [test] 1 test(s), 1 failed, 0 skipped in 7ms -> FAILED
-[reload] compile=12.5ms reload=0.8ms app=1.9ms test=8.3ms totalFromSave=154ms
-[reload] fromBatch: compileStart=10.5ms reloaded=11.8ms appDone=13.9ms testDone=23.2ms
+[reload] compile=6.0ms reload=0.6ms app=1.7ms test=6.9ms totalFromSave=95ms
+[reload] fromBatch: compileStart=0.4ms reloaded=7.0ms appDone=9.0ms testDone=16.5ms
 ```
+
+With the opt-in internal phase, the same one-file edit showed:
+
+```text
+[reload] first class from batch start: 8.7ms (final; opt-in internal phase)
+[reload] compile=3.7ms reload=0.7ms app=1.8ms test=6.9ms totalFromSave=132ms
+```
+
+The early phase parsed and bound the file while fs-meta was still finishing the batch; `END_BATCH` then ran
+resolution/cross-checks and codegen.
 
 `Ctrl+C` stops the runner (its shutdown hook closes the daemon subscription) and `run.js` then stops the
 private daemon. The example touches no other fs-meta daemon on the machine: its socket, config and root list
@@ -185,7 +197,7 @@ outside — is why the reload works at all.
 | field           | starts at                                             | ends at                              |
 | --------------- | ----------------------------------------------------- | ------------------------------------ |
 | `compile`       | the first compiler call                               | the last compiler call returns       |
-| `first class`   | the batch's `START_BATCH`                             | the first `compileOne()` returns     |
+| `first class`   | the batch's `START_BATCH` (opt-in early phase)        | `completeEarly()` writes the class   |
 | `reload`        | `old.classBytes()` is taken                           | the new loader's constructor returns |
 | `app`           | `App.main` is invoked through reflection              | it returns (or throws)               |
 | `test`          | the JUnit launcher is created                         | `execute` returns                    |
@@ -195,11 +207,13 @@ outside — is why the reload works at all.
 plus the compile plus the classload plus both runs. The second line separates the runner's own work from that
 latency:
 
-The runner subscribes with the **streaming** form of `FsMetaDaemonWatch`: `START_BATCH` resets the fast path, each
-accepted `CHANGE_ENTRY` is queued to a single compile worker, and `END_BATCH` is the cross-check point. A one-file
-batch is complete from its early `compileOne()`; a multi-file batch waits for the early workers and recompiles the
-changed set together, because ECJ's public `compile` performs resolution/cross-checks and codegen in one call. The
-`first class from batch start` line is the responsiveness number; `totalFromSave` is the finished-result number.
+The runner subscribes with the **streaming** form of `FsMetaDaemonWatch` when early compilation is enabled:
+`START_BATCH` resets the state, the first accepted `CHANGE_ENTRY` starts `beginEarly()` on a single worker, and
+`END_BATCH` is the cross-check point. A one-file batch calls `completeEarly()` on that same ECJ compiler; a
+multi-file batch cannot append units to an ECJ compiler that has already started, so it falls back to the normal
+changed-set compile. `first class from batch start` (only with `FSMETA_EARLY_COMPILE=1`) is the responsiveness
+number; `totalFromSave` is the finished-result number. The early phase uses ECJ's internal
+`beginToCompile`/`processCompiledUnits` split; without the flag the runner uses the public `compile(Set)` path.
 
 | field                 | meaning                                                        |
 | --------------------- | -------------------------------------------------------------- |

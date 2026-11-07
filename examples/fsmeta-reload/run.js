@@ -22,6 +22,7 @@
  * Environment:
  *   FSMETA_BIN   the fs-meta executable (default `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`)
  *   FSMETA_TICK_MS  the root scheduler tick (default 50; 5..1000; the scheduler's 25 ms quiet floor applies)
+ *   FSMETA_EARLY_COMPILE=1  opt into ECJ's internal START_BATCH parse/bind phase (default off)
  *   JCODEBUDDY_JDK25 / JCODEBUDDY_MVN   as for every other script in `scripts/`
  */
 
@@ -35,6 +36,7 @@ const REPO = repoRoot();
 const TMP = join(REPO, ".tmp", "fsmeta-reload");
 const FS = process.env.FSMETA_BIN ?? "D:\\wrk\\core\\fs-meta\\zig-out\\bin\\fsmeta.exe";
 const TICK_MS = process.env.FSMETA_TICK_MS ?? "50";
+const EARLY_COMPILE = process.env.FSMETA_EARLY_COMPILE === "1";
 
 const MODULE = ":fsmeta-reload-example";
 const PROJECT = join(HERE, "project");
@@ -143,7 +145,7 @@ if (added.status !== 0) {
   fail(`registering ${PROJECT} with the daemon failed`);
 }
 
-step(`watching ${PROJECT} (root: the project directory, filter: src/**/*.java, tick: ${TICK_MS} ms)`);
+step(`watching ${PROJECT} (root: the project directory, filter: src/**/*.java, tick: ${TICK_MS} ms, early: ${EARLY_COMPILE ? "opt-in" : "off"})`);
 step(`edit and save: ${EDIT_ME}`);
 step("Ctrl+C stops the runner and the private daemon");
 
@@ -159,6 +161,7 @@ const runner = Bun.spawn(
     MODULE,
     `-Dreload.exampleRoot=${HERE}`,
     `-Dreload.classesDir=${CLASSES}`,
+    `-Dreload.earlyCompile=${EARLY_COMPILE}`,
     "exec:java",
   ],
   { cwd: REPO, env: daemonEnv, stdout: "inherit", stderr: "inherit", stdin: "inherit" },

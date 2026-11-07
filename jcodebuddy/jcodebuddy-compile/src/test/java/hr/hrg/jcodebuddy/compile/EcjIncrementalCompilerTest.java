@@ -66,6 +66,30 @@ class EcjIncrementalCompilerTest {
     }
 
     @Test
+    void earlyPhaseStartsBeforeCompletionAndWritesTheClassOnCompletion() throws IOException {
+        Path hello = write("demo/Early.java", """
+                package demo;
+
+                public final class Early {
+                    public static int answer() {
+                        return 42;
+                    }
+                }
+                """);
+
+        EcjIncrementalCompiler compiler = newCompiler();
+        compiler.index();
+
+        EcjIncrementalCompiler.EarlyCompilation early = compiler.beginEarly(hello);
+        assertTrue(early != null, () -> "early phase should start: " + compiler.lastErrors());
+        assertFalse(Files.exists(binDir.resolve("demo").resolve("Early.class")),
+                "beginEarly parses/binds; it must not write the class file yet");
+        assertTrue(compiler.completeEarly(early), "completing the early phase should succeed");
+        assertTrue(Files.isRegularFile(binDir.resolve("demo").resolve("Early.class")),
+                "the class file is written by the completion phase");
+    }
+
+    @Test
     void compilesOneFileForTheStartBatchFastPath() throws IOException {
         Path hello = write("demo/One.java", """
                 package demo;

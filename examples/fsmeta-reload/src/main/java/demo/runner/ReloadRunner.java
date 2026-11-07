@@ -37,6 +37,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
@@ -114,9 +115,14 @@ public final class ReloadRunner {
     });
     private final Object compilerLock = new Object();
     private final List<Future<?>> fastTasks = new ArrayList<>();
-    private final Set<String> fastCompiled = new LinkedHashSet<>();
     private final AtomicLong batchStartNanos = new AtomicLong();
     private final AtomicLong firstClassNanos = new AtomicLong();
+    private final AtomicBoolean earlyBlocked = new AtomicBoolean();
+    private final boolean earlyCompile = Boolean.getBoolean("reload.earlyCompile");
+    private final java.util.concurrent.atomic.AtomicReference<EcjIncrementalCompiler.EarlyCompilation> earlyHandle =
+            new java.util.concurrent.atomic.AtomicReference<>();
+    private final java.util.concurrent.atomic.AtomicReference<EcjIncrementalCompiler> earlyOwner =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     private ReloadRunner(Path projectRoot, Path classesDir) {
         this.projectRoot = projectRoot;
@@ -282,47 +288,52 @@ public final class ReloadRunner {
 
     // ── One batch ─────────────────────────────────────────────────────────────
 
-    /** Resets the per-batch fast-path state on START_BATCH. */
+    /** Resets the per-batch early-phase state on START_BATCH. */
     private void beginFastBatch() {
         synchronized (fastTasks) {
             fastTasks.clear();
-            fastCompiled.clear();
         }
+        earlyHandle.set(null);
+        earlyOwner.set(null);
+        earlyBlocked.set(false);
         batchStartNanos.set(System.nanoTime());
         firstClassNanos.set(0);
     }
 
     /**
-     * Schedules one changed source for immediate compilation, without blocking the daemon reader. The final
-     * changed-set compile waits for these tasks; a single-file batch can use the result directly.
+     * Starts ECJ's internal parse/binding phase for the first changed source without blocking the daemon reader.
+     * A second change in the same batch means the early phase cannot be completed as a one-file compile, so the
+     * batch falls back to the normal changed-set compile at END_BATCH.
      */
     private void fastChange(FsMetaClient.Change change) {
+        if (!earlyCompile || earlyBlocked.get()) {
+            return;
+        }
         Path file = daemonFile(change.name());
         Path sourceRoot = file.startsWith(mainRoot) ? mainRoot : (file.startsWith(testRoot) ? testRoot : null);
         if (sourceRoot == null || !Files.isRegularFile(file) || !file.toString().endsWith(".java")) {
             return;
         }
-        String fqn = fullyQualifiedName(sourceRoot, file);
         synchronized (fastTasks) {
+            if (!fastTasks.isEmpty() || earlyOwner.get() != null) {
+                earlyBlocked.set(true);
+                return;
+            }
             fastTasks.add(fastCompiler.submit((Runnable) () -> {
-                long started = System.nanoTime();
                 synchronized (compilerLock) {
                     EcjIncrementalCompiler compiler = sourceRoot.equals(mainRoot) ? mainCompiler : testCompiler;
-                    boolean ok = compiler.compileOne(file);
-                    long elapsed = System.nanoTime() - batchStartNanos.get();
-                    if (ok) {
-                        synchronized (fastTasks) {
-                            fastCompiled.add(fqn);
-                        }
-                        firstClassNanos.accumulateAndGet(elapsed, (previous, candidate) ->
-                                previous == 0 || candidate < previous ? candidate : previous);
+                    EcjIncrementalCompiler.EarlyCompilation early = compiler.beginEarly(file);
+                    if (early != null) {
+                        earlyOwner.set(compiler);
+                        earlyHandle.set(early);
+                        firstClassNanos.set(System.nanoTime() - batchStartNanos.get());
                     }
                 }
             }));
         }
     }
 
-    /** Waits for every START_BATCH fast compile to finish before the changed-set cross-check. */
+    /** Waits for the START_BATCH early phase to finish before the changed-set cross-check. */
     private void awaitFastCompilation() {
         List<Future<?>> pending;
         synchronized (fastTasks) {
@@ -333,8 +344,8 @@ public final class ReloadRunner {
             try {
                 task.get(10, TimeUnit.SECONDS);
             } catch (Exception failed) {
-                // The final compile is the authority; a failed first-class attempt is only an early result.
-                System.out.println("[reload] first-class compile failed: " + failed);
+                // The final compile is the authority; a failed early phase is only an early result.
+                System.out.println("[reload] early phase failed: " + failed);
             }
         }
     }
@@ -366,25 +377,36 @@ public final class ReloadRunner {
         awaitFastCompilation();
 
         // ── Compile exactly the changed files ─────────────────────────────────────────────────────────────
-        // A one-file batch was already compiled on its CHANGE_ENTRY, against the previous class files. There is
-        // no sibling change for it to cross-check, so the pre-compiled result is the complete result. A batch with
-        // several changed files waits for those early compiles, then recompiles the set together: this is where
-        // ECJ resolves types that changed in the same batch, which the early per-unit compile could not see.
-        boolean singleFast = changedNames.size() + deletedNames.size() == 1
+        // The opt-in early phase has already parsed and bound the first changed unit. A one-file batch can finish
+        // that same ECJ compiler here (resolution/cross-check + codegen). A batch with several changed files has no
+        // way to append units to the already-started ECJ compiler, so it falls back to the normal changed-set
+        // compile; that is also where ECJ resolves types that changed in the same batch.
+        boolean singleEarly = earlyCompile
+                && changedNames.size() + deletedNames.size() == 1
                 && deletedNames.isEmpty()
-                && fastCompiled.containsAll(changedNames);
+                && !earlyBlocked.get()
+                && earlyHandle.get() != null
+                && earlyOwner.get() != null;
         long compileStartedNanos = System.nanoTime();
         boolean mainOk = true;
         boolean testOk = true;
-        if (!singleFast) {
+        if (singleEarly) {
+            EcjIncrementalCompiler owner = earlyOwner.get();
+            mainOk = owner.completeEarly(earlyHandle.get());
+            if (!mainOk) {
+                System.out.println("[reload] early completion failed; falling back to the changed-set compile");
+                singleEarly = false;
+            } else {
+                firstClassNanos.set(System.nanoTime() - batchStartNanos.get());
+            }
+        }
+        if (!singleEarly) {
             synchronized (compilerLock) {
                 mainOk = mainFiles.isEmpty() || mainCompiler.compile(mainFiles);
                 testOk = testFiles.isEmpty() || testCompiler.compile(testFiles);
             }
         }
-        long compileNanos = singleFast
-                ? firstClassNanos.get()
-                : System.nanoTime() - compileStartedNanos;
+        long compileNanos = System.nanoTime() - compileStartedNanos;
         if (!mainOk || !testOk) {
             // A compile error is not a reload: the previous class files belong to the last good compile, and the
             // loader that is running still describes them. Report and wait for the next batch.
@@ -400,7 +422,8 @@ public final class ReloadRunner {
         }
         if (firstClassNanos.get() > 0) {
             System.out.printf(Locale.ROOT, "[reload] first class from batch start: %.1fms%s%n",
-                    exactMillis(firstClassNanos.get()), singleFast ? " (final; one-file batch)" : " (early; cross-check follows)");
+                    exactMillis(firstClassNanos.get()),
+                    singleEarly ? " (final; opt-in internal phase)" : " (early parse; cross-check follows)");
         }
 
         // ── Reload: a new loader seeded with the old bytes, overwritten where the compile changed them ────
