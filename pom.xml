@@ -75,6 +75,11 @@
              and no java-watch dependency. The change source is fs-meta, and the caller passes the files. -->
         <module>jcodebuddy/jcodebuddy-compile</module>
         <module>benchmarks/fsmeta-auto-build</module>
+        <!-- A runnable example, not a tested library: an fs-meta daemon batch recompiles the project sources with
+             jcodebuddy-compile and reloads them in a fresh project-only classloader (examples/fsmeta-reload). It is
+             deliberately absent from GATE_MODULES in scripts/lib/gate.js — the gate builds and tests what this
+             repository ships, and the example is a demo of two shipped libraries. -->
+        <module>examples/fsmeta-reload</module>
         <!-- The LSP sidecar lives with the webview product, not at the repository root: it is the same
              product (pages, navigation, edits), reached over LSP instead of over a webview. See
              webview/PLAN-webview-suite.md, decision D9. -->

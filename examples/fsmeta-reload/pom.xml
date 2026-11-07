@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>hr.hrg.jcodebuddy</groupId>
+        <artifactId>jcodebuddy-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>fsmeta-reload-example</artifactId>
+    <name>fs-meta Incremental Reload Example</name>
+    <description>
+        A runnable example: one fs-meta daemon batch recompiles the changed project sources with the standalone
+        ECJ incremental compiler and loads them into a fresh project-only classloader, then re-runs the project's
+        Jackson console app and its JUnit 5 test. See README.md.
+    </description>
+
+    <properties>
+        <!-- The two arguments the runner takes. They are separate Maven properties (and separate
+             `<argument>` elements below) rather than one `exec.args` string, because the exec plugin splits a
+             command-line string on whitespace and a path with a space in it would become two arguments. The
+             defaults make `mvn -pl :fsmeta-reload-example exec:java` work with no -D at all; run.js overrides
+             them with absolute paths. -->
+        <reload.exampleRoot>${project.basedir}</reload.exampleRoot>
+        <reload.classesDir>${project.basedir}/project/classes</reload.classesDir>
+    </properties>
+
+    <dependencies>
+        <!-- The two libraries the runner is built on: the ECJ incremental compiler and the fs-meta daemon client.
+             Versions follow the reactor (they are modules of it). -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-compile</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-watch</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Jackson is a normal compile dependency: the project's App is compiled at run time against it, and it
+             is what the project classloader's parent supplies, so the project never loads its own copy. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- The runner itself imports the JUnit Platform launcher and engine, so those are compile scope. The
+             version of the launcher is not managed by the reactor, hence `${junit.platform.version}`; the engine
+             is managed, and is listed explicitly because the launcher declares it as a provided/optional
+             dependency (the runner builds discovery selectors and a launch request from it). -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <version>${junit.platform.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-engine</artifactId>
+            <version>${junit.platform.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <!-- junit-jupiter stays at the TEST scope the reactor manages - and that is exactly why the exec goal
+             below runs on the TEST classpath. Two facts make the compile scope the wrong one here:
+             the parent POM manages `junit-jupiter-api`, `junit-jupiter-params` and `junit-jupiter-engine` with
+             scope `test`, and dependencyManagement applies to transitive dependencies, so this aggregate cannot
+             drag them onto a runtime classpath even if it wanted to. The project's `CalculationTest` needs an
+             `org.junit.jupiter.api.Test` on the compile classpath *at run time*, and `exec:java`'s test classpath
+             is where the reactor's own managed jars live. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- The demo's entry point. Version from the root POM's pluginManagement.
+
+                 `classpathScope=test` is deliberate: the runner compiles the project's test source and executes
+                 it at run time, so the exec classpath must be the test classpath (see the junit-jupiter comment
+                 above). The two paths are `<arguments>`, never one `exec.args` string: the plugin splits that on
+                 whitespace, and a path with a space would silently become two arguments. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>demo.runner.ReloadRunner</mainClass>
+                    <classpathScope>test</classpathScope>
+                    <arguments>
+                        <argument>${reload.exampleRoot}</argument>
+                        <argument>${reload.classesDir}</argument>
+                    </arguments>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
