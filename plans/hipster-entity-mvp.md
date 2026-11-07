@@ -290,7 +290,7 @@ implements the trio, the fingerprint sidecar, the fallback matrix and the after-
 the run-record fields. **Design B replaced the trio with a daemon-generation `run.json` marker and a
 project-root subscription filtered to the module source root; the fallback matrix and byte-identity
 guarantees are unchanged.** `EntityBuildStateTest` is **16/16** at E2; the current design-B suite is
-**31/31** fake-daemon and **3/3** opt-in real-daemon.
+**30/30** fake-daemon and **3/3** opt-in real-daemon.
 
 ### E3 — Record what each view was generated from (M)
 **Who:** agent · **Depends:** E2

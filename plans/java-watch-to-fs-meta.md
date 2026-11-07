@@ -336,8 +336,8 @@ diffs or publishes a trio. The daemon root is the project root; a module cache u
 protocol's include/exclude patterns, and stores `<module>/.jcodebuddy/cache/entity-build/run.json` with the last
 successful daemon generation and fingerprint. `FsMetaClient` sends the extended `SUBSCRIBE`; the daemon-side
 filter was missing and is now implemented in `fs-meta` commit `f4be95d` (both replay and live batches, filtered
-`END_BATCH` counts). A missing daemon is a full pass, never a false no-op. Tests: `EntityBuildStateTest` 31/31,
-opt-in `EntityBuildStateDaemonTest` 3/3, the design-B targeted set 52/52; `WatcherBoundaryTest` 3/3.
+`END_BATCH` counts). A missing daemon is a full pass, never a false no-op. Tests: `EntityBuildStateTest` 30/30,
+opt-in `EntityBuildStateDaemonTest` 3/3, the design-B targeted set 51/51; `WatcherBoundaryTest` 3/3.
 
 **Gate:** the JCodeBuddy modules take events from the Zig daemon over the socket; no production Java code publishes a
 trio and no JCodeBuddy code starts a `WatchService`; two concurrent clients see the same batch stream; a
