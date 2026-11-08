@@ -28,6 +28,10 @@ one measurement line: compile / reload / app / test / totalFromSave
 There is no `WatchService` here and no `java-watch*` dependency: the change source is the **fs-meta daemon**,
 and `jcodebuddy-watch` is the client that subscribes to it.
 
+See [`USAGE.md`](USAGE.md) for the recipe-oriented guide: running the demo, using the two libraries in your
+own tool, adapting the template to another project layout/package, and choosing between `compile`, `compileOne`
+and the opt-in internal phase.
+
 For the IntelliJ setup — disabling its sluggish auto-build, adding the class output, and getting the compile
 errors into the editor as annotations that clear on success — see
 [`doc/incremental-compiler-intellij.md`](../../doc/incremental-compiler-intellij.md). The runner writes the
