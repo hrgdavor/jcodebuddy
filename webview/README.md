@@ -16,6 +16,14 @@ five copies of one security model:
 | [`core/webviewd`](core/README.md)                  | **the standalone host**: a page server with no editor of its own, for any browser          | a CLI adapter, an LSP sidecar, or nothing    | ephemeral (`--port 0`)                                                      | the port it bound, in `.jcodebuddy/webview/host.json`        |
 | [`jwa-sidecar`](jwa-sidecar/README.md)             | an LSP server (also the JWA addon host)                                                    | `window/showDocument`, `workspace/applyEdit` | 7979 (`jwa.sidecar.jumpPort`)                                               | the port it bound, once the client says where the project is |
 
+### Incremental build plugin (not a webview host)
+
+[`webview-intellij-incremental`](webview-intellij-incremental/README.md) is an IntelliJ plugin under
+`webview/` because it is an IDE integration. It is not one of the five page hosts: it replaces IntelliJ's
+Java auto-build with the `jcodebuddy-compile` + `jcodebuddy-watch` loop, bundles ECJ 3.46.100 and the
+fs-meta client, and publishes compiler diagnostics directly to the editor through an
+`ExternalAnnotator` — no diagnostics JSON.
+
 **The listed port is a request, not an address.** Every host publishes the port it actually bound in the
 served project's `.jcodebuddy/webview/host.json`, and moves to the next free port when something unrelated
 holds the requested one. When the port is held by a host that already serves **the same project**, the second
@@ -74,6 +82,7 @@ webview/
                                  injected bridge, HTTP bridge, preferences, editor host (see eclipse/README.md)
   jwa-sidecar/                   the LSP transport, and the JWA side (annotations, Sync Builder code action)
   webview-jetbrains/             IntelliJ Platform plugin (Gradle, IntelliJ Platform 2026.2.3)
+  webview-intellij-incremental/  IntelliJ plugin: fs-meta + ECJ incremental build and direct editor diagnostics
   webview-vscode/                the VS Code extension (TypeScript, no bundler)
   zed/                           Phase 0 findings and the Zed dev extension
   tools/
@@ -99,6 +108,7 @@ modules?** Read the rest of this table.
 | copy a working page                           | [`kit/examples/`](kit/examples/README.md) — start with [`self-contained/index.html`](kit/examples/self-contained/index.html) |
 | see a page that edits                         | [`kit/examples/with-assets/pages/edit-demo.html`](kit/examples/with-assets/pages/edit-demo.html) |
 | use the JetBrains plugin                      | [`webview-jetbrains/README.md`](webview-jetbrains/README.md) — `Ctrl+Alt+Shift+W`, right-click an `.html` file → **Open in WebView Explorer** |
+| use the incremental build plugin              | [`webview-intellij-incremental/README.md`](webview-intellij-incremental/README.md) — fs-meta + ECJ build, direct editor diagnostics |
 | use the VS Code extension                     | [`webview-vscode/README.md`](webview-vscode/README.md)                                           |
 | use the Eclipse plugin                        | [`eclipse/README.md`](eclipse/README.md) — dropins install, the port preference, what is declared and what backs each claim |
 | serve a page from a host that needs no editor | [`core/README.md`](core/README.md) — `webviewd --project . --port 0`                             |

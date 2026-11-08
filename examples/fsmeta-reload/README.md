@@ -32,10 +32,11 @@ See [`USAGE.md`](USAGE.md) for the recipe-oriented guide: running the demo, usin
 own tool, adapting the template to another project layout/package, and choosing between `compile`, `compileOne`
 and the opt-in internal phase.
 
-For the IntelliJ setup — disabling its sluggish auto-build, adding the class output, and getting the compile
-errors into the editor as annotations that clear on success — see
-[`doc/incremental-compiler-intellij.md`](../../doc/incremental-compiler-intellij.md). The runner writes the
-diagnostics report that setup consumes at `project/target/jcodebuddy-diagnostics.json`.
+For IntelliJ use the packaged plugin at
+[`webview/webview-intellij-incremental`](../../webview/webview-intellij-incremental/README.md): it bundles the
+compiler and fs-meta client and publishes diagnostics directly to the editor. The setup guide is
+[`doc/incremental-compiler-intellij.md`](../../doc/incremental-compiler-intellij.md). The standalone example
+still writes an optional report at `project/target/jcodebuddy-diagnostics.json`; the plugin does not need it.
 
 ## Run it
 

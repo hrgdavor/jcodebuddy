@@ -1,0 +1,17 @@
+<idea-plugin>
+    <!--
+      The plugin replaces IntelliJ's Java auto-build for a project with the fs-meta + ECJ loop. The Java
+      module is a runtime dependency: the diagnostics annotator is registered for the JAVA language, and
+      the build service reads Java source roots and compiler output paths.
+    -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <projectService serviceImplementation="hr.hrg.jetbrains.jcodebuddy.incremental.IncrementalBuildService"/>
+        <postStartupActivity implementation="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyStartupActivity"/>
+        <externalAnnotator language="JAVA"
+                           implementationClass="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyDiagnosticsAnnotator"/>
+        <notificationGroup id="JCodeBuddy Incremental Build" displayType="BALLOON" isLogByDefault="true"/>
+    </extensions>
+</idea-plugin>

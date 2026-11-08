@@ -24,9 +24,9 @@ Two audiences read this repository, and neither should have to guess which half 
   tracking) and answers in [`user/faq.md`](doc-hipster-entity/user/faq.md). The current MVP surface and the
   incremental edit loop are in [`user/mvp-surface.md`](doc-hipster-entity/user/mvp-surface.md) and
   [`user/incremental-build.md`](doc-hipster-entity/user/incremental-build.md).
-- **Using the incremental compiler from IntelliJ** — the external compiler and the editor/error-hint split are in
-  [`doc/incremental-compiler-intellij.md`](doc/incremental-compiler-intellij.md), including the diagnostics report
-  and the small `ExternalAnnotator` plugin that adds and removes editor errors.
+- **Using the incremental compiler from IntelliJ** — the packaged plugin is
+  [`webview/webview-intellij-incremental`](webview/webview-intellij-incremental/README.md); the setup and
+  error-hint model are in [`doc/incremental-compiler-intellij.md`](doc/incremental-compiler-intellij.md).
 - **Working on JCodeBuddy itself** — the architecture half is
   [`doc-hipster-entity/architecture/README.md`](doc-hipster-entity/architecture/README.md), its table of contents is
   [`architecture/TOC.md`](doc-hipster-entity/architecture/TOC.md), and the decisions that govern a change are indexed
