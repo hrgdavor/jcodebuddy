@@ -13,6 +13,7 @@ import org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder;
 import org.junit.platform.launcher.core.LauncherFactory;
 import org.junit.platform.launcher.listeners.SummaryGeneratingListener;
 import org.junit.platform.launcher.listeners.TestExecutionSummary;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,8 +24,11 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -39,6 +43,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -86,6 +92,8 @@ public final class ReloadRunner {
     private static final String APP_CLASS = "demo.project.App";
     private static final String TEST_CLASS = "demo.project.CalculationTest";
     private static final String EDIT_ME = "demo/project/Calculation.java";
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Pattern DIAGNOSTIC = Pattern.compile("^(.+):(\\d+)\\s{2}(.*)$");
 
     private final Path projectRoot;
     private final Path mainRoot;
@@ -218,6 +226,7 @@ public final class ReloadRunner {
         boolean testOk = testCompiler.compile(testSources);
         long compileNanos = System.nanoTime() - compileStartedAt;
         if (!mainOk || !testOk) {
+            writeDiagnostics(false, compileDiagnostics(mainOk, testOk));
             System.out.printf(Locale.ROOT, "[init] initial compile FAILED in %dms%n", millis(compileNanos));
             printCompileErrors("main", mainCompiler, mainOk);
             printCompileErrors("test", testCompiler, testOk);
@@ -225,6 +234,7 @@ public final class ReloadRunner {
                     + " module's runtime classpath: use `mvn -pl :fsmeta-reload-example exec:java`.");
             System.exit(1);
         }
+        writeDiagnostics(true, List.of());
         System.out.printf(Locale.ROOT, "[init] compiled %d main + %d test source(s) in %dms%n",
                 mainSources.size(), testSources.size(), millis(compileNanos));
 
@@ -408,6 +418,7 @@ public final class ReloadRunner {
         }
         long compileNanos = System.nanoTime() - compileStartedNanos;
         if (!mainOk || !testOk) {
+            writeDiagnostics(false, compileDiagnostics(mainOk, testOk));
             // A compile error is not a reload: the previous class files belong to the last good compile, and the
             // loader that is running still describes them. Report and wait for the next batch.
             System.out.printf(Locale.ROOT,
@@ -431,6 +442,7 @@ public final class ReloadRunner {
         Map<String, byte[]> previousBytes = loader.classBytes();
         ProjectClassLoader next = new ProjectClassLoader(classesDir, previousBytes, changedNames, deletedNames);
         loader = next; // the old loader is garbage now; its classes stay valid but can no longer be refreshed
+        writeDiagnostics(true, List.of());
         reloads++;
         long reloadNanos = System.nanoTime() - reloadStartedNanos;
         long reloadedNanos = System.nanoTime();
@@ -698,6 +710,70 @@ public final class ReloadRunner {
             return relative.equals(".") ? "" : relative;
         } catch (IllegalArgumentException outside) {
             return "";
+        }
+    }
+
+    private List<String> compileDiagnostics(boolean mainOk, boolean testOk) {
+        List<String> errors = new ArrayList<>();
+        if (!mainOk) {
+            errors.addAll(mainCompiler.lastErrors());
+        }
+        if (!testOk) {
+            errors.addAll(testCompiler.lastErrors());
+        }
+        return errors;
+    }
+
+    /**
+     * Writes the small diagnostics contract an IntelliJ {@code ExternalAnnotator} can consume. The report is
+     * deliberately outside the source tree: it is output, not input, and the watcher's filter never sees it.
+     */
+    private void writeDiagnostics(boolean success, List<String> errors) {
+        List<Map<String, Object>> files = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (String error : errors) {
+            Matcher match = DIAGNOSTIC.matcher(error);
+            Map<String, Object> entry = new LinkedHashMap<>();
+            if (match.matches()) {
+                entry.put("path", match.group(1));
+                entry.put("line", Integer.parseInt(match.group(2)));
+                entry.put("message", match.group(3));
+            } else {
+                entry.put("path", "");
+                entry.put("line", 0);
+                entry.put("message", error);
+            }
+            entry.put("column", 0);
+            entry.put("severity", "error");
+            if (seen.add(entry.get("path") + "\u0000" + entry.get("line") + "\u0000" + entry.get("message"))) {
+                files.add(entry);
+            }
+        }
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("schema", "jcodebuddy-diagnostics/1");
+        report.put("success", success);
+        report.put("generatedAt", Instant.now().toString());
+        report.put("files", files);
+        Path target;
+        String configured = System.getProperty("jcodebuddy.diagnostics");
+        if (configured == null || configured.isBlank()) {
+            target = projectRoot.resolve("target").resolve("jcodebuddy-diagnostics.json");
+        } else {
+            target = Path.of(configured).toAbsolutePath().normalize();
+        }
+        try {
+            Files.createDirectories(target.getParent());
+            Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+            Files.writeString(temporary, JSON.writeValueAsString(report));
+            // The IDE may read the report as soon as its VFS event fires; never expose a half-written document.
+            try {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception failed) {
+            System.out.println("[diagnostics] could not write " + target + ": " + failed);
         }
     }
 

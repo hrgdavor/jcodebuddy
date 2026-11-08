@@ -28,6 +28,11 @@ one measurement line: compile / reload / app / test / totalFromSave
 There is no `WatchService` here and no `java-watch*` dependency: the change source is the **fs-meta daemon**,
 and `jcodebuddy-watch` is the client that subscribes to it.
 
+For the IntelliJ setup — disabling its sluggish auto-build, adding the class output, and getting the compile
+errors into the editor as annotations that clear on success — see
+[`doc/incremental-compiler-intellij.md`](../../doc/incremental-compiler-intellij.md). The runner writes the
+diagnostics report that setup consumes at `project/target/jcodebuddy-diagnostics.json`.
+
 ## Run it
 
 Prerequisites:
@@ -228,17 +233,18 @@ the dominant term when nothing else changed.
 
 ## Files
 
-| file                                                      | what it is                                                                         |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `run.js`                                                  | the one-command driver: build, private daemon, `exec:java`, cleanup on exit/Ctrl+C |
+| file                                                      | what it is                                                                                         |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `run.js`                                                  | the one-command driver: build, private daemon, `exec:java`, cleanup on exit/Ctrl+C                 |
 | `pom.xml`                                                 | the `fsmeta-reload-example` module: `jcodebuddy-compile`, `jcodebuddy-watch`, Jackson, JUnit, `exec:java` |
-| `.gitignore`                                              | keeps the generated `project/classes/` out of the tree                             |
-| `src/main/java/demo/runner/ReloadRunner.java`             | the loop and the measurements                                                      |
-| `src/main/java/demo/runner/ProjectClassLoader.java`       | the project-only classloader and its byte snapshot                                 |
-| `project/src/main/java/demo/project/Calculation.java`     | the record you edit                                                                |
-| `project/src/main/java/demo/project/App.java`             | the Jackson JSON console app                                                       |
-| `project/src/test/java/demo/project/CalculationTest.java` | the JUnit 5 test                                                                   |
+| `.gitignore`                                              | keeps the generated `project/classes/` out of the tree                                             |
+| `src/main/java/demo/runner/ReloadRunner.java`             | the loop and the measurements                                                                      |
+| `src/main/java/demo/runner/ProjectClassLoader.java`       | the project-only classloader and its byte snapshot                                                 |
+| `project/src/main/java/demo/project/Calculation.java`     | the record you edit                                                                                |
+| `project/src/main/java/demo/project/App.java`             | the Jackson JSON console app                                                                       |
+| `project/src/test/java/demo/project/CalculationTest.java` | the JUnit 5 test                                                                                   |
 | `project/classes/`                                        | output of the runtime compiler; ignored by this example's `.gitignore` and cleaned by `run.js` at every start |
+| `project/target/jcodebuddy-diagnostics.json`              | atomic diagnostics report for the IntelliJ `ExternalAnnotator`; success has an empty `files` array |
 
 ## Building and testing this module
 

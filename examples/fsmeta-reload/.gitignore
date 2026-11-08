@@ -1,3 +1,4 @@
 # The runtime compiler's output: EcjIncrementalCompiler writes the project's class files here, and run.js
 # removes the directory at every start so no stale class can be seeded into the first loader.
 project/classes/
+project/target/
