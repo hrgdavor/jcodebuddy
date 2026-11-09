@@ -64,11 +64,9 @@ public final class IncrementalBuildService implements Disposable {
 
     private final Project project;
     private final IncrementalDiagnosticsService diagnostics;
-    private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
-        Thread thread = new Thread(task, "jcodebuddy-incremental-build");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final JcodeBuddySettings settings;
+    private final Object lifecycle = new Object();
+    private volatile ExecutorService worker;
 
     private final AtomicBoolean started = new AtomicBoolean();
     private volatile Path projectRoot;
@@ -80,31 +78,79 @@ public final class IncrementalBuildService implements Disposable {
     public IncrementalBuildService(@NotNull Project project) {
         this.project = project;
         this.diagnostics = project.getService(IncrementalDiagnosticsService.class);
+        this.settings = project.getService(JcodeBuddySettings.class);
     }
 
-    /** Starts the loop once per project; called by {@link JcodeBuddyStartupActivity}. */
+    /** Starts the loop once per project when the project-level setting is enabled. */
     public void start() {
-        if (!started.compareAndSet(false, true)) {
+        if (!settings.isEnabled()) {
             return;
         }
-        String base = project.getBasePath();
-        if (base == null) {
-            notify("Project has no base directory; incremental build was not started.", NotificationType.WARNING);
-            return;
+        synchronized (lifecycle) {
+            if (!started.compareAndSet(false, true)) {
+                return;
+            }
+            String base = project.getBasePath();
+            if (base == null) {
+                started.set(false);
+                notify("Project has no base directory; incremental build was not started.", NotificationType.WARNING);
+                return;
+            }
+            projectRoot = Path.of(base).toAbsolutePath().normalize();
+            worker = Executors.newSingleThreadExecutor(task -> {
+                Thread thread = new Thread(task, "jcodebuddy-incremental-build");
+                thread.setDaemon(true);
+                return thread;
+            });
+            worker.submit(this::initialize);
         }
-        projectRoot = Path.of(base).toAbsolutePath().normalize();
-        worker.submit(this::initialize);
+    }
+
+    /** Applies a changed project-level setting without restarting the IDE. */
+    public void applyEnabledState() {
+        if (settings.isEnabled()) {
+            start();
+        } else {
+            stop();
+        }
+    }
+
+    private void stop() {
+        synchronized (lifecycle) {
+            if (!started.compareAndSet(true, false)) {
+                return;
+            }
+            FsMetaDaemonWatch current = watch;
+            watch = null;
+            if (current != null) {
+                current.stop();
+            }
+            ExecutorService currentWorker = worker;
+            worker = null;
+            if (currentWorker != null) {
+                currentWorker.shutdownNow();
+            }
+            diagnostics.clear();
+            if (!project.isDisposed()) {
+                refreshHighlighting();
+            }
+        }
     }
 
     private void initialize() {
         try {
+            if (!started.get()) {
+                return;
+            }
             sourceRoots = collectSourceRoots();
-            if (sourceRoots.isEmpty()) {
+            if (sourceRoots.isEmpty() || !started.get()) {
                 return;
             }
             compilers = createCompilers(sourceRoots);
             compileAll();
-            startWatch();
+            if (started.get()) {
+                startWatch();
+            }
         } catch (Throwable failed) {
             notify("JCodeBuddy incremental build failed to start: " + failed, NotificationType.ERROR);
         }
@@ -305,12 +351,7 @@ public final class IncrementalBuildService implements Disposable {
 
     @Override
     public void dispose() {
-        FsMetaDaemonWatch current = watch;
-        if (current != null) {
-            current.stop();
-        }
-        worker.shutdownNow();
-        diagnostics.clear();
+        stop();
     }
 
     private record SourceRoot(Path root, Path output, boolean test) {

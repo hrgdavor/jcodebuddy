@@ -9,7 +9,12 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <projectService serviceImplementation="hr.hrg.jetbrains.jcodebuddy.incremental.IncrementalBuildService"/>
+        <projectService serviceImplementation="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddySettings"/>
         <postStartupActivity implementation="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyStartupActivity"/>
+        <projectConfigurable parentId="tools"
+                             instance="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyConfigurable"
+                             id="hr.hrg.jetbrains.jcodebuddy.incremental.settings"
+                             displayName="JCodeBuddy Incremental Build"/> 
         <externalAnnotator language="JAVA"
                            implementationClass="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyDiagnosticsAnnotator"/>
         <notificationGroup id="JCodeBuddy Incremental Build" displayType="BALLOON" isLogByDefault="true"/>

@@ -10,7 +10,11 @@ There is no diagnostics JSON, no report file and no file-watching round trip for
 
 ## What the plugin does
 
-On project open:
+The plugin is installed for the IDE, but it is enabled **per project**. Open
+`Settings | Tools | JCodeBuddy Incremental Build` and check **Enable the fs-meta + ECJ incremental build
+for this project**. The setting lives in the project (`.idea/jcodebuddy-incremental.xml`).
+
+When enabled, on project open the plugin:
 
 1. It collects the project's Java source roots and module compiler outputs from IntelliJ.
 2. It creates one `EcjIncrementalCompiler` per source root, writing into the module's existing output.
@@ -74,10 +78,18 @@ fsmeta root add /path/to/project --tick 25
 `--tick` is per root. 10–25 ms suits a fast local editor; 50–100 ms is safer for many roots or slower
 storage. The plugin never starts a Java `WatchService`.
 
-If no daemon is found, the plugin performs the initial compile and shows a warning, but it cannot watch
-changes until a daemon is available.
+If no daemon is found when the project setting is enabled, the plugin performs the initial compile and
+shows a warning, but it cannot watch changes. Start the daemon and reopen the project.
 
-### 3. Disable IntelliJ's build
+### 3. Enable it for the project
+
+`Settings | Tools | JCodeBuddy Incremental Build` → check
+**Enable the fs-meta + ECJ incremental build for this project** → **Apply**.
+
+The setting is project-scoped: another project can keep the plugin disabled. The plugin is not active
+until this box is checked; it starts immediately when applied and does not require an IDE restart.
+
+### 4. Disable IntelliJ's build
 
 The plugin owns the compiler output, so IntelliJ must not compete with it:
 
@@ -136,14 +148,14 @@ the plugin implements exactly that.
 
 ## Troubleshooting
 
-| symptom                                  | cause                                                             | fix                                                                                          |
-| ---------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| no squiggles at all                      | plugin not installed/enabled, or the daemon was absent at startup | install/enable the plugin, start `fsmeta`, reopen the project                                |
-| old errors remain after a good compile   | highlighting was not restarted, or the file is not open           | check the notification/event log; reopen the file; re-run the compile                        |
-| errors are on the wrong line             | line/column convention mismatch                                   | report it; compiler lines are 1-based and columns are 0-based here                           |
-| IDE still builds on save                 | auto-build or a Run configuration's Build step is still enabled   | disable both                                                                                 |
-| unresolved project classes               | plugin output is not the module output IntelliJ uses              | align `Project Structure → Modules → Paths` with the plugin output, or set the module output |
-| IntelliJ build overwrites plugin classes | an explicit Build still runs and shares the output directory      | remove the before-launch Build step, or use a separate module output for the external loop   |
+| symptom                                  | cause                                                                 | fix                                                                                          |
+| ---------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| no squiggles at all                      | plugin disabled for this project, or the daemon was absent at startup | enable it in `Settings                                                                       | Tools | JCodeBuddy Incremental Build`; start `fsmeta`; reopen the project |
+| old errors remain after a good compile   | highlighting was not restarted, or the file is not open               | check the notification/event log; reopen the file; re-run the compile                        |
+| errors are on the wrong line             | line/column convention mismatch                                       | report it; compiler lines are 1-based and columns are 0-based here                           |
+| IDE still builds on save                 | auto-build or a Run configuration's Build step is still enabled       | disable both                                                                                 |
+| unresolved project classes               | plugin output is not the module output IntelliJ uses                  | align `Project Structure → Modules → Paths` with the plugin output, or set the module output |
+| IntelliJ build overwrites plugin classes | an explicit Build still runs and shares the output directory          | remove the before-launch Build step, or use a separate module output for the external loop   |
 
 For building, running in a sandbox IDE, and the exact bundled jars, see the plugin's own
 [README](../webview/webview-intellij-incremental/README.md).

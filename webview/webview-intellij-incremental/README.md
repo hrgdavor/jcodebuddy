@@ -17,7 +17,12 @@ editor squiggles.
 
 ## What it does
 
-On project open, the plugin:
+The plugin is installed for the IDE, but the build loop is **enabled per project**. Open
+`Settings | Tools | JCodeBuddy Incremental Build` and check **Enable the fs-meta + ECJ incremental build
+for this project**. The setting is stored in the project (`.idea/jcodebuddy-incremental.xml`), so another
+project can keep it disabled.
+
+On project open, when that project setting is enabled, the plugin:
 
 1. collects the project's Java source roots from IntelliJ;
 2. creates one `EcjIncrementalCompiler` per source root, writing into the module's existing compiler
@@ -78,6 +83,20 @@ JCodeBuddy Incremental Build/lib/ecj-3.46.100.jar
 JCodeBuddy Incremental Build/lib/jcodebuddy-compile-1.0-SNAPSHOT.jar
 JCodeBuddy Incremental Build/lib/jcodebuddy-watch-1.0-SNAPSHOT.jar
 ```
+
+## Enable it per project
+
+Start the fs-meta daemon first (next section). If the project is already open when the daemon starts,
+reopen the project after starting it; the plugin does not retry discovery.
+
+1. Open the project in IntelliJ.
+2. `Settings | Tools | JCodeBuddy Incremental Build`.
+3. Check **Enable the fs-meta + ECJ incremental build for this project**.
+4. Apply. The service starts immediately; no IDE restart is required.
+
+The flag is persisted in `.idea/jcodebuddy-incremental.xml`. Unchecking it stops the watch loop and clears
+the plugin's diagnostics for the project. The plugin can be installed globally while remaining disabled for
+projects that do not want it.
 
 ## Start the daemon
 
