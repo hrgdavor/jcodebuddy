@@ -105,6 +105,9 @@ public final class IncrementalBuildService implements Disposable {
             }
             projectRoot = Path.of(base).toAbsolutePath().normalize();
             log("Starting incremental build for " + projectRoot);
+            Runtime runtime = Runtime.getRuntime();
+            log("IDE heap: max=" + (runtime.maxMemory() / (1024 * 1024)) + "MB, used="
+                    + ((runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)) + "MB");
             worker = Executors.newSingleThreadExecutor(task -> {
                 Thread thread = new Thread(task, "jcodebuddy-incremental-build");
                 thread.setDaemon(true);
@@ -162,6 +165,12 @@ public final class IncrementalBuildService implements Disposable {
             if (started.get()) {
                 startWatch();
             }
+        } catch (OutOfMemoryError memory) {
+            LOG.error("JCodeBuddy incremental build ran out of IDE heap", memory);
+            notify("JCodeBuddy incremental build ran out of IDE heap. Increase Help | Change Memory Settings "
+                    + "and reopen the project; the build log shows the project/module source roots. "
+                    + "The compiler shares one dependency index, so this is the IDE heap limit, not a per-module cache.",
+                    NotificationType.ERROR);
         } catch (Throwable failed) {
             LOG.error("JCodeBuddy incremental build failed to start", failed);
             notify("JCodeBuddy incremental build failed to start: " + failed, NotificationType.ERROR);
@@ -232,21 +241,32 @@ public final class IncrementalBuildService implements Disposable {
         for (SourceRoot root : roots) {
             byModule.computeIfAbsent(root.module(), ignored -> new ArrayList<>()).add(root);
         }
+
+        // One union classpath and one shared JAR/JDK index for the whole project. Without the shared
+        // index every source root keeps its own copy of every dependency class, which is what made the
+        // IntelliJ heap run out in a large multi-module project.
+        Set<String> classpath = new LinkedHashSet<>();
+        for (Module module : byModule.keySet()) {
+            classpath.addAll(classpathFor(module));
+            log("Module [" + module.getName() + "] classpath entries: " + classpathFor(module).size());
+        }
+        for (SourceRoot root : roots) {
+            classpath.add(root.output().toString());
+        }
+        List<String> extra = new ArrayList<>(classpath);
+        EcjIncrementalCompiler.SharedIndex shared = new EcjIncrementalCompiler.SharedIndex();
         Map<Path, EcjIncrementalCompiler> created = new LinkedHashMap<>();
-        for (Map.Entry<Module, List<SourceRoot>> entry : byModule.entrySet()) {
-            Module module = entry.getKey();
-            Set<String> entries = classpathFor(module);
-            for (SourceRoot sibling : roots) {
-                entries.add(sibling.output().toString());
-            }
-            List<String> extra = new ArrayList<>(entries);
-            log("Module [" + module.getName() + "] classpath entries: " + extra.size());
-            for (SourceRoot root : entry.getValue()) {
-                String classpath = EcjIncrementalCompiler.buildClasspath(root.output(), extra);
-                EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(root.root(), root.output(), classpath);
+        boolean indexed = false;
+        for (SourceRoot root : roots) {
+            String rootClasspath = EcjIncrementalCompiler.buildClasspath(root.output(), extra);
+            EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(
+                    root.root(), root.output(), rootClasspath, shared);
+            if (!indexed) {
                 compiler.index();
-                created.put(root.root(), compiler);
+                indexed = true;
+                log("Indexed shared dependency/JDK cache");
             }
+            created.put(root.root(), compiler);
         }
         return Map.copyOf(created);
     }

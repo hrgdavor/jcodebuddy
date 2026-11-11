@@ -23,18 +23,20 @@ watcher.
 
 Everything is in `hr.hrg.jcodebuddy.compile`; the only public type is `EcjIncrementalCompiler`.
 
-| member                                                                   | meaning                                                                                          |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath)` | source root, class output directory, effective classpath (JARs and directories)                  |
-| `void index()`                                                           | one-time, idempotent index of the classpath JARs and the JDK package set. Called automatically by the first compile if omitted |
-| `boolean compile(Set<Path> changedFiles)`                                | compile exactly these files; `true` when all of them compiled without an error. Never throws for a compile/read/path problem |
-| `boolean compileOne(Path changedFile)`                                   | compile one file immediately (a complete public-API compile); same result contract as `compile(Set)` |
-| `EarlyCompilation beginEarly(Path changedFile)`                          | opt-in internal phase split: parse/build bindings now, complete resolution/cross-checks and codegen later |
-| `boolean completeEarly(EarlyCompilation early)`                          | finish a `beginEarly` compilation; the handle is single-use                                      |
-| `long lastCompileNanos()`                                                | wall-clock duration of the last `compile()`, excluding the index — the number a benchmark quotes |
-| `long lastIndexNanos()`                                                  | duration of the last `index()` call                                                              |
-| `List<String> lastErrors()`                                              | immutable diagnostics of the last compile: `file:line  message`, or a read/write failure         |
-| `static String buildClasspath(Path binDir, List<String> extra)`          | `binDir` + `java.class.path` + extras, skipping empty entries                                    |
+| member                                                                                       | meaning                                                                                          |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath)`                     | source root, class output directory, effective classpath (JARs and directories)                  |
+| `EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath, SharedIndex shared)` | share the expensive JAR/JDK index with compilers over the same classpath                         |
+| `SharedIndex`                                                                                | one index shared by several compilers; create it once, then pass it to each constructor          |
+| `void index()`                                                                               | one-time, idempotent index of the classpath JARs and the JDK package set. Called automatically by the first compile if omitted |
+| `boolean compile(Set<Path> changedFiles)`                                                    | compile exactly these files; `true` when all of them compiled without an error. Never throws for a compile/read/path problem |
+| `boolean compileOne(Path changedFile)`                                                       | compile one file immediately (a complete public-API compile); same result contract as `compile(Set)` |
+| `EarlyCompilation beginEarly(Path changedFile)`                                              | opt-in internal phase split: parse/build bindings now, complete resolution/cross-checks and codegen later |
+| `boolean completeEarly(EarlyCompilation early)`                                              | finish a `beginEarly` compilation; the handle is single-use                                      |
+| `long lastCompileNanos()`                                                                    | wall-clock duration of the last `compile()`, excluding the index — the number a benchmark quotes |
+| `long lastIndexNanos()`                                                                      | duration of the last `index()` call                                                              |
+| `List<String> lastErrors()`                                                                  | immutable diagnostics of the last compile: `file:line  message`, or a read/write failure         |
+| `static String buildClasspath(Path binDir, List<String> extra)`                              | `binDir` + `java.class.path` + extras, skipping empty entries                                    |
 
 A typical call sequence:
 
@@ -52,6 +54,10 @@ if (!ok) {
 
 `lastCompileNanos()` is measured inside `compile()` around reading the source files and ECJ's compile, so it does
 not include `index()`. The compiler is not thread-safe; use it from one thread.
+
+A multi-module host should create one `SharedIndex` for the project classpath and pass it to every
+compiler. Without it, each compiler keeps its own copy of every dependency JAR's class bytes, which can
+exhaust the IDE heap on a large Maven reactor.
 
 ### Starting before `END_BATCH` (opt-in internal phase)
 
@@ -86,8 +92,10 @@ classpath sources. The compiler still uses ECJ's internal `Compiler` API deliber
 
 One `CachingNameEnvironment` lives for the whole compiler lifetime:
 
-- `index()` reads every class file of every classpath JAR into a `HashMap` once and records its packages. No
-  compile re-scans a JAR.
+- `index()` scans each classpath JAR's central directory and records the **type name and JAR entry location**,
+  not the class bytes. A dependency class is decompressed only when ECJ first asks for it and is kept in a
+  bounded LRU hot cache (default 32 MB, `-Djcodebuddy.compile.jarCacheBytes=<bytes>`). Unused classes stay in
+  the JAR and are served by the OS page cache.
 - JDK packages are enumerated from `ModuleLayer.boot()`; JDK class bytes are read on first use from the module that
   owns the package and cached, so each type is read once and resolution does not depend on a class loader a
   launcher may have replaced.
@@ -101,6 +109,14 @@ Each `compile()` then:
 3. creates a **fresh** ECJ `Compiler` (per-compilation state must not leak between rounds; the name environment
    is the expensive half and is reused),
 4. compiles, writes the class files and records problems.
+
+### Why JARs are read on demand instead of mmapped
+
+JAR entries are usually compressed, so mapping the JAR file does not give ECJ a usable class byte array
+without decompression. The index therefore stores entry locations, and `JarFile` reads one entry when ECJ
+asks for it; the operating system's page cache keeps hot JAR pages resident without a Java-heap copy. Only
+the bounded LRU hot set is in heap. A future decompressed cache could use a memory-mapped file, but it
+would add a cache format, invalidation and cleanup for little benefit over the OS page cache.
 
 ECJ options are built once: Java 21 source/compliance/target, warnings and Javadoc analysis off, annotation
 processing off, debug attributes on. A project that needs a newer language level changes `buildOptions()`.
@@ -144,6 +160,7 @@ The implementation is copied and adapted from the frozen watch module. Behaviour
 | package                 | `hr.hrg.watch2.run.ecj`                                                       | `hr.hrg.jcodebuddy.compile`                                                                |
 | `binDir` hand-off       | package-private field assigned after construction                             | constructor argument on `CachingNameEnvironment`                                           |
 | JDK class bytes         | eagerly walked the whole `jrt:/` tree into memory (~27k classes) at `index()` | loaded on demand through the boot-layer module that owns the package and cached; JDK packages still come from `ModuleLayer.boot()`, so `index()` stays cheap and memory stays small |
+| JAR class bytes         | every class of every classpath JAR kept in a heap map                         | only type names/locations indexed; class bytes read on demand and held in a bounded LRU hot cache, so unused dependency classes stay out of heap |
 | index lifecycle         | caller had to call `index()` first                                            | `compile()` indexes once if the caller did not                                             |
 | package lookup          | `isPackage` answered from JAR/JDK packages only                               | also probes `binDir`, so packages this project compiled itself are recognised              |
 | package prefixes        | a side effect of the eager `jrt:` walk (`java`, `javax`, …)                   | `registerPackagePath` registers every prefix of every `ModuleLayer.boot()` package         |

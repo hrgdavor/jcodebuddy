@@ -165,6 +165,9 @@ The same messages are written through IntelliJ's `Logger`, so they also appear i
 - **No classloader reload.** Unlike `examples/fsmeta-reload`, the plugin has no separate project
   classloader; IntelliJ loads the compiled classes when a run configuration starts.
 - **No dependency recompilation.** Only files in the fs-meta batch are compiled.
+- **Memory.** One dependency/JDK index is shared by every source root; JAR class bytes are read on demand
+  and kept in a bounded hot cache. If startup reports `OutOfMemoryError`, raise the IDE heap with
+  `Help | Change Memory Settings`.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.
 - **No automatic daemon retry.** If the daemon starts after the project is open, reopen the project or
   restart the IDE so the startup activity can subscribe.

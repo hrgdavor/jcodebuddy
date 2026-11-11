@@ -95,13 +95,28 @@ public final class EcjIncrementalCompiler {
      *                   {@link #buildClasspath(Path, List)}
      */
     public EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath) {
+        this(sourceRoot, binDir, classpath, new SharedIndex());
+    }
+
+    /**
+     * Creates a compiler that shares the expensive JAR/JDK index with other compilers over the same
+     * classpath. This keeps a multi-module host from keeping one copy of every dependency class per
+     * source root.
+     */
+    public EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath, SharedIndex shared) {
         this.sourceRoot = Objects.requireNonNull(sourceRoot, "sourceRoot").toAbsolutePath().normalize();
         this.binDir = Objects.requireNonNull(binDir, "binDir").toAbsolutePath().normalize();
-        this.nameEnvironment = new CachingNameEnvironment(classpath, this.binDir);
+        this.nameEnvironment = new CachingNameEnvironment(classpath, this.binDir,
+                Objects.requireNonNull(shared, "shared").shared);
         this.classFileWriter = new ClassFileWriter(this.binDir);
         this.options = buildOptions();
         this.errorPolicy = DefaultErrorHandlingPolicies.proceedWithAllProblems();
         this.problemFactory = new DefaultProblemFactory(Locale.getDefault());
+    }
+
+    /** An index that several compilers can share; create one and pass it to their constructors. */
+    public static final class SharedIndex {
+        private final CachingNameEnvironment.SharedIndex shared = new CachingNameEnvironment.SharedIndex();
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────

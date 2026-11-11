@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,8 +28,8 @@ import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
 /**
- * A persistent {@link INameEnvironment} that caches the binary contents of all
- * classpath JARs after a one-time {@link #index()} call.
+ * A persistent {@link INameEnvironment} that indexes dependency type locations and reads class bytes
+ * on demand, after a one-time {@link #index()} call.
  *
  * <h2>Why this exists</h2>
  * ECJ's {@code BatchCompiler} builds a fresh name environment on every invocation,
@@ -36,10 +37,8 @@ import java.util.regex.Pattern;
  * of Jackson and SLF4J JARs (a few thousand class files), that is tens of
  * milliseconds before ECJ parses a single source line.
  *
- * <p>By pre-loading the JAR bytes into a {@code HashMap} once, every later
- * {@link #findType} call is a map lookup, and the per-compile overhead drops to
- * near zero. This is the property the incremental compiler relies on: the
- * <em>index</em> is reused, only the sources change.
+ * <p>The index stores entry locations, not class bytes; classes are read on demand and kept in a
+ * bounded LRU hot cache.</p>
  *
  * <h2>Type resolution order</h2>
  * <ol>
@@ -48,7 +47,8 @@ import java.util.regex.Pattern;
  *   <li>The bin directory — classes written by earlier compiles of this project.
  *       Read from the filesystem on every lookup, so a class replaced by the
  *       previous compile is the one that is seen.</li>
- *   <li>The JAR cache — pre-indexed dependency class files.</li>
+ *   <li>The JAR type index — entry locations; class bytes are read on demand from the JAR and cached
+ *       only in a bounded hot set.</li>
  *   <li>JDK class files, read on demand through the {@link Module} that owns the
  *       package (a {@code .class} resource is never encapsulated) and cached from
  *       then on. This deliberately does not depend on a class loader: under a test
@@ -79,25 +79,56 @@ final class CachingNameEnvironment implements INameEnvironment {
     /** Dependency JAR files to index; directories are probed through the filesystem. */
     private final List<File> jarFiles = new ArrayList<>();
 
-    /** All class bytes loaded from dependency JARs, keyed by slash-form type name. */
-    private final Map<String, byte[]> jarTypeCache = new HashMap<>();
+    /**
+     * The expensive half: JAR/JDK class bytes and package information. Several compilers over the same
+     * project classpath share one instance; the per-compiler {@link CachingNameEnvironment} keeps only
+     * its output directory and current source units.
+     */
+    static final class SharedIndex {
+        private static final long MAX_JAR_CACHE_BYTES =
+                Long.getLong("jcodebuddy.compile.jarCacheBytes", 32L * 1024 * 1024);
+        private final Map<String, JarLocation> jarTypes = new HashMap<>();
+        private final LinkedHashMap<String, byte[]> jarBytes = new LinkedHashMap<>(256, 0.75f, true);
+        private long jarBytesSize;
+        private final Map<String, byte[]> jdkTypeCache = new HashMap<>();
+        private final Set<String> packageSet = new HashSet<>();
+        private final Map<String, Module> packageModules = new HashMap<>();
+        private boolean indexed;
 
-    /** Class bytes loaded on demand and kept for later compiles. */
-    private final Map<String, byte[]> jdkTypeCache = new HashMap<>();
+        private byte[] cachedJarType(String typeKey) {
+            return jarBytes.get(typeKey);
+        }
 
-    /** Known package paths in slash form, e.g. {@code "com/fasterxml/jackson"}. */
-    private final Set<String> packageSet = new HashSet<>();
+        private void rememberJarType(String typeKey, byte[] bytes) {
+            byte[] previous = jarBytes.put(typeKey, bytes);
+            if (previous != null) {
+                jarBytesSize -= previous.length;
+            }
+            jarBytesSize += bytes.length;
+            // The JAR is the backing store; this map is only a bounded hot set. Evict in access order
+            // until the budget is met, so a large classpath cannot pin every dependency class in heap.
+            var iterator = jarBytes.entrySet().iterator();
+            while (jarBytesSize > MAX_JAR_CACHE_BYTES && iterator.hasNext()) {
+                Map.Entry<String, byte[]> eldest = iterator.next();
+                if (eldest.getKey().equals(typeKey)) {
+                    continue;
+                }
+                jarBytesSize -= eldest.getValue().length;
+                iterator.remove();
+            }
+        }
+    }
 
-    /** The boot-layer module that owns each JDK package, keyed by slash-form package path. */
-    private final Map<String, Module> packageModules = new HashMap<>();
+    private record JarLocation(File jar, String entryName) {
+    }
+
+    private final SharedIndex shared;
 
     /** The output directory of the project; also a source of already-compiled types. */
     private final Path binDir;
 
     /** Source units of the compile in progress, keyed by internal type name. */
     private Map<String, SourceUnit> sourceUnits = Collections.emptyMap();
-
-    private boolean indexed;
 
     /**
      * @param classpathString effective {@code -cp} string (JARs and directories),
@@ -106,7 +137,12 @@ final class CachingNameEnvironment implements INameEnvironment {
      *                        resolution
      */
     CachingNameEnvironment(String classpathString, Path binDir) {
+        this(classpathString, binDir, new SharedIndex());
+    }
+
+    CachingNameEnvironment(String classpathString, Path binDir, SharedIndex shared) {
         this.binDir = Objects.requireNonNull(binDir, "binDir").toAbsolutePath().normalize();
+        this.shared = Objects.requireNonNull(shared, "shared");
         String classpath = classpathString == null ? "" : classpathString;
         for (String entry : classpath.split(Pattern.quote(File.pathSeparator))) {
             String candidate = entry.trim();
@@ -122,24 +158,17 @@ final class CachingNameEnvironment implements INameEnvironment {
     }
 
     /**
-     * Eagerly loads the binary content of every {@code .class} file in every indexed
-     * JAR, records all JAR package paths, and enumerates every package of every JDK
-     * module in {@link ModuleLayer#boot()}.
+     * Scans every indexed JAR's central directory, records each class's type name and entry location,
+     * records package paths, and enumerates every package of every JDK module in {@link ModuleLayer#boot()}.
+     * Class bytes are not loaded here; they are read from their JAR on first use.
      *
-     * <p>Idempotent, and cheap after the first call. Nothing here is re-done per
-     * compile; that is the point of the class.
-     *
-     * <p>JDK <em>class bytes</em> are deliberately not loaded here: the package set
-     * from the module layer makes {@link #isPackage} answer without I/O, and the
-     * individual class files are read on first use and cached. That keeps the index
-     * small (no tens of thousands of JDK class files in memory) while preserving the
-     * one-read-only property per type.
+     * <p>Idempotent, and cheap after the first call. Nothing here is re-done per compile.</p>
      */
     void index() {
-        if (indexed) {
+        if (shared.indexed) {
             return;
         }
-        indexed = true;
+        shared.indexed = true;
         long startedAt = System.nanoTime();
         int typeCount = 0;
 
@@ -154,10 +183,8 @@ final class CachingNameEnvironment implements INameEnvironment {
                     }
                     String typeKey = name.substring(0, name.length() - ".class".length());
                     registerPackage(typeKey);
-                    try (InputStream in = jarFile.getInputStream(entry)) {
-                        jarTypeCache.put(typeKey, in.readAllBytes());
-                        typeCount++;
-                    }
+                    shared.jarTypes.put(typeKey, new JarLocation(jar, name));
+                    typeCount++;
                 }
             } catch (IOException e) {
                 log.log(Level.WARNING, "failed to index JAR " + jar + ": " + e);
@@ -168,14 +195,14 @@ final class CachingNameEnvironment implements INameEnvironment {
         for (Module module : ModuleLayer.boot().modules()) {
             for (String packageName : module.getPackages()) {
                 String packagePath = packageName.replace('.', '/');
-                if (packageSet.add(packagePath)) {
+                if (shared.packageSet.add(packagePath)) {
                     packageCount++;
                 }
                 // Prefix packages matter: resolving `java.lang.Object` first asks
                 // `isPackage("java")`, then `isPackage("java.lang")`. Without the
                 // prefixes ECJ treats `java` as a type name and never resolves Object.
                 registerPackagePath(packagePath);
-                packageModules.putIfAbsent(packagePath, module);
+                shared.packageModules.putIfAbsent(packagePath, module);
             }
         }
 
@@ -185,7 +212,7 @@ final class CachingNameEnvironment implements INameEnvironment {
     }
 
     boolean isIndexed() {
-        return indexed;
+        return shared.indexed;
     }
 
     /**
@@ -223,7 +250,7 @@ final class CachingNameEnvironment implements INameEnvironment {
         if (key.isEmpty()) {
             return false;
         }
-        if (packageSet.contains(key)) {
+        if (shared.packageSet.contains(key)) {
             return true;
         }
         // A package this project compiled itself lives under bin/, not in any JAR.
@@ -256,21 +283,30 @@ final class CachingNameEnvironment implements INameEnvironment {
             return fromBin;
         }
 
-        // 3. A dependency class, pre-indexed in memory.
-        byte[] jarBytes = jarTypeCache.get(typeKey);
-        if (jarBytes != null) {
-            return toAnswer(jarBytes, typeKey);
+        // 3. A dependency class: read it from its JAR now, then keep it in the bounded hot cache.
+        JarLocation jarLocation = shared.jarTypes.get(typeKey);
+        if (jarLocation != null) {
+            byte[] jarBytes = shared.cachedJarType(typeKey);
+            if (jarBytes == null) {
+                jarBytes = readJarType(jarLocation);
+                if (jarBytes != null) {
+                    shared.rememberJarType(typeKey, jarBytes);
+                }
+            }
+            if (jarBytes != null) {
+                return toAnswer(jarBytes, typeKey);
+            }
         }
 
         // 4. A JDK type: the boot-layer module that owns its package serves the bytes.
-        byte[] cachedBytes = jdkTypeCache.get(typeKey);
+        byte[] cachedBytes = shared.jdkTypeCache.get(typeKey);
         if (cachedBytes != null) {
             return toAnswer(cachedBytes, typeKey);
         }
 
         byte[] moduleBytes = loadFromModule(typeKey);
         if (moduleBytes != null) {
-            jdkTypeCache.put(typeKey, moduleBytes);
+            shared.jdkTypeCache.put(typeKey, moduleBytes);
             registerPackage(typeKey);
             return toAnswer(moduleBytes, typeKey);
         }
@@ -279,12 +315,32 @@ final class CachingNameEnvironment implements INameEnvironment {
         //    indexed, a launcher's own classpath), cached like the JDK ones.
         byte[] loadedBytes = loadViaClassLoader(typeKey);
         if (loadedBytes != null) {
-            jdkTypeCache.put(typeKey, loadedBytes);
+            shared.jdkTypeCache.put(typeKey, loadedBytes);
             registerPackage(typeKey);
             return toAnswer(loadedBytes, typeKey);
         }
 
         return null;
+    }
+
+    /**
+     * Reads one class file from its JAR on demand. The JAR stays on disk; the OS page cache is the
+     * real backing store, so only the bounded hot set in {@link SharedIndex} occupies Java heap.
+     */
+    private static byte[] readJarType(JarLocation location) {
+        try (JarFile jar = new JarFile(location.jar())) {
+            JarEntry entry = jar.getJarEntry(location.entryName());
+            if (entry == null) {
+                return null;
+            }
+            try (InputStream in = jar.getInputStream(entry)) {
+                return in.readAllBytes();
+            }
+        } catch (IOException failed) {
+            log.log(Level.DEBUG, "could not read " + location.entryName() + " from " + location.jar()
+                    + ": " + failed);
+            return null;
+        }
     }
 
     private NameEnvironmentAnswer lookupInBinDir(String typeKey) {
@@ -323,7 +379,7 @@ final class CachingNameEnvironment implements INameEnvironment {
     private byte[] loadFromModule(String typeKey) {
         int lastSlash = typeKey.lastIndexOf('/');
         String packagePath = lastSlash < 0 ? "" : typeKey.substring(0, lastSlash);
-        Module module = packageModules.get(packagePath);
+        Module module = shared.packageModules.get(packagePath);
         if (module == null) {
             return null;
         }
@@ -382,7 +438,7 @@ final class CachingNameEnvironment implements INameEnvironment {
             if (next < 0) {
                 next = packagePath.length();
             }
-            packageSet.add(packagePath.substring(0, next));
+            shared.packageSet.add(packagePath.substring(0, next));
             if (next == packagePath.length()) {
                 break;
             }

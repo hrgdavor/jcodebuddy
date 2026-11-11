@@ -179,6 +179,11 @@ Batch: changed=[...] deleted=[...]
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 
+The log also prints the IDE heap maximum and current use at startup. If the build reports
+`OutOfMemoryError`, increase the IDE heap (`Help | Change Memory Settings`); the compiler now shares one
+lazy JAR/JDK index across the whole project and keeps only a bounded class-byte hot cache, so a large
+reactor should not multiply dependency caches per module.
+
 ## Multi-module projects
 
 The plugin uses IntelliJ's modules directly:
@@ -211,6 +216,10 @@ limitation as the standalone example.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.
 - **No automatic retry**: if the daemon is started after the project is opened, reopen the project (or
   restart the IDE) so the startup activity can subscribe.
+- **Memory**: the plugin shares one dependency index across all source roots. JAR class bytes are read on
+  demand from the JAR and limited to a bounded hot cache; the JARs themselves stay on disk. The IDE heap
+  maximum is logged at startup. Large projects may still need a higher IDE heap via
+  `Help | Change Memory Settings`.
 
 ## Development
 

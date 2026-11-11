@@ -66,6 +66,27 @@ class EcjIncrementalCompilerTest {
     }
 
     @Test
+    void resolvesATypeFromAJarOnDemand() throws Exception {
+        Path ecjJar = Path.of(Class.forName("org.eclipse.jdt.internal.compiler.Compiler")
+                .getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path usesEcj = write("demo/UsesEcj.java", """
+                package demo;
+
+                import org.eclipse.jdt.internal.compiler.Compiler;
+
+                public final class UsesEcj {
+                    Compiler compiler;
+                }
+                """);
+
+        EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(sourceRoot, binDir, ecjJar.toString());
+        compiler.index();
+
+        assertCompiles(compiler, usesEcj);
+        assertTrue(Files.isRegularFile(binDir.resolve("demo").resolve("UsesEcj.class")));
+    }
+
+    @Test
     void earlyPhaseStartsBeforeCompletionAndWritesTheClassOnCompletion() throws IOException {
         Path hello = write("demo/Early.java", """
                 package demo;
