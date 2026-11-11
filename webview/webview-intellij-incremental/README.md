@@ -24,10 +24,9 @@ project can keep it disabled.
 
 On project open, when that project setting is enabled, the plugin:
 
-1. collects the project's Java source roots from IntelliJ;
-2. creates one `EcjIncrementalCompiler` per source root, writing into the module's existing compiler
-   output (`CompilerModuleExtension`);
-3. compiles the source roots once;
+1. collects the project's Java source roots and module compiler outputs from IntelliJ, across all modules;
+2. creates one `EcjIncrementalCompiler` per source root, writing into that module's existing compiler output;
+3. compiles the source roots once, in module-dependency order;
 4. subscribes to the fs-meta daemon serving the project root;
 5. compiles exactly the changed `.java` files from each fs-meta batch;
 6. publishes the compiler diagnostics to IntelliJ and restarts highlighting.
@@ -152,13 +151,59 @@ a successful compile replaces that source root's diagnostics with an empty list,
 Line numbers are 1-based in the compiler output and converted to zero-based editor offsets by the
 annotator. `column: 0` means "whole line".
 
+## Logs
+
+There are two places to look:
+
+1. **View | Tool Windows | JCodeBuddy Build** — an in-IDE log with the current session's events:
+   source-root discovery, module classpaths, fs-meta daemon/socket/filter, batches, compile results and
+   failures. It is the quickest troubleshooting view.
+2. **`idea.log`** — every line is also written through IntelliJ's `Logger`. Use
+   **Help | Show Log in Explorer** (Windows) and search for `JCodeBuddy`.
+
+The service logs:
+
+```text
+Starting incremental build for <project>
+Source root [module] <path> -> <output>
+Module [module] classpath entries: N
+Initial compile: N source root(s)
+Compiling [module] N file(s) from <root>
+Compile OK [module] <root>
+Compile FAILED [module] N diagnostic(s); first: ...
+fs-meta daemon root: ...
+fs-meta socket: ...
+fs-meta filter: ...
+Batch: changed=[...] deleted=[...]
+```
+
+A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
+
+## Multi-module projects
+
+The plugin uses IntelliJ's modules directly:
+
+- every Java source root of every module gets its own compiler;
+- each compiler writes to **that module's** compiler output;
+- each module gets its **own** classpath (`OrderEnumerator.orderEntries(module)`);
+- initial compilation follows module dependency order, so a dependency module is compiled before a
+  module that uses its output.
+
+One root is still registered with fs-meta: the **project/aggregator root**. Do not register each Maven
+module as a separate fs-meta root.
+
+A batch that changes several modules is compiled in module dependency order. A change in module B does
+not automatically recompile an unchanged dependent module A; that is the same no-dependency-graph
+limitation as the standalone example.
+
 ## Configuration limits
 
 - **Source roots and output** come from the IntelliJ project. If a module has no compiler output path,
   the plugin falls back to `out/production/<module>` or `out/test/<module>`; set the module output in
   `Project Structure` if a run configuration must see it.
-- **Classpath** is built from the project's order entries (`OrderRootType.CLASSES`) plus the module
-  output directories. The JDK is resolved by `jcodebuddy-compile`.
+- **Classpath** is built per module from that module's `OrderEnumerator.orderEntries(module)` and
+  `OrderRootType.CLASSES`; all module output directories are included too. The JDK is resolved by
+  `jcodebuddy-compile`.
 - **No classloader reload**: unlike `examples/fsmeta-reload`, the plugin has no project-only classloader;
   IntelliJ loads the compiled classes when the project's run configuration starts.
 - **No dependency recompilation**: only files in the fs-meta batch are compiled. A changed signature that

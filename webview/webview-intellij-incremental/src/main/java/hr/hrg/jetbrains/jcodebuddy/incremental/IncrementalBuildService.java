@@ -6,6 +6,7 @@ import com.intellij.notification.NotificationType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
@@ -30,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -60,10 +62,12 @@ import java.util.stream.Stream;
 @Service(Service.Level.PROJECT)
 public final class IncrementalBuildService implements Disposable {
 
+    private static final Logger LOG = Logger.getInstance(IncrementalBuildService.class);
     private static final Pattern DIAGNOSTIC = Pattern.compile("^(.+):(\\d+)\\s{2}(.*)$");
 
     private final Project project;
     private final IncrementalDiagnosticsService diagnostics;
+    private final IncrementalLogService logService;
     private final JcodeBuddySettings settings;
     private final Object lifecycle = new Object();
     private volatile ExecutorService worker;
@@ -78,16 +82,19 @@ public final class IncrementalBuildService implements Disposable {
     public IncrementalBuildService(@NotNull Project project) {
         this.project = project;
         this.diagnostics = project.getService(IncrementalDiagnosticsService.class);
+        this.logService = project.getService(IncrementalLogService.class);
         this.settings = project.getService(JcodeBuddySettings.class);
     }
 
     /** Starts the loop once per project when the project-level setting is enabled. */
     public void start() {
         if (!settings.isEnabled()) {
+            log("Start requested but the project setting is disabled");
             return;
         }
         synchronized (lifecycle) {
             if (!started.compareAndSet(false, true)) {
+                log("Start requested but the incremental build is already running");
                 return;
             }
             String base = project.getBasePath();
@@ -97,6 +104,7 @@ public final class IncrementalBuildService implements Disposable {
                 return;
             }
             projectRoot = Path.of(base).toAbsolutePath().normalize();
+            log("Starting incremental build for " + projectRoot);
             worker = Executors.newSingleThreadExecutor(task -> {
                 Thread thread = new Thread(task, "jcodebuddy-incremental-build");
                 thread.setDaemon(true);
@@ -120,6 +128,7 @@ public final class IncrementalBuildService implements Disposable {
             if (!started.compareAndSet(true, false)) {
                 return;
             }
+            log("Stopping incremental build");
             FsMetaDaemonWatch current = watch;
             watch = null;
             if (current != null) {
@@ -144,21 +153,24 @@ public final class IncrementalBuildService implements Disposable {
             }
             sourceRoots = collectSourceRoots();
             if (sourceRoots.isEmpty() || !started.get()) {
+                log("No Java source roots found; incremental build is idle");
                 return;
             }
+            log("Discovered " + sourceRoots.size() + " Java source root(s) across modules");
             compilers = createCompilers(sourceRoots);
             compileAll();
             if (started.get()) {
                 startWatch();
             }
         } catch (Throwable failed) {
+            LOG.error("JCodeBuddy incremental build failed to start", failed);
             notify("JCodeBuddy incremental build failed to start: " + failed, NotificationType.ERROR);
         }
     }
 
     private List<SourceRoot> collectSourceRoots() {
         List<SourceRoot> roots = new ArrayList<>();
-        for (Module module : ModuleManager.getInstance(project).getModules()) {
+        for (Module module : modulesInDependencyOrder()) {
             CompilerModuleExtension extension = CompilerModuleExtension.getInstance(module);
             VirtualFile mainOutput = extension == null ? null : extension.getCompilerOutputPath();
             VirtualFile testOutput = extension == null ? null : extension.getCompilerOutputPathForTests();
@@ -170,11 +182,40 @@ public final class IncrementalBuildService implements Disposable {
                     }
                     boolean test = folder.isTestSource();
                     Path output = outputFor(module, test ? testOutput : mainOutput, test);
-                    roots.add(new SourceRoot(Path.of(root.getPath()).toAbsolutePath().normalize(), output, test));
+                    SourceRoot source = new SourceRoot(module, Path.of(root.getPath()).toAbsolutePath().normalize(),
+                            output, test);
+                    roots.add(source);
+                    log("Source root [" + module.getName() + "] " + source.root()
+                            + (test ? " (test)" : "") + " -> " + output);
                 }
             }
         }
         return List.copyOf(roots);
+    }
+
+    /**
+     * Topological module order: a dependency is visited before the module that needs its output. This is
+     * what makes an initial multi-module compile work when IntelliJ has no previous class output.
+     */
+    private List<Module> modulesInDependencyOrder() {
+        List<Module> ordered = new ArrayList<>();
+        Map<Module, Boolean> visiting = new HashMap<>();
+        for (Module module : ModuleManager.getInstance(project).getModules()) {
+            visit(module, visiting, ordered);
+        }
+        return ordered;
+    }
+
+    private void visit(Module module, Map<Module, Boolean> visiting, List<Module> ordered) {
+        Boolean state = visiting.get(module);
+        if (state != null) {
+            return; // already ordered, or a cycle; a cycle cannot improve on one pass
+        }
+        visiting.put(module, Boolean.TRUE);
+        for (Module dependency : ModuleRootManager.getInstance(module).getDependencies()) {
+            visit(dependency, visiting, ordered);
+        }
+        ordered.add(module);
     }
 
     private Path outputFor(Module module, VirtualFile compilerOutput, boolean test) {
@@ -187,34 +228,49 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private Map<Path, EcjIncrementalCompiler> createCompilers(List<SourceRoot> roots) {
+        Map<Module, List<SourceRoot>> byModule = new LinkedHashMap<>();
+        for (SourceRoot root : roots) {
+            byModule.computeIfAbsent(root.module(), ignored -> new ArrayList<>()).add(root);
+        }
+        Map<Path, EcjIncrementalCompiler> created = new LinkedHashMap<>();
+        for (Map.Entry<Module, List<SourceRoot>> entry : byModule.entrySet()) {
+            Module module = entry.getKey();
+            Set<String> entries = classpathFor(module);
+            for (SourceRoot sibling : roots) {
+                entries.add(sibling.output().toString());
+            }
+            List<String> extra = new ArrayList<>(entries);
+            log("Module [" + module.getName() + "] classpath entries: " + extra.size());
+            for (SourceRoot root : entry.getValue()) {
+                String classpath = EcjIncrementalCompiler.buildClasspath(root.output(), extra);
+                EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(root.root(), root.output(), classpath);
+                compiler.index();
+                created.put(root.root(), compiler);
+            }
+        }
+        return Map.copyOf(created);
+    }
+
+    private Set<String> classpathFor(Module module) {
         Set<String> entries = new LinkedHashSet<>();
-        OrderEnumerator.orderEntries(project).recursively().forEach(entry -> {
+        OrderEnumerator.orderEntries(module).recursively().forEach(entry -> {
             for (VirtualFile file : entry.getFiles(OrderRootType.CLASSES)) {
                 entries.add(file.getPath());
             }
             return true;
         });
-        for (SourceRoot root : roots) {
-            entries.add(root.output().toString());
-        }
-        List<String> extra = new ArrayList<>(entries);
-        Map<Path, EcjIncrementalCompiler> created = new LinkedHashMap<>();
-        for (SourceRoot root : roots) {
-            String classpath = EcjIncrementalCompiler.buildClasspath(root.output(), extra);
-            EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(root.root(), root.output(), classpath);
-            compiler.index();
-            created.put(root.root(), compiler);
-        }
-        return Map.copyOf(created);
+        return entries;
     }
 
     private void compileAll() {
+        log("Initial compile: " + sourceRoots.size() + " source root(s)");
         for (SourceRoot root : sourceRoots) {
             EcjIncrementalCompiler compiler = compilers.get(root.root());
             if (compiler == null) {
                 continue;
             }
             Set<Path> files = javaFiles(root.root());
+            log("Compiling [" + root.module().getName() + "] " + files.size() + " file(s) from " + root.root());
             compiler.compile(files);
             publish(root, compiler);
         }
@@ -226,6 +282,7 @@ public final class IncrementalBuildService implements Disposable {
         try {
             attach = FsMetaDaemonDiscovery.discoverAncestor(projectRoot);
         } catch (RuntimeException failed) {
+            LOG.error("Cannot find the fs-meta daemon", failed);
             notify("Cannot find the fs-meta daemon: " + failed, NotificationType.WARNING);
             return;
         }
@@ -237,11 +294,16 @@ public final class IncrementalBuildService implements Disposable {
         }
         daemonRoot = attach.location().root();
         PathFilter filter = filterFor(daemonRoot);
+        log("fs-meta daemon root: " + daemonRoot);
+        log("fs-meta socket: " + attach.location().socket());
+        log("fs-meta filter: " + filter);
         watch = new FsMetaDaemonWatch(filter, attach.location().socket(), FsMetaClient.LATEST,
                 batch -> worker.submit(() -> apply(batch)));
         try {
             watch.start();
+            log("Subscribed to fs-meta at generation " + FsMetaClient.LATEST);
         } catch (IOException failed) {
+            LOG.error("Cannot start the fs-meta subscription", failed);
             notify("Cannot start the fs-meta subscription: " + failed, NotificationType.WARNING);
         }
     }
@@ -262,6 +324,8 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void apply(WatchBatch batch) {
+        log("Batch: changed=" + batch.changed() + " deleted=" + batch.deleted()
+                + (batch.overflow() ? " overflow" : ""));
         if (batch.overflow()) {
             compileAll();
             return;
@@ -280,18 +344,21 @@ public final class IncrementalBuildService implements Disposable {
             }
         }
         if (changedByRoot.isEmpty()) {
+            log("Batch had no Java source changes");
             return;
         }
-        for (Map.Entry<Path, Set<Path>> entry : changedByRoot.entrySet()) {
-            SourceRoot root = sourceRoots.stream()
-                    .filter(candidate -> candidate.root().equals(entry.getKey()))
-                    .findFirst()
-                    .orElse(null);
-            EcjIncrementalCompiler compiler = compilers.get(entry.getKey());
-            if (root == null || compiler == null) {
+        for (SourceRoot root : sourceRoots) {
+            Set<Path> changed = changedByRoot.get(root.root());
+            EcjIncrementalCompiler compiler = compilers.get(root.root());
+            if (changed == null) {
                 continue;
             }
-            compiler.compile(entry.getValue());
+            if (compiler == null) {
+                log("No compiler for changed root " + root.root());
+                continue;
+            }
+            log("Compiling [" + root.module().getName() + "] " + changed.size() + " changed file(s)");
+            compiler.compile(changed);
             publish(root, compiler);
         }
         refreshHighlighting();
@@ -321,6 +388,12 @@ public final class IncrementalBuildService implements Disposable {
             }
         }
         diagnostics.replaceRoot(root.root(), parsed);
+        if (parsed.isEmpty()) {
+            log("Compile OK [" + root.module().getName() + "] " + root.root());
+        } else {
+            log("Compile FAILED [" + root.module().getName() + "] " + parsed.size()
+                    + " diagnostic(s); first: " + parsed.getFirst().message());
+        }
     }
 
     private void refreshHighlighting() {
@@ -328,7 +401,13 @@ public final class IncrementalBuildService implements Disposable {
                 () -> DaemonCodeAnalyzer.getInstance(project).restart());
     }
 
+    private void log(String message) {
+        LOG.info(message);
+        logService.add(message);
+    }
+
     private void notify(String message, NotificationType type) {
+        log(type + ": " + message);
         NotificationGroupManager.getInstance()
                 .getNotificationGroup("JCodeBuddy Incremental Build")
                 .createNotification(message, type)
@@ -354,6 +433,6 @@ public final class IncrementalBuildService implements Disposable {
         stop();
     }
 
-    private record SourceRoot(Path root, Path output, boolean test) {
+    private record SourceRoot(Module module, Path root, Path output, boolean test) {
     }
 }

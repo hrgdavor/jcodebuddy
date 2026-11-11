@@ -17,6 +17,10 @@
                              displayName="JCodeBuddy Incremental Build"/> 
         <externalAnnotator language="JAVA"
                            implementationClass="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyDiagnosticsAnnotator"/>
+        <toolWindow id="JCodeBuddy Build"
+                    factoryClass="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyLogToolWindowFactory"
+                    anchor="right"
+                    secondary="true"/>
         <notificationGroup id="JCodeBuddy Incremental Build" displayType="BALLOON" isLogByDefault="true"/>
     </extensions>
 </idea-plugin>

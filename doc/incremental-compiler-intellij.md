@@ -131,13 +131,37 @@ documented extension point for external validation is
 [`ExternalAnnotator`](https://plugins.jetbrains.com/docs/intellij/syntax-highlighting-and-error-highlighting.html.md#external-annotator);
 the plugin implements exactly that.
 
+## Multi-module Maven projects
+
+The plugin uses IntelliJ's modules:
+
+- every Java source root in every module gets its own `EcjIncrementalCompiler`;
+- each compiler writes to that module's own compiler output;
+- the classpath is built **per module** from `OrderEnumerator.orderEntries(module)`;
+- initial compilation follows module dependency order, so a dependency module is compiled before a
+  module that consumes its output;
+- a multi-module batch is compiled in that same order.
+
+Register the **project/aggregator root** with fs-meta once, not each Maven module. A change in module B
+does not automatically recompile an unchanged module A that depends on it; the plugin compiles only the
+changed batch.
+
+## Logs
+
+Use **View | Tool Windows | JCodeBuddy Build** for the in-IDE log. It includes source-root discovery,
+module classpaths, fs-meta daemon/socket/filter values, batches, compile results and failures.
+
+The same messages are written through IntelliJ's `Logger`, so they also appear in `idea.log`
+(**Help | Show Log in Explorer** on Windows); search for `JCodeBuddy`.
+
 ## Configuration and limits
 
 - **Source roots and output** come from the IntelliJ project. If a module has no compiler output path,
   the plugin falls back to `out/production/<module>` or `out/test/<module>`; set the module output in
   `Project Structure` if a run configuration must see it.
-- **Classpath** is built from the project's `OrderRootType.CLASSES` order entries plus module output
-  directories. `jcodebuddy-compile` resolves the JDK itself.
+- **Classpath** is built per module from that module's `OrderEnumerator.orderEntries(module)` and
+  `OrderRootType.CLASSES`; all module output directories are included. `jcodebuddy-compile` resolves the
+  JDK itself.
 - **No classloader reload.** Unlike `examples/fsmeta-reload`, the plugin has no separate project
   classloader; IntelliJ loads the compiled classes when a run configuration starts.
 - **No dependency recompilation.** Only files in the fs-meta batch are compiled.
@@ -148,14 +172,14 @@ the plugin implements exactly that.
 
 ## Troubleshooting
 
-| symptom                                  | cause                                                                 | fix                                                                                          |
-| ---------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| no squiggles at all                      | plugin disabled for this project, or the daemon was absent at startup | enable it in `Settings                                                                       | Tools | JCodeBuddy Incremental Build`; start `fsmeta`; reopen the project |
-| old errors remain after a good compile   | highlighting was not restarted, or the file is not open               | check the notification/event log; reopen the file; re-run the compile                        |
-| errors are on the wrong line             | line/column convention mismatch                                       | report it; compiler lines are 1-based and columns are 0-based here                           |
-| IDE still builds on save                 | auto-build or a Run configuration's Build step is still enabled       | disable both                                                                                 |
-| unresolved project classes               | plugin output is not the module output IntelliJ uses                  | align `Project Structure → Modules → Paths` with the plugin output, or set the module output |
-| IntelliJ build overwrites plugin classes | an explicit Build still runs and shares the output directory          | remove the before-launch Build step, or use a separate module output for the external loop   |
+| symptom                                  | cause                                                                 | fix                                                                                              |
+| ---------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| no squiggles at all                      | plugin disabled for this project, or the daemon was absent at startup | enable it in Settings → Tools → JCodeBuddy Incremental Build; start `fsmeta`; reopen the project |
+| old errors remain after a good compile   | highlighting was not restarted, or the file is not open               | check the notification/event log; reopen the file; re-run the compile                            |
+| errors are on the wrong line             | line/column convention mismatch                                       | report it; compiler lines are 1-based and columns are 0-based here                               |
+| IDE still builds on save                 | auto-build or a Run configuration's Build step is still enabled       | disable both                                                                                     |
+| unresolved project classes               | plugin output is not the module output IntelliJ uses                  | align `Project Structure → Modules → Paths` with the plugin output, or set the module output     |
+| IntelliJ build overwrites plugin classes | an explicit Build still runs and shares the output directory          | remove the before-launch Build step, or use a separate module output for the external loop       |
 
 For building, running in a sandbox IDE, and the exact bundled jars, see the plugin's own
 [README](../webview/webview-intellij-incremental/README.md).
