@@ -166,8 +166,10 @@ The same messages are written through IntelliJ's `Logger`, so they also appear i
   classloader; IntelliJ loads the compiled classes when a run configuration starts.
 - **No dependency recompilation.** Only files in the fs-meta batch are compiled.
 - **Memory.** One dependency/JDK index is shared by every source root; JAR class bytes are read on demand
-  and kept in a bounded hot cache. If startup reports `OutOfMemoryError`, raise the IDE heap with
-  `Help | Change Memory Settings`.
+  and kept in a bounded hot cache. The initial compile is chunked to bound ECJ's transient AST peak; the
+  chunk size is `-Djcodebuddy.intellij.initialCompileChunk` (default 32). If startup reports
+  `OutOfMemoryError`, raise the IDE heap with `Help | Change Memory Settings` and inspect the memory lines in
+  the JCodeBuddy Build log.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.
 - **No automatic daemon retry.** If the daemon starts after the project is open, reopen the project or
   restart the IDE so the startup activity can subscribe.

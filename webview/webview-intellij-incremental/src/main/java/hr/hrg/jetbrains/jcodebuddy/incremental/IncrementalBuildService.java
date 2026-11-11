@@ -31,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -64,6 +65,8 @@ public final class IncrementalBuildService implements Disposable {
 
     private static final Logger LOG = Logger.getInstance(IncrementalBuildService.class);
     private static final Pattern DIAGNOSTIC = Pattern.compile("^(.+):(\\d+)\\s{2}(.*)$");
+    private static final int INITIAL_COMPILE_CHUNK =
+            Integer.getInteger("jcodebuddy.intellij.initialCompileChunk", 32);
 
     private final Project project;
     private final IncrementalDiagnosticsService diagnostics;
@@ -180,6 +183,7 @@ public final class IncrementalBuildService implements Disposable {
     private List<SourceRoot> collectSourceRoots() {
         List<SourceRoot> roots = new ArrayList<>();
         for (Module module : modulesInDependencyOrder()) {
+            List<SourceRoot> moduleRoots = new ArrayList<>();
             CompilerModuleExtension extension = CompilerModuleExtension.getInstance(module);
             VirtualFile mainOutput = extension == null ? null : extension.getCompilerOutputPath();
             VirtualFile testOutput = extension == null ? null : extension.getCompilerOutputPathForTests();
@@ -193,11 +197,13 @@ public final class IncrementalBuildService implements Disposable {
                     Path output = outputFor(module, test ? testOutput : mainOutput, test);
                     SourceRoot source = new SourceRoot(module, Path.of(root.getPath()).toAbsolutePath().normalize(),
                             output, test);
-                    roots.add(source);
+                    moduleRoots.add(source);
                     log("Source root [" + module.getName() + "] " + source.root()
                             + (test ? " (test)" : "") + " -> " + output);
                 }
             }
+            moduleRoots.sort(Comparator.comparing(SourceRoot::test));
+            roots.addAll(moduleRoots);
         }
         return List.copyOf(roots);
     }
@@ -283,15 +289,40 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void compileAll() {
-        log("Initial compile: " + sourceRoots.size() + " source root(s)");
+        log("Initial compile: " + sourceRoots.size() + " source root(s), chunk=" + INITIAL_COMPILE_CHUNK);
+        logCompilerMemory("before initial compile");
         for (SourceRoot root : sourceRoots) {
             EcjIncrementalCompiler compiler = compilers.get(root.root());
             if (compiler == null) {
                 continue;
             }
             Set<Path> files = javaFiles(root.root());
-            log("Compiling [" + root.module().getName() + "] " + files.size() + " file(s) from " + root.root());
-            compiler.compile(files);
+            List<Path> pending = new ArrayList<>(files);
+            Set<Path> failed = new LinkedHashSet<>();
+            if (pending.isEmpty()) {
+                compiler.compile(Set.of());
+                publish(root, compiler);
+                continue;
+            }
+            int chunkIndex = 0;
+            for (int start = 0; start < pending.size(); start += INITIAL_COMPILE_CHUNK) {
+                int end = Math.min(start + INITIAL_COMPILE_CHUNK, pending.size());
+                Set<Path> chunk = new LinkedHashSet<>(pending.subList(start, end));
+                chunkIndex++;
+                log("Compiling [" + root.module().getName() + "] chunk " + chunkIndex + " "
+                        + chunk.size() + " file(s) from " + root.root());
+                if (!compiler.compile(chunk)) {
+                    failed.addAll(chunk);
+                }
+            }
+            // A chunk may reference a type that a later chunk writes. Retry the failed files once, after
+            // every chunk has had a chance to produce its class files. Real errors fail again and are
+            // published from this final pass.
+            if (!failed.isEmpty()) {
+                log("Retrying [" + root.module().getName() + "] " + failed.size()
+                        + " file(s) after the initial chunk pass");
+                compiler.compile(failed);
+            }
             publish(root, compiler);
         }
         logCompilerMemory("after initial compile");
