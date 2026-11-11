@@ -253,8 +253,9 @@ public final class IncrementalBuildService implements Disposable {
         // IntelliJ heap run out in a large multi-module project.
         Set<String> classpath = new LinkedHashSet<>();
         for (Module module : byModule.keySet()) {
-            classpath.addAll(classpathFor(module));
-            log("Module [" + module.getName() + "] classpath entries: " + classpathFor(module).size());
+            Set<String> moduleClasspath = classpathFor(module);
+            logClasspath(module, moduleClasspath);
+            classpath.addAll(moduleClasspath);
         }
         for (SourceRoot root : roots) {
             classpath.add(root.output().toString());
@@ -286,6 +287,42 @@ public final class IncrementalBuildService implements Disposable {
             return true;
         });
         return entries;
+    }
+
+    /**
+     * Logs every classpath entry, not just the count. This is the first thing to inspect when a Maven
+     * dependency appears unresolvable: it shows whether the entry was present, whether it is a JAR or a
+     * directory, and whether it exists on disk.
+     */
+    private void logClasspath(Module module, Set<String> entries) {
+        int jars = 0;
+        int directories = 0;
+        int missing = 0;
+        log("Classpath [" + module.getName() + "] " + entries.size() + " entries:");
+        for (String entry : entries) {
+            Path path;
+            try {
+                path = Path.of(entry);
+            } catch (RuntimeException malformed) {
+                missing++;
+                log("  MISSING (invalid path) " + entry);
+                continue;
+            }
+            String kind;
+            if (Files.isDirectory(path)) {
+                kind = "DIR";
+                directories++;
+            } else if (Files.isRegularFile(path)) {
+                kind = "JAR";
+                jars++;
+            } else {
+                kind = "MISSING";
+                missing++;
+            }
+            log("  " + kind + " " + entry);
+        }
+        log("Classpath summary [" + module.getName() + "]: jars=" + jars
+                + ", dirs=" + directories + ", missing=" + missing);
     }
 
     private void compileAll() {

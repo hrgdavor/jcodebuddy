@@ -119,7 +119,9 @@ One `CachingNameEnvironment` lives for the whole compiler lifetime:
   owns the package and cached, so each type is read once and resolution does not depend on a class loader a
   launcher may have replaced.
 - Classes this project compiled earlier are resolved from `binDir` on every lookup, so a change in one file does
-  not force the files that depend on it to be recompiled.
+  not force the files that depend on it to be recompiled. Other classpath **directories** (module outputs,
+  exploded libraries) are probed the same way; this is what lets a Maven multi-module classpath resolve
+  sibling `target/classes` directories.
 
 Each `compile()` then:
 

@@ -152,7 +152,9 @@ Use **View | Tool Windows | JCodeBuddy Build** for the in-IDE log. It includes s
 module classpaths, fs-meta daemon/socket/filter values, batches, compile results and failures.
 
 The same messages are written through IntelliJ's `Logger`, so they also appear in `idea.log`
-(**Help | Show Log in Explorer** on Windows); search for `JCodeBuddy`.
+(**Help | Show Log in Explorer** on Windows); search for `JCodeBuddy`. The log lists every module
+classpath entry as `JAR`, `DIR`, or `MISSING`; that is the first place to inspect when a Maven dependency
+appears unresolved.
 
 ## Configuration and limits
 

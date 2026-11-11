@@ -79,6 +79,9 @@ final class CachingNameEnvironment implements INameEnvironment {
     /** Dependency JAR files to index; directories are probed through the filesystem. */
     private final List<File> jarFiles = new ArrayList<>();
 
+    /** Classpath directories (module outputs, exploded libraries); classes are read on demand. */
+    private final List<Path> classDirectories = new ArrayList<>();
+
     /**
      * The expensive half: JAR/JDK class bytes and package information. Several compilers over the same
      * project classpath share one instance; the per-compiler {@link CachingNameEnvironment} keeps only
@@ -180,6 +183,8 @@ final class CachingNameEnvironment implements INameEnvironment {
             File file = new File(candidate);
             if (file.isFile() && (candidate.endsWith(".jar") || candidate.endsWith(".zip"))) {
                 jarFiles.add(file);
+            } else if (file.isDirectory()) {
+                classDirectories.add(file.toPath().toAbsolutePath().normalize());
             }
             // Directories (including the bin directory) are checked through the filesystem.
         }
@@ -287,7 +292,15 @@ final class CachingNameEnvironment implements INameEnvironment {
             return true;
         }
         // A package this project compiled itself lives under bin/, not in any JAR.
-        return Files.isDirectory(binDir.resolve(key.replace('/', File.separatorChar)));
+        if (Files.isDirectory(binDir.resolve(key.replace('/', File.separatorChar)))) {
+            return true;
+        }
+        for (Path directory : classDirectories) {
+            if (Files.isDirectory(directory.resolve(key.replace('/', File.separatorChar)))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -314,6 +327,14 @@ final class CachingNameEnvironment implements INameEnvironment {
         NameEnvironmentAnswer fromBin = lookupInBinDir(typeKey);
         if (fromBin != null) {
             return fromBin;
+        }
+
+        // 2b. A class in a classpath directory (a module output or an exploded dependency).
+        for (Path directory : classDirectories) {
+            NameEnvironmentAnswer fromDirectory = lookupInDirectory(directory, typeKey);
+            if (fromDirectory != null) {
+                return fromDirectory;
+            }
         }
 
         // 3. A dependency class: read it from its JAR now, then keep it in the bounded hot cache.
@@ -377,7 +398,11 @@ final class CachingNameEnvironment implements INameEnvironment {
     }
 
     private NameEnvironmentAnswer lookupInBinDir(String typeKey) {
-        Path classFile = binDir.resolve(typeKey.replace('/', File.separatorChar) + ".class");
+        return lookupInDirectory(binDir, typeKey);
+    }
+
+    private static NameEnvironmentAnswer lookupInDirectory(Path directory, String typeKey) {
+        Path classFile = directory.resolve(typeKey.replace('/', File.separatorChar) + ".class");
         if (!Files.isRegularFile(classFile)) {
             return null;
         }

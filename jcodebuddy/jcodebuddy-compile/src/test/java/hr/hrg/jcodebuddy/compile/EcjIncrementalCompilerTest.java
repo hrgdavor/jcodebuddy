@@ -66,6 +66,40 @@ class EcjIncrementalCompilerTest {
     }
 
     @Test
+    void resolvesATypeFromAClasspathDirectory() throws IOException {
+        Path dependencySources = Files.createDirectories(tempDir.resolve("dependency-src"));
+        Path dependencyClasses = tempDir.resolve("dependency-classes");
+        Path dependencyFile = dependencySources.resolve("dep/External.java");
+        Files.createDirectories(dependencyFile.getParent());
+        Files.writeString(dependencyFile, """
+                package dep;
+
+                public final class External {
+                    public static int value() {
+                        return 7;
+                    }
+                }
+                """, StandardCharsets.UTF_8);
+        EcjIncrementalCompiler dependencyCompiler = new EcjIncrementalCompiler(
+                dependencySources, dependencyClasses, "");
+        dependencyCompiler.index();
+        assertCompiles(dependencyCompiler, dependencyFile);
+
+        Path usesExternal = write("demo/UsesExternal.java", """
+                package demo;
+
+                public final class UsesExternal {
+                    int value = dep.External.value();
+                }
+                """);
+        EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(
+                sourceRoot, binDir, dependencyClasses.toString());
+        compiler.index();
+
+        assertCompiles(compiler, usesExternal);
+    }
+
+    @Test
     void resolvesATypeFromAJarOnDemand() throws Exception {
         Path ecjJar = Path.of(Class.forName("org.eclipse.jdt.internal.compiler.Compiler")
                 .getProtectionDomain().getCodeSource().getLocation().toURI());
