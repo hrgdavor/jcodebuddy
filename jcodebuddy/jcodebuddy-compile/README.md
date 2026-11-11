@@ -36,6 +36,7 @@ Everything is in `hr.hrg.jcodebuddy.compile`; the only public type is `EcjIncrem
 | `long lastCompileNanos()`                                                                    | wall-clock duration of the last `compile()`, excluding the index — the number a benchmark quotes |
 | `long lastIndexNanos()`                                                                      | duration of the last `index()` call                                                              |
 | `List<String> lastErrors()`                                                                  | immutable diagnostics of the last compile: `file:line  message`, or a read/write failure         |
+| `CompilerMemory memoryStats()`                                                               | approximate type-index, hot-JAR, JDK and total heap estimates for diagnostics                    |
 | `static String buildClasspath(Path binDir, List<String> extra)`                              | `binDir` + `java.class.path` + extras, skipping empty entries                                    |
 
 A typical call sequence:
@@ -58,6 +59,24 @@ not include `index()`. The compiler is not thread-safe; use it from one thread.
 A multi-module host should create one `SharedIndex` for the project classpath and pass it to every
 compiler. Without it, each compiler keeps its own copy of every dependency JAR's class bytes, which can
 exhaust the IDE heap on a large Maven reactor.
+
+`memoryStats()` reports an approximate breakdown:
+
+```text
+types=6012, jarHot=8.3MiB, jdk=1.4MiB, estimated=14.7MiB
+```
+
+The hot-JAR/JDK byte counts are exact; the index/package metadata is estimated. Use it for trend
+diagnostics, not allocation accounting.
+
+`memoryStats()` reports an approximate breakdown:
+
+```text
+types=6012, jarHot=8.3MiB, jdk=1.4MiB, estimated=14.7MiB
+```
+
+The hot-JAR/JDK byte counts are exact; the index/package metadata is estimated. Use it for trend
+diagnostics, not allocation accounting.
 
 ### Starting before `END_BATCH` (opt-in internal phase)
 

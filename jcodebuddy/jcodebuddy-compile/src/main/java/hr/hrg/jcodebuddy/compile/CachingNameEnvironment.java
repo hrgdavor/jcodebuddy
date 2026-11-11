@@ -91,12 +91,40 @@ final class CachingNameEnvironment implements INameEnvironment {
         private final LinkedHashMap<String, byte[]> jarBytes = new LinkedHashMap<>(256, 0.75f, true);
         private long jarBytesSize;
         private final Map<String, byte[]> jdkTypeCache = new HashMap<>();
+        private long jdkBytesSize;
         private final Set<String> packageSet = new HashSet<>();
         private final Map<String, Module> packageModules = new HashMap<>();
         private boolean indexed;
 
         private byte[] cachedJarType(String typeKey) {
             return jarBytes.get(typeKey);
+        }
+
+        private void rememberJdkType(String typeKey, byte[] bytes) {
+            byte[] previous = jdkTypeCache.put(typeKey, bytes);
+            if (previous != null) {
+                jdkBytesSize -= previous.length;
+            }
+            jdkBytesSize += bytes.length;
+        }
+
+        private CompilerMemory memoryStats() {
+            long jarIndexBytes = 0;
+            for (Map.Entry<String, JarLocation> entry : jarTypes.entrySet()) {
+                jarIndexBytes += 48 + 2L * entry.getKey().length();
+                jarIndexBytes += 96 + 2L * entry.getValue().entryName().length();
+            }
+            long packageBytes = 0;
+            for (String packageName : packageSet) {
+                packageBytes += 40 + 2L * packageName.length();
+            }
+            packageBytes += packageModules.size() * 64L;
+            long jdkIndexBytes = 0;
+            for (String typeName : jdkTypeCache.keySet()) {
+                jdkIndexBytes += 48 + 2L * typeName.length();
+            }
+            long estimated = jarBytesSize + jdkBytesSize + jarIndexBytes + packageBytes + jdkIndexBytes;
+            return new CompilerMemory(jarTypes.size(), jarBytesSize, jdkBytesSize, estimated);
         }
 
         private void rememberJarType(String typeKey, byte[] bytes) {
@@ -215,6 +243,11 @@ final class CachingNameEnvironment implements INameEnvironment {
         return shared.indexed;
     }
 
+    /** Approximate heap use of the shared index; see {@link CompilerMemory}. */
+    CompilerMemory memoryStats() {
+        return shared.memoryStats();
+    }
+
     /**
      * Injects the source units of the compile in progress so they can resolve each
      * other's types (e.g. {@code Main} referencing {@code Helper} in the same batch).
@@ -306,7 +339,7 @@ final class CachingNameEnvironment implements INameEnvironment {
 
         byte[] moduleBytes = loadFromModule(typeKey);
         if (moduleBytes != null) {
-            shared.jdkTypeCache.put(typeKey, moduleBytes);
+            shared.rememberJdkType(typeKey, moduleBytes);
             registerPackage(typeKey);
             return toAnswer(moduleBytes, typeKey);
         }
@@ -315,7 +348,7 @@ final class CachingNameEnvironment implements INameEnvironment {
         //    indexed, a launcher's own classpath), cached like the JDK ones.
         byte[] loadedBytes = loadViaClassLoader(typeKey);
         if (loadedBytes != null) {
-            shared.jdkTypeCache.put(typeKey, loadedBytes);
+            shared.rememberJdkType(typeKey, loadedBytes);
             registerPackage(typeKey);
             return toAnswer(loadedBytes, typeKey);
         }

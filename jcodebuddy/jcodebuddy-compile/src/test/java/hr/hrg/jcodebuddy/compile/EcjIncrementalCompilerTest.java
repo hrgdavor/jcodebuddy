@@ -84,6 +84,10 @@ class EcjIncrementalCompilerTest {
 
         assertCompiles(compiler, usesEcj);
         assertTrue(Files.isRegularFile(binDir.resolve("demo").resolve("UsesEcj.class")));
+        CompilerMemory memory = compiler.memoryStats();
+        assertTrue(memory.indexedTypes() > 0, "the JAR index should have types");
+        assertTrue(memory.estimatedBytes() >= memory.cachedJarBytes(),
+                "the estimate includes the hot cache: " + memory.summary());
     }
 
     @Test

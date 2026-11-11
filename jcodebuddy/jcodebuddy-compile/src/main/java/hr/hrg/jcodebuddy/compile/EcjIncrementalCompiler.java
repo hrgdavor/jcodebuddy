@@ -355,6 +355,11 @@ public final class EcjIncrementalCompiler {
         return lastErrors;
     }
 
+    /** Approximate heap use of the shared dependency/JDK index and hot class cache. */
+    public CompilerMemory memoryStats() {
+        return nameEnvironment.memoryStats();
+    }
+
     // ── Options ───────────────────────────────────────────────────────────────
 
     /**

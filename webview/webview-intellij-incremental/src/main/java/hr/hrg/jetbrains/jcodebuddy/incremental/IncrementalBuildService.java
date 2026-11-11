@@ -264,7 +264,7 @@ public final class IncrementalBuildService implements Disposable {
             if (!indexed) {
                 compiler.index();
                 indexed = true;
-                log("Indexed shared dependency/JDK cache");
+                log("Indexed shared dependency/JDK cache: " + compiler.memoryStats().summary());
             }
             created.put(root.root(), compiler);
         }
@@ -294,7 +294,19 @@ public final class IncrementalBuildService implements Disposable {
             compiler.compile(files);
             publish(root, compiler);
         }
+        logCompilerMemory("after initial compile");
         refreshHighlighting();
+    }
+
+    private void logCompilerMemory(String phase) {
+        EcjIncrementalCompiler compiler = compilers.values().stream().findFirst().orElse(null);
+        if (compiler == null) {
+            return;
+        }
+        Runtime runtime = Runtime.getRuntime();
+        log("Compiler memory " + phase + ": " + compiler.memoryStats().summary()
+                + "; IDE heap used=" + ((runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024))
+                + "MB/" + (runtime.maxMemory() / (1024 * 1024)) + "MB");
     }
 
     private void startWatch() {
@@ -381,6 +393,7 @@ public final class IncrementalBuildService implements Disposable {
             compiler.compile(changed);
             publish(root, compiler);
         }
+        logCompilerMemory("after batch compile");
         refreshHighlighting();
     }
 
