@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
@@ -15,7 +16,11 @@ import javax.swing.JButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import java.awt.BorderLayout;
+import java.awt.Desktop;
 import java.awt.FlowLayout;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.function.Consumer;
 import javax.swing.JPanel;
 
@@ -49,9 +54,21 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         JButton reconnect = new JButton("Reconnect fs-meta");
         reconnect.setToolTipText("Drop the current fs-meta subscription and retry daemon discovery");
         reconnect.addActionListener(event -> service.reconnectFsMeta());
+        JButton openLog = new JButton("Open Log Folder");
+        openLog.setToolTipText("Open " + logs.file().getParent() + " in the file explorer");
+        openLog.addActionListener(event -> openLogFolder(project, logs));
+        JButton clearLog = new JButton("Clear Log");
+        clearLog.setToolTipText("Clear the in-memory and file build log");
+        clearLog.addActionListener(event -> {
+            logs.clear();
+            area.setText("");
+            area.setCaretPosition(0);
+        });
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
         toolbar.add(rebuild);
         toolbar.add(reconnect);
+        toolbar.add(openLog);
+        toolbar.add(clearLog);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(toolbar, BorderLayout.NORTH);
@@ -66,5 +83,26 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
             }
         });
         toolWindow.getContentManager().addContent(content);
+    }
+
+    private static void openLogFolder(Project project, IncrementalLogService logs) {
+        logs.ensureDirectory();
+        Path folder = logs.file().getParent();
+        if (folder == null) {
+            folder = logs.file().toAbsolutePath().getParent();
+        }
+        try {
+            Files.createDirectories(folder);
+            if (!Desktop.isDesktopSupported()
+                    || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                Messages.showErrorDialog(project, "The system file explorer is not available.",
+                        "Open JCodeBuddy Log");
+                return;
+            }
+            Desktop.getDesktop().open(folder.toFile());
+        } catch (IOException | UnsupportedOperationException failed) {
+            Messages.showErrorDialog(project, "Cannot open " + folder + ": " + failed,
+                    "Open JCodeBuddy Log");
+        }
     }
 }

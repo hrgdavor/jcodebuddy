@@ -168,8 +168,15 @@ There are two places to look:
 
 1. **View | Tool Windows | JCodeBuddy Build** — an in-IDE log with the current session's events:
    source-root discovery, module classpaths, fs-meta daemon/socket/filter, batches, compile results and
-   failures. Its toolbar has **Rebuild** (compile every source root again) and **Reconnect fs-meta**
-   (drop the current subscription and retry daemon discovery). It is the quickest troubleshooting view.
+   failures. Every line has a full date/time. Its toolbar has:
+   - **Rebuild** — compile every source root again;
+   - **Reconnect fs-meta** — drop the current subscription and retry daemon discovery;
+   - **Open Log Folder** — open `.jcodebuddy/cache/incremental-build/` in the system file explorer;
+   - **Clear Log** — clear both the pane and `build.log`.
+
+   The same lines are appended to `<project>/.jcodebuddy/cache/incremental-build/build.log`, which stays
+   after the IDE restarts. The tool window is the quickest troubleshooting view; the file is the durable one.
+
 2. **`idea.log`** — every line is also written through IntelliJ's `Logger`. Use
    **Help | Show Log in Explorer** (Windows) and search for `JCodeBuddy`.
 
