@@ -88,8 +88,10 @@ fsmeta root add /path/to/project --tick 25
 `--tick` is per root. 10–25 ms suits a fast local editor; 50–100 ms is safer for many roots or slower
 storage. The plugin never starts a Java `WatchService`.
 
-If no daemon is found when the project setting is enabled, the plugin performs the initial compile and
-shows a warning, but it cannot watch changes. Start the daemon and reopen the project.
+If no daemon is found, or the daemon runs but this root is not tracked, the plugin logs and notifies the
+exact setup commands (`fsmeta daemon start`, and `fsmeta root add "<project>" --mode always --idle 0 --tick 25`
+when the root is missing). It still performs the hash-based compile; only watching is unavailable. Run the
+commands, then click **Reconnect fs-meta** in the log toolbar.
 
 ### 3. Enable it for the project
 
@@ -195,15 +197,15 @@ positive and skipped; a false deletion for an existing file is likewise ignored.
   `OutOfMemoryError`, raise the IDE heap with `Help | Change Memory Settings` and inspect the memory lines in
   the JCodeBuddy Build log.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.
-- **No automatic daemon retry.** If the daemon starts after the project is open, reopen the project or
-  restart the IDE so the startup activity can subscribe.
+- **No automatic daemon retry.** If the daemon starts after the project is open, click **Reconnect fs-meta**
+  in the log toolbar. The log prints the exact daemon/root commands when discovery fails.
 - **The plugin is a separate Gradle project.** It is not in the root Maven reactor or the Maven gate.
 
 ## Troubleshooting
 
 | symptom                                  | cause                                                                 | fix                                                                                              |
 | ---------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| no squiggles at all                      | plugin disabled for this project, or the daemon was absent at startup | enable it in Settings → Tools → JCodeBuddy Incremental Build; start `fsmeta`; reopen the project |
+| no squiggles at all                      | plugin disabled for this project, or the daemon was absent at startup | enable it in Settings → Tools → JCodeBuddy Incremental Build; run the logged `fsmeta` commands; click Reconnect fs-meta |
 | old errors remain after a good compile   | highlighting was not restarted, or the file is not open               | check the notification/event log; reopen the file; re-run the compile                            |
 | errors are on the wrong line             | line/column convention mismatch                                       | report it; compiler lines are 1-based and columns are 0-based here                               |
 | IDE still builds on save                 | auto-build or a Run configuration's Build step is still enabled       | disable both                                                                                     |

@@ -245,7 +245,9 @@ public final class IncrementalBuildService implements Disposable {
                 refreshHighlighting();
             }
 
-            FsMetaDaemonDiscovery.Attach attach = discover();
+            FsMetaDaemonDiscovery.Attach discovered = discover();
+            FsMetaDaemonDiscovery.Attach attach =
+                    discovered != null && discovered.attached() ? discovered : null;
             long head = -1;
             if (attach != null) {
                 daemonRoot = attach.location().root();
@@ -286,17 +288,46 @@ public final class IncrementalBuildService implements Disposable {
         try {
             FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discoverAncestor(projectRoot);
             if (attach == null || !attach.attached()) {
-                notify("No fs-meta daemon serves this project. Start `fsmeta daemon start` and "
-                        + "`fsmeta root add " + projectRoot + "`, then use Reconnect fs-meta. "
-                        + "The initial full compile will run, but changes are not being watched.", NotificationType.WARNING);
-                return null;
+                logFsMetaSetup(attach);
             }
             return attach;
         } catch (RuntimeException failed) {
             LOG.error("Cannot find the fs-meta daemon", failed);
-            notify("Cannot find the fs-meta daemon: " + failed, NotificationType.WARNING);
+            logFsMetaSetup(null, "daemon discovery failed: " + failed);
             return null;
         }
+    }
+
+    /**
+     * Prints the exact commands needed when no daemon serves this project. The discovery problem distinguishes a
+     * missing daemon from a daemon that is running but has no record for this root.
+     */
+    private void logFsMetaSetup(FsMetaDaemonDiscovery.Attach attach) {
+        logFsMetaSetup(attach, attach == null ? "" : attach.problem());
+    }
+
+    private void logFsMetaSetup(FsMetaDaemonDiscovery.Attach attach, String problem) {
+        log("fs-meta is not attached: " + (problem == null || problem.isBlank()
+                ? "no daemon serves this project" : problem));
+        log("Command 1 (start the daemon): fsmeta daemon start");
+        boolean rootMissing = attach == null
+                || problem == null
+                || problem.contains("no fsmeta root list")
+                || problem.contains("has no record for");
+        if (rootMissing) {
+            log("Command 2 (add this project root if it is not tracked): fsmeta root add \""
+                    + projectRoot + "\" --mode always --idle 0 --tick 25");
+        } else {
+            log("Command 2 (root is already registered; no root add needed): "
+                    + "the daemon is not running, or its socket is stale");
+        }
+        log("Then click Reconnect fs-meta. The hash-based compile still runs without a watcher.");
+        notify("fs-meta is not serving this project. Run `fsmeta daemon start`."
+                + (rootMissing
+                        ? " If the root is not tracked, run `fsmeta root add \"" + projectRoot
+                                + "\" --mode always --idle 0 --tick 25`."
+                        : " This root is already registered; the daemon/socket is not live.")
+                + " Then click Reconnect fs-meta.", NotificationType.WARNING);
     }
 
     private long queryHead(Path socket) {
@@ -780,7 +811,7 @@ public final class IncrementalBuildService implements Disposable {
 
     private void startWatch() {
         FsMetaDaemonDiscovery.Attach attach = discover();
-        if (attach == null) {
+        if (attach == null || !attach.attached()) {
             return;
         }
         startWatch(attach, lastAppliedBatch >= 0 ? lastAppliedBatch : FsMetaClient.LATEST);

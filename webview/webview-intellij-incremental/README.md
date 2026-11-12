@@ -97,7 +97,7 @@ JCodeBuddy Incremental Build/lib/jcodebuddy-watch-1.0-SNAPSHOT.jar
 ## Enable it per project
 
 Start the fs-meta daemon first (next section). If the project is already open when the daemon starts,
-reopen the project after starting it; the plugin does not retry discovery.
+click **Reconnect fs-meta** in the build-log toolbar.
 
 1. Open the project in IntelliJ.
 2. `Settings | Tools | JCodeBuddy Incremental Build`.
@@ -121,8 +121,17 @@ fsmeta root add /path/to/project --tick 25
 `--tick` is per root; 10–25 ms suits a fast local editor, 50–100 ms is safer for many roots or slower
 storage. The plugin never starts a Java `WatchService`.
 
-If no daemon is found, the plugin still performs the initial compile and shows a warning; it cannot
-watch changes until the daemon is available.
+If no daemon is found, or the daemon is running but this root is not tracked, the plugin logs and notifies
+the exact setup commands:
+
+```text
+Command 1 (start the daemon): fsmeta daemon start
+Command 2 (add this project root if it is not tracked): fsmeta root add "<project>" --mode always --idle 0 --tick 25
+Then click Reconnect fs-meta.
+```
+
+The plugin still performs the hash-based compile and restores diagnostics; only live watching is missing.
+After running the commands, click **Reconnect fs-meta** — no IDE restart is needed.
 
 ## Disable IntelliJ's build
 
@@ -289,8 +298,9 @@ limitation as the standalone example.
 - **No dependency recompilation**: only files in the fs-meta batch are compiled. A changed signature that
   requires recompiling an unchanged dependent is outside this plugin's scope.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.
-- **No automatic retry**: if the daemon is started after the project is opened, reopen the project (or
-  restart the IDE) so the startup activity can subscribe.
+- **No automatic retry**: if the daemon is started after the project is opened, click **Reconnect fs-meta**
+  in the build-log toolbar. The plugin prints the exact `fsmeta daemon start` and `fsmeta root add` commands
+  when the daemon/root is missing.
 - **Memory**: the plugin shares one dependency index across all source roots. JAR class bytes are read on
   demand from the JAR and limited to a bounded hot cache; the JARs themselves stay on disk. The initial
   full compile is chunked (default 32 files, `-Djcodebuddy.intellij.initialCompileChunk=<n>`) so the ECJ
