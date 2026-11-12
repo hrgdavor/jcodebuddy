@@ -262,11 +262,12 @@ fs-meta false positive: <path> has the same hash as the compiled generation; ign
 
 and does not invoke ECJ for it. A false deletion for a file that still exists is logged similarly.
 
-A failed batch updates hashes only for files that actually compiled; failed files are retried in the next
-batch, even when their content hash matches an older successful generation. Files with restored diagnostics
-are also recompiled at startup, so reverting an error to the previous valid text cannot leave a stale marker.
-Only the explicit **Rebuild** button calls the full compile path (plus the unavoidable first-run bootstrap
-when no hash state exists).
+A failed batch updates hashes only for files that actually compiled, and remembers only the files named by
+ECJ diagnostics, not the whole changed batch. Those files are retried in the next batch, even when their
+content hash matches an older successful generation. Files with restored diagnostics are also recompiled at
+startup, so reverting an error to the previous valid text cannot leave a stale marker. Only the explicit
+**Rebuild** button calls the full compile path (plus the unavoidable first-run bootstrap when no hash state
+exists).
 
 ## Multi-module projects
 

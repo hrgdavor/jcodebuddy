@@ -450,7 +450,7 @@ public final class IncrementalBuildService implements Disposable {
                 rememberHashes(files);
                 failedFiles.removeAll(files);
             } else {
-                failedFiles.addAll(files);
+                failedFiles.addAll(errorFiles(compiler, files, root.root()));
             }
             success &= rootOk;
             publish(root, compiler);
@@ -782,8 +782,9 @@ public final class IncrementalBuildService implements Disposable {
             }
             if (rootOk) {
                 rememberHashes(files);
+                failedFiles.removeAll(files);
             } else {
-                failedFiles.addAll(failed);
+                failedFiles.addAll(errorFiles(compiler, failed.isEmpty() ? files : failed, root.root()));
             }
             publish(root, compiler);
             success &= rootOk;
@@ -956,7 +957,7 @@ public final class IncrementalBuildService implements Disposable {
                 rememberHashes(changed);
                 failedFiles.removeAll(changed);
             } else {
-                failedFiles.addAll(changed);
+                failedFiles.addAll(errorFiles(compiler, changed, root.root()));
             }
             success &= rootOk;
             publish(root, compiler);
@@ -965,6 +966,27 @@ public final class IncrementalBuildService implements Disposable {
         logCompilerMemory("after batch compile");
         refreshHighlighting();
         return success;
+    }
+
+    /** The files named by ECJ diagnostics, not the whole batch that happened to contain them. */
+    private Set<Path> errorFiles(EcjIncrementalCompiler compiler, Set<Path> fallback, Path sourceRoot) {
+        Set<Path> errors = new LinkedHashSet<>();
+        for (String error : compiler.lastErrors()) {
+            Matcher matcher = DIAGNOSTIC.matcher(error);
+            if (!matcher.matches()) {
+                continue;
+            }
+            try {
+                Path path = Path.of(matcher.group(1));
+                if (!path.isAbsolute()) {
+                    path = sourceRoot.resolve(path);
+                }
+                errors.add(path.toAbsolutePath().normalize());
+            } catch (RuntimeException malformed) {
+                // Fall back to the compiled set if ECJ's path is not a valid filesystem path.
+            }
+        }
+        return errors.isEmpty() ? fallback : errors;
     }
 
     private void removeHashAndClasses(SourceRoot root, Path file) {

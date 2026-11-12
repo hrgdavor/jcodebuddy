@@ -29,12 +29,12 @@ change whose content hash is unchanged is logged and ignored. Only the explicit 
 full compile (the first run with no hash state is the unavoidable bootstrap).
 
 A failed compile adds red annotations. A successful compile replaces that source root's diagnostics with
-an empty list, so the next highlighting pass removes them. A failed file is recompiled even when its hash
-matches an older successful generation, and a file with restored diagnostics is recompiled at startup; this
-prevents reverting a constructor/syntax error from leaving a stale editor marker. The diagnostics are
-persisted in `.jcodebuddy/cache/incremental-build/diagnostics.tsv` and restored on project reopen, because
-IntelliJ does not persist external-annotator output itself. Disabling the project setting clears that saved
-state.
+an empty list, so the next highlighting pass removes them. A failed compile remembers only the files named by
+ECJ diagnostics, not the whole changed batch. A failed file is recompiled even when its hash matches an older
+successful generation, and a file with restored diagnostics is recompiled at startup; this prevents reverting
+a constructor/syntax error from leaving a stale editor marker. The diagnostics are persisted in
+`.jcodebuddy/cache/incremental-build/diagnostics.tsv` and restored on project reopen, because IntelliJ does
+not persist external-annotator output itself. Disabling the project setting clears that saved state.
 
 ## Setup
 
