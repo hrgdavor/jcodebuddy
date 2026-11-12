@@ -197,6 +197,7 @@ The service logs:
 Starting incremental build for <project>
 Hash-driven compile (startup): N changed, M deleted
 fs-meta false positive: <path> has the same hash as the compiled generation; ignored
+Identical compiled hash; skipped ECJ write and cleared stale diagnostic: <path>
 Source root [module] <path> -> <output>
 Classpath [module]: entries=277, jars=240, dirs=35, missing=2
 Full compile: N source root(s)          # only explicit Rebuild
@@ -234,7 +235,7 @@ The last successfully applied fs-meta generation is stored at:
 ```
 
 It records the batch number, daemon root and a source-root/output + classpath signature. It is written
-atomically only after a compile succeeds and all previously failed files are clean. The batch marker is the
+atomically only after a compile succeeds and the failed-file set is empty. The batch marker is the
 subscription position and a diagnostics/state reference; the compiled-hash map is what decides which files
 need compiling. A failed batch retries its files on the next batch instead of rebuilding the project.
 
@@ -263,11 +264,11 @@ fs-meta false positive: <path> has the same hash as the compiled generation; ign
 and does not invoke ECJ for it. A false deletion for a file that still exists is logged similarly.
 
 A failed batch updates hashes only for files that actually compiled, and remembers only the files named by
-ECJ diagnostics, not the whole changed batch. Those files are retried in the next batch, even when their
-content hash matches an older successful generation. Files with restored diagnostics are also recompiled at
-startup, so reverting an error to the previous valid text cannot leave a stale marker. Only the explicit
-**Rebuild** button calls the full compile path (plus the unavoidable first-run bootstrap when no hash state
-exists).
+ECJ diagnostics, not the whole changed batch. A file is retried only when its content hash or missing class
+output requires compilation. If a failed file returns to the last successfully compiled hash, the plugin
+clears the stale diagnostic and **skips ECJ entirely**, so no class file is rewritten for an external watcher.
+Only the explicit **Rebuild** button rewrites identical outputs (plus the unavoidable first-run bootstrap
+when no hash state exists).
 
 ## Multi-module projects
 

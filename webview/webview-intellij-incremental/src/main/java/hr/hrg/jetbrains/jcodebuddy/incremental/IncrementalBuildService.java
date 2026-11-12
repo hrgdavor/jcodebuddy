@@ -378,10 +378,13 @@ public final class IncrementalBuildService implements Disposable {
             String previous = compiledHashes.get(entry.getKey());
             SourceRoot root = rootFor(entry.getKey());
             if (!entry.getValue().equals(previous)
-                    || failedFiles.contains(entry.getKey())
-                    || !diagnostics.forFile(entry.getKey().toString()).isEmpty()
                     || (root != null && primaryClassMissing(root, entry.getKey()))) {
                 changed.add(entry.getKey());
+            } else if (failedFiles.remove(entry.getKey())
+                    || !diagnostics.forFile(entry.getKey().toString()).isEmpty()) {
+                diagnostics.removeFile(entry.getKey());
+                log("Identical compiled hash; skipped ECJ write and cleared stale diagnostic: "
+                        + entry.getKey());
             }
         }
         for (Path previous : compiledHashes.keySet()) {
@@ -391,6 +394,7 @@ public final class IncrementalBuildService implements Disposable {
         }
         if (changed.isEmpty() && deleted.isEmpty()) {
             log("No source hash changes (" + reason + ")");
+            saveDiagnostics();
             return true;
         }
         log("Hash-driven compile (" + reason + "): " + changed.size() + " changed, "
@@ -882,6 +886,7 @@ public final class IncrementalBuildService implements Disposable {
         }
         Map<Path, Set<Path>> changedByRoot = new LinkedHashMap<>();
         int ignoredUnchanged = 0;
+        boolean clearedDiagnostics = false;
         for (String name : batch.changed()) {
             Path file = daemonRoot.resolve(name).toAbsolutePath().normalize();
             SourceRoot root = rootFor(file);
@@ -902,17 +907,24 @@ public final class IncrementalBuildService implements Disposable {
             }
             String previousHash = compiledHashes.get(file);
             if (currentHash != null && currentHash.equals(previousHash)
-                    && !failedFiles.contains(file)
-                    && diagnostics.forFile(file.toString()).isEmpty()
                     && !primaryClassMissing(root, file)) {
-                ignoredUnchanged++;
-                log("fs-meta false positive: " + file + " has the same hash as the compiled generation; ignored");
+                boolean stale = failedFiles.remove(file)
+                        || !diagnostics.forFile(file.toString()).isEmpty();
+                diagnostics.removeFile(file);
+                if (stale) {
+                    clearedDiagnostics = true;
+                    log("Identical compiled hash; skipped ECJ write and cleared stale diagnostic: " + file);
+                } else {
+                    ignoredUnchanged++;
+                    log("fs-meta false positive: " + file
+                            + " has the same hash as the compiled generation; ignored");
+                }
                 continue;
             }
-            if (failedFiles.contains(file)) {
-                log("Retrying failed file despite unchanged hash: " + file);
-            }
             changedByRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(file);
+        }
+        if (clearedDiagnostics) {
+            saveDiagnostics();
         }
         for (String name : batch.deleted()) {
             Path file = daemonRoot.resolve(name).toAbsolutePath().normalize();
@@ -1004,6 +1016,18 @@ public final class IncrementalBuildService implements Disposable {
         return null;
     }
 
+    private void saveDiagnostics() {
+        if (diagnosticState == null) {
+            return;
+        }
+        try {
+            diagnosticState.save(diagnostics.snapshot());
+        } catch (IOException failed) {
+            LOG.warn("Cannot persist diagnostics " + diagnosticState.file(), failed);
+            log("Cannot persist diagnostics: " + failed);
+        }
+    }
+
     private void publish(SourceRoot root, EcjIncrementalCompiler compiler) {
         List<Diagnostic> parsed = new ArrayList<>();
         for (String error : compiler.lastErrors()) {
@@ -1019,14 +1043,7 @@ public final class IncrementalBuildService implements Disposable {
             }
         }
         diagnostics.replaceRoot(root.root(), parsed);
-        if (diagnosticState != null) {
-            try {
-                diagnosticState.save(diagnostics.snapshot());
-            } catch (IOException failed) {
-                LOG.warn("Cannot persist diagnostics " + diagnosticState.file(), failed);
-                log("Cannot persist diagnostics: " + failed);
-            }
-        }
+        saveDiagnostics();
         if (parsed.isEmpty()) {
             log("Compile OK [" + root.module().getName() + "] " + root.root());
         } else {
