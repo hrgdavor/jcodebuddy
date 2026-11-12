@@ -82,12 +82,13 @@ public final class IncrementalBuildService implements Disposable {
     private volatile List<SourceRoot> sourceRoots = List.of();
     private volatile Map<Path, EcjIncrementalCompiler> compilers = Map.of();
     private volatile FsMetaDaemonWatch watch;
+    private final Set<Path> failedFiles = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private volatile long lastAppliedBatch = -1;
     private volatile String sourceSignature = "";
     private volatile String classpathSignature = "";
     private volatile BatchStateStore batchState;
     private volatile DiagnosticStateStore diagnosticState;
-    private volatile boolean markerDirty;
+    private volatile boolean fullCompileRequired;
 
     public IncrementalBuildService(@NotNull Project project) {
         this.project = project;
@@ -158,13 +159,13 @@ public final class IncrementalBuildService implements Disposable {
             log("Manual full rebuild requested");
             boolean ok = compileAll();
             if (ok) {
-                markerDirty = false;
+                fullCompileRequired = false;
                 long head = daemonSocket == null ? -1 : queryHead(daemonSocket);
                 FsMetaDaemonWatch currentWatch = watch;
                 saveMarker(head >= 0 ? head
                         : currentWatch == null ? -1 : currentWatch.lastAppliedBatch());
             } else {
-                markerDirty = true;
+                fullCompileRequired = true;
             }
         });
     }
@@ -269,7 +270,7 @@ public final class IncrementalBuildService implements Disposable {
             if (ok) {
                 saveMarker(head);
             } else {
-                markerDirty = true;
+                fullCompileRequired = true;
             }
             startWatch(attach, head >= 0 ? head : FsMetaClient.LATEST);
         } catch (OutOfMemoryError memory) {
@@ -557,6 +558,9 @@ public final class IncrementalBuildService implements Disposable {
             success &= rootOk;
         }
         logCompilerMemory("after full compile");
+        if (success) {
+            failedFiles.clear();
+        }
         refreshHighlighting();
         return success;
     }
@@ -604,11 +608,11 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void applyBatch(WatchBatch batch) {
-        if (markerDirty) {
-            log("Recovering from a previous compile failure with a full compile");
+        if (fullCompileRequired) {
+            log("Recovering from a full-compile failure with a full compile");
             boolean ok = compileAll();
             if (ok) {
-                markerDirty = false;
+                fullCompileRequired = false;
                 FsMetaDaemonWatch current = watch;
                 if (current != null) {
                     saveMarker(current.lastAppliedBatch());
@@ -617,13 +621,11 @@ public final class IncrementalBuildService implements Disposable {
             return;
         }
         boolean ok = apply(batch);
-        if (ok) {
+        if (ok && failedFiles.isEmpty()) {
             FsMetaDaemonWatch current = watch;
             if (current != null) {
                 saveMarker(current.lastAppliedBatch());
             }
-        } else {
-            markerDirty = true;
         }
     }
 
@@ -646,7 +648,11 @@ public final class IncrementalBuildService implements Disposable {
         log("Batch: changed=" + batch.changed() + " deleted=" + batch.deleted()
                 + (batch.overflow() ? " overflow" : ""));
         if (batch.overflow()) {
-            return compileAll();
+            boolean ok = compileAll();
+            if (!ok) {
+                fullCompileRequired = true;
+            }
+            return ok;
         }
         Map<Path, Set<Path>> changedByRoot = new LinkedHashMap<>();
         for (String name : batch.changed()) {
@@ -659,6 +665,15 @@ public final class IncrementalBuildService implements Disposable {
                 changedByRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(file);
             } else {
                 diagnostics.removeFile(file);
+            }
+        }
+        // Recompile files from an earlier failed batch together with this batch's changes. A failure
+        // remembers only its own files; it must not turn the next save into a whole-project rebuild.
+        failedFiles.removeIf(file -> !Files.isRegularFile(file));
+        for (Path failed : failedFiles) {
+            SourceRoot root = rootFor(failed);
+            if (root != null) {
+                changedByRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(failed);
             }
         }
         if (changedByRoot.isEmpty()) {
@@ -678,7 +693,13 @@ public final class IncrementalBuildService implements Disposable {
                 continue;
             }
             log("Compiling [" + root.module().getName() + "] " + changed.size() + " changed file(s)");
-            success &= compiler.compile(changed);
+            boolean rootOk = compiler.compile(changed);
+            if (rootOk) {
+                failedFiles.removeAll(changed);
+            } else {
+                failedFiles.addAll(changed);
+            }
+            success &= rootOk;
             publish(root, compiler);
         }
         logCompilerMemory("after batch compile");

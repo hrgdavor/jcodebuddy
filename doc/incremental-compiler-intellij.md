@@ -23,10 +23,12 @@ When enabled, on project open the plugin:
    daemon head; on later starts it subscribes from that batch and compiles only the replayed changes.
 4. It publishes diagnostics in memory and restarts IntelliJ highlighting.
 
-A failed compile, a changed source-root/output or classpath layout, missing compiler output, or a marker
-newer than the daemon head forces a full compile. The marker is at
-`.jcodebuddy/cache/incremental-build/batch.properties` and is written only after success. **Rebuild** in
-the log tool window forces a full compile; **Reconnect fs-meta** keeps the marker and resubscribes from it.
+A failed batch retries only its failed files on the next batch; it does not rebuild the project. A full
+compile is forced by a failed full compile, changed source-root/output/classpath layout, missing compiler
+output, or a marker newer than the daemon head. The marker is at
+`.jcodebuddy/cache/incremental-build/batch.properties` and is written only when the failed-file set is
+empty. **Rebuild** in the log tool window forces a full compile; **Reconnect fs-meta** keeps the marker and
+resubscribes from it.
 
 A failed compile adds red annotations. A successful compile replaces that source root's diagnostics with
 an empty list, so the next highlighting pass removes them. The diagnostics are persisted in

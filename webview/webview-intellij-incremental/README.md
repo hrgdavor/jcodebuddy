@@ -32,8 +32,10 @@ On project open, when that project setting is enabled, the plugin:
 5. on later starts, subscribes from the saved batch and compiles only the replayed changes;
 6. publishes the compiler diagnostics to IntelliJ and restarts highlighting.
 
-The marker is written only after a successful compile. A source-root/layout change, a failed compile, or
-a marker newer than the daemon head forces a full compile. A marker for another daemon root is ignored.
+The marker is written only after a successful compile. A failed **batch** remembers only that batch's
+failed files (plus later changes), so fixing one error does not trigger a full rebuild. A source-root/layout
+change, a cleaned compiler output, or a full-compile failure still forces a full compile. A marker for
+another daemon root is ignored.
 
 On a successful compile the diagnostics for that source root are replaced by an empty list, so the next
 highlighting pass removes the old red errors. IntelliJ's own **Build** is not invoked by this plugin.
@@ -213,9 +215,10 @@ The last successfully applied fs-meta generation is stored at:
 ```
 
 It records the batch number, daemon root and a source-root/output + classpath signature. It is written
-atomically only after a compile succeeds. If the signature no longer matches, the daemon root changed, the
-compiler output was cleaned away, or the compile failed, the next start performs a full compile instead of
-trusting the marker.
+atomically only after a compile succeeds and all previously failed files are clean. If a batch fails, its
+files are retried in the next batch instead of rebuilding the project. If the signature no longer matches,
+the daemon root changed, the compiler output was cleaned away, or a full compile failed, the next start
+performs a full compile instead of trusting the marker.
 
 The **Rebuild** toolbar button deliberately performs a full compile and then saves the current daemon head.
 **Reconnect fs-meta** keeps the saved marker and resubscribes from it.
