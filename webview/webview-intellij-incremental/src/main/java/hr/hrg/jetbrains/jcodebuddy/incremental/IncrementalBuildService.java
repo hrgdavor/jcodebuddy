@@ -462,11 +462,22 @@ public final class IncrementalBuildService implements Disposable {
         Set<String> entries = new LinkedHashSet<>();
         OrderEnumerator.orderEntries(module).recursively().forEach(entry -> {
             for (VirtualFile file : entry.getFiles(OrderRootType.CLASSES)) {
-                entries.add(file.getPath());
+                entries.add(physicalPath(file));
             }
             return true;
         });
         return entries;
+    }
+
+    /**
+     * IntelliJ represents a JAR root as {@code .../foo.jar!/}; the compiler and {@link java.io.File}
+     * need the physical {@code .../foo.jar} path. Passing the virtual path made every Maven JAR look
+     * missing and kept it out of the ECJ index.
+     */
+    private static String physicalPath(VirtualFile file) {
+        String path = file.getPath();
+        int jarRoot = path.indexOf("!/");
+        return jarRoot >= 0 ? path.substring(0, jarRoot) : path;
     }
 
     /**

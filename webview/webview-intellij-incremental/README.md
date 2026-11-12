@@ -196,7 +196,8 @@ compile's error annotations were loaded from the diagnostics state file.
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 The log also lists every module classpath entry as `JAR`, `DIR`, or `MISSING`, with a per-module summary;
-use it first when a Maven dependency appears unresolved.
+use it first when a Maven dependency appears unresolved. IntelliJ reports a JAR root as `...jar!/`; the
+plugin strips that virtual suffix and logs the physical `.jar` path.
 
 The log also prints the IDE heap maximum and current use at startup. If the build reports
 `OutOfMemoryError`, increase the IDE heap (`Help | Change Memory Settings`); the compiler now shares one
