@@ -178,10 +178,10 @@ compiling.
 
 The compiled-source hashes are stored at
 `.jcodebuddy/cache/incremental-build/compiled-hashes.tsv`. Startup compiles only files whose hash or primary
-class output differs from that map. When the hash state is absent but existing classes are at least as new as
-their sources, those hashes are seeded instead of rewriting every class. A fs-meta change whose hash is
-unchanged is reported as a false positive and skipped; a false deletion for an existing file is likewise
-ignored. If the hash matches and the class exists, ECJ is not invoked, so no class file is rewritten.
+class output differs from that map. When the hash state is absent but existing classes are present, those
+hashes are seeded instead of rewriting every class. A fs-meta change whose hash is unchanged is reported as a
+false positive and skipped; a false deletion for an existing file is likewise ignored. If the hash matches
+and the class exists, ECJ is not invoked, so no class file is rewritten.
 
 ## Configuration and limits
 

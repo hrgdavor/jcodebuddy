@@ -252,9 +252,9 @@ The authoritative state is:
 
 It stores a SHA-256 of every successfully compiled `.java` file, plus a layout/classpath signature. Startup
 compiles only files whose hash differs from this map (or whose primary `.class` is missing), and removes
-classes for deleted sources. If the hash state is absent but existing class outputs are at least as new as
-their sources, those hashes are seeded first, so an upgrade does not rewrite every identical class. The
-fs-meta batch marker only positions the subscription; it cannot cause a full rebuild on its own.
+classes for deleted sources. If the hash state is absent but existing class outputs are present, those hashes
+are seeded first, so an upgrade does not rewrite every identical class. The fs-meta batch marker only
+positions the subscription; it cannot cause a full rebuild on its own.
 
 If a file's hash equals the last successful compile and its class exists, ECJ is not invoked at all, so no
 class file is rewritten and external output watchers do not see a change. Stale diagnostics for that file are

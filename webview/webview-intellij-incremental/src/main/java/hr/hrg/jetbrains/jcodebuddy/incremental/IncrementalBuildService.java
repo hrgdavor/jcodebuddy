@@ -485,8 +485,8 @@ public final class IncrementalBuildService implements Disposable {
 
     /**
      * On the first run after upgrading, there is no hash state but the module outputs may already be valid.
-     * Seed hashes from class files that are at least as new as their source, so the bootstrap does not rewrite
-     * every identical class and wake an external output watcher. Files with older/missing classes are compiled.
+     * Seed hashes from existing class files, so the bootstrap does not rewrite every identical class and wake
+     * an external output watcher. Only sources with no class output are compiled.
      */
     private int seedHashesFromExistingClasses() {
         int seeded = 0;
@@ -503,15 +503,8 @@ public final class IncrementalBuildService implements Disposable {
             if (classFile == null || !Files.isRegularFile(classFile)) {
                 continue;
             }
-            try {
-                if (Files.getLastModifiedTime(classFile).compareTo(
-                        Files.getLastModifiedTime(entry.getKey())) >= 0) {
-                    compiledHashes.put(entry.getKey(), entry.getValue());
-                    seeded++;
-                }
-            } catch (IOException ignored) {
-                // Leave the hash absent; the file will be compiled.
-            }
+            compiledHashes.put(entry.getKey(), entry.getValue());
+            seeded++;
         }
         if (seeded > 0) {
             saveHashes();
