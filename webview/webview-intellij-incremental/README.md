@@ -252,8 +252,13 @@ The authoritative state is:
 
 It stores a SHA-256 of every successfully compiled `.java` file, plus a layout/classpath signature. Startup
 compiles only files whose hash differs from this map (or whose primary `.class` is missing), and removes
-classes for deleted sources. The fs-meta batch marker only positions the subscription; it cannot cause a
-full rebuild on its own.
+classes for deleted sources. If the hash state is absent but existing class outputs are at least as new as
+their sources, those hashes are seeded first, so an upgrade does not rewrite every identical class. The
+fs-meta batch marker only positions the subscription; it cannot cause a full rebuild on its own.
+
+If a file's hash equals the last successful compile and its class exists, ECJ is not invoked at all, so no
+class file is rewritten and external output watchers do not see a change. Stale diagnostics for that file are
+cleared and highlighting is refreshed.
 
 If fs-meta reports a changed file whose current hash equals the compiled hash, the plugin logs:
 
@@ -267,8 +272,7 @@ A failed batch updates hashes only for files that actually compiled, and remembe
 ECJ diagnostics, not the whole changed batch. A file is retried only when its content hash or missing class
 output requires compilation. If a failed file returns to the last successfully compiled hash, the plugin
 clears the stale diagnostic and **skips ECJ entirely**, so no class file is rewritten for an external watcher.
-Only the explicit **Rebuild** button rewrites identical outputs (plus the unavoidable first-run bootstrap
-when no hash state exists).
+Only the explicit **Rebuild** button rewrites identical outputs.
 
 ## Multi-module projects
 

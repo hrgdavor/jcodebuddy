@@ -258,7 +258,11 @@ public final class IncrementalBuildService implements Disposable {
             // The explicit Rebuild action is the only path that calls compileAll(). A missing hash state is
             // the unavoidable first bootstrap; it is still driven file-by-file through the hash path.
             if (compiledHashes.isEmpty()) {
-                log("No compiled-hash state; performing the initial bootstrap hash scan");
+                int seeded = seedHashesFromExistingClasses();
+                log(seeded == 0
+                        ? "No compiled-hash state or class outputs; performing the initial bootstrap compile"
+                        : "Seeded " + seeded + " compiled hash(es) from existing class outputs; "
+                                + "only missing/stale classes will be compiled");
                 boolean ok = compileFromHashes("bootstrap");
                 if (!ok) {
                     fullCompileRequired = true;
@@ -479,6 +483,42 @@ public final class IncrementalBuildService implements Disposable {
         return hashes;
     }
 
+    /**
+     * On the first run after upgrading, there is no hash state but the module outputs may already be valid.
+     * Seed hashes from class files that are at least as new as their source, so the bootstrap does not rewrite
+     * every identical class and wake an external output watcher. Files with older/missing classes are compiled.
+     */
+    private int seedHashesFromExistingClasses() {
+        int seeded = 0;
+        for (Map.Entry<Path, String> entry : hashSources(sourceRoots).entrySet()) {
+            SourceRoot root = rootFor(entry.getKey());
+            if (root == null) {
+                continue;
+            }
+            // Never seed over a file that has a restored error; it must be compiled so the marker is confirmed.
+            if (!diagnostics.forFile(entry.getKey().toString()).isEmpty()) {
+                continue;
+            }
+            Path classFile = primaryClassPath(root, entry.getKey());
+            if (classFile == null || !Files.isRegularFile(classFile)) {
+                continue;
+            }
+            try {
+                if (Files.getLastModifiedTime(classFile).compareTo(
+                        Files.getLastModifiedTime(entry.getKey())) >= 0) {
+                    compiledHashes.put(entry.getKey(), entry.getValue());
+                    seeded++;
+                }
+            } catch (IOException ignored) {
+                // Leave the hash absent; the file will be compiled.
+            }
+        }
+        if (seeded > 0) {
+            saveHashes();
+        }
+        return seeded;
+    }
+
     private void rememberHashes(Set<Path> files) {
         for (Path file : files) {
             try {
@@ -501,13 +541,18 @@ public final class IncrementalBuildService implements Disposable {
         }
     }
 
-    private static boolean primaryClassMissing(SourceRoot root, Path source) {
+    private static Path primaryClassPath(SourceRoot root, Path source) {
         String relative = root.root().relativize(source).toString().replace('\\', '/');
         if (!relative.endsWith(".java")) {
-            return false;
+            return null;
         }
         String className = relative.substring(0, relative.length() - 5) + ".class";
-        return !Files.isRegularFile(root.output().resolve(className.replace('/', File.separatorChar)));
+        return root.output().resolve(className.replace('/', File.separatorChar));
+    }
+
+    private static boolean primaryClassMissing(SourceRoot root, Path source) {
+        Path classFile = primaryClassPath(root, source);
+        return classFile == null || !Files.isRegularFile(classFile);
     }
 
     private static void deleteCompiledClasses(SourceRoot root, Path source) {
