@@ -129,17 +129,62 @@ public final class IncrementalBuildService implements Disposable {
         }
     }
 
+    /** Compiles every source root again, on the worker thread. */
+    public void rebuild() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project before rebuilding.", NotificationType.WARNING);
+            return;
+        }
+        start();
+        ExecutorService current = worker;
+        if (current == null) {
+            return;
+        }
+        current.submit(() -> {
+            if (!started.get()) {
+                return;
+            }
+            log("Manual full rebuild requested");
+            compileAll();
+        });
+    }
+
+    /** Drops the current fs-meta subscription and attempts daemon discovery again. */
+    public void reconnectFsMeta() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project before reconnecting.", NotificationType.WARNING);
+            return;
+        }
+        start();
+        ExecutorService current = worker;
+        if (current == null) {
+            return;
+        }
+        current.submit(() -> {
+            if (!started.get()) {
+                return;
+            }
+            log("Manual fs-meta reconnect requested");
+            stopWatch();
+            startWatch();
+        });
+    }
+
+    private void stopWatch() {
+        FsMetaDaemonWatch current = watch;
+        watch = null;
+        if (current != null) {
+            current.stop();
+        }
+    }
+
     private void stop() {
         synchronized (lifecycle) {
             if (!started.compareAndSet(true, false)) {
                 return;
             }
             log("Stopping incremental build");
-            FsMetaDaemonWatch current = watch;
-            watch = null;
-            if (current != null) {
-                current.stop();
-            }
+            stopWatch();
             ExecutorService currentWorker = worker;
             worker = null;
             if (currentWorker != null) {
@@ -378,6 +423,7 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void startWatch() {
+        stopWatch();
         FsMetaDaemonDiscovery.Attach attach;
         try {
             attach = FsMetaDaemonDiscovery.discoverAncestor(projectRoot);

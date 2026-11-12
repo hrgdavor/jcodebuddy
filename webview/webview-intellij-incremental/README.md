@@ -157,7 +157,8 @@ There are two places to look:
 
 1. **View | Tool Windows | JCodeBuddy Build** — an in-IDE log with the current session's events:
    source-root discovery, module classpaths, fs-meta daemon/socket/filter, batches, compile results and
-   failures. It is the quickest troubleshooting view.
+   failures. Its toolbar has **Rebuild** (compile every source root again) and **Reconnect fs-meta**
+   (drop the current subscription and retry daemon discovery). It is the quickest troubleshooting view.
 2. **`idea.log`** — every line is also written through IntelliJ's `Logger`. Use
    **Help | Show Log in Explorer** (Windows) and search for `JCodeBuddy`.
 

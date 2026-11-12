@@ -11,9 +11,11 @@ import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentFactory;
 import org.jetbrains.annotations.NotNull;
 
+import javax.swing.JButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.util.function.Consumer;
 import javax.swing.JPanel;
 
@@ -29,6 +31,7 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         IncrementalLogService logs = IncrementalLogService.getInstance(project);
+        IncrementalBuildService service = project.getService(IncrementalBuildService.class);
         JTextArea area = new JTextArea();
         area.setEditable(false);
         area.setLineWrap(false);
@@ -40,7 +43,18 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         });
         logs.addListener(listener);
 
+        JButton rebuild = new JButton("Rebuild");
+        rebuild.setToolTipText("Compile every source root again");
+        rebuild.addActionListener(event -> service.rebuild());
+        JButton reconnect = new JButton("Reconnect fs-meta");
+        reconnect.setToolTipText("Drop the current fs-meta subscription and retry daemon discovery");
+        reconnect.addActionListener(event -> service.reconnectFsMeta());
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        toolbar.add(rebuild);
+        toolbar.add(reconnect);
+
         JPanel panel = new JPanel(new BorderLayout());
+        panel.add(toolbar, BorderLayout.NORTH);
         panel.add(new JScrollPane(area), BorderLayout.CENTER);
         Content content = ContentFactory.getInstance().createContent(panel, "Build log", false);
         Disposable disposable = Disposer.newDisposable("JCodeBuddy Build log");

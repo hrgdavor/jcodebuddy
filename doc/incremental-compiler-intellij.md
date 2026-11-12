@@ -149,7 +149,9 @@ changed batch.
 ## Logs
 
 Use **View | Tool Windows | JCodeBuddy Build** for the in-IDE log. It includes source-root discovery,
-module classpaths, fs-meta daemon/socket/filter values, batches, compile results and failures.
+module classpaths, fs-meta daemon/socket/filter values, batches, compile results and failures. Its
+toolbar provides **Rebuild** (compile all source roots again) and **Reconnect fs-meta** (drop the current
+subscription and retry daemon discovery).
 
 The same messages are written through IntelliJ's `Logger`, so they also appear in `idea.log`
 (**Help | Show Log in Explorer** on Windows); search for `JCodeBuddy`. The log lists every module
