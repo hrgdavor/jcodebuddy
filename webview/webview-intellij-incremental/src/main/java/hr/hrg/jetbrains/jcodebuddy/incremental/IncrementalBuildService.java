@@ -395,6 +395,7 @@ public final class IncrementalBuildService implements Disposable {
         if (changed.isEmpty() && deleted.isEmpty()) {
             log("No source hash changes (" + reason + ")");
             saveDiagnostics();
+            refreshHighlighting();
             return true;
         }
         log("Hash-driven compile (" + reason + "): " + changed.size() + " changed, "
@@ -925,6 +926,7 @@ public final class IncrementalBuildService implements Disposable {
         }
         if (clearedDiagnostics) {
             saveDiagnostics();
+            refreshHighlighting();
         }
         for (String name : batch.deleted()) {
             Path file = daemonRoot.resolve(name).toAbsolutePath().normalize();
