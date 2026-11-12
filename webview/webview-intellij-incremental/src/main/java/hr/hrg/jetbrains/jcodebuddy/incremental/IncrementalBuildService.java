@@ -346,7 +346,10 @@ public final class IncrementalBuildService implements Disposable {
         for (Map.Entry<Path, String> entry : current.entrySet()) {
             String previous = compiledHashes.get(entry.getKey());
             SourceRoot root = rootFor(entry.getKey());
-            if (!entry.getValue().equals(previous) || (root != null && primaryClassMissing(root, entry.getKey()))) {
+            if (!entry.getValue().equals(previous)
+                    || failedFiles.contains(entry.getKey())
+                    || !diagnostics.forFile(entry.getKey().toString()).isEmpty()
+                    || (root != null && primaryClassMissing(root, entry.getKey()))) {
                 changed.add(entry.getKey());
             }
         }
@@ -815,10 +818,15 @@ public final class IncrementalBuildService implements Disposable {
             }
             String previousHash = compiledHashes.get(file);
             if (currentHash != null && currentHash.equals(previousHash)
+                    && !failedFiles.contains(file)
+                    && diagnostics.forFile(file.toString()).isEmpty()
                     && !primaryClassMissing(root, file)) {
                 ignoredUnchanged++;
                 log("fs-meta false positive: " + file + " has the same hash as the compiled generation; ignored");
                 continue;
+            }
+            if (failedFiles.contains(file)) {
+                log("Retrying failed file despite unchanged hash: " + file);
             }
             changedByRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(file);
         }
