@@ -9,11 +9,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -63,6 +65,34 @@ class EcjIncrementalCompilerTest {
         byte[] bytes = Files.readAllBytes(classFile);
         return ((bytes[0] & 0xff) << 24) | ((bytes[1] & 0xff) << 16)
                 | ((bytes[2] & 0xff) << 8) | (bytes[3] & 0xff);
+    }
+
+    @Test
+    void doesNotTouchAByteIdenticalClassUnlessForced() throws IOException {
+        Path source = write("demo/Stable.java", """
+                package demo;
+
+                public final class Stable {
+                    public static int value() {
+                        return 1;
+                    }
+                }
+                """);
+        EcjIncrementalCompiler compiler = newCompiler();
+        compiler.index();
+        assertTrue(compiler.compile(Set.of(source), false));
+
+        Path classFile = binDir.resolve("demo").resolve("Stable.class");
+        FileTime marker = FileTime.fromMillis(1_000_000_000_000L);
+        Files.setLastModifiedTime(classFile, marker);
+
+        assertTrue(compiler.compile(Set.of(source), false));
+        assertEquals(marker, Files.getLastModifiedTime(classFile),
+                "an identical class must not be rewritten in incremental mode");
+
+        assertTrue(compiler.compile(Set.of(source), true));
+        assertNotEquals(marker, Files.getLastModifiedTime(classFile),
+                "a forced rebuild must rewrite the class");
     }
 
     @Test

@@ -270,10 +270,23 @@ public final class EcjIncrementalCompiler {
      * @throws NullPointerException if {@code changedFiles} is {@code null}
      */
     public boolean compile(Set<Path> changedFiles) {
+        return compile(changedFiles, true);
+    }
+
+    /**
+     * Compiles the changed files and optionally rewrites byte-identical class files.
+     *
+     * @param changedFiles   the {@code .java} files to compile
+     * @param writeIdentical {@code false} to leave an existing class file untouched when the newly produced
+     *                       bytes are identical; {@code true} for a forced rebuild
+     * @return {@code true} when every file compiled without an error
+     */
+    public boolean compile(Set<Path> changedFiles, boolean writeIdentical) {
         Objects.requireNonNull(changedFiles, "changedFiles");
         long startedAt = System.nanoTime();
         try {
             classFileWriter.reset();
+            classFileWriter.setWriteIdentical(writeIdentical);
             if (changedFiles.isEmpty()) {
                 lastErrors = List.of();
                 return true;

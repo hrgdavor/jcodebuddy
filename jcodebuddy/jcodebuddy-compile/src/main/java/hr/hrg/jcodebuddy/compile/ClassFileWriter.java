@@ -12,6 +12,7 @@ import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -36,9 +37,19 @@ final class ClassFileWriter implements ICompilerRequestor {
     private final Path binDir;
     private final List<String> errors = new ArrayList<>();
     private boolean hasErrors;
+    private boolean writeIdentical = true;
 
     ClassFileWriter(Path binDir) {
         this.binDir = Objects.requireNonNull(binDir, "binDir").toAbsolutePath().normalize();
+    }
+
+    /**
+     * When false, a class whose bytes equal the file already on disk is left untouched. Incremental
+     * consumers use this so an unchanged output does not wake an external file watcher; a forced rebuild
+     * leaves it true.
+     */
+    void setWriteIdentical(boolean writeIdentical) {
+        this.writeIdentical = writeIdentical;
     }
 
     /** Clears the problems of the previous compile round. */
@@ -113,7 +124,12 @@ final class ClassFileWriter implements ICompilerRequestor {
 
         try {
             Files.createDirectories(out.getParent());
-            Files.write(out, classFile.getBytes());
+            byte[] bytes = classFile.getBytes();
+            if (!writeIdentical && Files.isRegularFile(out) && Arrays.equals(Files.readAllBytes(out), bytes)) {
+                log.log(Level.DEBUG, "unchanged " + binDir.relativize(out));
+                return;
+            }
+            Files.write(out, bytes);
             log.log(Level.DEBUG, "wrote " + binDir.relativize(out));
         } catch (IOException e) {
             hasErrors = true;

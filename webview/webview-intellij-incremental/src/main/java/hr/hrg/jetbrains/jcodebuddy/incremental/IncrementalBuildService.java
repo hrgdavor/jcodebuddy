@@ -445,7 +445,7 @@ public final class IncrementalBuildService implements Disposable {
                 chunkIndex++;
                 log("Compiling [" + root.module().getName() + "] hash chunk " + chunkIndex + " "
                         + chunk.size() + " file(s)");
-                if (!compiler.compile(chunk)) {
+                if (!compiler.compile(chunk, false)) {
                     failed.addAll(chunk);
                 }
             }
@@ -453,7 +453,7 @@ public final class IncrementalBuildService implements Disposable {
             if (!failed.isEmpty()) {
                 log("Retrying [" + root.module().getName() + "] " + failed.size()
                         + " hash-changed file(s)");
-                rootOk = compiler.compile(failed);
+                rootOk = compiler.compile(failed, false);
             }
             if (rootOk) {
                 rememberHashes(files);
@@ -799,7 +799,7 @@ public final class IncrementalBuildService implements Disposable {
             List<Path> pending = new ArrayList<>(files);
             Set<Path> failed = new LinkedHashSet<>();
             if (pending.isEmpty()) {
-                success &= compiler.compile(Set.of());
+                success &= compiler.compile(Set.of(), true);
                 publish(root, compiler);
                 continue;
             }
@@ -810,7 +810,7 @@ public final class IncrementalBuildService implements Disposable {
                 chunkIndex++;
                 log("Compiling [" + root.module().getName() + "] chunk " + chunkIndex + " "
                         + chunk.size() + " file(s) from " + root.root());
-                if (!compiler.compile(chunk)) {
+                if (!compiler.compile(chunk, true)) {
                     failed.addAll(chunk);
                 }
             }
@@ -821,7 +821,7 @@ public final class IncrementalBuildService implements Disposable {
             if (!failed.isEmpty()) {
                 log("Retrying [" + root.module().getName() + "] " + failed.size()
                         + " file(s) after the initial chunk pass");
-                rootOk = compiler.compile(failed);
+                rootOk = compiler.compile(failed, true);
             }
             if (rootOk) {
                 rememberHashes(files);
@@ -1004,7 +1004,7 @@ public final class IncrementalBuildService implements Disposable {
                 continue;
             }
             log("Compiling [" + root.module().getName() + "] " + changed.size() + " changed file(s)");
-            boolean rootOk = compiler.compile(changed);
+            boolean rootOk = compiler.compile(changed, false);
             if (rootOk) {
                 rememberHashes(changed);
                 failedFiles.removeAll(changed);

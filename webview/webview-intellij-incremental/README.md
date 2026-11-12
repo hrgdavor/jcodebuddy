@@ -256,9 +256,11 @@ classes for deleted sources. If the hash state is absent but existing class outp
 are seeded first, so an upgrade does not rewrite every identical class. The fs-meta batch marker only
 positions the subscription; it cannot cause a full rebuild on its own.
 
-If a file's hash equals the last successful compile and its class exists, ECJ is not invoked at all, so no
-class file is rewritten and external output watchers do not see a change. Stale diagnostics for that file are
-cleared and highlighting is refreshed.
+If a file's hash equals the last successful compile and its class exists, ECJ is not invoked at all. Even when
+ECJ is invoked for another file, the class writer compares the produced bytes with the existing class and
+leaves a byte-identical file untouched in incremental mode, so external output watchers do not see a change.
+Stale diagnostics for an unchanged file are cleared and highlighting is refreshed. Only **Rebuild** enables
+rewriting identical class files.
 
 If fs-meta reports a changed file whose current hash equals the compiled hash, the plugin logs:
 

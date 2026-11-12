@@ -181,7 +181,8 @@ The compiled-source hashes are stored at
 class output differs from that map. When the hash state is absent but existing classes are present, those
 hashes are seeded instead of rewriting every class. A fs-meta change whose hash is unchanged is reported as a
 false positive and skipped; a false deletion for an existing file is likewise ignored. If the hash matches
-and the class exists, ECJ is not invoked, so no class file is rewritten.
+and the class exists, ECJ is not invoked. During incremental compiles the class writer also compares produced
+bytes and leaves byte-identical class files untouched; only **Rebuild** rewrites them.
 
 ## Configuration and limits
 
