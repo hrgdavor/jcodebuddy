@@ -13,9 +13,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * The in-memory diagnostic channel between the incremental compiler and the editor annotator.
  *
- * <p>This service is deliberately small and non-persistent: a compile replaces the diagnostics for the
- * compiled source roots, and the annotator reads the current map. No file is written, so there is no stale
- * JSON report and no file-watcher round trip for editor squiggles.</p>
+ * <p>This service is the in-memory channel; the build service also snapshots it to project output after a
+ * compile so the editor annotations can be restored after an IDE restart. The annotator always reads the
+ * current map, so there is no file-watcher round trip for editor squiggles.</p>
  */
 @Service(Service.Level.PROJECT)
 public final class IncrementalDiagnosticsService {
@@ -39,6 +39,22 @@ public final class IncrementalDiagnosticsService {
     public List<Diagnostic> forFile(String path) {
         List<Diagnostic> found = byFile.get(normalize(Path.of(path)));
         return found == null ? List.of() : List.copyOf(found);
+    }
+
+    /** Replaces the whole in-memory set, used when restoring persisted diagnostics. */
+    public void replaceAll(Collection<Diagnostic> diagnostics) {
+        byFile.clear();
+        for (Diagnostic diagnostic : diagnostics) {
+            byFile.computeIfAbsent(normalize(diagnostic.file()), ignored -> new ArrayList<>())
+                    .add(diagnostic);
+        }
+    }
+
+    /** Flattened snapshot for persistence. */
+    public List<Diagnostic> snapshot() {
+        List<Diagnostic> all = new ArrayList<>();
+        byFile.values().forEach(all::addAll);
+        return List.copyOf(all);
     }
 
     /** Removes diagnostics for a file that no longer exists or was deleted in a batch. */

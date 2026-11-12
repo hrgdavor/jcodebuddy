@@ -8,9 +8,9 @@ The plugin bundles:
 - `jcodebuddy-compile` and its **ECJ 3.46.100** dependency;
 - `jcodebuddy-watch`, the fs-meta daemon client.
 
-Compiler diagnostics stay **in memory** in the plugin and are rendered directly by an
-`ExternalAnnotator`. There is no diagnostics JSON, no report file and no file-watcher round trip for
-editor squiggles.
+Compiler diagnostics are published directly by an `ExternalAnnotator`; there is no JSON hand-off for editor
+squiggles. The last diagnostic set is also persisted as a small project-output TSV so IntelliJ can restore
+the annotations after a project restart.
 
 > This plugin is not part of the Maven reactor and not part of `GATE_MODULES`. It is a Gradle/IntelliJ
 > Platform project under `webview/`, like `webview-jetbrains`.
@@ -37,6 +37,11 @@ a marker newer than the daemon head forces a full compile. A marker for another 
 
 On a successful compile the diagnostics for that source root are replaced by an empty list, so the next
 highlighting pass removes the old red errors. IntelliJ's own **Build** is not invoked by this plugin.
+
+The last diagnostic set is persisted in
+`<project>/.jcodebuddy/cache/incremental-build/diagnostics.tsv` and restored when the project opens.
+IntelliJ does not persist external-annotator output itself, so this is what restores the markers when the
+resumed fs-meta batch contains no new compile. Disabling the project setting clears the saved diagnostics.
 
 ## Requirements
 
@@ -171,6 +176,7 @@ The service logs:
 ```text
 Starting incremental build for <project>
 Resuming from fs-meta batch 1234 (.jcodebuddy/cache/incremental-build/batch.properties)
+Restored N diagnostic(s) from .jcodebuddy/cache/incremental-build/diagnostics.tsv
 Source root [module] <path> -> <output>
 Module [module] classpath entries: N
 Full compile: N source root(s)
@@ -185,7 +191,8 @@ Batch: changed=[...] deleted=[...]
 ```
 
 `Resuming...` means the startup did **not** recompile everything. `Full compile` is expected on the first
-run, after a marker invalidation, or after a failed compile.
+run, after a marker invalidation, or after a failed compile. `Restored N diagnostic(s)` means the previous
+compile's error annotations were loaded from the diagnostics state file.
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 The log also lists every module classpath entry as `JAR`, `DIR`, or `MISSING`, with a per-module summary;

@@ -86,6 +86,7 @@ public final class IncrementalBuildService implements Disposable {
     private volatile String sourceSignature = "";
     private volatile String classpathSignature = "";
     private volatile BatchStateStore batchState;
+    private volatile DiagnosticStateStore diagnosticState;
     private volatile boolean markerDirty;
 
     public IncrementalBuildService(@NotNull Project project) {
@@ -132,6 +133,10 @@ public final class IncrementalBuildService implements Disposable {
             start();
         } else {
             stop();
+            DiagnosticStateStore state = diagnosticState;
+            if (state != null) {
+                state.clear();
+            }
         }
     }
 
@@ -226,6 +231,13 @@ public final class IncrementalBuildService implements Disposable {
             compilers = createCompilers(sourceRoots);
             sourceSignature = signature(sourceRoots) + "|" + classpathSignature;
             batchState = new BatchStateStore(projectRoot);
+            diagnosticState = new DiagnosticStateStore(projectRoot);
+            List<Diagnostic> restored = diagnosticState.load();
+            diagnostics.replaceAll(restored);
+            if (!restored.isEmpty()) {
+                log("Restored " + restored.size() + " diagnostic(s) from " + diagnosticState.file());
+                refreshHighlighting();
+            }
 
             FsMetaDaemonDiscovery.Attach attach = discover();
             if (attach == null) {
@@ -687,6 +699,14 @@ public final class IncrementalBuildService implements Disposable {
             }
         }
         diagnostics.replaceRoot(root.root(), parsed);
+        if (diagnosticState != null) {
+            try {
+                diagnosticState.save(diagnostics.snapshot());
+            } catch (IOException failed) {
+                LOG.warn("Cannot persist diagnostics " + diagnosticState.file(), failed);
+                log("Cannot persist diagnostics: " + failed);
+            }
+        }
         if (parsed.isEmpty()) {
             log("Compile OK [" + root.module().getName() + "] " + root.root());
         } else {

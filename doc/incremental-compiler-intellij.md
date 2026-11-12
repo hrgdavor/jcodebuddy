@@ -6,7 +6,8 @@ The IntelliJ integration is a packaged plugin, not a JSON report:
 
 It bundles `jcodebuddy-compile` (including **ECJ 3.46.100**) and `jcodebuddy-watch`, replaces IntelliJ's
 Java auto-build with the fs-meta + ECJ loop, and publishes compiler diagnostics directly to the editor.
-There is no diagnostics JSON, no report file and no file-watching round trip for error squiggles.
+There is no diagnostics JSON and no file-watching round trip for error squiggles; a small TSV keeps the
+last diagnostic set so the annotations can be restored after a project restart.
 
 ## What the plugin does
 
@@ -28,7 +29,9 @@ newer than the daemon head forces a full compile. The marker is at
 the log tool window forces a full compile; **Reconnect fs-meta** keeps the marker and resubscribes from it.
 
 A failed compile adds red annotations. A successful compile replaces that source root's diagnostics with
-an empty list, so the next highlighting pass removes them.
+an empty list, so the next highlighting pass removes them. The diagnostics are persisted in
+`.jcodebuddy/cache/incremental-build/diagnostics.tsv` and restored on project reopen, because IntelliJ does
+not persist external-annotator output itself. Disabling the project setting clears that saved state.
 
 ## Setup
 
