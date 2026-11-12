@@ -167,15 +167,17 @@ annotator. `column: 0` means "whole line".
 There are two places to look:
 
 1. **View | Tool Windows | JCodeBuddy Build** — an in-IDE log with the current session's events:
-   source-root discovery, module classpaths, fs-meta daemon/socket/filter, batches, compile results and
-   failures. Every line has a full date/time. Its toolbar has:
+   source-root discovery, module classpath counts, fs-meta daemon/socket/filter, batches, compile results
+   and failures. Every line has a full date/time. Its toolbar has:
    - **Rebuild** — compile every source root again;
    - **Reconnect fs-meta** — drop the current subscription and retry daemon discovery;
+   - **Detailed Classpath** — write every classpath entry for every module to the log on demand;
    - **Open Log Folder** — open `.jcodebuddy/cache/incremental-build/` in the system file explorer;
    - **Clear Log** — clear both the pane and `build.log`.
 
-   The same lines are appended to `<project>/.jcodebuddy/cache/incremental-build/build.log`, which stays
-   after the IDE restarts. The tool window is the quickest troubleshooting view; the file is the durable one.
+   Normal startup logs only counts such as
+   `Classpath [module]: entries=277, jars=240, dirs=35, missing=2`. The durable log file
+   `<project>/.jcodebuddy/cache/incremental-build/build.log` retains all lines after an IDE restart.
 
 2. **`idea.log`** — every line is also written through IntelliJ's `Logger`. Use
    **Help | Show Log in Explorer** (Windows) and search for `JCodeBuddy`.
@@ -187,7 +189,7 @@ Starting incremental build for <project>
 Hash-driven compile (startup): N changed, M deleted
 fs-meta false positive: <path> has the same hash as the compiled generation; ignored
 Source root [module] <path> -> <output>
-Module [module] classpath entries: N
+Classpath [module]: entries=277, jars=240, dirs=35, missing=2
 Full compile: N source root(s)          # only explicit Rebuild
 Compiling [module] N file(s) from <root>
 Compile OK [module] <root>
@@ -201,12 +203,13 @@ Batch: changed=[...] deleted=[...]
 
 `Hash-driven compile` is the normal startup path. `Full compile` is emitted only by the explicit
 **Rebuild** button. `Restored N diagnostic(s)` means the previous compile's error annotations were loaded
-from the diagnostics state file.
+from the diagnostics state file. Normal classpath lines show counts; use **Detailed Classpath** when the
+per-entry `JAR`/`DIR`/`MISSING` list is needed.
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
-The log also lists every module classpath entry as `JAR`, `DIR`, or `MISSING`, with a per-module summary;
-use it first when a Maven dependency appears unresolved. IntelliJ reports a JAR root as `...jar!/`; the
-plugin strips that virtual suffix and logs the physical `.jar` path.
+By default the log reports per-module classpath **counts**. Press **Detailed Classpath** to append each
+entry as `JAR`, `DIR`, or `MISSING`; use that when a Maven dependency appears unresolved. IntelliJ reports
+a JAR root as `...jar!/`; the plugin strips that virtual suffix and logs the physical `.jar` path.
 
 The log also prints the IDE heap maximum and current use at startup. If the build reports
 `OutOfMemoryError`, increase the IDE heap (`Help | Change Memory Settings`); the compiler now shares one

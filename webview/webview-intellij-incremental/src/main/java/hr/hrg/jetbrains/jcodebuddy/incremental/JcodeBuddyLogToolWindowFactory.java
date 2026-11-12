@@ -54,6 +54,9 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         JButton reconnect = new JButton("Reconnect fs-meta");
         reconnect.setToolTipText("Drop the current fs-meta subscription and retry daemon discovery");
         reconnect.addActionListener(event -> service.reconnectFsMeta());
+        JButton detailedClasspath = new JButton("Detailed Classpath");
+        detailedClasspath.setToolTipText("Log every module classpath entry; normal startup logs counts only");
+        detailedClasspath.addActionListener(event -> service.logDetailedClasspath());
         JButton openLog = new JButton("Open Log Folder");
         openLog.setToolTipText("Open " + logs.file().getParent() + " in the file explorer");
         openLog.addActionListener(event -> openLogFolder(project, logs));
@@ -67,6 +70,7 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
         toolbar.add(rebuild);
         toolbar.add(reconnect);
+        toolbar.add(detailedClasspath);
         toolbar.add(openLog);
         toolbar.add(clearLog);
 

@@ -577,7 +577,7 @@ public final class IncrementalBuildService implements Disposable {
         Set<String> classpath = new LinkedHashSet<>();
         for (Module module : byModule.keySet()) {
             Set<String> moduleClasspath = classpathFor(module);
-            logClasspath(module, moduleClasspath);
+            logClasspathSummary(module, moduleClasspath);
             classpath.addAll(moduleClasspath);
         }
         for (SourceRoot root : roots) {
@@ -625,39 +625,91 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     /**
-     * Logs every classpath entry, not just the count. This is the first thing to inspect when a Maven
-     * dependency appears unresolvable: it shows whether the entry was present, whether it is a JAR or a
-     * directory, and whether it exists on disk.
+     * Default logging is deliberately compact: a per-module count only. The full entry list is available
+     * on demand through the <b>Detailed Classpath</b> toolbar action.
      */
-    private void logClasspath(Module module, Set<String> entries) {
-        int jars = 0;
-        int directories = 0;
-        int missing = 0;
+    private void logClasspathSummary(Module module, Set<String> entries) {
+        Counts counts = classpathCounts(entries);
+        log("Classpath [" + module.getName() + "]: entries=" + entries.size()
+                + ", jars=" + counts.jars + ", dirs=" + counts.directories
+                + ", missing=" + counts.missing);
+    }
+
+    /** Explicit user action: write every classpath entry for every module into the log. */
+    public void logDetailedClasspath() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project first.", NotificationType.WARNING);
+            return;
+        }
+        start();
+        ExecutorService current = worker;
+        if (current == null) {
+            return;
+        }
+        current.submit(() -> {
+            if (!started.get()) {
+                return;
+            }
+            List<Module> modules = new ArrayList<>();
+            Set<String> seen = new LinkedHashSet<>();
+            for (SourceRoot root : sourceRoots) {
+                if (seen.add(root.module().getName())) {
+                    modules.add(root.module());
+                }
+            }
+            if (modules.isEmpty()) {
+                log("Detailed classpath: no Java source roots/modules");
+                return;
+            }
+            log("Detailed classpath requested for " + modules.size() + " module(s)");
+            for (Module module : modules) {
+                logDetailedClasspath(module, classpathFor(module));
+            }
+        });
+    }
+
+    private void logDetailedClasspath(Module module, Set<String> entries) {
+        Counts counts = new Counts();
         log("Classpath [" + module.getName() + "] " + entries.size() + " entries:");
         for (String entry : entries) {
-            Path path;
-            try {
-                path = Path.of(entry);
-            } catch (RuntimeException malformed) {
-                missing++;
-                log("  MISSING (invalid path) " + entry);
-                continue;
-            }
-            String kind;
-            if (Files.isDirectory(path)) {
-                kind = "DIR";
-                directories++;
-            } else if (Files.isRegularFile(path)) {
-                kind = "JAR";
-                jars++;
-            } else {
-                kind = "MISSING";
-                missing++;
-            }
-            log("  " + kind + " " + entry);
+            log("  " + classpathKind(entry, counts) + " " + entry);
         }
-        log("Classpath summary [" + module.getName() + "]: jars=" + jars
-                + ", dirs=" + directories + ", missing=" + missing);
+        log("Classpath summary [" + module.getName() + "]: jars=" + counts.jars
+                + ", dirs=" + counts.directories + ", missing=" + counts.missing);
+    }
+
+    private Counts classpathCounts(Set<String> entries) {
+        Counts counts = new Counts();
+        for (String entry : entries) {
+            classpathKind(entry, counts);
+        }
+        return counts;
+    }
+
+    private static String classpathKind(String entry, Counts counts) {
+        Path path;
+        try {
+            path = Path.of(entry);
+        } catch (RuntimeException malformed) {
+            counts.missing++;
+            return "MISSING";
+        }
+        if (Files.isDirectory(path)) {
+            counts.directories++;
+            return "DIR";
+        }
+        if (Files.isRegularFile(path)) {
+            counts.jars++;
+            return "JAR";
+        }
+        counts.missing++;
+        return "MISSING";
+    }
+
+    private static final class Counts {
+        private int jars;
+        private int directories;
+        private int missing;
     }
 
     private boolean compileAll() {

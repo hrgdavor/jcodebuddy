@@ -167,10 +167,11 @@ source roots again), **Reconnect fs-meta** (drop the current subscription and re
 pane and the file).
 
 The same messages are written through IntelliJ's `Logger`, so they also appear in `idea.log`
-(**Help | Show Log in Explorer** on Windows); search for `JCodeBuddy`. The log lists every module
-classpath entry as `JAR`, `DIR`, or `MISSING`; that is the first place to inspect when a Maven dependency
-appears unresolved. IntelliJ's virtual JAR root (`...jar!/`) is normalized to the physical `.jar` path
-before logging and compiling.
+(**Help | Show Log in Explorer** on Windows); search for `JCodeBuddy`. Normal startup logs per-module
+classpath **counts** only. Press **Detailed Classpath** in the log toolbar to append every entry as `JAR`,
+`DIR`, or `MISSING`; that is the first place to inspect when a Maven dependency appears unresolved.
+IntelliJ's virtual JAR root (`...jar!/`) is normalized to the physical `.jar` path before logging and
+compiling.
 
 The compiled-source hashes are stored at
 `.jcodebuddy/cache/incremental-build/compiled-hashes.tsv`. Startup compiles only files whose hash or primary
