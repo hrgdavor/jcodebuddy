@@ -26,16 +26,16 @@ On project open, when that project setting is enabled, the plugin:
 
 1. collects the project's Java source roots and module compiler outputs from IntelliJ, across all modules;
 2. creates one `EcjIncrementalCompiler` per source root, writing into that module's existing compiler output;
-3. discovers the fs-meta daemon and reads the last successfully applied batch marker from
-   `.jcodebuddy/cache/incremental-build/batch.properties`;
-4. on the first run, compiles all source roots once and saves the daemon head;
-5. on later starts, subscribes from the saved batch and compiles only the replayed changes;
-6. publishes the compiler diagnostics to IntelliJ and restarts highlighting.
+3. loads the persisted **source-content hash map** of files that compiled successfully;
+4. compares every current `.java` hash against it, plus missing output classes, and compiles only the
+   changed/missing files;
+5. discovers the fs-meta daemon and subscribes at its current head so later changes are watched;
+6. publishes compiler diagnostics and restarts highlighting.
 
-The marker is written only after a successful compile. A failed **batch** remembers only that batch's
-failed files (plus later changes), so fixing one error does not trigger a full rebuild. A source-root/layout
-change, a cleaned compiler output, or a full-compile failure still forces a full compile. A marker for
-another daemon root is ignored.
+The fs-meta batch marker positions the subscription, but the **hash map is the startup authority**. A false
+fs-meta change whose content hash matches the compiled generation is logged and ignored. Only the explicit
+**Rebuild** button performs a full compile; the first run with no hash state is the one unavoidable bootstrap
+compile.
 
 On a successful compile the diagnostics for that source root are replaced by an empty list, so the next
 highlighting pass removes the old red errors. IntelliJ's own **Build** is not invoked by this plugin.
@@ -177,11 +177,11 @@ The service logs:
 
 ```text
 Starting incremental build for <project>
-Resuming from fs-meta batch 1234 (.jcodebuddy/cache/incremental-build/batch.properties)
-Restored N diagnostic(s) from .jcodebuddy/cache/incremental-build/diagnostics.tsv
+Hash-driven compile (startup): N changed, M deleted
+fs-meta false positive: <path> has the same hash as the compiled generation; ignored
 Source root [module] <path> -> <output>
 Module [module] classpath entries: N
-Full compile: N source root(s)
+Full compile: N source root(s)          # only explicit Rebuild
 Compiling [module] N file(s) from <root>
 Compile OK [module] <root>
 Compile FAILED [module] N diagnostic(s); first: ...
@@ -192,9 +192,9 @@ fs-meta filter: ...
 Batch: changed=[...] deleted=[...]
 ```
 
-`Resuming...` means the startup did **not** recompile everything. `Full compile` is expected on the first
-run, after a marker invalidation, or after a failed compile. `Restored N diagnostic(s)` means the previous
-compile's error annotations were loaded from the diagnostics state file.
+`Hash-driven compile` is the normal startup path. `Full compile` is emitted only by the explicit
+**Rebuild** button. `Restored N diagnostic(s)` means the previous compile's error annotations were loaded
+from the diagnostics state file.
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 The log also lists every module classpath entry as `JAR`, `DIR`, or `MISSING`, with a per-module summary;
@@ -215,13 +215,37 @@ The last successfully applied fs-meta generation is stored at:
 ```
 
 It records the batch number, daemon root and a source-root/output + classpath signature. It is written
-atomically only after a compile succeeds and all previously failed files are clean. If a batch fails, its
-files are retried in the next batch instead of rebuilding the project. If the signature no longer matches,
-the daemon root changed, the compiler output was cleaned away, or a full compile failed, the next start
-performs a full compile instead of trusting the marker.
+atomically only after a compile succeeds and all previously failed files are clean. The batch marker is the
+subscription position and a diagnostics/state reference; the compiled-hash map is what decides which files
+need compiling. A failed batch retries its files on the next batch instead of rebuilding the project.
 
 The **Rebuild** toolbar button deliberately performs a full compile and then saves the current daemon head.
 **Reconnect fs-meta** keeps the saved marker and resubscribes from it.
+
+## Compiled hashes
+
+The authoritative state is:
+
+```text
+<project>/.jcodebuddy/cache/incremental-build/compiled-hashes.tsv
+```
+
+It stores a SHA-256 of every successfully compiled `.java` file, plus a layout/classpath signature. Startup
+compiles only files whose hash differs from this map (or whose primary `.class` is missing), and removes
+classes for deleted sources. The fs-meta batch marker only positions the subscription; it cannot cause a
+full rebuild on its own.
+
+If fs-meta reports a changed file whose current hash equals the compiled hash, the plugin logs:
+
+```text
+fs-meta false positive: <path> has the same hash as the compiled generation; ignored
+```
+
+and does not invoke ECJ for it. A false deletion for a file that still exists is logged similarly.
+
+A failed batch updates hashes only for files that actually compiled; failed files are retried in the next
+batch. Only the explicit **Rebuild** button calls the full compile path (plus the unavoidable first-run
+bootstrap when no hash state exists).
 
 ## Multi-module projects
 

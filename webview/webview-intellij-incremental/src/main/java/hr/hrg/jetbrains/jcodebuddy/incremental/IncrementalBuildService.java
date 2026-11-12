@@ -88,6 +88,8 @@ public final class IncrementalBuildService implements Disposable {
     private volatile String classpathSignature = "";
     private volatile BatchStateStore batchState;
     private volatile DiagnosticStateStore diagnosticState;
+    private volatile CompiledHashStore hashStore;
+    private volatile Map<Path, String> compiledHashes = Map.of();
     private volatile boolean fullCompileRequired;
 
     public IncrementalBuildService(@NotNull Project project) {
@@ -233,6 +235,9 @@ public final class IncrementalBuildService implements Disposable {
             sourceSignature = signature(sourceRoots) + "|" + classpathSignature;
             batchState = new BatchStateStore(projectRoot);
             diagnosticState = new DiagnosticStateStore(projectRoot);
+            hashStore = new CompiledHashStore(projectRoot);
+            CompiledHashStore.State hashes = hashStore.load();
+            compiledHashes = new LinkedHashMap<>(hashes.hashes());
             List<Diagnostic> restored = diagnosticState.load();
             diagnostics.replaceAll(restored);
             if (!restored.isEmpty()) {
@@ -241,38 +246,30 @@ public final class IncrementalBuildService implements Disposable {
             }
 
             FsMetaDaemonDiscovery.Attach attach = discover();
-            if (attach == null) {
-                compileAll();
-                return;
+            long head = -1;
+            if (attach != null) {
+                daemonRoot = attach.location().root();
+                daemonSocket = attach.location().socket();
+                head = queryHead(attach.location().socket());
             }
-            daemonRoot = attach.location().root();
-            daemonSocket = attach.location().socket();
-            BatchStateStore.State saved = batchState.load();
-            boolean resume = saved != null
-                    && saved.batch() >= 0
-                    && saved.daemonRoot().equals(daemonRoot.toString())
-                    && saved.sourceSignature().equals(sourceSignature)
-                    && outputsReady(sourceRoots);
-            long head = queryHead(attach.location().socket());
-            if (resume && head >= 0 && saved.batch() <= head) {
-                lastAppliedBatch = saved.batch();
-                log("Resuming from fs-meta batch " + saved.batch() + " (" + batchState.file() + ")");
-                startWatch(attach, saved.batch());
-                return;
-            }
-            if (saved != null && !resume) {
-                log("Batch marker invalid (layout/classpath/output changed); doing a full compile");
-            } else if (saved != null && saved.batch() > head) {
-                log("Batch marker " + saved.batch() + " is newer than daemon head " + head
-                        + "; doing a full compile");
-            }
-            boolean ok = compileAll();
-            if (ok) {
-                saveMarker(head);
+
+            // The explicit Rebuild action is the only path that calls compileAll(). A missing hash state is
+            // the unavoidable first bootstrap; it is still driven file-by-file through the hash path.
+            if (compiledHashes.isEmpty()) {
+                log("No compiled-hash state; performing the initial bootstrap hash scan");
+                boolean ok = compileFromHashes("bootstrap");
+                if (!ok) {
+                    fullCompileRequired = true;
+                }
             } else {
-                fullCompileRequired = true;
+                compileFromHashes("startup");
             }
-            startWatch(attach, head >= 0 ? head : FsMetaClient.LATEST);
+            if (attach != null) {
+                if (failedFiles.isEmpty()) {
+                    saveMarker(head);
+                }
+                startWatch(attach, head >= 0 ? head : FsMetaClient.LATEST);
+            }
         } catch (OutOfMemoryError memory) {
             LOG.error("JCodeBuddy incremental build ran out of IDE heap", memory);
             notify("JCodeBuddy incremental build ran out of IDE heap. Increase Help | Change Memory Settings "
@@ -323,28 +320,6 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     /** A marker is only trusted when the compiler outputs have not been cleaned away. */
-    private boolean outputsReady(List<SourceRoot> roots) {
-        for (SourceRoot root : roots) {
-            if (javaFiles(root.root()).isEmpty()) {
-                continue;
-            }
-            Path output = root.output();
-            if (!Files.isDirectory(output)) {
-                log("Output missing for [" + root.module().getName() + "]: " + output);
-                return false;
-            }
-            try (Stream<Path> stream = Files.walk(output)) {
-                if (stream.noneMatch(path -> Files.isRegularFile(path)
-                        && path.toString().endsWith(".class"))) {
-                    log("Output has no class files for [" + root.module().getName() + "]: " + output);
-                    return false;
-                }
-            } catch (IOException failed) {
-                return false;
-            }
-        }
-        return true;
-    }
 
     private void saveMarker(long batch) {
         if (batch < 0 || batchState == null || daemonRoot == null) {
@@ -357,6 +332,171 @@ public final class IncrementalBuildService implements Disposable {
         } catch (IOException failed) {
             LOG.warn("Cannot save fs-meta batch marker " + batchState.file(), failed);
             log("Cannot save fs-meta batch marker: " + failed);
+        }
+    }
+
+    /**
+     * Compares current source hashes with the last successfully compiled set. This is the automatic
+     * compile path; it deliberately never calls {@link #compileAll()}.
+     */
+    private boolean compileFromHashes(String reason) {
+        Map<Path, String> current = hashSources(sourceRoots);
+        Set<Path> changed = new LinkedHashSet<>();
+        Set<Path> deleted = new LinkedHashSet<>();
+        for (Map.Entry<Path, String> entry : current.entrySet()) {
+            String previous = compiledHashes.get(entry.getKey());
+            SourceRoot root = rootFor(entry.getKey());
+            if (!entry.getValue().equals(previous) || (root != null && primaryClassMissing(root, entry.getKey()))) {
+                changed.add(entry.getKey());
+            }
+        }
+        for (Path previous : compiledHashes.keySet()) {
+            if (!current.containsKey(previous)) {
+                deleted.add(previous);
+            }
+        }
+        if (changed.isEmpty() && deleted.isEmpty()) {
+            log("No source hash changes (" + reason + ")");
+            return true;
+        }
+        log("Hash-driven compile (" + reason + "): " + changed.size() + " changed, "
+                + deleted.size() + " deleted");
+        return compileChanged(changed, deleted);
+    }
+
+    private boolean compileChanged(Set<Path> changed, Set<Path> deleted) {
+        Map<Path, Set<Path>> byRoot = new LinkedHashMap<>();
+        for (Path file : changed) {
+            SourceRoot root = rootFor(file);
+            if (root != null) {
+                byRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(file);
+            }
+        }
+        for (Path file : deleted) {
+            SourceRoot root = rootFor(file);
+            compiledHashes.remove(file);
+            diagnostics.removeFile(file);
+            if (root != null) {
+                deleteCompiledClasses(root, file);
+            }
+        }
+        boolean success = true;
+        for (SourceRoot root : sourceRoots) {
+            Set<Path> files = byRoot.get(root.root());
+            EcjIncrementalCompiler compiler = compilers.get(root.root());
+            if (files == null || files.isEmpty()) {
+                continue;
+            }
+            if (compiler == null) {
+                success = false;
+                failedFiles.addAll(files);
+                continue;
+            }
+            log("Compiling [" + root.module().getName() + "] " + files.size() + " hash-changed file(s)");
+            List<Path> pending = new ArrayList<>(files);
+            Set<Path> failed = new LinkedHashSet<>();
+            int chunkIndex = 0;
+            for (int start = 0; start < pending.size(); start += INITIAL_COMPILE_CHUNK) {
+                int end = Math.min(start + INITIAL_COMPILE_CHUNK, pending.size());
+                Set<Path> chunk = new LinkedHashSet<>(pending.subList(start, end));
+                chunkIndex++;
+                log("Compiling [" + root.module().getName() + "] hash chunk " + chunkIndex + " "
+                        + chunk.size() + " file(s)");
+                if (!compiler.compile(chunk)) {
+                    failed.addAll(chunk);
+                }
+            }
+            boolean rootOk = true;
+            if (!failed.isEmpty()) {
+                log("Retrying [" + root.module().getName() + "] " + failed.size()
+                        + " hash-changed file(s)");
+                rootOk = compiler.compile(failed);
+            }
+            if (rootOk) {
+                rememberHashes(files);
+                failedFiles.removeAll(files);
+            } else {
+                failedFiles.addAll(files);
+            }
+            success &= rootOk;
+            publish(root, compiler);
+        }
+        saveHashes();
+        refreshHighlighting();
+        return success;
+    }
+
+    private Map<Path, String> hashSources(List<SourceRoot> roots) {
+        Map<Path, String> hashes = new LinkedHashMap<>();
+        for (SourceRoot root : roots) {
+            for (Path file : javaFiles(root.root())) {
+                try {
+                    hashes.put(file, CompiledHashStore.hash(file));
+                } catch (IOException failed) {
+                    log("Cannot hash " + file + ": " + failed);
+                }
+            }
+        }
+        return hashes;
+    }
+
+    private void rememberHashes(Set<Path> files) {
+        for (Path file : files) {
+            try {
+                compiledHashes.put(file, CompiledHashStore.hash(file));
+            } catch (IOException failed) {
+                compiledHashes.remove(file);
+            }
+        }
+    }
+
+    private void saveHashes() {
+        if (hashStore == null) {
+            return;
+        }
+        try {
+            hashStore.save(sourceSignature, Map.copyOf(compiledHashes));
+        } catch (IOException failed) {
+            LOG.warn("Cannot save compiled-hash state " + hashStore.file(), failed);
+            log("Cannot save compiled-hash state: " + failed);
+        }
+    }
+
+    private static boolean primaryClassMissing(SourceRoot root, Path source) {
+        String relative = root.root().relativize(source).toString().replace('\\', '/');
+        if (!relative.endsWith(".java")) {
+            return false;
+        }
+        String className = relative.substring(0, relative.length() - 5) + ".class";
+        return !Files.isRegularFile(root.output().resolve(className.replace('/', File.separatorChar)));
+    }
+
+    private static void deleteCompiledClasses(SourceRoot root, Path source) {
+        String relative = root.root().relativize(source).toString().replace('\\', '/');
+        if (!relative.endsWith(".java")) {
+            return;
+        }
+        String base = relative.substring(0, relative.length() - 5);
+        Path primary = root.output().resolve((base + ".class").replace('/', File.separatorChar));
+        try {
+            Files.deleteIfExists(primary);
+            Path parent = primary.getParent();
+            String prefix = primary.getFileName().toString();
+            String simple = prefix.substring(0, prefix.length() - ".class".length()) + "$";
+            if (parent != null && Files.isDirectory(parent)) {
+                try (Stream<Path> stream = Files.list(parent)) {
+                    stream.filter(path -> path.getFileName().toString().startsWith(simple))
+                            .forEach(path -> {
+                                try {
+                                    Files.deleteIfExists(path);
+                                } catch (IOException ignored) {
+                                    // Best effort; the source hash is still removed.
+                                }
+                            });
+                }
+            }
+        } catch (IOException ignored) {
+            // Best effort; a stale class is not a correctness input for the next source hash check.
         }
     }
 
@@ -554,12 +694,19 @@ public final class IncrementalBuildService implements Disposable {
                         + " file(s) after the initial chunk pass");
                 rootOk = compiler.compile(failed);
             }
+            if (rootOk) {
+                rememberHashes(files);
+            } else {
+                failedFiles.addAll(failed);
+            }
             publish(root, compiler);
             success &= rootOk;
         }
+        saveHashes();
         logCompilerMemory("after full compile");
         if (success) {
             failedFiles.clear();
+            fullCompileRequired = false;
         }
         refreshHighlighting();
         return success;
@@ -609,14 +756,10 @@ public final class IncrementalBuildService implements Disposable {
 
     private void applyBatch(WatchBatch batch) {
         if (fullCompileRequired) {
-            log("Recovering from a full-compile failure with a full compile");
-            boolean ok = compileAll();
+            log("Recovering from a failed bootstrap using source hashes (no full rebuild)");
+            boolean ok = compileFromHashes("bootstrap recovery");
             if (ok) {
                 fullCompileRequired = false;
-                FsMetaDaemonWatch current = watch;
-                if (current != null) {
-                    saveMarker(current.lastAppliedBatch());
-                }
             }
             return;
         }
@@ -648,27 +791,51 @@ public final class IncrementalBuildService implements Disposable {
         log("Batch: changed=" + batch.changed() + " deleted=" + batch.deleted()
                 + (batch.overflow() ? " overflow" : ""));
         if (batch.overflow()) {
-            boolean ok = compileAll();
-            if (!ok) {
-                fullCompileRequired = true;
-            }
-            return ok;
+            return compileFromHashes("fs-meta overflow");
         }
         Map<Path, Set<Path>> changedByRoot = new LinkedHashMap<>();
+        int ignoredUnchanged = 0;
         for (String name : batch.changed()) {
             Path file = daemonRoot.resolve(name).toAbsolutePath().normalize();
             SourceRoot root = rootFor(file);
             if (root == null || !file.toString().endsWith(".java")) {
                 continue;
             }
-            if (Files.isRegularFile(file)) {
-                changedByRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(file);
-            } else {
-                diagnostics.removeFile(file);
+            if (!Files.isRegularFile(file)) {
+                log("fs-meta reported a missing changed file (treating as deleted): " + file);
+                removeHashAndClasses(root, file);
+                continue;
+            }
+            String currentHash;
+            try {
+                currentHash = CompiledHashStore.hash(file);
+            } catch (IOException failed) {
+                log("Cannot hash changed file " + file + ": " + failed);
+                currentHash = null;
+            }
+            String previousHash = compiledHashes.get(file);
+            if (currentHash != null && currentHash.equals(previousHash)
+                    && !primaryClassMissing(root, file)) {
+                ignoredUnchanged++;
+                log("fs-meta false positive: " + file + " has the same hash as the compiled generation; ignored");
+                continue;
+            }
+            changedByRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(file);
+        }
+        for (String name : batch.deleted()) {
+            Path file = daemonRoot.resolve(name).toAbsolutePath().normalize();
+            SourceRoot root = rootFor(file);
+            if (root != null) {
+                if (Files.isRegularFile(file)) {
+                    log("fs-meta false deletion: " + file + " still exists; ignored");
+                    continue;
+                }
+                removeHashAndClasses(root, file);
             }
         }
-        // Recompile files from an earlier failed batch together with this batch's changes. A failure
-        // remembers only its own files; it must not turn the next save into a whole-project rebuild.
+        if (ignoredUnchanged > 0) {
+            log("Ignored " + ignoredUnchanged + " fs-meta change(s) whose content hash is unchanged");
+        }
         failedFiles.removeIf(file -> !Files.isRegularFile(file));
         for (Path failed : failedFiles) {
             SourceRoot root = rootFor(failed);
@@ -695,6 +862,7 @@ public final class IncrementalBuildService implements Disposable {
             log("Compiling [" + root.module().getName() + "] " + changed.size() + " changed file(s)");
             boolean rootOk = compiler.compile(changed);
             if (rootOk) {
+                rememberHashes(changed);
                 failedFiles.removeAll(changed);
             } else {
                 failedFiles.addAll(changed);
@@ -702,9 +870,16 @@ public final class IncrementalBuildService implements Disposable {
             success &= rootOk;
             publish(root, compiler);
         }
+        saveHashes();
         logCompilerMemory("after batch compile");
         refreshHighlighting();
         return success;
+    }
+
+    private void removeHashAndClasses(SourceRoot root, Path file) {
+        compiledHashes.remove(file);
+        diagnostics.removeFile(file);
+        deleteCompiledClasses(root, file);
     }
 
     private SourceRoot rootFor(Path file) {

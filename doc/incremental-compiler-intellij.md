@@ -19,16 +19,14 @@ When enabled, on project open the plugin:
 
 1. It collects the project's Java source roots and module compiler outputs from IntelliJ.
 2. It creates one `EcjIncrementalCompiler` per source root, writing into the module's existing output.
-3. It reads the saved fs-meta batch marker. On the first run it compiles all sources once and saves the
-   daemon head; on later starts it subscribes from that batch and compiles only the replayed changes.
-4. It publishes diagnostics in memory and restarts IntelliJ highlighting.
+3. It loads the persisted source-content hash map of successfully compiled files.
+4. It hashes the current sources and compiles only changed/missing-output files (never a full rebuild).
+5. It subscribes to fs-meta at the current head for subsequent changes.
+6. It publishes diagnostics in memory and restarts IntelliJ highlighting.
 
-A failed batch retries only its failed files on the next batch; it does not rebuild the project. A full
-compile is forced by a failed full compile, changed source-root/output/classpath layout, missing compiler
-output, or a marker newer than the daemon head. The marker is at
-`.jcodebuddy/cache/incremental-build/batch.properties` and is written only when the failed-file set is
-empty. **Rebuild** in the log tool window forces a full compile; **Reconnect fs-meta** keeps the marker and
-resubscribes from it.
+The fs-meta batch marker positions the subscription; the hash map is the startup authority. A false fs-meta
+change whose content hash is unchanged is logged and ignored. Only the explicit **Rebuild** button performs a
+full compile (the first run with no hash state is the unavoidable bootstrap).
 
 A failed compile adds red annotations. A successful compile replaces that source root's diagnostics with
 an empty list, so the next highlighting pass removes them. The diagnostics are persisted in
@@ -167,6 +165,11 @@ The same messages are written through IntelliJ's `Logger`, so they also appear i
 classpath entry as `JAR`, `DIR`, or `MISSING`; that is the first place to inspect when a Maven dependency
 appears unresolved. IntelliJ's virtual JAR root (`...jar!/`) is normalized to the physical `.jar` path
 before logging and compiling.
+
+The compiled-source hashes are stored at
+`.jcodebuddy/cache/incremental-build/compiled-hashes.tsv`. Startup compiles only files whose hash or primary
+class output differs from that map. A fs-meta change whose hash is unchanged is reported as a false
+positive and skipped; a false deletion for an existing file is likewise ignored.
 
 ## Configuration and limits
 
