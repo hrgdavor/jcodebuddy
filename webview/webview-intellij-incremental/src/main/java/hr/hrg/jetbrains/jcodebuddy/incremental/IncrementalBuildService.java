@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -212,6 +213,11 @@ public final class IncrementalBuildService implements Disposable {
             worker = null;
             if (currentWorker != null) {
                 currentWorker.shutdownNow();
+                try {
+                    currentWorker.awaitTermination(2, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
             }
             diagnostics.clear();
             if (!project.isDisposed()) {
@@ -873,8 +879,12 @@ public final class IncrementalBuildService implements Disposable {
         log("fs-meta socket: " + attach.location().socket());
         log("fs-meta filter: " + filter);
         log("Subscribing to fs-meta from batch " + fromBatch);
-        watch = new FsMetaDaemonWatch(filter, attach.location().socket(), fromBatch,
-                batch -> worker.submit(() -> applyBatch(batch)));
+        watch = new FsMetaDaemonWatch(filter, attach.location().socket(), fromBatch, batch -> {
+            ExecutorService current = worker;
+            if (current != null) {
+                current.submit(() -> applyBatch(batch));
+            }
+        });
         try {
             watch.start();
             log("Subscribed to fs-meta at generation " + watch.lastAppliedBatch());
@@ -885,6 +895,9 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void applyBatch(WatchBatch batch) {
+        if (!started.get()) {
+            return;
+        }
         if (fullCompileRequired) {
             log("Recovering from a failed bootstrap using source hashes (no full rebuild)");
             boolean ok = compileFromHashes("bootstrap recovery");
@@ -1126,7 +1139,14 @@ public final class IncrementalBuildService implements Disposable {
 
     @Override
     public void dispose() {
+        stopWatch();
         stop();
+        compilers = Map.of();
+        sourceRoots = List.of();
+        compiledHashes = Map.of();
+        diagnosticState = null;
+        batchState = null;
+        hashStore = null;
     }
 
     private record SourceRoot(Module module, Path root, Path output, boolean test) {
