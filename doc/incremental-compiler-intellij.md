@@ -18,10 +18,14 @@ When enabled, on project open the plugin:
 
 1. It collects the project's Java source roots and module compiler outputs from IntelliJ.
 2. It creates one `EcjIncrementalCompiler` per source root, writing into the module's existing output.
-3. It compiles the sources once.
-4. It subscribes to the fs-meta daemon serving the project root.
-5. It compiles exactly the changed `.java` files from each fs-meta batch.
-6. It publishes diagnostics in memory and restarts IntelliJ highlighting.
+3. It reads the saved fs-meta batch marker. On the first run it compiles all sources once and saves the
+   daemon head; on later starts it subscribes from that batch and compiles only the replayed changes.
+4. It publishes diagnostics in memory and restarts IntelliJ highlighting.
+
+A failed compile, a changed source-root/output or classpath layout, missing compiler output, or a marker
+newer than the daemon head forces a full compile. The marker is at
+`.jcodebuddy/cache/incremental-build/batch.properties` and is written only after success. **Rebuild** in
+the log tool window forces a full compile; **Reconnect fs-meta** keeps the marker and resubscribes from it.
 
 A failed compile adds red annotations. A successful compile replaces that source root's diagnostics with
 an empty list, so the next highlighting pass removes them.

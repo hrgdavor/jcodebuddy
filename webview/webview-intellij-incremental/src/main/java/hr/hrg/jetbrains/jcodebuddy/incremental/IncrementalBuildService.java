@@ -78,9 +78,15 @@ public final class IncrementalBuildService implements Disposable {
     private final AtomicBoolean started = new AtomicBoolean();
     private volatile Path projectRoot;
     private volatile Path daemonRoot;
+    private volatile Path daemonSocket;
     private volatile List<SourceRoot> sourceRoots = List.of();
     private volatile Map<Path, EcjIncrementalCompiler> compilers = Map.of();
     private volatile FsMetaDaemonWatch watch;
+    private volatile long lastAppliedBatch = -1;
+    private volatile String sourceSignature = "";
+    private volatile String classpathSignature = "";
+    private volatile BatchStateStore batchState;
+    private volatile boolean markerDirty;
 
     public IncrementalBuildService(@NotNull Project project) {
         this.project = project;
@@ -145,7 +151,16 @@ public final class IncrementalBuildService implements Disposable {
                 return;
             }
             log("Manual full rebuild requested");
-            compileAll();
+            boolean ok = compileAll();
+            if (ok) {
+                markerDirty = false;
+                long head = daemonSocket == null ? -1 : queryHead(daemonSocket);
+                FsMetaDaemonWatch currentWatch = watch;
+                saveMarker(head >= 0 ? head
+                        : currentWatch == null ? -1 : currentWatch.lastAppliedBatch());
+            } else {
+                markerDirty = true;
+            }
         });
     }
 
@@ -209,10 +224,42 @@ public final class IncrementalBuildService implements Disposable {
             }
             log("Discovered " + sourceRoots.size() + " Java source root(s) across modules");
             compilers = createCompilers(sourceRoots);
-            compileAll();
-            if (started.get()) {
-                startWatch();
+            sourceSignature = signature(sourceRoots) + "|" + classpathSignature;
+            batchState = new BatchStateStore(projectRoot);
+
+            FsMetaDaemonDiscovery.Attach attach = discover();
+            if (attach == null) {
+                compileAll();
+                return;
             }
+            daemonRoot = attach.location().root();
+            daemonSocket = attach.location().socket();
+            BatchStateStore.State saved = batchState.load();
+            boolean resume = saved != null
+                    && saved.batch() >= 0
+                    && saved.daemonRoot().equals(daemonRoot.toString())
+                    && saved.sourceSignature().equals(sourceSignature)
+                    && outputsReady(sourceRoots);
+            long head = queryHead(attach.location().socket());
+            if (resume && head >= 0 && saved.batch() <= head) {
+                lastAppliedBatch = saved.batch();
+                log("Resuming from fs-meta batch " + saved.batch() + " (" + batchState.file() + ")");
+                startWatch(attach, saved.batch());
+                return;
+            }
+            if (saved != null && !resume) {
+                log("Batch marker invalid (layout/classpath/output changed); doing a full compile");
+            } else if (saved != null && saved.batch() > head) {
+                log("Batch marker " + saved.batch() + " is newer than daemon head " + head
+                        + "; doing a full compile");
+            }
+            boolean ok = compileAll();
+            if (ok) {
+                saveMarker(head);
+            } else {
+                markerDirty = true;
+            }
+            startWatch(attach, head >= 0 ? head : FsMetaClient.LATEST);
         } catch (OutOfMemoryError memory) {
             LOG.error("JCodeBuddy incremental build ran out of IDE heap", memory);
             notify("JCodeBuddy incremental build ran out of IDE heap. Increase Help | Change Memory Settings "
@@ -222,6 +269,81 @@ public final class IncrementalBuildService implements Disposable {
         } catch (Throwable failed) {
             LOG.error("JCodeBuddy incremental build failed to start", failed);
             notify("JCodeBuddy incremental build failed to start: " + failed, NotificationType.ERROR);
+        }
+    }
+
+    private FsMetaDaemonDiscovery.Attach discover() {
+        try {
+            FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discoverAncestor(projectRoot);
+            if (attach == null || !attach.attached()) {
+                notify("No fs-meta daemon serves this project. Start `fsmeta daemon start` and "
+                        + "`fsmeta root add " + projectRoot + "`, then use Reconnect fs-meta. "
+                        + "The initial full compile will run, but changes are not being watched.", NotificationType.WARNING);
+                return null;
+            }
+            return attach;
+        } catch (RuntimeException failed) {
+            LOG.error("Cannot find the fs-meta daemon", failed);
+            notify("Cannot find the fs-meta daemon: " + failed, NotificationType.WARNING);
+            return null;
+        }
+    }
+
+    private long queryHead(Path socket) {
+        try (FsMetaClient client = FsMetaClient.connect(socket, FsMetaClient.LATEST)) {
+            return client.serverGeneration();
+        } catch (Exception failed) {
+            log("Could not read fs-meta head: " + failed);
+            return -1;
+        }
+    }
+
+    private String signature(List<SourceRoot> roots) {
+        StringBuilder signature = new StringBuilder();
+        for (SourceRoot root : roots) {
+            signature.append(root.module().getName()).append('|')
+                    .append(root.root()).append('|')
+                    .append(root.output()).append('|')
+                    .append(root.test()).append('\n');
+        }
+        return Integer.toHexString(signature.toString().hashCode()) + ":" + signature.length();
+    }
+
+    /** A marker is only trusted when the compiler outputs have not been cleaned away. */
+    private boolean outputsReady(List<SourceRoot> roots) {
+        for (SourceRoot root : roots) {
+            if (javaFiles(root.root()).isEmpty()) {
+                continue;
+            }
+            Path output = root.output();
+            if (!Files.isDirectory(output)) {
+                log("Output missing for [" + root.module().getName() + "]: " + output);
+                return false;
+            }
+            try (Stream<Path> stream = Files.walk(output)) {
+                if (stream.noneMatch(path -> Files.isRegularFile(path)
+                        && path.toString().endsWith(".class"))) {
+                    log("Output has no class files for [" + root.module().getName() + "]: " + output);
+                    return false;
+                }
+            } catch (IOException failed) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void saveMarker(long batch) {
+        if (batch < 0 || batchState == null || daemonRoot == null) {
+            return;
+        }
+        try {
+            batchState.save(batch, daemonRoot.toString(), sourceSignature);
+            lastAppliedBatch = batch;
+            log("Saved fs-meta batch marker " + batch + " -> " + batchState.file());
+        } catch (IOException failed) {
+            LOG.warn("Cannot save fs-meta batch marker " + batchState.file(), failed);
+            log("Cannot save fs-meta batch marker: " + failed);
         }
     }
 
@@ -306,6 +428,7 @@ public final class IncrementalBuildService implements Disposable {
             classpath.add(root.output().toString());
         }
         List<String> extra = new ArrayList<>(classpath);
+        classpathSignature = Integer.toHexString(extra.hashCode()) + ":" + extra.size();
         EcjIncrementalCompiler.SharedIndex shared = new EcjIncrementalCompiler.SharedIndex();
         Map<Path, EcjIncrementalCompiler> created = new LinkedHashMap<>();
         boolean indexed = false;
@@ -370,9 +493,10 @@ public final class IncrementalBuildService implements Disposable {
                 + ", dirs=" + directories + ", missing=" + missing);
     }
 
-    private void compileAll() {
-        log("Initial compile: " + sourceRoots.size() + " source root(s), chunk=" + INITIAL_COMPILE_CHUNK);
-        logCompilerMemory("before initial compile");
+    private boolean compileAll() {
+        log("Full compile: " + sourceRoots.size() + " source root(s), chunk=" + INITIAL_COMPILE_CHUNK);
+        logCompilerMemory("before full compile");
+        boolean success = true;
         for (SourceRoot root : sourceRoots) {
             EcjIncrementalCompiler compiler = compilers.get(root.root());
             if (compiler == null) {
@@ -382,7 +506,7 @@ public final class IncrementalBuildService implements Disposable {
             List<Path> pending = new ArrayList<>(files);
             Set<Path> failed = new LinkedHashSet<>();
             if (pending.isEmpty()) {
-                compiler.compile(Set.of());
+                success &= compiler.compile(Set.of());
                 publish(root, compiler);
                 continue;
             }
@@ -400,15 +524,18 @@ public final class IncrementalBuildService implements Disposable {
             // A chunk may reference a type that a later chunk writes. Retry the failed files once, after
             // every chunk has had a chance to produce its class files. Real errors fail again and are
             // published from this final pass.
+            boolean rootOk = true;
             if (!failed.isEmpty()) {
                 log("Retrying [" + root.module().getName() + "] " + failed.size()
                         + " file(s) after the initial chunk pass");
-                compiler.compile(failed);
+                rootOk = compiler.compile(failed);
             }
             publish(root, compiler);
+            success &= rootOk;
         }
-        logCompilerMemory("after initial compile");
+        logCompilerMemory("after full compile");
         refreshHighlighting();
+        return success;
     }
 
     private void logCompilerMemory(String phase) {
@@ -423,34 +550,57 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void startWatch() {
-        stopWatch();
-        FsMetaDaemonDiscovery.Attach attach;
-        try {
-            attach = FsMetaDaemonDiscovery.discoverAncestor(projectRoot);
-        } catch (RuntimeException failed) {
-            LOG.error("Cannot find the fs-meta daemon", failed);
-            notify("Cannot find the fs-meta daemon: " + failed, NotificationType.WARNING);
+        FsMetaDaemonDiscovery.Attach attach = discover();
+        if (attach == null) {
             return;
         }
-        if (attach == null || !attach.attached()) {
-            notify("No fs-meta daemon serves this project. Start `fsmeta daemon start` and "
-                    + "`fsmeta root add " + projectRoot + "`, then reopen the project. Initial compile "
-                    + "has run, but changes will not be watched.", NotificationType.WARNING);
+        startWatch(attach, lastAppliedBatch >= 0 ? lastAppliedBatch : FsMetaClient.LATEST);
+    }
+
+    private void startWatch(FsMetaDaemonDiscovery.Attach attach, long fromBatch) {
+        stopWatch();
+        if (!started.get() || attach == null || !attach.attached()) {
             return;
         }
         daemonRoot = attach.location().root();
+        daemonSocket = attach.location().socket();
         PathFilter filter = filterFor(daemonRoot);
         log("fs-meta daemon root: " + daemonRoot);
         log("fs-meta socket: " + attach.location().socket());
         log("fs-meta filter: " + filter);
-        watch = new FsMetaDaemonWatch(filter, attach.location().socket(), FsMetaClient.LATEST,
-                batch -> worker.submit(() -> apply(batch)));
+        log("Subscribing to fs-meta from batch " + fromBatch);
+        watch = new FsMetaDaemonWatch(filter, attach.location().socket(), fromBatch,
+                batch -> worker.submit(() -> applyBatch(batch)));
         try {
             watch.start();
-            log("Subscribed to fs-meta at generation " + FsMetaClient.LATEST);
+            log("Subscribed to fs-meta at generation " + watch.lastAppliedBatch());
         } catch (IOException failed) {
             LOG.error("Cannot start the fs-meta subscription", failed);
             notify("Cannot start the fs-meta subscription: " + failed, NotificationType.WARNING);
+        }
+    }
+
+    private void applyBatch(WatchBatch batch) {
+        if (markerDirty) {
+            log("Recovering from a previous compile failure with a full compile");
+            boolean ok = compileAll();
+            if (ok) {
+                markerDirty = false;
+                FsMetaDaemonWatch current = watch;
+                if (current != null) {
+                    saveMarker(current.lastAppliedBatch());
+                }
+            }
+            return;
+        }
+        boolean ok = apply(batch);
+        if (ok) {
+            FsMetaDaemonWatch current = watch;
+            if (current != null) {
+                saveMarker(current.lastAppliedBatch());
+            }
+        } else {
+            markerDirty = true;
         }
     }
 
@@ -469,12 +619,11 @@ public final class IncrementalBuildService implements Disposable {
         return PathFilter.of(includes, List.of("**/out/**", "**/target/**", "**/.jcodebuddy/**"));
     }
 
-    private void apply(WatchBatch batch) {
+    private boolean apply(WatchBatch batch) {
         log("Batch: changed=" + batch.changed() + " deleted=" + batch.deleted()
                 + (batch.overflow() ? " overflow" : ""));
         if (batch.overflow()) {
-            compileAll();
-            return;
+            return compileAll();
         }
         Map<Path, Set<Path>> changedByRoot = new LinkedHashMap<>();
         for (String name : batch.changed()) {
@@ -491,8 +640,9 @@ public final class IncrementalBuildService implements Disposable {
         }
         if (changedByRoot.isEmpty()) {
             log("Batch had no Java source changes");
-            return;
+            return true;
         }
+        boolean success = true;
         for (SourceRoot root : sourceRoots) {
             Set<Path> changed = changedByRoot.get(root.root());
             EcjIncrementalCompiler compiler = compilers.get(root.root());
@@ -501,14 +651,16 @@ public final class IncrementalBuildService implements Disposable {
             }
             if (compiler == null) {
                 log("No compiler for changed root " + root.root());
+                success = false;
                 continue;
             }
             log("Compiling [" + root.module().getName() + "] " + changed.size() + " changed file(s)");
-            compiler.compile(changed);
+            success &= compiler.compile(changed);
             publish(root, compiler);
         }
         logCompilerMemory("after batch compile");
         refreshHighlighting();
+        return success;
     }
 
     private SourceRoot rootFor(Path file) {

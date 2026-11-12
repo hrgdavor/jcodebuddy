@@ -26,10 +26,14 @@ On project open, when that project setting is enabled, the plugin:
 
 1. collects the project's Java source roots and module compiler outputs from IntelliJ, across all modules;
 2. creates one `EcjIncrementalCompiler` per source root, writing into that module's existing compiler output;
-3. compiles the source roots once, in module-dependency order;
-4. subscribes to the fs-meta daemon serving the project root;
-5. compiles exactly the changed `.java` files from each fs-meta batch;
+3. discovers the fs-meta daemon and reads the last successfully applied batch marker from
+   `.jcodebuddy/cache/incremental-build/batch.properties`;
+4. on the first run, compiles all source roots once and saves the daemon head;
+5. on later starts, subscribes from the saved batch and compiles only the replayed changes;
 6. publishes the compiler diagnostics to IntelliJ and restarts highlighting.
+
+The marker is written only after a successful compile. A source-root/layout change, a failed compile, or
+a marker newer than the daemon head forces a full compile. A marker for another daemon root is ignored.
 
 On a successful compile the diagnostics for that source root are replaced by an empty list, so the next
 highlighting pass removes the old red errors. IntelliJ's own **Build** is not invoked by this plugin.
@@ -166,19 +170,22 @@ The service logs:
 
 ```text
 Starting incremental build for <project>
+Resuming from fs-meta batch 1234 (.jcodebuddy/cache/incremental-build/batch.properties)
 Source root [module] <path> -> <output>
 Module [module] classpath entries: N
-Initial compile: N source root(s)
+Full compile: N source root(s)
 Compiling [module] N file(s) from <root>
 Compile OK [module] <root>
 Compile FAILED [module] N diagnostic(s); first: ...
-Indexed shared dependency/JDK cache: types=N, jarHot=..., jdk=..., estimated=...
-Compiler memory after initial compile: types=N, jarHot=..., jdk=..., estimated=...; IDE heap used=...MB/...MB
+Saved fs-meta batch marker 1234 -> ...
 fs-meta daemon root: ...
 fs-meta socket: ...
 fs-meta filter: ...
 Batch: changed=[...] deleted=[...]
 ```
+
+`Resuming...` means the startup did **not** recompile everything. `Full compile` is expected on the first
+run, after a marker invalidation, or after a failed compile.
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 The log also lists every module classpath entry as `JAR`, `DIR`, or `MISSING`, with a per-module summary;
@@ -188,6 +195,22 @@ The log also prints the IDE heap maximum and current use at startup. If the buil
 `OutOfMemoryError`, increase the IDE heap (`Help | Change Memory Settings`); the compiler now shares one
 lazy JAR/JDK index across the whole project and keeps only a bounded class-byte hot cache, so a large
 reactor should not multiply dependency caches per module.
+
+## Batch marker
+
+The last successfully applied fs-meta generation is stored at:
+
+```text
+<project>/.jcodebuddy/cache/incremental-build/batch.properties
+```
+
+It records the batch number, daemon root and a source-root/output + classpath signature. It is written
+atomically only after a compile succeeds. If the signature no longer matches, the daemon root changed, the
+compiler output was cleaned away, or the compile failed, the next start performs a full compile instead of
+trusting the marker.
+
+The **Rebuild** toolbar button deliberately performs a full compile and then saves the current daemon head.
+**Reconnect fs-meta** keeps the saved marker and resubscribes from it.
 
 ## Multi-module projects
 
