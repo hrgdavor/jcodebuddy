@@ -133,6 +133,24 @@ Then click Reconnect fs-meta.
 The plugin still performs the hash-based compile and restores diagnostics; only live watching is missing.
 After running the commands, click **Reconnect fs-meta** — no IDE restart is needed.
 
+## Single-watcher mode
+
+IntelliJ's native VFS watcher cannot be disabled per project. To make IntelliJ depend on this plugin's fs-meta
+stream instead, add this global VM option and restart:
+
+```text
+-Didea.filewatcher.disabled=true
+```
+
+Use **Help | Edit Custom VM Options**. The plugin registers `FsMetaVfsWatcher` as a
+`vfs.local.pluggableFileWatcher`; it subscribes to fs-meta for the VFS roots and reports changed/deleted paths
+through `FileWatcherNotificationSink`. Roots without a daemon are registered for manual refresh and the bridge
+retries every 2 seconds until the daemon appears.
+
+This option is global: every project in that IDE then relies on fs-meta for native file-change notifications.
+Keep the plugin installed while it is enabled. Without the option both watchers run; the plugin logs a warning
+and duplicate VFS notifications remain harmless, but the duplicate effort remains.
+
 ## Disable IntelliJ's build
 
 The plugin owns the compiler output, so IntelliJ must not compete with it:

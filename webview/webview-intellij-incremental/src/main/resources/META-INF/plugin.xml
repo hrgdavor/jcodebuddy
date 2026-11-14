@@ -17,6 +17,8 @@
                              displayName="JCodeBuddy Incremental Build"/> 
         <externalAnnotator language="JAVA"
                            implementationClass="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyDiagnosticsAnnotator"/>
+        <vfs.local.pluggableFileWatcher
+                implementation="hr.hrg.jetbrains.jcodebuddy.incremental.FsMetaVfsWatcher"/>
         <toolWindow id="JCodeBuddy Build"
                     factoryClass="hr.hrg.jetbrains.jcodebuddy.incremental.JcodeBuddyLogToolWindowFactory"
                     anchor="right"

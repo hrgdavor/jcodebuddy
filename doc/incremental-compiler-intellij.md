@@ -94,6 +94,21 @@ exact setup commands (`fsmeta daemon start`, and `fsmeta root add "<project>" --
 when the root is missing). It still performs the hash-based compile; only watching is unavailable. Run the
 commands, then click **Reconnect fs-meta** in the log toolbar.
 
+### 2b. Make fs-meta the only VFS watcher (optional)
+
+IntelliJ's native VFS watcher cannot be disabled per project. To make IntelliJ depend on the plugin's fs-meta
+stream, add this global VM option and restart:
+
+```text
+-Didea.filewatcher.disabled=true
+```
+
+The plugin registers `FsMetaVfsWatcher` as a `vfs.local.pluggableFileWatcher`. It subscribes to fs-meta for the
+VFS roots and reports changed/deleted paths through `FileWatcherNotificationSink`; roots without a daemon are
+registered for manual refresh and retried every 2 seconds. The option is global: every project in that IDE then
+relies on this plugin/fs-meta for native change notifications, so keep the plugin installed while it is enabled.
+Without the option both watchers run; the plugin logs a warning.
+
 ### 3. Enable it for the project
 
 `Settings | Tools | JCodeBuddy Incremental Build` → check
