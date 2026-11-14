@@ -148,8 +148,16 @@ through `FileWatcherNotificationSink`. Roots without a daemon are registered for
 retries every 2 seconds until the daemon appears.
 
 This option is global: every project in that IDE then relies on fs-meta for native file-change notifications.
-Keep the plugin installed while it is enabled. Without the option both watchers run; the plugin logs a warning
-and duplicate VFS notifications remain harmless, but the duplicate effort remains.
+Keep the plugin installed while it is enabled. Without the option both watchers run and the plugin logs this
+warning with the exact opt-in flag:
+
+```text
+JCodeBuddy fs-meta VFS watcher is active, but IntelliJ's native VFS watcher is also running.
+To opt in to using only fs-meta, add -Didea.filewatcher.disabled=true to
+Help | Edit Custom VM Options, then restart IntelliJ. This option is global for every project in this IDE.
+```
+
+Duplicate VFS notifications are harmless, but the duplicate watch effort remains until the flag is set.
 
 ## Disable IntelliJ's build
 

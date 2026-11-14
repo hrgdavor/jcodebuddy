@@ -56,9 +56,10 @@ public final class FsMetaVfsWatcher extends PluggableFileWatcher {
     public void initialize(@NotNull FileWatcherNotificationSink notificationSink) {
         this.sink = notificationSink;
         if (!Boolean.getBoolean("idea.filewatcher.disabled")) {
-            LOG.warn("JCodeBuddy fs-meta VFS watcher is active, but idea.filewatcher.disabled is false; "
-                    + "the native VFS watcher is also running. Add -Didea.filewatcher.disabled=true to the IDE "
-                    + "VM options to make fs-meta the only watcher.");
+            LOG.warn("JCodeBuddy fs-meta VFS watcher is active, but IntelliJ's native VFS watcher is also running. "
+                    + "To opt in to using only fs-meta, add -Didea.filewatcher.disabled=true to "
+                    + "Help | Edit Custom VM Options, then restart IntelliJ. This option is global for every "
+                    + "project in this IDE. See the plugin README section 'Single-watcher mode'.");
         }
         retry.scheduleWithFixedDelay(this::retryAttach, RETRY_SECONDS, RETRY_SECONDS, TimeUnit.SECONDS);
     }
