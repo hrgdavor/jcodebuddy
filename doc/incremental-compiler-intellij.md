@@ -107,7 +107,7 @@ The plugin registers `FsMetaVfsWatcher` as a `vfs.local.pluggableFileWatcher`. I
 VFS roots and reports changed/deleted paths through `FileWatcherNotificationSink`; roots without a daemon are
 registered for manual refresh and retried every 2 seconds. The option is global: every project in that IDE then
 relies on this plugin/fs-meta for native change notifications, so keep the plugin installed while it is enabled.
-Without the option both watchers run; the plugin warns in `idea.log`:
+Without the option both watchers run; the plugin warns in the JCodeBuddy Build log and in `idea.log`:
 
 ```text
 JCodeBuddy fs-meta VFS watcher is active, but IntelliJ's native VFS watcher is also running.

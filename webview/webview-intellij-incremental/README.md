@@ -149,7 +149,7 @@ retries every 2 seconds until the daemon appears.
 
 This option is global: every project in that IDE then relies on fs-meta for native file-change notifications.
 Keep the plugin installed while it is enabled. Without the option both watchers run and the plugin logs this
-warning with the exact opt-in flag:
+warning at startup in both the JCodeBuddy Build log and `idea.log`, with the exact opt-in flag:
 
 ```text
 JCodeBuddy fs-meta VFS watcher is active, but IntelliJ's native VFS watcher is also running.

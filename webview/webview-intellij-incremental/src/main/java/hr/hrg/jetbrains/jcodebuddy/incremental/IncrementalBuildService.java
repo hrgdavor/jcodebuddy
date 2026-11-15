@@ -236,6 +236,10 @@ public final class IncrementalBuildService implements Disposable {
                 log("No Java source roots found; incremental build is idle");
                 return;
             }
+            String watcherWarning = FsMetaVfsWatcher.duplicateWatcherWarning();
+            if (watcherWarning != null) {
+                log(watcherWarning);
+            }
             log("Discovered " + sourceRoots.size() + " Java source root(s) across modules");
             compilers = createCompilers(sourceRoots);
             sourceSignature = signature(sourceRoots) + "|" + classpathSignature;
