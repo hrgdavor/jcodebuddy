@@ -67,7 +67,7 @@ public final class IncrementalBuildService implements Disposable {
     private static final Logger LOG = Logger.getInstance(IncrementalBuildService.class);
     private static final Pattern DIAGNOSTIC = Pattern.compile("^(.+):(\\d+)\\s{2}(.*)$");
     private static final int INITIAL_COMPILE_CHUNK =
-            Integer.getInteger("jcodebuddy.intellij.initialCompileChunk", 32);
+            Integer.getInteger("jcodebuddy.intellij.initialCompileChunk", 64);
 
     private final Project project;
     private final IncrementalDiagnosticsService diagnostics;

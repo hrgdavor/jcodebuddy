@@ -218,7 +218,7 @@ bytes and leaves byte-identical class files untouched; only **Rebuild** rewrites
 - **No dependency recompilation.** Only files in the fs-meta batch are compiled.
 - **Memory.** One dependency/JDK index is shared by every source root; JAR class bytes are read on demand
   and kept in a bounded hot cache. The initial compile is chunked to bound ECJ's transient AST peak; the
-  chunk size is `-Djcodebuddy.intellij.initialCompileChunk` (default 32). If startup reports
+  chunk size is `-Djcodebuddy.intellij.initialCompileChunk` (default 64). If startup reports
   `OutOfMemoryError`, raise the IDE heap with `Help | Change Memory Settings` and inspect the memory lines in
   the JCodeBuddy Build log.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.

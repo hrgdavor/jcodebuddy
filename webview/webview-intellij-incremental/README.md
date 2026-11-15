@@ -337,7 +337,7 @@ limitation as the standalone example.
   when the daemon/root is missing.
 - **Memory**: the plugin shares one dependency index across all source roots. JAR class bytes are read on
   demand from the JAR and limited to a bounded hot cache; the JARs themselves stay on disk. The initial
-  full compile is chunked (default 32 files, `-Djcodebuddy.intellij.initialCompileChunk=<n>`) so the ECJ
+  full compile is chunked (default 64 files, `-Djcodebuddy.intellij.initialCompileChunk=<n>`) so the ECJ
   AST peak is bounded. The IDE heap maximum is logged at startup and after compiles. Large projects may
   still need a higher IDE heap via `Help | Change Memory Settings`.
 
