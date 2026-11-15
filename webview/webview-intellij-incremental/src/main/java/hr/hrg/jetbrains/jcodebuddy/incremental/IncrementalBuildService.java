@@ -231,14 +231,20 @@ public final class IncrementalBuildService implements Disposable {
             if (!started.get()) {
                 return;
             }
+            String watcherWarning = FsMetaVfsWatcher.duplicateWatcherWarning();
+            if (watcherWarning != null) {
+                log("================================================================================");
+                log("!! JCodeBuddy WARNING: IntelliJ's native VFS watcher is ALSO running.");
+                log("!! To use only fs-meta, add this VM option: -Didea.filewatcher.disabled=true");
+                log("!! Help | Edit Custom VM Options, then restart IntelliJ.");
+                log("!! This option is global for every project in this IDE.");
+                log("================================================================================");
+                notify(watcherWarning, NotificationType.WARNING);
+            }
             sourceRoots = collectSourceRoots();
             if (sourceRoots.isEmpty() || !started.get()) {
                 log("No Java source roots found; incremental build is idle");
                 return;
-            }
-            String watcherWarning = FsMetaVfsWatcher.duplicateWatcherWarning();
-            if (watcherWarning != null) {
-                log(watcherWarning);
             }
             log("Discovered " + sourceRoots.size() + " Java source root(s) across modules");
             compilers = createCompilers(sourceRoots);

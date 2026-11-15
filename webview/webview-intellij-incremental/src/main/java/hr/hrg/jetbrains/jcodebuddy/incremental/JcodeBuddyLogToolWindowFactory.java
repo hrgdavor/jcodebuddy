@@ -39,7 +39,8 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         IncrementalBuildService service = project.getService(IncrementalBuildService.class);
         JTextArea area = new JTextArea();
         area.setEditable(false);
-        area.setLineWrap(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
         area.setText(String.join("\n", logs.snapshot()));
         Consumer<String> listener = line -> ApplicationManager.getApplication().invokeLater(() -> {
             area.append(line);
