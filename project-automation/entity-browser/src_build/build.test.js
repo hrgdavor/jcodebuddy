@@ -1,6 +1,6 @@
 import { test } from 'bun:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { main } from './build.js'
@@ -72,6 +72,29 @@ function writeFixture(root, options = {}) {
   }), 'utf8')
   return join(indexDir, 'classes.json')
 }
+
+test('a second page build reuses the content-addressed jsx6 asset', () => {
+  if (!ready) {
+    console.log('[entity-browser.test] skipped: needs .jsx6/libs and `bun install` in entity-browser/')
+    return
+  }
+  const scratch = join(REPO_ROOT, '.tmp')
+  mkdirSync(scratch, { recursive: true })
+  const root = mkdtempSync(join(scratch, 'entity-browser-jsx6-'))
+  try {
+    const indexFile = writeFixture(root)
+    const outDir = join(root, '.jcodebuddy', 'metadata', 'browser')
+    assert.equal(main(['--index', indexFile, '--out', outDir, '--quiet']), 0)
+    const assetRoot = join(outDir, 'assets', 'jsx6')
+    const first = readdirSync(assetRoot)[0]
+    const firstMtime = statSync(join(assetRoot, first, 'jsx6.js')).mtimeMs
+    assert.equal(main(['--index', indexFile, '--out', outDir, '--quiet']), 0)
+    assert.equal(statSync(join(assetRoot, first, 'jsx6.js')).mtimeMs, firstMtime,
+      'jsx6 is not rebuilt when its content hash is unchanged')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
 
 test('the build writes a served page directory with the record and its inline enum values', () => {
   if (!ready) {

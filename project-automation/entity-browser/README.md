@@ -119,9 +119,10 @@ GET /api/v1/metadata/entity-browser/index
 GET /api/v1/metadata/events?report=entity-browser
 ```
 
-It polls the small `manifest.json` and emits one targeted SSE event naming changed shards; it does not
-rewrite or regenerate the page. The Java `webviewd` host may implement the same contract independently —
-the build output and wire format are the shared part.
+Catalog/index responses carry an `ETag` and answer `If-None-Match` with `304`. The server polls the small
+`manifest.json` and emits one targeted SSE event naming changed shards; it does not rewrite or regenerate
+the page. The Java `webviewd` host may implement the same contract independently — the build output and
+wire format are the shared part.
 
 ### Flags
 

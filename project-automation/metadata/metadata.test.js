@@ -86,6 +86,13 @@ test('the metadata host publishes one targeted SSE event for a changed shard', a
     try {
       const catalog = await fetch(`${base}/api/v1/metadata/catalog`)
       assert.equal(catalog.status, 200)
+      const indexResponse = await fetch(`${base}/index.json`)
+      const etag = indexResponse.headers.get('etag')
+      assert.ok(etag, 'index has an ETag')
+      const conditionalResponse = await fetch(`${base}/index.json`, {
+        headers: { 'if-none-match': etag },
+      })
+      assert.equal(conditionalResponse.status, 304)
       const stream = await fetch(`${base}/events?report=test`)
       assert.equal(stream.status, 200)
       const reader = stream.body.getReader()

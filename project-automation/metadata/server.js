@@ -54,6 +54,30 @@ function fileInside(root, pathname) {
   return candidate
 }
 
+function etagOf(file) {
+  const stat = statSync(file)
+  return `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`
+}
+
+function conditional(request, file, contentType, immutable) {
+  const etag = etagOf(file)
+  const requested = request.headers.get('if-none-match')
+  if (requested && requested.split(',').map((value) => value.trim()).includes(etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: { etag, 'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-store' },
+    })
+  }
+  return new Response(request.method === 'HEAD' ? null : Bun.file(file), {
+    headers: {
+      'content-type': contentType,
+      etag,
+      'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-store',
+      'x-content-type-options': 'nosniff',
+    },
+  })
+}
+
 function metaWithoutShards(index) {
   const { shards: _shards, generation: _generation, ...rest } = index
   return rest
@@ -213,17 +237,13 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
         if (!existsSync(catalog)) {
           return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } })
         }
-        return new Response(readFileSync(catalog, 'utf8'), {
-          headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-        })
+        return conditional(request, catalog, 'application/json; charset=utf-8', false)
       }
       if (url.pathname === `/api/v1/metadata/${report}/index`) {
         if (!existsSync(indexFile)) {
           return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } })
         }
-        return new Response(readFileSync(indexFile, 'utf8'), {
-          headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-        })
+        return conditional(request, indexFile, 'application/json; charset=utf-8', false)
       }
       const file = fileInside(pageRoot, url.pathname)
       if (!file) {
@@ -233,13 +253,7 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
         return new Response('Not Found', { status: 404 })
       }
       const type = MIME.get(extname(file).toLowerCase()) ?? 'application/octet-stream'
-      return new Response(request.method === 'HEAD' ? null : Bun.file(file), {
-        headers: {
-          'content-type': type,
-          'cache-control': file.includes(`${sep}blobs${sep}`) ? 'public, max-age=31536000, immutable' : 'no-store',
-          'x-content-type-options': 'nosniff',
-        },
-      })
+      return conditional(request, file, type, file.includes(`${sep}blobs${sep}`))
     },
   })
 

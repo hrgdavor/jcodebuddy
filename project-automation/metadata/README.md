@@ -43,6 +43,9 @@ manifest can fetch a consistent index; a shard is never modified in place.
 keys; `indexChanged` asks it to reload the small index for stats/title changes. Unchanged large maps are
 not transferred.
 
+Catalog and index responses carry an `ETag`; a conditional `If-None-Match` returns `304`. Blobs are
+immutable and cache for a year.
+
 ## Host
 
 `startMetadataServer({ root, host, port })` serves one page/report directory. It polls only

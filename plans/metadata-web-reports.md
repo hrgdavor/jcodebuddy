@@ -31,8 +31,9 @@
 > `server.js` serves the standalone read API and targeted SSE, `webviewd` implements the same read
 > API/SSE contract with catalog-path resolution, the entity-browser page loads index+shards and
 > live-updates changed shards (`metadata-client.test.js` covers the partial update), and jsx6 is built
-> once under `assets/jsx6/<hash>/` with an import map. Remaining: `ETag`/`304`, the IOC-graph second
-> consumer, the headless browser live-update gate, and rollout docs for the old static page flow.
+> once under `assets/jsx6/<hash>/` with an import map. `ETag`/`304` is implemented for the metadata
+> catalog/index in both hosts. Remaining: the IOC-graph second consumer, the headless browser
+> live-update gate, and rollout docs for the old static page flow.
 
 ## 1. The decision this plan implements
 

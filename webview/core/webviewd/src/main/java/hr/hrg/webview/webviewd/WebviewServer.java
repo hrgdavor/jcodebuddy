@@ -629,6 +629,18 @@ public final class WebviewServer implements AutoCloseable {
             send(exchange, 404, "text/plain", bytes("Not Found"));
             return;
         }
+        String etag = "\"" + Long.toHexString(Files.size(file)) + "-"
+                + Long.toHexString(Files.getLastModifiedTime(file).toMillis()) + "\"";
+        String requested = exchange.getRequestHeaders().getFirst("If-None-Match");
+        if (requested != null && java.util.Arrays.stream(requested.split(","))
+                .map(String::trim).anyMatch(etag::equals)) {
+            exchange.getResponseHeaders().set("ETag", etag);
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
+            exchange.sendResponseHeaders(304, -1);
+            exchange.close();
+            return;
+        }
+        exchange.getResponseHeaders().set("ETag", etag);
         send(exchange, 200, "application/json; charset=utf-8",
                 Files.readString(file, StandardCharsets.UTF_8).getBytes(StandardCharsets.UTF_8));
     }

@@ -42,8 +42,16 @@ class MetadataApiTest {
     }
 
     private HttpResponse<String> get(String path) throws Exception {
-        return HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(server.baseUrl() + path))
-                .header("Origin", ORIGIN).GET().build(), HttpResponse.BodyHandlers.ofString());
+        return get(path, null);
+    }
+
+    private HttpResponse<String> get(String path, String ifNoneMatch) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(server.baseUrl() + path))
+                .header("Origin", ORIGIN).GET();
+        if (ifNoneMatch != null) {
+            request.header("If-None-Match", ifNoneMatch);
+        }
+        return HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private void metadata() throws IOException {
@@ -74,6 +82,10 @@ class MetadataApiTest {
         HttpResponse<String> index = get("/api/v1/metadata/entity-browser/index");
         assertEquals(200, index.statusCode());
         assertTrue(index.body().contains("\"shards\""), index.body());
+
+        String etag = index.headers().firstValue("ETag").orElse(null);
+        assertTrue(etag != null && !etag.isBlank(), "the index response carries an ETag");
+        assertEquals(304, get("/api/v1/metadata/entity-browser/index", etag).statusCode());
     }
 
     @Test
