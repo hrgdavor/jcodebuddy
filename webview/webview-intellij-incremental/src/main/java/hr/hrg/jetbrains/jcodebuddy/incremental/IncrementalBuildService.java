@@ -12,11 +12,14 @@ import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.CompilerModuleExtension;
 import com.intellij.openapi.roots.ContentEntry;
+import com.intellij.openapi.roots.ModuleRootEvent;
+import com.intellij.openapi.roots.ModuleRootListener;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.OrderEnumerator;
 import com.intellij.openapi.roots.OrderRootType;
 import com.intellij.openapi.roots.SourceFolder;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.util.messages.MessageBusConnection;
 import hr.hrg.jcodebuddy.compile.EcjIncrementalCompiler;
 import hr.hrg.jcodebuddy.watch.FsMetaClient;
 import hr.hrg.jcodebuddy.watch.FsMetaDaemonDiscovery;
@@ -74,6 +77,8 @@ public final class IncrementalBuildService implements Disposable {
     private final IncrementalLogService logService;
     private final JcodeBuddySettings settings;
     private final Object lifecycle = new Object();
+    private final MessageBusConnection busConnection;
+    private final AtomicBoolean rootsRefreshPending = new AtomicBoolean();
     private volatile ExecutorService worker;
 
     private final AtomicBoolean started = new AtomicBoolean();
@@ -98,6 +103,13 @@ public final class IncrementalBuildService implements Disposable {
         this.diagnostics = project.getService(IncrementalDiagnosticsService.class);
         this.logService = project.getService(IncrementalLogService.class);
         this.settings = project.getService(JcodeBuddySettings.class);
+        this.busConnection = project.getMessageBus().connect(this);
+        this.busConnection.subscribe(ModuleRootListener.TOPIC, new ModuleRootListener() {
+            @Override
+            public void rootsChanged(@NotNull ModuleRootEvent event) {
+                requestRootsRefresh();
+            }
+        });
     }
 
     /** Starts the loop once per project when the project-level setting is enabled. */
@@ -192,6 +204,116 @@ public final class IncrementalBuildService implements Disposable {
             stopWatch();
             startWatch();
         });
+    }
+
+    /** Re-scans IntelliJ's module model for source roots added/removed by a branch or submodule change. */
+    public void refreshRoots() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project first.", NotificationType.WARNING);
+            return;
+        }
+        start();
+        requestRootsRefresh();
+    }
+
+    /** Writes the currently available Java source roots and outputs to the build log. */
+    public void listRoots() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project first.", NotificationType.WARNING);
+            return;
+        }
+        start();
+        ExecutorService current = worker;
+        if (current == null) {
+            return;
+        }
+        current.submit(() -> {
+            if (started.get()) {
+                logCurrentRoots();
+            }
+        });
+    }
+
+    private void requestRootsRefresh() {
+        if (!started.get() || !rootsRefreshPending.compareAndSet(false, true)) {
+            return;
+        }
+        ExecutorService current = worker;
+        if (current == null) {
+            rootsRefreshPending.set(false);
+            return;
+        }
+        current.submit(() -> {
+            rootsRefreshPending.set(false);
+            if (started.get()) {
+                refreshRootsOnWorker();
+            }
+        });
+    }
+
+    private void refreshRootsOnWorker() {
+        List<SourceRoot> next = collectSourceRoots();
+        Set<Path> oldPaths = new LinkedHashSet<>();
+        for (SourceRoot root : sourceRoots) {
+            oldPaths.add(root.root());
+        }
+        Set<Path> newPaths = new LinkedHashSet<>();
+        for (SourceRoot root : next) {
+            newPaths.add(root.root());
+        }
+        String nextSignature = signature(next);
+        boolean changed = !oldPaths.equals(newPaths) || !nextSignature.equals(signature(sourceRoots));
+        if (!changed) {
+            log("Source roots unchanged (" + next.size() + " root(s))");
+            return;
+        }
+        log("Source roots changed: " + sourceRoots.size() + " -> " + next.size());
+        sourceRoots = next;
+        compilers = createCompilers(next);
+        sourceSignature = signature(next) + "|" + classpathSignature;
+        seedHashesForNewRoots(next, oldPaths);
+        compileFromHashes("source roots refreshed");
+        if (failedFiles.isEmpty()) {
+            saveMarker(daemonSocket == null ? -1 : queryHead(daemonSocket));
+        }
+        stopWatch();
+        startWatch();
+    }
+
+    private void seedHashesForNewRoots(List<SourceRoot> roots, Set<Path> oldRoots) {
+        int seeded = 0;
+        for (SourceRoot root : roots) {
+            if (oldRoots.contains(root.root())) {
+                continue;
+            }
+            for (Path file : javaFiles(root.root())) {
+                if (!diagnostics.forFile(file.toString()).isEmpty()) {
+                    continue;
+                }
+                Path classFile = primaryClassPath(root, file);
+                if (classFile == null || !Files.isRegularFile(classFile)) {
+                    continue;
+                }
+                try {
+                    compiledHashes.put(file, CompiledHashStore.hash(file));
+                    seeded++;
+                } catch (IOException ignored) {
+                    // Leave it unseeded; it will be compiled.
+                }
+            }
+        }
+        if (seeded > 0) {
+            saveHashes();
+            log("Seeded " + seeded + " hash(es) from existing classes in new source root(s)");
+        }
+    }
+
+    private void logCurrentRoots() {
+        log("Available Java source roots (" + sourceRoots.size() + "):");
+        for (SourceRoot root : sourceRoots) {
+            log("  " + (root.test() ? "TEST" : "MAIN") + " [" + root.module().getName() + "] "
+                    + root.root() + " -> " + root.output());
+        }
     }
 
     private void stopWatch() {
@@ -1149,6 +1271,7 @@ public final class IncrementalBuildService implements Disposable {
 
     @Override
     public void dispose() {
+        busConnection.disconnect();
         stopWatch();
         stop();
         compilers = Map.of();

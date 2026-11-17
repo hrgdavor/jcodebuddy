@@ -58,6 +58,12 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         JButton detailedClasspath = new JButton("Detailed Classpath");
         detailedClasspath.setToolTipText("Log every module classpath entry; normal startup logs counts only");
         detailedClasspath.addActionListener(event -> service.logDetailedClasspath());
+        JButton refreshRoots = new JButton("Refresh Roots");
+        refreshRoots.setToolTipText("Re-scan modules after a branch/submodule change");
+        refreshRoots.addActionListener(event -> service.refreshRoots());
+        JButton listRoots = new JButton("List Roots");
+        listRoots.setToolTipText("Log the currently available source roots and outputs");
+        listRoots.addActionListener(event -> service.listRoots());
         JButton openLog = new JButton("Open Log Folder");
         openLog.setToolTipText("Open " + logs.file().getParent() + " in the file explorer");
         openLog.addActionListener(event -> openLogFolder(project, logs));
@@ -72,6 +78,8 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         toolbar.add(rebuild);
         toolbar.add(reconnect);
         toolbar.add(detailedClasspath);
+        toolbar.add(refreshRoots);
+        toolbar.add(listRoots);
         toolbar.add(openLog);
         toolbar.add(clearLog);
 

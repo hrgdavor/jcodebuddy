@@ -207,8 +207,14 @@ There are two places to look:
    - **Rebuild** — compile every source root again;
    - **Reconnect fs-meta** — drop the current subscription and retry daemon discovery;
    - **Detailed Classpath** — write every classpath entry for every module to the log on demand;
+   - **Refresh Roots** — re-scan IntelliJ's module model after a branch/submodule change;
+   - **List Roots** — log every currently available source root and output;
    - **Open Log Folder** — open `.jcodebuddy/cache/incremental-build/` in the system file explorer;
    - **Clear Log** — clear both the pane and `build.log`.
+
+   Source roots also refresh automatically when IntelliJ reports a module-root change, so switching to a
+   branch that adds/removes a submodule does not require a manual rebuild. A manual **Refresh Roots** is
+   available if the project model change is not delivered.
 
    Normal startup logs only counts such as
    `Classpath [module]: entries=277, jars=240, dirs=35, missing=2`. The durable log file
@@ -235,12 +241,21 @@ fs-meta daemon root: ...
 fs-meta socket: ...
 fs-meta filter: ...
 Batch: changed=[...] deleted=[...]
+Source roots changed: 12 -> 14
+Seed hashes from existing classes in new source root(s)
+Available Java source roots (14):
+  MAIN [module] <root> -> <output>
+  TEST [module] <root> -> <output>
 ```
+
+`Source roots changed` and the `Available Java source roots` list are also the quickest way to verify a branch
+or submodule update. **List Roots** prints the current list on demand.
 
 `Hash-driven compile` is the normal startup path. `Full compile` is emitted only by the explicit
 **Rebuild** button. `Restored N diagnostic(s)` means the previous compile's error annotations were loaded
 from the diagnostics state file. Normal classpath lines show counts; use **Detailed Classpath** when the
-per-entry `JAR`/`DIR`/`MISSING` list is needed.
+per-entry `JAR`/`DIR`/`MISSING` list is needed. Source roots are refreshed from IntelliJ's module model
+automatically; **Refresh Roots** is the manual fallback and **List Roots** prints the current roots.
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 By default the log reports per-module classpath **counts**. Press **Detailed Classpath** to append each
