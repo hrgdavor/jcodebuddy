@@ -177,11 +177,16 @@ class ClassIndexTest {
         written(root, null);
         String text = tableText(root);
 
-        for (String forbidden : List.of("\"id\"", "\"ids\"", "\"index\"", "\"ordinal\"", "\"row\"",
-                "\"crc\"", "\"hashOfPath\"")) {
-            Assertions.assertFalse(text.contains(forbidden),
-                    "the table must not carry " + forbidden + ": the key space is the language's own "
-                            + "fully qualified names, which is what an IDE's rename refactor can maintain");
+        // A member may legitimately be named `id` (the fixture record has one). What the table must not
+        // carry is a surrogate id at the row level; inspect the row's own keys rather than every string.
+        tools.jackson.databind.JsonNode table = EntityMetadataGenerator.OBJECT_MAPPER.readTree(text);
+        for (String forbidden : List.of("id", "ids", "index", "ordinal", "row", "crc", "hashOfPath")) {
+            for (var row : table.path("classes").properties()) {
+                Assertions.assertFalse(row.getValue().has(forbidden),
+                        "the table must not carry a row-level \"" + forbidden + "\": the key space is the "
+                                + "language's own fully qualified names, which is what an IDE's rename refactor "
+                                + "can maintain");
+            }
         }
         // Every key of `classes` is a dotted, package-qualified name — a name a compiler would accept.
         var parsed = readBack(root);

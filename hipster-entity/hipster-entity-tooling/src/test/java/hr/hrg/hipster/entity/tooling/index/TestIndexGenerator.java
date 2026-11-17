@@ -510,7 +510,9 @@ public final class TestIndexGenerator {
      * on a build-cache detail.
      */
     private static Path classesFromJar(Path jar) throws IOException {
-        Path extracted = Files.createTempDirectory("jcodebuddy-index-");
+        Path target = jar.getParent();
+        Path classes = target.resolve(CLASSES);
+        Files.createDirectories(classes);
         try (JarFile archive = new JarFile(jar.toFile())) {
             var entries = archive.entries();
             while (entries.hasMoreElements()) {
@@ -518,17 +520,17 @@ public final class TestIndexGenerator {
                 if (entry.isDirectory() || !entry.getName().endsWith(".class")) {
                     continue;
                 }
-                Path target = extracted.resolve(entry.getName()).normalize();
-                if (!target.startsWith(extracted)) {
+                Path targetFile = classes.resolve(entry.getName()).normalize();
+                if (!targetFile.startsWith(classes)) {
                     continue;
                 }
-                Files.createDirectories(target.getParent());
+                Files.createDirectories(targetFile.getParent());
                 try (InputStream input = archive.getInputStream(entry)) {
-                    Files.copy(input, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    Files.copy(input, targetFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 }
             }
         }
-        return extracted;
+        return classes.toAbsolutePath().normalize();
     }
 
     /** Two classpath entries with the same directory are one input, not two. */

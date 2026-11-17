@@ -111,7 +111,8 @@ generic `AnnotationModel` rows. Core still stores no table, ordinal or column se
 entity documents.
 
 Verification run: `JAVA_HOME=jdk-25 mvn -o -f hipster-sql/hipster-sql-tooling/pom.xml test` ->
-Core: **90 tests, 0 failures**; port: **29 tests, 0 failures**. The full repository gate was not run.
+Core: **90 tests, 0 failures**; port: **29 tests, 0 failures**. Full repository gate:
+`bun scripts/mvn-jdk25.js` → **BUILD SUCCESS**, exit 0, 20 modules, 10:29.
 
 ## 2. What `processor` does today
 
@@ -1368,7 +1369,9 @@ Estimates are for one developer familiar with the code; `Meta` is the bulk.
 | `git diff -- sql`                                                                             | the `sql` diff is exactly the approved one-line fix + its regression test                |
 | package/no-service test                                                                       | no `META-INF/services/javax.annotation.processing.Processor` in the jar                  |
 
-The full repository gate is not run for this change. The implemented slice's gate is
+The full repository gate ran on 2026-11-17: `bun scripts/mvn-jdk25.js` → **BUILD SUCCESS**, exit 0,
+20 modules, 10:29 (hipster-entity-tooling 617 tests, hipster-sql-tooling 29, jcodebuddy-core 90,
+project-automation 122 with 1 skipped). The implemented slice's gate is
 `mvn -o -f hipster-sql/hipster-sql-tooling/pom.xml test` on JDK 25; 29 tests are green (discovery,
 Visitor shape, Immutable/Update/Builder shape and behavior, Immutable Jackson serialization,
 Meta/registry shape, Meta Jackson mapper + Mongo encode/decode, `fromResultSet`/`visitResult`
