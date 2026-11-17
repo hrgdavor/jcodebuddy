@@ -350,9 +350,9 @@ limitation as the standalone example.
 - **No dependency recompilation**: only files in the fs-meta batch are compiled. A changed signature that
   requires recompiling an unchanged dependent is outside this plugin's scope.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.
-- **No automatic retry**: if the daemon is started after the project is opened, click **Reconnect fs-meta**
-  in the build-log toolbar. The plugin prints the exact `fsmeta daemon start` and `fsmeta root add` commands
-  when the daemon/root is missing.
+- **Automatic daemon retry**: if the daemon is started after the project is opened, the plugin retries
+  discovery/subscription with backoff (2s up to 30s). **Reconnect fs-meta** forces an immediate rediscovery.
+  The plugin prints the exact `fsmeta daemon start` and `fsmeta root add` commands when the daemon/root is missing.
 - **Memory**: the plugin shares one dependency index across all source roots. JAR class bytes are read on
   demand from the JAR and limited to a bounded hot cache; the JARs themselves stay on disk. The initial
   full compile is chunked (default 64 files, `-Djcodebuddy.intellij.initialCompileChunk=<n>`) so the ECJ

@@ -223,8 +223,9 @@ bytes and leaves byte-identical class files untouched; only **Rebuild** rewrites
   `OutOfMemoryError`, raise the IDE heap with `Help | Change Memory Settings` and inspect the memory lines in
   the JCodeBuddy Build log.
 - **Generated sources** are compiled only if their source root is part of the IntelliJ module.
-- **No automatic daemon retry.** If the daemon starts after the project is open, click **Reconnect fs-meta**
-  in the log toolbar. The log prints the exact daemon/root commands when discovery fails.
+- **Automatic daemon retry.** If the daemon starts after the project is open, the plugin retries discovery and
+  subscription with backoff (2s up to 30s); **Reconnect fs-meta** forces an immediate rediscovery. The log prints
+  the exact daemon/root commands when discovery fails.
 - **The plugin is a separate Gradle project.** It is not in the root Maven reactor or the Maven gate.
 
 ## Troubleshooting

@@ -43,8 +43,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -79,6 +81,15 @@ public final class IncrementalBuildService implements Disposable {
     private final Object lifecycle = new Object();
     private final MessageBusConnection busConnection;
     private final AtomicBoolean rootsRefreshPending = new AtomicBoolean();
+    private final AtomicBoolean watchRetryPending = new AtomicBoolean();
+    private final AtomicInteger watchRetrySeconds = new AtomicInteger(2);
+    private final AtomicBoolean watchFailureNotified = new AtomicBoolean();
+    private final AtomicBoolean fsMetaSetupNotified = new AtomicBoolean();
+    private final ScheduledExecutorService watchRetry = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "jcodebuddy-fsmeta-retry");
+        thread.setDaemon(true);
+        return thread;
+    });
     private volatile ExecutorService worker;
 
     private final AtomicBoolean started = new AtomicBoolean();
@@ -459,8 +470,13 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void logFsMetaSetup(FsMetaDaemonDiscovery.Attach attach, String problem) {
-        log("fs-meta is not attached: " + (problem == null || problem.isBlank()
-                ? "no daemon serves this project" : problem));
+        String detail = problem == null || problem.isBlank()
+                ? "no daemon serves this project" : problem;
+        if (!fsMetaSetupNotified.compareAndSet(false, true)) {
+            log("fs-meta still not attached: " + detail);
+            return;
+        }
+        log("fs-meta is not attached: " + detail);
         log("Command 1 (start the daemon): fsmeta daemon start");
         boolean rootMissing = attach == null
                 || problem == null
@@ -1004,6 +1020,7 @@ public final class IncrementalBuildService implements Disposable {
     private void startWatch() {
         FsMetaDaemonDiscovery.Attach attach = discover();
         if (attach == null || !attach.attached()) {
+            scheduleWatchRetry();
             return;
         }
         startWatch(attach, lastAppliedBatch >= 0 ? lastAppliedBatch : FsMetaClient.LATEST);
@@ -1029,11 +1046,47 @@ public final class IncrementalBuildService implements Disposable {
         });
         try {
             watch.start();
+            watchFailureNotified.set(false);
+            fsMetaSetupNotified.set(false);
+            watchRetrySeconds.set(2);
             log("Subscribed to fs-meta at generation " + watch.lastAppliedBatch());
         } catch (IOException failed) {
-            LOG.error("Cannot start the fs-meta subscription", failed);
-            notify("Cannot start the fs-meta subscription: " + failed, NotificationType.WARNING);
+            LOG.warn("Cannot start the fs-meta subscription; will rediscover and retry", failed);
+            log("fs-meta subscription failed: " + failed + "; retrying in "
+                    + watchRetrySeconds.get() + "s");
+            FsMetaDaemonWatch failedWatch = watch;
+            watch = null;
+            if (failedWatch != null) {
+                failedWatch.stop();
+            }
+            if (watchFailureNotified.compareAndSet(false, true)) {
+                notify("Cannot start the fs-meta subscription: " + failed
+                        + ". The plugin will keep retrying; use Reconnect fs-meta to force a rediscovery.",
+                        NotificationType.WARNING);
+            }
+            scheduleWatchRetry();
         }
+    }
+
+    private void scheduleWatchRetry() {
+        if (!started.get() || !watchRetryPending.compareAndSet(false, true)) {
+            return;
+        }
+        int delay = watchRetrySeconds.get();
+        watchRetry.schedule(() -> {
+            watchRetryPending.set(false);
+            ExecutorService current = worker;
+            if (!started.get() || current == null) {
+                return;
+            }
+            current.submit(() -> {
+                if (watch != null && watch.isRunning()) {
+                    return;
+                }
+                watchRetrySeconds.set(Math.min(30, Math.max(2, watchRetrySeconds.get() * 2)));
+                startWatch();
+            });
+        }, delay, TimeUnit.SECONDS);
     }
 
     private void applyBatch(WatchBatch batch) {
@@ -1282,6 +1335,7 @@ public final class IncrementalBuildService implements Disposable {
     @Override
     public void dispose() {
         busConnection.disconnect();
+        watchRetry.shutdownNow();
         stopWatch();
         stop();
         compilers = Map.of();
