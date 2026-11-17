@@ -148,6 +148,10 @@ class IndexTypeResolverTest {
         Assertions.assertEquals("long", person.fieldTypes().get("id"),
                 "and each field carries the type the source wrote — unresolved, like every name in this model");
         Assertions.assertEquals("Person", person.simpleName());
+        Assertions.assertEquals(3, person.members().size(),
+                "the generator-facing definition carries the index's members, not only field names");
+        Assertions.assertEquals("a/b/Person.java", person.path());
+        Assertions.assertEquals(3, person.line());
     }
 
     @Test

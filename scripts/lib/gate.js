@@ -64,6 +64,7 @@ export const GATE_MODULES = [
   'hipster-entity-api',
   'hipster-entity-core',
   'hipster-entity-tooling',
+  'hipster-sql-tooling',
   'hipster-entity-jackson',
   'hipster-entity-test',
   'hipster-entity-example',

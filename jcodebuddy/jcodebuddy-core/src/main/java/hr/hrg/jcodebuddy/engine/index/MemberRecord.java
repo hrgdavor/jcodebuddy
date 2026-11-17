@@ -21,6 +21,7 @@ import hr.hrg.jcodebuddy.engine.source.TreeQueries;
  *   <li>{@link Kind#METHOD} — the return type as written ({@code void} for a method that returns nothing);</li>
  *   <li>{@link Kind#CONSTRUCTOR} — empty: a constructor declares no return type, and its name is the type's;</li>
  *   <li>{@link Kind#ENUM_CONSTANT} — empty: a constant declares no type, and its name is its own;</li>
+ *   <li>{@link Kind#RECORD_COMPONENT} — the component type as written, type arguments included;</li>
  *   <li>{@link Kind#NESTED} — the nested type's simple name; its own row is keyed by the full name.</li>
  * </ul>
  *
@@ -94,6 +95,21 @@ public record MemberRecord(String name, Kind kind, String type, List<MemberParam
          * kind.</p>
          */
         ENUM_CONSTANT("enum-constant"),
+        /**
+         * A record component — the parameters of the record's canonical constructor.
+         *
+         * <p>Added 2026-11-16: a record's components are the record's own structure, and the member list
+         * recorded fields, methods, constructors, enum constants and nested types but not them. A consumer
+         * could see that {@code OrderState} was a record and nothing about what it contains, which is the
+         * one fact a record exists to state. javac models each component as a private final field, so the
+         * position lookup already had the role ({@code record-component}) and only this table was missing
+         * it.</p>
+         *
+         * <p>The component's type is written exactly as the header writes it ({@code List<String>}), and
+         * its span covers the component in the header, so its annotations can be sliced without a second
+         * parse.</p>
+         */
+        RECORD_COMPONENT("record-component"),
         NESTED("nested");
 
         private final String json;

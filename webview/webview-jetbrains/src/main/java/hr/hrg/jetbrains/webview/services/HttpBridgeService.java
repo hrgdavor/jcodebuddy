@@ -17,6 +17,7 @@ import hr.hrg.webview.core.HostDescriptor;
 import hr.hrg.webview.core.HostHealth;
 import hr.hrg.webview.core.HostPortClaim;
 import hr.hrg.webview.core.NavigationOutcome;
+import hr.hrg.webview.core.PageServer;
 import hr.hrg.webview.core.WriteSurface;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -31,6 +32,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -89,8 +91,13 @@ public final class HttpBridgeService {
     private volatile ExecutorService executor;
     private volatile int boundPort = -1;
     private volatile AllowedOrigins allowedOrigins = AllowedOrigins.of(null);
+    private volatile String configuredOriginsText = "";
     private volatile String token = "";
     private volatile WriteSurface writeSurface;
+    /** The project-jailed file decision used by {@code /page/}; built when a server starts. */
+    private volatile PageServer pageServer;
+    /** The one-time path segment that makes a served page and its assets a capability URL. */
+    private volatile String pageToken = "";
 
     /** Why the bridge is in the state it is in, for the settings UI: the claim's own sentence. */
     private volatile String stateNote = "Bridge: not started yet";
@@ -120,6 +127,45 @@ public final class HttpBridgeService {
         return boundPort;
     }
 
+    /**
+     * The URL a generated page should be opened at, or null when it cannot be served.
+     *
+     * <p>A page is served by an **existing** host when the project setting {@code pageBaseUrl} names one —
+     * the base is the path mapping, and the page's project-relative path is appended. Otherwise this IDE
+     * starts its own server on demand (an ephemeral port when no bridge port is configured) and serves the
+     * page under {@code /page/<one-time-token>/…}, so the page and its sibling assets load over HTTP and
+     * the JSON it fetches is same-origin. The token makes that URL a capability rather than an open file
+     * server; {@link PageServer} still confines every read to the project.</p>
+     *
+     * <p>Called from the Open action, which may be on a background thread: starting the server binds a
+     * loopback socket, so it must not run on the EDT.</p>
+     */
+    public synchronized @Nullable String pageUrl(@NotNull Path page) {
+        String basePath = project.getBasePath();
+        if (basePath == null || basePath.isBlank()) {
+            return null;
+        }
+        String relative = ServedPageUrls.projectRelative(Path.of(basePath), page);
+        if (relative == null) {
+            return null;
+        }
+        PluginStateService.State state = PluginStateService.getInstance(project).getState();
+        String existing = state == null ? "" : state.pageBaseUrl;
+        if (existing != null && !existing.isBlank()) {
+            return ServedPageUrls.onExistingServer(existing, relative);
+        }
+        if (server == null) {
+            // A page being opened is the request that turns the server on; without a configured port the
+            // operating system picks one, and `start` publishes the port it actually bound.
+            startServer(0);
+        }
+        if (server == null || boundPort <= 0 || pageToken.isEmpty()) {
+            stateNote = "the page server could not start; open the file:// page or configure pageBaseUrl";
+            return null;
+        }
+        return ServedPageUrls.onLocalServer(boundPort, pageToken, relative);
+    }
+
     /** A one-line description of the bridge for the settings UI. */
     public @NotNull String describeState() {
         HttpServer current = server;
@@ -145,6 +191,8 @@ public final class HttpBridgeService {
         } finally {
             server = null;
             boundPort = -1;
+            pageServer = null;
+            pageToken = "";
         }
         ExecutorService currentExecutor = executor;
         if (currentExecutor != null) {
@@ -169,6 +217,7 @@ public final class HttpBridgeService {
                 : System.getProperty("webview.explorer.token");
 
         allowedOrigins = AllowedOrigins.of(originsText);
+        configuredOriginsText = originsText == null ? "" : originsText.trim();
         token = tokenText == null ? "" : tokenText.trim();
 
         int port;
@@ -306,6 +355,8 @@ public final class HttpBridgeService {
     /** Registers the routes, starts the claimed server and publishes the port. */
     private void start(@NotNull HttpServer created, int port, @NotNull Path projectRoot, boolean sticky) {
         try {
+            PageServer createdPageServer = new PageServer(projectRoot.toString());
+            String createdPageToken = UUID.randomUUID().toString().replace("-", "");
             created.createContext("/", this::handle);
             ExecutorService createdExecutor = Executors.newSingleThreadExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "webview-bridge-" + threadSequence.incrementAndGet());
@@ -315,11 +366,22 @@ public final class HttpBridgeService {
             created.setExecutor(createdExecutor);
             created.start();
 
+            // `port` is 0 when the caller asked the operating system to choose. The actual port is what
+            // must be published and used in URLs; using the request (0) made an on-demand server
+            // unreachable and published "port 0".
+            int actualPort = created.getAddress() != null ? created.getAddress().getPort() : port;
             server = created;
             executor = createdExecutor;
-            boundPort = port;
-            publish(projectRoot, port, sticky);
-            LOG.info("WebView HTTP bridge listening on 127.0.0.1:" + port
+            pageServer = createdPageServer;
+            pageToken = createdPageToken;
+            boundPort = actualPort;
+            // The pages this host serves are the pages it must drive: trust its own origin, as webviewd
+            // does, in addition to whatever the settings name.
+            String self = "http://127.0.0.1:" + actualPort + ",http://localhost:" + actualPort;
+            allowedOrigins = AllowedOrigins.of(configuredOriginsText.isEmpty()
+                    ? self : self + "," + configuredOriginsText);
+            publish(projectRoot, actualPort, sticky);
+            LOG.info("WebView HTTP bridge listening on 127.0.0.1:" + actualPort
                     + (sticky ? " (pinned for this project)" : "")
                     + (allowedOrigins.isEmpty() && token.isEmpty()
                             ? " (denying every caller until an allowed origin or token is configured)"
@@ -410,6 +472,11 @@ public final class HttpBridgeService {
             return;
         }
 
+        if (path != null && path.startsWith(ServedPageUrls.LOCAL_PREFIX)) {
+            handlePage(exchange, path);
+            return;
+        }
+
         if (path != null && path.startsWith(WRITE_PREFIX)) {
             handleWrite(exchange, path);
             return;
@@ -462,6 +529,34 @@ public final class HttpBridgeService {
             case INVALID_PATH -> send(exchange, 400, "Missing filePath parameter", "text/plain");
             default -> send(exchange, 404, "Could not open " + filePath, "text/plain");
         }
+    }
+
+    /**
+     * {@code GET /page/<token>/<project-relative path>}: a page and the sibling assets it loads.
+     *
+     * <p>The token is a capability, not a secret the page has to send on every request: every relative
+     * asset URL resolves under the same segment, so the browser carries it automatically. The file
+     * decision is core's {@link PageServer}, which confines every read to the project and supplies the MIME
+     * table — this handler only checks the method and the token, and writes the bytes.</p>
+     */
+    private void handlePage(@NotNull HttpExchange exchange, @NotNull String path) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+        String prefix = ServedPageUrls.LOCAL_PREFIX + pageToken + "/";
+        if (!path.startsWith(prefix)) {
+            send(exchange, 403, "Forbidden: this page URL is not valid in this session", "text/plain");
+            return;
+        }
+        PageServer current = pageServer;
+        if (current == null) {
+            send(exchange, 404, "No page server is running", "text/plain");
+            return;
+        }
+        String relative = path.substring(prefix.length());
+        PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + relative, null);
+        sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());
     }
 
     /**
@@ -553,16 +648,33 @@ public final class HttpBridgeService {
                 return true;
             }
         }
+        // A page this host served carries its one-time token in its own URL and passes it back on the
+        // `/open` fallback, so a browser without the injected `window.openFile` can still navigate.
+        if (!pageToken.isEmpty()) {
+            Map<String, String> params = parseQuery(exchange.getRequestURI().getQuery());
+            if (pageToken.equals(params.get("token"))) {
+                return true;
+            }
+        }
         return allowedOrigins.allows(origin);
     }
 
     private static void send(@NotNull HttpExchange exchange, int status, @NotNull String body,
                              @NotNull String contentType) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", contentType + "; charset=utf-8");
-        exchange.sendResponseHeaders(status, bytes.length);
+        sendBytes(exchange, status, contentType, body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** A response with bytes behind it: a page, its JavaScript, its JSON model, a stylesheet. */
+    private static void sendBytes(@NotNull HttpExchange exchange, int status, @NotNull String contentType,
+                                  byte[] body) throws IOException {
+        String type = contentType.startsWith("text/") || contentType.contains("json")
+                ? contentType + "; charset=utf-8" : contentType;
+        exchange.getResponseHeaders().set("Content-Type", type);
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.sendResponseHeaders(status, body.length);
         try (OutputStream out = exchange.getResponseBody()) {
-            out.write(bytes);
+            out.write(body);
         }
     }
 

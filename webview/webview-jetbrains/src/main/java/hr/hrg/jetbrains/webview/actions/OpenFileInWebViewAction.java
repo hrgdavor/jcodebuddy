@@ -4,13 +4,17 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import hr.hrg.jetbrains.webview.services.HttpBridgeService;
 import hr.hrg.jetbrains.webview.toolWindow.MarkdownView;
 import hr.hrg.jetbrains.webview.toolWindow.WebViewService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.nio.file.Path;
 
 /**
  * "Open in WebView Explorer" for the Project view, editor and editor-tab popups.
@@ -38,7 +42,20 @@ public final class OpenFileInWebViewAction extends AnAction implements DumbAware
         if (MarkdownView.isMarkdown(file.getName()) && MarkdownView.getInstance(project).show(file.getPath())) {
             return;
         }
-        WebViewService.getInstance(project).openInPanel(urlFor(file));
+        // An HTML page is served, not opened as a file: a page that fetches its own JSON (the entity
+        // browser does) cannot do that from file://. The bridge serves it under a one-time token path,
+        // or an existing host named in the settings serves it; if neither is possible, the file URL is
+        // still a usable fallback for a page that needs no fetch.
+        Path page = Path.of(file.getPath());
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            String served = HttpBridgeService.getInstance(project).pageUrl(page);
+            String url = served != null ? served : urlFor(file);
+            ApplicationManager.getApplication().invokeLater(() -> {
+                if (!project.isDisposed()) {
+                    WebViewService.getInstance(project).openInPanel(url);
+                }
+            });
+        });
     }
 
     @Override

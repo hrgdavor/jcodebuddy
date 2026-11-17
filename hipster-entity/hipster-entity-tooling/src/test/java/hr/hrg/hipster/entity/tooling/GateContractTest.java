@@ -36,7 +36,8 @@ class GateContractTest {
 
     private static final List<String> GATE_MODULES = List.of(
             "jcodebuddy-core", "jcodebuddy-generated", "jcodebuddy-watch", "jcodebuddy-compile", "jcodebuddy-meta", "jcodebuddy-meta-mcp",
-            "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling", "hipster-entity-jackson",
+            "hipster-entity-api", "hipster-entity-core", "hipster-entity-tooling", "hipster-sql-tooling",
+            "hipster-entity-jackson",
             "hipster-entity-test", "hipster-entity-example", "hipster-ioc-api", "hipster-ioc-tooling",
             "hipster-ioc-test", "project-automation");
 

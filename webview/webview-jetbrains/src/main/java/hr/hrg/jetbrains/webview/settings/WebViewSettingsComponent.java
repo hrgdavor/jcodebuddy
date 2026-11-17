@@ -19,6 +19,7 @@ public class WebViewSettingsComponent {
     private final JBTextField myPortText = new JBTextField();
     private final JBTextField myAllowedOriginsText = new JBTextField();
     private final JBTextField myTokenText = new JBTextField();
+    private final JBTextField myPageBaseUrlText = new JBTextField();
     private final JBLabel myStatusLabel = new JBLabel();
 
     public WebViewSettingsComponent() {
@@ -28,11 +29,22 @@ public class WebViewSettingsComponent {
                 .addLabeledComponent(new JBLabel("Allowed origins: "), myAllowedOriginsText, 1, false)
                 .addLabeledComponent(new JBLabel("Token: "), myTokenText, 1, false)
                 .addComponent(new JBLabel("<html><body style='width:520px'>"
-                        + "The bridge is off while the port is empty. It listens on 127.0.0.1 only, and it "
-                        + "opens a file in the IDE only for a caller that presents the token or one of the "
-                        + "allowed origins. With both empty every caller is refused. Pages loaded in the "
-                        + "built-in webview do not need the bridge: they get <code>window.openFile</code> "
-                        + "injected instead."
+                        + "The bridge is off while the port is empty, except that opening an HTML page "
+                        + "starts a page server on demand (and then uses this port if one is configured). "
+                        + "It listens on 127.0.0.1 only, and it opens a file in the IDE only for a caller "
+                        + "that presents the token or one of the allowed origins. With both empty every "
+                        + "caller is refused. Pages loaded in the built-in webview do not need the bridge: "
+                        + "they get <code>window.openFile</code> injected instead."
+                        + "</body></html>"))
+                .addComponent(new TitledSeparator("Served HTML pages"))
+                .addLabeledComponent(new JBLabel("Existing page server: "), myPageBaseUrlText, 1, false)
+                .addComponent(new JBLabel("<html><body style='width:520px'>"
+                        + "Leave empty to let this IDE serve an HTML page on demand under a one-time "
+                        + "<code>/page/&lt;token&gt;/…</code> URL. Set a base such as "
+                        + "<code>http://127.0.0.1:18884/page/</code> to use an existing host instead; the "
+                        + "page's path relative to the project root is appended (for example "
+                        + "<code>webviewd --project &lt;root&gt;</code>). The server serves project files "
+                        + "to loopback only, confined to the project root."
                         + "</body></html>"))
                 .addComponent(myStatusLabel)
                 .addComponentFillVertically(new JPanel(), 0)
@@ -72,6 +84,15 @@ public class WebViewSettingsComponent {
 
     public void setTokenText(@NotNull String newText) {
         myTokenText.setText(newText);
+    }
+
+    @NotNull
+    public String getPageBaseUrlText() {
+        return myPageBaseUrlText.getText();
+    }
+
+    public void setPageBaseUrlText(@NotNull String newText) {
+        myPageBaseUrlText.setText(newText);
     }
 
     /** Shows what the bridge is currently doing, so the port field is not the only feedback. */

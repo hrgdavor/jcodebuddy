@@ -210,7 +210,9 @@ code or documentation for this repository:
   **This is an instruction to the agent, not a check the build enforces**: how complex a page is,
   is a judgement (DEC-027's amendment, and step 7.10 of [`plans/unified-plan.md`](plans/unified-plan.md)). The classifiable pages today: the entity reference page and the merge summary stay
   vanilla; the per-conflict review render (`plans/unified-plan.md` 4.2, and 4.3's action
-  display) is a `jsx6` page; the hipster-ioc dependency graph (3.8) is `jsx6` + `nodditor`.
+  display) is a `jsx6` page; the entity browser (`project-automation/entity-browser/`) is a `jsx6` page — record
+  navigation, filtering and dependency drill-down are state beyond a document; the hipster-ioc
+  dependency graph (3.8) is `jsx6` + `nodditor`.
   Link targets are paths relative to one
   link base (never absolute), resolved by the page from its own
   `location`, and **every link is verified** (the file exists and
@@ -809,8 +811,14 @@ supersedes the "iterate fast, then verify with the gate" habit **for this scope*
   port, no server to start, nothing to install — and a webview integration is an **enhancement** on top of that,
   never the thing that makes the tool work. This is why the merge review page exports its decisions as a file and
   a CLI applies them instead of posting them to an endpoint (plan step 4.3, and the "one serving host per project"
-  rule above, which that design also respects). A tool that only works when a host happens to be running is not
-  finished; say so rather than shipping it as if it were.
+  rule above, which that design also respects). **Recorded exception (2026-11-16): the entity browser is a
+  served page.** Its source is `project-automation/entity-browser/` (dev-time, checked in, never installed or
+  deployed) and its standalone path is `bun project-automation/entity-browser/src_build/serve.js` (a local
+  loopback server for the built directory); the build writes the runnable page into
+  `<link-base>/.jcodebuddy/metadata/browser/` (DEC-026's derived, ignored metadata subtree). The JetBrains
+  plugin serves the same directory when the HTML is opened from the Project view. The maintainer's instruction is that a local server is acceptable and that a
+  page must not be overcomplicated into one inlined `file://` document to avoid one; the rule's intent — no
+  webview is required for a tool — still holds.
 
 - **`java-watch*` is standalone — no Jackson, no OpenRewrite, nothing else from this workspace.** The rule, as
   given by the maintainer on 2026-10-02:

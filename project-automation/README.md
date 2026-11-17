@@ -6,6 +6,18 @@ project-specific generators, the regeneration watcher, and the
 LSP sidecar wiring. Nothing here ships with the application — a runtime
 app module never depends on this one.
 
+## The entity browser tool
+
+[`entity-browser/`](entity-browser/README.md) is the Bun/jsx6 record browser: it reads a module's
+`.jcodebuddy/index/classes.json`, renders `model.json` and a jsx6 bundle, and writes a runnable page
+directory into `<link-base>/.jcodebuddy/metadata/browser/` (including the standalone `serve.js`).
+Its `build.config.json` is the project-specific setup; changing the page or the resolver is done by
+building here, not by registering a plugin. The output is derived and ignored, and `mvn clean` does not
+touch it.
+
+The entity-browser tool has its own Bun test suite (`cd entity-browser && bun test`); it is deliberately
+outside Maven's test set, like the rest of this dev-time module's non-Java tooling.
+
 ## The regeneration watcher
 
 [`EntityRegenerationWatcher`](src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java)

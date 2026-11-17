@@ -108,20 +108,39 @@ public final class JavacPositions {
      */
     public int memberLine(String owner, String kind, String name, int parameterCount) {
         if ("method".equals(kind) || "constructor".equals(kind)) {
+            JavaSyntaxCheck.MethodPosition constructorWithoutArity = null;
+            int constructorCandidates = 0;
             for (JavaSyntaxCheck.MethodPosition method : methods) {
-                if (!ownerMatches(method.declaringType(), owner) || method.parameterCount() != parameterCount) {
+                if (!ownerMatches(method.declaringType(), owner)) {
                     continue;
                 }
+                boolean named = "constructor".equals(kind)
+                        // javac spells a constructor's name `<init>` in its method positions while the *span*
+                        // walk records the declared name, so the two vocabularies differ on exactly this case.
+                        // Match that spelling or the owner's name, never arity alone: a no-arg method has the
+                        // same arity as a no-arg constructor, and matching only the arity pointed a record's
+                        // canonical constructor at the first zero-argument method in the body (found by the
+                        // entity browser's link check on OrderState, 2026-11-16).
+                        ? "<init>".equals(method.simpleName())
+                            || ownerSimpleName(owner).equals(method.simpleName())
+                        : method.simpleName().equals(name);
+                if (!named) {
+                    continue;
+                }
+                if (method.parameterCount() == parameterCount) {
+                    return method.nameLine();
+                }
                 if ("constructor".equals(kind)) {
-                    // javac spells a constructor's name `<init>` in its method positions while the *span* walk
-                    // records the declared name, so the two vocabularies differ on exactly this case. Matching on
-                    // the owner and the arity is what identifies a constructor: its name is its type's, and two
-                    // constructors differ by arity.
-                    return method.nameLine();
+                    constructorWithoutArity = method;
+                    constructorCandidates += 1;
                 }
-                if (method.simpleName().equals(name)) {
-                    return method.nameLine();
-                }
+            }
+            // A compact record constructor has no parameter list in the source but javac counts the record's
+            // components as its arity, so no exact match exists. The constructor is still identifiable when
+            // the declaration has exactly one: a class with several constructors keeps UNKNOWN_LINE rather
+            // than pointing at the wrong one.
+            if ("constructor".equals(kind) && constructorCandidates == 1) {
+                return constructorWithoutArity.nameLine();
             }
             return UNKNOWN_LINE;
         }
@@ -152,11 +171,25 @@ public final class JavacPositions {
      */
     public TreeQueries.SourceSpan memberSpan(String owner, String kind, String name, int parameterCount) {
         String simpleOwner = ownerSimpleName(owner);
+        JavaSyntaxCheck.MemberSpan constructorWithoutArity = null;
+        int constructorCandidates = 0;
         for (JavaSyntaxCheck.MemberSpan span : spans) {
-            if (ownerMatches(span.owner(), simpleOwner) && span.kind().equals(kind) && span.name().equals(name)
-                    && span.parameterCount() == parameterCount) {
+            if (!ownerMatches(span.owner(), simpleOwner) || !span.kind().equals(kind) || !span.name().equals(name)) {
+                continue;
+            }
+            if (span.parameterCount() == parameterCount) {
                 return new TreeQueries.SourceSpan(span.startOffset(), span.endOffset());
             }
+            if ("constructor".equals(kind)) {
+                constructorWithoutArity = span;
+                constructorCandidates += 1;
+            }
+        }
+        // The compact-record-constructor case of {@link #memberLine}: javac counts the record's components as
+        // the arity of a constructor the source writes with no parameter list.
+        if ("constructor".equals(kind) && constructorCandidates == 1) {
+            return new TreeQueries.SourceSpan(constructorWithoutArity.startOffset(),
+                    constructorWithoutArity.endOffset());
         }
         return null;
     }

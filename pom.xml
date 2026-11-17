@@ -94,6 +94,10 @@
         <module>hipster-entity/hipster-entity-jackson</module>
         <module>hipster-entity/hipster-entity-test</module>
         <module>hipster-entity/hipster-entity-tooling</module>
+        <!-- The hipster-sql generator: dev-time, reads @HipsterEntity interfaces through the engine
+             and writes committed source. The hipster-sql runtime is an external, fixed dependency;
+             this module does not modify it. -->
+        <module>hipster-sql/hipster-sql-tooling</module>
         <!-- The engine, and since 2026-10-03 also the home of the generator SPI (step 3.0i,
              DEC-037 decision 2): what a code generator is, the context it is handed, and how it
              resolves a type. The reason it is a library rather than a project's own is a rule, not a

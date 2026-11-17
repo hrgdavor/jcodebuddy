@@ -13,6 +13,10 @@ source line a reader clicks.
 - **WebView tool window** — displays HTML files in a JCEF (Java Chromium Embedded Framework) browser inside the IDE.
 - **Keyboard shortcut** — toggle the tool window with `Ctrl+Alt+Shift+W`.
 - **Context menu integration** — right-click an `.html` file in the Project view, the editor or an editor tab and choose **Open in WebView Explorer**.
+- **Served HTML pages** — an HTML page is opened over loopback HTTP, not as `file://`, so a page may fetch
+  its own JSON or other same-origin assets. The plugin starts a page server on demand (on an ephemeral port
+  when no bridge port is configured), or uses an existing host named in the settings; see
+  [Served HTML pages](#served-html-pages).
 - **JavaScript bridge** — every loaded page gets `window.openFile(path, line, column)`, which opens the file in an editor, puts the caret on the line and centers it. This is the path the generated entity index uses ([DEC-027 § 7](../../doc-hipster-entity/architecture/decisions/DEC-027.md)).
 - **HTTP bridge (fallback)** — `GET /open?filePath=…&line=…&column=…` for a browser that does not have the injected function. Off until a port is configured, loopback-only, and denied unless the caller is authorized; see [HTTP bridge](#http-bridge).
 - **IDE-styled scrollbars** and a `data:` splash page on first open.
@@ -94,6 +98,27 @@ and is parsed as JSON, so a path containing quotes or the text `"line":` cannot 
 `scripts/entity-html/render.js` feature-detects the function, falls back to the HTTP bridge, and finally
 copies the location to the clipboard.
 
+## Served HTML pages
+
+Right-clicking an HTML file and choosing **Open in WebView Explorer** serves it over loopback HTTP. A
+page that fetches data from its own directory (the entity browser fetches `model.json`) cannot do that
+from `file://`, where the origin is null, so the page route is the normal path rather than an optional
+extra.
+
+- **This IDE's server (default).** The plugin starts a loopback server on demand and opens
+  `http://127.0.0.1:<port>/page/<one-time-token>/<project-relative path>`. The token segment is in the
+  page URL, so the page's relative `browser.js` and `model.json` requests carry it automatically; the
+  file decision is `webview-core`'s `PageServer`, confined to the project root. With no bridge port
+  configured, the operating system picks one; with one configured, that port is used.
+- **An existing host.** Settings → Tools → WebView Explorer → **Existing page server** accepts a base
+  such as `http://127.0.0.1:18884/page/` (what `webviewd --project <root>` serves). The page's project-relative
+  path is appended — that base is the path mapping — and no local server is started.
+- **No host at all.** A page that needs no fetch still opens; a page that does fetches `model.json` and
+  says why if it cannot. A standalone page directory carries its own `serve.js`, so a plain browser can
+  be used without the IDE.
+
+The page route answers `GET` only, sends no CORS grant, and adds `X-Content-Type-Options: nosniff`.
+
 ## HTTP bridge
 
 For a page opened outside the IDE (a plain browser), the plugin can open files over HTTP:
@@ -112,10 +137,12 @@ which is the form the renderer's `--bridge-port` default assumes:
 -Dwebview.explorer.token=<optional shared secret>
 ```
 
-**It is off while the port is empty, it binds to `127.0.0.1` only, and it denies every caller until you
-authorize one.** A caller is authorized by presenting the token (as an `X-WebView-Token` header or a
-`token` query parameter) or an allowed `Origin`. With no token and no origins configured, `/open` answers
-`403` — that is deliberate: the endpoint can open any file in your IDE, so it does not work by accident.
+**It is off while the port is empty, except that opening an HTML page starts the page server on demand
+(on an ephemeral port when none is configured). It binds to `127.0.0.1` only, and it denies every caller
+until you authorize one.** A caller is authorized by presenting the token (as an `X-WebView-Token` header
+or a `token` query parameter) or an allowed `Origin`. A page served by this host also carries its own
+one-time token for `/open`. With no token and no origins configured, `/open` answers `403` — that is
+deliberate: the endpoint can open any file in your IDE, so it does not work by accident.
 
 **The port you configure is a request.** With no `webview.explorer.port` setting and no `-D`, the port this
 checkout is currently on (`.jcodebuddy/webview/host.json` — local, never in git) is asked for first, and
@@ -223,9 +250,10 @@ src/main/java/hr/hrg/jetbrains/webview/
 │   ├── UrlNormalizer.java               # address bar text -> URL
 │   └── WebViewBridge.java               # injects window.openFile, receives its messages
 ├── services/
-│   ├── HttpBridgeService.java           # the /open and /health HTTP fallback
+│   ├── HttpBridgeService.java           # /open, /health and /page/ served pages
+│   ├── ServedPageUrls.java              # page URL and path-mapping rules (pure)
 │   ├── HttpBridgeStartupActivity.java   # starts the bridge when the project opens
-│   └── PluginStateService.java          # per-project state: lastUrl, port, origins, token
+│   └── PluginStateService.java          # per-project state: lastUrl, port, origins, token, pageBaseUrl
 ├── settings/
 │   ├── WebViewSettingsComponent.java    # the form
 │   └── WebViewSettingsConfigurable.java # project configurable, parent "tools"
@@ -239,7 +267,7 @@ src/main/java/hr/hrg/jetbrains/webview/
     └── WebViewToolWindow.java           # the tool window id
 
 src/main/resources/META-INF/plugin.xml   # extensions and actions; identity comes from build.gradle.kts
-src/test/java/…                          # 52 unit tests, no IDE required
+src/test/java/…                          # 60 unit tests, no IDE required
 ```
 
 `WebViewPanel` owns the browser and `WebViewService` owns the panel, so nothing else has to search the

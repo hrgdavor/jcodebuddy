@@ -1,0 +1,6 @@
+# Derived output of the entity browser, ignored here rather than in the root .gitignore so the
+# package states its own shape (the DEC-026 convention for a module that owns derived files):
+#   build/          a local page directory, when --out points here
+#   .tmp-serve-*/   scratch roots the serve test starts and removes
+build/
+.tmp-serve-*/

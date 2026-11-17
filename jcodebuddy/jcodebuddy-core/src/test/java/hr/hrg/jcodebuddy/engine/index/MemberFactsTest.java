@@ -134,6 +134,76 @@ class MemberFactsTest {
     }
 
     @Test
+    void recordComponentsAreMembersInHeaderOrderWithTheirWrittenTypes(@TempDir Path tree) throws IOException {
+        ClassIndex read = indexed(tree, "a/b/OrderState.java", "package a.b;\n\n"
+                + "import java.util.List;\n\n"
+                + "public record OrderState(@Deprecated Long id,\n"
+                + "                         String customer,\n"
+                + "                         List<String> appliedPromotions)\n"
+                + "        implements java.io.Serializable {\n"
+                + "\n"
+                + "    public static final String TYPE = \"Order\";\n"
+                + "\n"
+                + "    public OrderState {\n"
+                + "        customer = customer == null ? \"\" : customer;\n"
+                + "    }\n"
+                + "}\n");
+
+        List<MemberRecord> members = read.row("a.b.OrderState").members();
+        List<MemberRecord> components = members.stream()
+                .filter(member -> member.kind() == MemberRecord.Kind.RECORD_COMPONENT).toList();
+
+        Assertions.assertEquals(List.of("id", "customer", "appliedPromotions"),
+                components.stream().map(MemberRecord::name).toList(),
+                "a record's header components are its structure, in header order — before this the table said "
+                        + "\"this is a record\" and nothing about what it contains");
+        Assertions.assertEquals(List.of("Long", "String", "List<String>"),
+                components.stream().map(MemberRecord::type).toList(),
+                "each component's type is recorded exactly as the header writes it, generics included");
+        Assertions.assertTrue(components.stream().allMatch(component -> component.line() > 0),
+                "with the line each sits on, so a consumer can point at one (DEC-040 D6)");
+        Assertions.assertTrue(components.get(0).annotations().stream()
+                        .anyMatch(annotation -> annotation.name().equals("Deprecated")),
+                "and the component's own annotations, because a header annotation is part of the component");
+        Assertions.assertTrue(components.stream().allMatch(component -> !component.hasInitializer()),
+                "a component is not a field with an initialiser: its value is the constructor's argument");
+        Assertions.assertEquals(List.of("TYPE"),
+                members.stream().filter(member -> member.kind() == MemberRecord.Kind.FIELD)
+                        .map(MemberRecord::name).toList(),
+                "while a static field declared in the body is still a field, after the components");
+    }
+
+    @Test
+    void aRecordWithoutComponentsRecordsAnEmptyListRatherThanNoMembers(@TempDir Path tree) throws IOException {
+        ClassIndex read = indexed(tree, "a/b/Marker.java",
+                "package a.b;\n\npublic record Marker() {\n}\n");
+
+        Assertions.assertEquals(List.of(), read.row("a.b.Marker").members().stream()
+                        .filter(member -> member.kind() == MemberRecord.Kind.RECORD_COMPONENT).toList(),
+                "an empty header is a fact (the record has no components), not a gap in the table");
+    }
+
+    @Test
+    void aCompactConstructorsLineIsNotTheFirstZeroArityMethod(@TempDir Path tree) throws IOException {
+        ClassIndex read = indexed(tree, "a/b/OrderState.java", "package a.b;\n\n"
+                + "public record OrderState(Long id) {\n"
+                + "    public OrderState {\n"
+                + "        id = id == null ? 0L : id;\n"
+                + "    }\n"
+                + "\n"
+                + "    public String key() {\n"
+                + "        return \"\";\n"
+                + "    }\n"
+                + "}\n");
+        MemberRecord constructor = read.row("a.b.OrderState").members().stream()
+                .filter(member -> member.kind() == MemberRecord.Kind.CONSTRUCTOR)
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(4, constructor.line(),
+                "a constructor is matched as javac's <init>, not as the first zero-argument method — the old "
+                        + "arity-only match pointed this compact constructor at key() below it");
+    }
+
+    @Test
     void aFieldCarriesItsInitialiserAndACallableCarriesItsThrowsClauseAndBodyQuestion(@TempDir Path tree)
             throws IOException {
         ClassIndex read = indexed(tree, "a/b/Service.java", "package a.b;\n\n"
@@ -183,13 +253,14 @@ class MemberFactsTest {
 
     @Test
     void theKindSpecificFactsSurviveAWriteAndAReadForEveryMemberKind(@TempDir Path tree) throws IOException {
-        // Round trip over a declaration whose members exercise all five kinds at once, compared field by field
-        // rather than as whole records: the record's equals is not what this test is about, the format is.
+        // Round trip over a declaration whose members exercise every member kind at once, compared field by
+        // field rather than as whole records: the record's equals is not what this test is about, the format is.
         ClassIndex read = indexed(tree, "a/b/Everything.java", "package a.b;\n\n"
                 + "public sealed class Everything permits Nothing {\n"
                 + "    static final String FIELD = \"v\";\n"
                 + "    enum Kind { ONE(1), TWO; Kind() {} Kind(int i) {} }\n"
                 + "    interface Nested {}\n"
+                + "    record Point(int x, int y) {}\n"
                 + "    Everything() throws java.io.IOException {}\n"
                 + "    void call() throws java.io.IOException {}\n"
                 + "}\n");
@@ -217,10 +288,18 @@ class MemberFactsTest {
                         .toList(),
                 "and each one's span came back, which is what carries its arguments: a bare constant slices to "
                         + "its name and a constructed one to the call");
-        Assertions.assertEquals(List.of("Kind", "Nested"),
+        Assertions.assertEquals(List.of("Kind", "Nested", "Point"),
                 row.members().stream().filter(member -> member.kind() == MemberRecord.Kind.NESTED)
                         .map(MemberRecord::name).toList(),
                 "while the declaring type records the nested types it contains, as it always did (including the "
                         + "enum whose constants belong to its own row, not to this one)");
+
+        ClassRecord point = read.row("a.b.Everything.Point");
+        Assertions.assertNotNull(point, "a nested record is its own row");
+        Assertions.assertEquals(List.of("x", "y"),
+                point.members().stream()
+                        .filter(member -> member.kind() == MemberRecord.Kind.RECORD_COMPONENT)
+                        .map(MemberRecord::name).toList(),
+                "and a nested record's components survived the round trip on its own row");
     }
 }

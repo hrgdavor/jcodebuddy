@@ -206,21 +206,31 @@ public final class ClassIndex {
             means the file writes none. The two are different answers, and DEC-040 D4 is the rule that keeps
             them apart.
 
-            ## Reserved, not implemented
-            The directory is a *directory of tables* so these can be added without changing any consumer's
-            contract:
+            ## Extended tables
+            The directory is a *directory of tables*. These depend on more than one file's bytes (resolution,
+            a classpath, or the generator graph), so they are separate from `classes.json` and a tool that
+            only needs file-local facts can ignore them:
 
-            * `generator` — a header value naming the tooling revision and the flags that change output.
-              Defined, not written until something consumes it: the same "options are part of the
-              fingerprint" rule the `hash` header follows.
-            * the dependency edges (`artifacts[].inputs` in a document) — per emitted artifact, the file
-              ids it was generated *from*. That turns the index into the graph an incremental pass needs
-              instead of one it must re-derive by parsing.
+            * `type-refs.json` — resolved type occurrences (`TypeReference`/`TypeReferenceSite`): written
+              form, raw type, resolved FQN, resolution status, how it was resolved, candidates. A consumer
+              links `List<String>` without re-implementing name resolution.
+            * `type-uses.json` — body-level dependency edges (`TypeUseRecord`): method calls, constructor
+              calls and capitalized type references, with owner/member.
+            * `artifacts.json` — generated artifacts (`ArtifactRecord`): artifact FQN/path, generator and
+              version, input FQNs, option names and options hash. This is the graph an incremental pass and
+              a UI need; `generated` on a class row stays a boolean.
+            * `packages.json` — `package-info.java` facts (`PackageRecord`): package name, file, checksum,
+              annotations as written.
+            * `modules.json` — `module-info.java` directives (`ModuleRecord`): name, requires, exports,
+              opens, uses, provides. OpenRewrite's current Java model does not expose a module declaration,
+              so these are read from directive lines and kept as written.
+            * `generator` — still reserved: a run-level tooling revision/flags header. Artifact records
+              carry the per-artifact generator/version/options; the run-level header is not written yet.
             * a pointer in a generated artifact's DEC-021 header naming the class index row it came from
-              — the machine-readable form of DEC-019's navigability rule for generated Java.
+              — still reserved; the machine-readable form of DEC-019's navigability rule for generated Java.
 
-            None of those is written today. `metadata/watch/<toolSet>/metadata.db` remains the watch
-            agent's own cache and is not replaced by this directory.
+            `metadata/watch/<toolSet>/metadata.db` remains the watch agent's own cache and is not replaced
+            by this directory.
 
             This README is tracked and human-owned: the pass creates it when it is absent and never
             overwrites it.
@@ -1464,6 +1474,18 @@ public final class ClassIndex {
                         + unreadable.getMessage() + "), so every row's content will be hashed again");
             }
         }
+    }
+
+    /** Writes the extended tables beside this index. The caller owns what the pass derived. */
+    public void writeExtended(ExtendedMetadataIndex extended) throws IOException {
+        if (extended != null) {
+            extended.write(indexDir);
+        }
+    }
+
+    /** Reads the extended tables beside a module's index directory. */
+    public static ExtendedMetadataIndex readExtended(Path indexDir) throws IOException {
+        return ExtendedMetadataIndex.read(indexDir);
     }
 
     /** A consumer's view of why a table could not be used, for a diagnostic in DEC-022's format. */

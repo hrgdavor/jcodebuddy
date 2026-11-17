@@ -1,0 +1,14 @@
+{
+  "name": "jcodebuddy-entity-browser",
+  "private": true,
+  "type": "module",
+  "description": "A searchable record/entity browser over a module's JCodeBuddy class index. A jsx6 page built by Bun: the class index is the model, the page is presentation, and the output is one self-contained HTML file openable in the JetBrains WebView Explorer.",
+  "scripts": {
+    "build": "bun run src_build/build.js",
+    "serve": "bun run src_build/serve.js",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

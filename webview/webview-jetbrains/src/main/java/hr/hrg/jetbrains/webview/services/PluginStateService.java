@@ -41,6 +41,16 @@ public final class PluginStateService implements PersistentStateComponent<Plugin
         /** Optional shared secret the HTTP bridge requires; empty means only the allow-list applies. */
         public String token = "";
         /**
+         * An existing page host's base URL, or empty to use this IDE's own server.
+         *
+         * <p>This is the **path mapping**: the page's path relative to the project root is appended to
+         * this base. {@code http://127.0.0.1:18884/page/} therefore asks that host for
+         * {@code /page/<project-relative path>}, which is exactly what {@code webviewd --project <root>}
+         * serves. Empty means the plugin starts its own loopback server on demand when an HTML page is
+         * opened from the Project view.</p>
+         */
+        public String pageBaseUrl = "";
+        /**
          * Optional path to the Markdown page generator this project renders with.
          *
          * <p>Empty means "the generator embedded in the plugin", which is the page the Gradle task {@code markdownPage}

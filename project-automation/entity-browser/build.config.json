@@ -1,0 +1,8 @@
+{
+  "modules": ["hipster-entity/hipster-entity-example"],
+  "indexes": [],
+  "linkBase": null,
+  "out": null,
+  "title": null,
+  "bridgePort": 18881
+}

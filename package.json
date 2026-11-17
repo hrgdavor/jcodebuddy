@@ -5,7 +5,8 @@
   "scripts": {
     "inject:examples": "npx --yes @hrg/inject-examples merge-java/docs/resolvers doc-hipster-entity/architecture/materialization-levels.md",
     "check:examples": "npx --yes @hrg/inject-examples --check merge-java/docs/resolvers doc-hipster-entity/architecture/materialization-levels.md",
-    "check:resolver-docs": "bun scripts/check-resolver-docs.js"
+    "check:resolver-docs": "bun scripts/check-resolver-docs.js",
+    "entity-browser": "bun project-automation/entity-browser/src_build/build.js"
   },
   "dependencies": {
     "@hrg/inject-examples": "^1.2.2",

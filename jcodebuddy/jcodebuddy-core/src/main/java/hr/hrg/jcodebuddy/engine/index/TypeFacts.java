@@ -321,8 +321,9 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
     }
 
     /**
-     * What the declaration contains, in source order: its fields, methods, constructors, enum constants and
-     * nested types (plan step 3.0r, DEC-029's member field; enum constants added by DEC-040 D1).
+     * What the declaration contains, in source order: its record components, fields, methods, constructors,
+     * enum constants and nested types (plan step 3.0r, DEC-029's member field; enum constants added by DEC-040
+     * D1, record components 2026-11-16).
      *
      * <p>Two limits remain deliberate, and each is a fact this table has no contract for — so a consumer that
      * needs one asks the parse path rather than reading an absence here as a "no":</p>
@@ -357,6 +358,19 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
         }
         String owner = declaration.getSimpleName();
         List<MemberRecord> members = new ArrayList<>();
+        // A record's components are the parameters of its canonical constructor, and they are the record's
+        // structure: they precede every body member in source, so they are recorded first. Without them a row
+        // says "this is a record" and nothing about what the record contains (added 2026-11-16).
+        if (declaration.getKind() == J.ClassDeclaration.Kind.Type.Record) {
+            List<Statement> primaryConstructor = declaration.getPrimaryConstructor();
+            if (primaryConstructor != null) {
+                for (Statement component : primaryConstructor) {
+                    if (component instanceof J.VariableDeclarations declarations) {
+                        members.addAll(recordComponentsOf(declarations, owner, positions));
+                    }
+                }
+            }
+        }
         for (Statement statement : declaration.getBody().getStatements()) {
             if (statement instanceof J.EnumValueSet constants) {
                 // An enum's constants arrive as ONE statement holding the comma-separated group, not as one
@@ -403,6 +417,37 @@ public record TypeFacts(String fqn, String kind, List<String> modifiers, String 
             }
         }
         return List.copyOf(members);
+    }
+
+    /**
+     * One record header declaration's components: its type, its annotations and its position in the header.
+     *
+     * <p>The header is where a record states its structure, so a component is a member of the record in the
+     * same sense an enum constant is a member of its enum. The compiler materialises each one as a private final
+     * field, which is why javac's position lookup already spells the role {@code record-component}; this table
+     * previously stopped at the body and therefore omitted exactly the list a record exists to declare.</p>
+     *
+     * <p>A component has no initialiser (its value is the constructor's argument), no {@code throws} clause and
+     * no body: those are a field's and a callable's facts, and each stays with the kind that owns it (DEC-040
+     * D1). Its modifiers are recorded as written, which for a normal header is none — Java applies
+     * {@code private final} whether or not the source says it, and this model does not record keywords the
+     * source does not say.</p>
+     */
+    private static List<MemberRecord> recordComponentsOf(J.VariableDeclarations component, String owner,
+                                                         JavacPositions positions) {
+        String type = TreeQueries.typeText(component.getTypeExpression());
+        List<String> modifiers = modifiersOf(component.getModifiers());
+        List<MemberRecord> components = new ArrayList<>(component.getVariables().size());
+        for (J.VariableDeclarations.NamedVariable variable : component.getVariables()) {
+            String name = variable.getSimpleName();
+            components.add(new MemberRecord(name, MemberRecord.Kind.RECORD_COMPONENT, type, List.of(),
+                    modifiers,
+                    annotationsOf(component.getLeadingAnnotations(), positions, owner, name),
+                    false, List.of(), false,
+                    positions.memberLine(owner, MemberRecord.Kind.RECORD_COMPONENT.positionKind(), name, 0),
+                    positions.memberSpan(owner, MemberRecord.Kind.RECORD_COMPONENT.positionKind(), name, 0)));
+        }
+        return components;
     }
 
     /**

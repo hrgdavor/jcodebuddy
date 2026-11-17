@@ -1,5 +1,10 @@
 # WebView Explorer Changelog
 
+## [1.0.1]
+### Added
+- **Served HTML pages.** Right-clicking an HTML file now opens it over loopback HTTP instead of `file://`, so a page can fetch its own same-origin JSON and assets. The plugin starts a page server on demand (ephemeral port when no bridge port is configured) under `/page/<one-time-token>/<project-relative path>`.
+- **Existing page server setting.** Settings → Tools → WebView Explorer → **Existing page server** accepts a base URL such as `http://127.0.0.1:18884/page/`; the project-relative page path is appended as the path mapping, and no local server is started.
+
 ## [Unreleased]
 ### Fixed
 - **The plugin did not start at all**: the tool window failed with `Cannot find suitable constructor for class JcefToolWindowFactory`. The cause was a missing runtime dependency — `com.intellij.modules.jcef` was configured as a compile-only `platformBundledModules` entry and never declared with `<depends>` in `plugin.xml`, so every JCEF type was unresolvable. `PluginDescriptorTest` now guards the declaration.

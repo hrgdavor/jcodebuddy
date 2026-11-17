@@ -52,7 +52,8 @@ public class WebViewSettingsConfigurable implements Configurable {
         String portText = state.port != null ? state.port.toString() : "";
         return !mySettingsComponent.getPortText().equals(portText)
                 || !mySettingsComponent.getAllowedOriginsText().equals(nullToEmpty(state.allowedOrigins))
-                || !mySettingsComponent.getTokenText().equals(nullToEmpty(state.token));
+                || !mySettingsComponent.getTokenText().equals(nullToEmpty(state.token))
+                || !mySettingsComponent.getPageBaseUrlText().equals(nullToEmpty(state.pageBaseUrl));
     }
 
     @Override
@@ -81,6 +82,7 @@ public class WebViewSettingsConfigurable implements Configurable {
 
         state.allowedOrigins = mySettingsComponent.getAllowedOriginsText().trim();
         state.token = mySettingsComponent.getTokenText().trim();
+        state.pageBaseUrl = mySettingsComponent.getPageBaseUrlText().trim();
 
         HttpBridgeService.getInstance(project).restartServer();
         refreshStatus();
@@ -95,6 +97,7 @@ public class WebViewSettingsConfigurable implements Configurable {
         mySettingsComponent.setPortText(state.port != null ? state.port.toString() : "");
         mySettingsComponent.setAllowedOriginsText(nullToEmpty(state.allowedOrigins));
         mySettingsComponent.setTokenText(nullToEmpty(state.token));
+        mySettingsComponent.setPageBaseUrlText(nullToEmpty(state.pageBaseUrl));
         refreshStatus();
     }
 

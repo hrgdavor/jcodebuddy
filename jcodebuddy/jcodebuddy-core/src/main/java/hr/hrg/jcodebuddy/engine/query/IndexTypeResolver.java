@@ -81,7 +81,7 @@ public final class IndexTypeResolver implements TypeResolver {
             }
         }
         return new TypeDefinition(row.fqn(), simpleNameOf(row.fqn()), row.kind(), fields, fieldTypes,
-                row.relations());
+                row.relations(), row.members(), row.annotations(), row.path(), row.line(), row.span());
     }
 
     /**

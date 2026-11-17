@@ -3,6 +3,11 @@ package hr.hrg.jcodebuddy.engine.query;
 import java.util.List;
 import java.util.Map;
 
+import hr.hrg.jcodebuddy.engine.index.MemberRecord;
+import hr.hrg.jcodebuddy.engine.index.TypeAnnotation;
+import hr.hrg.jcodebuddy.engine.index.TypeRelation;
+import hr.hrg.jcodebuddy.engine.source.TreeQueries;
+
 /**
  * What a generator is told about a type it asks for: its name, its kind, the fields it declares, and its
  * supertypes.
@@ -30,6 +35,11 @@ import java.util.Map;
  *                      like every other name this model carries
  * @param relations     the type's supertypes, {@code extends} clause first and then {@code implements}, as
  *                      written; empty for a type that declares none
+ * @param members       the declaration's members, as the class index records them
+ * @param annotations   the declaration's annotations, written as source
+ * @param path          the declaring file, module-relative
+ * @param line          the declaration's start line
+ * @param span          the declaration's character range, or {@code null}
  */
 public record TypeDefinition(
         String qualifiedName,
@@ -37,12 +47,27 @@ public record TypeDefinition(
         String kind,
         List<String> fields,
         Map<String, String> fieldTypes,
-        List<hr.hrg.jcodebuddy.engine.index.TypeRelation> relations
+        List<TypeRelation> relations,
+        List<MemberRecord> members,
+        List<TypeAnnotation> annotations,
+        String path,
+        int line,
+        TreeQueries.SourceSpan span
 ) {
 
     public TypeDefinition {
         fields = fields == null ? List.of() : List.copyOf(fields);
         fieldTypes = fieldTypes == null ? Map.of() : Map.copyOf(fieldTypes);
         relations = relations == null ? List.of() : List.copyOf(relations);
+        members = members == null ? List.of() : List.copyOf(members);
+        annotations = annotations == null ? List.of() : List.copyOf(annotations);
+        path = path == null ? "" : path;
+    }
+
+    /** The pre-member shape, for a caller that only has the older facts. */
+    public TypeDefinition(String qualifiedName, String simpleName, String kind, List<String> fields,
+                          Map<String, String> fieldTypes, List<TypeRelation> relations) {
+        this(qualifiedName, simpleName, kind, fields, fieldTypes, relations, List.of(), List.of(), "", -1,
+                null);
     }
 }
