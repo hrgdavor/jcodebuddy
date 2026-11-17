@@ -2,6 +2,8 @@ package hr.hrg.webview.webviewd;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -92,6 +94,7 @@ public final class WebviewServer implements AutoCloseable {
     private final AllowedOrigins origins;
     private final String token;
     private final Path project;
+    private final Path metadataDir;
     private final int port;
     private final String injectedBridge;
     private final EditorHost host;
@@ -119,6 +122,7 @@ public final class WebviewServer implements AutoCloseable {
         this.token = token;
         this.tokenFile = tokenFile;
         this.project = config.project();
+        this.metadataDir = project.resolve(".jcodebuddy").resolve("metadata");
         this.port = port;
         this.host = host;
         // The transport a page served by this host uses: an image beacon to our own /open, which needs no
@@ -185,6 +189,7 @@ public final class WebviewServer implements AutoCloseable {
         server.createContext("/api/v1/undo", instance::handleUndo);
         server.createContext("/api/v1/redo", instance::handleRedo);
         server.createContext("/api/v1/events", instance::handleEvents);
+        server.createContext("/api/v1/metadata", instance::handleMetadata);
         server.createContext("/", instance::handleIndex);
         server.start();
         return instance;
@@ -549,6 +554,191 @@ public final class WebviewServer implements AutoCloseable {
      * contract exposes to an arbitrary origin. The loop ends when the client goes away, which is reported as an
      * {@link IOException} on write — the normal way a server learns a browser tab closed.
      */
+    /**
+     * {@code /api/v1/metadata}: the shared read-only report metadata contract.
+     *
+     * <p>The publish-side format is written by {@code project-automation/metadata/publish.js}; this is an
+     * independent Java host for the same wire contract. It serves the catalog and small report index, and
+     * streams one targeted event per changed index generation. The page itself and its immutable blobs are
+     * served by the ordinary {@code /page/} route.</p>
+     */
+    private void handleMetadata(HttpExchange exchange) throws IOException {
+        if (!authorize(exchange)) {
+            return;
+        }
+        String path = exchange.getRequestURI().getPath().substring("/api/v1/metadata".length());
+        if ("/catalog".equals(path)) {
+            sendJsonFile(exchange, metadataDir.resolve("catalog.json"));
+            return;
+        }
+        if ("/events".equals(path)) {
+            handleMetadataEvents(exchange);
+            return;
+        }
+        if (path.startsWith("/") && path.endsWith("/index")) {
+            String report = path.substring(1, path.length() - "/index".length());
+            Path reportDir = metadataReport(report);
+            if (reportDir == null) {
+                send(exchange, 404, "text/plain", bytes("Unknown report"));
+                return;
+            }
+            sendJsonFile(exchange, reportDir.resolve("index.json"));
+            return;
+        }
+        send(exchange, 404, "text/plain", bytes("Not Found"));
+    }
+
+    private Path metadataReport(String report) {
+        if (report == null || report.isBlank() || !report.matches("[A-Za-z0-9._-]+")) {
+            return null;
+        }
+        Path root = metadataDir.toAbsolutePath().normalize();
+        // The catalog is the authority for where a report's page/index live; a report may intentionally
+        // share a directory with its page (entity-browser does).
+        Path catalog = root.resolve("catalog.json");
+        if (Files.isRegularFile(catalog)) {
+            try {
+                JsonObject document = GSON.fromJson(Files.readString(catalog, StandardCharsets.UTF_8), JsonObject.class);
+                JsonArray reports = document == null ? null : document.getAsJsonArray("reports");
+                if (reports != null) {
+                    for (var item : reports) {
+                        JsonObject entry = item.getAsJsonObject();
+                        if (!report.equals(entry.has("report") ? entry.get("report").getAsString() : "")) {
+                            continue;
+                        }
+                        String manifest = entry.has("manifest") ? entry.get("manifest").getAsString() : null;
+                        if (manifest != null && manifest.endsWith("/manifest.json")) {
+                            Path resolved = root.resolve(manifest.substring(0, manifest.length()
+                                    - "/manifest.json".length())).normalize();
+                            if (resolved.startsWith(root)) {
+                                return resolved;
+                            }
+                        }
+                    }
+                }
+            } catch (IOException | RuntimeException malformed) {
+                // Fall through to the conventional directory.
+            }
+        }
+        Path reportDir = root.resolve(report).normalize();
+        return reportDir.startsWith(root) ? reportDir : null;
+    }
+
+    private void sendJsonFile(HttpExchange exchange, Path file) throws IOException {
+        if (!Files.isRegularFile(file)) {
+            send(exchange, 404, "text/plain", bytes("Not Found"));
+            return;
+        }
+        send(exchange, 200, "application/json; charset=utf-8",
+                Files.readString(file, StandardCharsets.UTF_8).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void handleMetadataEvents(HttpExchange exchange) throws IOException {
+        String report = query(exchange.getRequestURI()).get("report");
+        Path reportDir = metadataReport(report);
+        if (reportDir == null) {
+            send(exchange, 404, "text/plain", bytes("Unknown report"));
+            return;
+        }
+        Path manifestFile = reportDir.resolve("manifest.json");
+        Path indexFile = reportDir.resolve("index.json");
+        if (!Files.isRegularFile(manifestFile)) {
+            send(exchange, 503, "text/plain", bytes("No metadata manifest for " + report));
+            return;
+        }
+        JsonObject manifest;
+        JsonObject index;
+        try {
+            manifest = GSON.fromJson(Files.readString(manifestFile, StandardCharsets.UTF_8), JsonObject.class);
+            index = GSON.fromJson(Files.readString(indexFile, StandardCharsets.UTF_8), JsonObject.class);
+        } catch (RuntimeException | IOException malformed) {
+            send(exchange, 503, "text/plain", bytes("Cannot read metadata for " + report));
+            return;
+        }
+        String generation = manifest.has("generation") ? manifest.get("generation").getAsString() : "";
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.getResponseHeaders().set("Connection", "keep-alive");
+        exchange.sendResponseHeaders(200, 0);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(": connected\n\n".getBytes(StandardCharsets.UTF_8));
+            out.flush();
+            int keepalive = 0;
+            while (true) {
+                Thread.sleep(250);
+                if (++keepalive >= 60) {
+                    keepalive = 0;
+                    out.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                }
+                JsonObject currentManifest;
+                try {
+                    currentManifest = GSON.fromJson(Files.readString(manifestFile, StandardCharsets.UTF_8),
+                            JsonObject.class);
+                } catch (IOException | RuntimeException missing) {
+                    continue;
+                }
+                if (currentManifest == null || !currentManifest.has("generation")) {
+                    continue;
+                }
+                String nextGeneration = currentManifest.get("generation").getAsString();
+                if (nextGeneration.equals(generation)) {
+                    continue;
+                }
+                JsonObject nextIndex;
+                try {
+                    nextIndex = GSON.fromJson(Files.readString(indexFile, StandardCharsets.UTF_8), JsonObject.class);
+                } catch (IOException | RuntimeException incomplete) {
+                    continue;
+                }
+                JsonObject event = metadataChange(report, index, nextIndex);
+                event.addProperty("generation", nextGeneration);
+                out.write(("id: " + nextGeneration + "\nevent: metadata\ndata: "
+                        + GSON.toJson(event) + "\n\n").getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                generation = nextGeneration;
+                index = nextIndex;
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } catch (IOException clientGone) {
+            // The page closed the stream; that is how a browser tab ends an SSE request.
+        }
+    }
+
+    /** Compare shard hashes; a large unchanged shard is not named again. */
+    private static JsonObject metadataChange(String report, JsonObject previous, JsonObject next) {
+        JsonObject event = new JsonObject();
+        event.addProperty("report", report);
+        JsonArray changed = new JsonArray();
+        JsonArray before = previous == null ? null : previous.getAsJsonArray("shards");
+        JsonArray after = next == null ? null : next.getAsJsonArray("shards");
+        int count = Math.max(before == null ? 0 : before.size(), after == null ? 0 : after.size());
+        for (int index = 0; index < count; index++) {
+            String oldHash = before != null && index < before.size() ? before.get(index).getAsString() : null;
+            String newHash = after != null && index < after.size() ? after.get(index).getAsString() : null;
+            if (!java.util.Objects.equals(oldHash, newHash)) {
+                changed.add(index);
+            }
+        }
+        event.add("changedShards", changed);
+        event.addProperty("indexChanged", !sameIndexMetadata(previous, next));
+        return event;
+    }
+
+    private static boolean sameIndexMetadata(JsonObject left, JsonObject right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        JsonObject a = left.deepCopy();
+        JsonObject b = right.deepCopy();
+        a.remove("shards");
+        b.remove("shards");
+        a.remove("generation");
+        b.remove("generation");
+        return a.equals(b);
+    }
+
     private void handleEvents(HttpExchange exchange) throws IOException {
         if (!authorizeWrite(exchange)) {
             return;

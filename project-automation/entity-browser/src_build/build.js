@@ -21,11 +21,13 @@
  * ignored metadata subtree — a served page is a report, not build tool output — so `mvn clean` does
  * not delete it and no `target/` rule is fought.</p>
  */
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildBrowserModel, formatDiagnostic } from '../src/model.js'
 import { verifySourceLinks } from '../src/verify.js'
+import { publishReport } from '../../metadata/publish.js'
 import { stopwatch, reportDuration } from './timing.js'
 import { esbDef, jsx6Root, libraryAliases } from './esbDef.js'
 
@@ -413,8 +415,9 @@ function runEsbuild(outDir) {
     `--jsx-import-source=${esbDef.jsxImportSource}`,
     `--tsconfig=${join(PACKAGE_ROOT, esbDef.tsconfig)}`,
     '--sourcemap',
+    '--external:@jsx6/jsx6',
+    '--external:@jsx6/jsx-runtime',
     ...Object.entries(esbDef.loader).map(([extension, loader]) => `--loader:${extension}=${loader}`),
-    ...Object.entries(aliases).map(([name, entry]) => `--alias:${name}=${entry}`),
   ]
   const result = Bun.spawnSync(['bunx', ...args], {
     cwd: PACKAGE_ROOT,
@@ -426,11 +429,75 @@ function runEsbuild(outDir) {
   return { bundle, jsx6: root, aliasCount: Object.keys(aliases).length }
 }
 
-function copyShell(outDir) {
+/** A content hash of the jsx6 checkout's library sources, used as the shared asset directory key. */
+function jsx6Hash(root) {
+  const hash = createHash('sha256')
+  const visit = (directory) => {
+    for (const name of readdirSync(directory).sort()) {
+      const file = join(directory, name)
+      const stat = statSync(file)
+      if (stat.isDirectory()) {
+        visit(file)
+      } else {
+        hash.update(relative(root, file).split(sep).join('/'))
+        hash.update('\0')
+        hash.update(readFileSync(file))
+        hash.update('\0')
+      }
+    }
+  }
+  visit(join(root, 'libs'))
+  return hash.digest('hex').slice(0, 16)
+}
+
+/**
+ * Build the jsx6 libraries once under the serving root. The report bundle references these files
+ * through an import map, so changing only page code does not rebuild jsx6, and a second report can
+ * reuse the same content-addressed directory.
+ */
+function buildSharedJsx6(outDir, root) {
+  const hash = jsx6Hash(root)
+  const relativeDir = `assets/jsx6/${hash}`
+  const assetDir = join(outDir, relativeDir)
+  const entries = {
+    '@jsx6/jsx6': join(root, 'libs', 'jsx6', 'index.js'),
+    '@jsx6/jsx-runtime': join(root, 'libs', 'jsx-runtime', 'index.js'),
+  }
+  if (existsSync(join(assetDir, 'jsx6.js'))) {
+    return { hash, relativeDir, assetDir, built: false, count: Object.keys(entries).length }
+  }
+  mkdirSync(assetDir, { recursive: true })
+  for (const [specifier, entry] of Object.entries(entries)) {
+    const name = specifier.slice('@jsx6/'.length)
+    const result = Bun.spawnSync([
+      'bunx', 'esbuild', entry,
+      `--outfile=${join(assetDir, `${name}.js`)}`,
+      '--bundle',
+      '--format=esm',
+      '--sourcemap',
+    ], { cwd: PACKAGE_ROOT, stdio: ['inherit', 'inherit', 'inherit'] })
+    if (result.exitCode !== 0) {
+      throw new Error(`jsx6 shared asset build failed for ${specifier} (exit ${result.exitCode})`)
+    }
+  }
+  return { hash, relativeDir, assetDir, built: true, count: Object.keys(entries).length }
+}
+
+function copyShell(outDir, jsx6Assets) {
   const shell = join(PACKAGE_ROOT, 'index.html')
   const target = join(outDir, 'index.html')
   mkdirSync(outDir, { recursive: true })
-  writeFileSync(target, readFileSync(shell, 'utf8'), 'utf8')
+  const imports = {}
+  for (const name of readdirSync(jsx6Assets.assetDir)) {
+    if (name === 'jsx6.js') {
+      imports['@jsx6/jsx6'] = `./${jsx6Assets.relativeDir}/${name}`
+    } else if (name === 'jsx-runtime.js') {
+      imports['@jsx6/jsx-runtime'] = `./${jsx6Assets.relativeDir}/${name}`
+    }
+  }
+  const importMap = `<script type="importmap">${JSON.stringify({ imports })}</script>`
+  const html = readFileSync(shell, 'utf8').replace('<head>', `<head>\n    ${importMap}`)
+  writeFileSync(target, html, 'utf8')
   return target
 }
 
@@ -443,6 +510,8 @@ function copyRuntime(outDir) {
   const serverSource = join(PACKAGE_ROOT, 'src_build', 'serve.js')
   const server = join(outDir, 'serve.js')
   writeFileSync(server, readFileSync(serverSource, 'utf8'), 'utf8')
+  const metadataServer = join(REPO_ROOT, 'project-automation', 'metadata', 'server.js')
+  writeFileSync(join(outDir, 'metadata-server.js'), readFileSync(metadataServer, 'utf8'), 'utf8')
   writeFileSync(join(outDir, 'README.txt'),
     'Entity browser\n\n'
     + 'Standalone:  bun serve.js\n'
@@ -503,17 +572,29 @@ export function main(argv = process.argv.slice(2)) {
 
   try {
     mkdirSync(outDir, { recursive: true })
-    const modelFile = writeModel(outDir, model)
+    const jsx6Assets = buildSharedJsx6(outDir, jsx6Root(REPO_ROOT))
+    const metadataRoot = dirname(outDir)
+    const published = publishReport({
+      metadataRoot,
+      report: 'entity-browser',
+      title: model.title,
+      model,
+      pageDir: outDir,
+      reportDir: outDir,
+      assets: [jsx6Assets.relativeDir],
+    })
     const build = runEsbuild(outDir)
-    const pageFile = copyShell(outDir)
+    const pageFile = copyShell(outDir, jsx6Assets)
     const serverFile = copyRuntime(outDir)
     if (!options.quiet) {
       console.log(identity())
       console.log(`Indexes: ${indexes.map((index) => displayPath(linkBase, index.file)).join(', ')}`)
       console.log(`Link base: ${displayPath(REPO_ROOT, linkBase)}   page: ${displayPath(REPO_ROOT, pageFile)}`)
-      console.log(`Model: ${displayPath(REPO_ROOT, modelFile)}   bundle: ${displayPath(REPO_ROOT, build.bundle)}`)
+      console.log(`Metadata index: ${displayPath(REPO_ROOT, join(published.reportDir, 'index.json'))}`
+        + `   bundle: ${displayPath(REPO_ROOT, build.bundle)}`)
       console.log(`Server: ${displayPath(REPO_ROOT, serverFile)}`)
-      console.log(`jsx6: ${build.jsx6} (${build.aliasCount} libs aliased)`)
+      console.log(`jsx6 shared: ${jsx6Assets.relativeDir} (${jsx6Assets.built ? 'built' : 'reused'}, `
+        + `${jsx6Assets.count} libs)`)
     }
     console.log(`HTML entity browser written to: ${pageFile}`)
     console.log(`Serve its directory: bun ${displayPath(REPO_ROOT, serverFile)}`)

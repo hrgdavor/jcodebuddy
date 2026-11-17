@@ -18,6 +18,10 @@ touch it.
 The entity-browser tool has its own Bun test suite (`cd entity-browser && bun test`); it is deliberately
 outside Maven's test set, like the rest of this dev-time module's non-Java tooling.
 
+[`metadata/`](metadata/README.md) is the shared build-side publisher and standalone metadata/SSE host:
+it writes the catalog, manifest, index and content-addressed shards, and lets an open page fetch only the
+shards changed by a recompile.
+
 ## The regeneration watcher
 
 [`EntityRegenerationWatcher`](src/main/java/hr/hrg/jcodebuddy/automation/entity/EntityRegenerationWatcher.java)

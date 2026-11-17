@@ -28,29 +28,35 @@ function renderLoadError(error) {
   const title = document.createElement('h1')
   title.textContent = 'The entity model could not be loaded'
   const reason = document.createElement('p')
-  reason.textContent = `Fetching ./model.json failed: ${error instanceof Error ? error.message : String(error)}`
+  reason.textContent = `Fetching the metadata index failed: ${error instanceof Error ? error.message : String(error)}`
   const why = document.createElement('p')
-  why.textContent = 'This page fetches its JSON model, which a file:// page is not allowed to do. '
+  why.textContent = 'This page fetches its JSON metadata, which a file:// page is not allowed to do. '
     + 'Open it through the JetBrains WebView Explorer (right-click the HTML file in the Project view), '
     + 'or serve its directory: bun entity-browser/src_build/serve.js --dir <page directory>.'
   box.append(title, reason, why)
   document.body.replaceChildren(box)
 }
 
-async function loadModel() {
-  try {
-    const response = await fetch('./model.json', { cache: 'no-store' })
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} for ${response.url}`)
-    }
-    return await response.json()
-  } catch (error) {
-    renderLoadError(error)
-    throw error
-  }
+let model
+try {
+  const metadata = await loadMetadata({
+    onChange(next) {
+      model = next
+      bridgePort = model.bridgePort
+      if (state.selected && !model.types[state.selected]) {
+        state.selected = selectedInitial(model, hashFqn())
+        state.trail = []
+      }
+      document.title = model.title
+      renderList()
+      renderDetail()
+    },
+  })
+  model = metadata.model
+} catch (error) {
+  renderLoadError(error)
+  throw error
 }
-
-const model = await loadModel()
 
 // The one-time capability segment of a plugin-served URL. It authenticates the host's `/open` route
 // for a page opened in an ordinary browser, where no `window.openFile` was injected.

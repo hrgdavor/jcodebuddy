@@ -86,8 +86,15 @@ The first run needs `bun install` in this directory (esbuild) and the jsx6 check
 (clone `https://github.com/hrgdavor/jsx6` there, or set `JCODEBUDDY_JSX6_DIR`).
 
 The output defaults to `<link-base>/.jcodebuddy/metadata/browser/` and contains `index.html`,
-`browser.js`, `model.json`, `serve.js` and `README.txt`. It is derived report output under DEC-026's
-ignored metadata subtree, not a committed artifact and not Maven's `target/`.
+`browser.js`, `model.json`, the live metadata files (`manifest.json`, `index.json`, `blobs/`),
+`assets/jsx6/<hash>/`, `serve.js`, `metadata-server.js` and `README.txt`. It is derived report output
+under DEC-026's ignored metadata subtree, not a committed artifact and not Maven's `target/`.
+
+The page loads `index.json` and its content-addressed shard blobs, then subscribes to
+`/api/v1/metadata/events`; a model-only rebuild fetches only the shards named by the event. `model.json`
+remains the static fallback for a page served without the metadata host. The jsx6 libraries live once
+under `assets/jsx6/<hash>/` and are referenced by an import map, so they are not bundled into
+`browser.js` again.
 
 ### Serve it standalone
 
@@ -103,6 +110,18 @@ bun serve.js
 The command prints `http://127.0.0.1:<port>/`; open that. The page fetches `model.json` and loads the
 bundle from the same origin, so no `file://` workaround is involved. `--port` and `--host` are optional;
 the server is loopback-only by default and refuses paths outside the served directory.
+
+The same server exposes the shared metadata read contract:
+
+```text
+GET /api/v1/metadata/catalog
+GET /api/v1/metadata/entity-browser/index
+GET /api/v1/metadata/events?report=entity-browser
+```
+
+It polls the small `manifest.json` and emits one targeted SSE event naming changed shards; it does not
+rewrite or regenerate the page. The Java `webviewd` host may implement the same contract independently —
+the build output and wire format are the shared part.
 
 ### Flags
 

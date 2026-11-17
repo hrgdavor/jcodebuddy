@@ -1,6 +1,7 @@
 # Serving metadata reports live
 
-> **Status: draft for review — 2026-11-17. No implementation is included in this plan.**
+> **Status: implementation started — 2026-11-17.** The M1–M5 standalone/Bun + webviewd vertical slice is
+> in place; the IOC-graph second consumer and the headless page-live gate are the remaining delivery.
 >
 > **Scope.** JCodeBuddy's generated HTML reports become **served, interactive metadata views**:
 > the report shell is built once, the metadata model is fetched at runtime, and a recompile that
@@ -10,6 +11,28 @@
 > **Not in scope.** A general-purpose metadata query language, editing metadata from the browser,
 > WebSockets, or a second visual design. This is the serving/reload contract and the build split that
 > makes it useful.
+>
+> **Accepted decisions (2026-11-17).**
+>
+> 1. **Build pipelines are Bun JavaScript.** Report builds write the catalog, manifest, index, blobs
+>    and shared assets into the proper metadata folder. The **web server may be implemented twice**
+>    (Bun standalone and Java `webviewd`); the wire contract and conformance fixtures are shared, not
+>    the server source. A host is selected at run time.
+> 2. **Large metadata is split into identifiable, content-addressed blobs.** A shard key can be a
+>    type/FQN, a record id, or a deterministic hash bucket. SSE carries changed/removed keys or shard
+>    ids; a page fetches only those blobs, never the whole model.
+> 3. **jsx6 is a content-addressed asset under the serving root** (`assets/jsx6/<hash>/...`), external
+>    to report bundles. Pages reuse it and only rebuild the page-specific code.
+> 4. **The first delivery is M1–M5** for `entity-browser`; the IOC graph follows as the second
+>    consumer.
+>
+> **Implementation progress (2026-11-17).** The M1–M5 vertical slice is in place:
+> `project-automation/metadata/publish.js` writes catalog/manifest/index/blobs atomically,
+> `server.js` serves the standalone read API and targeted SSE, `webviewd` now implements the same read
+> API/SSE contract with catalog-path resolution, the entity-browser page loads index+shards and
+> live-updates changed shards, and jsx6 is built once under `assets/jsx6/<hash>/` with an import map.
+> Remaining: the IOC-graph second consumer, the headless browser live-update gate, and the rollout
+> docs for replacing the old static page flow.
 
 ## 1. The decision this plan implements
 
