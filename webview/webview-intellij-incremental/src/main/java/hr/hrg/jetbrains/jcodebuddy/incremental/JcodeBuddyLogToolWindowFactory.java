@@ -77,15 +77,22 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
             area.setText("");
             area.setCaretPosition(0);
         });
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        toolbar.add(rebuild);
-        toolbar.add(reconnect);
-        toolbar.add(detailedClasspath);
-        toolbar.add(refreshRoots);
-        toolbar.add(refreshErrors);
-        toolbar.add(listRoots);
-        toolbar.add(openLog);
-        toolbar.add(clearLog);
+        JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        actionRow.add(rebuild);
+        actionRow.add(reconnect);
+        actionRow.add(refreshRoots);
+        actionRow.add(refreshErrors);
+
+        JPanel utilityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        utilityRow.add(detailedClasspath);
+        utilityRow.add(listRoots);
+        utilityRow.add(openLog);
+        utilityRow.add(clearLog);
+
+        JPanel toolbar = new JPanel();
+        toolbar.setLayout(new javax.swing.BoxLayout(toolbar, javax.swing.BoxLayout.Y_AXIS));
+        toolbar.add(actionRow);
+        toolbar.add(utilityRow);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(toolbar, BorderLayout.NORTH);
