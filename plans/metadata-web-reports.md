@@ -28,11 +28,11 @@
 >
 > **Implementation progress (2026-11-17).** The M1–M5 vertical slice is in place:
 > `project-automation/metadata/publish.js` writes catalog/manifest/index/blobs atomically,
-> `server.js` serves the standalone read API and targeted SSE, `webviewd` now implements the same read
+> `server.js` serves the standalone read API and targeted SSE, `webviewd` implements the same read
 > API/SSE contract with catalog-path resolution, the entity-browser page loads index+shards and
-> live-updates changed shards, and jsx6 is built once under `assets/jsx6/<hash>/` with an import map.
-> Remaining: the IOC-graph second consumer, the headless browser live-update gate, and the rollout
-> docs for replacing the old static page flow.
+> live-updates changed shards (`metadata-client.test.js` covers the partial update), and jsx6 is built
+> once under `assets/jsx6/<hash>/` with an import map. Remaining: `ETag`/`304`, the IOC-graph second
+> consumer, the headless browser live-update gate, and rollout docs for the old static page flow.
 
 ## 1. The decision this plan implements
 
@@ -46,8 +46,9 @@ A metadata report has two independent lifecycles:
 The **page never has to be regenerated to show new metadata**. A rebuild writes a new model revision;
 the server announces that revision; the page fetches it and re-renders while preserving its UI state.
 
-The metadata server is the **single reader and publisher** of report metadata. The same contract is
-implemented in two hosts:
+The metadata host is a **read-only reader** of report metadata; the build is the publisher. Two host
+implementations are allowed (Bun standalone and Java `webviewd`) because they are selected at run time,
+but they share the same on-disk contract and event shape.
 
 1. **`webviewd`** (and the JetBrains WebView Explorer bridge) is the normal host. It already owns
    page serving, project jailing, tokens, `/api/v1/events` SSE and the fs-meta dependency.
@@ -151,9 +152,9 @@ Under the host’s existing origin/token rules:
 
 | route                                    | meaning                                        |
 | ---------------------------------------- | ---------------------------------------------- |
-| `GET /api/v1/metadata/catalog`           | the report catalog; `ETag` is the catalog hash |
-| `GET /api/v1/metadata/<report>/model`    | current model; `ETag` is the generation        |
-| `GET /api/v1/metadata/<report>/manifest` | optional manifest for diagnostics              |
+| `GET /api/v1/metadata/catalog`           | the report catalog                             |
+| `GET /api/v1/metadata/<report>/index`    | the small index (shard hashes and fixed data)  |
+| `GET /page/...`                          | the page, `index.json` and immutable blobs     |
 | `GET /api/v1/metadata/events`            | metadata SSE stream                            |
 
 - A conditional `If-None-Match` returns `304`; the page keeps its current model.
@@ -163,11 +164,17 @@ Under the host’s existing origin/token rules:
 
 ### 4.3 SSE contract
 
-```text
-id: sha256:9f2c...
-event: metadata
-data: {"report":"entity-browser","generation":"sha256:9f2c...","modelUrl":"/api/v1/metadata/entity-browser/model"}
+```json
+{
+  "report": "entity-browser",
+  "generation": "sha256:9f2c...",
+  "changedShards": [7, 19],
+  "indexChanged": false
+}
 ```
+
+`changedShards` are indexes into `index.shards`; a page fetches only those blobs. `indexChanged` asks
+it to reload the small index for stats/title changes. A large unchanged map is never transferred.
 
 - One event per **coalesced metadata publication**, not one per file write. A short server-side
   debounce (proposed 75–150 ms) turns a multi-file generator write into one event.
@@ -182,9 +189,9 @@ data: {"report":"entity-browser","generation":"sha256:9f2c...","modelUrl":"/api/
 
 A small shared client (proposed `metadata-client.js`) provides:
 
-- initial `catalog` → `manifest` → `model` load;
+- initial `manifest` → `index` → shard load;
 - `EventSource` subscription with reconnect and `Last-Event-ID`;
-- conditional model fetches (`If-None-Match`) and abort of stale fetches;
+- conditional fetches and abort of stale fetches;
 - a `state` update callback so a page keeps search text, selected record, scroll position and
   drill-down state;
 - an explicit `stale`/`error` status instead of silently showing an old model.
@@ -197,14 +204,16 @@ second rendering path.
 The build must stop putting jsx6 into every page bundle:
 
 1. Build jsx6 once into a content-addressed asset, e.g.
-   `.jcodebuddy/metadata/libs/jsx6/<hash>/jsx6.js` (plus any modules it exports).
-2. The report build marks `@jsx6/*` as external and writes an import map into `index.html`, for example:
+   `.jcodebuddy/metadata/browser/assets/jsx6/<hash>/jsx6.js` (plus the JSX runtime).
+2. The report build marks `@jsx6/jsx6` and `@jsx6/jsx-runtime` as external and writes an import map
+   into `index.html`, for example:
    ```html
    <script type="importmap">
-     {"imports":{"@jsx6/":"/libs/jsx6/<hash>/"}}
+     {"imports":{"@jsx6/jsx6":"./assets/jsx6/<hash>/jsx6.js",
+                 "@jsx6/jsx-runtime":"./assets/jsx6/<hash>/jsx-runtime.js"}}
    </script>
    ```
-3. The server serves `/libs/` with immutable cache headers. A second report reuses the same asset.
+3. The host serves the assets with immutable cache headers. A second report reuses the same hash.
 4. A jsx6 source change rebuilds only the shared asset and invalidates by hash; a report change
    rebuilds only that report. The build reports which of the two it did.
 

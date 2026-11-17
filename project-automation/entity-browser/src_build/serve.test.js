@@ -31,7 +31,7 @@ test('serve.js serves the page, its JSON and nested assets, and refuses traversa
   writeFileSync(join(root, 'nested', 'a.js'), 'export const a = 1\n')
   writeFileSync(join(root, '..', 'outside-probe.txt'), 'not served\n')
   const child = Bun.spawn(['bun', SERVE, '--dir', root, '--port', String(port)], {
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', 'ignore', 'inherit'],
   })
   try {
     const page = await waitFor(`http://127.0.0.1:${port}/`)

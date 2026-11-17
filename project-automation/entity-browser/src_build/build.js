@@ -49,8 +49,8 @@ Options:
   --link-base <dir>     directory that data-open paths are relative to — normally the project
                         root the IDE has open (default: the index's module root, or the common
                         ancestor of several module roots)
-  --out <dir>           page directory for index.html, browser.js, model.json and serve.js
-                        (default: <link-base>/.jcodebuddy/metadata/browser)
+  --out <dir>           page directory for index.html, browser.js, manifest/index/blobs,
+                        assets/jsx6 and serve.js (default: <link-base>/.jcodebuddy/metadata/browser)
   --config <file>       project build configuration (default: build.config.json beside this tool)
   --title <text>        page title (default: "<module> — entity browser")
   --bridge-port <n>     WebView Explorer HTTP bridge port for the fallback, 0 to disable
