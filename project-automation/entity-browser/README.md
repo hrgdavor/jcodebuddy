@@ -11,6 +11,11 @@ document (DEC-027's *interactive or advanced* class). It is a **served page dire
 origin. The JetBrains **WebView Explorer** serves that directory over loopback when you right-click the
 HTML file; `serve.js` does the same for a plain browser.
 
+> **Next direction:** [serving metadata reports live](../../plans/metadata-web-reports.md) replaces the
+> static model fetch with a catalog + atomic model revisions + metadata SSE, and externalizes jsx6 into a
+> shared content-addressed asset so a model update does not rebuild the page. This page is the first
+> consumer.
+
 ## Where the tool lives, and where its output lives
 
 - **The tool is committed under `project-automation/entity-browser/`.** It is dev-time code: nothing
