@@ -61,6 +61,9 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         JButton refreshRoots = new JButton("Refresh Roots");
         refreshRoots.setToolTipText("Re-scan modules after a branch/submodule change");
         refreshRoots.addActionListener(event -> service.refreshRoots());
+        JButton refreshErrors = new JButton("Refresh Errors");
+        refreshErrors.setToolTipText("Re-run editor highlighting from the current diagnostics; no compile");
+        refreshErrors.addActionListener(event -> service.refreshErrors());
         JButton listRoots = new JButton("List Roots");
         listRoots.setToolTipText("Log the currently available source roots and outputs");
         listRoots.addActionListener(event -> service.listRoots());
@@ -79,6 +82,7 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         toolbar.add(reconnect);
         toolbar.add(detailedClasspath);
         toolbar.add(refreshRoots);
+        toolbar.add(refreshErrors);
         toolbar.add(listRoots);
         toolbar.add(openLog);
         toolbar.add(clearLog);

@@ -206,6 +206,16 @@ public final class IncrementalBuildService implements Disposable {
         });
     }
 
+    /** Re-runs editor highlighting against the current diagnostic map without compiling or rebuilding. */
+    public void refreshErrors() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project first.", NotificationType.WARNING);
+            return;
+        }
+        log("Refreshing error markers (no compile)");
+        refreshHighlighting();
+    }
+
     /** Re-scans IntelliJ's module model for source roots added/removed by a branch or submodule change. */
     public void refreshRoots() {
         if (!settings.isEnabled()) {

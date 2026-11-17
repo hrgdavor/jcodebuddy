@@ -208,6 +208,7 @@ There are two places to look:
    - **Reconnect fs-meta** — drop the current subscription and retry daemon discovery;
    - **Detailed Classpath** — write every classpath entry for every module to the log on demand;
    - **Refresh Roots** — re-scan IntelliJ's module model after a branch/submodule change;
+   - **Refresh Errors** — re-run editor highlighting from the current diagnostics without compiling;
    - **List Roots** — log every currently available source root and output;
    - **Open Log Folder** — open `.jcodebuddy/cache/incremental-build/` in the system file explorer;
    - **Clear Log** — clear both the pane and `build.log`.
@@ -242,6 +243,7 @@ fs-meta socket: ...
 fs-meta filter: ...
 Batch: changed=[...] deleted=[...]
 Source roots changed: 12 -> 14
+Refreshing error markers (no compile)
 Seed hashes from existing classes in new source root(s)
 Available Java source roots (14):
   MAIN [module] <root> -> <output>
@@ -255,7 +257,8 @@ or submodule update. **List Roots** prints the current list on demand.
 **Rebuild** button. `Restored N diagnostic(s)` means the previous compile's error annotations were loaded
 from the diagnostics state file. Normal classpath lines show counts; use **Detailed Classpath** when the
 per-entry `JAR`/`DIR`/`MISSING` list is needed. Source roots are refreshed from IntelliJ's module model
-automatically; **Refresh Roots** is the manual fallback and **List Roots** prints the current roots.
+automatically; **Refresh Roots** is the manual fallback and **List Roots** prints the current roots. If an
+editor marker looks stale, **Refresh Errors** restarts highlighting without invoking the compiler or rebuilding.
 
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 By default the log reports per-module classpath **counts**. Press **Detailed Classpath** to append each

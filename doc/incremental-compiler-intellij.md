@@ -187,9 +187,9 @@ module classpaths, fs-meta daemon/socket/filter values, batches, compile results
 a full date/time, and the same lines are appended to
 `<project>/.jcodebuddy/cache/incremental-build/build.log`. Its toolbar provides **Rebuild** (compile all
 source roots again), **Reconnect fs-meta** (drop the current subscription and retry daemon discovery),
-**Refresh Roots** (re-scan module roots after a branch/submodule change), **List Roots** (log the current
-source roots and outputs), **Detailed Classpath** (per-entry classpath list), **Open Log Folder** and
-**Clear Log**.
+**Refresh Roots** (re-scan module roots after a branch/submodule change), **Refresh Errors** (restart
+highlighting from the current diagnostics without compiling), **List Roots** (log the current source roots
+and outputs), **Detailed Classpath** (per-entry classpath list), **Open Log Folder** and **Clear Log**.
 
 The same messages are written through IntelliJ's `Logger`, so they also appear in `idea.log`
 (**Help | Show Log in Explorer** on Windows); search for `JCodeBuddy`. Normal startup logs per-module
