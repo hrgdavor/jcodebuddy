@@ -1,7 +1,8 @@
 # Serving metadata reports live
 
-> **Status: implementation started — 2026-11-17.** The M1–M5 standalone/Bun + webviewd vertical slice is
-> in place; the IOC-graph second consumer and the headless page-live gate are the remaining delivery.
+> **Status: M1–M5 complete — 2026-11-17.** The standalone/Bun + webviewd vertical slice, ETag reads,
+> targeted SSE, live entity-browser page and shared jsx6 asset are in place. The IOC-graph second
+> consumer (M6) remains.
 >
 > **Scope.** JCodeBuddy's generated HTML reports become **served, interactive metadata views**:
 > the report shell is built once, the metadata model is fetched at runtime, and a recompile that
