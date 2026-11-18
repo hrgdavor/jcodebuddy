@@ -65,6 +65,8 @@ function writeBlob(reportDir, text) {
  *   pageEntry?: string,
  *   shardCount?: number,
  *   assets?: string[],
+ *   collection?: string,
+ *   collectionKey?: string,
  * }} input
  */
 export function publishReport({
@@ -77,21 +79,40 @@ export function publishReport({
   pageEntry = 'index.html',
   shardCount = 64,
   assets = [],
+  collection = 'types',
+  collectionKey = 'id',
 }) {
   mkdirSync(join(reportDir, 'blobs'), { recursive: true })
 
-  const { types = {}, ...rest } = model
+  const source = model[collection]
+  let entries
+  let order = []
+  if (Array.isArray(source)) {
+    entries = {}
+    for (let index = 0; index < source.length; index += 1) {
+      const item = source[index]
+      const key = String(item?.[collectionKey] ?? item?.id ?? item?.context ?? index)
+      entries[key] = item
+      order.push(key)
+    }
+  } else {
+    entries = source && typeof source === 'object' ? source : {}
+    order = Object.keys(entries)
+  }
   const shards = Array.from({ length: shardCount }, () => ({}))
-  for (const [fqn, value] of Object.entries(types)) {
-    shards[shardOf(fqn, shardCount)][fqn] = value
+  for (const [key, value] of Object.entries(entries)) {
+    shards[shardOf(key, shardCount)][key] = value
   }
   const shardRefs = shards.map((shard) => writeBlob(reportDir, json(shard)))
 
+  const { [collection]: _values, ...rest } = model
   const index = {
     schemaVersion: SCHEMA_VERSION,
     report,
     title,
     ...rest,
+    collection,
+    collectionOrder: order,
     shardCount,
     shards: shardRefs,
     generation: '',

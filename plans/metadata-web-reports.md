@@ -34,10 +34,14 @@
 > live-updates changed shards (`metadata-client.test.js` covers the partial update), and jsx6 is built
 > once under `assets/jsx6/<hash>/` with an import map. `ETag`/`304` is implemented for the metadata
 > catalog/index in both hosts. The headless live-page gate is in
-> [`scripts/check-metadata-live-page.js`](../scripts/check-metadata-live-page.js). Remaining: the IOC-graph
-> second consumer and rollout docs for the old static page flow.
+> [`scripts/check-metadata-live-page.js`](../scripts/check-metadata-live-page.js). The user guide is
+> [`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md). The IOC graph remains an acceptable
+> static report; migrating it is optional follow-up.
 
 ## 1. The decision this plan implements
+
+User-facing hosting, update, fallback and verification instructions are in
+[`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md).
 
 A metadata report has two independent lifecycles:
 
@@ -288,14 +292,17 @@ no `node_modules` and only same-origin assets.
 
 ### M6 — Rollout and fallback (M)
 
-- Make entity-browser the default consumer.
-- Add the IOC graph as the second consumer to prove reuse (same catalog, same SSE client, same shared
-  jsx6 asset).
+- Make entity-browser the default live consumer.
+- **The IOC graph may remain a static `file://` page.** Dynamic is preferred, but a generated report that
+  is already self-contained is acceptable (maintainer, 2026-11-18); migrating it is optional follow-up, not
+  a gate for the entity-browser delivery.
+- If migrated, reuse the same catalog, SSE client and shared jsx6 asset rather than inventing a second
+  runtime.
 - Document the standalone `serve.js` path and the `file://` limitation honestly.
 - Leave old static reports working; migration is additive.
 
-**Gate:** both reports have catalog entries; both update live; a page with no SSE still renders the
-last static model; the docs name which host serves which route.
+**Gate:** entity-browser has a catalog entry and updates live; a page with no SSE still renders the last
+static model; the docs name which host serves which route. The IOC graph's status is stated, not implied.
 
 ### M7 — Verification and cleanup (S)
 

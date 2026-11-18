@@ -111,7 +111,8 @@ The command prints `http://127.0.0.1:<port>/`; open that. The page fetches `mode
 bundle from the same origin, so no `file://` workaround is involved. `--port` and `--host` are optional;
 the server is loopback-only by default and refuses paths outside the served directory.
 
-The same server exposes the shared metadata read contract:
+The same server exposes the shared metadata read contract; the complete hosting and live-update guide is
+[`doc/metadata-report-hosting.md`](../../doc/metadata-report-hosting.md).
 
 ```text
 GET /api/v1/metadata/catalog

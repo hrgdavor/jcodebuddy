@@ -24,34 +24,36 @@ async function loadShard(model, hash) {
   return await getJson(shardUrl(model, hash))
 }
 
-function mergeShard(model, shardKeys, index, shard) {
+function mergeShard(model, shardKeys, index, shard, collection) {
   const current = shardKeys.get(index) ?? new Set()
   const next = new Set(Object.keys(shard))
+  const values = model[collection]
   for (const key of current) {
     if (!next.has(key)) {
-      delete model.types[key]
+      delete values[key]
     }
   }
   for (const [key, value] of Object.entries(shard)) {
-    model.types[key] = value
+    values[key] = value
   }
   shardKeys.set(index, next)
 }
 
-async function loadFromIndex(manifest, index) {
-  const model = { ...index, types: {} }
+async function loadFromIndex(manifest, index, collection) {
+  const model = { ...index, [collection]: {} }
   const shards = await Promise.all((index.shards ?? []).map((hash) => loadShard(model, hash)))
   const shardKeys = new Map()
-  shards.forEach((shard, index) => mergeShard(model, shardKeys, index, shard))
+  shards.forEach((shard, index) => mergeShard(model, shardKeys, index, shard, collection))
   model.report = manifest.report
   model.generation = manifest.generation
   return { model, shardKeys, live: typeof EventSource !== 'undefined' }
 }
 
 /**
+ * @param {{onChange?: (model: object) => void, collection?: string}} [options]
  * @returns {Promise<{model: object, live: boolean, close: () => void}>}
  */
-export async function loadMetadata({ onChange } = {}) {
+export async function loadMetadata({ onChange, collection = 'types' } = {}) {
   let manifest
   try {
     manifest = await getJson('./manifest.json')
@@ -59,7 +61,7 @@ export async function loadMetadata({ onChange } = {}) {
     return { model: await getJson('./model.json'), live: false, close() {} }
   }
   let index = await getJson('./index.json')
-  let { model, shardKeys, live } = await loadFromIndex(manifest, index)
+  let { model, shardKeys, live } = await loadFromIndex(manifest, index, collection)
   let closed = false
   let source = null
   let currentGeneration = manifest.generation
@@ -87,13 +89,13 @@ export async function loadMetadata({ onChange } = {}) {
       try {
         if (change.indexChanged) {
           index = await getJson('./index.json')
-          model = { ...index, types: model.types }
+          model = { ...index, [collection]: model[collection] }
         }
         const changed = Array.isArray(change.changedShards) ? change.changedShards : []
         for (const shardIndex of changed) {
           const hash = index.shards?.[shardIndex]
           if (hash) {
-            mergeShard(model, shardKeys, shardIndex, await loadShard(model, hash))
+            mergeShard(model, shardKeys, shardIndex, await loadShard(model, hash), collection)
           }
         }
         model.report = change.report

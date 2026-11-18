@@ -3,7 +3,9 @@
 This folder is the shared **build-side** contract for live metadata reports. It is dev-time code under
 `project-automation/` and is never installed or shipped as an application artifact.
 
-- `publish.js` splits a report model into a catalog, manifest, index and immutable shard blobs.
+- `publish.js` splits a report model into a catalog, manifest, index and immutable shard blobs. The default
+collection is `types`; `collection`/`collectionKey` let another report publish an array or a differently
+named map (for example `contexts`). The browser client accepts the same `collection` option.
 - `server.js` is the standalone read-only host: static page + metadata API + targeted SSE.
 - `metadata.test.js` covers atomic publication, content-addressed shards and a live SSE change.
 
