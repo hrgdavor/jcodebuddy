@@ -77,7 +77,7 @@ export function publishReport({
   pageDir,
   reportDir = join(metadataRoot, report),
   pageEntry = 'index.html',
-  shardCount = 64,
+  shardCount: requestedShardCount,
   assets = [],
   collection = 'types',
   collectionKey = 'id',
@@ -99,6 +99,10 @@ export function publishReport({
     entries = source && typeof source === 'object' ? source : {}
     order = Object.keys(entries)
   }
+  // Keep shards small enough that a three-item change names three buckets, not a thousand entries, without
+  // creating a file per tiny report. The cap keeps the index and blob count bounded.
+  const shardCount = requestedShardCount
+    ?? Math.min(512, Math.max(64, 2 ** Math.ceil(Math.log2(Math.max(1, order.length / 8)))))
   const shards = Array.from({ length: shardCount }, () => ({}))
   for (const [key, value] of Object.entries(entries)) {
     shards[shardOf(key, shardCount)][key] = value

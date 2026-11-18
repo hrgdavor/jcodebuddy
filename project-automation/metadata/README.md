@@ -32,6 +32,24 @@ this JavaScript source); the build output and event shape are what must agree.
 The index is written after its shards, and the manifest after the index. A reader that sees a new
 manifest can fetch a consistent index; a shard is never modified in place.
 
+## Change-event size
+
+One generation change produces **one** SSE event. Do not emit one event per changed type, file or metadata
+entry.
+
+- `changedShards` is O(number of changed shards), at most 512 indexes.
+- `indexChanged` is a boolean; when true the page fetches the small `index.json` whole.
+- The large collection is never in the event and is never re-sent as a whole.
+
+The shard is the granularity. The publisher uses between 64 and 512 deterministic hash buckets, growing with
+the collection size (roughly one bucket per eight entries); changing three types names at most three
+buckets, not 1000 entries. The small index is deliberately sent whole when `indexChanged` is true — there
+is no per-entry metadata event.
+
+If a consumer needs finer UI updates than a shard, the next step is to compare the fetched old/new shard and
+update only the changed keys, not to make the wire event per-entry. That is a page concern and does not
+change this contract.
+
 ## SSE event
 
 ```json
@@ -47,9 +65,10 @@ manifest can fetch a consistent index; a shard is never modified in place.
 keys; `indexChanged` asks it to reload the small index for stats/title changes. Unchanged large maps are
 not transferred.
 
-The shard is the granularity. A report model with 1000 types is split into 64 hash buckets; changing three
-types names at most three buckets, not 1000 entries. The small index is deliberately sent whole when
-`indexChanged` is true — there is no per-entry metadata event.
+The shard is the granularity. The publisher uses between 64 and 512 deterministic hash buckets, growing with
+the collection size (roughly one bucket per eight entries); changing three types names at most three
+buckets, not 1000 entries. The small index is deliberately sent whole when `indexChanged` is true — there
+is no per-entry metadata event.
 
 Catalog and index responses carry an `ETag`; a conditional `If-None-Match` returns `304`. Blobs are
 immutable and cache for a year.

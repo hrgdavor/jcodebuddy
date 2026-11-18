@@ -108,6 +108,30 @@ test('the metadata host serves report, source and lib namespaces from one site r
   }
 })
 
+test('large collections get more shards automatically', () => {
+  const root = mkdtempSync(join(REPO_ROOT, '.tmp', 'metadata-shards-'))
+  try {
+    const metadataRoot = join(root, 'metadata')
+    const reportDir = join(metadataRoot, 'test')
+    const types = {}
+    for (let index = 0; index < 1000; index += 1) {
+      types[`demo.Type${index}`] = { name: `Type${index}`, kind: 'record' }
+    }
+    publishReport({
+      metadataRoot,
+      report: 'test',
+      title: 'test',
+      model: { ...model('one'), types, stats: { ...model('one').stats, types: 1000 } },
+      pageDir: reportDir,
+      reportDir,
+    })
+    const index = JSON.parse(readFileSync(join(reportDir, 'index.json'), 'utf8'))
+    assert.equal(index.shards.length, 128, '1000 types use 128 buckets instead of 64')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('a three-type change sends only those shard ids, not all 64', async () => {
   const root = mkdtempSync(join(REPO_ROOT, '.tmp', 'metadata-sse-1000-'))
   try {
