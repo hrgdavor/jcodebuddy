@@ -206,13 +206,12 @@ public final class HostConfig {
     }
 
     /**
-     * An authored project-automation server that owns {@code /app}, {@code /source}, {@code /lib},
-     * {@code /reports} and {@code /api/v1/metadata}.
+     * An authored project-automation server that owns the app content and its data.
      *
-     * <p>When present the IDE host still binds its own loopback port for the editor API
-     * ({@code /open}, {@code /api/v1/applyEdit}, ...), opens the app from that port, and proxies the
-     * authored-server namespaces to this base URL. That keeps the page same-origin with the IDE API while
-     * the page and its data come from the project's own automation server.</p>
+     * <p>When present the IDE host still binds its own loopback port for the editor API and the standard
+     * namespaces ({@code /source}, {@code /lib}, {@code /reports}, {@code /api/v1/metadata}), opens the app
+     * from that port, and proxies only {@code /app/} to this base URL. A custom server may also implement
+     * the standard namespaces for standalone use, but a webview never requires that.</p>
      */
     public record CustomServer(String baseUrl, String problem) {
 

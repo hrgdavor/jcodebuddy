@@ -1,5 +1,8 @@
 package hr.hrg.jetbrains.webview.services;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.components.Service;
@@ -541,6 +544,21 @@ public final class HttpBridgeService {
             return;
         }
 
+        if (path != null && path.startsWith("/lib/")) {
+            handleLib(exchange, path, origin);
+            return;
+        }
+
+        if (path != null && path.startsWith("/reports/")) {
+            handleReports(exchange, path, origin);
+            return;
+        }
+
+        if (path != null && path.startsWith("/api/v1/metadata/")) {
+            handleMetadata(exchange, path, origin);
+            return;
+        }
+
         if (path != null && path.startsWith(WRITE_PREFIX)) {
             handleWrite(exchange, path);
             return;
@@ -595,6 +613,210 @@ public final class HttpBridgeService {
         }
     }
 
+    /** {@code GET /lib/...} — the project's shared metadata lib, read-only. */
+    private void handleLib(@NotNull HttpExchange exchange, @NotNull String path, String origin)
+            throws IOException {
+        if (!isAuthorized(exchange, origin) || !"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, isAuthorized(exchange, origin) ? 405 : 403, "Forbidden", "text/plain");
+            return;
+        }
+        serveMetadataFile(exchange, metadataDirectory().resolve("lib"), path.substring("/lib/".length()));
+    }
+
+    /** {@code GET /reports/<id>/...} — generated report pages and their metadata, read-only. */
+    private void handleReports(@NotNull HttpExchange exchange, @NotNull String path, String origin)
+            throws IOException {
+        if (!isAuthorized(exchange, origin)) {
+            send(exchange, 403, "Forbidden", "text/plain");
+            return;
+        }
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+        String rest = path.substring("/reports/".length());
+        int slash = rest.indexOf('/');
+        String id = slash < 0 ? rest : rest.substring(0, slash);
+        Path dir = reportDirectory(id);
+        if (dir == null) {
+            send(exchange, 404, "Unknown report", "text/plain");
+            return;
+        }
+        String relative = slash < 0 ? "index.html" : rest.substring(slash + 1);
+        serveMetadataFile(exchange, dir, relative);
+    }
+
+    /** The catalog/index part of the standard metadata contract. */
+    private void handleMetadata(@NotNull HttpExchange exchange, @NotNull String path, String origin)
+            throws IOException {
+        if (!isAuthorized(exchange, origin)) {
+            send(exchange, 403, "Forbidden", "text/plain");
+            return;
+        }
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+        String rest = path.substring("/api/v1/metadata/".length());
+        if (rest.equals("catalog")) {
+            serveMetadataFile(exchange, metadataDirectory(), "catalog.json");
+            return;
+        }
+        if (rest.equals("events")) {
+            handleMetadataEvents(exchange, exchange.getRequestURI().getQuery());
+            return;
+        }
+        if (rest.endsWith("/index")) {
+            String id = rest.substring(0, rest.length() - "/index".length());
+            Path dir = reportDirectory(id);
+            if (dir == null) {
+                send(exchange, 404, "Unknown report", "text/plain");
+                return;
+            }
+            serveMetadataFile(exchange, dir, "index.json");
+            return;
+        }
+        send(exchange, 404, "Not Found", "text/plain");
+    }
+
+    private void handleMetadataEvents(@NotNull HttpExchange exchange, String query) throws IOException {
+        String report = null;
+        if (query != null) {
+            for (String part : query.split("&")) {
+                if (part.startsWith("report=")) {
+                    report = URLDecoder.decode(part.substring("report=".length()), StandardCharsets.UTF_8);
+                }
+            }
+        }
+        Path dir = reportDirectory(report == null ? "" : report);
+        if (dir == null) {
+            send(exchange, 404, "Unknown report", "text/plain");
+            return;
+        }
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(200, 0);
+        String reportId = report;
+        Thread.ofVirtual().start(() -> streamMetadataEvents(exchange, dir, reportId));
+    }
+
+    /**
+     * Polls the local manifest and writes one event per generation. The event names every shard when the
+     * generation changes; a page still fetches only the shards it is told about, and a larger host may
+     * narrow that set.
+     */
+    private void streamMetadataEvents(HttpExchange exchange, Path dir, String report) {
+        String last = "";
+        long keepalive = 0;
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(": connected\n\n".getBytes(StandardCharsets.UTF_8));
+            out.flush();
+            while (true) {
+                String generation = "";
+                int shards = 0;
+                try {
+                    JsonObject manifest = JsonParser.parseString(
+                            Files.readString(dir.resolve("manifest.json"), StandardCharsets.UTF_8)).getAsJsonObject();
+                    generation = manifest.has("generation") ? manifest.get("generation").getAsString() : "";
+                    JsonObject index = JsonParser.parseString(
+                            Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8)).getAsJsonObject();
+                    if (index.has("shards") && index.get("shards").isJsonArray()) {
+                        shards = index.getAsJsonArray("shards").size();
+                    }
+                } catch (IOException | RuntimeException ignored) {
+                    // The manifest is replaced atomically; a torn read is retried on the next tick.
+                }
+                if (!generation.isEmpty() && !generation.equals(last)) {
+                    StringBuilder changed = new StringBuilder();
+                    for (int i = 0; i < shards; i++) {
+                        if (i > 0) {
+                            changed.append(',');
+                        }
+                        changed.append(i);
+                    }
+                    String event = "id: " + generation + "\nevent: metadata\ndata: {\"report\":\""
+                            + (report == null ? "" : report.replace("\"", "\\\""))
+                            + "\",\"generation\":\"" + generation.replace("\"", "\\\"")
+                            + "\",\"changedShards\":[" + changed + "],\"indexChanged\":true}\n\n";
+                    out.write(event.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                    last = generation;
+                }
+                if (++keepalive % 60 == 0) {
+                    out.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                }
+                Thread.sleep(250);
+            }
+        } catch (IOException | InterruptedException ignored) {
+            // The browser closed the stream, or the host is stopping.
+        }
+    }
+
+    private Path metadataDirectory() {
+        String base = project.getBasePath();
+        return base == null ? Path.of(".jcodebuddy/metadata") : Path.of(base, ".jcodebuddy", "metadata");
+    }
+
+    @Nullable
+    private Path reportDirectory(@Nullable String id) {
+        if (id == null || id.isBlank() || !id.matches("[A-Za-z0-9._-]+")) {
+            return null;
+        }
+        try {
+            Path catalog = metadataDirectory().resolve("catalog.json");
+            if (Files.isRegularFile(catalog)) {
+                JsonObject root = JsonParser.parseString(Files.readString(catalog, StandardCharsets.UTF_8))
+                        .getAsJsonObject();
+                for (JsonElement element : root.getAsJsonArray("reports")) {
+                    JsonObject entry = element.getAsJsonObject();
+                    if (id.equals(entry.has("report") ? entry.get("report").getAsString() : "")) {
+                        String manifest = entry.has("manifest") ? entry.get("manifest").getAsString() : "";
+                        int slash = manifest.lastIndexOf('/');
+                        if (slash > 0) {
+                            return metadataDirectory().resolve(manifest.substring(0, slash));
+                        }
+                    }
+                }
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // Fall through to the direct report directory.
+        }
+        Path direct = metadataDirectory().resolve(id);
+        return Files.isDirectory(direct) ? direct : null;
+    }
+
+    private void serveMetadataFile(@NotNull HttpExchange exchange, @NotNull Path root, @NotNull String relative)
+            throws IOException {
+        PageServer current = pageServer;
+        if (current == null) {
+            send(exchange, 404, "No page server is running", "text/plain");
+            return;
+        }
+        String path = relative.isEmpty() ? "index.html" : relative;
+        if (path.endsWith("/")) {
+            path += "index.html";
+        }
+        String projectRelative = projectRelativeOf(root.resolve(path).normalize());
+        if (projectRelative == null) {
+            send(exchange, 404, "Not Found", "text/plain");
+            return;
+        }
+        PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + projectRelative, null);
+        sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());
+    }
+
+    @Nullable
+    private String projectRelativeOf(Path file) {
+        String base = project.getBasePath();
+        if (base == null) {
+            return null;
+        }
+        Path root = Path.of(base).toAbsolutePath().normalize();
+        Path target = file.toAbsolutePath().normalize();
+        return target.startsWith(root) ? root.relativize(target).toString().replace('\\', '/') : null;
+    }
+
     /**
      * {@code GET /app/?openFile=<project-relative>} and its assets. The app is derived output in
      * {@code .jcodebuddy/app}; the query is read by the app, not the host.
@@ -647,11 +869,9 @@ public final class HttpBridgeService {
         if (path == null) {
             return false;
         }
-        return path.equals("/app") || path.startsWith("/app/")
-                || path.startsWith("/source/")
-                || path.startsWith("/lib/")
-                || path.startsWith("/reports/")
-                || path.startsWith("/api/v1/metadata/");
+        // Only the app content is the custom server's. /source, /lib, /reports and /api/v1/metadata are the
+        // webview host's standard contract and stay local even when a custom server is configured.
+        return path.equals("/app") || path.startsWith("/app/");
     }
 
     /**

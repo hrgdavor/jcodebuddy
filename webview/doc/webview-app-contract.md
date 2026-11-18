@@ -85,15 +85,25 @@ The project chooses the second in `.jcodebuddy/conf/webview.json`:
 }
 ```
 
-- **No `customServer`** — the webview host serves its own page/data namespaces.
+- **No `customServer`** — the webview host serves the app from `.jcodebuddy/app`.
 - **`customServer` present** — the webview host still binds its own loopback **editor API** port, opens
-  `/app/?openFile=...` from that port, and proxies `/app/`, `/source/`, `/lib/`, `/reports/` and
-  `/api/v1/metadata/` to the custom base. `/open`, `/health` and the edit/undo routes stay local.
+  `/app/?openFile=...` from that port, and proxies only **`/app/`** to the custom base.
 
-That proxy is the point of the split: the app is same-origin with the IDE bridge, so `window.openFile`,
-`fetch('/source/...')` and `POST /api/v1/applyEdit` all work while the page and data come from the
-project-automation server. A custom server never implements the editor API and a host never reimplements
-the project-automation server.
+`/source/`, `/lib/`, `/reports/` and `/api/v1/metadata/` are the **webview host's standard contract**.
+They stay local even with a custom server, because every editor/webview must provide them and the app is
+same-origin with the editor API. A custom server may implement the same standard namespaces for standalone
+use (the `project-automation/metadata` base is the reference), but a webview does not require it to.
+
+The split is therefore:
+
+| Namespace                                             | Owner when a webview is present |
+| ----------------------------------------------------- | ------------------------------- |
+| `/app/`                                               | custom server, proxied by host  |
+| `/source/`, `/lib/`, `/reports/`, `/api/v1/metadata/` | webview host (standard)         |
+| `/open`, `/health`, `/api/v1/applyEdit`, undo/redo    | webview host (editor)           |
+
+The custom server can be just an app build and its own data; it never has to implement the editor API,
+and it does not have to duplicate `/source`, `/reports` or metadata when a webview is there.
 
 `customServer` is committed configuration; the port the host actually bound remains local state in
 `.jcodebuddy/webview/host.json`.

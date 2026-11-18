@@ -56,11 +56,13 @@ both. The choice is committed configuration in `.jcodebuddy/conf/webview.json`:
 
 - without `customServer`, the webview host serves `/app`, `/source`, `/lib`, `/reports` itself;
 - with `customServer`, it still starts its **own editor API port**, opens `/app/` from that port and
-  proxies `/app`, `/source`, `/lib`, `/reports` and `/api/v1/metadata` to the custom base. `/open`,
-  `/health` and the edit routes stay local, so jumps and buffered edits keep working.
+  proxies only `/app` to the custom base. `/source`, `/lib`, `/reports` and `/api/v1/metadata` stay on
+  the webview host as its standard contract; `/open`, `/health` and the edit routes stay local too.
 
-The custom server implements the project-automation contract; the webview host keeps the editor contract.
-The page is same-origin with both because the host is the URL the webview opens.
+The custom server implements the app and its data. It may also implement the standard `/source`,
+`/reports` and metadata namespaces for standalone editors (the `project-automation/metadata` host is the
+reference), but a webview does not require it to. The page is same-origin with both because the host is
+the URL the webview opens.
 
 An authored UI can be an elaborate application over these namespaces without becoming a report root.
 The exact `/app/?openFile=<project-relative>` URL, the `/source` read it triggers, and the reserved future
