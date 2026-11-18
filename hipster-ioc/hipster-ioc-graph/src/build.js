@@ -28,6 +28,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { classRows, joinLocations } from './locations.js'
+import { publishReport } from '../../../project-automation/metadata/publish.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PACKAGE = join(HERE, '..')
@@ -56,7 +57,9 @@ const NODDITOR_CSS = join(JSX6, 'apps', 'nodditor', 'static', 'nodditor.css')
  * rather than concatenated, because each one imports the others by name: concatenation would produce
  * one module with two copies of every import, which the JSX transform then sees as duplicate bindings.
  */
-export const SOURCE_FILES = ['src/model.js', 'src/locations.js', 'src/navigate.js', 'src/blocks.js', 'src/host.jsx', 'src/main.js']
+export const SOURCE_FILES = ['src/model.js', 'src/locations.js', 'src/navigate.js', 'src/blocks.js', 'src/host.jsx', 'src/main.js', 'src/static-entry.js']
+const LIVE_SOURCE_FILES = ['src/model.js', 'src/locations.js', 'src/navigate.js', 'src/blocks.js', 'src/host.jsx', 'src/main.js', 'src/live-entry.js']
+const CLIENT_SOURCE = '../../project-automation/entity-browser/src/metadata-client.js'
 
 /** The bundle's staging home inside the checkout — ignored by both trees, and never `target/`. */
 export function stagingDir() {
@@ -93,7 +96,7 @@ function run(command, args, options = {}) {
  * <p>The join is already made by the caller and arrives here, so the graph the bundle inlines is the same one
  * `main` reports on — reading it twice would let the report describe a different pass than the page.</p>
  */
-export function bundle({ contexts, joined } = {}) {
+export function bundle({ contexts, joined, live = false } = {}) {
   if (!existsSync(JSX6)) {
     throw new Error(`no jsx6 checkout at ${JSX6} — clone https://github.com/hrgdavor/jsx6 there, `
       + 'or set JCODEBUDDY_JSX6_DIR (AGENTS.md § 2)')
@@ -105,13 +108,18 @@ export function bundle({ contexts, joined } = {}) {
   mkdirSync(staging, { recursive: true })
   // The sources are copied to a flat directory, so their relative imports (`./host.jsx`) resolve there
   // exactly as they do here, and the bare `@jsx6/*` specifiers resolve through the checkout.
-  for (const name of SOURCE_FILES) {
+  for (const name of live ? LIVE_SOURCE_FILES : SOURCE_FILES) {
     copyFileSync(join(PACKAGE, name), join(staging, name.split('/').pop()))
   }
+  if (live) {
+    copyFileSync(join(PACKAGE, CLIENT_SOURCE), join(staging, 'metadata-client.js'))
+  }
   const entry = join(staging, 'entry.jsx')
-  writeFileSync(entry, entrySourceOf(), 'utf8')
-  writeFileSync(join(staging, 'contexts.js'),
-    contextsModule(placed.contexts ?? graph, placed.locations ?? {}, placed.locationless ?? []), 'utf8')
+  writeFileSync(entry, live ? "import './live-entry.js'\n" : "import './static-entry.js'\n", 'utf8')
+  if (!live) {
+    writeFileSync(join(staging, 'contexts.js'),
+      contextsModule(placed.contexts ?? graph, placed.locations ?? {}, placed.locationless ?? []), 'utf8')
+  }
 
   const result = run('bun', buildArgs(entry, staging), { cwd: JSX6 })
   if (result.status !== 0) {
@@ -128,7 +136,7 @@ export function bundle({ contexts, joined } = {}) {
  * rather than a line's.
  */
 export function entrySourceOf() {
-  return "import './main.js'\n"
+  return "import './static-entry.js'\n"
 }
 
 /**
@@ -222,34 +230,57 @@ function main() {
   const check = process.argv.includes('--check')
   const projectArg = process.argv.find((arg) => arg.startsWith('--project='))
   const project = projectArg ? projectArg.slice('--project='.length) : process.env.JCODEBUDDY_PROJECT_DIR
-  const { script, joined } = build({ project })
+  const { script, liveScript, joined } = build({ project })
   const page = html(script, styles())
+  const livePage = html(liveScript, styles())
   if (joined.locationless.length > 0) {
     // Reported, not dropped (DEC-049 decision 3): a name the index cannot answer is the page's own line to
     // say, and the build says it too, so a join that silently resolved nothing is visible here.
     console.log(`reported ${joined.locationless.length} name(s) with no location: ${joined.locationless.join(', ')}`)
   }
   if (check) {
-    const existing = existsSync(join(OUTPUT_DIR, 'graph.html'))
-      ? readFileSync(join(OUTPUT_DIR, 'graph.html'), 'utf8')
-      : null
-    if (existing !== page) {
-      console.error('graph.html is not what this build would write — re-run without --check')
-      process.exit(1)
+    for (const [name, expected] of [['graph.html', page], ['live.html', livePage]]) {
+      const file = join(OUTPUT_DIR, name)
+      const existing = existsSync(file) ? readFileSync(file, 'utf8') : null
+      if (existing !== expected) {
+        console.error(`${name} is not what this build would write — re-run without --check`)
+        process.exit(1)
+      }
     }
-    console.log(`ok       graph.html is current (${page.length} bytes)`)
+    console.log(`ok       graph.html and live.html are current`)
     return
   }
   mkdirSync(OUTPUT_DIR, { recursive: true })
   writeFileSync(join(OUTPUT_DIR, 'graph.html'), page, 'utf8')
-  console.log(`written  ${join(OUTPUT_DIR, 'graph.html')} (${page.length} bytes, script ${script.length})`)
+  writeFileSync(join(OUTPUT_DIR, 'live.html'), livePage, 'utf8')
+  const model = {
+    title: 'hipster-ioc — context dependency graph',
+    contexts: joined.contexts,
+    locations: joined.locations,
+    locationless: joined.locationless,
+  }
+  publishReport({
+    metadataRoot: dirname(OUTPUT_DIR),
+    report: 'hipster-ioc',
+    title: model.title,
+    model,
+    pageDir: OUTPUT_DIR,
+    reportDir: OUTPUT_DIR,
+    pageEntry: 'live.html',
+    collection: 'contexts',
+    collectionKey: 'context',
+  })
+  console.log(`written  ${join(OUTPUT_DIR, 'graph.html')} (static)`)
+  console.log(`written  ${join(OUTPUT_DIR, 'live.html')} (live metadata, script ${liveScript.length})`)
 }
 
 /** The bundle and the join it was built from, so `main` can report what it could not place. */
 function build(options) {
   const contexts = readContexts()
   const joined = readLocations(contexts, options)
-  return { script: bundle({ contexts, joined }), joined }
+  const script = bundle({ contexts, joined })
+  const liveScript = bundle({ contexts, joined, live: true })
+  return { script, liveScript, joined }
 }
 
 if (import.meta.main) {

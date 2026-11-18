@@ -28,6 +28,11 @@ one self-contained file: the script and both stylesheets are inlined, and the gr
 too, so nothing is fetched at view time (DEC-027's "no network" rule, and the maintainer's "a UI must
 be usable standalone even without webview").
 
+The build also writes **`live.html`**. It renders the same graph from the shared metadata contract
+(manifest/index/blobs + targeted SSE); serve the directory with the metadata host or open it through
+`webviewd`. A metadata change updates the live page without rebuilding or reloading it. `graph.html`
+remains the static fallback.
+
 | file                    | what it is                                                                                          |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
 | `src/model.js`          | the projection of the generator's JSON: contexts, beans, the lines between them, and the joined locations. A dependency naming a context that is not in the file is **reported, never drawn** |

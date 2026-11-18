@@ -143,7 +143,9 @@ The headless script needs a built page and Chrome/Edge; it skips with exit 0 whe
 ## Migration notes
 
 - Entity browser is migrated.
-- The `hipster-ioc` graph remains a self-contained `file://` page while its second-consumer migration is
-  scheduled; it must not be described as live until that migration lands.
+- The IOC graph now has a live `live.html` built from the same manifest/index/SSE contract; `graph.html`
+  remains the self-contained `file://` fallback. The graph still carries its nodditor runtime in its own
+  bundle because it is a self-contained graph editor.
 - Other reports can adopt `publishReport` and `loadMetadata` without a new server: the on-disk contract and
   event shape are the shared part.
+- `model.json` remains the static fallback for a page without the live host.

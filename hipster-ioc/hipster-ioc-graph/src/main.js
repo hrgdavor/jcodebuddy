@@ -14,13 +14,12 @@
 import { insert } from '@jsx6/jsx6'
 import { NodeEditor } from '@jsx6/nodditor'
 
-import contexts from './contexts.js'
 import { GraphShell } from './host.jsx'
 import { typeMap } from './blocks.js'
 import { layout, readGraph } from './model.js'
 import { canNavigate, locationOfElement, openLocation } from './navigate.js'
 
-async function boot() {
+export async function bootGraph(contexts) {
   const mount = document.getElementById('graph-root')
   if (!mount) {
     return
@@ -30,8 +29,9 @@ async function boot() {
   // `build.js` for the measured reason (`file://` refuses a sibling fetch, and DEC-027 requires this
   // page to be usable standalone — no host, no server, nothing to start).
   // The placeholder in the built HTML is for the instant before the script runs; clearing it keeps it
-  // from sitting above the shell forever.
-  mount.textContent = ''
+  // from sitting above the shell forever. A live model update re-enters this function, so replace
+  // (rather than append) the previous graph.
+  mount.replaceChildren()
 
   const graph = readGraph(contexts)
   const select = (context) => {
@@ -42,13 +42,13 @@ async function boot() {
   // One listener for every navigable element in the page: the blocks, their implementations and their
   // beans, plus the sidebar's per-context "source" buttons. `closest` walks up from whatever was clicked,
   // so a click on a nested span still finds the element that carries the target.
-  mount.addEventListener('click', (event) => {
+  mount.onclick = (event) => {
     const target = event.target?.closest?.('[data-location]')
     const location = locationOfElement(target)
     if (location) {
       openLocation(location)
     }
-  })
+  }
 
   // Built here rather than in JSX: see `host.jsx` for the measured reason (a custom element's
   // constructor must not be given attributes or children). The element is created **detached and
@@ -109,5 +109,3 @@ function navHint(graph) {
 // `ContextBlock` and `typeMap` live in `blocks.js`; the editor needs only the map, which is why the
 // block builder is not imported here (a bundler keeps it through the map).
 export { }
-
-boot()

@@ -1,8 +1,8 @@
 # Serving metadata reports live
 
-> **Status: M1–M5 complete — 2026-11-17.** The standalone/Bun + webviewd vertical slice, ETag reads,
-> targeted SSE, live entity-browser page and shared jsx6 asset are in place. The IOC-graph second
-> consumer (M6) remains.
+> **Status: M1–M6 complete — 2026-11-18.** The entity browser and the IOC graph have live served pages;
+> `graph.html` remains the static `file://` fallback. ETag reads, targeted SSE, shared jsx6 and the headless
+> live-page gate are in place. M7 (verification/cleanup and broader rollout) remains.
 >
 > **Scope.** JCodeBuddy's generated HTML reports become **served, interactive metadata views**:
 > the report shell is built once, the metadata model is fetched at runtime, and a recompile that
@@ -35,8 +35,8 @@
 > once under `assets/jsx6/<hash>/` with an import map. `ETag`/`304` is implemented for the metadata
 > catalog/index in both hosts. The headless live-page gate is in
 > [`scripts/check-metadata-live-page.js`](../scripts/check-metadata-live-page.js). The user guide is
-> [`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md). The IOC graph remains an acceptable
-> static report; migrating it is optional follow-up.
+> [`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md). The IOC graph is a second live
+> consumer (`live.html`) while retaining `graph.html` as the static, no-server fallback.
 
 ## 1. The decision this plan implements
 
@@ -293,16 +293,15 @@ no `node_modules` and only same-origin assets.
 ### M6 — Rollout and fallback (M)
 
 - Make entity-browser the default live consumer.
-- **The IOC graph may remain a static `file://` page.** Dynamic is preferred, but a generated report that
-  is already self-contained is acceptable (maintainer, 2026-11-18); migrating it is optional follow-up, not
-  a gate for the entity-browser delivery.
-- If migrated, reuse the same catalog, SSE client and shared jsx6 asset rather than inventing a second
-  runtime.
+- The IOC graph has a live `live.html` built from the same catalog/SSE contract, while `graph.html` remains
+  the static `file://` fallback.
+- Reuse the same catalog, SSE client and shared assets where the page class permits it; the graph still
+  bundles its nodditor runtime because it is a self-contained graph editor.
 - Document the standalone `serve.js` path and the `file://` limitation honestly.
 - Leave old static reports working; migration is additive.
 
-**Gate:** entity-browser has a catalog entry and updates live; a page with no SSE still renders the last
-static model; the docs name which host serves which route. The IOC graph's status is stated, not implied.
+**Gate:** entity-browser and IOC graph have catalog entries; the IOC live page fetches the metadata model;
+a page with no SSE still renders the last static model; the docs name which host serves which route.
 
 ### M7 — Verification and cleanup (S)
 
