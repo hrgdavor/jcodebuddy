@@ -1,5 +1,6 @@
 package hr.hrg.jetbrains.webview.services;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -38,7 +39,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -701,45 +704,43 @@ public final class HttpBridgeService {
     }
 
     /**
-     * Polls the local manifest and writes one event per generation. The event names every shard when the
-     * generation changes; a page still fetches only the shards it is told about, and a larger host may
-     * narrow that set.
+     * Polls the local manifest and writes one event per generation. The event names only shards whose
+     * content hash changed, and sets {@code indexChanged} when the non-shard index fields (stats, title,
+     * link base, …) changed. This is the same diff the standalone/webviewd host computes.
      */
     private void streamMetadataEvents(HttpExchange exchange, Path dir, String report) {
         String last = "";
+        JsonObject previousIndex = null;
         long keepalive = 0;
         try (OutputStream out = exchange.getResponseBody()) {
             out.write(": connected\n\n".getBytes(StandardCharsets.UTF_8));
             out.flush();
             while (true) {
                 String generation = "";
-                int shards = 0;
+                JsonObject index = null;
                 try {
                     JsonObject manifest = JsonParser.parseString(
                             Files.readString(dir.resolve("manifest.json"), StandardCharsets.UTF_8)).getAsJsonObject();
                     generation = manifest.has("generation") ? manifest.get("generation").getAsString() : "";
-                    JsonObject index = JsonParser.parseString(
+                    index = JsonParser.parseString(
                             Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8)).getAsJsonObject();
-                    if (index.has("shards") && index.get("shards").isJsonArray()) {
-                        shards = index.getAsJsonArray("shards").size();
-                    }
                 } catch (IOException | RuntimeException ignored) {
                     // The manifest is replaced atomically; a torn read is retried on the next tick.
                 }
-                if (!generation.isEmpty() && !generation.equals(last)) {
-                    StringBuilder changed = new StringBuilder();
-                    for (int i = 0; i < shards; i++) {
-                        if (i > 0) {
-                            changed.append(',');
-                        }
-                        changed.append(i);
+                if (index != null && !generation.isEmpty() && !generation.equals(last)) {
+                    List<Integer> changed = changedShards(previousIndex, index);
+                    boolean indexChanged = previousIndex == null
+                            || !metadataWithoutShards(previousIndex).equals(metadataWithoutShards(index));
+                    if (!changed.isEmpty() || indexChanged) {
+                        String event = "id: " + generation + "\nevent: metadata\ndata: {\"report\":\""
+                                + (report == null ? "" : report.replace("\"", "\\\""))
+                                + "\",\"generation\":\"" + generation.replace("\"", "\\\"")
+                                + "\",\"changedShards\":" + changed
+                                + ",\"indexChanged\":" + indexChanged + "}\n\n";
+                        out.write(event.getBytes(StandardCharsets.UTF_8));
+                        out.flush();
                     }
-                    String event = "id: " + generation + "\nevent: metadata\ndata: {\"report\":\""
-                            + (report == null ? "" : report.replace("\"", "\\\""))
-                            + "\",\"generation\":\"" + generation.replace("\"", "\\\"")
-                            + "\",\"changedShards\":[" + changed + "],\"indexChanged\":true}\n\n";
-                    out.write(event.getBytes(StandardCharsets.UTF_8));
-                    out.flush();
+                    previousIndex = index;
                     last = generation;
                 }
                 if (++keepalive % 60 == 0) {
@@ -751,6 +752,31 @@ public final class HttpBridgeService {
         } catch (IOException | InterruptedException ignored) {
             // The browser closed the stream, or the host is stopping.
         }
+    }
+
+    /** The shard indexes whose hash changed, or every shard on the first event. */
+    private static List<Integer> changedShards(@Nullable JsonObject previous, @NotNull JsonObject next) {
+        JsonArray current = next.has("shards") && next.get("shards").isJsonArray()
+                ? next.getAsJsonArray("shards") : new JsonArray();
+        JsonArray before = previous != null && previous.has("shards") && previous.get("shards").isJsonArray()
+                ? previous.getAsJsonArray("shards") : null;
+        List<Integer> changed = new ArrayList<>();
+        for (int i = 0; i < current.size(); i++) {
+            boolean same = before != null && i < before.size()
+                    && before.get(i).equals(current.get(i));
+            if (!same) {
+                changed.add(i);
+            }
+        }
+        return changed;
+    }
+
+    /** The index without its shard hashes and generation, which is what "indexChanged" compares. */
+    private static JsonObject metadataWithoutShards(@NotNull JsonObject index) {
+        JsonObject meta = index.deepCopy();
+        meta.remove("shards");
+        meta.remove("generation");
+        return meta;
     }
 
     private Path metadataDirectory() {
