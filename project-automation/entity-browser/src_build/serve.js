@@ -84,7 +84,7 @@ function main(argv = process.argv.slice(2)) {
     return 1
   }
   console.log(`Serving ${host.root}`)
-  console.log(`URL: http://${options.host}:${host.server.port}/`)
+  console.log(`URL: http://${options.host}:${host.server.port}/reports/${encodeURIComponent(host.report)}/`)
   console.log(`Metadata SSE: /api/v1/metadata/events?report=${host.report}`)
   console.log('Press Ctrl+C to stop.')
   process.on('SIGINT', () => {

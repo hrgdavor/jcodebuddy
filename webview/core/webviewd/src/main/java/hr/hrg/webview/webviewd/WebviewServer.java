@@ -76,6 +76,9 @@ public final class WebviewServer implements AutoCloseable {
     /** Where the capabilities, the port and the token path are published for a caller that cannot guess. */
     public static final String MANIFEST_ROUTE = "/.well-known/webview.json";
 
+    /** The default authored app URL; its derived output lives in the project's {@code .jcodebuddy/app}. */
+    public static final String APP_ROUTE_PREFIX = "/app/";
+
     /** Pages served under this prefix get the bridge injected; files under {@link PageServer#ROUTE_PREFIX} do not. */
     public static final String PAGE_ROUTE_PREFIX = "/page/";
 
@@ -95,6 +98,7 @@ public final class WebviewServer implements AutoCloseable {
     private final String token;
     private final Path project;
     private final Path metadataDir;
+    private final Path appDir;
     private final int port;
     private final String injectedBridge;
     private final EditorHost host;
@@ -123,6 +127,7 @@ public final class WebviewServer implements AutoCloseable {
         this.tokenFile = tokenFile;
         this.project = config.project();
         this.metadataDir = project.resolve(".jcodebuddy").resolve("metadata");
+        this.appDir = project.resolve(".jcodebuddy").resolve("app");
         this.port = port;
         this.host = host;
         // The transport a page served by this host uses: an image beacon to our own /open, which needs no
@@ -183,6 +188,10 @@ public final class WebviewServer implements AutoCloseable {
         server.createContext("/open", instance::handleOpen);
         server.createContext(PageServer.ROUTE_PREFIX, instance::handleFile);
         server.createContext(PAGE_ROUTE_PREFIX, instance::handlePage);
+        server.createContext("/reports", instance::handleReportAlias);
+        server.createContext("/app", instance::handleAppAlias);
+        server.createContext("/source", instance::handleSourceAlias);
+        server.createContext("/lib", instance::handleLibAlias);
         server.createContext(MANIFEST_ROUTE, instance::handleManifest);
         server.createContext("/api/v1/applyEdit", instance::handleApplyEdit);
         server.createContext("/api/v1/diff", instance::handleDiff);
@@ -457,6 +466,102 @@ public final class WebviewServer implements AutoCloseable {
             return;
         }
         PageServer.Response response = pageServer.serve(exchange.getRequestURI().getPath(), null);
+        announceDigest(exchange, response);
+        send(exchange, response.httpStatus(), response.contentType(), response.body());
+    }
+
+    /**
+     * The site namespaces an authored UI can rely on:
+     * <ul>
+     *   <li>{@code /reports/<id>/...} — a report page and its metadata;</li>
+     *   <li>{@code /source/...} — project sources, read-only;</li>
+     *   <li>{@code /lib/...} — project-automation bundles and shared assets.</li>
+     * </ul>
+     * All reads go through {@link PageServer}'s project jail and the same origin/token rule as a page.
+     */
+    private void handleReportAlias(HttpExchange exchange) throws IOException {
+        if (!authorize(exchange)) {
+            return;
+        }
+        String path = exchange.getRequestURI().getPath();
+        if (!path.startsWith("/reports/")) {
+            send(exchange, 404, "text/plain", bytes("Unknown report"));
+            return;
+        }
+        String rest = path.substring("/reports/".length());
+        int slash = rest.indexOf('/');
+        String id = slash < 0 ? rest : rest.substring(0, slash);
+        Path reportDir = metadataReport(id);
+        if (reportDir == null) {
+            send(exchange, 404, "text/plain", bytes("Unknown report"));
+            return;
+        }
+        String relative = slash < 0 ? "" : rest.substring(slash + 1);
+        serveProjectFile(exchange, reportDir, relative);
+    }
+
+    private void handleAppAlias(HttpExchange exchange) throws IOException {
+        if (!authorize(exchange)) {
+            return;
+        }
+        String path = exchange.getRequestURI().getPath();
+        if (!path.equals("/app") && !path.startsWith("/app/")) {
+            send(exchange, 404, "text/plain", bytes("Not Found"));
+            return;
+        }
+        String relative = path.length() <= "/app/".length()
+                ? "index.html"
+                : path.substring("/app/".length());
+        serveProjectFile(exchange, appDir, relative);
+    }
+
+    private void handleSourceAlias(HttpExchange exchange) throws IOException {
+        if (!authorize(exchange)) {
+            return;
+        }
+        String path = exchange.getRequestURI().getPath();
+        if (!path.startsWith("/source/")) {
+            send(exchange, 404, "text/plain", bytes("Not Found"));
+            return;
+        }
+        serveProjectFile(exchange, project, path.substring("/source/".length()));
+    }
+
+    private void handleLibAlias(HttpExchange exchange) throws IOException {
+        if (!authorize(exchange)) {
+            return;
+        }
+        String path = exchange.getRequestURI().getPath();
+        if (!path.startsWith("/lib/")) {
+            send(exchange, 404, "text/plain", bytes("Not Found"));
+            return;
+        }
+        serveProjectFile(exchange, metadataDir.resolve("lib"), path.substring("/lib/".length()));
+    }
+
+    private void serveProjectFile(HttpExchange exchange, Path root, String relative) throws IOException {
+        String normalized = relative.replace('\\', '/');
+        if (normalized.isEmpty() || normalized.endsWith("/")) {
+            normalized += "index.html";
+        }
+        Path target;
+        try {
+            target = root.resolve(normalized).toAbsolutePath().normalize();
+        } catch (RuntimeException malformed) {
+            send(exchange, 400, "text/plain", bytes("Invalid path"));
+            return;
+        }
+        if (!target.startsWith(root.toAbsolutePath().normalize())) {
+            send(exchange, 404, "text/plain", bytes("Not Found"));
+            return;
+        }
+        Path projectRoot = project.toAbsolutePath().normalize();
+        if (!target.startsWith(projectRoot)) {
+            send(exchange, 404, "text/plain", bytes("Not Found"));
+            return;
+        }
+        String projectRelative = projectRoot.relativize(target).toString().replace('\\', '/');
+        PageServer.Response response = pageServer.serve(PageServer.ROUTE_PREFIX + projectRelative, null);
         announceDigest(exchange, response);
         send(exchange, response.httpStatus(), response.contentType(), response.body());
     }

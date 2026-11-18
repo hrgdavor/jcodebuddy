@@ -27,6 +27,7 @@ test('serve.js serves the page, its JSON and nested assets, and refuses traversa
   const port = 20000 + Math.floor(Math.random() * 2000)
   mkdirSync(join(root, 'nested'), { recursive: true })
   writeFileSync(join(root, 'index.html'), '<!doctype html><title>probe</title>\n')
+  writeFileSync(join(root, 'manifest.json'), '{"report":"probe","generation":"g1"}\n')
   writeFileSync(join(root, 'model.json'), '{"ok":true}\n')
   writeFileSync(join(root, 'nested', 'a.js'), 'export const a = 1\n')
   writeFileSync(join(root, '..', 'outside-probe.txt'), 'not served\n')
@@ -34,17 +35,17 @@ test('serve.js serves the page, its JSON and nested assets, and refuses traversa
     stdio: ['ignore', 'ignore', 'ignore'],
   })
   try {
-    const page = await waitFor(`http://127.0.0.1:${port}/`)
+    const page = await waitFor(`http://127.0.0.1:${port}/reports/probe/`)
     assert.equal(await page.text(), '<!doctype html><title>probe</title>\n')
-    const model = await waitFor(`http://127.0.0.1:${port}/model.json`)
+    const model = await waitFor(`http://127.0.0.1:${port}/reports/probe/model.json`)
     assert.deepEqual(await model.json(), { ok: true })
     assert.match(model.headers.get('content-type') ?? '', /application\/json/)
-    const asset = await waitFor(`http://127.0.0.1:${port}/nested/a.js`)
+    const asset = await waitFor(`http://127.0.0.1:${port}/reports/probe/nested/a.js`)
     assert.match(asset.headers.get('content-type') ?? '', /text\/javascript/)
 
     const traversal = await fetch(`http://127.0.0.1:${port}/../outside-probe.txt`)
     assert.equal(traversal.status, 404, 'a path outside the served directory is not readable')
-    const post = await fetch(`http://127.0.0.1:${port}/model.json`, { method: 'POST' })
+    const post = await fetch(`http://127.0.0.1:${port}/reports/probe/model.json`, { method: 'POST' })
     assert.equal(post.status, 405)
   } finally {
     child.kill()

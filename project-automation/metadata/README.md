@@ -15,16 +15,18 @@ this JavaScript source); the build output and event shape are what must agree.
 ## Published layout
 
 ```text
-<metadata root>/
-  catalog.json
-  <report>/
-    manifest.json          report id, generation, index/page pointers
-    index.json             small index: stats/linkBase + ordered shard hashes
-    model.json             full-model static fallback
-    blobs/<sha256>.json    immutable shard content
-    index.html
-    browser.js             page bundle (jsx6 externalized)
-    assets/jsx6/<hash>/    shared, content-addressed jsx6 libraries
+<project>/.jcodebuddy/
+  app/                     default /app/ webview app, derived and rebuildable
+  metadata/
+    catalog.json
+    lib/<bundle>/           shared project-automation assets (jsx6, ...)
+    <report>/
+      manifest.json         report id, generation, index/page pointers
+      index.json            small index: stats/linkBase + ordered shard hashes
+      model.json            full-model static fallback
+      blobs/<sha256>.json   immutable shard content
+      index.html
+      browser.js            page bundle (jsx6 externalized)
 ```
 
 The index is written after its shards, and the manifest after the index. A reader that sees a new
@@ -50,9 +52,19 @@ immutable and cache for a year.
 
 ## Host
 
-`startMetadataServer({ root, host, port })` serves one page/report directory. It polls only
-`manifest.json`, and refuses paths outside the directory. `serve.js` in the entity-browser page is a thin
-wrapper around it.
+`startMetadataServer({ root, host, port })` serves one page/report directory inside a site root:
+
+```text
+/                  catalog/landing
+/app/              project's authored webview app (from .jcodebuddy/app)
+/reports/<id>/...  report page + metadata
+/source/...        project sources, read-only
+/lib/...           shared project-automation bundles
+```
+
+The app directory is derived and rebuildable, and `/app/` is the default URL a webview should open. The
+server polls only `manifest.json`, refuses paths outside the project, and serves `/source` and `/lib`
+through the same path jail.
 
 ## Tests
 

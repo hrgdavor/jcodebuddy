@@ -66,6 +66,48 @@ test('publishReport writes a catalog, manifest, index and content-addressed shar
   }
 })
 
+test('the metadata host serves report, source and lib namespaces from one site root', async () => {
+  const root = mkdtempSync(join(REPO_ROOT, '.tmp', 'metadata-site-'))
+  try {
+    const projectRoot = join(root, 'project')
+    const metadataRoot = join(projectRoot, '.jcodebuddy', 'metadata')
+    const reportDir = join(metadataRoot, 'test')
+    mkdirSync(reportDir, { recursive: true })
+    mkdirSync(join(projectRoot, 'src'), { recursive: true })
+    mkdirSync(join(metadataRoot, 'lib'), { recursive: true })
+    mkdirSync(join(projectRoot, '.jcodebuddy', 'app'), { recursive: true })
+    writeFileSync(join(projectRoot, '.jcodebuddy', 'app', 'index.html'),
+      '<!doctype html><title>app</title>\n', 'utf8')
+    writeFileSync(join(projectRoot, 'src', 'A.java'), 'class A {}\n', 'utf8')
+    writeFileSync(join(metadataRoot, 'lib', 'shared.js'), 'export const x = 1\n', 'utf8')
+    writeFileSync(join(reportDir, 'index.html'), '<!doctype html><title>site</title>\n', 'utf8')
+    publishReport({
+      metadataRoot,
+      report: 'test',
+      title: 'test',
+      model: model('one'),
+      pageDir: reportDir,
+      reportDir,
+    })
+    const host = startMetadataServer({ root: reportDir, projectRoot, metadataRoot, port: 0 })
+    const base = `http://127.0.0.1:${host.server.port}`
+    try {
+      assert.equal((await fetch(`${base}/reports/test/`)).status, 200)
+      assert.equal((await fetch(`${base}/app/`)).status, 200)
+      assert.equal(await (await fetch(`${base}/source/src/A.java`)).text(), 'class A {}\n')
+      assert.equal((await fetch(`${base}/lib/shared.js`)).status, 200)
+      assert.equal((await fetch(`${base}/source/../outside`)).status, 404)
+      const landing = await fetch(`${base}/`)
+      assert.equal(landing.status, 200)
+      assert.match(await landing.text(), /JCodeBuddy reports/)
+    } finally {
+      host.close()
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('the metadata host publishes one targeted SSE event for a changed shard', async () => {
   const root = mkdtempSync(join(REPO_ROOT, '.tmp', 'metadata-sse-'))
   try {

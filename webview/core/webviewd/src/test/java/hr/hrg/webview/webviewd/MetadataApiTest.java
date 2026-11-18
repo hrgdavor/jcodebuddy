@@ -57,6 +57,15 @@ class MetadataApiTest {
     private void metadata() throws IOException {
         Path root = project.resolve(".jcodebuddy").resolve("metadata");
         Files.createDirectories(root.resolve("browser"));
+        Files.createDirectories(root.resolve("lib"));
+        Files.createDirectories(project.resolve("src"));
+        Files.createDirectories(project.resolve(".jcodebuddy").resolve("app"));
+        Files.writeString(project.resolve(".jcodebuddy/app/index.html"), "<!doctype html><title>app</title>\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(project.resolve("src/A.java"), "class A {}\n", StandardCharsets.UTF_8);
+        Files.writeString(root.resolve("lib/shared.js"), "export const x = 1\n", StandardCharsets.UTF_8);
+        Files.writeString(root.resolve("browser/index.html"), "<!doctype html><title>report</title>\n",
+                StandardCharsets.UTF_8);
         Files.writeString(root.resolve("catalog.json"), """
                 {"schemaVersion":1,"reports":[{"report":"entity-browser","manifest":"browser/manifest.json",
                 "index":"browser/index.json","page":"browser/index.html"}]}
@@ -86,6 +95,13 @@ class MetadataApiTest {
         String etag = index.headers().firstValue("ETag").orElse(null);
         assertTrue(etag != null && !etag.isBlank(), "the index response carries an ETag");
         assertEquals(304, get("/api/v1/metadata/entity-browser/index", etag).statusCode());
+
+        assertEquals(200, get("/reports/entity-browser/").statusCode());
+        assertEquals(200, get("/reports/entity-browser/index.html").statusCode());
+        assertEquals(200, get("/app/").statusCode());
+        assertEquals(200, get("/lib/shared.js").statusCode());
+        assertEquals(200, get("/source/src/A.java").statusCode());
+        assertTrue(get("/source/src/A.java").body().contains("class A"), "source is served read-only");
     }
 
     @Test

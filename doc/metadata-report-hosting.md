@@ -17,12 +17,32 @@ replaceable:
     manifest.json
     index.json
     blobs/<sha256>.json
-    assets/jsx6/<hash>/...
     model.json                 # static fallback
+  lib/jsx6/<hash>/             # shared page libraries
 ```
 
-- `index.json` is small: report identity, stats/link base, and ordered shard hashes.
-- `blobs` holds immutable shard content. The entity browser shards by type/FQN.
+The host presents a site root, not a report root:
+
+```text
+/                         catalog/landing page
+/app/                     default authored webview app
+/reports/<id>/...         report page + metadata
+/source/...               project sources, read-only
+/lib/...                  project-automation bundles/shared assets
+/api/v1/metadata/...      catalog/index/SSE
+```
+
+`/app/` is the default URL a webview should open. The app folder is derived, rebuildable output at
+`<project>/.jcodebuddy/app/` (ignored by DEC-026); a webview build copies its runnable app there. The app
+may load `/lib/...` and read `/source/...`, and may use the host's editor routes:
+
+- `GET /source/<project-relative-path>` — source text and context;
+- `GET /api/v1/open?filePath=...&line=...&column=...` — jump in the editor;
+- `POST /api/v1/applyEdit` / `diff` / `undo` / `redo` — guarded editor edits (webviewd);
+- OpenRewrite/refactor recipes need a host route and implementation before an app can call them; the app
+  should report that capability as unavailable rather than fake it.
+
+An authored UI can be an elaborate application over these namespaces without becoming a report root.
 - `manifest.json` names the current generation and index.
 - `catalog.json` lists the reports available to a host.
 - `model.json` remains for a page or server that cannot use the live contract.
@@ -39,8 +59,10 @@ For the entity browser:
 bun project-automation/entity-browser/src_build/build.js
 ```
 
-The default output is `<link-base>/.jcodebuddy/metadata/browser/`. The build also creates the shared
-`assets/jsx6/<hash>/` directory and an import map in `index.html`; jsx6 is not re-bundled into `browser.js`.
+The default output is `<link-base>/.jcodebuddy/metadata/browser/`. The build also creates shared jsx6
+assets under `<link-base>/.jcodebuddy/metadata/lib/jsx6/<hash>/` and an import map in `index.html`; jsx6 is
+not re-bundled into `browser.js`. The pages are served under `/reports/<id>/`, the shared assets under
+`/lib/`, and the default app under `/app/`.
 
 Metadata-only changes do not require rebuilding page code. Re-run the report's build/pass when the model
 changes; the page receives the new generation.

@@ -87,14 +87,16 @@ The first run needs `bun install` in this directory (esbuild) and the jsx6 check
 
 The output defaults to `<link-base>/.jcodebuddy/metadata/browser/` and contains `index.html`,
 `browser.js`, `model.json`, the live metadata files (`manifest.json`, `index.json`, `blobs/`),
-`assets/jsx6/<hash>/`, `serve.js`, `metadata-server.js` and `README.txt`. It is derived report output
-under DEC-026's ignored metadata subtree, not a committed artifact and not Maven's `target/`.
+`serve.js`, `metadata-server.js` and `README.txt`. The shared jsx6 assets are **not** inside the page
+directory: they live at `<link-base>/.jcodebuddy/metadata/lib/jsx6/<hash>/` and are loaded through the import
+map. The whole metadata tree is derived output under DEC-026's ignored subtree, not a committed artifact
+and not Maven's `target/`.
 
 The page loads `index.json` and its content-addressed shard blobs, then subscribes to
 `/api/v1/metadata/events`; a model-only rebuild fetches only the shards named by the event. `model.json`
 remains the static fallback for a page served without the metadata host. The jsx6 libraries live once
-under `assets/jsx6/<hash>/` and are referenced by an import map, so they are not bundled into
-`browser.js` again.
+under `<link-base>/.jcodebuddy/metadata/lib/jsx6/<hash>/` and are referenced by an import map, so they
+are not bundled into `browser.js` again.
 
 ### Serve it standalone
 

@@ -22,7 +22,7 @@
 > 2. **Large metadata is split into identifiable, content-addressed blobs.** A shard key can be a
 >    type/FQN, a record id, or a deterministic hash bucket. SSE carries changed/removed keys or shard
 >    ids; a page fetches only those blobs, never the whole model.
-> 3. **jsx6 is a content-addressed asset under the serving root** (`assets/jsx6/<hash>/...`), external
+> 3. **jsx6 is a content-addressed asset under the serving root** (`lib/jsx6/<hash>/...`), external
 >    to report bundles. Pages reuse it and only rebuild the page-specific code.
 > 4. **The first delivery is M1–M5** for `entity-browser`; the IOC graph follows as the second
 >    consumer.
@@ -32,7 +32,7 @@
 > `server.js` serves the standalone read API and targeted SSE, `webviewd` implements the same read
 > API/SSE contract with catalog-path resolution, the entity-browser page loads index+shards and
 > live-updates changed shards (`metadata-client.test.js` covers the partial update), and jsx6 is built
-> once under `assets/jsx6/<hash>/` with an import map. `ETag`/`304` is implemented for the metadata
+> once under `lib/jsx6/<hash>/` with an import map. `ETag`/`304` is implemented for the metadata
 > catalog/index in both hosts. The headless live-page gate is in
 > [`scripts/check-metadata-live-page.js`](../scripts/check-metadata-live-page.js). The user guide is
 > [`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md). The IOC graph is a second live
@@ -96,21 +96,21 @@ generator / recompile pass
         │
         │ writes model.json + manifest.json atomically
         ▼
-<project>/.jcodebuddy/metadata/
-  catalog.json
-  entity-browser/
-    manifest.json          ← report id, schema, generation, model hash
-    model.json             ← replaceable metadata revision
-    index.html             ← static page shell
-    report.js              ← page-specific bundle (jsx6 externalized)
+<project>/.jcodebuddy/
+  app/                    ← default /app/ webview app, derived and rebuildable
+  metadata/
+    catalog.json
+    lib/                  ← /lib/ shared project-automation bundles
+    <report>/...
         │
-        │ fs-meta sees the manifest/model change (or standalone serves polls)
         ▼
-metadata host (webviewd / standalone serve.js)
-  GET /api/v1/metadata/catalog
-  GET /api/v1/metadata/events        ← SSE
-  GET /api/v1/metadata/<report>/model
-  GET /page/...                      ← existing page serving
+site host (webviewd / standalone)
+  /            catalog/landing
+  /app/        default authored webview app
+  /reports/<id>/...
+  /source/...  project sources (read-only)
+  /lib/...     bundles/shared assets
+  /api/v1/metadata/... catalog/index/SSE
         │
         ▼
 browser page
@@ -211,13 +211,13 @@ second rendering path.
 The build must stop putting jsx6 into every page bundle:
 
 1. Build jsx6 once into a content-addressed asset, e.g.
-   `.jcodebuddy/metadata/browser/assets/jsx6/<hash>/jsx6.js` (plus the JSX runtime).
+   `.jcodebuddy/metadata/lib/jsx6/<hash>/jsx6.js` (plus the JSX runtime).
 2. The report build marks `@jsx6/jsx6` and `@jsx6/jsx-runtime` as external and writes an import map
    into `index.html`, for example:
    ```html
    <script type="importmap">
-     {"imports":{"@jsx6/jsx6":"./assets/jsx6/<hash>/jsx6.js",
-                 "@jsx6/jsx-runtime":"./assets/jsx6/<hash>/jsx-runtime.js"}}
+     {"imports":{"@jsx6/jsx6":"../../lib/jsx6/<hash>/jsx6.js",
+                 "@jsx6/jsx-runtime":"../../lib/jsx6/<hash>/jsx-runtime.js"}}
    </script>
    ```
 3. The host serves the assets with immutable cache headers. A second report reuses the same hash.

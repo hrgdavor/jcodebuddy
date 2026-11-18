@@ -455,10 +455,10 @@ function jsx6Hash(root) {
  * through an import map, so changing only page code does not rebuild jsx6, and a second report can
  * reuse the same content-addressed directory.
  */
-function buildSharedJsx6(outDir, root) {
+function buildSharedJsx6(servingRoot, root) {
   const hash = jsx6Hash(root)
-  const relativeDir = `assets/jsx6/${hash}`
-  const assetDir = join(outDir, relativeDir)
+  const relativeDir = `lib/jsx6/${hash}`
+  const assetDir = join(servingRoot, relativeDir)
   const entries = {
     '@jsx6/jsx6': join(root, 'libs', 'jsx6', 'index.js'),
     '@jsx6/jsx-runtime': join(root, 'libs', 'jsx-runtime', 'index.js'),
@@ -487,13 +487,11 @@ function copyShell(outDir, jsx6Assets) {
   const shell = join(PACKAGE_ROOT, 'index.html')
   const target = join(outDir, 'index.html')
   mkdirSync(outDir, { recursive: true })
-  const imports = {}
-  for (const name of readdirSync(jsx6Assets.assetDir)) {
-    if (name === 'jsx6.js') {
-      imports['@jsx6/jsx6'] = `./${jsx6Assets.relativeDir}/${name}`
-    } else if (name === 'jsx-runtime.js') {
-      imports['@jsx6/jsx-runtime'] = `./${jsx6Assets.relativeDir}/${name}`
-    }
+  // Reports are served at /reports/<id>/; shared libraries are at /lib/. That is two URL levels above
+  // the page, which is one more than the filesystem relationship between the report dir and lib.
+  const imports = {
+    '@jsx6/jsx6': `../../${jsx6Assets.relativeDir}/jsx6.js`,
+    '@jsx6/jsx-runtime': `../../${jsx6Assets.relativeDir}/jsx-runtime.js`,
   }
   const importMap = `<script type="importmap">${JSON.stringify({ imports })}</script>`
   const html = readFileSync(shell, 'utf8').replace('<head>', `<head>\n    ${importMap}`)
@@ -572,8 +570,8 @@ export function main(argv = process.argv.slice(2)) {
 
   try {
     mkdirSync(outDir, { recursive: true })
-    const jsx6Assets = buildSharedJsx6(outDir, jsx6Root(REPO_ROOT))
     const metadataRoot = dirname(outDir)
+    const jsx6Assets = buildSharedJsx6(metadataRoot, jsx6Root(REPO_ROOT))
     const published = publishReport({
       metadataRoot,
       report: 'entity-browser',

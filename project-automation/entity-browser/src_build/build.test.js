@@ -85,7 +85,7 @@ test('a second page build reuses the content-addressed jsx6 asset', () => {
     const indexFile = writeFixture(root)
     const outDir = join(root, '.jcodebuddy', 'metadata', 'browser')
     assert.equal(main(['--index', indexFile, '--out', outDir, '--quiet']), 0)
-    const assetRoot = join(outDir, 'assets', 'jsx6')
+    const assetRoot = join(dirname(outDir), 'lib', 'jsx6')
     const first = readdirSync(assetRoot)[0]
     const firstMtime = statSync(join(assetRoot, first, 'jsx6.js')).mtimeMs
     assert.equal(main(['--index', indexFile, '--out', outDir, '--quiet']), 0)

@@ -13,12 +13,22 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { extname, join, resolve, sep } from 'node:path'
 
+export const APP_ROUTE = '/app/'
+export const APP_DIR = '.jcodebuddy/app'
+
 const MIME = new Map(Object.entries({
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
+  '.java': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+  '.ts': 'text/plain; charset=utf-8',
+  '.tsx': 'text/plain; charset=utf-8',
+  '.jsx': 'text/plain; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -31,6 +41,12 @@ const MIME = new Map(Object.entries({
 
 function jsonFile(file) {
   return JSON.parse(readFileSync(file, 'utf8'))
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char])
 }
 
 function fileInside(root, pathname) {
@@ -116,8 +132,22 @@ function changedEvent(previous, next, report) {
  *
  * @param {{root: string, host?: string, port?: number, pollMs?: number}} options
  */
-export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs = 250 }) {
+export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs = 250,
+  projectRoot: explicitProjectRoot, metadataRoot: explicitMetadataRoot }) {
   const pageRoot = resolve(root)
+  const metadataRoot = explicitMetadataRoot ? resolve(explicitMetadataRoot) : resolve(pageRoot, '..')
+  const projectRoot = explicitProjectRoot ? resolve(explicitProjectRoot) : (() => {
+    let current = metadataRoot
+    while (current && current !== resolve(current, '..')) {
+      if (current.split(/[\\/]/).pop() === '.jcodebuddy') {
+        return resolve(current, '..')
+      }
+      current = resolve(current, '..')
+    }
+    return pageRoot
+  })()
+  const catalogFile = join(metadataRoot, 'catalog.json')
+  const appRoot = join(projectRoot, '.jcodebuddy', 'app')
   const manifestFile = join(pageRoot, 'manifest.json')
   const indexFile = join(pageRoot, 'index.json')
   const clients = new Set()
@@ -191,6 +221,55 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
     }
   }, 15_000)
 
+  function reportDirFor(id) {
+    if (!/^[A-Za-z0-9._-]+$/.test(id ?? '')) {
+      return null
+    }
+    if (id === report) {
+      return pageRoot
+    }
+    try {
+      const catalog = jsonFile(catalogFile)
+      const entry = (catalog.reports ?? []).find((item) => item.report === id)
+      if (entry?.manifest?.endsWith('/manifest.json')) {
+        return resolve(metadataRoot, entry.manifest.slice(0, -'/manifest.json'.length))
+      }
+    } catch {
+      // No catalog: only the report passed to this server is known.
+    }
+    return null
+  }
+
+  function staticFile(request, root, pathname, immutable) {
+    const file = fileInside(root, pathname)
+    if (!file || !existsSync(file) || !statSync(file).isFile()) {
+      return new Response('Not Found', { status: 404 })
+    }
+    return conditional(request, file, MIME.get(extname(file).toLowerCase()) ?? 'application/octet-stream',
+      immutable)
+  }
+
+  function landing() {
+    let reports = []
+    try {
+      reports = jsonFile(catalogFile).reports ?? []
+    } catch {
+      // A single-report legacy server still has a usable landing page.
+    }
+    if (reports.length === 0) {
+      reports = [{ report, title: report, page: `${report}/index.html` }]
+    }
+    const links = reports.map((item) => `<li><a href="/reports/${encodeURIComponent(item.report)}/">`
+      + `${escapeHtml(item.title ?? item.report)}</a></li>`).join('')
+    const app = existsSync(join(appRoot, 'index.html'))
+      ? `<p><a href="/app/">Open the project app</a></p>`
+      : ''
+    return new Response(`<!doctype html><meta charset="utf-8"><title>JCodeBuddy reports</title>`
+      + `<h1>JCodeBuddy</h1>${app}<h2>Reports</h2><ul>${links}</ul>`, {
+      headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+    })
+  }
+
   let server
   server = Bun.serve({
     hostname: host,
@@ -232,12 +311,37 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
       }
+      if (url.pathname === '/') {
+        return landing()
+      }
+      if (url.pathname === '/app' || url.pathname.startsWith('/app/')) {
+        return staticFile(request, appRoot, url.pathname.slice('/app'.length) || '/', false)
+      }
+      if (url.pathname.startsWith('/reports/')) {
+        const rest = url.pathname.slice('/reports/'.length)
+        const slash = rest.indexOf('/')
+        const id = slash < 0 ? rest : rest.slice(0, slash)
+        const reportDir = reportDirFor(id)
+        if (!reportDir) {
+          return new Response('Unknown report', { status: 404 })
+        }
+        if (slash < 0) {
+          return Response.redirect(`/reports/${id}/`, 302)
+        }
+        const relative = `/${rest.slice(slash + 1)}`
+        return staticFile(request, reportDir, relative, false)
+      }
+      if (url.pathname.startsWith('/lib/')) {
+        return staticFile(request, join(metadataRoot, 'lib'), url.pathname.slice('/lib'.length), true)
+      }
+      if (url.pathname.startsWith('/source/')) {
+        return staticFile(request, projectRoot, url.pathname.slice('/source'.length), false)
+      }
       if (url.pathname === '/api/v1/metadata/catalog') {
-        const catalog = join(pageRoot, '..', 'catalog.json')
-        if (!existsSync(catalog)) {
+        if (!existsSync(catalogFile)) {
           return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } })
         }
-        return conditional(request, catalog, 'application/json; charset=utf-8', false)
+        return conditional(request, catalogFile, 'application/json; charset=utf-8', false)
       }
       if (url.pathname === `/api/v1/metadata/${report}/index`) {
         if (!existsSync(indexFile)) {
@@ -260,6 +364,8 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
   return {
     server,
     root: pageRoot,
+    projectRoot,
+    appRoot,
     report,
     close() {
       closed = true

@@ -158,7 +158,9 @@ try {
   await browser.send('Runtime.enable', {}, sessionId)
   await browser.send('Page.enable', {}, sessionId)
   const loaded = browser.nextEvent('Page.loadEventFired')
-  await browser.send('Page.navigate', { url: `http://127.0.0.1:${host.server.port}/${GRAPH_MODE ? 'live.html' : ''}` }, sessionId)
+  const manifest = JSON.parse(readFileSync(join(PAGE, 'manifest.json'), 'utf8'))
+  const livePath = `reports/${encodeURIComponent(manifest.report)}/${GRAPH_MODE ? 'live.html' : ''}`
+  await browser.send('Page.navigate', { url: `http://127.0.0.1:${host.server.port}/${livePath}` }, sessionId)
   await loaded
   await Bun.sleep(1000)
   const before = await evaluate(browser, sessionId, `(() => {
