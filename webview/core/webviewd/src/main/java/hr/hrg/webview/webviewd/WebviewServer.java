@@ -497,7 +497,7 @@ public final class WebviewServer implements AutoCloseable {
             return;
         }
         String relative = slash < 0 ? "" : rest.substring(slash + 1);
-        serveProjectFile(exchange, reportDir, relative);
+        serveProjectFile(exchange, reportDir, relative, true);
     }
 
     private void handleAppAlias(HttpExchange exchange) throws IOException {
@@ -512,7 +512,7 @@ public final class WebviewServer implements AutoCloseable {
         String relative = path.length() <= "/app/".length()
                 ? "index.html"
                 : path.substring("/app/".length());
-        serveProjectFile(exchange, appDir, relative);
+        serveProjectFile(exchange, appDir, relative, true);
     }
 
     private void handleSourceAlias(HttpExchange exchange) throws IOException {
@@ -524,7 +524,7 @@ public final class WebviewServer implements AutoCloseable {
             send(exchange, 404, "text/plain", bytes("Not Found"));
             return;
         }
-        serveProjectFile(exchange, project, path.substring("/source/".length()));
+        serveProjectFile(exchange, project, path.substring("/source/".length()), false);
     }
 
     private void handleLibAlias(HttpExchange exchange) throws IOException {
@@ -536,10 +536,11 @@ public final class WebviewServer implements AutoCloseable {
             send(exchange, 404, "text/plain", bytes("Not Found"));
             return;
         }
-        serveProjectFile(exchange, metadataDir.resolve("lib"), path.substring("/lib/".length()));
+        serveProjectFile(exchange, metadataDir.resolve("lib"), path.substring("/lib/".length()), false);
     }
 
-    private void serveProjectFile(HttpExchange exchange, Path root, String relative) throws IOException {
+    private void serveProjectFile(HttpExchange exchange, Path root, String relative, boolean injectBridge)
+            throws IOException {
         String normalized = relative.replace('\\', '/');
         if (normalized.isEmpty() || normalized.endsWith("/")) {
             normalized += "index.html";
@@ -561,7 +562,8 @@ public final class WebviewServer implements AutoCloseable {
             return;
         }
         String projectRelative = projectRoot.relativize(target).toString().replace('\\', '/');
-        PageServer.Response response = pageServer.serve(PageServer.ROUTE_PREFIX + projectRelative, null);
+        PageServer.Response response = pageServer.serve(PageServer.ROUTE_PREFIX + projectRelative,
+                injectBridge ? injectedBridge : null);
         announceDigest(exchange, response);
         send(exchange, response.httpStatus(), response.contentType(), response.body());
     }
