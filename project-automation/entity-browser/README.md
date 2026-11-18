@@ -109,23 +109,13 @@ cd hipster-entity/hipster-entity-example/.jcodebuddy/metadata/browser
 bun serve.js
 ```
 
-The command prints `http://127.0.0.1:<port>/`; open that. The page fetches `model.json` and loads the
+The command prints a `/reports/<id>/` URL; open that. The page fetches `model.json` and loads the
 bundle from the same origin, so no `file://` workaround is involved. `--port` and `--host` are optional;
 the server is loopback-only by default and refuses paths outside the served directory.
 
-The same server exposes the shared metadata read contract; the complete hosting and live-update guide is
-[`doc/metadata-report-hosting.md`](../../doc/metadata-report-hosting.md).
-
-```text
-GET /api/v1/metadata/catalog
-GET /api/v1/metadata/entity-browser/index
-GET /api/v1/metadata/events?report=entity-browser
-```
-
-Catalog/index responses carry an `ETag` and answer `If-None-Match` with `304`. The server polls the small
-`manifest.json` and emits one targeted SSE event naming changed shards; it does not rewrite or regenerate
-the page. The Java `webviewd` host may implement the same contract independently — the build output and
-wire format are the shared part.
+This Bun server is the **JS metadata backend**; webview hosts serve static `/source`, `/lib`, `/reports`
+and the editor API, and proxy `/api/v1/metadata` here when configured. The complete hosting and
+live-update guide is [`doc/metadata-report-hosting.md`](../../doc/metadata-report-hosting.md).
 
 ### Flags
 

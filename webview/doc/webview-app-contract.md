@@ -52,20 +52,21 @@ A host that receives an absolute or escaping path must refuse to build the app U
 ```text
 /app/                    default authored app; derived and rebuildable
 /app/?openFile=<path>    open a project file in the app
-/source/<path>           project sources and files, read-only
-/lib/                    project-automation bundles and shared assets
-/reports/<id>/...        generated report pages and their metadata
-/api/v1/metadata/...     catalog/index/SSE
+/source/<path>           project sources and files, read-only (webview static)
+/lib/                    project-automation bundles/shared assets (webview static)
+/reports/<id>/...        generated report pages and metadata files (webview static)
+/api/v1/metadata/...     catalog/index/SSE (JS metadata backend)
 ```
 
 - `/app/` maps to `<project>/.jcodebuddy/app/` and is the default URL a webview should open.
 - The app directory is ignored derived output. A build may replace it; nothing in it is a committed
   source of truth.
-- `/source/` is project-jailed. It is a file reader, not a directory listing.
-- `/lib/` is project-jailed to the metadata lib directory.
-- `/reports/` is project-jailed through the catalog.
-- The host serves all four namespaces; `/app/` and `/reports/` pages receive the injected editor bridge,
-  while `/source/` and `/lib/` are raw files.
+- `/source/`, `/lib/` and `/reports/` are static file namespaces served by the webview host and jailed to
+  the project. They are not a metadata API.
+- `/api/v1/metadata/` is served by the **JS project-automation backend**, not by the webview host. In
+  custom-server mode the webview proxies this prefix to that backend; without one there is no live
+  metadata transport and the page falls back to its static model.
+- `/app/` and `/reports/` pages receive the injected editor bridge; `/source/` and `/lib/` are raw files.
 
 ## 3. Own server vs custom project-automation server
 
@@ -73,10 +74,11 @@ The webview integration has two distinct APIs:
 
 1. **The IDE integration API** — `/open`, `/health`, `/api/v1/applyEdit`, `/api/v1/diff`,
    `/api/v1/undo`, `/api/v1/redo`, and the injected bridge. It always belongs to the webview host.
-2. **The project-automation API** — `/app/`, `/source/`, `/lib/`, `/reports/`,
-   `/api/v1/metadata/...`. It belongs to whichever server owns the site.
+2. **The project-automation API** — `/app/` and `/api/v1/metadata/...` (the latter is the JS metadata
+   transport). It belongs to the JS backend. `/source/`, `/lib/` and `/reports/` are static files the
+   webview host can serve from the project without a backend.
 
-The project chooses the second in `.jcodebuddy/conf/webview.json`:
+The project chooses the backend in `.jcodebuddy/conf/webview.json`:
 
 ```json
 {
@@ -85,25 +87,26 @@ The project chooses the second in `.jcodebuddy/conf/webview.json`:
 }
 ```
 
-- **No `customServer`** — the webview host serves the app from `.jcodebuddy/app`.
+- **No `customServer`** — the webview serves the static namespaces and the local app; there is no
+  metadata transport, so a page falls back to its static model.
 - **`customServer` present** — the webview host still binds its own loopback **editor API** port, opens
-  `/app/?openFile=...` from that port, and proxies only **`/app/`** to the custom base.
+  `/app/?openFile=...` from that port, and proxies `/app/` **and `/api/v1/metadata/`** to the custom
+  backend.
 
-`/source/`, `/lib/`, `/reports/` and `/api/v1/metadata/` are the **webview host's standard contract**.
-They stay local even with a custom server, because every editor/webview must provide them and the app is
-same-origin with the editor API. A custom server may implement the same standard namespaces for standalone
-use (the `project-automation/metadata` base is the reference), but a webview does not require it to.
+`/source/`, `/lib/` and `/reports/` are static, project-jailed namespaces the webview host serves itself;
+they are not a metadata transport and do not require the custom server. `/api/v1/metadata/` is the JS
+backend's API and is never implemented in the Java webview host.
 
-The split is therefore:
+| Namespace                                          | Owner when a webview is present |
+| -------------------------------------------------- | ------------------------------- |
+| `/app/`                                            | JS backend, proxied by host     |
+| `/api/v1/metadata/`                                | JS backend, proxied by host     |
+| `/source/`, `/lib/`, `/reports/`                   | webview host (static files)     |
+| `/open`, `/health`, `/api/v1/applyEdit`, undo/redo | webview host (editor)           |
 
-| Namespace                                             | Owner when a webview is present |
-| ----------------------------------------------------- | ------------------------------- |
-| `/app/`                                               | custom server, proxied by host  |
-| `/source/`, `/lib/`, `/reports/`, `/api/v1/metadata/` | webview host (standard)         |
-| `/open`, `/health`, `/api/v1/applyEdit`, undo/redo    | webview host (editor)           |
-
-The custom server can be just an app build and its own data; it never has to implement the editor API,
-and it does not have to duplicate `/source`, `/reports` or metadata when a webview is there.
+The custom server can be just an app build and its metadata transport. It never implements the editor
+API, and it does not have to duplicate `/source`, `/lib` or `/reports` when a webview is there — though it
+may serve them too for a standalone editor.
 
 `customServer` is committed configuration; the port the host actually bound remains local state in
 `.jcodebuddy/webview/host.json`.

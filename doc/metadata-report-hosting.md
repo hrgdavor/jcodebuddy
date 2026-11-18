@@ -54,15 +54,16 @@ both. The choice is committed configuration in `.jcodebuddy/conf/webview.json`:
 }
 ```
 
-- without `customServer`, the webview host serves `/app`, `/source`, `/lib`, `/reports` itself;
+- without `customServer`, the webview host serves `/app`, `/source`, `/lib`, `/reports` as static files;
 - with `customServer`, it still starts its **own editor API port**, opens `/app/` from that port and
-  proxies only `/app` to the custom base. `/source`, `/lib`, `/reports` and `/api/v1/metadata` stay on
-  the webview host as its standard contract; `/open`, `/health` and the edit routes stay local too.
+  proxies `/app` **and `/api/v1/metadata`** to the JS backend. `/source`, `/lib` and `/reports` remain
+  local static namespaces; `/open`, `/health` and the edit routes stay local.
 
-The custom server implements the app and its data. It may also implement the standard `/source`,
-`/reports` and metadata namespaces for standalone editors (the `project-automation/metadata` host is the
-reference), but a webview does not require it to. The page is same-origin with both because the host is
-the URL the webview opens.
+The JS project-automation backend owns `/app` and the metadata catalog/index/SSE transport. It may also
+serve `/source`, `/lib` and `/reports` for a standalone editor (the `project-automation/metadata` host is
+the reference), but a webview does not require it to duplicate those static namespaces.
+
+The page is same-origin with both because the host is the URL the webview opens.
 
 An authored UI can be an elaborate application over these namespaces without becoming a report root.
 The exact `/app/?openFile=<project-relative>` URL, the `/source` read it triggers, and the reserved future
@@ -114,10 +115,11 @@ If the manifest is absent, the page falls back to `model.json`.
 
 ### webviewd
 
-Start `webviewd` for the project (or use an existing running host), then open the page through its
-`/page/<token>/...` URL. `webviewd` implements the same catalog/index/SSE contract under
-`/api/v1/metadata`, uses the project jail and origin/token rules, and resolves the report directory through
-`catalog.json`.
+`webviewd` is the static webview host and editor bridge. It serves `/source`, `/lib`, `/reports` and
+`/app` from the project, but it does **not** implement the metadata catalog/index/SSE transport: that is
+the JS project-automation backend's job. Run the JS server (or point `.jcodebuddy/conf/webview.json` at
+it via `customServer`) when live metadata is needed. Without it, a page still renders from its static
+files/model.
 
 The page's metadata events URL is absolute:
 
@@ -167,7 +169,7 @@ cd project-automation/entity-browser && bun test
 # publisher + SSE + ETag
 bun test project-automation/metadata/metadata.test.js
 
-# webviewd metadata API
+# webviewd static namespaces (metadata transport is not here)
 mvn -o -pl :webviewd -am test \
   '-Dtest=MetadataApiTest' '-Dsurefire.failIfNoSpecifiedTests=false'
 

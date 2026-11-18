@@ -17,7 +17,10 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The read-only metadata contract over the real HTTP server, including the report-path resolution. */
+/**
+ * The static site namespaces and the editor API. Metadata catalog/index/SSE is the JS backend's job; a
+ * webview host serves the files and the editor routes, not the metadata transport.
+ */
 class MetadataApiTest {
 
     private static final String ORIGIN = "https://allowed.test";
@@ -80,21 +83,9 @@ class MetadataApiTest {
     }
 
     @Test
-    void catalogAndIndexUseTheCatalogPathRatherThanTheReportIdDirectory() throws Exception {
+    void staticSiteNamespacesAreServedAndMetadataTransportIsNot() throws Exception {
         metadata();
         start();
-
-        HttpResponse<String> catalog = get("/api/v1/metadata/catalog");
-        assertEquals(200, catalog.statusCode());
-        assertTrue(catalog.body().contains("entity-browser"), catalog.body());
-
-        HttpResponse<String> index = get("/api/v1/metadata/entity-browser/index");
-        assertEquals(200, index.statusCode());
-        assertTrue(index.body().contains("\"shards\""), index.body());
-
-        String etag = index.headers().firstValue("ETag").orElse(null);
-        assertTrue(etag != null && !etag.isBlank(), "the index response carries an ETag");
-        assertEquals(304, get("/api/v1/metadata/entity-browser/index", etag).statusCode());
 
         assertEquals(200, get("/reports/entity-browser/").statusCode());
         assertEquals(200, get("/reports/entity-browser/index.html").statusCode());
@@ -102,6 +93,8 @@ class MetadataApiTest {
         assertEquals(200, get("/lib/shared.js").statusCode());
         assertEquals(200, get("/source/src/A.java").statusCode());
         assertTrue(get("/source/src/A.java").body().contains("class A"), "source is served read-only");
+        assertEquals(404, get("/api/v1/metadata/catalog").statusCode(),
+                "metadata transport belongs to the JS project-automation server, not webviewd");
     }
 
     @Test
@@ -109,7 +102,7 @@ class MetadataApiTest {
         metadata();
         start();
 
-        assertEquals(404, get("/api/v1/metadata/../catalog").statusCode());
-        assertEquals(404, get("/api/v1/metadata/not-there/index").statusCode());
+        assertEquals(404, get("/reports/not-there/index.html").statusCode());
+        assertEquals(404, get("/reports/../catalog.json").statusCode());
     }
 }

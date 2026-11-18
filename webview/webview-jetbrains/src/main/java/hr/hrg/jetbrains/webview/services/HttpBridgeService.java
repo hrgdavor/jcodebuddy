@@ -557,11 +557,6 @@ public final class HttpBridgeService {
             return;
         }
 
-        if (path != null && path.startsWith("/api/v1/metadata/")) {
-            handleMetadata(exchange, path, origin);
-            return;
-        }
-
         if (path != null && path.startsWith(WRITE_PREFIX)) {
             handleWrite(exchange, path);
             return;
@@ -647,136 +642,6 @@ public final class HttpBridgeService {
         }
         String relative = slash < 0 ? "index.html" : rest.substring(slash + 1);
         serveMetadataFile(exchange, dir, relative);
-    }
-
-    /** The catalog/index part of the standard metadata contract. */
-    private void handleMetadata(@NotNull HttpExchange exchange, @NotNull String path, String origin)
-            throws IOException {
-        if (!isAuthorized(exchange, origin)) {
-            send(exchange, 403, "Forbidden", "text/plain");
-            return;
-        }
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            send(exchange, 405, "Method Not Allowed", "text/plain");
-            return;
-        }
-        String rest = path.substring("/api/v1/metadata/".length());
-        if (rest.equals("catalog")) {
-            serveMetadataFile(exchange, metadataDirectory(), "catalog.json");
-            return;
-        }
-        if (rest.equals("events")) {
-            handleMetadataEvents(exchange, exchange.getRequestURI().getQuery());
-            return;
-        }
-        if (rest.endsWith("/index")) {
-            String id = rest.substring(0, rest.length() - "/index".length());
-            Path dir = reportDirectory(id);
-            if (dir == null) {
-                send(exchange, 404, "Unknown report", "text/plain");
-                return;
-            }
-            serveMetadataFile(exchange, dir, "index.json");
-            return;
-        }
-        send(exchange, 404, "Not Found", "text/plain");
-    }
-
-    private void handleMetadataEvents(@NotNull HttpExchange exchange, String query) throws IOException {
-        String report = null;
-        if (query != null) {
-            for (String part : query.split("&")) {
-                if (part.startsWith("report=")) {
-                    report = URLDecoder.decode(part.substring("report=".length()), StandardCharsets.UTF_8);
-                }
-            }
-        }
-        Path dir = reportDirectory(report == null ? "" : report);
-        if (dir == null) {
-            send(exchange, 404, "Unknown report", "text/plain");
-            return;
-        }
-        exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
-        exchange.getResponseHeaders().set("Cache-Control", "no-store");
-        exchange.sendResponseHeaders(200, 0);
-        String reportId = report;
-        Thread.ofVirtual().start(() -> streamMetadataEvents(exchange, dir, reportId));
-    }
-
-    /**
-     * Polls the local manifest and writes one event per generation. The event names only shards whose
-     * content hash changed, and sets {@code indexChanged} when the non-shard index fields (stats, title,
-     * link base, …) changed. This is the same diff the standalone/webviewd host computes.
-     */
-    private void streamMetadataEvents(HttpExchange exchange, Path dir, String report) {
-        String last = "";
-        JsonObject previousIndex = null;
-        long keepalive = 0;
-        try (OutputStream out = exchange.getResponseBody()) {
-            out.write(": connected\n\n".getBytes(StandardCharsets.UTF_8));
-            out.flush();
-            while (true) {
-                String generation = "";
-                JsonObject index = null;
-                try {
-                    JsonObject manifest = JsonParser.parseString(
-                            Files.readString(dir.resolve("manifest.json"), StandardCharsets.UTF_8)).getAsJsonObject();
-                    generation = manifest.has("generation") ? manifest.get("generation").getAsString() : "";
-                    index = JsonParser.parseString(
-                            Files.readString(dir.resolve("index.json"), StandardCharsets.UTF_8)).getAsJsonObject();
-                } catch (IOException | RuntimeException ignored) {
-                    // The manifest is replaced atomically; a torn read is retried on the next tick.
-                }
-                if (index != null && !generation.isEmpty() && !generation.equals(last)) {
-                    List<Integer> changed = changedShards(previousIndex, index);
-                    boolean indexChanged = previousIndex == null
-                            || !metadataWithoutShards(previousIndex).equals(metadataWithoutShards(index));
-                    if (!changed.isEmpty() || indexChanged) {
-                        String event = "id: " + generation + "\nevent: metadata\ndata: {\"report\":\""
-                                + (report == null ? "" : report.replace("\"", "\\\""))
-                                + "\",\"generation\":\"" + generation.replace("\"", "\\\"")
-                                + "\",\"changedShards\":" + changed
-                                + ",\"indexChanged\":" + indexChanged + "}\n\n";
-                        out.write(event.getBytes(StandardCharsets.UTF_8));
-                        out.flush();
-                    }
-                    previousIndex = index;
-                    last = generation;
-                }
-                if (++keepalive % 60 == 0) {
-                    out.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
-                    out.flush();
-                }
-                Thread.sleep(250);
-            }
-        } catch (IOException | InterruptedException ignored) {
-            // The browser closed the stream, or the host is stopping.
-        }
-    }
-
-    /** The shard indexes whose hash changed, or every shard on the first event. */
-    private static List<Integer> changedShards(@Nullable JsonObject previous, @NotNull JsonObject next) {
-        JsonArray current = next.has("shards") && next.get("shards").isJsonArray()
-                ? next.getAsJsonArray("shards") : new JsonArray();
-        JsonArray before = previous != null && previous.has("shards") && previous.get("shards").isJsonArray()
-                ? previous.getAsJsonArray("shards") : null;
-        List<Integer> changed = new ArrayList<>();
-        for (int i = 0; i < current.size(); i++) {
-            boolean same = before != null && i < before.size()
-                    && before.get(i).equals(current.get(i));
-            if (!same) {
-                changed.add(i);
-            }
-        }
-        return changed;
-    }
-
-    /** The index without its shard hashes and generation, which is what "indexChanged" compares. */
-    private static JsonObject metadataWithoutShards(@NotNull JsonObject index) {
-        JsonObject meta = index.deepCopy();
-        meta.remove("shards");
-        meta.remove("generation");
-        return meta;
     }
 
     private Path metadataDirectory() {
@@ -895,9 +760,10 @@ public final class HttpBridgeService {
         if (path == null) {
             return false;
         }
-        // Only the app content is the custom server's. /source, /lib, /reports and /api/v1/metadata are the
-        // webview host's standard contract and stay local even when a custom server is configured.
-        return path.equals("/app") || path.startsWith("/app/");
+        // The app and the metadata transport belong to the JS backend. /source, /lib and /reports are the
+        // webview host's static contract and stay local even when a custom server is configured.
+        return path.equals("/app") || path.startsWith("/app/")
+                || path.startsWith("/api/v1/metadata/");
     }
 
     /**

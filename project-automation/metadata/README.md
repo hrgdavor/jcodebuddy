@@ -9,8 +9,9 @@ named map (for example `contexts`). The browser client accepts the same `collect
 - `server.js` is the standalone read-only host: static page + metadata API + targeted SSE.
 - `metadata.test.js` covers atomic publication, content-addressed shards and a live SSE change.
 
-A host may implement the same wire contract independently (the Java `webviewd` adapter does not share
-this JavaScript source); the build output and event shape are what must agree.
+A host may serve the static `/reports`, `/source` and `/lib` files and proxy the metadata transport to a
+project-automation backend. The Java `webviewd` host does not implement the catalog/index/SSE contract;
+that belongs to this JS side. The build output and event shape are what the backend and page share.
 
 ## Published layout
 

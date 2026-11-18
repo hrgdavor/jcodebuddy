@@ -29,11 +29,13 @@
 >
 > **Implementation progress (2026-11-17).** The M1–M5 vertical slice is in place:
 > `project-automation/metadata/publish.js` writes catalog/manifest/index/blobs atomically,
-> `server.js` serves the standalone read API and targeted SSE, `webviewd` implements the same read
-> API/SSE contract with catalog-path resolution, the entity-browser page loads index+shards and
-> live-updates changed shards (`metadata-client.test.js` covers the partial update), and jsx6 is built
+> `server.js` is the **JS metadata backend** for catalog/index/targeted SSE. Java tooling stops at the
+> JSON boundary: `webviewd`/JetBrains serve static `/reports`, `/source`, `/lib` and `/app` plus the
+> editor API, and proxy `/app` + `/api/v1/metadata` to the JS backend when `customServer` is configured.
+> The entity-browser page loads index+shards and live-updates changed shards
+> (`metadata-client.test.js` covers the partial update), and jsx6 is built
 > once under `lib/jsx6/<hash>/` with an import map. `ETag`/`304` is implemented for the metadata
-> catalog/index in both hosts. The headless live-page gate is in
+> catalog/index in the JS backend. The headless live-page gate is in
 > [`scripts/check-metadata-live-page.js`](../scripts/check-metadata-live-page.js). The user guide is
 > [`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md). The IOC graph is a second live
 > consumer (`live.html`) while retaining `graph.html` as the static, no-server fallback.
@@ -54,14 +56,15 @@ A metadata report has two independent lifecycles:
 The **page never has to be regenerated to show new metadata**. A rebuild writes a new model revision;
 the server announces that revision; the page fetches it and re-renders while preserving its UI state.
 
-The metadata host is a **read-only reader** of report metadata; the build is the publisher. Two host
-implementations are allowed (Bun standalone and Java `webviewd`) because they are selected at run time,
-but they share the same on-disk contract and event shape.
+The metadata host is a **read-only reader** of report metadata; the build is the publisher. The
+metadata API is **JS-side**: Java tooling produces JSON and stops; `project-automation/metadata/server.js`
+owns catalog/index/SSE for this and other languages.
 
-1. **`webviewd`** (and the JetBrains WebView Explorer bridge) is the normal host. It already owns
-   page serving, project jailing, tokens, `/api/v1/events` SSE and the fs-meta dependency.
-2. **`entity-browser/serve.js`** is the standalone development fallback. It serves a page directory
-   with Bun alone; it gains the same read-only metadata routes and a polling-backed SSE fallback.
+1. **`webviewd`** (and the JetBrains WebView Explorer bridge) is the static webview host and editor
+   bridge. It serves `/reports`, `/source`, `/lib`, `/app` and the editor API, and proxies the JS
+   backend's `/app` + `/api/v1/metadata` when a custom server is configured.
+2. **`entity-browser/serve.js`** is the standalone JS backend/development host. It serves a page
+   directory with Bun and provides the metadata routes and SSE.
 
 This keeps the existing rule that a page is usable without a webview: a standalone page directory is
 still runnable, and a static `model.json` remains the fallback when no live server is available.
@@ -105,13 +108,13 @@ generator / recompile pass
     <report>/...
         │
         ▼
-site host (webviewd / standalone)
+site host (webviewd / JetBrains)
   /            catalog/landing
-  /app/        default authored webview app
+  /app/        default authored webview app (JS backend)
   /reports/<id>/...
   /source/...  project sources (read-only)
   /lib/...     bundles/shared assets
-  /api/v1/metadata/... catalog/index/SSE
+  /api/v1/metadata/... JS backend, proxied when configured
         │
         ▼
 browser page
@@ -156,18 +159,19 @@ DEC-026; it is never a committed artifact.
 
 ### 4.2 HTTP read API
 
-Under the host’s existing origin/token rules:
+Under the JS backend's origin/token rules:
 
 | route                                    | meaning                                        |
 | ---------------------------------------- | ---------------------------------------------- |
 | `GET /api/v1/metadata/catalog`           | the report catalog                             |
 | `GET /api/v1/metadata/<report>/index`    | the small index (shard hashes and fixed data)  |
-| `GET /page/...`                          | the page, `index.json` and immutable blobs     |
-| `GET /api/v1/metadata/events`            | metadata SSE stream                            |
+| `GET /reports/<report>/...`              | static page, `index.json` and immutable blobs  |
+| `GET /api/v1/metadata/events`            | metadata SSE stream (JS backend)               |
 
 - A conditional `If-None-Match` returns `304`; the page keeps its current model.
 - Unknown reports are `404`; a malformed/traversal path is `400`/`404`, never a filesystem read.
-- The host serves only paths inside the project and only catalogued reports.
+- The JS backend serves only paths inside the project and only catalogued reports; the webview host
+  serves the static namespaces under its own jail.
 - No report writes are exposed. The existing `/api/v1/applyEdit` write routes remain unrelated.
 
 ### 4.3 SSE contract
@@ -188,8 +192,8 @@ it to reload the small index for stats/title changes. A large unchanged map is n
   debounce (proposed 75–150 ms) turns a multi-file generator write into one event.
 - `id` is the generation; a reconnect sends `Last-Event-ID`, and the server replays the latest event
   if the client missed it. Generation equality means no fetch is necessary.
-- If the stream cannot attach (no fs-meta daemon), the route answers `503` with the same actionable
-  setup text as `/api/v1/events`; the page falls back to polling the manifest.
+- If the JS backend is not available, there is no metadata SSE; the page falls back to its static
+  `model.json`. The webview host does not implement the transport.
 - Keep `GET /api/v1/events` unchanged for ordinary file changes. A separate metadata stream avoids
   making every page interpret project-wide paths.
 
@@ -334,7 +338,7 @@ These are the decisions M0 must settle; the plan does not pretend they are alrea
 
 | id   | question                                               | proposed answer                                                                            |
 | ---- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| M-D1 | Which host owns the metadata API?                      | `webviewd` is canonical; `serve.js` implements the read-only subset                        |
+| M-D1 | Which host owns the metadata API?                      | JS `project-automation/metadata/server.js`; webview serves static files/editor API only    |
 | M-D2 | Is the metadata stream separate from `/api/v1/events`? | Yes, a separate `/api/v1/metadata/events`; file changes stay file changes                  |
 | M-D3 | Is a token required for metadata reads?                | Same rule as page serving; no broader CORS or anonymous reads                              |
 | M-D4 | How is generation defined?                             | Content hash of the model + schema/report identity; never a clock                          |
