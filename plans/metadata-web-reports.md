@@ -32,8 +32,9 @@
 > API/SSE contract with catalog-path resolution, the entity-browser page loads index+shards and
 > live-updates changed shards (`metadata-client.test.js` covers the partial update), and jsx6 is built
 > once under `assets/jsx6/<hash>/` with an import map. `ETag`/`304` is implemented for the metadata
-> catalog/index in both hosts. Remaining: the IOC-graph second consumer, the headless browser
-> live-update gate, and rollout docs for the old static page flow.
+> catalog/index in both hosts. The headless live-page gate is in
+> [`scripts/check-metadata-live-page.js`](../scripts/check-metadata-live-page.js). Remaining: the IOC-graph
+> second consumer and rollout docs for the old static page flow.
 
 ## 1. The decision this plan implements
 

@@ -1,6 +1,7 @@
 import { insert } from '@jsx6/jsx6'
 import { filterTypes, selectedInitial } from './model.js'
 import { bridgeLabel, copyText, openLocation } from './bridge.js'
+import { loadMetadata } from './metadata-client.js'
 
 /**
  * The entity browser page.

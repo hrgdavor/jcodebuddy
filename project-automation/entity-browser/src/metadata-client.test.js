@@ -48,6 +48,19 @@ function fakeWorld(files) {
   }
 }
 
+test('falls back to the single model.json when no manifest is published', async () => {
+  const world = fakeWorld({
+    'model.json': { title: 'static', types: { 'demo.A': { name: 'A' } } },
+  })
+  const loaded = await loadMetadata()
+  assert.equal(loaded.live, false)
+  assert.equal(loaded.model.types['demo.A'].name, 'A')
+  assert.deepEqual(world.requests, ['manifest.json', 'model.json'])
+  globalThis.fetch = realFetch
+  globalThis.EventSource = realEventSource
+  globalThis.document = realDocument
+})
+
 test('loads index plus every shard and applies only changed shards from SSE', async () => {
   const world = fakeWorld({
     'manifest.json': { report: 'demo', generation: 'g1' },

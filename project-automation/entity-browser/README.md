@@ -221,10 +221,21 @@ bun test
 
 `src/model.test.js` covers record extraction, type resolution (same package, nested type, explicit and
 wildcard imports, ambiguity), the inline-enum threshold and search. `src/verify.test.js` covers verified,
-stale and missing source lines. `src/bridge.test.js` covers the navigation URL. `src_build/build.test.js`
-builds a fixture module and asserts the page directory (`index.html`, `browser.js`, `model.json`) and its
-inline enum values; `src_build/serve.test.js` starts the server and checks the page, JSON, nested assets and
-path-traversal refusal. The build tests skip when the jsx6 checkout or esbuild is absent.
+stale and missing source lines. `src/bridge.test.js` covers the navigation URL. `src/metadata-client.test.js`
+covers index+shard loading, targeted SSE replacement and the static `model.json` fallback.
+`src_build/build.test.js` builds a fixture module and asserts the page directory (`index.html`,
+`browser.js`, `model.json`, index/blobs, shared jsx6 assets) and its inline enum values;
+`src_build/serve.test.js` starts the server and checks the page, JSON, nested assets and path-traversal
+refusal. The build tests skip when the jsx6 checkout or esbuild is absent.
+
+The headless live-update gate is a separate root script (needs Chrome/Edge and a built example page):
+
+```sh
+bun scripts/check-metadata-live-page.js
+```
+
+It opens the page in headless Chrome, publishes a model revision changing only `stats.records`, and
+asserts the visible count updates while the page document stays loaded.
 
 ## What it deliberately does not do
 
