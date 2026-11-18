@@ -42,6 +42,26 @@ may load `/lib/...` and read `/source/...`, and may use the host's editor routes
 - OpenRewrite/refactor recipes need a host route and implementation before an app can call them; the app
   should report that capability as unavailable rather than fake it.
 
+### Own server or a project-automation server
+
+The IDE integration API and the project-automation API are different servers even when one URL fronts
+both. The choice is committed configuration in `.jcodebuddy/conf/webview.json`:
+
+```json
+{
+  "port": 18882,
+  "customServer": "http://127.0.0.1:9000"
+}
+```
+
+- without `customServer`, the webview host serves `/app`, `/source`, `/lib`, `/reports` itself;
+- with `customServer`, it still starts its **own editor API port**, opens `/app/` from that port and
+  proxies `/app`, `/source`, `/lib`, `/reports` and `/api/v1/metadata` to the custom base. `/open`,
+  `/health` and the edit routes stay local, so jumps and buffered edits keep working.
+
+The custom server implements the project-automation contract; the webview host keeps the editor contract.
+The page is same-origin with both because the host is the URL the webview opens.
+
 An authored UI can be an elaborate application over these namespaces without becoming a report root.
 The exact `/app/?openFile=<project-relative>` URL, the `/source` read it triggers, and the reserved future
 query keys are in [`webview-app-contract.md`](../webview/doc/webview-app-contract.md).

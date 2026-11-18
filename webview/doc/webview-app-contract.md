@@ -67,7 +67,38 @@ A host that receives an absolute or escaping path must refuse to build the app U
 - The host serves all four namespaces; `/app/` and `/reports/` pages receive the injected editor bridge,
   while `/source/` and `/lib/` are raw files.
 
-## 3. App-side example
+## 3. Own server vs custom project-automation server
+
+The webview integration has two distinct APIs:
+
+1. **The IDE integration API** — `/open`, `/health`, `/api/v1/applyEdit`, `/api/v1/diff`,
+   `/api/v1/undo`, `/api/v1/redo`, and the injected bridge. It always belongs to the webview host.
+2. **The project-automation API** — `/app/`, `/source/`, `/lib/`, `/reports/`,
+   `/api/v1/metadata/...`. It belongs to whichever server owns the site.
+
+The project chooses the second in `.jcodebuddy/conf/webview.json`:
+
+```json
+{
+  "port": 18882,
+  "customServer": "http://127.0.0.1:9000"
+}
+```
+
+- **No `customServer`** — the webview host serves its own page/data namespaces.
+- **`customServer` present** — the webview host still binds its own loopback **editor API** port, opens
+  `/app/?openFile=...` from that port, and proxies `/app/`, `/source/`, `/lib/`, `/reports/` and
+  `/api/v1/metadata/` to the custom base. `/open`, `/health` and the edit/undo routes stay local.
+
+That proxy is the point of the split: the app is same-origin with the IDE bridge, so `window.openFile`,
+`fetch('/source/...')` and `POST /api/v1/applyEdit` all work while the page and data come from the
+project-automation server. A custom server never implements the editor API and a host never reimplements
+the project-automation server.
+
+`customServer` is committed configuration; the port the host actually bound remains local state in
+`.jcodebuddy/webview/host.json`.
+
+## 4. App-side example
 
 ```js
 const params = new URLSearchParams(location.search)
@@ -89,7 +120,7 @@ if (openFile) {
 `URLSearchParams` decodes the query value; do not call `decodeURIComponent` again. Encode each path
 segment when building the `/source` URL so a filename with `#`/`?` stays a filename.
 
-## 4. Editor actions
+## 5. Editor actions
 
 An app can use the existing host verbs (see [`webview-host-api.md`](webview-host-api.md)):
 
@@ -102,7 +133,7 @@ An app can use the existing host verbs (see [`webview-host-api.md`](webview-host
 
 An app must ask `/health` for capabilities rather than infer them from `ide`.
 
-## 5. Future contract slots
+## 6. Future contract slots
 
 The following query keys are **reserved**; they are not implemented and must not be treated as live:
 
@@ -125,7 +156,7 @@ Rules for adding one:
 The path rule is shared by all future keys: project-relative, forward-slash, one decode, no escaping
 segments. A future key that cannot satisfy that rule needs its own contract section here.
 
-## 6. Tests
+## 7. Tests
 
 - `webview/core/webviewd` `MetadataApiTest`: `/app/`, `/reports/`, `/source/`, `/lib/` status and jail.
 - `project-automation/metadata/metadata.test.js`: the same namespaces in the standalone host.

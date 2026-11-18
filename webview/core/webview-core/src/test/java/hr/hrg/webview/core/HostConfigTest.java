@@ -66,6 +66,37 @@ class HostConfigTest {
     }
 
     @Test
+    void aCustomServerIsReadAndNormalized(@TempDir Path project) throws IOException {
+        write(project, "{ \"customServer\": \"http://127.0.0.1:9000\" }\n");
+
+        HostConfig.CustomServer custom = HostConfig.customServer(project);
+
+        assertTrue(custom.present());
+        assertEquals("http://127.0.0.1:9000/", custom.baseUrl(), "the base always ends in a slash");
+        assertEquals("", custom.problem());
+    }
+
+    @Test
+    void anInvalidCustomServerIsReportedAndIgnored(@TempDir Path project) throws IOException {
+        write(project, "{ \"customServer\": \"file:///tmp/app\" }\n");
+
+        HostConfig.CustomServer custom = HostConfig.customServer(project);
+
+        assertFalse(custom.present());
+        assertTrue(custom.problem().contains("http://"), custom.problem());
+    }
+
+    @Test
+    void noCustomServerIsNotAProblem(@TempDir Path project) throws IOException {
+        write(project, "{ \"port\": 18882 }\n");
+
+        HostConfig.CustomServer custom = HostConfig.customServer(project);
+
+        assertFalse(custom.present());
+        assertEquals("", custom.problem());
+    }
+
+    @Test
     void anEmptyDocumentNamesNoPortAndIsNotAProblem(@TempDir Path project) throws IOException {
         write(project, "{}\n");
 

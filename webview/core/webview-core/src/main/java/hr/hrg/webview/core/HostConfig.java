@@ -204,4 +204,68 @@ public final class HostConfig {
         }
         return new PortPreference(OptionalInt.of(value), "");
     }
+
+    /**
+     * An authored project-automation server that owns {@code /app}, {@code /source}, {@code /lib},
+     * {@code /reports} and {@code /api/v1/metadata}.
+     *
+     * <p>When present the IDE host still binds its own loopback port for the editor API
+     * ({@code /open}, {@code /api/v1/applyEdit}, ...), opens the app from that port, and proxies the
+     * authored-server namespaces to this base URL. That keeps the page same-origin with the IDE API while
+     * the page and its data come from the project's own automation server.</p>
+     */
+    public record CustomServer(String baseUrl, String problem) {
+
+        public boolean present() {
+            return baseUrl != null && !baseUrl.isBlank();
+        }
+
+        static CustomServer none() {
+            return new CustomServer(null, "");
+        }
+    }
+
+    /**
+     * Reads {@code "customServer"} from the same committed {@code webview.json}.
+     *
+     * <pre>{@code
+     * { "port": 18882, "customServer": "http://127.0.0.1:9000" }
+     * }</pre>
+     */
+    public static CustomServer customServer(Path project) {
+        Path file = fileOf(project);
+        if (!Files.isRegularFile(file)) {
+            return CustomServer.none();
+        }
+        JsonObject object;
+        try {
+            JsonElement parsed = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
+            if (!parsed.isJsonObject()) {
+                return new CustomServer(null, file + " is not a JSON object; no custom server");
+            }
+            object = parsed.getAsJsonObject();
+        } catch (IOException e) {
+            return new CustomServer(null, "could not read " + file + ": " + e.getMessage());
+        } catch (JsonSyntaxException e) {
+            return new CustomServer(null, file + " is not valid JSON; no custom server");
+        }
+        JsonElement value = object.get("customServer");
+        if (value == null || value.isJsonNull()) {
+            return CustomServer.none();
+        }
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+            return new CustomServer(null, file + ": 'customServer' must be a string");
+        }
+        String base = value.getAsString().trim();
+        if (base.isEmpty()) {
+            return CustomServer.none();
+        }
+        if (!base.startsWith("http://") && !base.startsWith("https://")) {
+            return new CustomServer(null, file + ": 'customServer' must start with http:// or https://");
+        }
+        if (!base.endsWith("/")) {
+            base += "/";
+        }
+        return new CustomServer(base, "");
+    }
 }

@@ -26,7 +26,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -99,6 +103,8 @@ public final class HttpBridgeService {
     private volatile PageServer pageServer;
     /** The one-time path segment that makes a served page and its assets a capability URL. */
     private volatile String pageToken = "";
+    /** Project-automation server to proxy /app, /source, /lib, /reports and metadata reads to, or null. */
+    private volatile String customServerBase;
 
     /** Why the bridge is in the state it is in, for the settings UI: the claim's own sentence. */
     private volatile String stateNote = "Bridge: not started yet";
@@ -180,7 +186,8 @@ public final class HttpBridgeService {
             return null;
         }
         Path root = Path.of(basePath);
-        if (!Files.isRegularFile(root.resolve(".jcodebuddy").resolve("app").resolve("index.html"))) {
+        boolean custom = customServerBase != null;
+        if (!custom && !Files.isRegularFile(root.resolve(".jcodebuddy").resolve("app").resolve("index.html"))) {
             return null;
         }
         String relative = ServedPageUrls.projectRelative(root, file);
@@ -194,6 +201,11 @@ public final class HttpBridgeService {
             return null;
         }
         return ServedPageUrls.appUrl("http://127.0.0.1:" + boundPort, relative);
+    }
+
+    /** True when a project-automation server is configured to own the page/data namespaces. */
+    public boolean isCustomServerConfigured() {
+        return customServerBase != null;
     }
 
     /** A one-line description of the bridge for the settings UI. */
@@ -252,6 +264,13 @@ public final class HttpBridgeService {
 
         int port;
         String basePath = project.getBasePath();
+        HostConfig.CustomServer custom = basePath == null
+                ? HostConfig.customServer(Path.of("."))
+                : HostConfig.customServer(Path.of(basePath));
+        customServerBase = custom.present() ? custom.baseUrl() : null;
+        if (!custom.problem().isEmpty()) {
+            LOG.info("WebView HTTP bridge: " + custom.problem());
+        }
         Integer explicitPort = null;
         if (portText != null && !portText.isBlank()) {
             try {
@@ -273,14 +292,14 @@ public final class HttpBridgeService {
         if (!resolved.problem().isEmpty()) {
             LOG.info("WebView HTTP bridge: " + resolved.problem());
         }
-        if (!resolved.configured()) {
+        if (!resolved.configured() && customServerBase == null) {
             stateNote = "the bridge is off (neither webview.explorer.port, nor this checkout's "
                     + HostDescriptor.FILE_NAME + ", nor " + HostConfig.DIR + "/" + HostConfig.FILE_NAME
                     + " names a port)";
             LOG.info("WebView HTTP bridge is off (webview.explorer.port is not configured)");
             return;
         }
-        port = resolved.port();
+        port = resolved.configured() ? resolved.port() : 0;
         stateNote = resolved.describe(Path.of(basePath));
         if (!stateNote.isEmpty()) {
             LOG.info("WebView HTTP bridge: " + stateNote);
@@ -507,6 +526,11 @@ public final class HttpBridgeService {
             return;
         }
 
+        if (customServerBase != null && isProxied(path)) {
+            proxyToCustomServer(exchange, path);
+            return;
+        }
+
         if (path != null && (path.equals("/app") || path.startsWith("/app/"))) {
             handleApp(exchange, path, origin);
             return;
@@ -615,6 +639,61 @@ public final class HttpBridgeService {
         }
         PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + relative, null);
         sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());
+    }
+
+    private static final HttpClient PROXY_CLIENT = HttpClient.newHttpClient();
+
+    private static boolean isProxied(@Nullable String path) {
+        if (path == null) {
+            return false;
+        }
+        return path.equals("/app") || path.startsWith("/app/")
+                || path.startsWith("/source/")
+                || path.startsWith("/lib/")
+                || path.startsWith("/reports/")
+                || path.startsWith("/api/v1/metadata/");
+    }
+
+    /**
+     * Proxies one page/data request to the project-automation server. Editor routes are checked before this
+     * method, so {@code /open}, {@code /health} and the write API always stay on this IDE's port.
+     */
+    private void proxyToCustomServer(@NotNull HttpExchange exchange, @NotNull String path)
+            throws IOException {
+        String query = exchange.getRequestURI().getRawQuery();
+        String rawPath = exchange.getRequestURI().getRawPath();
+        String target = customServerBase + (rawPath.startsWith("/") ? rawPath.substring(1) : rawPath)
+                + (query == null ? "" : "?" + query);
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(target));
+            HttpRequest request;
+            if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+                request = builder.method("HEAD", HttpRequest.BodyPublishers.noBody()).build();
+            } else if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                send(exchange, 405, "Method Not Allowed", "text/plain");
+                return;
+            } else {
+                request = builder.GET().build();
+            }
+            HttpResponse<java.io.InputStream> response = PROXY_CLIENT.send(request,
+                    HttpResponse.BodyHandlers.ofInputStream());
+            String type = response.headers().firstValue("content-type")
+                    .orElse("application/octet-stream");
+            exchange.getResponseHeaders().set("Content-Type", type);
+            response.headers().firstValue("cache-control")
+                    .ifPresent(value -> exchange.getResponseHeaders().set("Cache-Control", value));
+            response.headers().firstValue("etag")
+                    .ifPresent(value -> exchange.getResponseHeaders().set("ETag", value));
+            exchange.sendResponseHeaders(response.statusCode(), 0);
+            try (var body = response.body(); var out = exchange.getResponseBody()) {
+                body.transferTo(out);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            send(exchange, 502, "Bad Gateway", "text/plain");
+        } catch (IOException | RuntimeException e) {
+            send(exchange, 502, "Bad Gateway: " + e.getMessage(), "text/plain");
+        }
     }
 
     /**

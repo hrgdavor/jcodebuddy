@@ -86,6 +86,9 @@ public final class OpenFileInWebViewAction extends AnAction implements DumbAware
         if (project == null || project.getBasePath() == null) {
             return false;
         }
+        if (HttpBridgeService.getInstance(project).isCustomServerConfigured()) {
+            return true;
+        }
         return java.nio.file.Files.isRegularFile(Path.of(project.getBasePath())
                 .resolve(".jcodebuddy").resolve("app").resolve("index.html"));
     }
