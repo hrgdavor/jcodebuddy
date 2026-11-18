@@ -47,6 +47,10 @@ manifest can fetch a consistent index; a shard is never modified in place.
 keys; `indexChanged` asks it to reload the small index for stats/title changes. Unchanged large maps are
 not transferred.
 
+The shard is the granularity. A report model with 1000 types is split into 64 hash buckets; changing three
+types names at most three buckets, not 1000 entries. The small index is deliberately sent whole when
+`indexChanged` is true — there is no per-entry metadata event.
+
 Catalog and index responses carry an `ETag`; a conditional `If-None-Match` returns `304`. Blobs are
 immutable and cache for a year.
 

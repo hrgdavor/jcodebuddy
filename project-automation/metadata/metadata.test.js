@@ -108,6 +108,50 @@ test('the metadata host serves report, source and lib namespaces from one site r
   }
 })
 
+test('a three-type change sends only those shard ids, not all 64', async () => {
+  const root = mkdtempSync(join(REPO_ROOT, '.tmp', 'metadata-sse-1000-'))
+  try {
+    const metadataRoot = join(root, 'metadata')
+    const reportDir = join(metadataRoot, 'test')
+    mkdirSync(reportDir, { recursive: true })
+    writeFileSync(join(reportDir, 'index.html'), '<!doctype html><title>test</title>\n', 'utf8')
+    const many = (label) => {
+      const types = {}
+      for (let index = 0; index < 300; index += 1) {
+        types[`demo.Type${index}`] = { name: `Type${index}`, kind: 'record', label }
+      }
+      return { ...model(label), types, stats: { ...model(label).stats, types: 300 } }
+    }
+    publishReport({ metadataRoot, report: 'test', title: 'test', model: many('one'),
+      pageDir: reportDir, reportDir })
+    const host = startMetadataServer({ root: reportDir, port: 0, pollMs: 25 })
+    const base = `http://127.0.0.1:${host.server.port}`
+    try {
+      const stream = await fetch(`${base}/events?report=test`)
+      const reader = stream.body.getReader()
+      assert.match(await waitForLine(reader) ?? '', /: connected/)
+      const next = many('one')
+      for (const name of ['demo.Type0', 'demo.Type100', 'demo.Type200']) {
+        next.types[name].label = 'two'
+      }
+      publishReport({ metadataRoot, report: 'test', title: 'test', model: next,
+        pageDir: reportDir, reportDir })
+      const frame = await waitForLine(reader)
+      assert.ok(frame)
+      const dataLine = frame.split('\n').find((line) => line.startsWith('data: '))
+      const event = JSON.parse(dataLine.slice('data: '.length))
+      assert.ok(event.changedShards.length <= 3,
+        `three changed types must not name all shards: ${JSON.stringify(event.changedShards)}`)
+      assert.ok(event.changedShards.length < 64)
+      assert.equal(event.indexChanged, false, 'stats/title did not change: the small index is unchanged')
+    } finally {
+      host.close()
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('the metadata host publishes one targeted SSE event for a changed shard', async () => {
   const root = mkdtempSync(join(REPO_ROOT, '.tmp', 'metadata-sse-'))
   try {
