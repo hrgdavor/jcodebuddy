@@ -43,6 +43,8 @@ may load `/lib/...` and read `/source/...`, and may use the host's editor routes
   should report that capability as unavailable rather than fake it.
 
 An authored UI can be an elaborate application over these namespaces without becoming a report root.
+The exact `/app/?openFile=<project-relative>` URL, the `/source` read it triggers, and the reserved future
+query keys are in [`webview-app-contract.md`](../webview/doc/webview-app-contract.md).
 - `manifest.json` names the current generation and index.
 - `catalog.json` lists the reports available to a host.
 - `model.json` remains for a page or server that cannot use the live contract.

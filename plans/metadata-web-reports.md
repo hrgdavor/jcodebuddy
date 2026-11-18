@@ -41,7 +41,8 @@
 ## 1. The decision this plan implements
 
 User-facing hosting, update, fallback and verification instructions are in
-[`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md).
+[`doc/metadata-report-hosting.md`](../doc/metadata-report-hosting.md). The app URL, `/source` path and
+future query-key contract are in [`webview/doc/webview-app-contract.md`](../webview/doc/webview-app-contract.md).
 
 A metadata report has two independent lifecycles:
 

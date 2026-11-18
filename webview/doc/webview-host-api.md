@@ -6,6 +6,9 @@ spike**, which made `--host lsp` real and found the position bug that had been s
 hosts converge on; [`../kit/doc/contract.md`](../kit/doc/contract.md) is the **frozen** page-side subset every
 existing page relies on, and nothing here changes it.
 
+The app URL, open-file query and site path namespaces are in
+[`webview-app-contract.md`](webview-app-contract.md).
+
 - The frozen page contract: `window.openFile(path, line, column)`, `data-open`/`data-line`, `GET /open`,
   `GET /health`, the auth rules, and the `/file/` route — normative in
   [`../kit/doc/contract.md`](../kit/doc/contract.md).

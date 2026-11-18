@@ -39,15 +39,26 @@ public final class OpenFileInWebViewAction extends AnAction implements DumbAware
         if (file == null) {
             return;
         }
-        if (MarkdownView.isMarkdown(file.getName()) && MarkdownView.getInstance(project).show(file.getPath())) {
+        Path page = Path.of(file.getPath());
+        boolean app = appExists(project);
+        if (!app && MarkdownView.isMarkdown(file.getName())
+                && MarkdownView.getInstance(project).show(file.getPath())) {
             return;
         }
-        // An HTML page is served, not opened as a file: a page that fetches its own JSON (the entity
-        // browser does) cannot do that from file://. The bridge serves it under a one-time token path,
-        // or an existing host named in the settings serves it; if neither is possible, the file URL is
-        // still a usable fallback for a page that needs no fetch.
-        Path page = Path.of(file.getPath());
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            String appUrl = HttpBridgeService.getInstance(project).appUrl(page);
+            if (appUrl != null) {
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (!project.isDisposed()) {
+                        WebViewService.getInstance(project).openInPanel(appUrl);
+                    }
+                });
+                return;
+            }
+            // An HTML page is served, not opened as a file: a page that fetches its own JSON (the entity
+            // browser does) cannot do that from file://. The bridge serves it under a one-time token path,
+            // or an existing host named in the settings serves it; if neither is possible, the file URL is
+            // still a usable fallback for a page that needs no fetch.
             String served = HttpBridgeService.getInstance(project).pageUrl(page);
             String url = served != null ? served : urlFor(file);
             ApplicationManager.getApplication().invokeLater(() -> {
@@ -62,11 +73,21 @@ public final class OpenFileInWebViewAction extends AnAction implements DumbAware
     public void update(@NotNull AnActionEvent event) {
         VirtualFile file = getFileFromContext(event);
         // A Markdown file is a page this tool window renders itself (2026-10-04): the action offers itself for
-        // both, and actionPerformed decides which job it is.
+        // both, and actionPerformed decides which job it is. When the project has a built app, every file is
+        // an app input instead.
+        boolean app = file != null && appExists(event.getProject());
         boolean isViewable = file != null
-                && ("html".equalsIgnoreCase(file.getExtension()) || MarkdownView.isMarkdown(file.getName()));
+                && (app || "html".equalsIgnoreCase(file.getExtension()) || MarkdownView.isMarkdown(file.getName()));
         event.getPresentation().setEnabledAndVisible(isViewable);
         event.getPresentation().setText("Open in WebView Explorer");
+    }
+
+    private static boolean appExists(@Nullable Project project) {
+        if (project == null || project.getBasePath() == null) {
+            return false;
+        }
+        return java.nio.file.Files.isRegularFile(Path.of(project.getBasePath())
+                .resolve(".jcodebuddy").resolve("app").resolve("index.html"));
     }
 
     /**

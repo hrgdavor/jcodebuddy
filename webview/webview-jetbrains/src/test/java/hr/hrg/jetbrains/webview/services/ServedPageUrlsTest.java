@@ -49,4 +49,12 @@ public class ServedPageUrlsTest {
         assertEquals("dir/a%20page.html", ServedPageUrls.encodePath("dir/a page.html"));
         assertEquals("%C3%BCmlaut.html", ServedPageUrls.encodePath("ümlaut.html"));
     }
+
+    @Test
+    public void theAppUrlCarriesTheWholeRelativePathAsOneEncodedQueryValue() {
+        assertEquals("http://127.0.0.1:18884/app/?openFile=src%2Fmain%2Fjava%2FA.java",
+                ServedPageUrls.appUrl("http://127.0.0.1:18884/", "src/main/java/A.java"));
+        assertEquals("http://127.0.0.1:18884/app/?openFile=a%20page.html",
+                ServedPageUrls.appUrl("http://127.0.0.1:18884", "a page.html"));
+    }
 }

@@ -66,6 +66,7 @@ webview/
     examples/                    the two runnable page shapes, the clients, the smoke tests (see its README)
   doc/                           THE PRODUCER HALF — host authors and this repository's own records
     webview-host-api.md          what a host must implement, and how a page discovers what it can do
+    webview-app-contract.md      /app/?openFile=, /source, /lib, /reports and future query keys
     ide-observation-checklist.md the two claims a test cannot make here, and how to check them by hand
   core/
     README.md                    what the shared core is and why it exists

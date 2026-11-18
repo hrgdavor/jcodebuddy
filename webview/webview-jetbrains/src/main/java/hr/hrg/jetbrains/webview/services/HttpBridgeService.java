@@ -28,6 +28,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -164,6 +165,35 @@ public final class HttpBridgeService {
             return null;
         }
         return ServedPageUrls.onLocalServer(boundPort, pageToken, relative);
+    }
+
+    /**
+     * The default app URL for a project file, or null when this project has no built app.
+     *
+     * <p>Unlike {@link #pageUrl(Path)}, the app URL has no token segment: it is the stable
+     * {@code /app/?openFile=<relative>} contract. The local server accepts it only from an allowed
+     * origin (or with the token query), and confines both the app and {@code /source} to the project.</p>
+     */
+    public synchronized @Nullable String appUrl(@NotNull Path file) {
+        String basePath = project.getBasePath();
+        if (basePath == null || basePath.isBlank()) {
+            return null;
+        }
+        Path root = Path.of(basePath);
+        if (!Files.isRegularFile(root.resolve(".jcodebuddy").resolve("app").resolve("index.html"))) {
+            return null;
+        }
+        String relative = ServedPageUrls.projectRelative(root, file);
+        if (relative == null) {
+            return null;
+        }
+        if (server == null) {
+            startServer(0);
+        }
+        if (server == null || boundPort <= 0) {
+            return null;
+        }
+        return ServedPageUrls.appUrl("http://127.0.0.1:" + boundPort, relative);
     }
 
     /** A one-line description of the bridge for the settings UI. */
@@ -477,6 +507,16 @@ public final class HttpBridgeService {
             return;
         }
 
+        if (path != null && (path.equals("/app") || path.startsWith("/app/"))) {
+            handleApp(exchange, path, origin);
+            return;
+        }
+
+        if (path != null && path.startsWith("/source/")) {
+            handleSource(exchange, path, origin);
+            return;
+        }
+
         if (path != null && path.startsWith(WRITE_PREFIX)) {
             handleWrite(exchange, path);
             return;
@@ -529,6 +569,52 @@ public final class HttpBridgeService {
             case INVALID_PATH -> send(exchange, 400, "Missing filePath parameter", "text/plain");
             default -> send(exchange, 404, "Could not open " + filePath, "text/plain");
         }
+    }
+
+    /**
+     * {@code GET /app/?openFile=<project-relative>} and its assets. The app is derived output in
+     * {@code .jcodebuddy/app}; the query is read by the app, not the host.
+     */
+    private void handleApp(@NotNull HttpExchange exchange, @NotNull String path, String origin)
+            throws IOException {
+        if (!isAuthorized(exchange, origin)) {
+            send(exchange, 403, "Forbidden", "text/plain");
+            return;
+        }
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+        String relative = path.startsWith("/app/") ? path.substring("/app/".length()) : "index.html";
+        serveProjectRelative(exchange, ".jcodebuddy/app/" + relative);
+    }
+
+    /** {@code GET /source/<project-relative>} — the app's read-only source view. */
+    private void handleSource(@NotNull HttpExchange exchange, @NotNull String path, String origin)
+            throws IOException {
+        if (!isAuthorized(exchange, origin)) {
+            send(exchange, 403, "Forbidden", "text/plain");
+            return;
+        }
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+        serveProjectRelative(exchange, path.substring("/source/".length()));
+    }
+
+    private void serveProjectRelative(@NotNull HttpExchange exchange, @NotNull String relative)
+            throws IOException {
+        PageServer current = pageServer;
+        if (current == null) {
+            send(exchange, 404, "No page server is running", "text/plain");
+            return;
+        }
+        if (relative.isEmpty() || relative.endsWith("/")) {
+            relative += "index.html";
+        }
+        PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + relative, null);
+        sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());
     }
 
     /**

@@ -73,4 +73,20 @@ public final class ServedPageUrls {
         }
         return trimmed + "/" + encodePath(relative);
     }
+
+    /**
+     * The default app URL for one project file:
+     * {@code <host>/app/?openFile=<project-relative path>}.
+     *
+     * <p>The path is one query value and is encoded as one component, so {@code /} becomes {@code %2F}.
+     * The app decodes it once and fetches {@code /source/<path>}.</p>
+     */
+    public static @NotNull String appUrl(@NotNull String base, @NotNull String relative) {
+        String trimmed = base.trim();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed + "/app/?openFile="
+                + URLEncoder.encode(relative, StandardCharsets.UTF_8).replace("+", "%20");
+    }
 }
