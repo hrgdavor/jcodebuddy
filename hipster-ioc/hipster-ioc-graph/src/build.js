@@ -253,9 +253,12 @@ function main() {
   mkdirSync(OUTPUT_DIR, { recursive: true })
   writeFileSync(join(OUTPUT_DIR, 'graph.html'), page, 'utf8')
   writeFileSync(join(OUTPUT_DIR, 'live.html'), livePage, 'utf8')
+  const sourceContexts = Array.isArray(joined.contexts)
+    ? joined.contexts
+    : joined.contexts?.contexts ?? []
   const model = {
     title: 'hipster-ioc — context dependency graph',
-    contexts: joined.contexts,
+    contexts: sourceContexts,
     locations: joined.locations,
     locationless: joined.locationless,
   }

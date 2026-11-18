@@ -19,6 +19,7 @@ import { publishReport } from '../project-automation/metadata/publish.js'
 const REPO_ROOT = resolve(import.meta.dir, '..')
 const PAGE = resolve(process.argv[2] ?? join(REPO_ROOT,
   'hipster-entity', 'hipster-entity-example', '.jcodebuddy', 'metadata', 'browser'))
+const GRAPH_MODE = process.argv.includes('--graph') || PAGE.includes(`${join('hipster-ioc', '')}`)
 
 const CHROME = [
   process.env.CHROME_PATH,
@@ -30,7 +31,7 @@ const CHROME = [
   '/usr/bin/chromium',
 ].filter(Boolean).find((file) => existsSync(file))
 
-if (!existsSync(join(PAGE, 'index.html')) || !existsSync(join(PAGE, 'manifest.json'))) {
+if (!existsSync(join(PAGE, GRAPH_MODE ? 'live.html' : 'index.html')) || !existsSync(join(PAGE, 'manifest.json'))) {
   console.log(`skip: no built live page at ${PAGE}`)
   process.exit(0)
 }
@@ -157,40 +158,65 @@ try {
   await browser.send('Runtime.enable', {}, sessionId)
   await browser.send('Page.enable', {}, sessionId)
   const loaded = browser.nextEvent('Page.loadEventFired')
-  await browser.send('Page.navigate', { url: `http://127.0.0.1:${host.server.port}/` }, sessionId)
+  await browser.send('Page.navigate', { url: `http://127.0.0.1:${host.server.port}/${GRAPH_MODE ? 'live.html' : ''}` }, sessionId)
   await loaded
   await Bun.sleep(1000)
   const before = await evaluate(browser, sessionId, `(() => {
     window.__jcbLiveMarker = 'still-here';
-    const text = document.body.innerText;
-    return { marker: window.__jcbLiveMarker, text };
+    return { marker: window.__jcbLiveMarker, text: document.body.innerText };
   })()`)
-  if (!/records/i.test(before.text)) {
+  if (GRAPH_MODE ? !(before.text.includes('context') || before.text.includes('depends')) : !/records/i.test(before.text)) {
     console.log(`page text: ${before.text.replace(/\s+/g, ' ').slice(0, 800)}`)
     const errorText = await evaluate(browser, sessionId, 'document.querySelector("p")?.textContent ?? ""')
     console.log(`page error: ${errorText}`)
-    throw new Error('page did not render the record UI')
+    throw new Error('page did not render its UI')
   }
 
   const model = JSON.parse(readFileSync(join(PAGE, 'model.json'), 'utf8'))
-  const expected = Number(model.stats?.records ?? 0) + 1
-  const changed = {
-    ...model,
-    stats: { ...model.stats, records: expected },
+  let changed
+  let expected
+  if (GRAPH_MODE) {
+    changed = structuredClone(model)
+    if (!Array.isArray(changed.contexts) || changed.contexts.length === 0) {
+      throw new Error('graph model has no contexts')
+    }
+    changed.contexts.push({
+      context: 'demo.LiveProbe',
+      implementation: 'demo.LiveProbeImpl',
+      dependencies: [],
+      beans: [],
+    })
+    expected = 'LiveProbe'
+    publishReport({
+      metadataRoot: dirname(PAGE),
+      report: 'hipster-ioc',
+      title: changed.title,
+      model: changed,
+      pageDir: PAGE,
+      reportDir: PAGE,
+      pageEntry: 'live.html',
+      collection: 'contexts',
+      collectionKey: 'context',
+    })
+  } else {
+    expected = String(Number(model.stats?.records ?? 0) + 1)
+    changed = {
+      ...model,
+      stats: { ...model.stats, records: Number(expected) },
+    }
+    publishReport({
+      metadataRoot: dirname(PAGE),
+      report: 'entity-browser',
+      title: changed.title,
+      model: changed,
+      pageDir: PAGE,
+      reportDir: PAGE,
+    })
   }
-  publishReport({
-    metadataRoot: dirname(PAGE),
-    report: 'entity-browser',
-    title: changed.title,
-    model: changed,
-    pageDir: PAGE,
-    reportDir: PAGE,
-  })
   await Bun.sleep(1200)
   const after = await evaluate(browser, sessionId, `(() => ({
     marker: window.__jcbLiveMarker,
-    text: document.body.innerText,
-    generation: document.querySelector('[data-metadata-generation]')?.textContent ?? ''
+    text: document.body.innerText
   }))()`)
 
   if (after.marker !== 'still-here') {
@@ -199,11 +225,11 @@ try {
   } else {
     console.log('ok live page kept its document marker')
   }
-  if (!after.text.includes(`${expected}`) || !/records/i.test(after.text)) {
+  if (!after.text.includes(expected)) {
     failures += 1
-    console.log(`FAIL: updated record count ${expected} is not visible`)
+    console.log(`FAIL: updated value ${expected} is not visible`)
   } else {
-    console.log(`ok live page rendered the new record count ${expected}`)
+    console.log(`ok live page rendered the new value ${expected}`)
   }
 } catch (error) {
   failures += 1
