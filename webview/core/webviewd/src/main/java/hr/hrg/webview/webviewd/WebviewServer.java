@@ -561,6 +561,10 @@ public final class WebviewServer implements AutoCloseable {
             return;
         }
         String projectRelative = projectRoot.relativize(target).toString().replace('\\', '/');
+        if (projectRelative.endsWith(".json") || projectRelative.endsWith(".html")) {
+            // A manual refresh must see the current manifest/index/page, never a heuristic cache.
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        }
         PageServer.Response response = pageServer.serve(PageServer.ROUTE_PREFIX + projectRelative,
                 injectBridge ? injectedBridge : null);
         announceDigest(exchange, response);

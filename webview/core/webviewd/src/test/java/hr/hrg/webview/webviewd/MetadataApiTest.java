@@ -88,7 +88,9 @@ class MetadataApiTest {
         start();
 
         assertEquals(200, get("/reports/entity-browser/").statusCode());
-        assertEquals(200, get("/reports/entity-browser/index.html").statusCode());
+        HttpResponse<String> manifest = get("/reports/entity-browser/manifest.json");
+        assertEquals(200, manifest.statusCode());
+        assertEquals("no-store", manifest.headers().firstValue("Cache-Control").orElse(""));
         assertEquals(200, get("/app/").statusCode());
         assertEquals(200, get("/lib/shared.js").statusCode());
         assertEquals(200, get("/source/src/A.java").statusCode());

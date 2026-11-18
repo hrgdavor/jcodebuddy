@@ -6,6 +6,10 @@
  * only the shards that changed, so a large type map is never transferred again. If there is no
  * manifest (an old static page directory), it falls back to the single `model.json` and does not
  * subscribe.</p>
+ *
+ * <p>There is deliberately no polling loop. A host without a metadata transport is refreshed by the
+ * reader; every fetch is `no-store`, and the host marks manifest/index/page responses no-store so a
+ * manual refresh cannot be served from a stale cache.</p>
  */
 
 async function getJson(url) {

@@ -693,6 +693,9 @@ public final class HttpBridgeService {
             send(exchange, 404, "Not Found", "text/plain");
             return;
         }
+        if (projectRelative.endsWith(".json") || projectRelative.endsWith(".html")) {
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        }
         PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + projectRelative, null);
         sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());
     }
@@ -749,6 +752,9 @@ public final class HttpBridgeService {
         }
         if (relative.isEmpty() || relative.endsWith("/")) {
             relative += "index.html";
+        }
+        if (relative.endsWith(".json") || relative.endsWith(".html")) {
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
         }
         PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + relative, null);
         sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());

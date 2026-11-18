@@ -203,6 +203,7 @@ A small shared client (proposed `metadata-client.js`) provides:
 
 - initial `manifest` → `index` → shard load;
 - `EventSource` subscription with reconnect and `Last-Event-ID`;
+- no polling loop; a reader refresh is the fallback when the backend is absent;
 - conditional fetches and abort of stale fetches;
 - a `state` update callback so a page keeps search text, selected record, scroll position and
   drill-down state;
@@ -253,33 +254,34 @@ will use the contract (entity-browser first, IOC graph second, entity reference 
 **Gate:** a test builds twice with unchanged metadata and proves the generation and model bytes are
 identical; an interrupted temp file is ignored; a changed model produces a new generation.
 
-### M2 — Read API in the host (M)
+### M2 — Read API in the JS backend (M)
 
-- Add catalog/manifest/model routes to `webviewd`, reusing `PageServer`’s project jail and the
-  existing token/origin rules.
+- Add catalog/manifest/model routes to `project-automation/metadata/server.js`, reusing its project
+  jail and the host's token/origin rules when proxied.
 - Add `ETag`/`If-None-Match` and `304`.
-- Add the same read routes to `serve.js` (the standalone subset).
+- Keep `serve.js` as the standalone JS backend; the webview host serves static report files and proxies
+  the metadata routes when configured.
 
-**Gate:** Bun tests start a host, fetch catalog/model, assert `304` on the matching `ETag`, and assert
-traversal/unknown-report refusal. The same assertions run against `serve.js`.
+**Gate:** Bun tests start the JS backend, fetch catalog/model, assert `304` on the matching `ETag`, and
+assert traversal/unknown-report refusal. The webview tests cover static `/reports`, `/source`, `/lib`.
 
-### M3 — Metadata SSE and publisher (M)
+### M3 — Metadata SSE in the JS backend (M)
 
-- Add a metadata stream that watches `.jcodebuddy/metadata/**/manifest.json` through fs-meta (or the
-  host’s existing file-change stream filtered to that subtree), coalesces writes, and publishes
-  generation events.
+- Add a metadata stream in the JS backend that watches `.jcodebuddy/metadata/**/manifest.json`,
+  coalesces writes, and publishes generation events.
 - Add `Last-Event-ID` replay and a bounded recent-event ring.
-- Add the standalone polling fallback (manifest `ETag`, no fs-meta required).
+- No polling loop in the page: an unhosted page is refreshed by the reader, with `no-store` reads.
 
 **Gate:** a test writes a new model atomically, receives exactly one event with the new generation,
-reconnects with `Last-Event-ID` and receives the missed event; unchanged bytes produce no event; no
-daemon produces `503` in `webviewd` and polling in `serve.js`.
+reconnects with `Last-Event-ID` and receives the missed event; unchanged bytes produce no event; a
+webview without the JS backend still serves the static page and the reader can refresh it.
 
 ### M4 — Page-side live updates (M)
 
 - Add the shared metadata client and adopt it in entity-browser.
 - Preserve selection/search and show a non-blocking “metadata updated” transition.
-- Keep the existing static fetch as a no-SSE fallback.
+- Keep the existing static fetch as a no-SSE fallback; a reader refresh is the intended path when no
+  backend is running.
 
 **Gate:** a headless browser test (the existing CDP smoke-test style) opens the page, changes the
 model on disk, observes new content without a full page reload, and asserts the selected record is
@@ -327,7 +329,8 @@ The direction is complete when all of these are true:
 4. A conditional fetch returns `304` for an unchanged generation.
 5. A reconnect with `Last-Event-ID` does not lose the latest publication.
 6. `webviewd` remains token/project-jailed; no metadata write route exists.
-7. `serve.js` can serve the same page and model without fs-meta; it uses polling when SSE cannot attach.
+7. `serve.js` can serve the same page and model without fs-meta; without the JS SSE backend the reader
+   refreshes the page, with `no-store` reads.
 8. jsx6 is built once per hash and reused across reports; page builds do not bundle it again.
 9. Existing static page directories still work as a fallback.
 10. Tests cover catalog, model `ETag`, SSE coalescing/replay, page live update, and shared-library reuse.
@@ -357,8 +360,8 @@ These are the decisions M0 must settle; the plan does not pretend they are alrea
   tested in the same headless lane.
 - **Cache invalidation.** Content-addressed assets are immutable; `index.html` itself must not be
   cached aggressively, or a changed import map will not be seen.
-- **Two hosts must not drift.** The catalog/model/event rules live in one shared implementation
-  where possible; `serve.js` is a subset, not a second semantic.
+- **Two implementations must not drift.** The catalog/model/event rules live in the JS backend;
+  `serve.js` is the same JS backend used standalone, not a second semantic.
 - **Security.** Metadata can name source paths. The same project jail and token rule applies; a
   report must never cause a read outside the project.
 - **No live update without a host.** `file://` and a static server without SSE still show the model
@@ -372,7 +375,7 @@ These are the decisions M0 must settle; the plan does not pretend they are alrea
 | static fallback server | [`src_build/serve.js`](../project-automation/entity-browser/src_build/serve.js)                     |
 | report build           | [`src_build/build.js`](../project-automation/entity-browser/src_build/build.js)                     |
 | page runtime           | [`src/index.jsx`](../project-automation/entity-browser/src/index.jsx), new shared `metadata-client` |
-| host API/SSE           | `webview/core/webviewd`, sharing `PageServer` and the existing fs-meta client                       |
+| host API/SSE           | `project-automation/metadata/server.js` (JS); webview hosts are static/editor only                  |
 | page serving           | existing `PageServer` / `/page/` routes                                                             |
 | jsx6 checkout          | `.jsx6/` or `JCODEBUDDY_JSX6_DIR` (AGENTS.md § 2)                                                   |
 

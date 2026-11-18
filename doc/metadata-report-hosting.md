@@ -156,9 +156,10 @@ large unchanged collection.
 
 ## Static/offline fallback
 
-`model.json` is still written. A page opened as `file://`, or served without the metadata API, can use the
-fallback if its loader supports it; the entity browser reports the fetch failure instead of rendering a
-blank page. The old self-contained graph page remains an independent `file://` report until it is migrated.
+`model.json` is still written. A page opened as `file://`, or served without the metadata transport,
+uses the static model. There is deliberately no polling loop: a reader refreshes the page when they want
+the current metadata. The client sends `cache: 'no-store'`, and the host marks report HTML/JSON
+`Cache-Control: no-store`, so a manual refresh cannot be answered from a stale cache.
 
 ## Verification
 
