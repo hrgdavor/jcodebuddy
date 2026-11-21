@@ -16,6 +16,7 @@ import com.intellij.ui.jcef.JBCefBrowser;
 import com.intellij.ui.jcef.JBCefScrollbarsHelper;
 import com.intellij.ui.jcef.JBCefBrowserBase;
 import hr.hrg.jetbrains.webview.bridge.WebViewBridge;
+import hr.hrg.jetbrains.webview.services.HttpBridgeService;
 import hr.hrg.jetbrains.webview.services.PluginStateService;
 import hr.hrg.webview.core.UrlNormalizer;
 import org.cef.browser.CefBrowser;
@@ -202,6 +203,45 @@ public final class WebViewPanel implements Disposable {
         browser.getCefBrowser().reload();
     }
 
+    /**
+     * Opens the project's app home: {@code /app/index.html} on the host the panel is already using, or on
+     * this project's bridge when the current page is not a host page. The default home is the dashboard;
+     * a project that has not built an app gets the host's 404, which is the honest answer.
+     */
+    public void goHome() {
+        if (disposed) {
+            return;
+        }
+        String origin = originOf(currentUrl());
+        if (origin == null) {
+            int port = HttpBridgeService.getInstance(project).getBoundPort();
+            if (port > 0) {
+                origin = "http://127.0.0.1:" + port;
+            }
+        }
+        if (origin != null) {
+            load(origin + "/app/index.html");
+        }
+    }
+
+    /** The scheme/host/port origin of an http(s) URL, or null for a data:/file: page. */
+    private static @Nullable String originOf(@Nullable String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            String scheme = uri.getScheme();
+            if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))
+                    || uri.getHost() == null) {
+                return null;
+            }
+            return scheme + "://" + uri.getHost() + (uri.getPort() > 0 ? ":" + uri.getPort() : "");
+        } catch (RuntimeException malformed) {
+            return null;
+        }
+    }
+
     public boolean canGoBack() {
         return !disposed && browser.getCefBrowser().canGoBack();
     }
@@ -296,6 +336,7 @@ public final class WebViewPanel implements Disposable {
         DefaultActionGroup group = new DefaultActionGroup();
         group.add(new WebViewActions.Back(this));
         group.add(new WebViewActions.Forward(this));
+        group.add(new WebViewActions.Home(this));
         group.add(new WebViewActions.Refresh(this));
         group.add(new WebViewActions.Settings(project));
 

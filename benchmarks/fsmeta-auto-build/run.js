@@ -14,11 +14,13 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { envWith, resolveJdk25 } from "../../scripts/lib/toolchain.js";
+import { resolveFsmeta } from "../../scripts/lib/fsmeta.js";
 
 const HERE = import.meta.dir;
 const REPO = join(HERE, "..", "..");
 const TMP = join(REPO, ".tmp", "fsmeta-auto-build");
-const FS = process.env.FSMETA_BIN ?? "D:\\wrk\\core\\fs-meta\\zig-out\\bin\\fsmeta.exe";
+// FSMETA_BIN, then a sibling `../fs-meta` checkout, then `fsmeta` on PATH — never a machine-specific default.
+const FS = resolveFsmeta(REPO);
 const TICK_MS = process.env.FSMETA_TICK_MS ?? "50";
 const CLASSES = (process.env.BENCH_CLASSES ?? "42").split(",").map(Number);
 const REPEAT = Number(process.env.BENCH_REPEAT ?? "1");

@@ -18,7 +18,12 @@ import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.OrderEnumerator;
 import com.intellij.openapi.roots.OrderRootType;
 import com.intellij.openapi.roots.SourceFolder;
+import com.intellij.openapi.util.Computable;
+import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileFilter;
+import com.intellij.problems.WolfTheProblemSolver;
 import com.intellij.util.messages.MessageBusConnection;
 import hr.hrg.jcodebuddy.compile.EcjIncrementalCompiler;
 import hr.hrg.jcodebuddy.watch.FsMetaClient;
@@ -43,6 +48,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -65,6 +71,10 @@ import java.util.stream.Stream;
  *
  * <p>There is no JSON report, no intermediate diagnostics file and no IntelliJ build invocation. IntelliJ's
  * auto-build must be disabled by the user; this service is the writer of the compiler output in that setup.</p>
+ *
+ * <p>The fs-meta subscription can be paused independently of the compile loop ({@link #pauseWatch()} and
+ * {@link #resumeWatch()}), which is what lets an external Maven run rewrite sources and class outputs
+ * without this loop compiling each file as it appears.</p>
  */
 @Service(Service.Level.PROJECT)
 public final class IncrementalBuildService implements Disposable {
@@ -78,6 +88,7 @@ public final class IncrementalBuildService implements Disposable {
     private final IncrementalDiagnosticsService diagnostics;
     private final IncrementalLogService logService;
     private final JcodeBuddySettings settings;
+    private final IncrementalToolSocket toolSocket;
     private final Object lifecycle = new Object();
     private final MessageBusConnection busConnection;
     private final AtomicBoolean rootsRefreshPending = new AtomicBoolean();
@@ -85,6 +96,9 @@ public final class IncrementalBuildService implements Disposable {
     private final AtomicInteger watchRetrySeconds = new AtomicInteger(2);
     private final AtomicBoolean watchFailureNotified = new AtomicBoolean();
     private final AtomicBoolean fsMetaSetupNotified = new AtomicBoolean();
+    /** Set by <b>Stop Watch</b>: no subscription is opened and no new batch is read until <b>Start Watch</b>. */
+    private final AtomicBoolean watchPaused = new AtomicBoolean();
+    private final AtomicBoolean pausedSkipLogged = new AtomicBoolean();
     private final ScheduledExecutorService watchRetry = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "jcodebuddy-fsmeta-retry");
         thread.setDaemon(true);
@@ -114,6 +128,7 @@ public final class IncrementalBuildService implements Disposable {
         this.diagnostics = project.getService(IncrementalDiagnosticsService.class);
         this.logService = project.getService(IncrementalLogService.class);
         this.settings = project.getService(JcodeBuddySettings.class);
+        this.toolSocket = new IncrementalToolSocket(project, this);
         this.busConnection = project.getMessageBus().connect(this);
         this.busConnection.subscribe(ModuleRootListener.TOPIC, new ModuleRootListener() {
             @Override
@@ -132,6 +147,7 @@ public final class IncrementalBuildService implements Disposable {
         synchronized (lifecycle) {
             if (!started.compareAndSet(false, true)) {
                 log("Start requested but the incremental build is already running");
+                applyToolSocketState();
                 return;
             }
             String base = project.getBasePath();
@@ -151,7 +167,17 @@ public final class IncrementalBuildService implements Disposable {
                 return thread;
             });
             worker.submit(this::initialize);
+            applyToolSocketState();
         }
+    }
+
+    /** Starts or stops the live tool endpoint to match the project settings; idempotent. */
+    private void applyToolSocketState() {
+        if (!settings.isEnabled() || !settings.isSocketEnabled()) {
+            toolSocket.stop();
+            return;
+        }
+        toolSocket.start();
     }
 
     /** Applies a changed project-level setting without restarting the IDE. */
@@ -165,6 +191,7 @@ public final class IncrementalBuildService implements Disposable {
                 state.clear();
             }
         }
+        applyToolSocketState();
     }
 
     /** Compiles every source root again, on the worker thread. */
@@ -217,13 +244,98 @@ public final class IncrementalBuildService implements Disposable {
         });
     }
 
-    /** Re-runs editor highlighting against the current diagnostic map without compiling or rebuilding. */
+    /**
+     * Stops the fs-meta subscription so an external build (for example {@code mvn generate-sources}) can
+     * rewrite sources and class outputs without this loop compiling them as they appear.
+     *
+     * <p>Only the subscription stops. The compile loop, the compilers and the persisted state stay alive, so
+     * <b>Rebuild</b>, <b>Refresh Roots</b> and the editor diagnostics keep working. This action does not move
+     * the batch marker, so <b>Start Watch</b> replays every generation the daemon recorded during the pause;
+     * those files are hash-checked, so a replay of an already compiled file costs no ECJ write.</p>
+     */
+    public void pauseWatch() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project before pausing the watch.",
+                    NotificationType.WARNING);
+            return;
+        }
+        if (!watchPaused.compareAndSet(false, true)) {
+            log("Watch is already paused; nothing to stop");
+            return;
+        }
+        pausedSkipLogged.set(false);
+        log("Watch paused at batch marker " + lastAppliedBatch
+                + ": fs-meta changes will not trigger a compile until Start Watch"
+                + (worker == null ? "" : "; a compile that is already running finishes first"));
+        submitToWorker(() -> {
+            FsMetaDaemonWatch current = watch;
+            if (current != null) {
+                log("Stopped fs-meta subscription; it had read up to batch " + current.lastAppliedBatch());
+            }
+            stopWatch();
+        });
+    }
+
+    /**
+     * Re-subscribes to fs-meta after {@link #pauseWatch()} and replays from the last applied batch marker,
+     * so nothing that changed during the pause is lost. Called while the watch is not paused, it is a manual
+     * re-subscribe from the same marker.
+     */
+    public void resumeWatch() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project before starting the watch.",
+                    NotificationType.WARNING);
+            return;
+        }
+        boolean wasPaused = watchPaused.compareAndSet(true, false);
+        if (wasPaused) {
+            pausedSkipLogged.set(false);
+            log("Watch resumed: replaying fs-meta from batch marker " + lastAppliedBatch);
+        } else {
+            log("Watch is not paused; re-subscribing from batch marker " + lastAppliedBatch);
+        }
+        if (!started.get()) {
+            start();
+        }
+        submitToWorker(() -> {
+            if (started.get()) {
+                startWatch();
+            }
+        });
+    }
+
+    /** Whether <b>Stop Watch</b> is in effect: the compile loop runs, but no fs-meta batch is consumed. */
+    public boolean isWatchPaused() {
+        return watchPaused.get();
+    }
+
+    /** Submits work to the loop's single thread; a stop between the click and the submit must not throw on the EDT. */
+    private void submitToWorker(Runnable task) {
+        ExecutorService current = worker;
+        if (current == null) {
+            return;
+        }
+        try {
+            current.submit(task);
+        } catch (RejectedExecutionException stopped) {
+            log("Ignoring the request because the incremental build was stopped");
+        }
+    }
+
+    /**
+     * Re-runs editor highlighting against the current diagnostic map without compiling or rebuilding, and
+     * clears the Project-view problem marks of files this loop has compiled
+     * ({@link #clearProjectViewProblems(Collection)}).
+     */
     public void refreshErrors() {
         if (!settings.isEnabled()) {
             notify("Enable JCodeBuddy Incremental Build for this project first.", NotificationType.WARNING);
             return;
         }
         log("Refreshing error markers (no compile)");
+        // The Project view paints its red problem underlines from WolfTheProblemSolver, not from the editor's
+        // highlighting; restarting the daemon alone therefore leaves them behind.
+        ApplicationManager.getApplication().executeOnPooledThread(() -> clearProjectViewProblems(null));
         refreshHighlighting();
     }
 
@@ -253,6 +365,70 @@ public final class IncrementalBuildService implements Disposable {
                 logCurrentRoots();
             }
         });
+    }
+
+    /**
+     * Whether the incremental loop is running; the state the live tool socket reports as {@code running}.
+     */
+    public boolean isRunning() {
+        return started.get();
+    }
+
+    /** Whether the project setting enables the build; a consumer reports this before offering commands. */
+    public boolean isEnabledForProject() {
+        return settings.isEnabled();
+    }
+
+    /**
+     * The fs-meta subscription state, as a consumer renders it: {@code stopped}, {@code paused},
+     * {@code not-attached}, {@code disconnected} or {@code watching}.
+     */
+    public String watchState() {
+        if (!started.get()) {
+            return "stopped";
+        }
+        if (watchPaused.get()) {
+            return "paused";
+        }
+        FsMetaDaemonWatch current = watch;
+        if (current == null) {
+            return "not-attached";
+        }
+        return current.isRunning() ? "watching" : "disconnected";
+    }
+
+    /** The last fs-meta batch a compile was applied for, or {@code -1} before the first one. */
+    public long appliedBatch() {
+        return lastAppliedBatch;
+    }
+
+    /** The daemon root the last subscription used, or {@code null}. */
+    public Path daemonRootPath() {
+        return daemonRoot;
+    }
+
+    /** The fs-meta socket the last subscription used, or {@code null}. */
+    public Path daemonSocketPath() {
+        return daemonSocket;
+    }
+
+    /** How many files are waiting for a retry after a failed compile. */
+    public int failedFileCount() {
+        return failedFiles.size();
+    }
+
+    /** The Java source roots this loop compiles, in dependency order; the data behind {@code build.roots}. */
+    public List<SourceRootInfo> sourceRoots() {
+        List<SourceRootInfo> roots = new ArrayList<>(sourceRoots.size());
+        for (SourceRoot root : sourceRoots) {
+            roots.add(new SourceRootInfo(root.module().getName(), root.root().toString(),
+                    root.output().toString(), root.test()));
+        }
+        return List.copyOf(roots);
+    }
+
+    /** One source root as a consumer sees it, with absolute paths. */
+    public record SourceRootInfo(String module, String root, String output, boolean test) {
     }
 
     private void requestRootsRefresh() {
@@ -351,6 +527,10 @@ public final class IncrementalBuildService implements Disposable {
                 return;
             }
             log("Stopping incremental build");
+            toolSocket.stop();
+            // A pause is a property of the running loop: re-enabling the project setting must watch again.
+            watchPaused.set(false);
+            pausedSkipLogged.set(false);
             stopWatch();
             ExecutorService currentWorker = worker;
             worker = null;
@@ -622,6 +802,7 @@ public final class IncrementalBuildService implements Disposable {
             if (rootOk) {
                 rememberHashes(files);
                 failedFiles.removeAll(files);
+                clearProjectViewProblems(files);
             } else {
                 failedFiles.addAll(errorFiles(compiler, files, root.root()));
             }
@@ -1001,6 +1182,7 @@ public final class IncrementalBuildService implements Disposable {
         if (success) {
             failedFiles.clear();
             fullCompileRequired = false;
+            clearProjectViewProblems(null);
         }
         refreshHighlighting();
         return success;
@@ -1018,6 +1200,10 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void startWatch() {
+        if (watchPaused.get()) {
+            log("Watch is paused; fs-meta is not subscribed. Press Start Watch to resume");
+            return;
+        }
         FsMetaDaemonDiscovery.Attach attach = discover();
         if (attach == null || !attach.attached()) {
             scheduleWatchRetry();
@@ -1028,6 +1214,12 @@ public final class IncrementalBuildService implements Disposable {
 
     private void startWatch(FsMetaDaemonDiscovery.Attach attach, long fromBatch) {
         stopWatch();
+        if (watchPaused.get()) {
+            // Stop Watch must also survive a subscription attempt that a startup, a roots refresh or an
+            // automatic retry happens to make after the user paused.
+            log("Watch is paused; fs-meta is not subscribed. Press Start Watch to resume");
+            return;
+        }
         if (!started.get() || attach == null || !attach.attached()) {
             return;
         }
@@ -1038,12 +1230,19 @@ public final class IncrementalBuildService implements Disposable {
         log("fs-meta socket: " + attach.location().socket());
         log("fs-meta filter: " + filter);
         log("Subscribing to fs-meta from batch " + fromBatch);
+        // The reader reports a batch on its own thread, and it keeps reading ahead while the worker compiles.
+        // This holder lets the listener read the generation of the subscription it belongs to, even when the
+        // service has already replaced the field with a newer one.
+        FsMetaDaemonWatch[] reader = new FsMetaDaemonWatch[1];
         watch = new FsMetaDaemonWatch(filter, attach.location().socket(), fromBatch, batch -> {
+            FsMetaDaemonWatch subscription = reader[0];
+            long generation = subscription == null ? -1 : subscription.lastAppliedBatch();
             ExecutorService current = worker;
             if (current != null) {
-                current.submit(() -> applyBatch(batch));
+                current.submit(() -> applyBatch(batch, generation));
             }
         });
+        reader[0] = watch;
         try {
             watch.start();
             watchFailureNotified.set(false);
@@ -1069,18 +1268,18 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private void scheduleWatchRetry() {
-        if (!started.get() || !watchRetryPending.compareAndSet(false, true)) {
+        if (watchPaused.get() || !started.get() || !watchRetryPending.compareAndSet(false, true)) {
             return;
         }
         int delay = watchRetrySeconds.get();
         watchRetry.schedule(() -> {
             watchRetryPending.set(false);
             ExecutorService current = worker;
-            if (!started.get() || current == null) {
+            if (watchPaused.get() || !started.get() || current == null) {
                 return;
             }
             current.submit(() -> {
-                if (watch != null && watch.isRunning()) {
+                if (watchPaused.get() || (watch != null && watch.isRunning())) {
                     return;
                 }
                 watchRetrySeconds.set(Math.min(30, Math.max(2, watchRetrySeconds.get() * 2)));
@@ -1089,8 +1288,23 @@ public final class IncrementalBuildService implements Disposable {
         }, delay, TimeUnit.SECONDS);
     }
 
-    private void applyBatch(WatchBatch batch) {
+    /**
+     * Applies one delivered batch.
+     *
+     * @param generation the generation this batch carries, read on the reader thread; it is the only safe
+     *                   batch marker, because the reader may already be ahead of this worker
+     */
+    private void applyBatch(WatchBatch batch, long generation) {
         if (!started.get()) {
+            return;
+        }
+        if (watchPaused.get()) {
+            // Stop Watch was pressed: a batch that was already queued is not compiled, because Maven may start
+            // rewriting its files at any moment. The marker still names the last applied generation, so
+            // Start Watch replays this one.
+            if (pausedSkipLogged.compareAndSet(false, true)) {
+                log("Watch is paused; a batch that had not been applied yet is replayed after Start Watch");
+            }
             return;
         }
         if (fullCompileRequired) {
@@ -1101,23 +1315,92 @@ public final class IncrementalBuildService implements Disposable {
             }
             return;
         }
+        requestVfsRefresh(batch);
         boolean ok = apply(batch);
         if (ok && failedFiles.isEmpty()) {
-            FsMetaDaemonWatch current = watch;
-            if (current != null) {
-                saveMarker(current.lastAppliedBatch());
+            saveMarker(generation);
+        }
+    }
+
+    /**
+     * Asks IntelliJ's own VFS to refresh the paths of a batch.
+     *
+     * <p>Granular by construction: the set is exactly this batch's changed and deleted paths, filtered to the
+     * project, and the refresh is non-recursive — no source root, directory or project-wide refresh. One default
+     * call refreshes each file in the set. With the native VFS watcher disabled
+     * ({@code -Didea.filewatcher.disabled=true}) the plugin's {@link FsMetaVfsWatcher} is the only bridge, and it
+     * reports through the file-watcher sink; this is the compiler-side safety net for the same batch, so a file
+     * created by a generator or Maven, or a source root the VFS bridge did not register, appears in the editor
+     * and the project view without a manual "Reload from Disk".</p>
+     */
+    private void requestVfsRefresh(WatchBatch batch) {
+        if (!Boolean.getBoolean("idea.filewatcher.disabled") || daemonRoot == null || projectRoot == null) {
+            return;
+        }
+        Set<File> files = new LinkedHashSet<>();
+        for (String name : batch.changed()) {
+            addForRefresh(files, name, false);
+        }
+        for (String name : batch.deleted()) {
+            addForRefresh(files, name, true);
+        }
+        if (files.isEmpty()) {
+            return;
+        }
+        ApplicationManager.getApplication().invokeLater(() -> {
+            LocalFileSystem fileSystem = LocalFileSystem.getInstance();
+            Set<File> refresh = new LinkedHashSet<>(files);
+            for (File file : files) {
+                // A new file is not a VFS child yet; refreshing only the file can leave the parent's children
+                // list stale. The parent refresh is non-recursive and stays inside the project. Deleted paths
+                // already contributed their parent above.
+                if (fileSystem.findFileByNioFile(file.toPath()) == null) {
+                    addParent(refresh, file);
+                }
             }
+            fileSystem.refreshIoFiles(refresh, true, false, null);
+        });
+    }
+
+    /** Adds one daemon-relative batch path, when it belongs to this project, to the refresh set. */
+    private void addForRefresh(Set<File> files, String name, boolean deleted) {
+        Path path = daemonRoot.resolve(name).toAbsolutePath().normalize();
+        if (!path.startsWith(projectRoot)) {
+            return;
+        }
+        File file = path.toFile();
+        files.add(file);
+        if (deleted) {
+            addParent(files, file);
+        }
+    }
+
+    /** The file's parent, when it is still inside the project; a new/deleted child needs its parent refreshed. */
+    private void addParent(Set<File> files, File file) {
+        File parent = file.getParentFile();
+        if (parent != null && parent.toPath().startsWith(projectRoot)) {
+            files.add(parent);
         }
     }
 
     private PathFilter filterFor(Path daemonRoot) {
         List<String> includes = new ArrayList<>();
+        List<Path> uncovered = new ArrayList<>();
         for (SourceRoot sourceRoot : sourceRoots) {
             if (!sourceRoot.root().startsWith(daemonRoot)) {
+                // The compiler attaches one root (the project root). A source root outside it is not a second
+                // subscription, so say what the watch cannot see instead of silently dropping it. Per-root
+                // subscriptions are the alternative; see doc/architecture/fs-meta-roots.md.
+                uncovered.add(sourceRoot.root());
                 continue;
             }
             String relative = daemonRoot.relativize(sourceRoot.root()).toString().replace('\\', '/');
             includes.add(relative.isEmpty() ? "**" : relative + "/**");
+        }
+        if (!uncovered.isEmpty()) {
+            log("fs-meta root " + daemonRoot + " does not cover source root(s) " + uncovered
+                    + "; the watch cannot deliver their changes. Register one root for the project, or a root"
+                    + " that contains every source root (per-module roots need one subscription each).");
         }
         if (includes.isEmpty()) {
             includes.add("**");
@@ -1216,6 +1499,7 @@ public final class IncrementalBuildService implements Disposable {
             if (rootOk) {
                 rememberHashes(changed);
                 failedFiles.removeAll(changed);
+                clearProjectViewProblems(changed);
             } else {
                 failedFiles.addAll(errorFiles(compiler, changed, root.root()));
             }
@@ -1300,12 +1584,76 @@ public final class IncrementalBuildService implements Disposable {
         }
     }
 
+    /**
+     * Clears the Project-view problem marks (the red wavy underlines under a file, package or module name) for
+     * Java files this loop compiles.
+     *
+     * <p>Those marks are not editor highlighting: IntelliJ keeps them in {@link WolfTheProblemSolver}, the
+     * Project view renders them, and they survive a successful compile, an editor restart of the daemon and
+     * {@link #refreshHighlighting()} — which is why a build can be clean while the tree still looks broken.
+     * They are normally written by the IDE's own build, which this plugin replaces, so nothing else clears
+     * them. Only files under this plugin's source roots are touched: a problem reported for a file this loop
+     * does not compile is left alone.</p>
+     *
+     * @param only files to check, or {@code null} to clear every marked Java file under the project's sources
+     */
+    private void clearProjectViewProblems(Collection<Path> only) {
+        WolfTheProblemSolver solver = WolfTheProblemSolver.getInstanceIfCreated(project);
+        if (solver == null || project.isDisposed()) {
+            return;
+        }
+        List<VirtualFile> marked = ApplicationManager.getApplication().runReadAction(
+                (Computable<List<VirtualFile>>) () -> problemMarkedFiles(solver, only));
+        if (marked.isEmpty()) {
+            return;
+        }
+        log("Clearing " + marked.size() + " stale Project-view problem marker(s)");
+        ApplicationManager.getApplication().invokeLater(() -> {
+            if (project.isDisposed()) {
+                return;
+            }
+            for (VirtualFile file : marked) {
+                solver.clearProblems(file);
+            }
+        });
+    }
+
+    /** The read-action half of {@link #clearProjectViewProblems(Collection)}. */
+    private List<VirtualFile> problemMarkedFiles(WolfTheProblemSolver solver, Collection<Path> only) {
+        List<VirtualFile> marked = new ArrayList<>();
+        LocalFileSystem files = LocalFileSystem.getInstance();
+        if (only != null) {
+            for (Path path : only) {
+                VirtualFile file = files.findFileByNioFile(path);
+                if (file != null && solver.isProblemFile(file)) {
+                    marked.add(file);
+                }
+            }
+            return marked;
+        }
+        for (SourceRoot root : sourceRoots) {
+            VirtualFile dir = files.findFileByNioFile(root.root());
+            if (dir == null) {
+                continue;
+            }
+            VfsUtilCore.iterateChildrenRecursively(dir, VirtualFileFilter.ALL, file -> {
+                if (!file.isDirectory()
+                        && file.getName().endsWith(".java")
+                        && solver.isProblemFile(file)) {
+                    marked.add(file);
+                }
+                return true;
+            });
+        }
+        return marked;
+    }
+
     private void refreshHighlighting() {
         ApplicationManager.getApplication().invokeLater(
                 () -> DaemonCodeAnalyzer.getInstance(project).restart());
     }
 
-    private void log(String message) {
+    void log(String message) {
         LOG.info(message);
         logService.add(message);
     }
@@ -1334,6 +1682,7 @@ public final class IncrementalBuildService implements Disposable {
 
     @Override
     public void dispose() {
+        toolSocket.stop();
         busConnection.disconnect();
         watchRetry.shutdownNow();
         stopWatch();

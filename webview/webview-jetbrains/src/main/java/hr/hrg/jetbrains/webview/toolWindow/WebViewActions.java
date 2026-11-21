@@ -72,6 +72,27 @@ final class WebViewActions {
         }
     }
 
+    /** Goes to the project's app home, {@code /app/index.html}. */
+    static final class Home extends DumbAwareAction {
+
+        private final WebViewPanel panel;
+
+        Home(@NotNull WebViewPanel panel) {
+            super("Home", "Open the app home (/app/index.html)", AllIcons.Nodes.HomeFolder);
+            this.panel = panel;
+        }
+
+        @Override
+        public void actionPerformed(@NotNull AnActionEvent event) {
+            panel.goHome();
+        }
+
+        @Override
+        public @NotNull ActionUpdateThread getActionUpdateThread() {
+            return ActionUpdateThread.EDT;
+        }
+    }
+
     /** Reloads the current page. */
     static final class Refresh extends DumbAwareAction {
 

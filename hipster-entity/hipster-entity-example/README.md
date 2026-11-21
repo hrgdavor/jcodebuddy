@@ -1,5 +1,11 @@
 # hipster-entity-example
 
+> **Layout note (2026-11-20):** this fixture predates the one-folder-per-domain convention (root
+> [`AGENTS.md`](../../AGENTS.md) § 2 and [`hipster-entity/AGENTS.md`](../AGENTS.md)). It keeps its historical
+> `person/entity`, `person/iface` and `paymentMethod/entity` packages as fixtures. New domains keep entity
+> definitions, views, generated adapters, repositories/services and controllers/mappers
+> each in its own entity/aggregate subpackage, with application-wide classes in an application subpackage; a flat domain package is unacceptable. Do not copy this fixture's layer packages for new code.
+
 The canonical, **generated** example for `hipster-entity`. It is the regression artifact the whole
 plan is measured against: the field enums, records, builders and tracking builders under
 `src/main/java/.../{person,paymentMethod}/entity/` are generator output, committed to git because the

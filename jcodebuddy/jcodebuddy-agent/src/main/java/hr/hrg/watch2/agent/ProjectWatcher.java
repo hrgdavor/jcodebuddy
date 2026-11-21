@@ -28,6 +28,12 @@ import java.util.Optional;
  * watcher inactive ({@link #live()} false). An agent that refused to start because nobody had started a watcher would
  * be worse than one that runs without live events, and {@link #stop()} stays safe either way.</p>
  *
+ * <p><strong>Exact root.</strong> Discovery asks for the daemon serving exactly this directory
+ * ({@link FsMetaDaemonDiscovery#discover(Path)}); a project directory that is merely inside a served root does not
+ * attach. That is the safe default for an agent that must not react to a parent's changes. A project may instead
+ * register this directory as its own root; the ancestor-plus-filter alternative for a host that serves a
+ * subdirectory is discussed in {@code doc/architecture/fs-meta-roots.md}.</p>
+ *
  * <p>The filter is a pass-all one for the root: each agent filters internally with its own toolset includes and
  * excludes. The state and policy stay in the agents; this class is only the event source.</p>
  */

@@ -6,7 +6,8 @@ incremental compiler.
 The plugin bundles:
 
 - `jcodebuddy-compile` and its **ECJ 3.46.100** dependency;
-- `jcodebuddy-watch`, the fs-meta daemon client.
+- `jcodebuddy-watch`, the fs-meta daemon client;
+- `jcodebuddy-ipc`, the live tool socket contract (DEC-053).
 
 Compiler diagnostics are published directly by an `ExternalAnnotator`; there is no JSON hand-off for editor
 squiggles. The last diagnostic set is also persisted as a small project-output TSV so IntelliJ can restore
@@ -20,7 +21,9 @@ the annotations after a project restart.
 The plugin is installed for the IDE, but the build loop is **enabled per project**. Open
 `Settings | Tools | JCodeBuddy Incremental Build` and check **Enable the fs-meta + ECJ incremental build
 for this project**. The setting is stored in the project (`.idea/jcodebuddy-incremental.xml`), so another
-project can keep it disabled.
+project can keep it disabled. The second checkbox there, **Publish the live tool socket in .jcodebuddy/ipc
+(DEC-053)**, controls the socket independently of the build and is on by default while the project setting is
+enabled.
 
 On project open, when that project setting is enabled, the plugin:
 
@@ -52,12 +55,12 @@ resumed fs-meta batch contains no new compile. Disabling the project setting cle
 | JDK 25                     | the plugin and the compiler are compiled for Java 25                                           |
 | IntelliJ IDEA 2026.2+      | the Gradle project uses the 2026.2 platform line (`pluginSinceBuild = 262`)                    |
 | fs-meta daemon             | it owns watching, hashing and batching                                                         |
-| local JCodeBuddy artifacts | Gradle resolves `hr.hrg.jcodebuddy:jcodebuddy-compile` and `jcodebuddy-watch` from Maven local |
+| local JCodeBuddy artifacts | Gradle resolves `hr.hrg.jcodebuddy:jcodebuddy-compile`, `jcodebuddy-watch` and `jcodebuddy-ipc` from Maven local |
 
-Install the two Maven artifacts once after changing them:
+Install the three Maven artifacts once after changing them:
 
 ```sh
-mvn -o -pl :jcodebuddy-compile,:jcodebuddy-watch -am install -DskipTests
+mvn -o -pl :jcodebuddy-compile,:jcodebuddy-watch,:jcodebuddy-ipc -am install -DskipTests
 ```
 
 The plugin build resolves the local Maven repository, so the installed artifacts are what gets bundled.
@@ -92,6 +95,7 @@ The distribution should contain the compiler and watcher jars:
 JCodeBuddy Incremental Build/lib/ecj-3.46.100.jar
 JCodeBuddy Incremental Build/lib/jcodebuddy-compile-1.0-SNAPSHOT.jar
 JCodeBuddy Incremental Build/lib/jcodebuddy-watch-1.0-SNAPSHOT.jar
+JCodeBuddy Incremental Build/lib/jcodebuddy-ipc-1.0-SNAPSHOT.jar
 ```
 
 ## Enable it per project
@@ -121,6 +125,10 @@ fsmeta root add /path/to/project --tick 25
 `--tick` is per root; 10–25 ms suits a fast local editor, 50–100 ms is safer for many roots or slower
 storage. The plugin never starts a Java `WatchService`.
 
+Register **one root that contains the project's source roots** (the project/aggregator root). The plugin currently
+discovers one root for the project; per-module (nested) roots are not attached yet — see
+[`doc/architecture/fs-meta-roots.md`](../../doc/architecture/fs-meta-roots.md).
+
 If no daemon is found, or the daemon is running but this root is not tracked, the plugin logs and notifies
 the exact setup commands:
 
@@ -145,7 +153,11 @@ stream instead, add this global VM option and restart:
 Use **Help | Edit Custom VM Options**. The plugin registers `FsMetaVfsWatcher` as a
 `vfs.local.pluggableFileWatcher`; it subscribes to fs-meta for the VFS roots and reports changed/deleted paths
 through `FileWatcherNotificationSink`. Roots without a daemon are registered for manual refresh and the bridge
-retries every 2 seconds until the daemon appears.
+retries every 2 seconds until the daemon appears. With the flag set, the build service also refreshes every
+batch's **changed/deleted files only** — the exact set, filtered to the project, non-recursive — plus the
+**parent folder** when a file was added or removed, so the parent's child list updates. It uses IntelliJ's
+**default IO refresh** (`LocalFileSystem.refreshIoFiles`), so a generated file or a source root the VFS bridge
+did not register still appears in the editor and the Project view without a manual *Reload from Disk*.
 
 This option is global: every project in that IDE then relies on fs-meta for native file-change notifications.
 Keep the plugin installed while it is enabled. Without the option both watchers run and the plugin logs this
@@ -205,13 +217,21 @@ There are two places to look:
    source-root discovery, module classpath counts, fs-meta daemon/socket/filter, batches, compile results
    and failures. Every line has a full date/time. Its toolbar has:
    - **Rebuild** — compile every source root again;
+   - **Stop Watch** — drop the fs-meta subscription so an external Maven run can rewrite sources and class
+     outputs; the compile loop, the compilers and the batch marker stay as they are;
+   - **Start Watch** — subscribe again and replay every batch recorded while the watch was stopped;
    - **Reconnect fs-meta** — drop the current subscription and retry daemon discovery;
    - **Detailed Classpath** — write every classpath entry for every module to the log on demand;
    - **Refresh Roots** — re-scan IntelliJ's module model after a branch/submodule change;
-   - **Refresh Errors** — re-run editor highlighting from the current diagnostics without compiling;
+   - **Refresh Errors** — re-run editor highlighting from the current diagnostics and clear stale
+     Project-view problem marks, without compiling;
    - **List Roots** — log every currently available source root and output;
    - **Open Log Folder** — open `.jcodebuddy/cache/incremental-build/` in the system file explorer;
    - **Clear Log** — clear both the pane and `build.log`.
+
+   **Stop Watch** and **Start Watch** are a pair: **Start Watch** is enabled only while the watch is
+   stopped, and **Stop Watch** only while it runs. [Running Maven with the watch stopped](#running-maven-with-the-watch-stopped)
+   is the sequence they exist for.
 
    Source roots also refresh automatically when IntelliJ reports a module-root change, so switching to a
    branch that adds/removes a submodule does not require a manual rebuild. A manual **Refresh Roots** is
@@ -238,6 +258,8 @@ Compiling [module] N file(s) from <root>
 Compile OK [module] <root>
 Compile FAILED [module] N diagnostic(s); first: ...
 Saved fs-meta batch marker 1234 -> ...
+Watch paused at batch marker 1234: fs-meta changes will not trigger a compile until Start Watch
+Watch resumed: replaying fs-meta from batch marker 1234
 fs-meta daemon root: ...
 fs-meta socket: ...
 fs-meta filter: ...
@@ -260,6 +282,25 @@ per-entry `JAR`/`DIR`/`MISSING` list is needed. Source roots are refreshed from 
 automatically; **Refresh Roots** is the manual fallback and **List Roots** prints the current roots. If an
 editor marker looks stale, **Refresh Errors** restarts highlighting without invoking the compiler or rebuilding.
 
+### Project-view problem marks
+
+The red wavy underlines the Project view puts under a file, package or module name are **not** editor
+highlighting. IntelliJ keeps them in `WolfTheProblemSolver`, normally written by the IDE's own build, and the
+Project view re-renders when that changes. They survive a successful external compile and a daemon restart,
+which is why a clean build can still leave a repository looking broken.
+
+This plugin replaces the IDE build, so it also owns that state: every successful compile clears the marks of
+the files it compiled, and **Refresh Errors** clears every marked `.java` file under this project's source
+roots. Files belonging to other compilers (Kotlin, JavaScript, …) are left alone. The log shows:
+
+```text
+Clearing 3 stale Project-view problem marker(s)
+```
+
+A full **Rebuild** clears all of them, because it compiles every source root. If a mark belongs to a file
+outside the plugin's source roots, it is not this plugin's to clear; use the IDE build or that file's own
+compiler once.
+
 A missing daemon, a source root outside the daemon root, or a compile failure is visible in both places.
 By default the log reports per-module classpath **counts**. Press **Detailed Classpath** to append each
 entry as `JAR`, `DIR`, or `MISSING`; use that when a Maven dependency appears unresolved. IntelliJ reports
@@ -269,6 +310,87 @@ The log also prints the IDE heap maximum and current use at startup. If the buil
 `OutOfMemoryError`, increase the IDE heap (`Help | Change Memory Settings`); the compiler now shares one
 lazy JAR/JDK index across the whole project and keeps only a bounded class-byte hot cache, so a large
 reactor should not multiply dependency caches per module.
+
+## Running Maven with the watch stopped
+
+A Maven run that generates sources or writes class files competes with the watch: every generated file
+arrives as an fs-meta batch and is compiled while Maven is still writing it. The two watch buttons bound
+that window:
+
+1. **Stop Watch** — the fs-meta subscription is dropped. The compile loop, the compilers, the diagnostics
+   and the batch marker stay as they are, so nothing is lost; generations published while stopped are
+   replayed later.
+2. Run Maven (`mvn generate-sources`, a full `mvn install`, …).
+3. **Rebuild** — compile every source root against the new sources. This is the one action that compiles
+   everything and is not driven by fs-meta batches.
+4. **Start Watch** — subscribe again from the last applied batch marker. **Rebuild** saves the current
+   daemon head when it can reach the daemon, so in the normal sequence there is nothing to replay; if the
+   daemon was unreachable, the batches published during the pause are replayed and files whose content hash
+   already matches the compiled generation are skipped without an ECJ write.
+
+While the watch is stopped, IntelliJ's own VFS still receives the changes through the fs-meta VFS bridge,
+so editors reload what Maven rewrote; only the compile loop is paused. The pause is in memory: reopening
+the project starts watching again, and disabling the project setting clears it.
+
+## Live tool socket (DEC-053)
+
+While the project setting is enabled — and the second checkbox, **Publish the live tool socket in
+.jcodebuddy/ipc (DEC-053)**, is on — the plugin publishes its state and actions on a Unix domain socket:
+
+```text
+<project>/.jcodebuddy/ipc/jcodebuddy-incremental-build.sock
+<project>/.jcodebuddy/ipc/jcodebuddy-incremental-build.json   the descriptor
+```
+
+Protocol: newline-delimited JSON-RPC 2.0. No TCP port and **no token**: the socket is a file the operating
+system scopes to your user. The full contract (paths, descriptor fields, error codes, the second-instance
+rule) is [`jcodebuddy-ipc/README.md`](../../jcodebuddy/jcodebuddy-ipc/README.md) and DEC-053.
+
+Every endpoint answers `tool.info` (its descriptor). This tool adds:
+
+| method                                       | answers                                                  |
+| -------------------------------------------- | -------------------------------------------------------- |
+| `build.status`                               | enabled/running, watch state, batch marker, daemon root/socket, failed files, roots, diagnostic counts, log file/size/next |
+| `build.log`                                  | `{since?, limit?}` → `{lines: [{sequence, text}], next}`; the cursor is the sequence, so a poller asks for new lines only |
+| `build.diagnostics`                          | `[{file, line, column, message}]`                        |
+| `build.roots`                                | `[{module, root, output, test}]`                         |
+| `build.rebuild`                              | accepted; compiles every source root on the worker       |
+| `build.watch.stop` / `build.watch.start`     | accepted; the Stop Watch / Start Watch buttons           |
+| `build.refreshErrors` / `build.refreshRoots` | accepted; the same actions as the toolbar                |
+| `build.listClasspath`                        | accepted; writes the detailed classpath to the build log |
+
+Example (any JSON-lines client works):
+
+```text
+{"jsonrpc":"2.0","id":1,"method":"build.status"}
+```
+
+The log is also **pushed**. The endpoint declares the `log` topic, and `tool.subscribe` with
+`{"topic":"log","since":<sequence>}` turns that connection into `tool.event` notifications — one per line, as
+it is written — so a consumer does not poll. `since` is the last line already seen (absent means "from now"),
+and the retained backlog is replayed under the same lock the log writes take, so no line falls in the gap. A
+consumer that falls too far behind is ended with `tool.event-error` (`reason: overflow`) rather than silently
+skipped, and re-reads the missing lines with `build.log`. `build.status.log.last` is the newest sequence.
+
+The socket stops with the loop: disabling the project setting, or quitting the IDE, removes the socket and
+the descriptor. If another IDE window already owns the socket for this project, this one does not bind — it
+logs the occupant and leaves that endpoint alone (`BusyException`), because two answers for one project leave
+a consumer no rule for choosing. The startup log names the socket, its descriptor and its methods.
+
+### The page
+
+`project-automation/compiler-console/` is the default solo page for this tool: the same log and buttons,
+reached over a host's proxy of the socket, with the log **pushed over SSE**. Build it into the project's
+derived output:
+
+```sh
+bun project-automation/compiler-console/src_build/build.js --link-base .
+```
+
+Then open `/app/incremental-build.html?token=<host token>` on a host that serves DEC-053's proxy: `webviewd`,
+the JetBrains **WebView Explorer** host (its HTTP bridge), or the standalone Bun metadata server
+(`project-automation/metadata`), which reads the token from `.jcodebuddy/webview/token`. The token is the
+host's; without it the page explains why it cannot call the tool instead of rendering an empty log.
 
 ## Batch marker
 
@@ -284,7 +406,7 @@ subscription position and a diagnostics/state reference; the compiled-hash map i
 need compiling. A failed batch retries its files on the next batch instead of rebuilding the project.
 
 The **Rebuild** toolbar button deliberately performs a full compile and then saves the current daemon head.
-**Reconnect fs-meta** keeps the saved marker and resubscribes from it.
+**Reconnect fs-meta** and **Start Watch** keep the saved marker and resubscribe from it.
 
 ## Compiled hashes
 
@@ -330,8 +452,12 @@ The plugin uses IntelliJ's modules directly:
 - initial compilation follows module dependency order, so a dependency module is compiled before a
   module that uses its output.
 
-One root is still registered with fs-meta: the **project/aggregator root**. Do not register each Maven
-module as a separate fs-meta root.
+**Current limitation:** the plugin discovers one fs-meta root for the project (the deepest root containing the
+project directory) and filters every module's source root to it. Register the **project/aggregator root**, not one
+root per Maven module: a nested module root is excluded from its parent's guarded stream, and a project directory
+that is not itself a root has no stream of its own. The compiler needs one subscription per serving root before
+that layout works; the audit and the fix are in
+[`doc/architecture/fs-meta-roots.md`](../../doc/architecture/fs-meta-roots.md).
 
 A batch that changes several modules is compiled in module dependency order. A change in module B does
 not automatically recompile an unchanged dependent module A; that is the same no-dependency-graph

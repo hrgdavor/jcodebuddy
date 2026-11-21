@@ -36,6 +36,12 @@
             <groupId>hr.hrg.jcodebuddy</groupId>
             <artifactId>jcodebuddy-watch</artifactId>
         </dependency>
+        <!-- DEC-053: the live-tool endpoints under `.jcodebuddy/ipc/`. The host proxies them at /api/tools;
+             the tool-side transport (Unix socket, JSON-RPC, descriptor) is this library's, not the host's. -->
+        <dependency>
+            <groupId>hr.hrg.jcodebuddy</groupId>
+            <artifactId>jcodebuddy-ipc</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

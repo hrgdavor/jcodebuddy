@@ -28,6 +28,10 @@ import javax.swing.JPanel;
  * The <b>JCodeBuddy Build</b> tool window: a readable, copyable log of source-root discovery, module
  * classpaths, daemon attachment, batches, compiles and failures. The same messages also go to
  * IntelliJ's {@code idea.log}.
+ *
+ * <p>The toolbar is also the loop's control panel. <b>Rebuild</b>, <b>Stop Watch</b> and <b>Start Watch</b>
+ * are the three actions an external Maven run needs: stop the subscription, let Maven rewrite sources and
+ * class outputs, rebuild, then start the watch again.</p>
  */
 public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, DumbAware {
 
@@ -42,16 +46,18 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         area.setLineWrap(true);
         area.setWrapStyleWord(true);
         area.setText(String.join("\n", logs.snapshot()));
-        Consumer<String> listener = line -> ApplicationManager.getApplication().invokeLater(() -> {
-            area.append(line);
-            area.append("\n");
-            area.setCaretPosition(area.getDocument().getLength());
-        });
-        logs.addListener(listener);
 
         JButton rebuild = new JButton("Rebuild");
         rebuild.setToolTipText("Compile every source root again");
         rebuild.addActionListener(event -> service.rebuild());
+        JButton stopWatch = new JButton("Stop Watch");
+        stopWatch.setToolTipText("Drop the fs-meta subscription so Maven or a generator can rewrite sources "
+                + "and class outputs; Rebuild and Start Watch stay available");
+        stopWatch.addActionListener(event -> service.pauseWatch());
+        JButton startWatch = new JButton("Start Watch");
+        startWatch.setToolTipText("Re-subscribe to fs-meta and replay every batch recorded while the watch "
+                + "was stopped");
+        startWatch.addActionListener(event -> service.resumeWatch());
         JButton reconnect = new JButton("Reconnect fs-meta");
         reconnect.setToolTipText("Drop the current fs-meta subscription and retry daemon discovery");
         reconnect.addActionListener(event -> service.reconnectFsMeta());
@@ -62,7 +68,8 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         refreshRoots.setToolTipText("Re-scan modules after a branch/submodule change");
         refreshRoots.addActionListener(event -> service.refreshRoots());
         JButton refreshErrors = new JButton("Refresh Errors");
-        refreshErrors.setToolTipText("Re-run editor highlighting from the current diagnostics; no compile");
+        refreshErrors.setToolTipText("Re-run editor highlighting and clear stale Project-view problem marks; "
+                + "no compile");
         refreshErrors.addActionListener(event -> service.refreshErrors());
         JButton listRoots = new JButton("List Roots");
         listRoots.setToolTipText("Log the currently available source roots and outputs");
@@ -77,11 +84,30 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
             area.setText("");
             area.setCaretPosition(0);
         });
+
+        Runnable updateWatchButtons = () -> {
+            boolean paused = service.isWatchPaused();
+            stopWatch.setEnabled(!paused);
+            startWatch.setEnabled(paused);
+        };
+        Consumer<String> listener = line -> ApplicationManager.getApplication().invokeLater(() -> {
+            area.append(line);
+            area.append("\n");
+            area.setCaretPosition(area.getDocument().getLength());
+            updateWatchButtons.run();
+        });
+        logs.addListener(listener);
+        updateWatchButtons.run();
+
         JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         actionRow.add(rebuild);
-        actionRow.add(reconnect);
-        actionRow.add(refreshRoots);
-        actionRow.add(refreshErrors);
+        actionRow.add(stopWatch);
+        actionRow.add(startWatch);
+
+        JPanel watchRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        watchRow.add(reconnect);
+        watchRow.add(refreshRoots);
+        watchRow.add(refreshErrors);
 
         JPanel utilityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         utilityRow.add(detailedClasspath);
@@ -92,6 +118,7 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         JPanel toolbar = new JPanel();
         toolbar.setLayout(new javax.swing.BoxLayout(toolbar, javax.swing.BoxLayout.Y_AXIS));
         toolbar.add(actionRow);
+        toolbar.add(watchRow);
         toolbar.add(utilityRow);
 
         JPanel panel = new JPanel(new BorderLayout());

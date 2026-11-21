@@ -43,13 +43,15 @@ import java.util.Objects;
  * <em>which daemon generation the last successful pass left behind</em>. The daemon is the tracker, and a
  * second tracker is exactly what this repository does not allow.</p>
  *
- * <h3>fs-meta is a hard requirement, and the root is the project root</h3>
+ * <h3>fs-meta is a hard requirement, and the root is the serving root</h3>
  * <p>{@link #decide} discovers the deepest served ancestor root of the module source root
- * ({@link FsMetaDaemonDiscovery#discoverAncestor(Path)}) and records that root. The daemon serves the whole
- * project; a module's cache is <strong>not</strong> a second root — it filters the daemon stream to its own
- * source-root subfolder with the protocol's own {@code SUBSCRIBE} include patterns
- * ({@link FsMetaDaemonState#includePatterns(Path, Path)}). Two modules of one project share one daemon, one
- * event stream and one generation sequence, and each answers only for its own subfolder.</p>
+ * ({@link FsMetaDaemonDiscovery#discoverAncestor(Path)}) and records that root. A module's cache is
+ * <strong>not</strong> a second root — it filters the serving root's stream to its own source-root subfolder with
+ * the protocol's own {@code SUBSCRIBE} include patterns ({@link FsMetaDaemonState#includePatterns(Path, Path)}).
+ * The serving root may be the project root or a module root of its own: modules can share one root, or a module
+ * registered as its own root resolves to that root instead. The state records the root it used and refuses a
+ * different one, so a layout change is a full pass rather than a silently mixed baseline. (A project-level tool
+ * that wants several roots must subscribe per root; see {@code doc/architecture/fs-meta-roots.md}.)</p>
  *
  * <h3>The decision, and why a missing daemon can never be a wrong answer</h3>
  * <ul>

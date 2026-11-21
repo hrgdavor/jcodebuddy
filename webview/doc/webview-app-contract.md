@@ -51,14 +51,24 @@ A host that receives an absolute or escaping path must refuse to build the app U
 
 ```text
 /app/                    default authored app; derived and rebuildable
-/app/?openFile=<path>    open a project file in the app
+/app/<page>              one page of that app, opened directly (e.g. /app/incremental-build.html)
+/app/?openFile=<path>    the app shell, asked to open a project file (a page under .jcodebuddy/app is
+                        navigated to; any other file is handed to the IDE)
 /source/<path>           project sources and files, read-only (webview static)
 /lib/                    project-automation bundles/shared assets (webview static)
 /reports/<id>/...        generated report pages and metadata files (webview static)
 /api/v1/metadata/...     catalog/index/SSE (JS metadata backend)
+/api/tools               live tool descriptors from .jcodebuddy/ipc/ (host proxy, DEC-053)
+/api/tools/<tool>/call   one call forwarded to that tool's Unix socket (host proxy, DEC-053)
+/api/tools/<tool>/events that tool's event stream as SSE (host proxy, DEC-053)
 ```
 
 - `/app/` maps to `<project>/.jcodebuddy/app/` and is the default URL a webview should open.
+- `/app/<page>` opens one page of that app directly. The app pages are derived output and are readable
+  without a token (a typed URL or a link that forgets the token still loads). The IDE host injects the
+  server's page token into `localStorage` (`jcodebuddy.token`) before the page's scripts run; a standalone
+  first visit may carry `?token=`, which the page stores and removes from the address bar. The token is what
+  authorizes `/api/tools/<tool>/call` and the event stream; the pages themselves are public.
 - The app directory is ignored derived output. A build may replace it; nothing in it is a committed
   source of truth.
 - `/source/`, `/lib/` and `/reports/` are static file namespaces served by the webview host and jailed to
@@ -66,6 +76,19 @@ A host that receives an absolute or escaping path must refuse to build the app U
 - `/api/v1/metadata/` is served by the **JS project-automation backend**, not by the webview host. In
   custom-server mode the webview proxies this prefix to that backend; without one there is no live
   metadata transport and the page falls back to its static model.
+- `/api/tools` is the **host's** live-tool proxy, not the JS backend's. In custom-server mode it stays on the
+  host's own port (the proxy forwards only `/app` and `/api/v1/metadata/`). The standalone Bun metadata server
+  also serves the same three tool routes for the pages it serves, using the token in
+  `.jcodebuddy/webview/token`, so a page works from either server.
+- `/api/tools` and `/api/tools/<tool>/call` are the **host's** proxy to the project's live tool endpoints
+  ([DEC-053](../../doc-hipster-entity/architecture/decisions/DEC-053.md)): the control plane of the tools
+  that run inside the project, not page content. The call route is token-only, because a call may rebuild or
+  change what a tool watches; the list is origin-or-token. A page served from `/app/` reaches them on its own
+  origin, and needs the host token for the call route.
+- `/api/tools/<tool>/events` is the same proxy's **push** half: the tool streams JSON-RPC notifications on
+  its socket and the host forwards them as SSE. It is token-only too, and because `EventSource` cannot set a
+  header the token is in the query (`?token=`), which is the mechanism the Eclipse host already uses for a
+  page URL.
 - `/app/` and `/reports/` pages receive the injected editor bridge; `/source/` and `/lib/` are raw files.
 
 ## 3. Own server vs custom project-automation server
@@ -172,6 +195,9 @@ segments. A future key that cannot satisfy that rule needs its own contract sect
 ## 7. Tests
 
 - `webview/core/webviewd` `MetadataApiTest`: `/app/`, `/reports/`, `/source/`, `/lib/` status and jail.
+- `webview/core/webviewd` `ToolApiTest`: `/api/tools` and the call route over a real tool socket (DEC-053).
+- `project-automation/metadata/metadata.test.js`: the same three tool routes on the standalone Bun server
+  (list, token-gated call, SSE stream over a real Unix socket).
 - `project-automation/metadata/metadata.test.js`: the same namespaces in the standalone host.
 - `scripts/check-metadata-live-page.js`: real-Chrome live report checks.
 - The app contract's URL/path rules are pure; add a test beside the host that constructs the URL when a

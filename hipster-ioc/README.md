@@ -50,6 +50,23 @@ For a deeper dive into the architecture, best practices, and advanced context co
 
 Define a public interface that is public facing part of your context. Other transitive dependencies that their dependencies resolved will
 be part of the context, but not exposed.
+
+### Naming: contexts are `CtxSomething`
+
+A context interface is named **`Ctx<Something>`** — `CtxMain`, `CtxChatApp` — with the `Ctx` prefix first.
+The generated implementation is `<Context>Impl` (`CtxChatAppImpl`), and the module interface that carries the
+`default build<Bean>` factories is `<Something>Module` (`ChatAppModule`), not a context.
+
+```text
+CtxChatApp            context interface
+CtxChatAppImpl        generated implementation
+ChatAppModule         module interface with the build factories
+```
+
+Do not name a context `AppContext`, `ChatContext` or `<Domain>Context`: a context and a domain entity or an
+application class must not read as the same kind of thing. The rule is binding in
+[`AGENTS.md`](../AGENTS.md) § 2 and [`AGENTS.md`](AGENTS.md); the playground's contexts are `CtxApp` and
+`CtxChatApp`.
 ```java
 @HipsterContext(factory=CtxMainBeanFactory.class)
 public abstract class CtxMain{
@@ -112,6 +129,6 @@ You can declare a bean as Context even if there are no unimplemented methods (in
 any auto-created context)
 
 Factories with assisted Injection
- - convention : ContextName+(BeanFactory|Beans)
+ - convention : ContextName+(BeanFactory|Beans), with the context itself named `CtxSomething` (see above)
  - define in annotation
  - Similar to Assisted Injection - https://avaje.io/inject/#assistInject

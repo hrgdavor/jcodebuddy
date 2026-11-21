@@ -17,8 +17,9 @@ The first compiler index and the Eclipse initial build are **outside** the measu
 
 - JDK 25 (`JAVA_HOME` or `JCODEBUDDY_JDK25`).
 - Maven on `PATH`.
-- A built `fsmeta` binary for the fs-meta side (`FSMETA_BIN`, default
-  `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`).
+- A built `fsmeta` binary for the fs-meta side, resolved as `FSMETA_BIN`, then the sibling `../fs-meta`
+  checkout, then `fsmeta` on `PATH`. Keeping the checkout as a **sibling** of this one is deliberate: a daemon
+  root at this repository then cannot contain the watcher's own `zig-out`/`.zig-cache`.
 - `FSMETA_TICK_MS` (default 50, range 5–1000) is the per-root scheduler tick; the 25 ms quiet floor still
   applies. Use e.g. `FSMETA_TICK_MS=10` to see the shorter batch window.
 - Eclipse for the auto-build side; `ECLIPSE_HOME` defaults to `D:\programs\eclipse`.

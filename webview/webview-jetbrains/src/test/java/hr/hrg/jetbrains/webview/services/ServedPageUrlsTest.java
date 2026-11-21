@@ -57,4 +57,22 @@ public class ServedPageUrlsTest {
         assertEquals("http://127.0.0.1:18884/app/?openFile=a%20page.html",
                 ServedPageUrls.appUrl("http://127.0.0.1:18884", "a page.html"));
     }
+
+    @Test
+    public void anAppPageIsOpenedDirectlyInTheAppRoute() {
+        assertEquals("http://127.0.0.1:18884/app/incremental-build.html",
+                ServedPageUrls.appPage("http://127.0.0.1:18884/", "incremental-build.html"));
+        assertEquals("http://127.0.0.1:18884/app/a%20page.html",
+                ServedPageUrls.appPage("http://127.0.0.1:18884", "a page.html"));
+    }
+
+    @Test
+    public void anAppPageCarriesTheHostTokenOnlyWhenOneIsConfigured() {
+        assertEquals("http://127.0.0.1:18884/app/incremental-build.html?token=a%20b",
+                ServedPageUrls.appPage("http://127.0.0.1:18884", "incremental-build.html", "a b"));
+        assertEquals("http://127.0.0.1:18884/app/incremental-build.html",
+                ServedPageUrls.appPage("http://127.0.0.1:18884", "incremental-build.html", ""));
+        assertEquals("http://127.0.0.1:18884/app/incremental-build.html",
+                ServedPageUrls.appPage("http://127.0.0.1:18884", "incremental-build.html", null));
+    }
 }

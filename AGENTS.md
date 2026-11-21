@@ -5,7 +5,7 @@
 > in this checkout — code, documentation, tests, examples, commit
 > messages, and the driver projects under `proto/`.
 >
-> § 0 says which of the three `AGENTS.md` files applies to your work.
+> § 0 says which of the five `AGENTS.md` files applies to your work.
 >
 > **Until JCodeBuddy reaches a major release, it is expected that
 > JCodeBuddy itself is changed — issues fixed, missing functionality
@@ -17,16 +17,18 @@
 
 ## 0. Which file applies to your work
 
-Three `AGENTS.md` files apply, and the **nearest one wins** for what it states:
+Five `AGENTS.md` files apply, and the **nearest one wins** for what it states:
 
-| File                                 | Applies to                                                                               |
-| ------------------------------------ | ---------------------------------------------------------------------------------------- |
-| **this file** (repository root)      | everything in this checkout                                                              |
-| [`doc/AGENTS.md`](doc/AGENTS.md)     | changing JCodeBuddy itself — a generator, a library module, the gate, the entity tooling |
-| [`proto/AGENTS.md`](proto/AGENTS.md) | working in the `proto/` area, on a driver project                                        |
-| `proto/<project>/AGENTS.md`          | **one** driver project, in that project's own repository                                 |
+| File                                                   | Applies to                                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **this file** (repository root)                        | everything in this checkout                                                              |
+| [`hipster-entity/AGENTS.md`](hipster-entity/AGENTS.md) | the hipster-entity modules and their fixtures                                            |
+| [`hipster-ioc/AGENTS.md`](hipster-ioc/AGENTS.md)       | the hipster-ioc modules and their fixtures                                               |
+| [`doc/AGENTS.md`](doc/AGENTS.md)                       | changing JCodeBuddy itself — a generator, a library module, the gate, the entity tooling |
+| [`proto/AGENTS.md`](proto/AGENTS.md)                   | working in the `proto/` area, on a driver project                                        |
+| `proto/<project>/AGENTS.md`                            | **one** driver project, in that project's own repository                                 |
 
-Each of those two files marks what is **JCodeBuddy-only** — written for this repository's tree, and not
+The `doc/AGENTS.md` and `proto/AGENTS.md` files mark what is **JCodeBuddy-only** — written for this repository's tree, and not
 binding a driver project. A driver project that copied this repository's Maven reactor layout, for
 instance, would be wrong rather than extra-careful.
 
@@ -384,8 +386,13 @@ satisfiable because the artifact was being installed. Either one alone would hav
     watching and optimized incremental builds** instead of each tool carrying its own change-tracking logic; use
     them rather than inventing another tracker.
   - **The existing standalone-package permission is how this repository consumes them.** `hr.hrg:fs-meta` and
-    `hr.hrg:wyhash` are not packages in this checkout (see the `java-watch*` bullet below); `D:/wrk/core/fs-meta`
-    and the `wyhash` project are their checkouts. Consume the artifacts or the checkout — never a copy.
+    `hr.hrg:wyhash` are not packages in this checkout (see the `java-watch*` bullet below); the `wyhash` project
+    and `fs-meta` are their checkouts. Consume the artifacts or the checkout — never a copy. **The `fs-meta`
+    checkout is a sibling of this checkout (`../fs-meta`), not inside it:** a daemon root that serves this
+    repository must not contain the watcher's own `zig-out/` and `.zig-cache/`, and tooling resolves the `fsmeta`
+    binary as `FSMETA_BIN`, then `../fs-meta/zig-out/bin/fsmeta`, then `fsmeta` on `PATH` — never a
+    machine-specific default. Where the checkout currently sits does not change daemon discovery: the compiler
+    asks `roots.json` for a daemon serving the **project root**, not for a tool path.
 
 - **`glob` is abandoned and strictly not supported; `wildmatch` is the only wildcard syntax.** The ecosystem rule, as
   given: wildcard file matching uses git's `wildmatch` semantics as implemented by the `gitignore` project
@@ -402,6 +409,29 @@ canonical statement of a boundary that has no other home.
   module orchestrates dev-time codegen; the runtime app modules
   depend on released JCodeBuddy libraries, never on
   `project-automation`. See [`README.md`](README.md).
+- **One folder per domain; each entity/aggregate gets its own subpackage.** JCodeBuddy and hipster-entity
+  prefer a module root that groups **domain subpackages**, each holding one entity/aggregate and everything
+  that belongs to it: the entity definition, `@View` interfaces, the generated `_` metadata and JDBC
+  adapters/binders, repositories, services, controllers, mappers and whatever else belongs to that aggregate.
+  The application-wide classes live in an **application subpackage** of the same domain. For example, the chat
+  module uses `demo.chat.chatmessage` (ChatMessage and its view/adapters/repository/service),
+  `demo.chat.chatroom` (ChatRoom and its view/adapters), and `demo.chat.chatapp` (ChatAppDb, ChatAppStore,
+  ChatAppService, ChatAppModule, CtxChatApp, ChatAppServer). **A completely flat domain package is not
+  acceptable, ever.** Do not split an aggregate into layer subpackages (`entity/`, `ioc/`, `store/`,
+  `controller/`, `mapper/`): that is the shape the convention rejects. Subfolders inside an aggregate package
+  may be allowed later by an explicit decision; they are not allowed now. Application-level bootstrap and
+  cross-domain wiring may sit in the application subpackage. The existing
+  `hipster-entity/hipster-entity-example` fixture predates the convention and is called out in
+  [`hipster-entity/AGENTS.md`](hipster-entity/AGENTS.md); do not use it as the template for new domains.
+- **IoC context names are `CtxSomething`.** Every `@HipsterContext` interface is named
+  `Ctx<Something>` — `CtxMain`, `CtxChatApp` — and the generator writes
+  `Ctx<Something>Impl` (`CtxChatAppImpl`). The module interface is
+  `<Something>Module` (`ChatAppModule`), not a context. Do not name a context
+  `AppContext`, `ChatContext` or `<Domain>Context`: the `Ctx` prefix is the marker
+  that separates a context from a domain entity or an application class. The
+  playground follows this (`CtxApp`, `CtxChatApp`); the older test fixtures in
+  `hipster-ioc/hipster-ioc-tooling` are legacy and are migrated when touched — see
+  [`hipster-ioc/AGENTS.md`](hipster-ioc/AGENTS.md).
 - **The Maven build cache is on, and it is never turned off — in no circumstances.** `.mvn/extensions.xml` loads
   `maven-build-cache-extension` for every Maven invocation here, **including the recorded gate** (`scripts/lib/gate.js`
   keeps it on and says so; a comment in `extensions.xml` claimed the opposite and was wrong). It **checksums a module
@@ -836,7 +866,7 @@ supersedes the "iterate fast, then verify with the gate" habit **for this scope*
   extending it to solve a JCodeBuddy need. **A live step needing it does not lift the freeze**: move the need to
   `fs-meta` (or a JCodeBuddy adapter over it) and record the move; if it cannot be moved, stop and record the
   conflict. `fs-meta` is the target because it owns reliable change tracking (content hash, batching, git
-  cooperation), and `D:/wrk/core/fs-meta` is its checkout; a `watch/*` module may depend on it under the
+  cooperation), and `../fs-meta` (a sibling of this checkout, not inside it) is its checkout; a `watch/*` module may depend on it under the
   standalone-package permission below, and an adapter that bridges it to a JCodeBuddy SPI belongs in a module that
   legitimately depends on both.
 
@@ -862,8 +892,8 @@ supersedes the "iterate fast, then verify with the gate" habit **for this scope*
 
   - **`hr.hrg:fs-meta`** ([github.com/hrgdavor/fs-meta](https://github.com/hrgdavor/fs-meta)) — the file-system state
     trio a watcher maintains and every other tool reads. **Since 2026-10-23 it is not a package in this checkout**:
-    the project has its own repository, as `wyhash` does, and is consumed as an artifact; `D:/wrk/core/fs-meta` is
-    its checkout. The watcher is the *writer* of that trio, so this is the dependency the rule would otherwise
+    the project has its own repository, as `wyhash` does, and is consumed as an artifact; `../fs-meta` (a
+    sibling of this checkout) is its checkout. The watcher is the *writer* of that trio, so this is the dependency the rule would otherwise
     forbid by accident.
   - **`hr.hrg:wyhash`** — one hash, one definition, ports aligned by shared vectors;
     `hr.hrg:wyhash:1.0.0` is already what `java-watch-core` hashes with. **Since 2026-10-16 it is not a

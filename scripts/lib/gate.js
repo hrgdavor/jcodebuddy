@@ -30,6 +30,10 @@
  *   (`MetadataProvider`/`CacheEntry`), and since 3.0j its `parse` default is the engine-backed one — a change
  *   that breaks the engine's parse or the provider's shape must fail here rather than in a consumer's build.
  * - `jcodebuddy-meta-mcp` is the MCP tool surface over that provider, which is what a client actually calls.
+ * - `jcodebuddy-ipc` owns the live-tool socket contract (DEC-053): the `.jcodebuddy/ipc/` convention, the
+ *   descriptor a host discovers, and the newline-delimited JSON-RPC framing. A change to that framing or to a
+ *   descriptor field is a change every endpoint and every proxy has to follow, so its round-trip tests belong to
+ *   the gate rather than to whichever consumer notices first.
  * - `project-automation` is the dev-time pass, and since 3.0j it is the first caller of the per-file cache
  *   (DEC-041) — the module where "a warm rebuild parses nothing" stops being an engine-level claim.
  * - `hipster-ioc-api` and `hipster-ioc-tooling` are the generator's API and its model-driven implementation
@@ -58,6 +62,7 @@ export const GATE_MODULES = [
   'jcodebuddy-core',
   'jcodebuddy-generated',
   'jcodebuddy-watch',
+  'jcodebuddy-ipc',
   'jcodebuddy-compile',
   'jcodebuddy-meta',
   'jcodebuddy-meta-mcp',

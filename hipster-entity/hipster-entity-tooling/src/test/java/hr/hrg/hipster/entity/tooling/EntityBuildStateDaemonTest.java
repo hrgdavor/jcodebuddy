@@ -26,7 +26,8 @@ import java.util.concurrent.TimeUnit;
  * The opt-in integration: {@code --incremental}'s daemon-generation state against the <strong>real</strong> Zig
  * fs-meta daemon.
  *
- * <p>Point {@code FSMETA_BIN} at {@code fs-meta/zig-out/bin/fsmeta.exe} (or the platform equivalent). Without it the
+ * <p>Point {@code FSMETA_BIN} at the fs-meta build — the sibling {@code ../fs-meta/zig-out/bin/fsmeta} checkout, or
+ * the {@code fsmeta} on {@code PATH}. Without it the
  * class is skipped, so the ordinary suite does not depend on a native toolchain — the same opt-in rule as
  * {@code FsMetaClientDaemonTest}.</p>
  *

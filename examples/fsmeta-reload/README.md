@@ -46,7 +46,7 @@ Prerequisites:
 | ---------------------- | -------------------------------------------------------------------------------------------------- |
 | JDK 25                 | the reactor compiles at release 25; `scripts/lib/toolchain.js` resolves and verifies it            |
 | Apache Maven (3.9)     | `exec:java` runs the runner; resolved through `JCODEBUDDY_MVN`, the recorded location, then `PATH` |
-| the fs-meta executable | it is the watcher; `FSMETA_BIN` overrides the default `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe` |
+| the fs-meta executable | it is the watcher; `FSMETA_BIN` overrides the resolution, which is the sibling `../fs-meta` checkout, then `fsmeta` on `PATH` |
 | fs-meta tick           | `FSMETA_TICK_MS` defaults to 50 ms; valid 5–1000; the scheduler’s 25 ms quiet floor still applies  |
 | early compilation      | `FSMETA_EARLY_COMPILE=1` opts into ECJ’s internal START_BATCH parse/bind phase; default off        |
 

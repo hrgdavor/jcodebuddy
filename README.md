@@ -77,6 +77,20 @@ The `project-automation` module can either be a standalone project folder inside
 
 > In 2026 context, think of it more like SKILLS folder for agents.
 
+### Folder per domain (flat for now)
+
+JCodeBuddy and hipster-entity both prefer **one package/folder per domain**, with the domain's entity
+definitions, `@View` interfaces, generated `_` metadata and JDBC adapters/binders, repositories, services, its
+IoC context/module, and later controllers and mappers all in that one folder. This is a deliberate reaction to
+layer packages (`entity/`, `ioc/`, `store/`, `controller/`, `mapper/`): the domain is the unit a developer opens,
+and its data, mapping and behaviour should be visible together.
+
+Keep the domain folder **flat for now**: no layer subpackages. Subfolders inside a domain may be allowed later by
+an explicit decision; they are not allowed today. Cross-domain bootstrap and wiring may live at the application
+package. The rule is binding in [`AGENTS.md`](AGENTS.md) § 2, and the hipster-entity module restates it in
+[`hipster-entity/AGENTS.md`](hipster-entity/AGENTS.md); the playground under
+`D:\wrk\java\jcodebuddy_proto\entity-ioc-playground` is the worked example.
+
 ### Bootstrapping & Naming Strategy
 
 To solve the "recursion problem" (the fact that JCodeBuddy uses itself to be built), a clear naming distinction has been established to prevent confusion for both human developers and AI coding agents:

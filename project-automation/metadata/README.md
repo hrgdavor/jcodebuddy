@@ -84,11 +84,21 @@ immutable and cache for a year.
 /reports/<id>/...  report page + metadata
 /source/...        project sources, read-only
 /lib/...           shared project-automation bundles
+/events            metadata change SSE
+/api/tools         the project's live tool descriptors (DEC-053)
+/api/tools/<tool>/call    one call forwarded to the tool's Unix socket
+/api/tools/<tool>/events  that tool's event stream as SSE
 ```
 
 The app directory is derived and rebuildable, and `/app/` is the default URL a webview should open. The
 server polls only `manifest.json`, refuses paths outside the project, and serves `/source` and `/lib`
 through the same path jail.
+
+The tool routes let a page served here talk to the compiler's socket, the same way it would through
+`webviewd` or the JetBrains host. The list is open, like the rest of this read-only server; a call or a stream
+requires the token a webview host published in `.jcodebuddy/webview/token` (or the `toolToken` option), in an
+`X-WebView-Token` header or the query. With no token the server answers `403` for those two routes and says
+why — a state-changing route with no secret is not worth the convenience.
 
 ## Tests
 

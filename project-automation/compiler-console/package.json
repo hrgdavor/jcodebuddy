@@ -1,0 +1,12 @@
+{
+  "name": "jcodebuddy-compiler-console",
+  "private": true,
+  "type": "module",
+  "description": "A served jsx6 console over the incremental-compiler tool socket (DEC-053): the same log and the same buttons as the IntelliJ log page, proxied by a host at /api/tools.",
+  "scripts": {
+    "build": "bun run src_build/build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -27,7 +27,8 @@ import java.util.function.BooleanSupplier;
  * fs-meta daemon, edit a source file, watch the generator emit the affected view, and prove the generated output
  * does not cause an endless second pass.
  *
- * <p>Point {@code FSMETA_BIN} at {@code D:/wrk/core/fs-meta/zig-out/bin/fsmeta.exe} (or the platform equivalent).
+ * <p>Point {@code FSMETA_BIN} at the fs-meta build — the sibling {@code ../fs-meta/zig-out/bin/fsmeta} checkout, or
+ * the {@code fsmeta} on {@code PATH} — and the test is enabled.
  * Without it the test is skipped, exactly like {@code EntityBuildStateDaemonTest} and
  * {@code FsMetaClientDaemonTest}, so the ordinary suite does not require a native toolchain.</p>
  *

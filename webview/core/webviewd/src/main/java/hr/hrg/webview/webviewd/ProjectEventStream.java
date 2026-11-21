@@ -30,6 +30,10 @@ import java.util.concurrent.TimeUnit;
  * requirement for the live stream. {@link #of(Path)} fails with an actionable message when no daemon is
  * attached, and the HTTP handler answers {@code 503} rather than pretending a stream that cannot update.</p>
  *
+ * <p><strong>Exact root.</strong> Discovery asks for the daemon serving exactly the project directory; a project
+ * opened as a subdirectory of a served root gets no stream. For a multi-root project, point the host at a root, or
+ * use the ancestor-plus-project-filter mode discussed in {@code doc/architecture/fs-meta-roots.md}.</p>
+ *
  * <p>Noise control is explicit: the daemon subscription filters the directories a project generates
  * ({@code .git}, {@code .jcodebuddy}, {@code node_modules}, {@code target}, …), because a page cares that its
  * sources changed, not that a build wrote a hundred class files. One frame per batch, not one per event: a save

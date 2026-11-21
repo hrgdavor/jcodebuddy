@@ -24,6 +24,7 @@ jcodebuddy-parent (POM)
 │   ├── jcodebuddy-core        the engine: one parse path, the model, the index, the queries, freshness
 │   ├── jcodebuddy-generated   the marker vocabulary and its parser — a leaf (DEC-035, step 3.0l)
 │   ├── jcodebuddy-watch       the fs-meta daemon client (socket protocol, batches, replay refusals) + wildmatch filters; state is fs-meta's
+│   ├── jcodebuddy-ipc         the live-tool endpoint contract (DEC-053): one Unix socket per tool under .jcodebuddy/ipc/, its descriptor, and newline-delimited JSON-RPC 2.0
 │   ├── jcodebuddy-agent       the code-action server (was `java-watch-agent`; it left `watch/` at 3.0s)
 │   ├── jcodebuddy-watch-tools
 │   ├── jcodebuddy-builder
@@ -67,6 +68,7 @@ The following modules have **no dependency** on any other JCodeBuddy module:
 | `jcodebuddy-meta`        | DEC-W006–W009's metadata serving: cache access over JSON-RPC and Apache Fory, on HTTP and Unix sockets. Declares slf4j, Jackson and Fory, and **no workspace artifact** — step 3.0m renamed it from `metadata-server` without changing what it depends on |
 | `fs-meta` (moved)        | **Not a JCodeBuddy artifact, and not in this checkout since 2026-10-23** — [github.com/hrgdavor/fs-meta](https://github.com/hrgdavor/fs-meta), own version, no parent. The file-system state contract ([`fs-meta/FORMAT.md`](https://github.com/hrgdavor/fs-meta/blob/main/FORMAT.md)): the trio (`files.meta` / `files.txt` / `files.json`), the 64-byte entry codec, the validator, a `.gitignore`-honouring walk, the atomic publisher, a diff and a hash-recovery repair. Its one dependency is the hash, [`wyhash`](https://github.com/hrgdavor/wyhash) — a project of its own since 2026-10-16, consumed as the artifact `hr.hrg:wyhash` (DEC-050) rather than built here — and nothing else: no Jackson, no OpenRewrite, no workspace artifact. Its Bun port is not a Maven module (it lives under `fs-meta/js`) and imports that project's JavaScript port through the package link the root `package.json` declares; every port asserts `fs-meta/conformance/fsmeta-vectors.json`. It is in the recorded gate as a **contract** module, because the format is read by tools that do not build together — and a `watch/*` module may depend on it (AGENTS.md § 2's 2026-10-16 amendment), since the watcher is the writer of the trio |
 | `webview-core`           | The host-neutral webview kernel: the security model (`AllowedOrigins`, `RateLimiter`, `PathResolver`), `/health` (`HostHealth`), the port claim (`HostPortClaim`) and descriptor (`HostDescriptor`), page/file serving (`PageServer`) and the write surface (`WriteSurface`, `EditService`, `CheckpointStore`). Depends only on Gson |
+| `jcodebuddy-ipc`         | DEC-053's live tool endpoint: the `<project>/.jcodebuddy/ipc/` convention, the descriptor a host discovers, newline-delimited JSON-RPC 2.0 over a Unix domain socket, and the client a host or proxy uses (`ToolClient`). Declares Jackson and no workspace artifact; `webviewd` proxies it and the incremental-compiler plugin is its first endpoint |
 
 `project-automation` used to be listed here and does not belong: it depends on Layer 2 modules, so it was
 never a Layer 1 library, and it is now not a library at all. It is one project's private dev-time
@@ -105,7 +107,7 @@ These modules depend on Layer 1 and/or Layer 2, or are applications built from t
 | `jcodebuddy-meta-mcp`    | `jcodebuddy-meta` and the `mcp` library — the MCP tool surface over the metadata server (was `metadata-mcp-server`; step 3.0m) |
 | `hipster-ioc-tooling`    | `hipster-ioc-api`, `hipster-entity-tooling`, `jcodebuddy-core`                                     |
 | `merge-java`             | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
-| `webviewd`               | `webview-core` — the reference host of the webview contract, and the only one that needs no editor |
+| `webviewd`               | `webview-core`, `jcodebuddy-watch`, `jcodebuddy-ipc` — the reference host of the webview contract, and the only one that needs no editor |
 | `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core`                                                        |
 | `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api`                                                        |
 | `hipster-entity-test`    | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`                              |

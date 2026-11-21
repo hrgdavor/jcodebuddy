@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JCodeBuddy Incremental Build</title>
+    <style>
+      :root {
+        --bg: #1e1f22;
+        --panel: #26282c;
+        --fg: #dfe1e5;
+        --muted: #9aa0a6;
+        --faint: #6f7379;
+        --line: #34373c;
+        --accent: #579df0;
+        --ok: #73c991;
+        --warn: #d8a657;
+        --bad: #e06c75;
+        --code: #1a1b1e;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.55 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+      }
+      code, pre {
+        font-family: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
+        font-size: 12.5px;
+      }
+      .wrap {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        padding: 14px 16px 10px;
+        gap: 8px;
+      }
+      .head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .head h1 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+      .sub { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+      .sub code { color: var(--fg); }
+      .chips {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .status { margin: 0; color: var(--muted); font-size: 12px; min-height: 18px; }
+      .bar { display: flex; flex-wrap: wrap; gap: 6px; }
+      button {
+        font: inherit;
+        color: var(--fg);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) { border-color: var(--muted); }
+      button:disabled { opacity: 0.45; cursor: default; }
+      .info, .log {
+        margin: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--code);
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .info { max-height: 26vh; }
+      .info:empty { display: none; }
+      .log { flex: 1; min-height: 120px; }
+      .foot { color: var(--faint); font-size: 11px; overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <div id="page"></div>
+    <script type="module" src="__BUNDLE__"></script>
+  </body>
+</html>

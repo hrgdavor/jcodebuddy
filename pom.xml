@@ -70,6 +70,11 @@
         <module>jcodebuddy/jcodebuddy-builder-api</module>
         <module>jcodebuddy/jcodebuddy-builder</module>
         <module>jcodebuddy/jcodebuddy-watch</module>
+        <!-- The live-tool endpoint contract (DEC-053): a Unix socket per tool under .jcodebuddy/ipc/, the
+             descriptor a host discovers, and newline-delimited JSON-RPC 2.0. No port and no token, because the
+             socket is a file the operating system scopes to the user. The incremental-compiler plugin
+             (webview/webview-intellij-incremental) is its first endpoint. -->
+        <module>jcodebuddy/jcodebuddy-ipc</module>
         <!-- The standalone ECJ incremental compiler, rebuilt from the frozen watch group (step that gave
              jcodebuddy its own compile helper): a benchmark/dev-time compiler, with no watcher, no relaunch
              and no java-watch dependency. The change source is fs-meta, and the caller passes the files. -->
@@ -357,6 +362,14 @@
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>jcodebuddy-watch</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- DEC-053's live-tool endpoint contract: a Unix socket per tool under .jcodebuddy/ipc/, its
+                 descriptor and the JSON-RPC framing. `webviewd` proxies it; the incremental-compiler plugin
+                 is the first tool that publishes one. -->
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-ipc</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

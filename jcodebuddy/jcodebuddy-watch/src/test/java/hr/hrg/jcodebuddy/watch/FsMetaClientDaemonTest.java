@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The real integration: a Java client watches through the **Zig fs-meta daemon** over its Unix socket.
  *
- * <p>This is opt-in because the daemon is a native binary outside this checkout. Point {@code FSMETA_BIN} at
- * {@code fs-meta/zig-out/bin/fsmeta.exe} (or the platform equivalent) and the test starts
+ * <p>This is opt-in because the daemon is a native binary outside this checkout. Point {@code FSMETA_BIN} at the
+ * fs-meta build — the sibling {@code ../fs-meta/zig-out/bin/fsmeta} checkout, or the {@code fsmeta} on
+ * {@code PATH} — and the test starts
  * {@code fsmeta daemon start --foreground}, adds the served root, connects the Java client, edits a file and asserts
  * the live batch. Without the variable the test is skipped, so the ordinary gate does not depend on a native
  * toolchain.</p>

@@ -12,6 +12,7 @@ source line a reader clicks.
 
 - **WebView tool window** — displays HTML files in a JCEF (Java Chromium Embedded Framework) browser inside the IDE.
 - **Keyboard shortcut** — toggle the tool window with `Ctrl+Alt+Shift+W`.
+- **Navigation toolbar** — Back, Forward, **Home** (`/app/index.html`), Refresh and Settings.
 - **Context menu integration** — right-click an `.html` file in the Project view, the editor or an editor tab and choose **Open in WebView Explorer**.
 - **Served HTML pages** — an HTML page is opened over loopback HTTP, not as `file://`, so a page may fetch
   its own JSON or other same-origin assets. The plugin starts a page server on demand (on an ephemeral port
@@ -110,6 +111,14 @@ extra.
   page URL, so the page's relative `browser.js` and `model.json` requests carry it automatically; the
   file decision is `webview-core`'s `PageServer`, confined to the project root. With no bridge port
   configured, the operating system picks one; with one configured, that port is used.
+- **An app page.** A page under `.jcodebuddy/app/` opens **directly** at
+  `http://127.0.0.1:<port>/app/<page>` (e.g. `/app/incremental-build.html`). The app pages are derived
+  output and are readable without a token, so a typed URL and a link that forgets the token both load. The
+  host **injects this server's page token into `localStorage`** (`jcodebuddy.token`) before the page's own
+  scripts run; the token is what authorizes the page's `/api/tools/<tool>/call` requests and its event
+  stream, so no setting or manual `?token=` is needed. The `/app/?openFile=<project-relative>` form remains
+  the app shell for a source file. The toolbar has **Back, Forward, Home, Refresh and Settings**; **Home**
+  opens `/app/index.html`.
 - **An existing host.** Settings → Tools → WebView Explorer → **Existing page server** accepts a base
   such as `http://127.0.0.1:18884/page/` (what `webviewd --project <root>` serves). The page's project-relative
   path is appended — that base is the path mapping — and no local server is started.
@@ -126,7 +135,18 @@ For a page opened outside the IDE (a plain browser), the plugin can open files o
 ```text
 GET http://127.0.0.1:<port>/open?filePath=<absolute path>&line=<n>&column=<n>
 GET http://127.0.0.1:<port>/health
+GET http://127.0.0.1:<port>/api/tools
+POST http://127.0.0.1:<port>/api/tools/<tool>/call
+GET http://127.0.0.1:<port>/api/tools/<tool>/events
 ```
+
+The last three are DEC-053's live-tool API (`webview/doc/webview-host-api.md` § 5): the descriptors in the
+project's `.jcodebuddy/ipc/`, one JSON-RPC call forwarded to a tool's Unix socket, and that tool's event stream
+as SSE. The list accepts the token or an allowed `Origin`, like `/open`; a call and a stream require the token,
+because a call can rebuild or stop a watch. The wire format, discovery and SSE frame are
+`jcodebuddy-ipc`'s `ToolProxy`, so this host contributes only its authentication rule and its HTTP plumbing.
+A page served from `/app/` reaches them on this host's own port, which is what makes the compiler console work
+inside the IDE as well as through `webviewd`.
 
 Configure it in **Settings → Tools → WebView Explorer**, or with VM options (Help → Edit Custom VM Options),
 which is the form the renderer's `--bridge-port` default assumes:

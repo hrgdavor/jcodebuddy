@@ -19,10 +19,14 @@ fsmeta daemon start
 fsmeta root add /path/to/project
 ```
 
-Each module then filters that one daemon to its own `sourceRoot/**`; a project needs one root, not one per
-module. The server-side subfolder filter requires the daemon built from `fs-meta` commit **`2da83ae`**
-(which includes the filter from `f4be95d`; the local checkout's rebuilt binary is
-`D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`). A root's scheduler tick is configurable with
+Each module then filters that one daemon to its own `sourceRoot/**`. Registering one root for the project is the
+simplest layout, and the one the IntelliJ compiler currently expects. fs-meta also supports one root per
+subproject — nested roots are guarded, so a parent's stream excludes the child — and the entity/IoC caches resolve
+the **deepest** serving root of their source root, so a module registered as its own root works for them. The
+IntelliJ compiler still attaches one root for the project, so per-module roots are not yet seen there; the audit
+and the fix are in [`doc/architecture/fs-meta-roots.md`](../../doc/architecture/fs-meta-roots.md). The server-side subfolder filter requires the daemon built from `fs-meta` commit **`2da83ae`**
+(which includes the filter from `f4be95d`; the current build is the `fsmeta` on `PATH` or the sibling
+`../fs-meta/zig-out/bin/fsmeta` checkout — `FSMETA_BIN` overrides both). A root's scheduler tick is configurable with
 `--tick` / `FSMETA_TICK_MS` (default 50 ms, range 5–1000; the 25 ms quiet floor still applies). **The tick should be
 chosen per editor/SSD rather than globally.** 50 ms is the new default; 10–25 ms is reasonable for a fast local
 editor, while 50–100 ms is safer for many roots or slower storage. An older daemon still works

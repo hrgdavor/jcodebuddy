@@ -20,7 +20,7 @@
  * totalFromSave=..ms` after recompiling, reloading and re-running the project.
  *
  * Environment:
- *   FSMETA_BIN   the fs-meta executable (default `D:\wrk\core\fs-meta\zig-out\bin\fsmeta.exe`)
+ *   FSMETA_BIN   the fs-meta executable; otherwise the sibling `../fs-meta` checkout, then `fsmeta` on PATH
  *   FSMETA_TICK_MS  the root scheduler tick (default 50; 5..1000; the scheduler's 25 ms quiet floor applies)
  *   FSMETA_EARLY_COMPILE=1  opt into ECJ's internal START_BATCH parse/bind phase (default off)
  *   JCODEBUDDY_JDK25 / JCODEBUDDY_MVN   as for every other script in `scripts/`
@@ -30,11 +30,13 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { envWith, repoRoot, resolveJdk25, resolveMaven, run } from "../../scripts/lib/toolchain.js";
+import { resolveFsmeta } from "../../scripts/lib/fsmeta.js";
 
 const HERE = import.meta.dir;
 const REPO = repoRoot();
 const TMP = join(REPO, ".tmp", "fsmeta-reload");
-const FS = process.env.FSMETA_BIN ?? "D:\\wrk\\core\\fs-meta\\zig-out\\bin\\fsmeta.exe";
+// FSMETA_BIN, then a sibling `../fs-meta` checkout, then `fsmeta` on PATH — never a machine-specific default.
+const FS = resolveFsmeta(REPO);
 const TICK_MS = process.env.FSMETA_TICK_MS ?? "50";
 const EARLY_COMPILE = process.env.FSMETA_EARLY_COMPILE === "1";
 

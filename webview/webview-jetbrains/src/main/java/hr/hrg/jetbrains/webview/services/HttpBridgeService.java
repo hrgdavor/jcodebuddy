@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.components.Service;
@@ -13,6 +14,7 @@ import com.intellij.openapi.ui.Messages;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import hr.hrg.jetbrains.webview.bridge.NavigatorService;
+import hr.hrg.jcodebuddy.ipc.ToolProxy;
 import hr.hrg.webview.core.AllowedOrigins;
 import hr.hrg.webview.core.CheckpointStore;
 import hr.hrg.webview.core.EditService;
@@ -42,10 +44,12 @@ import java.util.ArrayList;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -91,6 +95,13 @@ public final class HttpBridgeService {
 
     private static final String PATH_OPEN = "/open";
     private static final String PATH_HEALTH = "/health";
+
+    /**
+     * DEC-053's live-tool namespace: the project's `.jcodebuddy/ipc/` descriptors, one call proxy and one SSE
+     * stream per tool. Served by this host rather than proxied to a custom server: the descriptors are the
+     * project's own files and the sockets are local, so there is nothing for the JS backend to add.
+     */
+    private static final String TOOL_ROUTE = "/api/tools";
 
     /** The write contract's routes; see {@code doc/edit-api.md}. */
     private static final String WRITE_PREFIX = "/api/v1/";
@@ -180,11 +191,13 @@ public final class HttpBridgeService {
     }
 
     /**
-     * The default app URL for a project file, or null when this project has no built app.
+     * The URL for a project file when the project has a built app, or null.
      *
-     * <p>Unlike {@link #pageUrl(Path)}, the app URL has no token segment: it is the stable
-     * {@code /app/?openFile=<relative>} contract. The local server accepts it only from an allowed
-     * origin (or with the token query), and confines both the app and {@code /source} to the project.</p>
+     * <p>A file that is itself a page under {@code .jcodebuddy/app/} gets the direct app URL
+     * ({@code /app/<page>}), which is what a person expects from "Open in WebView Explorer". Any other file
+     * gets the stable {@code /app/?openFile=<relative>} contract, which the app shell hands to the IDE
+     * ({@code window.openFile}). The local server accepts both only from an allowed origin (or with the token
+     * query), and confines the app and {@code /source} to the project.</p>
      */
     public synchronized @Nullable String appUrl(@NotNull Path file) {
         String basePath = project.getBasePath();
@@ -192,8 +205,10 @@ public final class HttpBridgeService {
             return null;
         }
         Path root = Path.of(basePath);
+        Path appRoot = root.resolve(".jcodebuddy").resolve("app").toAbsolutePath().normalize();
+        Path target = file.toAbsolutePath().normalize();
         boolean custom = customServerBase != null;
-        if (!custom && !Files.isRegularFile(root.resolve(".jcodebuddy").resolve("app").resolve("index.html"))) {
+        if (!custom && !Files.isRegularFile(appRoot.resolve("index.html"))) {
             return null;
         }
         String relative = ServedPageUrls.projectRelative(root, file);
@@ -205,6 +220,14 @@ public final class HttpBridgeService {
         }
         if (server == null || boundPort <= 0) {
             return null;
+        }
+        if (target.startsWith(appRoot)) {
+            String appRelative = appRoot.relativize(target).toString().replace('\\', '/');
+            // The per-server page token is generated, not configured: the action can open the page and its
+            // /api/tools calls work without the user setting anything. A configured token is the fallback
+            // for an external caller.
+            String auth = !pageToken.isEmpty() ? pageToken : token;
+            return ServedPageUrls.appPage("http://127.0.0.1:" + boundPort, appRelative, auth);
         }
         return ServedPageUrls.appUrl("http://127.0.0.1:" + boundPort, relative);
     }
@@ -532,6 +555,11 @@ public final class HttpBridgeService {
             return;
         }
 
+        if (path != null && (path.equals(TOOL_ROUTE) || path.startsWith(TOOL_ROUTE + "/"))) {
+            handleToolApi(exchange, path, origin);
+            return;
+        }
+
         if (customServerBase != null && isProxied(path)) {
             proxyToCustomServer(exchange, path);
             return;
@@ -717,10 +745,9 @@ public final class HttpBridgeService {
      */
     private void handleApp(@NotNull HttpExchange exchange, @NotNull String path, String origin)
             throws IOException {
-        if (!isAuthorized(exchange, origin)) {
-            send(exchange, 403, "Forbidden", "text/plain");
-            return;
-        }
+        // The app is derived output. Its pages are readable without a token (a link or an address-bar
+        // navigation carries no Origin); the token is injected into each HTML page and protects the tool
+        // calls and the source namespaces. That is what lets links that forget the token keep working.
         if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
             send(exchange, 405, "Method Not Allowed", "text/plain");
             return;
@@ -757,7 +784,46 @@ public final class HttpBridgeService {
             exchange.getResponseHeaders().set("Cache-Control", "no-store");
         }
         PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + relative, null);
-        sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());
+        byte[] body = relative.startsWith(".jcodebuddy/app/") && relative.endsWith(".html")
+                ? withTokenScript(response.body(), response.contentType(), tokenForPages())
+                : response.body();
+        sendBytes(exchange, response.httpStatus(), response.contentType(), body);
+    }
+
+    /** The token a page served by this host carries: the generated page token, or the configured one. */
+    private @NotNull String tokenForPages() {
+        return !pageToken.isEmpty() ? pageToken : token;
+    }
+
+    /**
+     * Injects the host token into an HTML page before its own scripts run, under the key the pages read
+     * ({@code jcodebuddy.token}). The page's tool calls need a token; the page does not need it in its URL
+     * and a link that forgets it still works.
+     */
+    private static byte[] withTokenScript(byte[] body, @Nullable String contentType, @Nullable String token) {
+        if (token == null || token.isBlank() || contentType == null
+                || !contentType.toLowerCase(Locale.ROOT).startsWith("text/html")) {
+            return body;
+        }
+        String html = new String(body, StandardCharsets.UTF_8);
+        String script = "<script>try{localStorage.setItem('jcodebuddy.token',"
+                + new JsonPrimitive(token) + ")}catch(e){}</script>";
+        int insert = 0;
+        int head = indexOfIgnoreCase(html, "<head");
+        if (head >= 0) {
+            int close = html.indexOf('>', head);
+            if (close >= 0) {
+                insert = close + 1;
+            }
+        } else {
+            int firstScript = indexOfIgnoreCase(html, "<script");
+            insert = firstScript >= 0 ? firstScript : 0;
+        }
+        return (html.substring(0, insert) + script + html.substring(insert)).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static int indexOfIgnoreCase(@NotNull String text, @NotNull String needle) {
+        return text.toLowerCase(Locale.ROOT).indexOf(needle.toLowerCase(Locale.ROOT));
     }
 
     private static final HttpClient PROXY_CLIENT = HttpClient.newHttpClient();
@@ -839,7 +905,10 @@ public final class HttpBridgeService {
         }
         String relative = path.substring(prefix.length());
         PageServer.Response response = current.serve(PageServer.ROUTE_PREFIX + relative, null);
-        sendBytes(exchange, response.httpStatus(), response.contentType(), response.body());
+        byte[] body = relative.endsWith(".html")
+                ? withTokenScript(response.body(), response.contentType(), pageToken)
+                : response.body();
+        sendBytes(exchange, response.httpStatus(), response.contentType(), body);
     }
 
     /**
@@ -904,16 +973,181 @@ public final class HttpBridgeService {
         }
     }
 
+    /**
+     * DEC-053's tool API: the descriptors under {@code <project>/.jcodebuddy/ipc/}, one call route and one SSE
+     * route per tool.
+     *
+     * <p>The list is a read — an allowed Origin or the token, like {@code /open}. A call and a stream can
+     * change what the tool does (rebuild, stop watching), so they use the token-only rule this host already
+     * has for state-changing routes. The wire format, the discovery and the SSE frame belong to
+     * {@link ToolProxy}, so this host only translates HTTP.</p>
+     */
+    private void handleToolApi(@NotNull HttpExchange exchange, @NotNull String path, @Nullable String origin)
+            throws IOException {
+        String base = project.getBasePath();
+        if (base == null || base.isBlank()) {
+            send(exchange, 400, "The project has no base directory", "text/plain");
+            return;
+        }
+        Path projectRoot = Path.of(base);
+        if (path.equals(TOOL_ROUTE) || path.equals(TOOL_ROUTE + "/")) {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                send(exchange, 405, "Method Not Allowed", "text/plain");
+                return;
+            }
+            if (!isAuthorized(exchange, origin)) {
+                send(exchange, 403, "Forbidden: the token or an allowed Origin is required", "text/plain");
+                return;
+            }
+            ToolProxy.Answer answer = ToolProxy.list(projectRoot);
+            send(exchange, answer.status(), answer.body(), "application/json");
+            return;
+        }
+        String tail = path.startsWith(TOOL_ROUTE + "/") ? path.substring(TOOL_ROUTE.length() + 1) : "";
+        int slash = tail.indexOf('/');
+        String tool = slash <= 0 ? "" : tail.substring(0, slash);
+        String action = slash <= 0 ? "" : tail.substring(slash + 1);
+        if ("call".equals(action)) {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                send(exchange, 405, "Method Not Allowed", "text/plain");
+                return;
+            }
+            if (!isAuthorizedWrite(exchange)) {
+                send(exchange, 403, "Forbidden: the token is required for a tool call", "text/plain");
+                return;
+            }
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            ToolProxy.Answer answer = ToolProxy.call(projectRoot, tool, body);
+            send(exchange, answer.status(), answer.body(), "application/json");
+            return;
+        }
+        if ("events".equals(action)) {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                send(exchange, 405, "Method Not Allowed", "text/plain");
+                return;
+            }
+            if (!isAuthorizedWrite(exchange)) {
+                send(exchange, 403, "Forbidden: the token is required for a tool stream", "text/plain");
+                return;
+            }
+            streamToolEvents(exchange, projectRoot, tool);
+            return;
+        }
+        send(exchange, 404, "Not Found", "text/plain");
+    }
+
+    /**
+     * The SSE half: {@code GET /api/tools/<tool>/events}. The token is accepted in the query because
+     * EventSource cannot set a header, and {@code Last-Event-ID} wins over {@code ?since=} so a reconnect
+     * resumes at the last line the page rendered.
+     */
+    private void streamToolEvents(@NotNull HttpExchange exchange, @NotNull Path projectRoot, String tool)
+            throws IOException {
+        Map<String, String> query = parseQuery(exchange.getRequestURI().getQuery());
+        Long since = parseLong(query.get("since"));
+        Long lastEventId = parseLong(exchange.getRequestHeaders().getFirst("Last-Event-ID"));
+        if (lastEventId != null) {
+            since = lastEventId;
+        }
+        OutputStream[] body = new OutputStream[1];
+        AtomicBoolean closed = new AtomicBoolean();
+        AtomicReference<ToolProxy.Stream> stream = new AtomicReference<>();
+        ToolProxy.Start start = ToolProxy.start(projectRoot, tool, query.get("topic"), since, frame -> {
+            if (!closed.get() && body[0] != null) {
+                writeToolFrame(body[0], frame);
+            }
+        });
+        if (start.refused()) {
+            send(exchange, start.refusal().status(), start.refusal().body(), "application/json");
+            return;
+        }
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(200, 0);
+        OutputStream out = exchange.getResponseBody();
+        body[0] = out;
+        stream.set(start.stream());
+        keepToolAlive(out, closed, stream);
+        try {
+            while (!closed.get()) {
+                start.stream().pump();
+            }
+        } catch (IOException ended) {
+            // The tool or the browser went away; ending the stream is how EventSource learns to retry.
+        } finally {
+            closed.set(true);
+            start.stream().close();
+            synchronized (out) {
+                try {
+                    out.close();
+                } catch (IOException ignored) {
+                    // The browser may already have closed it.
+                }
+            }
+        }
+    }
+
+    /** Writes an SSE comment every keep-alive interval; a failed write ends the stream. */
+    private static void keepToolAlive(OutputStream out, AtomicBoolean closed,
+                                      AtomicReference<ToolProxy.Stream> stream) {
+        Thread thread = new Thread(() -> {
+            while (!closed.get()) {
+                try {
+                    Thread.sleep(15_000L);
+                } catch (InterruptedException interrupted) {
+                    return;
+                }
+                if (closed.get()) {
+                    return;
+                }
+                try {
+                    writeToolFrame(out, ": keep-alive\n\n");
+                } catch (IOException gone) {
+                    closed.set(true);
+                    ToolProxy.Stream current = stream.get();
+                    if (current != null) {
+                        current.close();
+                    }
+                    return;
+                }
+            }
+        }, "webview-jetbrains-tool-events-keepalive");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private static void writeToolFrame(OutputStream out, String frame) throws IOException {
+        byte[] bytes = frame.getBytes(StandardCharsets.UTF_8);
+        synchronized (out) {
+            out.write(bytes);
+            out.flush();
+        }
+    }
+
+    private static Long parseLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException malformed) {
+            return null;
+        }
+    }
+
     /** The token-only rule for a state-changing route. */
     private boolean isAuthorizedWrite(@NotNull HttpExchange exchange) {
-        if (token.isEmpty()) {
-            return false;
-        }
         String supplied = exchange.getRequestHeaders().getFirst("X-WebView-Token");
         if (supplied == null) {
             supplied = parseQuery(exchange.getRequestURI().getQuery()).get("token");
         }
-        return token.equals(supplied);
+        if (supplied == null || supplied.isBlank()) {
+            return false;
+        }
+        // The configured token authorizes an external caller; the per-server page token authorizes a page
+        // this host opened (its own URL carries it), so a page needs no manual setup to use its buttons.
+        return (!token.isEmpty() && token.equals(supplied))
+                || (!pageToken.isEmpty() && pageToken.equals(supplied));
     }
 
     /**

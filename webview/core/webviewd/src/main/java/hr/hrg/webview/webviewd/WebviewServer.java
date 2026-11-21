@@ -3,10 +3,13 @@ package hr.hrg.webview.webviewd;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import hr.hrg.jcodebuddy.ipc.ToolProxy;
 import hr.hrg.webview.core.AllowedOrigins;
 import hr.hrg.webview.core.CheckpointStore;
 import hr.hrg.webview.core.Clock;
@@ -43,6 +46,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The page host: loopback HTTP, the frozen contract's two routes, the two page routes, a manifest, and one
@@ -81,6 +86,12 @@ public final class WebviewServer implements AutoCloseable {
 
     /** Pages served under this prefix get the bridge injected; files under {@link PageServer#ROUTE_PREFIX} do not. */
     public static final String PAGE_ROUTE_PREFIX = "/page/";
+
+    /**
+     * DEC-053's live-tool namespace: the descriptor list at {@code /api/tools}, and one tool's call proxy at
+     * {@code /api/tools/<tool>/call}.
+     */
+    public static final String TOOLS_ROUTE = "/api/tools";
 
     /** How long the event stream waits before sending a keep-alive comment, so a proxy does not close it. */
     static final long EVENT_KEEPALIVE_MS = 15_000L;
@@ -192,6 +203,7 @@ public final class WebviewServer implements AutoCloseable {
         server.createContext("/app", instance::handleAppAlias);
         server.createContext("/source", instance::handleSourceAlias);
         server.createContext("/lib", instance::handleLibAlias);
+        server.createContext(TOOLS_ROUTE, instance::handleTools);
         server.createContext(MANIFEST_ROUTE, instance::handleManifest);
         server.createContext("/api/v1/applyEdit", instance::handleApplyEdit);
         server.createContext("/api/v1/diff", instance::handleDiff);
@@ -500,9 +512,9 @@ public final class WebviewServer implements AutoCloseable {
     }
 
     private void handleAppAlias(HttpExchange exchange) throws IOException {
-        if (!authorize(exchange)) {
-            return;
-        }
+        // The app is derived output. Its pages are readable without a token; the token is only needed for
+        // the tool calls and source namespaces. That is what lets links that forget the token keep working
+        // after the first visit stored it in localStorage.
         String path = exchange.getRequestURI().getPath();
         if (!path.equals("/app") && !path.startsWith("/app/")) {
             send(exchange, 404, "text/plain", bytes("Not Found"));
@@ -569,6 +581,154 @@ public final class WebviewServer implements AutoCloseable {
                 injectBridge ? injectedBridge : null);
         announceDigest(exchange, response);
         send(exchange, response.httpStatus(), response.contentType(), response.body());
+    }
+
+    /**
+     * DEC-053's tool namespace: {@code GET /api/tools} lists the project's live tool endpoints, and
+     * {@code POST /api/tools/<tool>/call} forwards one JSON-RPC call to one of them.
+     *
+     * <p>The list is a read, so it uses {@link #authorize} (an allowed origin or the token). A call can change
+     * the tool's state — "rebuild", "stop watching" — so it uses {@link #authorizeWrite}, which is the token
+     * alone. The tool socket itself carries no token: it is a filesystem object the operating system scopes to
+     * its user, and this route is the one place that boundary is crossed, under this host's own token.</p>
+     *
+     * <p>A failed call is not a host failure: the tool's refusal is {@code 400} with the JSON-RPC code, and an
+     * unreachable tool is {@code 502}. The page then shows "not running" instead of an empty log.</p>
+     */
+    private void handleTools(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        if (path.equals(TOOLS_ROUTE) || path.equals(TOOLS_ROUTE + "/")) {
+            if (!authorize(exchange) || !requireGet(exchange)) {
+                return;
+            }
+            ToolProxy.Answer answer = ToolProxy.list(project);
+            sendJson(exchange, answer.status(), answer.body());
+            return;
+        }
+        String tail = path.startsWith(TOOLS_ROUTE + "/") ? path.substring(TOOLS_ROUTE.length() + 1) : "";
+        int slash = tail.indexOf('/');
+        String tool = slash <= 0 ? "" : tail.substring(0, slash);
+        String action = slash <= 0 ? "" : tail.substring(slash + 1);
+        if ("call".equals(action)) {
+            if (!requirePost(exchange) || !authorizeWrite(exchange)) {
+                return;
+            }
+            ToolProxy.Answer answer = ToolProxy.call(project, tool, readBody(exchange));
+            sendJson(exchange, answer.status(), answer.body());
+            return;
+        }
+        if ("events".equals(action)) {
+            if (!requireGet(exchange) || !authorizeWrite(exchange)) {
+                return;
+            }
+            streamToolEvents(exchange, tool);
+            return;
+        }
+        send(exchange, 404, "text/plain", bytes("Not found: " + path));
+    }
+
+    /**
+     * {@code GET /api/tools/<tool>/events}: the tool's event stream as SSE.
+     *
+     * <p>The discovery, the topic check and the frame syntax belong to {@link ToolProxy}; this method owns the
+     * HTTP half only: the token rule (EventSource cannot set a header, so the token is the query's), the
+     * response headers, the keep-alive that also notices a closed tab, and closing both ends at the end.</p>
+     *
+     * <p>{@code Last-Event-ID} wins over the query's {@code since}, so EventSource's automatic reconnect
+     * resumes at the last line the page rendered instead of at whatever the page's JavaScript remembers.</p>
+     */
+    private void streamToolEvents(HttpExchange exchange, String tool) throws IOException {
+        Map<String, String> query = query(exchange.getRequestURI());
+        Long since = parseLong(query.get("since"));
+        Long lastEventId = parseLong(exchange.getRequestHeaders().getFirst("Last-Event-ID"));
+        if (lastEventId != null) {
+            since = lastEventId;
+        }
+        OutputStream[] body = new OutputStream[1];
+        AtomicBoolean closed = new AtomicBoolean();
+        AtomicReference<ToolProxy.Stream> stream = new AtomicReference<>();
+        ToolProxy.Start start = ToolProxy.start(project, tool, query.get("topic"), since, frame -> {
+            if (!closed.get() && body[0] != null) {
+                writeFrame(body[0], frame);
+            }
+        });
+        if (start.refused()) {
+            sendJson(exchange, start.refusal().status(), start.refusal().body());
+            return;
+        }
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.getResponseHeaders().set("X-Accel-Buffering", "no");
+        exchange.sendResponseHeaders(200, 0);
+        OutputStream out = exchange.getResponseBody();
+        body[0] = out;
+        stream.set(start.stream());
+        keepAlive(out, closed, stream);
+        try {
+            while (!closed.get()) {
+                start.stream().pump();
+            }
+        } catch (IOException ended) {
+            // The tool or the browser went away; ending the stream is how EventSource learns to retry.
+        } finally {
+            closed.set(true);
+            start.stream().close();
+            synchronized (out) {
+                try {
+                    out.close();
+                } catch (IOException ignored) {
+                    // The browser may already have closed it.
+                }
+            }
+        }
+    }
+
+    /** Writes an SSE comment every keep-alive interval; a failed write ends the stream. */
+    private static void keepAlive(OutputStream out, AtomicBoolean closed,
+                                  AtomicReference<ToolProxy.Stream> stream) {
+        Thread thread = new Thread(() -> {
+            while (!closed.get()) {
+                try {
+                    Thread.sleep(EVENT_KEEPALIVE_MS);
+                } catch (InterruptedException interrupted) {
+                    return;
+                }
+                if (closed.get()) {
+                    return;
+                }
+                try {
+                    writeFrame(out, ": keep-alive\n\n");
+                } catch (IOException gone) {
+                    closed.set(true);
+                    ToolProxy.Stream current = stream.get();
+                    if (current != null) {
+                        current.close();
+                    }
+                    return;
+                }
+            }
+        }, "webviewd-tool-events-keepalive");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private static void writeFrame(OutputStream out, String frame) throws IOException {
+        byte[] bytes = frame.getBytes(StandardCharsets.UTF_8);
+        synchronized (out) {
+            out.write(bytes);
+            out.flush();
+        }
+    }
+
+    private static Long parseLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException malformed) {
+            return null;
+        }
     }
 
     private void handlePage(HttpExchange exchange) throws IOException {

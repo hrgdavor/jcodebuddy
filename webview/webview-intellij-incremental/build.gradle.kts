@@ -14,8 +14,9 @@ java {
 
 repositories {
     mavenCentral()
-    // jcodebuddy-compile and jcodebuddy-watch are this repository's Maven modules. Install them first:
-    //   mvn -o -pl :jcodebuddy-compile,:jcodebuddy-watch install -DskipTests
+    // jcodebuddy-compile, jcodebuddy-watch and jcodebuddy-ipc are this repository's Maven modules. Install
+    // them first:
+    //   mvn -o -pl :jcodebuddy-compile,:jcodebuddy-watch,:jcodebuddy-ipc install -DskipTests
     mavenLocal()
     intellijPlatform {
         defaultRepositories()
@@ -23,10 +24,11 @@ repositories {
 }
 
 dependencies {
-    // Both are implementation dependencies, not compileOnly: the plugin must bundle the compiler, its ECJ
-    // dependency and the fs-meta client into the distributable.
+    // These are implementation dependencies, not compileOnly: the plugin must bundle the compiler, its ECJ
+    // dependency, the fs-meta client and the live-tool socket into the distributable.
     implementation("hr.hrg.jcodebuddy:jcodebuddy-compile:1.0-SNAPSHOT")
     implementation("hr.hrg.jcodebuddy:jcodebuddy-watch:1.0-SNAPSHOT")
+    implementation("hr.hrg.jcodebuddy:jcodebuddy-ipc:1.0-SNAPSHOT")
 
     intellijPlatform {
         intellijIdea(providers.gradleProperty("platformVersion"))

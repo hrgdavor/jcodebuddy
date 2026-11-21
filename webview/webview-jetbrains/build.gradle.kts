@@ -59,6 +59,11 @@ dependencies {
     // with NoClassDefFoundError. It has no dependencies of its own, so nothing else comes with it.
     implementation("hr.hrg.inject:inject-examples:0.1.0")
 
+    // DEC-053's live-tool socket clients: /api/tools lists the project's `.jcodebuddy/ipc/` descriptors and
+    // forwards calls and events to their Unix sockets. The transport and the wire format are this library's,
+    // not this host's; its Jackson dependency comes with it and is bundled into the distributable.
+    implementation("hr.hrg.jcodebuddy:jcodebuddy-ipc:1.0-SNAPSHOT")
+
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
         intellijIdea(providers.gradleProperty("platformVersion"))

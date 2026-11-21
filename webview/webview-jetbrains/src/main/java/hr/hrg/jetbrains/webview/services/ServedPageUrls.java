@@ -89,4 +89,37 @@ public final class ServedPageUrls {
         return trimmed + "/app/?openFile="
                 + URLEncoder.encode(relative, StandardCharsets.UTF_8).replace("+", "%20");
     }
+
+    /**
+     * The direct URL for one page that already lives in the app directory:
+     * {@code <host>/app/<page>} — no {@code openFile} shell, no token segment.
+     *
+     * <p>This is what "Open in WebView Explorer" uses for a page under {@code .jcodebuddy/app/}; the
+     * {@code ?openFile=} form remains the one for a source file, which the app shell hands to the IDE.
+     * The relative path is relative to {@code .jcodebuddy/app/}, e.g. {@code incremental-build.html}.</p>
+     */
+    public static @NotNull String appPage(@NotNull String base, @NotNull String relative) {
+        String trimmed = base.trim();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed + "/app/" + encodePath(relative);
+    }
+
+    /**
+     * The direct app page URL with the host token as its query, when one is configured.
+     *
+     * <p>The app route is auth-protected (an allowed {@code Origin} or the token). A page opened in the
+     * IDE's own webview has the origin, but the page's {@code /api/tools/<tool>/call} requests need the
+     * token, and the page reads it from its own query. Carrying it here makes the opened page fully usable
+     * without a second manual step.</p>
+     */
+    public static @NotNull String appPage(@NotNull String base, @NotNull String relative,
+                                          @Nullable String token) {
+        String url = appPage(base, relative);
+        if (token == null || token.isBlank()) {
+            return url;
+        }
+        return url + "?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8).replace("+", "%20");
+    }
 }

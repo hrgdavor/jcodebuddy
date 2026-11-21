@@ -96,12 +96,12 @@ function run(command, args, options = {}) {
  * <p>The join is already made by the caller and arrives here, so the graph the bundle inlines is the same one
  * `main` reports on — reading it twice would let the report describe a different pass than the page.</p>
  */
-export function bundle({ contexts, joined, live = false } = {}) {
+export function bundle({ contexts, joined, live = false, outputDir = OUTPUT_DIR } = {}) {
   if (!existsSync(JSX6)) {
     throw new Error(`no jsx6 checkout at ${JSX6} — clone https://github.com/hrgdavor/jsx6 there, `
       + 'or set JCODEBUDDY_JSX6_DIR (AGENTS.md § 2)')
   }
-  const graph = contexts ?? readContexts()
+  const graph = contexts ?? readContexts(outputDir)
   const placed = joined ?? readLocations(graph)
   const staging = stagingDir()
   rmSync(staging, { recursive: true, force: true })
@@ -165,10 +165,10 @@ export function contextsModule(contexts, locations = {}, locationless = []) {
  * usable path". It comes from `--project` (`JCODEBUDDY_PROJECT_DIR`), and a build that cannot say where the
  * project is **stops** rather than emitting paths aimed at the wrong root.</p>
  *
- * @param {{project?: string, indexPath?: string}} [options]
+ * @param {{project?: string, indexPath?: string, moduleDir?: string}} [options]
  * @throws when the index is missing, is a format this reader does not know, or the project root is not given
  */
-export function readLocations(contexts, { project, indexPath = INDEX_FILE } = {}) {
+export function readLocations(contexts, { project, indexPath = INDEX_FILE, moduleDir = MODULE_DIR } = {}) {
   if (!project) {
     throw new Error('no project root — pass --project=<dir> (or set JCODEBUDDY_PROJECT_DIR): the class '
       + 'index is module-relative, and a joined path a host cannot resolve is worse than no join')
@@ -177,12 +177,12 @@ export function readLocations(contexts, { project, indexPath = INDEX_FILE } = {}
     throw new Error(`no class index at ${indexPath} — run the generator first (bun scripts/ioc-gen.js)`)
   }
   const rows = classRows(JSON.parse(readFileSync(indexPath, 'utf8')))
-  const moduleDir = relative(resolve(project), resolve(MODULE_DIR)).split(sep).join('/')
-  if (moduleDir.startsWith('..')) {
-    throw new Error(`the module ${MODULE_DIR} is not inside the project ${resolve(project)}`)
+  const moduleRelative = relative(resolve(project), resolve(moduleDir)).split(sep).join('/')
+  if (moduleRelative.startsWith('..')) {
+    throw new Error(`the module ${moduleDir} is not inside the project ${resolve(project)}`)
   }
-  const joined = joinLocations(contexts, rows, { moduleDir })
-  return { ...joined, contexts, moduleDir }
+  const joined = joinLocations(contexts, rows, { moduleDir: moduleRelative })
+  return { ...joined, contexts, moduleDir: moduleRelative }
 }
 
 /** The node CSS: nodditor's geometry plus this page's block look. */
@@ -217,9 +217,14 @@ ${script}
 `
 }
 
-/** The generator's graph, read from the module's derived metadata subtree. */
-export function readContexts() {
-  const file = join(OUTPUT_DIR, 'contexts.json')
+/**
+ * The generator's graph, read from a module's derived metadata subtree.
+ *
+ * <p>{@code outputDir} defaults to this repository's own test module; a consuming project passes its own
+ * {@code .jcodebuddy/metadata/hipster-ioc} through {@code --output=} (or calls {@link build} with it).</p>
+ */
+export function readContexts(outputDir = OUTPUT_DIR) {
+  const file = join(outputDir, 'contexts.json')
   if (!existsSync(file)) {
     throw new Error(`no graph at ${file} — run the generator first (bun scripts/ioc-gen.js)`)
   }
@@ -228,9 +233,16 @@ export function readContexts() {
 
 function main() {
   const check = process.argv.includes('--check')
-  const projectArg = process.argv.find((arg) => arg.startsWith('--project='))
-  const project = projectArg ? projectArg.slice('--project='.length) : process.env.JCODEBUDDY_PROJECT_DIR
-  const { script, liveScript, joined } = build({ project })
+  const value = (name, fallback) => {
+    const prefix = `--${name}=`
+    const found = process.argv.find((arg) => arg.startsWith(prefix))
+    return found ? found.slice(prefix.length) : fallback
+  }
+  const project = value('project', process.env.JCODEBUDDY_PROJECT_DIR)
+  const outputDir = resolve(value('output', OUTPUT_DIR))
+  const indexPath = resolve(value('index', INDEX_FILE))
+  const moduleDir = resolve(value('module', MODULE_DIR))
+  const { script, liveScript, joined } = build({ project, outputDir, indexPath, moduleDir })
   const page = html(script, styles())
   const livePage = html(liveScript, styles())
   if (joined.locationless.length > 0) {
@@ -240,19 +252,19 @@ function main() {
   }
   if (check) {
     for (const [name, expected] of [['graph.html', page], ['live.html', livePage]]) {
-      const file = join(OUTPUT_DIR, name)
+      const file = join(outputDir, name)
       const existing = existsSync(file) ? readFileSync(file, 'utf8') : null
       if (existing !== expected) {
         console.error(`${name} is not what this build would write — re-run without --check`)
         process.exit(1)
       }
     }
-    console.log(`ok       graph.html and live.html are current`)
+    console.log(`ok       graph.html and live.html are current in ${outputDir}`)
     return
   }
-  mkdirSync(OUTPUT_DIR, { recursive: true })
-  writeFileSync(join(OUTPUT_DIR, 'graph.html'), page, 'utf8')
-  writeFileSync(join(OUTPUT_DIR, 'live.html'), livePage, 'utf8')
+  mkdirSync(outputDir, { recursive: true })
+  writeFileSync(join(outputDir, 'graph.html'), page, 'utf8')
+  writeFileSync(join(outputDir, 'live.html'), livePage, 'utf8')
   const sourceContexts = Array.isArray(joined.contexts)
     ? joined.contexts
     : joined.contexts?.contexts ?? []
@@ -263,26 +275,27 @@ function main() {
     locationless: joined.locationless,
   }
   publishReport({
-    metadataRoot: dirname(OUTPUT_DIR),
+    metadataRoot: dirname(outputDir),
     report: 'hipster-ioc',
     title: model.title,
     model,
-    pageDir: OUTPUT_DIR,
-    reportDir: OUTPUT_DIR,
+    pageDir: outputDir,
+    reportDir: outputDir,
     pageEntry: 'live.html',
     collection: 'contexts',
     collectionKey: 'context',
   })
-  console.log(`written  ${join(OUTPUT_DIR, 'graph.html')} (static)`)
-  console.log(`written  ${join(OUTPUT_DIR, 'live.html')} (live metadata, script ${liveScript.length})`)
+  console.log(`written  ${join(outputDir, 'graph.html')} (static)`)
+  console.log(`written  ${join(outputDir, 'live.html')} (live metadata, script ${liveScript.length})`)
 }
 
 /** The bundle and the join it was built from, so `main` can report what it could not place. */
-function build(options) {
-  const contexts = readContexts()
+function build(options = {}) {
+  const outputDir = options.outputDir ?? OUTPUT_DIR
+  const contexts = readContexts(outputDir)
   const joined = readLocations(contexts, options)
-  const script = bundle({ contexts, joined })
-  const liveScript = bundle({ contexts, joined, live: true })
+  const script = bundle({ contexts, joined, outputDir })
+  const liveScript = bundle({ contexts, joined, live: true, outputDir })
   return { script, liveScript, joined }
 }
 

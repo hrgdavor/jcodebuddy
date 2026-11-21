@@ -12,6 +12,7 @@
  */
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { extname, join, resolve, sep } from 'node:path'
+import { callTool, listTools, openToolStream, readToolToken, ToolHttpError, PROTOCOL as TOOL_PROTOCOL } from './tool-api.js'
 
 export const APP_ROUTE = '/app/'
 export const APP_DIR = '.jcodebuddy/app'
@@ -130,10 +131,10 @@ function changedEvent(previous, next, report) {
 /**
  * Start the static page + metadata + SSE server for one report directory.
  *
- * @param {{root: string, host?: string, port?: number, pollMs?: number}} options
+ * @param {{root: string, host?: string, port?: number, pollMs?: number, toolToken?: string}} options
  */
 export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs = 250,
-  projectRoot: explicitProjectRoot, metadataRoot: explicitMetadataRoot }) {
+  projectRoot: explicitProjectRoot, metadataRoot: explicitMetadataRoot, toolToken }) {
   const pageRoot = resolve(root)
   const metadataRoot = explicitMetadataRoot ? resolve(explicitMetadataRoot) : resolve(pageRoot, '..')
   const projectRoot = explicitProjectRoot ? resolve(explicitProjectRoot) : (() => {
@@ -151,6 +152,8 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
   const manifestFile = join(pageRoot, 'manifest.json')
   const indexFile = join(pageRoot, 'index.json')
   const clients = new Set()
+  /** Live tool streams: controller → the open tool subscription, so close() can end both ends. */
+  const toolStreams = new Map()
   let report = pageRoot.split(/[\\/]/).pop() ?? 'report'
   let lastGeneration = ''
   let lastIndex = null
@@ -219,6 +222,13 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
         clients.delete(client)
       }
     }
+    for (const controller of toolStreams.keys()) {
+      try {
+        controller.enqueue(': keepalive\n\n')
+      } catch {
+        toolStreams.delete(controller)
+      }
+    }
   }, 15_000)
 
   function reportDirFor(id) {
@@ -270,6 +280,137 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
     })
   }
 
+  function toolTokenValue() {
+    return typeof toolToken === 'string' && toolToken.length > 0 ? toolToken : readToolToken(projectRoot)
+  }
+
+  function toolAuthorized(request, url) {
+    const required = toolTokenValue()
+    if (!required) {
+      return false
+    }
+    const presented = request.headers.get('x-webview-token') ?? url.searchParams.get('token')
+    return presented === required
+  }
+
+  function jsonResponse(body, status = 200) {
+    return new Response(body, {
+      status,
+      headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    })
+  }
+
+  /**
+   * DEC-053 on the standalone server: the descriptors, the call proxy and the SSE stream.
+   *
+   * <p>The list is open like the rest of this read-only server; a call or a stream can change the tool (rebuild,
+   * stop watching), so those require the webview host's token — read from `.jcodebuddy/webview/token` or given
+   * as `toolToken` — in a header or the query (EventSource cannot set a header). Without a token they answer
+   * `403` and say so, rather than exposing a command channel to any page on the loopback interface.</p>
+   */
+  async function toolApi(request, url) {
+    if (url.pathname === '/api/tools' || url.pathname === '/api/tools/') {
+      if (request.method !== 'GET') {
+        return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET' } })
+      }
+      return jsonResponse(JSON.stringify({ protocol: TOOL_PROTOCOL, tools: listTools(projectRoot) }))
+    }
+    const match = url.pathname.match(/^\/api\/tools\/([^/]+)\/(call|events)$/)
+    if (!match) {
+      return new Response('Not Found', { status: 404 })
+    }
+    const tool = decodeURIComponent(match[1])
+    if (!toolAuthorized(request, url)) {
+      const hint = toolTokenValue()
+        ? ''
+        : ' (this server has no token: start a webview host for the project, or pass toolToken)'
+      return new Response(`Forbidden: the token is required for a tool call or stream${hint}`, { status: 403 })
+    }
+    if (match[2] === 'call') {
+      if (request.method !== 'POST') {
+        return new Response('Method Not Allowed', { status: 405, headers: { allow: 'POST' } })
+      }
+      try {
+        const answer = await callTool(projectRoot, tool, await request.text())
+        return jsonResponse(answer.body, answer.status)
+      } catch (error) {
+        if (error instanceof ToolHttpError) {
+          return jsonResponse(error.body, error.status)
+        }
+        return jsonResponse(JSON.stringify({ error: 'internal', message: error.message }), 500)
+      }
+    }
+    if (request.method !== 'GET') {
+      return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET' } })
+    }
+    const sinceText = request.headers.get('last-event-id') ?? url.searchParams.get('since')
+    const since = /^\d+$/.test(String(sinceText ?? '')) ? Number(sinceText) : null
+    let stream
+    try {
+      stream = await openToolStream(projectRoot, tool, url.searchParams.get('topic'), since)
+    } catch (error) {
+      if (error instanceof ToolHttpError) {
+        return jsonResponse(error.body, error.status)
+      }
+      return jsonResponse(JSON.stringify({ error: 'internal', message: error.message }), 500)
+    }
+    let controllerRef
+    let done = false
+    const closeStream = () => {
+      if (done) {
+        return
+      }
+      done = true
+      toolStreams.delete(controllerRef)
+      stream.close()
+    }
+    const body = new ReadableStream({
+      start(controller) {
+        controllerRef = controller
+        toolStreams.set(controller, stream)
+        // A comment as the first chunk: it flushes the response headers at once, so a consumer's fetch
+        // resolves before the first log line, and it is the SSE keep-alive shape a proxy already understands.
+        controller.enqueue(': connected\n\n')
+        void pump()
+      },
+      cancel() {
+        closeStream()
+      },
+    })
+    async function pump() {
+      try {
+        while (!done) {
+          const message = await stream.next()
+          if (message.method === 'tool.event-error') {
+            throw new Error(message.params?.reason ?? 'stream ended')
+          }
+          if (message.method !== 'tool.event') {
+            continue
+          }
+          const data = message.params?.data
+          const id = Number.isInteger(data?.sequence) ? data.sequence : null
+          const payload = JSON.stringify({ topic: stream.topic, data: data ?? null })
+          controllerRef.enqueue(`${id === null ? '' : `id: ${id}\n`}event: tool-event\ndata: ${payload}\n\n`)
+        }
+      } catch {
+        closeStream()
+        try {
+          controllerRef.close()
+        } catch {
+          // The browser already closed it.
+        }
+      }
+    }
+    return new Response(body, {
+      headers: {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store',
+        connection: 'keep-alive',
+        'x-accel-buffering': 'no',
+      },
+    })
+  }
+
   let server
   server = Bun.serve({
     hostname: host,
@@ -277,6 +418,9 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
     development: false,
     async fetch(request) {
       const url = new URL(request.url)
+      if (url.pathname === '/api/tools' || url.pathname.startsWith('/api/tools/')) {
+        return toolApi(request, url)
+      }
       if (url.pathname === '/events' || url.pathname === '/api/v1/metadata/events') {
         if (request.method !== 'GET') {
           return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET' } })
@@ -379,6 +523,19 @@ export function startMetadataServer({ root, host = '127.0.0.1', port = 0, pollMs
         }
       }
       clients.clear()
+      for (const [controller, stream] of toolStreams) {
+        try {
+          stream.close()
+        } catch {
+          // already closed
+        }
+        try {
+          controller.close()
+        } catch {
+          // already closed
+        }
+      }
+      toolStreams.clear()
       server.stop(true)
     },
   }
