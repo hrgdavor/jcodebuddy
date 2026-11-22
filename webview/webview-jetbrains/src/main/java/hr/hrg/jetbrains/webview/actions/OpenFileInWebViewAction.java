@@ -74,7 +74,7 @@ public final class OpenFileInWebViewAction extends AnAction implements DumbAware
         VirtualFile file = getFileFromContext(event);
         // A Markdown file is a page this tool window renders itself (2026-10-04): the action offers itself for
         // both, and actionPerformed decides which job it is. When the project has a built app, every file is
-        // an app input instead.
+        // an app input instead — including Markdown, whose default app handler renders it.
         boolean app = file != null && appExists(event.getProject());
         boolean isViewable = file != null
                 && (app || "html".equalsIgnoreCase(file.getExtension()) || MarkdownView.isMarkdown(file.getName()));

@@ -59,6 +59,15 @@ public class ServedPageUrlsTest {
     }
 
     @Test
+    public void anOptedInAppUsesHashRoutingAndKeepsTheTokenInTheQuery() {
+        assertEquals("http://127.0.0.1:18884/app/#openFile=src%2Fmain%2Fjava%2FA.java",
+                ServedPageUrls.appUrl("http://127.0.0.1:18884/", "src/main/java/A.java",
+                        null, true));
+        assertEquals("http://127.0.0.1:18884/app/?token=abc#openFile=README.md",
+                ServedPageUrls.appUrl("http://127.0.0.1:18884", "README.md", "abc", true));
+    }
+
+    @Test
     public void anAppPageIsOpenedDirectlyInTheAppRoute() {
         assertEquals("http://127.0.0.1:18884/app/incremental-build.html",
                 ServedPageUrls.appPage("http://127.0.0.1:18884/", "incremental-build.html"));

@@ -29,12 +29,13 @@ public class WebViewSettingsComponent {
                 .addLabeledComponent(new JBLabel("Allowed origins: "), myAllowedOriginsText, 1, false)
                 .addLabeledComponent(new JBLabel("Token: "), myTokenText, 1, false)
                 .addComponent(new JBLabel("<html><body style='width:520px'>"
-                        + "The bridge is off while the port is empty, except that opening an HTML page "
-                        + "starts a page server on demand (and then uses this port if one is configured). "
-                        + "It listens on 127.0.0.1 only, and it opens a file in the IDE only for a caller "
-                        + "that presents the token or one of the allowed origins. With both empty every "
-                        + "caller is refused. Pages loaded in the built-in webview do not need the bridge: "
-                        + "they get <code>window.openFile</code> injected instead."
+                        + "Empty uses the host default (18882); a saved port is tried first. If the port is "
+                        + "busy, WebView Explorer asks whether to take the next free port or open these "
+                        + "settings, and saving checks the port again. It listens on 127.0.0.1 only, and it "
+                        + "opens a file in the IDE only for a caller that presents the token or one of the "
+                        + "allowed origins. With both empty every caller is refused. Pages loaded in the "
+                        + "built-in webview do not need the bridge: they get <code>window.openFile</code> "
+                        + "injected instead."
                         + "</body></html>"))
                 .addComponent(new TitledSeparator("Served HTML pages"))
                 .addLabeledComponent(new JBLabel("Existing page server: "), myPageBaseUrlText, 1, false)

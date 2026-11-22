@@ -81,7 +81,7 @@ public class RemoteJumpTest {
     /** The whole chain, over HTTP: page → agent server → sidecar, with the token on the hop that needs it. */
     @Test
     public void theDashboardJumpReachesTheSidecarWithTheTokenAndRelaysItsOutcome() throws Exception {
-        CommandServer server = new CommandServer(0, Path.of("."), List.of(), null, "", "", false);
+        CommandServer server = new CommandServer(0, Path.of("."), "", "", new AgentMethods(Path.of(".")));
         server.start();
         try {
             HttpResponse<String> answer = jump(server.port(), "{\"uri\":\"file:///src/People.java\",\"line\":12}");
@@ -111,7 +111,7 @@ public class RemoteJumpTest {
     public void anUnreachableSidecarIsReportedRatherThanAssumedToHaveWorked() throws Exception {
         // A port nothing listens on: the stub is stopped first, so the number is real but closed.
         stub.stop(0);
-        CommandServer server = new CommandServer(0, Path.of("."), List.of(), null, "", "", false);
+        CommandServer server = new CommandServer(0, Path.of("."), "", "", new AgentMethods(Path.of(".")));
         server.start();
         try {
             HttpResponse<String> answer = jump(server.port(), "{\"uri\":\"file:///src/People.java\",\"line\":1}");

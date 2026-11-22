@@ -9,6 +9,7 @@ import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -63,5 +64,35 @@ public class JcefToolWindowFactoryTest {
         assertFalse("a real page must still be able to report a load failure",
                 WebViewPanel.isInternalBrowserUrl("file:///D:/wrk/page.html"));
         assertFalse(WebViewPanel.isInternalBrowserUrl("https://example.com"));
+    }
+
+    @Test
+    public void rawSourceUrlsAreNotRestorable() {
+        assertTrue(WebViewPanel.isSourceUrl(
+                "http://127.0.0.1:18886/source/chat-app/src/main/java/demo/chat/chatapp/ChatAppDb.java?token=x"));
+        assertTrue(WebViewPanel.isSourceUrl("http://127.0.0.1:18886/source/README.md"));
+        assertFalse(WebViewPanel.isSourceUrl("http://127.0.0.1:18886/app/?openFile=README.md"));
+        assertFalse(WebViewPanel.isSourceUrl("http://127.0.0.1:18886/page/report.html"));
+        assertFalse(WebViewPanel.isSourceUrl("file:///D:/wrk/page.html"));
+    }
+
+    @Test
+    public void homeUsesTheBoundBridgePortNoMatterWhichPageIsShowing() {
+        assertEquals("http://127.0.0.1:18887/app/index.html",
+                WebViewPanel.homeUrl("http://127.0.0.1:18886/app/hipster-ioc.html", 18887));
+        assertEquals("http://127.0.0.1:18887/app/index.html",
+                WebViewPanel.homeUrl("file:///D:/wrk/README.md", 18887));
+        assertEquals("http://127.0.0.1:19000/app/index.html",
+                WebViewPanel.homeUrl("http://127.0.0.1:19000/page/report.html", -1));
+    }
+
+    @Test
+    public void openFileIsReadFromQueryOrHashRouting() {
+        assertEquals("README.md", WebViewPanel.openFileOf("http://127.0.0.1:18886/app/?openFile=README.md"));
+        assertEquals("src/main/java/A.java",
+                WebViewPanel.openFileOf("http://127.0.0.1:18886/app/#openFile=src%2Fmain%2Fjava%2FA.java"));
+        assertNull(WebViewPanel.openFileOf("http://127.0.0.1:18886/app/hipster-ioc.html"));
+        assertTrue(WebViewPanel.isAppNavigationUrl("http://127.0.0.1:18886/app/#openFile=README.md"));
+        assertFalse(WebViewPanel.isAppNavigationUrl("http://127.0.0.1:18886/source/README.md"));
     }
 }

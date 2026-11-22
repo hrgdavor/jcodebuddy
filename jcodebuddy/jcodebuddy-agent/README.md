@@ -1,96 +1,132 @@
-# Java Watch Agent
+# JCodeBuddy Agent
 
-The **Java Watch Agent** is a unique, deterministic, and modular developer utility that automates boilerplate generation, project maintenance, and refactorings directly from your code, without relying solely on heavy IDE plugins or cloud AI.
+The agent watches a project through the **fs-meta** daemon, runs JCodeBuddy code tools, and publishes
+their proposals and change batches through a **jsx6 dashboard**, a local HTTP server and the tool socket
+the webview host proxies.
 
-It operates via a background watcher and provides both a local Terminal UI (TUI) and a Web UI to review, reject, or apply generated code additions safely.
+There is no terminal UI. The process runs headless and is stopped with Ctrl+C or the host's process
+control.
 
-## Features
+## What it does
 
-*   **Comment-Driven Generation:** Trigger advanced file manipulations simply by typing comment markers (like `// @gen builder`) in your code.
-*   **Dual UI (Terminal & Web):** Review, diff, and approve generated code through a built-in terminal interface or a companion web application.
-*   **Audit Trails:** Every change is safely backed up in the `.jcodebuddy/metadata/watch/audit` directory. You can easily rollback if needed.
-*   **Zero-Config Security:** Web interfaces are secured by default using Basic Authentication with auto-generated passwords.
-*   **Extensible Tooling:** The agent runs specific `ActionTool` implementations (e.g., Getters, Builders, Record Builders) and can be extended with custom refactoring logic.
+- **fs-meta watching:** one daemon subscription per project root; no private `WatchService`.
+- **Proposal-first tools:** a tool returns before/after text and hashes; it never writes.
+- **Change batches:** one fs-meta event groups its proposals; every file has a jsdiff line diff with
+  microlighter syntax colour, and can be applied or reverted individually or as a whole batch.
+- **Review and active modes:** `review` waits for accept; `active` applies through the coordinator and
+  keeps the batch revertible.
+- **Permanent refusal:** a tool with a stable case key can remember "do not propose this again" in
+  `.jcodebuddy/conf/tool-refusals.json`.
+- **OpenRewrite source model:** Java parsing and queries use OpenRewrite LSTs; generated text is
+  spliced through `SourceSplicer` (DEC-030). There is no JavaParser.
+- **Live tool socket:** `jcodebuddy-agent` is published under `.jcodebuddy/ipc/`; the same
+  `AgentMethods` object serves `/rpc` and the host proxy.
 
-## Built-in Tools
+## Tools
 
-The following generators are currently bundled. To use them, add the corresponding trigger comment just above a class or record declaration:
+| Tool             | Proposal source                    | UI             |
+| ---------------- | ---------------------------------- | -------------- |
+| `builder`        | OpenRewrite `ClassMemberProcessor` | `builder.html` |
+| `record-builder` | `BuilderTransformationEngine`      | catalog        |
+| `accessors`      | OpenRewrite `ClassMemberProcessor` | catalog        |
+| `constructor`    | OpenRewrite `ClassMemberProcessor` | catalog        |
+| `rename`         | `SourceReader` / `TreeQueries`     | catalog        |
+| `hipster-ioc`    | `IocGeneration.render`             | catalog        |
+| `hipster-entity` | temporary-source entity pass       | catalog        |
 
-*   **`// @gen builder`**: Generates a standard fluent Builder pattern as a static inner class.
-*   **`// @gen record_builder`**: Generates a fluent Builder specifically tailored for Java `record` types.
-*   **`// @gen getters`**: Generates standard getters (e.g., `getName()`, `isActive()`) for all fields.
-*   **`// @gen setters`**: Generates standard setters for all fields.
-*   **`// @gen accessors`**: Generates both getters and setters.
-*   **`// @gen constructor`**: Generates a public constructor taking all fields as arguments.
-
-## How to Build
-
-The project is built using Maven.
+## Build
 
 ```bash
-mvn clean install
+bun run web/src_build/build.js
+mvn -o -pl jcodebuddy/jcodebuddy-agent -am package
 ```
 
-## How to Run
+The jsx6 assets are built into `src/main/resources/web/` and copied into the shaded jar. The agent also
+installs them into `<project>/.jcodebuddy/app/`.
 
-You can run the agent by executing the main class `hr.hrg.watch2.agent.WatchAgent`. This should be run from the root of the Java workspace you want to monitor.
+## Run
 
-Upon starting, the agent will:
-1. Load or create a `.watch_agent.conf` file.
-2. If the web server is enabled (default), it creates a random web password and prints it to the console.
-3. Start watching the files in the current director for changes.
-4. Open the Interactive Terminal Session (TUI).
+Run `hr.hrg.watch2.agent.WatchAgent` from the project root. It:
 
-## Interactive Terminal UI (TUI) Commands
-
-In the terminal where the agent is running, you can use the following commands:
-
-*   `list` - List all pending actions triggered by comments.
-*   `diff <idx>` - Show a line-by-line diff of what the tool will change.
-*   `accept <idx>` - Apply the generated code to your source file.
-*   `reject <idx>` - Discard the pending changes.
-*   `jump <idx>` - Open your configured editor directly to the location of the trigger.
-*   `copy <idx>` - Copy the file path and line number to your clipboard.
-*   `rebuild-cache` - Force a rescan of tracked metadata.
-*   `exit` / `quit` - Shutdown the agent.
+1. loads or creates `.watch_agent.conf`;
+2. generates a web password when standalone access is enabled and no password is set;
+3. attaches to the fs-meta daemon serving the project, or reports the `fsmeta root add` command;
+4. publishes `.jcodebuddy/ipc/jcodebuddy-agent.{sock,json}`;
+5. installs `.jcodebuddy/app/jcodebuddy-agent.html`;
+6. starts the standalone HTTP server when enabled;
+7. waits for Ctrl+C.
 
 ## Configuration
 
-Configuration is automatically stored in `.watch_agent.conf` at your project root.
+`.watch_agent.conf` holds the standalone host settings:
 
-Example configuration options:
-*   `webEnabled`: Boolean to turn the web companion UI on/off (default: `true`).
-*   `webPort`: Port for the web interface (default: `6666`).
-*   `webUser`: default `java_watch_agent`
-*   `webPassword`: The password for Basic Authentication. If empty, one is generated on startup.
-*   `editorCommand`: Command template to open your IDE (e.g., `"code --goto %f:%l"` or `"idea --line %l %f"`).
-*   `applyFirst`: If enabled (`true`), actions are applied immediately when discovered, and then you review them to decide to keep (accept) or roll back (reject). Default is `false` (i.e. first prepare the action, wait for review to apply).
+```json
+{
+  "webEnabled": true,
+  "webPort": 6666,
+  "webUser": "jcodebuddy_agent",
+  "webPassword": "change-me"
+}
+```
 
-## Apply Modes (applyFirst)
+Tool activation and UI mode are per tool in `.jcodebuddy/conf/agent.json`:
 
-The Java Watch Agent offers two distinct workflows for how generated code is handled, controlled by the `applyFirst` configuration option:
+```json
+{
+  "tools": {
+    "builder": { "activation": "explicit", "mode": "review", "ui": "standalone" },
+    "hipster-ioc": { "activation": "auto", "mode": "review" },
+    "hipster-entity": { "activation": "disabled" }
+  }
+}
+```
 
-### `applyFirst: false` (Default)
-In this mode, the agent prioritizes safety and manual review.
-1. **Prepare:** When a trigger (like `// @gen builder`) is detected, the agent generates the boilerplate code but *does not* write it back to your source file immediately.
-2. **Review:** The pending changes are listed in the TUI or Web UI. Your source file remains untouched.
-3. **Accept/Reject:** You manually review the diff. Clicking "Accept" applies the generated code to your source file. Clicking "Reject" discards the generated code.
+- `explicit`: only a request from the live webview starts it; a live dashboard is the heartbeat.
+- `auto`: proposals are produced without a live dashboard.
+- `disabled`: the tool refuses previews.
+- `mode: review`: proposals wait for accept.
+- `mode: active`: proposals are applied immediately and remain revertible.
+- `ui: standalone | integrated | both` is read by project-automation.
 
-This mode is ideal when you want to carefully inspect the automated changes before they become part of your codebase.
+A missing entry is `explicit`/`review`. The full tool config is the tracked project decision; the
+per-checkout web port/password is not.
 
-### `applyFirst: true`
-In this mode, the agent acts more like a real-time auto-fixer, prioritizing speed while still offering safety via audit trails.
-1. **Apply Immediately:** When a trigger is detected, the agent generates the boilerplate code and *immediately* writes it back to your source file.
-2. **Review via Audit:** The action is still recorded as pending in the TUI or Web UI, and a snapshot of your file *before* the change was made is saved in the `.jcodebuddy/metadata/watch/audit` directory.
-3. **Accept/Reject (Revert):** If you like the change, clicking "Accept" finalizes the action. If you don't like the change, clicking "Reject" will *revert* your source file back to its original state using the `.jcodebuddy/metadata/watch/audit` snapshot.
+## Dashboard
 
-This mode is ideal for experienced users who trust the generators and want the code available in their IDE immediately, while still retaining the ability to undo the action cleanly if it produces an unexpected result.
+- `/` serves the jsx6 catalog and change batches.
+- `/rpc` serves the shared `AgentMethods`.
+- `/jump` forwards an editor jump to the webview sidecar with the host token.
+- `?token=` is the first-visit host token; it is stored for later calls.
 
-## Web UI
+The catalog lists tools and the current batches. Each batch shows:
 
-If enabled, navigate to `http://localhost:6666` (or your configured port). 
-You will be prompted for credentials:
-*   **Username**: `admin`
-*   **Password**: *[Check your terminal output for the generated password, or set one manually in watch_agent.conf]*
+- per-file jsdiff line diffs, coloured by microlighter;
+- `Apply file` / `Revert file`;
+- `Open file` (host `window.openFile` or the `/jump` relay);
+- `Apply batch` / `Revert batch`;
+- `Accept proposal` and `Reject & skip future` when the tool supports permanent refusal.
 
-The web UI provides a visual diff and allows you to Accept/Reject actions just like the terminal interface.
+Microlighter is used only as the code-colour layer. If the browser lacks the CSS Custom Highlight API,
+the diff remains readable and uncoloured.
+
+## Methods
+
+`AgentMethods` exposes:
+
+- `agent.status`;
+- `tool.list`, `tool.preview`, `tool.batches`;
+- `tool.apply`, `tool.reject`, `tool.applyFile`, `tool.revertFile`;
+- `tool.applyBatch`, `tool.revertBatch`.
+
+A tool preview never writes. `WriteCoordinator` is the single writer for every apply/revert.
+
+## Coordination
+
+`WriteCoordinator` provides:
+
+- a per-file OS lock under `.jcodebuddy/agent/locks/`;
+- a SHA-256 `beforeHash` stale check;
+- atomic temp-file replacement;
+- revert only when the current file is still the proposal's after-state;
+- audit snapshots under `.jcodebuddy/agent/audit/`;
+- generator ownership in `.jcodebuddy/agent/owners.properties`.

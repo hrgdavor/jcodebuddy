@@ -58,6 +58,14 @@ public final class JcefToolWindowFactory implements ToolWindowFactory, DumbAware
         // the parked URL and then loaded the fallback on top of it, so "Open in WebView Explorer" on a
         // file showed the splash page and never rendered the file.
         String lastUrl = PluginStateService.getInstance(project).getLastUrl();
+        // Older builds let a normal click on a source link navigate the panel to the raw /source/ route, and
+        // remembered that URL. It is not restorable - JCEF aborts the response and every restart opens on the
+        // same error card - so drop it before the normal missing-file/fallback decision.
+        if (WebViewPanel.isSourceUrl(lastUrl)) {
+            LOG.info("WebView Explorer: forgetting the raw source URL: " + lastUrl);
+            PluginStateService.getInstance(project).setLastUrl("");
+            lastUrl = "";
+        }
         // A remembered URL is a convenience, not a promise: the file it named may have moved (this repository's own
         // kit examples did, out from under a URL the tool window kept restoring), and the window then showed an
         // error page on every open. Validate it, forget it, and say so - a stale convenience that explains itself

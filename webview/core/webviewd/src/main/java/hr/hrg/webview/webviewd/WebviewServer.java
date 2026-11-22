@@ -40,6 +40,7 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -294,7 +295,7 @@ public final class WebviewServer implements AutoCloseable {
         // from "a host for somebody else's", which is the difference between not starting and taking the
         // next port.
         return HostHealth.of(PLUGIN, IDE, project.toString(), port, origins.values().size(), token != null,
-                navigator.capabilities()).toJson();
+                withWatch(navigator.capabilities())).toJson();
     }
 
     /** The manifest {@code /.well-known/webview.json} answers with (and {@code --print-manifest} prints). */
@@ -313,7 +314,7 @@ public final class WebviewServer implements AutoCloseable {
 
     /** The same, for a host that names itself: {@code ide} is the human name {@code /health} also answers. */
     public static String manifestJson(Path project, String ide, EditorHost host, int port, Path tokenFile) {
-        Set<String> capabilities = capabilitiesOf(host);
+        Set<String> capabilities = withWatch(capabilitiesOf(host));
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("plugin", PLUGIN);
         manifest.put("ide", ide);
@@ -330,6 +331,12 @@ public final class WebviewServer implements AutoCloseable {
         hostDetail.put("note", lineNavigationNoteOf(host));
         manifest.put("host", hostDetail);
         return GSON.toJson(manifest);
+    }
+
+    private static Set<String> withWatch(Set<String> capabilities) {
+        Set<String> all = new LinkedHashSet<>(capabilities);
+        all.add("watch");
+        return all;
     }
 
     /** The capabilities a page may assume, given an adapter: empty while nothing is attached. */

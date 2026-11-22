@@ -3,6 +3,7 @@ package hr.hrg.jetbrains.webview.toolWindow;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
+import com.google.gson.JsonObject;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.Disposable;
@@ -22,6 +23,7 @@ import hr.hrg.webview.core.UrlNormalizer;
 import org.cef.browser.CefBrowser;
 import org.cef.browser.CefFrame;
 import org.cef.handler.CefLoadHandlerAdapter;
+import org.cef.network.CefRequest;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,6 +35,9 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * The tool window's contents: one JCEF browser, an address bar, a toolbar and an error card.
@@ -49,19 +54,22 @@ public final class WebViewPanel implements Disposable {
     private static final String CARD_ERROR = "error";
 
     private final Project project;
-    private final JBCefBrowser browser;
+    private JBCefBrowser browser;
     private final PendingLoad pendingLoad;
     private final JBTextField addressBar = new JBTextField();
     private final SimpleToolWindowPanel root;
     private final CardLayout cards = new CardLayout();
     private final JPanel cardPanel = new JPanel(cards);
     private final JBLabel errorLabel = new JBLabel();
-    private final WebViewBridge bridge;
+    private WebViewBridge bridge;
 
     /** The one load handler for this browser, so nothing has to guess the registration order. */
     private final CefLoadHandlerAdapter loadHandler;
 
     private volatile boolean disposed;
+    /** Home requested but not yet confirmed; used only to decide whether a fallback is still needed. */
+    private volatile String homeTarget;
+    private volatile boolean homeLoadStarted;
 
     public WebViewPanel(@NotNull Project project, @NotNull PendingLoad pendingLoad) {
         this.project = project;
@@ -73,11 +81,30 @@ public final class WebViewPanel implements Disposable {
 
         this.loadHandler = new CefLoadHandlerAdapter() {
             @Override
+            public void onLoadStart(CefBrowser cefBrowser, CefFrame frame, CefRequest.TransitionType type) {
+                if (cefBrowser != browser.getCefBrowser()) {
+                    return;
+                }
+                if (frame != null && !frame.isMain()) {
+                    return;
+                }
+                if (homeTarget != null && homeTarget.equals(frame == null ? null : frame.getURL())) {
+                    homeLoadStarted = true;
+                }
+            }
+
+            @Override
             public void onLoadEnd(CefBrowser cefBrowser, CefFrame frame, int httpStatusCode) {
+                if (cefBrowser != browser.getCefBrowser()) {
+                    return;
+                }
                 if (frame != null && !frame.isMain()) {
                     return;
                 }
                 String url = cefBrowser.getURL();
+                if (homeTarget != null && homeTarget.equals(url)) {
+                    homeTarget = null;
+                }
                 SwingUtilities.invokeLater(() -> onMainFrameLoaded(url));
                 bridge.install(cefBrowser);
             }
@@ -85,6 +112,9 @@ public final class WebViewPanel implements Disposable {
             @Override
             public void onLoadError(CefBrowser cefBrowser, CefFrame frame, ErrorCode errorCode,
                                     String errorText, String failedUrl) {
+                if (cefBrowser != browser.getCefBrowser()) {
+                    return;
+                }
                 if (frame != null && !frame.isMain()) {
                     return;
                 }
@@ -93,6 +123,9 @@ public final class WebViewPanel implements Disposable {
                     // creation. Showing an error card for it would greet every first open with a
                     // failure that is not one.
                     return;
+                }
+                if (homeTarget != null && homeTarget.equals(failedUrl)) {
+                    homeTarget = null;
                 }
                 LOG.info("WebView Explorer could not load " + failedUrl + ": " + errorCode + " " + errorText);
                 SwingUtilities.invokeLater(() -> showBrowserError(
@@ -132,10 +165,106 @@ public final class WebViewPanel implements Disposable {
 
     /** Loads a URL or path; used by the address bar, the toolbar and the service. */
     public boolean load(@Nullable String urlOrPath) {
-        if (disposed || !pendingLoad.request(urlOrPath)) {
+        if (disposed || urlOrPath == null) {
+            return false;
+        }
+        // When the app is already showing, navigation is an app action, not a document load: the app may
+        // intercept it (window.jcodebuddyNavIntercept) and render in place. The script handles the
+        // allowed case and falls back to location.assign, so Java never needs the result.
+        if (isAppNavigationUrl(urlOrPath) && isCurrentAppPage()) {
+            String file = openFileOf(urlOrPath);
+            navigateApp(urlOrPath, file == null ? "page" : "file", file);
+            return true;
+        }
+        if (!pendingLoad.request(urlOrPath)) {
             return false;
         }
         return pendingLoad.deliverTo(this::loadNow);
+    }
+
+    /** URL path is under the served app. */
+    static boolean isAppNavigationUrl(@Nullable String url) {
+        if (url == null) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(url.trim());
+            String path = uri.getPath();
+            return path != null && (path.equals("/app") || path.startsWith("/app/"));
+        } catch (IllegalArgumentException malformed) {
+            return false;
+        }
+    }
+
+    private boolean isCurrentAppPage() {
+        return isAppNavigationUrl(currentUrl());
+    }
+
+    /** The project-relative openFile from either the query (default) or the fragment (hash routing). */
+    static @Nullable String openFileOf(@Nullable String url) {
+        if (url == null) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(url.trim());
+            String value = param(uri.getRawQuery(), "openFile");
+            if (value == null) {
+                value = param(uri.getRawFragment(), "openFile");
+            }
+            return value == null ? null : URLDecoder.decode(value, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException malformed) {
+            return null;
+        }
+    }
+
+    private static @Nullable String param(@Nullable String query, @NotNull String name) {
+        if (query == null || query.isBlank()) {
+            return null;
+        }
+        for (String part : query.split("&")) {
+            int equals = part.indexOf('=');
+            if (equals > 0 && part.substring(0, equals).equals(name)) {
+                return part.substring(equals + 1);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Navigates an already-loaded app. The app may declare
+     * {@code window.jcodebuddyNavIntercept(target)}; returning {@code true}, {@code "intercept"} or a URL
+     * string means it rendered the target and the host only updates the URL. Anything else falls back to a
+     * normal document navigation.
+     */
+    private void navigateApp(@NotNull String url, @NotNull String kind, @Nullable String path) {
+        JsonObject target = new JsonObject();
+        target.addProperty("kind", kind);
+        if (path != null) {
+            target.addProperty("path", path);
+        }
+        target.addProperty("url", url);
+        target.addProperty("line", 1);
+        target.addProperty("column", 1);
+        addressBar.setText(url);
+        PluginStateService.getInstance(project).setLastUrl(url);
+        String script = "(function () {"
+                + "  var target = " + target + ";"
+                + "  var hook = window.jcodebuddyNavIntercept;"
+                + "  if (typeof hook === 'function') {"
+                + "    var result;"
+                + "    try { result = hook(target); }"
+                + "    catch (error) { console.error('jcodebuddyNavIntercept failed', error); }"
+                + "    if (result === true || result === 'intercept'"
+                + "        || (typeof result === 'string' && result.length > 0)) {"
+                + "      var next = typeof result === 'string'"
+                + "          ? new URL(result, location.href).href : target.url;"
+                + "      history.pushState({}, '', next);"
+                + "      return;"
+                + "    }"
+                + "  }"
+                + "  location.assign(target.url);"
+                + "})();";
+        browser.getCefBrowser().executeJavaScript(script, browser.getCefBrowser().getURL(), 0);
     }
 
     /**
@@ -194,6 +323,9 @@ public final class WebViewPanel implements Disposable {
             LOG.info("WebView Explorer: no file at " + normalized.localPath() + ", loading the path anyway");
         }
         pendingLoad.markLoaded();
+        // The error card is a CardLayout sibling of the browser: a later load has to bring the browser
+        // back to the front, or Home/Reload appear to do nothing while the old card stays visible.
+        cards.show(cardPanel, CARD_BROWSER);
         browser.loadURL(normalized.url());
         return true;
     }
@@ -212,16 +344,105 @@ public final class WebViewPanel implements Disposable {
         if (disposed) {
             return;
         }
-        String origin = originOf(currentUrl());
-        if (origin == null) {
-            int port = HttpBridgeService.getInstance(project).getBoundPort();
-            if (port > 0) {
-                origin = "http://127.0.0.1:" + port;
-            }
+        String home = homeUrl(currentUrl(), HttpBridgeService.getInstance(project).getBoundPort());
+        if (home == null) {
+            LOG.info("WebView Explorer: home unavailable (no current origin and no bound port)");
+            return;
         }
-        if (origin != null) {
-            load(origin + "/app/index.html");
+        LOG.info("WebView Explorer: home -> " + home);
+        if (isCurrentAppPage()) {
+            // An app may handle Home in place; an app without the hook falls through to location.assign
+            // inside the same script. This avoids a second Swing-driven navigation path for the common
+            // case of being in the app already.
+            navigateApp(home, "home", null);
+            return;
         }
+        // Go straight to the browser: Home is a navigation command, not a request that has to pass
+        // through the first-page/address-bar normalizer. Do not stopLoad here: on a large report page
+        // the stop is asynchronous and delayed the useful load by seconds without helping it.
+        homeTarget = home;
+        homeLoadStarted = false;
+        cards.show(cardPanel, CARD_BROWSER);
+        addressBar.setText(home);
+        pendingLoad.markLoaded();
+        browser.loadURL(home);
+        // A load start is enough to stop the fast fallbacks, but not enough to prove the page arrived.
+        // This watchdog only fires when the home load never completed; it is dead on the normal path.
+        new com.intellij.util.Alarm(com.intellij.util.Alarm.ThreadToUse.SWING_THREAD, this)
+                .addRequest(() -> {
+                    if (disposed || home.equals(currentUrl()) || homeTarget == null) {
+                        return;
+                    }
+                    LOG.warn("WebView Explorer: Home load did not finish; recreating the browser");
+                    resetBrowser(home);
+                }, 2500);
+        // Only wait long enough to notice that CEF ignored the load. A normal local page emits
+        // onLoadStart immediately; the fallbacks are deliberately out of the normal path.
+        new com.intellij.util.Alarm(com.intellij.util.Alarm.ThreadToUse.SWING_THREAD, this)
+                .addRequest(() -> {
+                    if (disposed || home.equals(currentUrl()) || homeLoadStarted) {
+                        return;
+                    }
+                    LOG.warn("WebView Explorer: Home load did not start; forcing in-page navigation to " + home);
+                    String quoted = home.replace("\\", "\\\\").replace("'", "\\'");
+                    browser.getCefBrowser().executeJavaScript(
+                            "window.location.replace('" + quoted + "');",
+                            browser.getCefBrowser().getURL(), 0);
+                    new com.intellij.util.Alarm(com.intellij.util.Alarm.ThreadToUse.SWING_THREAD, this)
+                            .addRequest(() -> {
+                                if (disposed || home.equals(currentUrl()) || homeLoadStarted) {
+                                    return;
+                                }
+                                LOG.warn("WebView Explorer: Home still did not start; recreating the browser");
+                                resetBrowser(home);
+                            }, 500);
+                }, 350);
+    }
+
+    /**
+     * Replaces the JCEF browser with a fresh one on the same panel. This is the recovery of last resort:
+     * CEF can keep a page that refuses top-level and in-page navigation, and only a new browser is
+     * guaranteed to leave that state.
+     */
+    private void resetBrowser(@NotNull String url) {
+        if (disposed) {
+            return;
+        }
+        JBCefBrowser old = browser;
+        WebViewBridge oldBridge = bridge;
+        try {
+            old.getJBCefClient().removeLoadHandler(loadHandler, old.getCefBrowser());
+        } catch (RuntimeException ignored) {
+            // The old browser may already be torn down; the replacement still has to happen.
+        }
+        cardPanel.remove(old.getComponent());
+        Disposer.dispose(oldBridge);
+        Disposer.dispose(old);
+
+        browser = JBCefBrowser.createBuilder()
+                .setEnableOpenDevToolsMenuItem(true)
+                .build();
+        bridge = new WebViewBridge(project, browser, this);
+        browser.getJBCefClient().addLoadHandler(loadHandler, browser.getCefBrowser());
+        cardPanel.add(browser.getComponent(), CARD_BROWSER);
+        cards.show(cardPanel, CARD_BROWSER);
+        addressBar.setText(url);
+        pendingLoad.markLoaded();
+        browser.loadURL(url);
+    }
+
+    /**
+     * The Home URL. The bridge's actual port wins when it has one: the page being shown may be a page on
+     * an old port, an asset, or a {@code file:} page, and deriving Home from that URL is why the button
+     * only appeared to work on some pages. A custom/current origin is the fallback when this IDE has no
+     * local bridge.
+     */
+    static @Nullable String homeUrl(@Nullable String currentUrl, int boundPort) {
+        if (boundPort > 0) {
+            return "http://127.0.0.1:" + boundPort + "/app/index.html";
+        }
+        String origin = originOf(currentUrl);
+        return origin == null ? null : origin + "/app/index.html";
     }
 
     /** The scheme/host/port origin of an http(s) URL, or null for a data:/file: page. */
@@ -303,7 +524,26 @@ public final class WebViewPanel implements Disposable {
             return;
         }
         addressBar.setText(url);
-        PluginStateService.getInstance(project).setLastUrl(url);
+        cards.show(cardPanel, CARD_BROWSER);
+        // A raw /source/ response is not a page this panel can restore: JCEF has already aborted it once,
+        // and remembering it makes every later restart open on the same error card. The app's source links
+        // open the IDE; anything that still reaches here (middle click, address bar) is view-only.
+        if (!isSourceUrl(url)) {
+            PluginStateService.getInstance(project).setLastUrl(url);
+        }
+    }
+
+    /** True for {@code /source/...}, the raw file route the app uses for source links. */
+    static boolean isSourceUrl(@Nullable String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        try {
+            String path = java.net.URI.create(url).getPath();
+            return path != null && (path.equals("/source") || path.startsWith("/source/"));
+        } catch (IllegalArgumentException malformed) {
+            return false;
+        }
     }
 
     /**

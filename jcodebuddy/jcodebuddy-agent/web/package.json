@@ -1,0 +1,15 @@
+{
+  "name": "jcodebuddy-agent-web",
+  "private": true,
+  "type": "module",
+  "description": "The jsx6 dashboard for JCodeBuddy Agent. It is served by the agent's standalone CommandServer and installed into the project's .jcodebuddy/app for the webview host.",
+  "scripts": {
+    "build": "bun run src_build/build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "dependencies": {
+    "diff": "^9.0.0"
+  }
+}

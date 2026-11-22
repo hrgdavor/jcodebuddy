@@ -1,0 +1,11 @@
+{
+  "id": "builder",
+  "title": "Builder",
+  "version": "1",
+  "standalone": "builder.html",
+  "integrated": "builder.html",
+  "navigation": {
+    "mode": "auto",
+    "home": "builder.html"
+  }
+}

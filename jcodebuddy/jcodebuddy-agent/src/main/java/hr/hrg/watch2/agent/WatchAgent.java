@@ -3,53 +3,31 @@
 package hr.hrg.watch2.agent;
 
 import tools.jackson.databind.ObjectMapper;
+
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 import hr.hrg.watch2.agent.config.AgentConfig;
+import hr.hrg.watch2.agent.server.AgentMethods;
+import hr.hrg.watch2.agent.server.AgentPageInstaller;
 import hr.hrg.watch2.agent.server.CommandServer;
-import hr.hrg.watch2.agent.tools.*;
-import hr.hrg.watch2.agent.ui.*;
+import hr.hrg.jcodebuddy.ipc.ToolEndpoint;
 
 public class WatchAgent {
     public static void main(String[] args) throws Exception {
-        System.out.println("Java Watch Agent Initializing...");
+        System.out.println("JCodeBuddy Agent initializing...");
 
         Path root = Paths.get(".").toAbsolutePath().normalize();
         File configFile = root.resolve(".watch_agent.conf").toFile();
-
         ObjectMapper mapper = new ObjectMapper();
         AgentConfig config;
         if (configFile.exists()) {
             config = mapper.readValue(configFile, AgentConfig.class);
         } else {
-            System.out.println("No .watch_agent.conf found, using default empty configuration.");
             config = new AgentConfig();
-        }
-
-        ToolRegistry globalRegistry = new ToolRegistry();
-        globalRegistry.register(new HelloTool());
-        globalRegistry.register(new BuilderGenerator());
-        globalRegistry.register(new AccessorGenerator("getters", true, false));
-        globalRegistry.register(new AccessorGenerator("setters", false, true));
-        globalRegistry.register(new AccessorGenerator("accessors", true, true));
-        globalRegistry.register(new ConstructorGenerator());
-        // Plan step 7.5: the OpenRewrite-based tool prototype, registered so it appears in the menu. It is
-        // configured from .watch_agent.conf (renameFrom/renameTo); with nothing configured it is applicable to
-        // nothing, which is the honest state of a toolset entry that names a tool but gives it no work.
-        globalRegistry.register(new RenameMemberTool(config.getRenameFrom(), config.getRenameTo()));
-        if (config.getToolSets().isEmpty()) {
-            AgentConfig.ToolSet defaultSet = new AgentConfig.ToolSet();
-            defaultSet.setName("java");
-            defaultSet.setInclude(List.of("src/main/java/**/*", "src/main/resources/**/*"));
-            defaultSet.setTools(
-                    List.of("hello", "builder", "getters", "setters", "accessors", "constructor", "record_builder",
-                            "rename"));
-            config.getToolSets().add(defaultSet);
-            System.out.println("No toolsets defined, added default 'java' toolset.");
         }
 
         boolean saveNeeded = false;
@@ -58,56 +36,52 @@ public class WatchAgent {
             System.out.println("Generated web password: " + config.getWebPassword());
             saveNeeded = true;
         }
-
-        if (saveNeeded || config.getToolSets().size() == 1 && "java".equals(config.getToolSets().get(0).getName())) {
-            // we should save if password was generated OR if we just added the default
-            // toolset (and it's the only one)
-            // however, to be safe, I'll just check if the file didn't exist or we added
-            // things.
-            // Actually, if configFile didn't exist, we definitely want to save.
-            if (!configFile.exists() || saveNeeded) {
-                mapper.writerWithDefaultPrettyPrinter().writeValue(configFile, config);
-            }
+        if (!configFile.exists() || saveNeeded) {
+            mapper.writerWithDefaultPrettyPrinter().writeValue(configFile, config);
         }
 
-        List<ToolSetAgent> agents = new ArrayList<>();
-        PendingActionManager manager = new PendingActionManager();
-        InteractiveSession session = new InteractiveSession(agents, config, manager);
-
-        for (AgentConfig.ToolSet setConfig : config.getToolSets()) {
-            ToolSetAgent agent = new ToolSetAgent(root, setConfig, globalRegistry);
-            agent.setActionCallback(session::addAction);
-            agent.load();
-            System.out.println("Initialized ToolSet: " + setConfig.getName());
-            agents.add(agent);
-        }
-
-        // Initial scan for all agents
-        System.out.println("Performing initial scan...");
-        for (ToolSetAgent agent : agents) {
-            agent.scan();
-        }
-
-        ProjectWatcher watcher = new ProjectWatcher(root, agents);
+        AgentMethods methods = new AgentMethods(root);
+        ProjectWatcher watcher = new ProjectWatcher(root, methods.tools()::onChanged);
+        methods.setWatcher(watcher);
         watcher.start();
 
-        CommandServer apiServer = null;
+        ToolEndpoint toolEndpoint = new ToolEndpoint(root, AgentMethods.TOOL, "JCodeBuddy Agent",
+                "JCodeBuddy Agent", "", methods);
+        try {
+            toolEndpoint.start();
+            System.out.println("Agent tool socket: " + toolEndpoint.descriptor().socket());
+        } catch (Exception alreadyServing) {
+            System.out.println("Agent tool socket not started: " + alreadyServing.getMessage());
+            toolEndpoint = null;
+        }
+        try {
+            AgentPageInstaller.install(root);
+        } catch (RuntimeException installFailure) {
+            System.out.println("Agent dashboard not installed: " + installFailure.getMessage());
+        }
+
+        AtomicReference<CommandServer> apiServer = new AtomicReference<>();
         if (config.isWebEnabled()) {
             System.out.println("Starting Command Server on port " + config.getWebPort() + "...");
-            apiServer = new CommandServer(config.getWebPort(), root, agents, manager, config.getWebUser(),
-                    config.getWebPassword(),
-                    config.isApplyFirst());
-            apiServer.start();
+            CommandServer server = new CommandServer(config.getWebPort(), root, config.getWebUser(),
+                    config.getWebPassword(), methods);
+            server.start();
+            apiServer.set(server);
         } else {
             System.out.println("Web interface is disabled in configuration.");
         }
 
-        session.startLoop();
+        final ToolEndpoint endpoint = toolEndpoint;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            CommandServer server = apiServer.get();
+            if (server != null) server.stop();
+            if (endpoint != null) endpoint.stop();
+            watcher.stop();
+            System.out.println("Agent closed.");
+        }, "jcodebuddy-agent-shutdown"));
 
-        if (apiServer != null)
-            apiServer.stop();
-        watcher.stop();
-        System.out.println("Agent closed.");
+        System.out.println("Agent running; press Ctrl+C to stop.");
+        new CountDownLatch(1).await();
     }
 
     private static String generateRandomPassword(int length) {

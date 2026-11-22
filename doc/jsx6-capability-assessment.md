@@ -15,6 +15,9 @@ rests on a README alone, it says so.
 "simple" or "advanced" is a judgement, and per the maintainer's 2026-10-02 decision **no guard enforces it**; this
 document is the evidence for the judgement, not a check.
 
+**Current inventory, audit and the proposed shared composition layer:** [`design-system/README.md`](design-system/README.md).
+The navigation half is [`design-system/navigation.md`](design-system/navigation.md).
+
 ---
 
 ## 1. The minimal vanilla page — the entity reference, the merge summary

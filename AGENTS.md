@@ -858,7 +858,7 @@ supersedes the "iterate fast, then verify with the gate" habit **for this scope*
   A `watch/*` module therefore declares no dependency on a workspace artifact (`hr.hrg.jcodebuddy:*`,
   `hr.hrg.hipster:*`, any `jcodebuddy-*` / `hipster-*` / `metadata-*` / `jwa-*` artifactId), on Jackson or on
   OpenRewrite, and its sources import none of them. The shared build parent is not a dependency and is not
-  covered. **A port the watcher needs must be the watcher's own** (`ActionTool` is); an adapter that bridges it
+  covered. **A port the watcher needs must be the watcher's own**; an adapter that bridges it
   to a JCodeBuddy SPI belongs in a module that legitimately depends on both.
 
   **Frozen 2026-10-31 — see the `core` bullet above; the direction for a watching need is `fs-meta`, not a

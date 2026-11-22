@@ -1972,6 +1972,39 @@ public class EntityMetadataGenerator {
         }
     }
 
+    /**
+     * Render the generated Java for one module into a temporary source copy and return its relative paths
+     * and text. Nothing under the real source or {@code .jcodebuddy/} is written.
+     *
+     * <p>This is the preview half the agent needs: it uses the same generator and the same generated-file
+     * filter as {@link #checkGeneratedSource}, not a second code emitter. It is intentionally a full pass;
+     * a module's generated output is small compared with its source, and a partial preview that misses a
+     * stale file would be worse than a slower one.</p>
+     *
+     * @param sourceRoot the module's {@code src/main/java}
+     * @return generated files, keyed by source-root-relative forward-slash paths
+     */
+    public static Map<String, String> renderGeneratedSource(Path sourceRoot) throws IOException {
+        Path temp = Files.createTempDirectory("entity-preview-");
+        try {
+            Path tempSource = temp.resolve("src");
+            Path tempReport = temp.resolve(".jcodebuddy").resolve("metadata").resolve("entity");
+            copyJavaTree(sourceRoot, tempSource);
+            generate(tempSource, tempReport, tempSource);
+            Map<String, byte[]> generated = readJavaTree(tempSource);
+            Map<String, String> result = new TreeMap<>();
+            for (Map.Entry<String, byte[]> entry : generated.entrySet()) {
+                String text = new String(entry.getValue(), java.nio.charset.StandardCharsets.UTF_8);
+                if (isGeneratedSource(text)) {
+                    result.put(entry.getKey(), text);
+                }
+            }
+            return result;
+        } finally {
+            deleteTree(temp);
+        }
+    }
+
     private static void copyJavaTree(Path from, Path to) throws IOException {
         try (var walk = Files.walk(from)) {
             for (Path file : walk.filter(path -> path.toString().endsWith(".java")).toList()) {

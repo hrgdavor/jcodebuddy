@@ -91,6 +91,47 @@ public final class ServedPageUrls {
     }
 
     /**
+     * The app URL with the host token as an additional query value.
+     *
+     * <p>The app shell fetches Markdown through {@code /source/…}; carrying the token lets that fetch
+     * pass the host's origin/token guard even when the app page itself was opened without a token
+     * segment. The {@code openFile} value stays first, so the contract and its tests remain readable.</p>
+     */
+    public static @NotNull String appUrl(@NotNull String base, @NotNull String relative,
+                                         @Nullable String token) {
+        return appUrl(base, relative, token, false);
+    }
+
+    /**
+     * The app URL in either of the two routing spellings:
+     *
+     * <pre>
+     * query: /app/?openFile=README.md
+     * hash:  /app/?token=...#openFile=README.md
+     * </pre>
+     *
+     * <p>The hash form is opt-in from the app's {@code navigation.json}; it keeps the app shell document
+     * stable, so a SPA can intercept navigation and render without a page load. The token, when present,
+     * stays a query value because the source fetch needs it before the page is running.</p>
+     */
+    public static @NotNull String appUrl(@NotNull String base, @NotNull String relative,
+                                         @Nullable String token, boolean hashRouting) {
+        String trimmed = base.trim();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        String encoded = URLEncoder.encode(relative, StandardCharsets.UTF_8).replace("+", "%20");
+        if (!hashRouting) {
+            return appUrl(trimmed, relative, token);
+        }
+        StringBuilder url = new StringBuilder(trimmed).append("/app/");
+        if (token != null && !token.isBlank()) {
+            url.append("?token=").append(URLEncoder.encode(token, StandardCharsets.UTF_8).replace("+", "%20"));
+        }
+        return url.append("#openFile=").append(encoded).toString();
+    }
+
+    /**
      * The direct URL for one page that already lives in the app directory:
      * {@code <host>/app/<page>} — no {@code openFile} shell, no token segment.
      *

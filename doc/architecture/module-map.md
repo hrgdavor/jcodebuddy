@@ -26,7 +26,6 @@ jcodebuddy-parent (POM)
 │   ├── jcodebuddy-watch       the fs-meta daemon client (socket protocol, batches, replay refusals) + wildmatch filters; state is fs-meta's
 │   ├── jcodebuddy-ipc         the live-tool endpoint contract (DEC-053): one Unix socket per tool under .jcodebuddy/ipc/, its descriptor, and newline-delimited JSON-RPC 2.0
 │   ├── jcodebuddy-agent       the code-action server (was `java-watch-agent`; it left `watch/` at 3.0s)
-│   ├── jcodebuddy-watch-tools
 │   ├── jcodebuddy-builder
 │   ├── jcodebuddy-builder-api
 │   ├── jcodebuddy-meta        metadata serving: JSON-RPC and Fory over HTTP and Unix sockets (was `metadata-server`)
@@ -95,24 +94,28 @@ both.
 ### Layer 3: Applications & Runtimes
 These modules depend on Layer 1 and/or Layer 2, or are applications built from them:
 
-| Module                   | Depends On                                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `java-watch-app`         | `directory-watcher`, `slf4j` — the watcher's own app, and no workspace artifact                    |
-| `java-watch-scp`         | `java-watch-core`                                                                                  |
-| `java-watch-run`         | `java-watch-core`, `ecj`, `polyglot`                                                               |
-| `java-watch-run-sample`  | `java-watch-run` (provided)                                                                        |
-| `jwa-sidecar`            | `jcodebuddy-builder-api`, `jcodebuddy-builder`                                                     |
-| `jcodebuddy-agent`       | `jcodebuddy-watch`, `jcodebuddy-builder-api`, `jcodebuddy-builder`, `jackson-databind`, `slf4j`, `hr.hrg:wyhash` (it was `java-watch-agent`, and it left `watch/` at step 3.0s) |
-| `jcodebuddy-watch-tools` | `jcodebuddy-agent`, `jcodebuddy-builder`, `jcodebuddy-builder-api`, `slf4j`                        |
-| `jcodebuddy-meta-mcp`    | `jcodebuddy-meta` and the `mcp` library — the MCP tool surface over the metadata server (was `metadata-mcp-server`; step 3.0m) |
-| `hipster-ioc-tooling`    | `hipster-ioc-api`, `hipster-entity-tooling`, `jcodebuddy-core`                                     |
-| `merge-java`             | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
-| `webviewd`               | `webview-core`, `jcodebuddy-watch`, `jcodebuddy-ipc` — the reference host of the webview contract, and the only one that needs no editor |
-| `hipster-entity-jackson` | `hipster-entity-api`, `hipster-entity-core`                                                        |
-| `hipster-entity-example` | `hipster-entity-core`, `hipster-entity-api`                                                        |
-| `hipster-entity-test`    | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`                              |
-| `hipster-ioc-test`       | `hipster-ioc-api`, `hipster-ioc-tooling` (test)                                                    |
-| `webview-eclipse`        | `webview-core` (core + Gson unpacked into the bundle jar; Eclipse platform bundles are provided)   |
+| Module                           | Depends On                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `java-watch-app`                 | `directory-watcher`, `slf4j` — the watcher's own app, and no workspace artifact                    |
+| `java-watch-scp`                 | `java-watch-core`                                                                                  |
+| `java-watch-run`                 | `java-watch-core`, `ecj`, `polyglot`                                                               |
+| `java-watch-run-sample`          | `java-watch-run` (provided)                                                                        |
+| `jwa-sidecar`                    | `jcodebuddy-builder-api`, `jcodebuddy-builder`                                                     |
+| `jcodebuddy-agent`               | `jcodebuddy-watch`, `jcodebuddy-ipc`, `jcodebuddy-tool-api`, tool modules, `jcodebuddy-builder`, OpenRewrite, `jackson-databind`, `slf4j` |
+| `jcodebuddy-tool-api`            | no workspace dependency; the proposal/coordinator contracts                                        |
+| `jcodebuddy-tool-builder`        | `jcodebuddy-tool-api`, `jcodebuddy-builder`                                                        |
+| `jcodebuddy-tool-java`           | `jcodebuddy-tool-api`, `jcodebuddy-builder`, `jcodebuddy-core`                                     |
+| `jcodebuddy-tool-hipster-ioc`    | `jcodebuddy-tool-api`, `hipster-ioc-tooling`                                                       |
+| `jcodebuddy-tool-hipster-entity` | `jcodebuddy-tool-api`, `hipster-entity-tooling`                                                    |
+| `jcodebuddy-meta-mcp`            | `jcodebuddy-meta` and the `mcp` library — the MCP tool surface over the metadata server (was `metadata-mcp-server`; step 3.0m) |
+| `hipster-ioc-tooling`            | `hipster-ioc-api`, `hipster-entity-tooling`, `jcodebuddy-core`                                     |
+| `merge-java`                     | OpenRewrite (`rewrite-core`, `rewrite-java`, `rewrite-java-25`, `rewrite-maven`) and `org.eclipse.jgit` — no workspace artifact |
+| `webviewd`                       | `webview-core`, `jcodebuddy-watch`, `jcodebuddy-ipc` — the reference host of the webview contract, and the only one that needs no editor |
+| `hipster-entity-jackson`         | `hipster-entity-api`, `hipster-entity-core`                                                        |
+| `hipster-entity-example`         | `hipster-entity-core`, `hipster-entity-api`                                                        |
+| `hipster-entity-test`            | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-jackson`                              |
+| `hipster-ioc-test`               | `hipster-ioc-api`, `hipster-ioc-tooling` (test)                                                    |
+| `webview-eclipse`                | `webview-core` (core + Gson unpacked into the bundle jar; Eclipse platform bundles are provided)   |
 
 *This table describes the tree as of 2026-10-03 (step 3.0i). It is a description, not a check: nothing in the
 build reads it, so a module that moves or gains a dependency has to be written here by hand in the same
@@ -227,7 +230,7 @@ Do **not** rename `jswa` to `watch`. The `jwa`/`jswa` branding is intentional: J
 
 | Layer   | Test Framework                           |
 | ------- | ---------------------------------------- |
-| `java-watch-app`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jcodebuddy-builder-api`, `jcodebuddy-builder`, `jwa-sidecar`, `jcodebuddy-agent` | JUnit 4 |
+| `java-watch-app`, `java-watch-core`, `java-watch-scp`, `java-watch-run`, `jcodebuddy-builder-api`, `jcodebuddy-builder`, `jwa-sidecar` | JUnit 4 |
 | `hipster-entity-api`, `hipster-entity-core`, `hipster-entity-example`, `hipster-entity-jackson`, `hipster-entity-test`, `hipster-entity-tooling`, `jcodebuddy-core`, `webview-core`, `webviewd`, `webview-eclipse` | JUnit 5 (the default; no profile needed) |
 
 JUnit 5 is not gated behind profile activation. Each module with tests declares

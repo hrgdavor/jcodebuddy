@@ -75,6 +75,11 @@
              socket is a file the operating system scopes to the user. The incremental-compiler plugin
              (webview/webview-intellij-incremental) is its first endpoint. -->
         <module>jcodebuddy/jcodebuddy-ipc</module>
+        <module>jcodebuddy/jcodebuddy-tool-api</module>
+        <module>jcodebuddy/jcodebuddy-tool-builder</module>
+        <module>jcodebuddy/jcodebuddy-tool-java</module>
+        <module>jcodebuddy/jcodebuddy-tool-hipster-ioc</module>
+        <module>jcodebuddy/jcodebuddy-tool-hipster-entity</module>
         <!-- The standalone ECJ incremental compiler, rebuilt from the frozen watch group (step that gave
              jcodebuddy its own compile helper): a benchmark/dev-time compiler, with no watcher, no relaunch
              and no java-watch dependency. The change source is fs-meta, and the caller passes the files. -->
@@ -111,7 +116,6 @@
         <!-- The marker vocabulary and its parser, as a leaf: DEC-035's readers are not generators, and
              the engine they used to sit in carries OpenRewrite and Jackson (step 3.0l). -->
         <module>jcodebuddy/jcodebuddy-generated</module>
-        <module>jcodebuddy/jcodebuddy-watch-tools</module>
         <module>project-automation</module>
         <module>hipster-ioc/hipster-ioc-api</module>
         <module>hipster-ioc/hipster-ioc-tooling</module>
@@ -370,6 +374,31 @@
             <dependency>
                 <groupId>hr.hrg.jcodebuddy</groupId>
                 <artifactId>jcodebuddy-ipc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-tool-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-tool-builder</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-tool-java</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-tool-hipster-ioc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>hr.hrg.jcodebuddy</groupId>
+                <artifactId>jcodebuddy-tool-hipster-entity</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

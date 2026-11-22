@@ -10,320 +10,121 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import hr.hrg.watch2.agent.ToolSetAgent;
-import hr.hrg.watch2.agent.ui.PendingActionManager;
-import hr.hrg.watch2.agent.tools.SimpleToolContext;
-import hr.hrg.watch2.agent.core.AuditManager;
-import hr.hrg.watch2.agent.ui.PendingAction;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.io.InputStream;
 
-/**
- * Lightweight HTTP server for IDE integration and HTML UI.
- */
+/** The standalone HTTP host: static dashboard assets, the shared RPC verbs and the editor jump relay. */
 public class CommandServer {
 
     private static final Logger log = LoggerFactory.getLogger(CommandServer.class);
 
     private final int port;
-
     private final Path projectRoot;
-
-    /**
-     * Where the editor's jump service is, resolved per request (plan step 8.3).
-     *
-     * <p>Not constructor state, and not a plain port either: the port is a fact about which host is running for
-     * this project <em>right now</em>, and a host that restarts on another port must not require this server to
-     * restart. See {@link WebviewHandshake} for why the published descriptor outranks the system property.</p>
-     */
     private final WebviewHandshake handshake;
-
-    private final List<ToolSetAgent> agents;
-
-    private final PendingActionManager actionManager;
-
     private final String user;
-
     private final String password;
-
-    private final boolean applyFirst;
-
+    private final AgentMethods methods;
     private final ObjectMapper mapper = new ObjectMapper();
 
     private HttpServer server;
 
-    public CommandServer(int port, Path projectRoot, List<ToolSetAgent> agents, PendingActionManager actionManager,
-            String user, String password, boolean applyFirst) {
+    public CommandServer(int port, Path projectRoot, String user, String password, AgentMethods methods) {
         this.port = port;
         this.projectRoot = projectRoot;
-        // The handshake is built from the same root the server serves, which is the root the descriptor is
-        // keyed by: a jump must reach the host for THIS project and no other.
         this.handshake = new WebviewHandshake(projectRoot);
-        this.agents = agents;
-        this.actionManager = actionManager;
-        this.password = password;
         this.user = user;
-        this.applyFirst = applyFirst;
+        this.password = password;
+        this.methods = methods;
     }
 
-    public static record MyRecord(String name, int age) {
-
-        public static Builder builder() {
-            return new Builder();
-        }
-
-        public Builder toBuilder() {
-            return new Builder().name(this.name()).age(this.age());
-        }
-
-        public static class Builder {
-
-            private String name;
-
-            public Builder name(String name) {
-                this.name = name;
-                return this;
-            }
-
-            private int age;
-
-            public Builder age(int age) {
-                this.age = age;
-                return this;
-            }
-
-            public MyRecord build() {
-                return new MyRecord(name, age);
-            }
-        }
+    public AgentMethods methods() {
+        return methods;
     }
 
     public void start() throws IOException {
         try {
             server = HttpServer.create(new InetSocketAddress(port), 0);
-        } catch (Exception e) {
-            throw new RuntimeException("Can not setart server on port " + port, e);
+        } catch (Exception failed) {
+            throw new RuntimeException("Cannot start server on port " + port, failed);
         }
-        BasicAuthenticator auth = new BasicAuthenticator("Java Watch Agent") {
-
+        BasicAuthenticator auth = new BasicAuthenticator("JCodeBuddy Agent") {
             @Override
-            public boolean checkCredentials(String u, String pwd) {
-                return CommandServer.this.user.equals(u) && password.equals(pwd);
+            public boolean checkCredentials(String candidateUser, String candidatePassword) {
+                return CommandServer.this.user.equals(candidateUser) && password.equals(candidatePassword);
             }
         };
         createAuthenticatedContext("/status", new StatusHandler(), auth);
-        createAuthenticatedContext("/trigger", new TriggerHandler(), auth);
-        createAuthenticatedContext("/suggest", new SuggestHandler(), auth);
-        createAuthenticatedContext("/actions", new ActionsHandler(), auth);
-        createAuthenticatedContext("/accept", new AcceptHandler(), auth);
-        createAuthenticatedContext("/reject", new RejectHandler(), auth);
-        createAuthenticatedContext("/diff", new DiffHandler(), auth);
-        // Plan step 7.2: the dashboard's remote jump. The page never holds the sidecar's token — it posts to this
-        // server, which is the origin it was served from, and this server is what presents the token.
         createAuthenticatedContext("/jump", new JumpHandler(), auth);
+        createAuthenticatedContext("/rpc", new RpcHandler(), auth);
         createAuthenticatedContext("/", new StaticHandler(), auth);
         server.setExecutor(null);
         server.start();
-        System.out.println("HTTP Server is now listening on http://localhost:" + port);
+        System.out.println("HTTP Server listening on http://localhost:" + port);
         log.info("Command Server started on port {} with Basic Auth (user: {})", port, user);
     }
 
     private void createAuthenticatedContext(String path, HttpHandler handler, BasicAuthenticator auth) {
         HttpContext context = server.createContext(path, handler);
-        if (password != null && !password.isEmpty()) {
-            context.setAuthenticator(auth);
-        }
+        if (password != null && !password.isEmpty()) context.setAuthenticator(auth);
     }
 
     public void stop() {
-        if (server != null) {
-            server.stop(0);
-        }
+        if (server != null) server.stop(0);
     }
 
-    /**
-     * The port this server is actually listening on.
-     *
-     * <p>Not the constructor's argument: that may be {@code 0}, meaning "any free port", which is what a test or a
-     * second instance on one machine wants — and then only the bound socket knows the answer.
-     */
     public int port() {
         return server == null ? port : server.getAddress().getPort();
     }
 
-    private class SuggestHandler implements HttpHandler {
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                sendResponse(exchange, 405, Map.of("error", "Method not allowed"));
-                return;
-            }
-            try {
-                @SuppressWarnings("unchecked")
-                Map<String, String> body = mapper.readValue(exchange.getRequestBody(), Map.class);
-                String filePath = body.get("file");
-                String agentName = body.get("agent");
-                String lineStr = body.get("line");
-                int line = (lineStr != null) ? Integer.parseInt(lineStr) : 1;
-                ToolSetAgent agent = agents.stream().filter(a -> agentName == null || a.getName().equals(agentName))
-                        .findFirst().orElse(agents.get(0));
-                Path path = Paths.get(filePath);
-                if (!path.isAbsolute()) {
-                    path = agent.getRoot().resolve(path);
-                }
-                path = path.toAbsolutePath().normalize();
-                List<String> suggestions = agent.getAnalyzer().suggestTools(path, line);
-                sendResponse(exchange, 200, Map.of("suggestions", suggestions));
-            } catch (Exception e) {
-                log.error("Suggest error", e);
-                sendResponse(exchange, 400, Map.of("error", e.getMessage()));
-            }
-        }
-    }
-
     private class StatusHandler implements HttpHandler {
-
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            Map<String, Object> response = Map.of("status", "running", "root", projectRoot.toAbsolutePath().toString(),
-                    "agents", agents.stream().map(ToolSetAgent::getName).toList());
-            sendResponse(exchange, 200, response);
+            sendResponse(exchange, 200, Map.of("status", "running", "root",
+                    projectRoot.toAbsolutePath().toString().replace('\\', '/')));
         }
     }
 
-    private class TriggerHandler implements HttpHandler {
+    private class RpcHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 sendResponse(exchange, 405, Map.of("error", "Method not allowed"));
                 return;
             }
+            if (methods == null) {
+                sendResponse(exchange, 503, Map.of("error", "agent methods are unavailable"));
+                return;
+            }
             try {
                 @SuppressWarnings("unchecked")
-                Map<String, String> body = mapper.readValue(exchange.getRequestBody(), Map.class);
-                String toolName = body.get("tool");
-                String filePath = body.get("file");
-                String agentName = body.get("agent");
-                String lineStr = body.get("line");
-                int line = (lineStr != null) ? Integer.parseInt(lineStr) : 1;
-                ToolSetAgent agent = agents.stream().filter(a -> agentName == null || a.getName().equals(agentName))
-                        .findFirst().orElse(null);
-                if (agent == null) {
-                    sendResponse(exchange, 404, Map.of("error", "Agent not found"));
-                    return;
-                }
-                Path root = agent.getRoot();
-                Path path = Paths.get(filePath);
-                if (!path.isAbsolute()) {
-                    path = root.resolve(path);
-                }
-                path = path.toAbsolutePath().normalize();
-                SimpleToolContext context = new SimpleToolContext(root, path, line);
-                PendingAction pa = agent.getEngine().runTool(toolName, agent, context);
-                if (pa != null) {
-                    if (applyFirst) {
-                        try {
-                            pa.doApply();
-                        } catch (Exception e) {
-                            log.error("Error auto-applying action", e);
-                        }
-                    }
-                    actionManager.addAction(pa);
-                }
-                sendResponse(exchange, 200, Map.of("status", "pending", "action", toolName));
-            } catch (Exception e) {
-                log.error("Trigger error", e);
-                sendResponse(exchange, 400, Map.of("error", e.getMessage()));
-            }
-        }
-    }
-
-    private class ActionsHandler implements HttpHandler {
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            List<PendingAction> actions = actionManager.getActions();
-            List<Map<String, Object>> response = new ArrayList<>();
-            for (int i = 0; i < actions.size(); i++) {
-                PendingAction pa = actions.get(i);
-                response.add(Map.of("id", i, "tool", pa.toolName(), "agent", pa.agent().getName(), "file",
-                        pa.context().getFilePath().getFileName().toString(), "line", pa.context().getLine(), "changes",
-                        pa.getChanges().size()));
-            }
-            sendResponse(exchange, 200, response);
-        }
-    }
-
-    private class AcceptHandler implements HttpHandler {
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            try {
-                int idx = Integer.parseInt(exchange.getRequestURI().getQuery().split("=")[1]);
-                actionManager.accept(idx);
-                sendResponse(exchange, 200, Map.of("status", "ok"));
-            } catch (Exception e) {
-                sendResponse(exchange, 400, Map.of("error", e.getMessage()));
-            }
-        }
-    }
-
-    private class RejectHandler implements HttpHandler {
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            try {
-                int idx = Integer.parseInt(exchange.getRequestURI().getQuery().split("=")[1]);
-                actionManager.reject(idx);
-                sendResponse(exchange, 200, Map.of("status", "ok"));
-            } catch (Exception e) {
-                sendResponse(exchange, 400, Map.of("error", e.getMessage()));
-            }
-        }
-    }
-
-    private class DiffHandler implements HttpHandler {
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            try {
-                int idx = Integer.parseInt(exchange.getRequestURI().getQuery().split("=")[1]);
-                PendingAction pa = actionManager.getAction(idx);
-                if (pa == null) {
-                    sendResponse(exchange, 404, Map.of("error", "Action not found"));
-                    return;
-                }
-                List<Map<String, Object>> diffs = new ArrayList<>();
-                for (AuditManager.FileEntry entry : pa.getChanges()) {
-                    Path before = pa.session().getSessionDir().resolve("before").resolve(entry.file);
-                    Path after = pa.session().getSessionDir().resolve("after").resolve(entry.file);
-                    String bContent = Files.exists(before) ? Files.readString(before) : "";
-                    String aContent = Files.exists(after) ? Files.readString(after) : "";
-                    diffs.add(Map.of("file", entry.file, "before", bContent, "after", aContent));
-                }
-                sendResponse(exchange, 200, diffs);
-            } catch (Exception e) {
-                sendResponse(exchange, 400, Map.of("error", e.getMessage()));
+                Map<String, Object> request = mapper.readValue(exchange.getRequestBody(), Map.class);
+                String method = String.valueOf(request.get("method"));
+                Object rawParams = request.get("params");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> params = rawParams instanceof Map<?, ?> map
+                        ? (Map<String, Object>) map
+                        : Map.of();
+                Object result = methods.call(method, params);
+                sendResponse(exchange, 200, Map.of("result", result));
+            } catch (hr.hrg.jcodebuddy.ipc.ToolException refused) {
+                sendResponse(exchange, 400, Map.of("error", refused.getMessage(), "code", refused.code()));
+            } catch (Exception failed) {
+                log.error("Agent RPC failed", failed);
+                sendResponse(exchange, 500, Map.of("error", String.valueOf(failed.getMessage())));
             }
         }
     }
 
     private class StaticHandler implements HttpHandler {
-
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
-            if (path.equals("/"))
-                path = "/index.html";
+            if (path.equals("/")) path = "/index.html";
             InputStream is = getClass().getResourceAsStream("/web" + path);
             if (is == null) {
                 exchange.sendResponseHeaders(404, -1);
@@ -331,10 +132,8 @@ public class CommandServer {
             }
             byte[] bytes = is.readAllBytes();
             String contentType = "text/html";
-            if (path.endsWith(".js"))
-                contentType = "application/javascript";
-            if (path.endsWith(".css"))
-                contentType = "text/css";
+            if (path.endsWith(".js")) contentType = "application/javascript";
+            if (path.endsWith(".css")) contentType = "text/css";
             exchange.getResponseHeaders().set("Content-Type", contentType);
             exchange.sendResponseHeaders(200, bytes.length);
             try (OutputStream os = exchange.getResponseBody()) {
@@ -353,12 +152,6 @@ public class CommandServer {
         }
     }
 
-    /**
-     * Send a body that is already JSON, unchanged.
-     *
-     * <p>Used by the remote jump, which relays the sidecar's answer verbatim: the sidecar's own vocabulary describes
-     * what happened, and re-encoding it through a map here would be a second place for the two to disagree.
-     */
     private void sendJson(HttpExchange exchange, int statusCode, String json) throws IOException {
         byte[] bytes = json == null ? new byte[0] : json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
@@ -369,27 +162,8 @@ public class CommandServer {
         }
     }
 
-    /**
-     * The dashboard's remote jump (plan step 7.2): forward the request to the JWA sidecar's own {@code /jump} and
-     * relay what the sidecar answered.
-     *
-     * <p><b>The page never holds the sidecar's token.</b> It posts to the origin that served it, and this server is
-     * what presents {@code X-WebView-Token} — which is also why the page needs no CORS allowance from the sidecar,
-     * whose origin gate refuses anything it was not configured to accept.
-     *
-     * <p><b>An outcome, never an assumed success</b> — the sidecar's rule since 2026-09-25. Whatever it answered is
-     * what the caller gets, and a sidecar that is not running is reported as <b>unreachable</b> with {@code 502}
-     * rather than as a jump that "worked", because the dashboard has to be able to show a person which of the two
-     * happened.
-     *
-     * <p>The port and token are resolved per request from the project's published descriptor, falling back to
-     * {@code jwa.sidecar.jumpPort} and {@code jwa.sidecar.token}: they are facts about one machine's running host
-     * rather than configuration of this server, so they are not constructor state and a host that restarts on
-     * another port does not need this server restarted. <b>Step 8.3's handshake is what replaced the property-only
-     * lookup</b> — a host that took the next free port published it, and this handler could not see it.
-     */
+    /** Forward a jump request to the webview sidecar, presenting the host token on the page's behalf. */
     private class JumpHandler implements HttpHandler {
-
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -398,7 +172,6 @@ public class CommandServer {
             }
             int sidecarPort = handshake.jumpPort();
             String token = handshake.token();
-            // Said once per jump at debug level, so "why did that go to that port" is answerable without guessing.
             log.debug("remote jump: {} ({}), token {}", sidecarPort, handshake.describe(),
                     token.isEmpty() ? "none" : "present");
             try {

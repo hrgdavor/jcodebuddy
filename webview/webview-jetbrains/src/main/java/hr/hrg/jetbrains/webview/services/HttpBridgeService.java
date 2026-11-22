@@ -10,10 +10,18 @@ import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.options.ShowSettingsUtil;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileAdapter;
+import com.intellij.openapi.vfs.VirtualFileEvent;
+import com.intellij.openapi.vfs.VirtualFileListener;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.VirtualFileMoveEvent;
 import com.intellij.openapi.ui.Messages;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import hr.hrg.jetbrains.webview.bridge.NavigatorService;
+import hr.hrg.jetbrains.webview.settings.WebViewSettingsConfigurable;
 import hr.hrg.jcodebuddy.ipc.ToolProxy;
 import hr.hrg.webview.core.AllowedOrigins;
 import hr.hrg.webview.core.CheckpointStore;
@@ -43,12 +51,17 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -95,6 +108,13 @@ public final class HttpBridgeService {
 
     private static final String PATH_OPEN = "/open";
     private static final String PATH_HEALTH = "/health";
+    /** The port an IDE host asks for when the project has never chosen one. */
+    private static final int DEFAULT_PORT = 18882;
+    private static final String[] BUSY_PORT_OPTIONS = {
+            "Use next free port", "Open Settings", "Cancel"
+    };
+    /** Project file-change SSE for the app shell; every app-serving host must provide it. */
+    private static final String PATH_EVENTS = "/api/v1/events";
 
     /**
      * DEC-053's live-tool namespace: the project's `.jcodebuddy/ipc/` descriptors, one call proxy and one SSE
@@ -229,7 +249,30 @@ public final class HttpBridgeService {
             String auth = !pageToken.isEmpty() ? pageToken : token;
             return ServedPageUrls.appPage("http://127.0.0.1:" + boundPort, appRelative, auth);
         }
-        return ServedPageUrls.appUrl("http://127.0.0.1:" + boundPort, relative);
+        String auth = !pageToken.isEmpty() ? pageToken : token;
+        return ServedPageUrls.appUrl("http://127.0.0.1:" + boundPort, relative, auth,
+                hashNavigation(appRoot));
+    }
+
+    /**
+     * The app may opt into hash routing with {@code .jcodebuddy/app/navigation.json}:
+     * {@code {"mode":"hash"}}. It is a file rather than a setting because the app owns its routing, and
+     * a host should not have to be configured twice for the same app.
+     */
+    private static boolean hashNavigation(@NotNull Path appRoot) {
+        Path config = appRoot.resolve("navigation.json");
+        if (!Files.isRegularFile(config)) {
+            return false;
+        }
+        try {
+            JsonObject json = JsonParser.parseString(Files.readString(config)).getAsJsonObject();
+            JsonElement mode = json.get("mode");
+            return mode != null && mode.isJsonPrimitive()
+                    && "hash".equalsIgnoreCase(mode.getAsString());
+        } catch (RuntimeException | IOException malformed) {
+            LOG.info("WebView app: ignoring malformed navigation.json: " + malformed.getMessage());
+            return false;
+        }
     }
 
     /** True when a project-automation server is configured to own the page/data namespaces. */
@@ -313,19 +356,19 @@ public final class HttpBridgeService {
         // One resolution for every host: the setting the user made, else the port this checkout is currently
         // on (`.jcodebuddy/webview/host.json`, local and never in git), else the project's committed default
         // (`conf/webview.json` — optional, and there so a fresh clone needs no IDE configuration). The
-        // fallback is -1: this host stays off until something names a port, which is its documented behaviour
-        // and not an oversight.
+        // fallback is DEFAULT_PORT: an unconfigured project still gets a working bridge; an existing
+        // host.json or conf/webview.json still outranks it.
         HostConfig.RequestedPort resolved = basePath == null
                 ? new HostConfig.RequestedPort(-1, "fallback", "")
-                : HostConfig.requestedPort(Path.of(basePath), explicitPort, -1);
+                : HostConfig.requestedPort(Path.of(basePath), explicitPort, DEFAULT_PORT);
         if (!resolved.problem().isEmpty()) {
             LOG.info("WebView HTTP bridge: " + resolved.problem());
         }
         if (!resolved.configured() && customServerBase == null) {
-            stateNote = "the bridge is off (neither webview.explorer.port, nor this checkout's "
+            stateNote = "the bridge is off (neither the IDE setting, nor this checkout's "
                     + HostDescriptor.FILE_NAME + ", nor " + HostConfig.DIR + "/" + HostConfig.FILE_NAME
                     + " names a port)";
-            LOG.info("WebView HTTP bridge is off (webview.explorer.port is not configured)");
+            LOG.info("WebView HTTP bridge is off (no port could be resolved)");
             return;
         }
         port = resolved.configured() ? resolved.port() : 0;
@@ -333,7 +376,7 @@ public final class HttpBridgeService {
         if (!stateNote.isEmpty()) {
             LOG.info("WebView HTTP bridge: " + stateNote);
         }
-        startServer(port);
+        startServer(port, false);
     }
 
     /**
@@ -349,6 +392,44 @@ public final class HttpBridgeService {
      * not be taken — a pinned port is a choice, and quietly moving would be a lie about it.
      */
     private void startServer(int requestedPort) {
+        startServer(requestedPort, false);
+    }
+
+    /**
+     * Asks what to do when the configured port is busy. The answer is one of the option indexes:
+     * {@code 0} use the next free port, {@code 1} open settings, {@code 2} cancel. Headless runs choose the
+     * automatic path; there is nobody to ask.
+     */
+    private int askBusyPort(int port, @Nullable HostPortClaim.Occupant occupant) {
+        if (ApplicationManager.getApplication().isHeadlessEnvironment() || project.isDisposed()) {
+            return 0;
+        }
+        AtomicInteger choice = new AtomicInteger(2);
+        Runnable show = () -> {
+            String who = occupant == null ? "another process" : occupant.describe();
+            int answer = Messages.showChooseDialog(project,
+                    "Port " + port + " is already in use by " + who + ".\n\n"
+                            + "Choose the next free port automatically, or open Settings and enter one.\n"
+                            + "After saving the settings, the port check runs again.",
+                    "WebView Explorer",
+                    Messages.getQuestionIcon(),
+                    BUSY_PORT_OPTIONS,
+                    BUSY_PORT_OPTIONS[0]);
+            choice.set(answer < 0 || answer >= BUSY_PORT_OPTIONS.length ? 2 : answer);
+        };
+        if (ApplicationManager.getApplication().isDispatchThread()) {
+            show.run();
+        } else {
+            ApplicationManager.getApplication().invokeAndWait(show);
+        }
+        return choice.get();
+    }
+
+    /**
+     * @param allowMove true when the user has already chosen "use the next free port"; the claim may then
+     *                  move without another dialog
+     */
+    private void startServer(int requestedPort, boolean allowMove) {
         String basePath = project.getBasePath();
         if (basePath == null) {
             stateNote = "the project has no base path, so there is nowhere to publish a port";
@@ -360,8 +441,35 @@ public final class HttpBridgeService {
         // The pin is a local property of the port this checkout uses, so it is read from the published state
         // and never from configuration. `null` means "this project has not pinned anything".
         HostDescriptor published = HostDescriptor.read(projectRoot);
+        int previousPort = published != null ? published.port() : -1;
         boolean sticky = published != null && published.sticky();
         Integer stickyPort = sticky && published.port() > 0 ? published.port() : null;
+
+        if (!allowMove && !sticky && requestedPort > 0 && !HostPortClaim.isBindable(requestedPort)) {
+            HostPortClaim.Occupant occupant = HostPortClaim.occupantOf(requestedPort);
+            if (occupant != null && occupant.servesSameProject(projectRoot)) {
+                stateNote = "another webview host already serves this project: " + occupant.describe();
+                LOG.info("WebView HTTP bridge: " + stateNote);
+                return;
+            }
+            int choice = askBusyPort(requestedPort, occupant);
+            if (choice == 0) {
+                // The user chose the automatic path; let the claim take the next free port.
+                startServer(requestedPort, true);
+                return;
+            }
+            if (choice == 1) {
+                stateNote = "port " + requestedPort + " is busy; the settings were opened";
+                LOG.info("WebView HTTP bridge: " + stateNote);
+                ApplicationManager.getApplication().invokeLater(() ->
+                        ShowSettingsUtil.getInstance().showSettingsDialog(project,
+                                WebViewSettingsConfigurable.class));
+                return;
+            }
+            stateNote = "port " + requestedPort + " is busy; the bridge was not started";
+            LOG.info("WebView HTTP bridge: " + stateNote);
+            return;
+        }
 
         // The server created by the attempt that succeeded. A bind failure on a taken port is classified by
         // asking the occupant what it is: "the port is busy" is not "a bridge is there".
@@ -408,7 +516,7 @@ public final class HttpBridgeService {
         if (decision.moved() || decision.sticky()) {
             LOG.info("WebView HTTP bridge: " + decision.reason());
         }
-        start(created, decision.port(), projectRoot, sticky);
+        start(created, decision.port(), projectRoot, sticky, previousPort);
     }
 
     /**
@@ -431,12 +539,17 @@ public final class HttpBridgeService {
     }
 
     /** Registers the routes, starts the claimed server and publishes the port. */
-    private void start(@NotNull HttpServer created, int port, @NotNull Path projectRoot, boolean sticky) {
+    private void start(@NotNull HttpServer created, int port, @NotNull Path projectRoot, boolean sticky,
+                       int previousPort) {
         try {
             PageServer createdPageServer = new PageServer(projectRoot.toString());
             String createdPageToken = UUID.randomUUID().toString().replace("-", "");
             created.createContext("/", this::handle);
-            ExecutorService createdExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            // Long-lived SSE streams must not hold the server's only worker: `/api/v1/events` keeps a
+            // response open for as long as the page is alive, so a single-thread executor would block
+            // `/app`, `/source`, `/health` and even its own reconnect. A cached pool gives each stream its
+            // own daemon thread and leaves the request routes responsive.
+            ExecutorService createdExecutor = Executors.newCachedThreadPool(runnable -> {
                 Thread thread = new Thread(runnable, "webview-bridge-" + threadSequence.incrementAndGet());
                 thread.setDaemon(true);
                 return thread;
@@ -459,6 +572,7 @@ public final class HttpBridgeService {
             allowedOrigins = AllowedOrigins.of(configuredOriginsText.isEmpty()
                     ? self : self + "," + configuredOriginsText);
             publish(projectRoot, actualPort, sticky);
+            rememberCurrentPortAndUrl(previousPort, actualPort, createdPageToken);
             LOG.info("WebView HTTP bridge listening on 127.0.0.1:" + actualPort
                     + (sticky ? " (pinned for this project)" : "")
                     + (allowedOrigins.isEmpty() && token.isEmpty()
@@ -467,6 +581,49 @@ public final class HttpBridgeService {
         } catch (RuntimeException e) {
             stateNote = "could not start on port " + port + ": " + e.getMessage();
             LOG.warn("WebView HTTP bridge could not start on port " + port, e);
+        }
+    }
+
+    /**
+     * Writes the bound port back into this project's IDE state and moves its remembered page URL to it.
+     *
+     * <p>{@code host.json} is the project's published port; the IDE's per-project setting is what the next
+     * start asks for first. Updating both is what makes a port <b>stick</b>: a start that had to take the next
+     * free port does not ask for the old one again and drift on every restart. The remembered app URL is
+     * rewritten in the same step (port and current page token) so a restart restores the page on the port the
+     * host is actually serving.</p>
+     */
+    private void rememberCurrentPortAndUrl(int previousPort, int actualPort, @NotNull String pageToken) {
+        PluginStateService states = PluginStateService.getInstance(project);
+        PluginStateService.State state = states.getState();
+        if (state != null) {
+            state.port = actualPort;
+        }
+        String lastUrl = states.getLastUrl();
+        String updated = RememberedHostUrl.rewrite(lastUrl, previousPort, actualPort, pageToken);
+        if (updated != null && !updated.equals(lastUrl)) {
+            states.setLastUrl(updated);
+            LOG.info("WebView app URL moved with the bridge port: " + updated);
+        }
+        // The State is what a restart restores, but an already-open tool window still holds the old URL.
+        // Move it too: the port and page token in the old URL are dead after this process started.
+        if (updated != null && !updated.isBlank()
+                && (updated.startsWith("http://127.0.0.1:") || updated.startsWith("http://localhost:"))) {
+            ApplicationManager.getApplication().invokeLater(() -> {
+                var panel = hr.hrg.jetbrains.webview.toolWindow.WebViewService.getInstance(project).getPanel();
+                if (panel == null) {
+                    return;
+                }
+                String current = panel.currentUrl();
+                if (current != null && !current.startsWith("http://127.0.0.1:")
+                        && !current.startsWith("http://localhost:")) {
+                    return;
+                }
+                if (!updated.equals(current)) {
+                    LOG.info("WebView tool window moved to the current bridge URL: " + updated);
+                    panel.load(updated);
+                }
+            });
         }
     }
 
@@ -545,8 +702,13 @@ public final class HttpBridgeService {
             // bridge of its own.
             String body = HostHealth.of(HostHealth.PLUGIN_JETBRAINS, ideName(), projectPath(), boundPort,
                     allowedOrigins.values().size(), !token.isEmpty(),
-                    NavigatorService.getInstance(project).capabilities()).toJson();
+                    withWatch(NavigatorService.getInstance(project).capabilities())).toJson();
             send(exchange, 200, body, "application/json");
+            return;
+        }
+
+        if (PATH_EVENTS.equals(path)) {
+            handleEvents(exchange, origin);
             return;
         }
 
@@ -637,6 +799,129 @@ public final class HttpBridgeService {
             case INVALID_PATH -> send(exchange, 400, "Missing filePath parameter", "text/plain");
             default -> send(exchange, 404, "Could not open " + filePath, "text/plain");
         }
+    }
+
+    private static Set<String> withWatch(Set<String> capabilities) {
+        Set<String> all = new LinkedHashSet<>(capabilities);
+        all.add("watch");
+        return all;
+    }
+
+    /**
+     * {@code GET /api/v1/events}: project file changes as server-sent events for the app shell.
+     *
+     * <p>Every app-serving host must provide this. The event source is the IDE's own VFS, so it covers
+     * every project file the app can read — Markdown, source, configuration and assets — not only Java
+     * sources. Generated/noise trees are filtered ({@code .jcodebuddy}, {@code target}, {@code build},
+     * {@code node_modules}, ...). Each frame is one coalesced batch:
+     * {@code event: change} with {@code {"paths":["README.md", ...]}}; {@code "*"} asks the app to refresh
+     * everything. A comment every 20s keeps the connection alive.</p>
+     */
+    private void handleEvents(HttpExchange exchange, String origin) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain");
+            return;
+        }
+        if (!isAuthorized(exchange, origin)) {
+            send(exchange, 403, "Forbidden: the token or an allowed Origin is required", "text/plain");
+            return;
+        }
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-transform");
+        exchange.getResponseHeaders().set("Connection", "keep-alive");
+        exchange.sendResponseHeaders(200, 0);
+
+        BlockingQueue<String> changed = new LinkedBlockingQueue<>();
+        VirtualFileListener listener = new VirtualFileAdapter() {
+            @Override
+            public void contentsChanged(@NotNull VirtualFileEvent event) {
+                offerChanged(event.getFile(), changed);
+            }
+
+            @Override
+            public void fileCreated(@NotNull VirtualFileEvent event) {
+                offerChanged(event.getFile(), changed);
+            }
+
+            @Override
+            public void fileDeleted(@NotNull VirtualFileEvent event) {
+                offerChanged(event.getFile(), changed);
+            }
+
+            @Override
+            public void fileMoved(@NotNull VirtualFileMoveEvent event) {
+                offerChanged(event.getFile(), changed);
+            }
+        };
+        VirtualFileManager.getInstance().addVirtualFileListener(listener);
+        try (OutputStream body = exchange.getResponseBody()) {
+            body.write(": connected\n\n".getBytes(StandardCharsets.UTF_8));
+            body.flush();
+            while (true) {
+                String first;
+                try {
+                    first = changed.poll(20, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+                if (first == null) {
+                    body.write(": keep-alive\n\n".getBytes(StandardCharsets.UTF_8));
+                    body.flush();
+                    continue;
+                }
+                Set<String> paths = new LinkedHashSet<>();
+                paths.add(first);
+                List<String> rest = new ArrayList<>();
+                changed.drainTo(rest);
+                paths.addAll(rest);
+                body.write(("event: change\ndata: " + eventData(paths) + "\n\n")
+                        .getBytes(StandardCharsets.UTF_8));
+                body.flush();
+            }
+        } catch (IOException disconnected) {
+            LOG.debug("WebView file-change stream closed: " + disconnected.getMessage());
+        } finally {
+            VirtualFileManager.getInstance().removeVirtualFileListener(listener);
+            exchange.close();
+        }
+    }
+
+    private void offerChanged(@Nullable VirtualFile file, @NotNull BlockingQueue<String> changed) {
+        String base = project.getBasePath();
+        if (base == null || file == null || file.isDirectory()) {
+            return;
+        }
+        Path root = Path.of(base).toAbsolutePath().normalize();
+        Path target = Path.of(file.getPath()).toAbsolutePath().normalize();
+        if (!target.startsWith(root)) {
+            return;
+        }
+        String relative = root.relativize(target).toString().replace('\\', '/');
+        if (relative.isEmpty() || ignoredEventPath(relative)) {
+            return;
+        }
+        changed.offer(relative);
+    }
+
+    private static boolean ignoredEventPath(@NotNull String relative) {
+        return relative.startsWith(".git/") || relative.startsWith(".jcodebuddy/")
+                || relative.startsWith(".gradle/") || relative.startsWith(".idea/")
+                || relative.startsWith("node_modules/") || relative.startsWith("target/")
+                || relative.startsWith("build/") || relative.startsWith("out/");
+    }
+
+    private static String eventData(@NotNull Set<String> paths) {
+        StringBuilder json = new StringBuilder("{\"paths\":[");
+        boolean first = true;
+        for (String path : paths) {
+            if (!first) {
+                json.append(',');
+            }
+            first = false;
+            json.append('"').append(path.replace("\\", "\\\\").replace("\"", "\\\"")).append('"');
+        }
+        return json.append("]}").toString();
     }
 
     /** {@code GET /lib/...} — the project's shared metadata lib, read-only. */

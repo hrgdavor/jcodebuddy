@@ -4,8 +4,6 @@ package hr.hrg.watch2.agent;
 
 import hr.hrg.jcodebuddy.watch.FsMetaClient;
 import hr.hrg.jcodebuddy.watch.FsMetaDaemonDiscovery;
-import hr.hrg.watch2.agent.config.AgentConfig;
-import hr.hrg.watch2.agent.tools.ToolRegistry;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -50,7 +48,7 @@ class ProjectWatcherTest {
         FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discover(root, env, isWindows());
         assertFalse(attach.attached(), "no root list exists, so discovery must not attach");
 
-        ProjectWatcher watcher = new ProjectWatcher(root, List.of(), attach);
+        ProjectWatcher watcher = new ProjectWatcher(root, paths -> {}, attach);
         try {
             watcher.start(); // must not throw: no daemon is a normal state, not a startup failure
             assertFalse(watcher.live());
@@ -65,7 +63,7 @@ class ProjectWatcherTest {
     }
 
     @Test
-    void aDaemonBatchIsDispatchedToEveryAgent() throws Exception {
+    void aDaemonBatchIsDispatchedToTheListener() throws Exception {
         // A relative scratch directory would make the watcher's normalized paths differ from the fixture's; keep the
         // whole fixture absolute and short, because AF_UNIX limits the socket path to about a hundred characters.
         Path scratch = Files.createTempDirectory(Path.of("target"), "pw-").toAbsolutePath();
@@ -84,18 +82,16 @@ class ProjectWatcherTest {
             FsMetaDaemonDiscovery.Attach attach = FsMetaDaemonDiscovery.discover(root, env, isWindows());
             assertTrue(attach.attached(), attach.problem());
 
-            RecordingAgent first = new RecordingAgent(root);
-            RecordingAgent second = new RecordingAgent(root);
-            watcher = new ProjectWatcher(root, List.of(first, second), attach);
+            List<Path> seen = new CopyOnWriteArrayList<>();
+            watcher = new ProjectWatcher(root, seen::addAll, attach);
             watcher.start();
             assertTrue(watcher.live(), watcher.attachProblem());
             assertEquals(socket, watcher.daemonSocket().orElseThrow());
 
-            await(() -> !first.seen().isEmpty() && !second.seen().isEmpty(), 15_000);
+            await(() -> !seen.isEmpty(), 15_000);
 
             Path expected = root.resolve("src/A.java");
-            assertEquals(List.of(expected), first.seen(), "the first agent sees the daemon's change");
-            assertEquals(List.of(expected), second.seen(), "every agent is dispatched, not just the first");
+            assertEquals(List.of(expected), seen, "the listener sees the daemon's change");
         } finally {
             if (watcher != null) {
                 watcher.stop();
@@ -107,30 +103,6 @@ class ProjectWatcherTest {
 
     // ── fixtures ─────────────────────────────────────────────────────────────────────────────────────────────────
 
-    /** A toolset agent that only records what the watcher dispatches; the real agents would parse the file. */
-    private static final class RecordingAgent extends ToolSetAgent {
-
-        private final List<Path> seen = new CopyOnWriteArrayList<>();
-
-        RecordingAgent(Path root) {
-            super(root, toolSet(), new ToolRegistry());
-        }
-
-        private static AgentConfig.ToolSet toolSet() {
-            AgentConfig.ToolSet set = new AgentConfig.ToolSet();
-            set.setName("test");
-            return set;
-        }
-
-        @Override
-        public void onFileChange(Path path) {
-            seen.add(path);
-        }
-
-        List<Path> seen() {
-            return seen;
-        }
-    }
 
     /** Writes the daemon's durable root list, the way {@code fsmeta root add} does. */
     private static void writeRegistry(Path configHome, Path root, Path socket) throws Exception {
