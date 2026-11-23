@@ -825,6 +825,271 @@ var Diff = class {
   }
 };
 
+// node_modules/diff/libesm/util/string.js
+function longestCommonPrefix(str1, str2) {
+  let i;
+  for (i = 0; i < str1.length && i < str2.length; i++) {
+    if (str1[i] != str2[i]) {
+      return str1.slice(0, i);
+    }
+  }
+  return str1.slice(0, i);
+}
+function longestCommonSuffix(str1, str2) {
+  let i;
+  if (!str1 || !str2 || str1[str1.length - 1] != str2[str2.length - 1]) {
+    return "";
+  }
+  for (i = 0; i < str1.length && i < str2.length; i++) {
+    if (str1[str1.length - (i + 1)] != str2[str2.length - (i + 1)]) {
+      return str1.slice(-i);
+    }
+  }
+  return str1.slice(-i);
+}
+function replacePrefix(string, oldPrefix, newPrefix) {
+  if (string.slice(0, oldPrefix.length) != oldPrefix) {
+    throw Error(`string ${JSON.stringify(string)} doesn't start with prefix ${JSON.stringify(oldPrefix)}; this is a bug`);
+  }
+  return newPrefix + string.slice(oldPrefix.length);
+}
+function replaceSuffix(string, oldSuffix, newSuffix) {
+  if (!oldSuffix) {
+    return string + newSuffix;
+  }
+  if (string.slice(-oldSuffix.length) != oldSuffix) {
+    throw Error(`string ${JSON.stringify(string)} doesn't end with suffix ${JSON.stringify(oldSuffix)}; this is a bug`);
+  }
+  return string.slice(0, -oldSuffix.length) + newSuffix;
+}
+function removePrefix(string, oldPrefix) {
+  return replacePrefix(string, oldPrefix, "");
+}
+function removeSuffix(string, oldSuffix) {
+  return replaceSuffix(string, oldSuffix, "");
+}
+function maximumOverlap(string1, string2) {
+  return string2.slice(0, overlapCount(string1, string2));
+}
+function overlapCount(a, b) {
+  let startA = 0;
+  if (a.length > b.length) {
+    startA = a.length - b.length;
+  }
+  let endB = b.length;
+  if (a.length < b.length) {
+    endB = a.length;
+  }
+  const map = Array(endB);
+  let k = 0;
+  map[0] = 0;
+  for (let j = 1; j < endB; j++) {
+    if (b[j] == b[k]) {
+      map[j] = map[k];
+    } else {
+      map[j] = k;
+    }
+    while (k > 0 && b[j] != b[k]) {
+      k = map[k];
+    }
+    if (b[j] == b[k]) {
+      k++;
+    }
+  }
+  k = 0;
+  for (let i = startA; i < a.length; i++) {
+    while (k > 0 && a[i] != b[k]) {
+      k = map[k];
+    }
+    if (a[i] == b[k]) {
+      k++;
+    }
+  }
+  return k;
+}
+function segment(string, segmenter) {
+  const parts = [];
+  for (const segmentObj of Array.from(segmenter.segment(string))) {
+    const segment2 = segmentObj.segment;
+    if (parts.length && /\s/.test(parts[parts.length - 1]) && /\s/.test(segment2)) {
+      parts[parts.length - 1] += segment2;
+    } else {
+      parts.push(segment2);
+    }
+  }
+  return parts;
+}
+function trailingWs(string, segmenter) {
+  if (segmenter) {
+    return leadingAndTrailingWs(string, segmenter)[1];
+  }
+  let i;
+  for (i = string.length - 1; i >= 0; i--) {
+    if (!string[i].match(/\s/)) {
+      break;
+    }
+  }
+  return string.substring(i + 1);
+}
+function leadingWs(string, segmenter) {
+  if (segmenter) {
+    return leadingAndTrailingWs(string, segmenter)[0];
+  }
+  const match = string.match(/^\s*/);
+  return match ? match[0] : "";
+}
+function leadingAndTrailingWs(string, segmenter) {
+  if (!segmenter) {
+    return [leadingWs(string), trailingWs(string)];
+  }
+  if (segmenter.resolvedOptions().granularity != "word") {
+    throw new Error('The segmenter passed must have a granularity of "word"');
+  }
+  const segments = segment(string, segmenter);
+  const firstSeg = segments[0];
+  const lastSeg = segments[segments.length - 1];
+  const head = /\s/.test(firstSeg) ? firstSeg : "";
+  const tail = /\s/.test(lastSeg) ? lastSeg : "";
+  return [head, tail];
+}
+
+// node_modules/diff/libesm/diff/word.js
+var extendedWordChars = "a-zA-Z0-9_\\u{AD}\\u{C0}-\\u{D6}\\u{D8}-\\u{F6}\\u{F8}-\\u{2C6}\\u{2C8}-\\u{2D7}\\u{2DE}-\\u{2FF}\\u{1E00}-\\u{1EFF}";
+var tokenizeIncludingWhitespace = new RegExp(`[${extendedWordChars}]+|\\s+|[^${extendedWordChars}]`, "ug");
+var WordDiff = class extends Diff {
+  equals(left, right, options) {
+    if (options.ignoreCase) {
+      left = left.toLowerCase();
+      right = right.toLowerCase();
+    }
+    return left.trim() === right.trim();
+  }
+  tokenize(value, options = {}) {
+    let parts;
+    if (options.intlSegmenter) {
+      const segmenter = options.intlSegmenter;
+      if (segmenter.resolvedOptions().granularity != "word") {
+        throw new Error('The segmenter passed must have a granularity of "word"');
+      }
+      parts = segment(value, segmenter);
+    } else {
+      parts = value.match(tokenizeIncludingWhitespace) || [];
+    }
+    const tokens = [];
+    let prevPart = null;
+    parts.forEach((part) => {
+      if (/\s/.test(part)) {
+        if (prevPart == null) {
+          tokens.push(part);
+        } else {
+          tokens.push(tokens.pop() + part);
+        }
+      } else if (prevPart != null && /\s/.test(prevPart)) {
+        if (tokens[tokens.length - 1] == prevPart) {
+          tokens.push(tokens.pop() + part);
+        } else {
+          tokens.push(prevPart + part);
+        }
+      } else {
+        tokens.push(part);
+      }
+      prevPart = part;
+    });
+    return tokens;
+  }
+  join(tokens) {
+    return tokens.map((token, i) => {
+      if (i == 0) {
+        return token;
+      } else {
+        return token.replace(/^\s+/, "");
+      }
+    }).join("");
+  }
+  postProcess(changes, options) {
+    if (!changes || options.oneChangePerToken) {
+      return changes;
+    }
+    let lastKeep = null;
+    let insertion = null;
+    let deletion = null;
+    changes.forEach((change) => {
+      if (change.added) {
+        insertion = change;
+      } else if (change.removed) {
+        deletion = change;
+      } else {
+        if (insertion || deletion) {
+          dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, change, options.intlSegmenter);
+        }
+        lastKeep = change;
+        insertion = null;
+        deletion = null;
+      }
+    });
+    if (insertion || deletion) {
+      dedupeWhitespaceInChangeObjects(lastKeep, deletion, insertion, null, options.intlSegmenter);
+    }
+    return changes;
+  }
+};
+var wordDiff = new WordDiff();
+function dedupeWhitespaceInChangeObjects(startKeep, deletion, insertion, endKeep, segmenter) {
+  if (deletion && insertion) {
+    const [oldWsPrefix, oldWsSuffix] = leadingAndTrailingWs(deletion.value, segmenter);
+    const [newWsPrefix, newWsSuffix] = leadingAndTrailingWs(insertion.value, segmenter);
+    if (startKeep) {
+      const commonWsPrefix = longestCommonPrefix(oldWsPrefix, newWsPrefix);
+      startKeep.value = replaceSuffix(startKeep.value, newWsPrefix, commonWsPrefix);
+      deletion.value = removePrefix(deletion.value, commonWsPrefix);
+      insertion.value = removePrefix(insertion.value, commonWsPrefix);
+    }
+    if (endKeep) {
+      const commonWsSuffix = longestCommonSuffix(oldWsSuffix, newWsSuffix);
+      endKeep.value = replacePrefix(endKeep.value, newWsSuffix, commonWsSuffix);
+      deletion.value = removeSuffix(deletion.value, commonWsSuffix);
+      insertion.value = removeSuffix(insertion.value, commonWsSuffix);
+    }
+  } else if (insertion) {
+    if (startKeep) {
+      const ws = leadingWs(insertion.value, segmenter);
+      insertion.value = insertion.value.substring(ws.length);
+    }
+    if (endKeep) {
+      const ws = leadingWs(endKeep.value, segmenter);
+      endKeep.value = endKeep.value.substring(ws.length);
+    }
+  } else if (startKeep && endKeep) {
+    const newWsFull = leadingWs(endKeep.value, segmenter), [delWsStart, delWsEnd] = leadingAndTrailingWs(deletion.value, segmenter);
+    const newWsStart = longestCommonPrefix(newWsFull, delWsStart);
+    deletion.value = removePrefix(deletion.value, newWsStart);
+    const newWsEnd = longestCommonSuffix(removePrefix(newWsFull, newWsStart), delWsEnd);
+    deletion.value = removeSuffix(deletion.value, newWsEnd);
+    endKeep.value = replacePrefix(endKeep.value, newWsFull, newWsEnd);
+    startKeep.value = replaceSuffix(startKeep.value, newWsFull, newWsFull.slice(0, newWsFull.length - newWsEnd.length));
+  } else if (endKeep) {
+    const endKeepWsPrefix = leadingWs(endKeep.value, segmenter);
+    const deletionWsSuffix = trailingWs(deletion.value, segmenter);
+    const overlap = maximumOverlap(deletionWsSuffix, endKeepWsPrefix);
+    deletion.value = removeSuffix(deletion.value, overlap);
+  } else if (startKeep) {
+    const startKeepWsSuffix = trailingWs(startKeep.value, segmenter);
+    const deletionWsPrefix = leadingWs(deletion.value, segmenter);
+    const overlap = maximumOverlap(startKeepWsSuffix, deletionWsPrefix);
+    deletion.value = removePrefix(deletion.value, overlap);
+  }
+}
+var WordsWithSpaceDiff = class extends Diff {
+  tokenize(value) {
+    const regex = new RegExp(`(\\r?\\n)|[${extendedWordChars}]+|[^\\S\\n\\r]+|[^${extendedWordChars}]`, "ug");
+    return value.match(regex) || [];
+  }
+};
+var wordsWithSpaceDiff = new WordsWithSpaceDiff();
+function diffWordsWithSpace(oldStr, newStr, options) {
+  return wordsWithSpaceDiff.diff(oldStr, newStr, options);
+}
+
 // node_modules/diff/libesm/diff/line.js
 var LineDiff = class extends Diff {
   constructor() {
@@ -884,6 +1149,11 @@ var Fragment = (attr, children) => children;
 var TOOL = "jcodebuddy-agent";
 var HOST_PAGE = location.pathname.startsWith("/app/");
 var TOKEN_KEY = "jcodebuddy.token";
+var initialQuery = new URLSearchParams(location.search);
+var OPEN_BATCH = initialQuery.get("batch");
+var selectedFileKey = initialQuery.get("file");
+var wholeFile = initialQuery.get("full") === "1";
+document.body.classList.toggle("batch-mode", Boolean(OPEN_BATCH));
 var $badge = signal("connecting\u2026");
 var $badgeClass = signal("badge");
 var $summary = signal("");
@@ -892,6 +1162,9 @@ var $notice = signal("");
 var tools = [];
 var batches = [];
 var refreshBusy = false;
+var actionBusy = false;
+var actionError = "";
+var batchSignature = "";
 function resolveToken() {
   const fromUrl = new URLSearchParams(location.search).get("token") || "";
   if (fromUrl) {
@@ -990,6 +1263,7 @@ function renderTools() {
 function renderBatches() {
   const list = document.getElementById("batches");
   if (!list) return;
+  const pageScroll = document.scrollingElement?.scrollTop ?? window.scrollY ?? 0;
   list.replaceChildren();
   if (batches.length === 0) {
     const empty = document.createElement("div");
@@ -1000,10 +1274,148 @@ function renderBatches() {
   }
   for (const batch of batches) list.append(batchCard(batch));
   highlightDiffs(list);
+  requestAnimationFrame(() => {
+    if (document.scrollingElement) document.scrollingElement.scrollTop = pageScroll;
+    else window.scrollTo(0, pageScroll);
+  });
+}
+function batchFiles(batch) {
+  return (batch?.proposals || []).flatMap((proposal) => (proposal.files || []).map((file) => ({
+    proposal,
+    file,
+    key: `${proposal.proposalId}:${file.path}`
+  })));
+}
+function batchUrl(fileKey) {
+  const params = new URLSearchParams();
+  params.set("batch", OPEN_BATCH);
+  if (fileKey) params.set("file", fileKey);
+  if (wholeFile) params.set("full", "1");
+  return `${location.pathname}?${params.toString()}`;
+}
+function selectBatchFile(fileKey) {
+  selectedFileKey = fileKey;
+  history.replaceState(null, "", batchUrl(fileKey));
+  renderBatchDetail();
+}
+function renderBatchDetail() {
+  const view = document.getElementById("batch-view");
+  if (!view) return;
+  const pageScroll = document.scrollingElement?.scrollTop ?? window.scrollY ?? 0;
+  view.replaceChildren();
+  const batch = batches.find((candidate) => candidate.batchId === OPEN_BATCH);
+  if (!batch) {
+    view.append(
+      textElement("h2", `Batch ${OPEN_BATCH} is no longer pending`),
+      textElement("p", "It may have been accepted, rejected or replaced by a newer proposal.")
+    );
+    const back2 = document.createElement("a");
+    back2.href = "./";
+    back2.className = "button-link";
+    back2.textContent = "\u2190 Back to catalog";
+    view.append(back2);
+    return;
+  }
+  const files = batchFiles(batch);
+  if (!selectedFileKey || !files.some((entry) => entry.key === selectedFileKey)) {
+    selectedFileKey = files[0]?.key || null;
+  }
+  const selected = files.find((entry) => entry.key === selectedFileKey) || null;
+  const tools2 = [...new Set((batch.proposals || []).map((proposal) => proposal.tool))];
+  const header = document.createElement("div");
+  header.className = "batch-detail-head";
+  const heading = document.createElement("div");
+  const title = textElement("h2", `Batch ${batch.batchId}`);
+  const meta = textElement("p", `${tools2.join(", ")} \xB7 ${files.length} file(s) \xB7 ${batch.allApplied ? "applied" : batch.anyApplied ? "partially applied" : "pending review"}`);
+  meta.className = "card-meta";
+  heading.append(title, meta);
+  const links = document.createElement("div");
+  links.className = "card-actions";
+  const back = document.createElement("a");
+  back.href = "./";
+  back.className = "button-link";
+  back.textContent = "\u2190 Catalog";
+  links.append(back);
+  const applyBatchButton = textButton("Apply batch", "primary", () => applyBatch(batch.batchId));
+  applyBatchButton.disabled = batch.allApplied;
+  const revertBatchButton = textButton("Revert batch", "danger", () => revertBatch(batch.batchId));
+  revertBatchButton.disabled = !batch.anyApplied;
+  links.append(applyBatchButton, revertBatchButton);
+  header.append(heading, links);
+  view.append(header);
+  const state = document.createElement("div");
+  state.className = `batch-state ${batch.allApplied ? "applied" : batch.anyApplied ? "partial" : "pending"}`;
+  state.textContent = batch.allApplied ? "\u2713 Applied \u2014 the files are on disk; use Revert batch to undo the whole batch." : batch.anyApplied ? "Partially applied \u2014 some files are on disk; the rest is still reviewable." : "Pending review \u2014 preview only; no editor buffer has been changed.";
+  view.append(state);
+  const layout = document.createElement("div");
+  layout.className = "batch-layout";
+  const sidebar = document.createElement("aside");
+  sidebar.className = "batch-files";
+  const sideTitle = textElement("h3", "Files");
+  sidebar.append(sideTitle);
+  for (const entry of files) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `batch-file${entry.key === selectedFileKey ? " selected" : ""}${entry.file.applied ? " applied" : ""}`;
+    const path = document.createElement("span");
+    path.className = "batch-file-path";
+    path.textContent = entry.file.path;
+    const stateLabel = document.createElement("span");
+    stateLabel.className = "batch-file-state";
+    stateLabel.textContent = entry.file.applied ? "applied" : entry.proposal.tool;
+    button.append(path, stateLabel);
+    button.addEventListener("click", () => selectBatchFile(entry.key));
+    sidebar.append(button);
+  }
+  const diffPanel = document.createElement("section");
+  diffPanel.className = `batch-diff${batch.allApplied ? " applied" : ""}`;
+  if (selected) {
+    const fileHead = document.createElement("div");
+    fileHead.className = "batch-diff-head";
+    const fileTitle = textElement("strong", selected.file.path);
+    const fileMeta = textElement("span", `${selected.proposal.tool} \xB7 ${selected.file.applied ? "applied" : "not applied"}`);
+    fileMeta.className = "card-meta";
+    fileHead.append(fileTitle, fileMeta);
+    const fileActions = document.createElement("div");
+    fileActions.className = "card-actions";
+    const toggle = textButton(
+      wholeFile ? "Changes only" : "Whole file",
+      "",
+      () => {
+        wholeFile = !wholeFile;
+        history.replaceState(null, "", batchUrl(selectedFileKey));
+        renderBatchDetail();
+      }
+    );
+    fileActions.append(
+      textButton("Open file", "", () => openFile(selected.file.path)),
+      toggle,
+      selected.file.applied ? textButton("Revert file", "danger", () => revertFile(selected.proposal.proposalId, selected.file.path)) : textButton("Apply file", "primary", () => applyFile(selected.proposal.proposalId, selected.file.path))
+    );
+    diffPanel.append(
+      fileHead,
+      fileActions,
+      diffRows(
+        selected.file.before || "",
+        selected.file.after || "",
+        languageFor(selected.file.path),
+        wholeFile
+      )
+    );
+  } else {
+    diffPanel.append(textElement("p", "No files in this batch."));
+  }
+  layout.append(sidebar, diffPanel);
+  view.append(layout);
+  highlightDiffs(diffPanel);
+  requestAnimationFrame(() => {
+    if (document.scrollingElement) document.scrollingElement.scrollTop = pageScroll;
+    else window.scrollTo(0, pageScroll);
+  });
 }
 function batchCard(batch) {
   const card = document.createElement("article");
-  card.className = "card batch";
+  card.className = `card batch${batch.allApplied ? " applied" : ""}`;
   const head = document.createElement("div");
   head.className = "card-head";
   const left = document.createElement("div");
@@ -1014,8 +1426,11 @@ function batchCard(batch) {
   const meta = document.createElement("div");
   meta.className = "card-meta";
   const fileCount = (batch.proposals || []).reduce((count, proposal) => count + (proposal.files?.length || 0), 0);
-  meta.textContent = `${fileCount} file(s) \xB7 ${batch.allApplied ? "applied" : batch.anyApplied ? "partially applied" : "review"}`;
-  left.append(title, meta);
+  meta.textContent = `${(batch.proposals || []).length} proposal(s) \xB7 ${fileCount} file(s) \xB7 ${batch.allApplied ? "applied" : batch.anyApplied ? "partially applied" : "review"}`;
+  const toolCounts = document.createElement("div");
+  toolCounts.className = "card-meta";
+  toolCounts.textContent = (batch.proposals || []).map((proposal) => `${proposal.tool} (${proposal.files?.length || 0})`).join(" \xB7 ");
+  left.append(title, meta, toolCounts);
   const state = document.createElement("div");
   state.className = `badge${batch.allApplied ? " live" : ""}`;
   state.textContent = batch.allApplied ? "applied" : "pending";
@@ -1023,63 +1438,17 @@ function batchCard(batch) {
   card.append(head);
   const actionsRow = document.createElement("div");
   actionsRow.className = "card-actions";
+  const open = document.createElement("a");
+  open.className = "button-link";
+  open.href = `?batch=${encodeURIComponent(batch.batchId)}`;
+  open.textContent = "Open batch";
   actionsRow.append(
+    open,
     textButton("Apply batch", "primary", () => applyBatch(batch.batchId)),
     textButton("Revert batch", "danger", () => revertBatch(batch.batchId))
   );
   card.append(actionsRow);
-  for (const proposal of batch.proposals || []) {
-    card.append(proposalBlock(proposal));
-  }
   return card;
-}
-function proposalBlock(proposal) {
-  const section = document.createElement("section");
-  section.className = "batch-proposal";
-  const head = document.createElement("div");
-  head.className = "card-head";
-  const left = document.createElement("div");
-  const title = document.createElement("div");
-  title.className = "card-title";
-  title.textContent = proposal.title || proposal.tool;
-  const meta = document.createElement("div");
-  meta.className = "card-meta";
-  meta.textContent = `${proposal.mode} \xB7 ${proposal.files?.length || 0} file(s)` + (proposal.caseKey ? ` \xB7 ${proposal.caseKey}` : "");
-  left.append(title, meta);
-  head.append(left);
-  section.append(head);
-  for (const file of proposal.files || []) {
-    section.append(batchFile(proposal, file));
-  }
-  const footer = document.createElement("div");
-  footer.className = "card-actions";
-  footer.append(textButton("Accept proposal", "primary", () => applyProposal(proposal.proposalId)));
-  if (proposal.refusalSupported && proposal.caseKey) {
-    footer.append(textButton(
-      "Reject & skip future",
-      "danger",
-      () => rejectProposal(proposal.proposalId, true)
-    ));
-  } else {
-    footer.append(textButton("Discard", "danger", () => rejectProposal(proposal.proposalId, false)));
-  }
-  section.append(footer);
-  return section;
-}
-function batchFile(proposal, file) {
-  const section = document.createElement("section");
-  section.className = "diff-file";
-  const head = document.createElement("div");
-  head.className = "diff-file-head";
-  head.textContent = `${file.path}${file.applied ? " \xB7 applied" : ""}`;
-  const row = document.createElement("div");
-  row.className = "card-actions";
-  row.append(
-    textButton("Open file", "", () => openFile(file.path)),
-    file.applied ? textButton("Revert file", "danger", () => revertFile(proposal.proposalId, file.path)) : textButton("Apply file", "primary", () => applyFile(proposal.proposalId, file.path))
-  );
-  section.append(head, row, diffRows(file.before || "", file.after || "", languageFor(file.path)));
-  return section;
 }
 function languageFor(path) {
   const extension = String(path || "").toLowerCase().split(".").pop();
@@ -1104,9 +1473,25 @@ async function refresh() {
     $summary(
       `${status.tools?.length || tools.length} tool(s) \xB7 ${batches.length} change batch(es) \xB7 ${status.root}`
     );
-    $error(status.watchProblem || "");
-    renderTools();
-    renderBatches();
+    $error(status.configurationProblem || status.watchProblem || actionError || "");
+    if (OPEN_BATCH) {
+      document.getElementById("catalog-view").hidden = true;
+      document.getElementById("batch-view").hidden = false;
+      const nextBatchSignature = signatureOf(batches);
+      if (nextBatchSignature !== batchSignature) {
+        batchSignature = nextBatchSignature;
+        renderBatchDetail();
+      }
+    } else {
+      document.getElementById("catalog-view").hidden = false;
+      document.getElementById("batch-view").hidden = true;
+      renderTools();
+      const nextBatchSignature = signatureOf(batches);
+      if (nextBatchSignature !== batchSignature) {
+        batchSignature = nextBatchSignature;
+        renderBatches();
+      }
+    }
   } catch (error) {
     setBadge("disconnected", "bad");
     $error(
@@ -1134,108 +1519,232 @@ async function openFile(path) {
     $notice(`open failed: ${error.message}`);
   }
 }
-async function applyProposal(proposalId) {
-  try {
-    await call("tool.apply", { proposalId });
-    $notice(`applied ${proposalId}`);
-    await refresh();
-  } catch (error) {
-    $error(error.message);
-  }
+function signatureOf(value) {
+  return (value || []).map((batch) => [
+    batch.batchId,
+    batch.allApplied ? "a" : "p",
+    ...(batch.proposals || []).map((proposal) => [
+      proposal.proposalId,
+      proposal.mode,
+      ...(proposal.files || []).map((file) => `${file.path}:${file.applied ? 1 : 0}`)
+    ].join(":"))
+  ].join("|")).join("~");
 }
 async function applyFile(proposalId, path) {
+  if (actionBusy) return;
+  actionBusy = true;
+  $notice(`applying ${path}\u2026`);
   try {
     await call("tool.applyFile", { proposalId, path });
     $notice(`applied ${path}`);
     await refresh();
   } catch (error) {
     $error(error.message);
+  } finally {
+    actionBusy = false;
   }
 }
 async function revertFile(proposalId, path) {
+  if (actionBusy) return;
+  actionBusy = true;
+  $notice(`reverting ${path}\u2026`);
   try {
     await call("tool.revertFile", { proposalId, path });
     $notice(`reverted ${path}`);
     await refresh();
   } catch (error) {
     $error(error.message);
+  } finally {
+    actionBusy = false;
   }
 }
 async function applyBatch(batchId) {
+  if (actionBusy) return;
+  actionBusy = true;
+  actionError = "";
+  $notice(`applying batch ${batchId}\u2026`);
   try {
-    await call("tool.applyBatch", { batchId });
-    $notice(`applied batch ${batchId}`);
+    const result = await call("tool.applyBatch", { batchId });
+    const failures = (result.proposals || []).flatMap((proposal) => (proposal.files || []).filter((file) => file.status !== "APPLIED" && file.status !== "already-applied"));
+    if (result.status === "partial" || result.status === "refused" || failures.length > 0) {
+      const detail = failures.map((file) => `${file.path}: ${file.message || file.status}`).join("; ");
+      actionError = `batch ${batchId} ${result.status}: ${detail || "no file was applied"}`;
+      $notice("");
+    } else {
+      $notice(`applied batch ${batchId}`);
+    }
     await refresh();
   } catch (error) {
-    $error(error.message);
+    actionError = error.message;
+  } finally {
+    actionBusy = false;
   }
 }
 async function revertBatch(batchId) {
+  if (actionBusy) return;
+  actionBusy = true;
+  $notice(`reverting batch ${batchId}\u2026`);
   try {
     await call("tool.revertBatch", { batchId });
     $notice(`reverted batch ${batchId}`);
     await refresh();
   } catch (error) {
     $error(error.message);
+  } finally {
+    actionBusy = false;
   }
 }
-async function rejectProposal(proposalId, permanent) {
-  try {
-    const result = await call("tool.reject", { proposalId, permanent });
-    $notice(result.permanent ? "rejected and remembered" : "rejected");
-    await refresh();
-  } catch (error) {
-    $error(error.message);
-  }
-}
-function diffRows(before, after, language = "java") {
+function diffRows(before, after, language = "java", wholeFile2 = true) {
   const lines = document.createElement("div");
   lines.className = "diff-lines";
-  const diff = lineDiff2(before, after);
+  const side = document.createElement("div");
+  side.className = "diff-side";
+  const head = document.createElement("div");
+  head.className = "diff-side-head";
+  head.append(textElement("span", "Before"), textElement("span", "After"));
+  side.append(head);
+  const wordRanges = [];
+  const rows = lineDiffRows(before, after);
   let oldLine = 1;
   let newLine = 1;
-  for (const entry of diff) {
-    const row = document.createElement("div");
-    row.className = `diff-line${entry.kind === "add" ? " add" : entry.kind === "remove" ? " remove" : ""}`;
-    const old = document.createElement("span");
-    old.className = "ln";
-    old.textContent = entry.kind === "add" ? "" : String(oldLine);
-    if (entry.kind !== "add") oldLine++;
-    const next = document.createElement("span");
-    next.className = "ln";
-    next.textContent = entry.kind === "remove" ? "" : String(newLine);
-    if (entry.kind !== "remove") newLine++;
-    const sign = document.createElement("span");
-    sign.className = "sign";
-    sign.textContent = entry.kind === "add" ? "+" : entry.kind === "remove" ? "-" : " ";
-    const content = document.createElement("code");
-    content.className = `diff-code language-${language}`;
-    content.textContent = entry.text;
-    row.append(old, next, sign, content);
-    lines.append(row);
+  for (const row of rows) {
+    if (!wholeFile2 && row.kind === "same") {
+      if (row.left !== null) oldLine++;
+      if (row.right !== null) newLine++;
+      continue;
+    }
+    const line = document.createElement("div");
+    line.className = `side-line ${row.kind}`;
+    const leftCell = sideCell(row.left, row.left === null ? null : oldLine, "left", language, row.kind);
+    const rightCell = sideCell(row.right, row.right === null ? null : newLine, "right", language, row.kind);
+    if (row.kind === "change") {
+      addWordRanges(row.left, row.right, leftCell.code, rightCell.code, wordRanges);
+    } else if (row.kind === "remove") {
+      addFullRange(leftCell.code, "word-remove", wordRanges);
+    } else if (row.kind === "add") {
+      addFullRange(rightCell.code, "word-add", wordRanges);
+    }
+    line.append(leftCell, rightCell);
+    if (row.left !== null) oldLine++;
+    if (row.right !== null) newLine++;
+    side.append(line);
   }
+  lines._wordRanges = wordRanges;
+  lines.append(side);
   return lines;
+}
+function textElement(tag, text) {
+  const element = document.createElement(tag);
+  element.textContent = text;
+  return element;
+}
+function sideCell(text, lineNumber, side, language, kind) {
+  const cell = document.createElement("div");
+  cell.className = `side-cell ${side}${kind === "same" ? "" : ` ${kind}`}`;
+  if (text === null) {
+    cell.classList.add("empty");
+    return cell;
+  }
+  const number = document.createElement("span");
+  number.className = "ln";
+  number.textContent = lineNumber === null ? "" : String(lineNumber);
+  const code = document.createElement("code");
+  code.className = `diff-code language-${language}`;
+  code.textContent = text;
+  cell.code = code;
+  cell.append(number, code);
+  return cell;
+}
+function addWordRanges(left, right, leftCode, rightCode, ranges) {
+  if (!leftCode || !rightCode) return;
+  let leftOffset = 0;
+  let rightOffset = 0;
+  for (const part of diffWordsWithSpace(left, right)) {
+    const length = part.value.length;
+    if (part.added) {
+      addRange(rightCode, rightOffset, rightOffset + length, "word-add", ranges);
+      rightOffset += length;
+    } else if (part.removed) {
+      addRange(leftCode, leftOffset, leftOffset + length, "word-remove", ranges);
+      leftOffset += length;
+    } else {
+      leftOffset += length;
+      rightOffset += length;
+    }
+  }
+}
+function addFullRange(code, kind, ranges) {
+  if (code) addRange(code, 0, code.textContent.length, kind, ranges);
+}
+function addRange(code, start, end, kind, ranges) {
+  if (code && end > start) ranges.push({ code, start, end, kind });
+}
+function lineDiffRows(before, after) {
+  const left = normalizeDiffText(before);
+  const right = normalizeDiffText(after);
+  const parts = diffLines(left, right);
+  const removed = [];
+  const added = [];
+  const rows = [];
+  const flush = () => {
+    const count = Math.max(removed.length, added.length);
+    for (let index = 0; index < count; index++) {
+      const beforeLine = index < removed.length ? removed[index] : null;
+      const afterLine = index < added.length ? added[index] : null;
+      rows.push({
+        left: beforeLine,
+        right: afterLine,
+        kind: beforeLine !== null && afterLine !== null ? "change" : beforeLine !== null ? "remove" : "add"
+      });
+    }
+    removed.length = 0;
+    added.length = 0;
+  };
+  for (const part of parts) {
+    const lines = part.value.split("\n");
+    if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    if (part.added) added.push(...lines);
+    else if (part.removed) removed.push(...lines);
+    else {
+      flush();
+      for (const line of lines) rows.push({ left: line, right: line, kind: "same" });
+    }
+  }
+  flush();
+  if (rows.length === 1 && rows[0].left === "" && rows[0].right === "") return [];
+  return rows;
+}
+function normalizeDiffText(text) {
+  return String(text || "").replace(/\r\n?/g, "\n");
 }
 async function highlightDiffs(root) {
   const microlighter = window.microlighter;
-  if (!microlighter || typeof microlighter.highlightAll !== "function") return;
-  if (typeof CSS === "undefined" || !CSS.highlights || typeof Highlight !== "function") return;
-  try {
-    await microlighter.highlightAll({ root, selector: "code.diff-code" });
-  } catch {
-  }
-}
-function lineDiff2(before, after) {
-  const out = [];
-  for (const part of diffLines(before || "", after || "")) {
-    const lines = part.value.split("\n");
-    if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-    for (const text of lines) {
-      out.push({ kind: part.added ? "add" : part.removed ? "remove" : "same", text });
+  const hasHighlight = typeof CSS !== "undefined" && Boolean(CSS.highlights) && typeof Highlight === "function";
+  if (microlighter && typeof microlighter.highlightAll === "function" && hasHighlight) {
+    try {
+      await microlighter.highlightAll({ root, selector: "code.diff-code" });
+    } catch {
     }
   }
-  if (out.length === 1 && out[0].text === "") return [];
-  return out;
+  if (!hasHighlight) return;
+  const wordRanges = [];
+  for (const lines of root.querySelectorAll(".diff-lines")) {
+    if (Array.isArray(lines._wordRanges)) wordRanges.push(...lines._wordRanges);
+  }
+  for (const kind of ["word-add", "word-remove"]) CSS.highlights.delete(kind);
+  const groups = /* @__PURE__ */ new Map();
+  for (const entry of wordRanges) {
+    const code = entry.code;
+    const node = code?.firstChild;
+    if (!code || !node || node.nodeType !== Node.TEXT_NODE) continue;
+    const range = document.createRange();
+    range.setStart(node, Math.min(entry.start, node.textContent.length));
+    range.setEnd(node, Math.min(entry.end, node.textContent.length));
+    if (range.collapsed) continue;
+    if (!groups.has(entry.kind)) groups.set(entry.kind, new Highlight());
+    groups.get(entry.kind).add(range);
+  }
+  for (const [kind, highlight] of groups) CSS.highlights.set(kind, highlight);
 }
 insert(document.getElementById("page"), /* @__PURE__ */ jsx("div", { class: "agent-shell", children: [
   /* @__PURE__ */ jsx("header", { class: "top", children: [
@@ -1251,17 +1760,20 @@ insert(document.getElementById("page"), /* @__PURE__ */ jsx("div", { class: "age
     /* @__PURE__ */ jsx("p", { class: "error", children: $error }),
     /* @__PURE__ */ jsx("span", { class: "notice", children: $notice })
   ] }),
-  /* @__PURE__ */ jsx("section", { children: [
-    /* @__PURE__ */ jsx("div", { class: "section-head", children: /* @__PURE__ */ jsx("h2", { children: "Tools" }) }),
-    /* @__PURE__ */ jsx("div", { class: "actions", id: "tools" })
-  ] }),
-  /* @__PURE__ */ jsx("section", { children: [
-    /* @__PURE__ */ jsx("div", { class: "section-head", children: [
-      /* @__PURE__ */ jsx("h2", { children: "Changes" }),
-      /* @__PURE__ */ jsx("button", { type: "button", onclick: () => void refresh(), children: "Refresh" })
+  /* @__PURE__ */ jsx("div", { id: "catalog-view", children: [
+    /* @__PURE__ */ jsx("section", { children: [
+      /* @__PURE__ */ jsx("div", { class: "section-head", children: /* @__PURE__ */ jsx("h2", { children: "Tools" }) }),
+      /* @__PURE__ */ jsx("div", { class: "actions", id: "tools" })
     ] }),
-    /* @__PURE__ */ jsx("div", { class: "actions", id: "batches" })
-  ] })
+    /* @__PURE__ */ jsx("section", { children: [
+      /* @__PURE__ */ jsx("div", { class: "section-head", children: [
+        /* @__PURE__ */ jsx("h2", { children: "Changes" }),
+        /* @__PURE__ */ jsx("button", { type: "button", onclick: () => void refresh(), children: "Refresh" })
+      ] }),
+      /* @__PURE__ */ jsx("div", { class: "actions", id: "batches" })
+    ] })
+  ] }),
+  /* @__PURE__ */ jsx("div", { id: "batch-view", hidden: true })
 ] }));
 void refresh();
 setInterval(() => {

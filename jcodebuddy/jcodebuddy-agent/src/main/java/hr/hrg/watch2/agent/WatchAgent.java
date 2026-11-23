@@ -41,6 +41,23 @@ public class WatchAgent {
         }
 
         AgentMethods methods = new AgentMethods(root);
+        String configurationProblem = methods.tools().configurationProblem();
+        if (!configurationProblem.isBlank()) {
+            System.err.println("JCodeBuddy Agent cannot start: " + configurationProblem);
+            System.err.println("Configure the generated tool annotations in "
+                    + root.resolve(".jcodebuddy/conf/agent.json") + ". Example:");
+            System.err.println("""
+                    {
+                      "annotations": {
+                        "module": "core",
+                        "sourceRoot": "core/src/main/java",
+                        "package": "com.example.annotations"
+                      }
+                    }
+                    """.stripTrailing());
+            System.exit(2);
+            return;
+        }
         ProjectWatcher watcher = new ProjectWatcher(root, methods.tools()::onChanged);
         methods.setWatcher(watcher);
         watcher.start();

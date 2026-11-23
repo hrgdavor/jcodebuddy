@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A Java client for the fs-meta daemon's Unix-socket protocol (`FORMAT.socket.md`).
@@ -587,6 +589,7 @@ public final class FsMetaClient implements AutoCloseable {
     public static final class ProtocolException extends IOException {
 
         private static final long serialVersionUID = 1L;
+        private static final Pattern NEWEST_BATCH = Pattern.compile("newest batch (\\d+)");
 
         private final int code;
 
@@ -598,6 +601,15 @@ public final class FsMetaClient implements AutoCloseable {
         /** The {@code u16} code from the payload, or {@code 0} when the frame did not carry one. */
         public int code() {
             return code;
+        }
+
+        /**
+         * The archive's newest batch named by a "from_batch is newer than the newest batch" refusal, or
+         * {@code -1} when this refusal is not that shape.
+         */
+        public long newestBatch() {
+            Matcher matcher = NEWEST_BATCH.matcher(getMessage());
+            return matcher.find() ? Long.parseLong(matcher.group(1)) : -1;
         }
 
         /** Whether the replay cannot continue where the client asked, so a full read is the only safe answer. */

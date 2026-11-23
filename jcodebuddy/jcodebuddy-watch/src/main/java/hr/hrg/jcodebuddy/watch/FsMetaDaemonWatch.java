@@ -252,6 +252,18 @@ public final class FsMetaDaemonWatch implements AutoCloseable {
      */
     private boolean recover(FsMetaClient.ProtocolException refusal) {
         lastError = refusal.getMessage();
+        // A no-op pass advances the daemon's generation without publishing a batch, so the greeting's
+        // generation can be newer than the archive's newest batch. Reconnecting "at LATEST" repeats that
+        // same invalid position; resume at the newest batch the refusal names instead.
+        if (refusal.code() == FsMetaClient.ERROR_PROTOCOL) {
+            long newest = refusal.newestBatch();
+            if (newest >= 0 && newest < lastApplied) {
+                System.err.println("fs-meta: generation " + lastApplied + " is newer than the newest batch "
+                        + newest + "; resuming at batch " + newest);
+                lastApplied = newest;
+                return reconnect(newest);
+            }
+        }
         if (!isReplayRefusal(refusal.code(), lastApplied)) {
             running = false;
             return false;
@@ -319,5 +331,6 @@ public final class FsMetaDaemonWatch implements AutoCloseable {
             // Subscribed at the head: that head is the generation this consumer now describes.
             lastApplied = next.serverGeneration();
         }
+        lastError = "";
     }
 }

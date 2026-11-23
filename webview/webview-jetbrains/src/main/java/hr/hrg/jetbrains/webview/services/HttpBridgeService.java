@@ -9,8 +9,11 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationNamesInfo;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.options.ShowSettingsUtil;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileAdapter;
 import com.intellij.openapi.vfs.VirtualFileEvent;
@@ -1212,6 +1215,13 @@ public final class HttpBridgeService {
             send(exchange, 405, "Method Not Allowed", "text/plain");
             return;
         }
+        // The agent refreshes files it just wrote through a loopback-only request. The route is
+        // path-jailed and changes no bytes; external callers still need the token.
+        if (path.equals("/api/v1/refresh") && isLoopback(exchange)) {
+            refreshFiles(exchange, new String(exchange.getRequestBody().readAllBytes(),
+                    StandardCharsets.UTF_8));
+            return;
+        }
         if (!isAuthorizedWrite(exchange)) {
             LOG.warn("WebView HTTP bridge: refused a write to " + path
                     + (token.isEmpty() ? " (no token configured)" : " (token missing or wrong)"));
@@ -1219,6 +1229,10 @@ public final class HttpBridgeService {
             return;
         }
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        if (path.equals("/api/v1/refresh")) {
+            refreshFiles(exchange, body);
+            return;
+        }
         WriteSurface surface = writeSurface();
         WriteSurface.Answer answer = switch (path) {
             case "/api/v1/applyEdit" -> surface.applyEdit(body);
@@ -1235,6 +1249,53 @@ public final class HttpBridgeService {
             LOG.warn("WebView HTTP bridge: " + path + " refused with " + answer.status());
         }
         send(exchange, answer.status(), answer.body(), "application/json");
+    }
+
+    /**
+     * Refresh open documents after a tool wrote the file on disk. The agent writes through its own
+     * coordinator, not this bridge's buffer edit route, so the IDE's VFS poll can race the user's next
+     * keystroke. The route is token-protected like the other write routes; a modified buffer is left alone
+     * rather than silently overwritten.
+     */
+    private void refreshFiles(@NotNull HttpExchange exchange, @NotNull String body) throws IOException {
+        Set<String> paths = new LinkedHashSet<>();
+        try {
+            JsonObject request = JsonParser.parseString(body).getAsJsonObject();
+            JsonElement list = request.get("paths");
+            if (list != null && list.isJsonArray()) {
+                for (JsonElement element : list.getAsJsonArray()) paths.add(element.getAsString());
+            } else if (request.has("path")) {
+                paths.add(request.get("path").getAsString());
+            }
+        } catch (RuntimeException malformed) {
+            send(exchange, 400, "{\"error\":\"invalid refresh body\"}", "application/json");
+            return;
+        }
+        String root = project.getBasePath();
+        int refreshed = 0;
+        if (root != null) {
+            Path projectRoot = Path.of(root).toAbsolutePath().normalize();
+            for (String raw : paths) {
+                Path absolute;
+                try {
+                    absolute = Path.of(raw).toAbsolutePath().normalize();
+                } catch (RuntimeException invalid) {
+                    continue;
+                }
+                if (!absolute.startsWith(projectRoot)) continue;
+                VirtualFile file = LocalFileSystem.getInstance().findFileByPath(absolute.toString());
+                if (file == null || !file.isValid()) continue;
+                ApplicationManager.getApplication().invokeAndWait(() -> {
+                    file.refresh(false, false);
+                    Document document = FileDocumentManager.getInstance().getDocument(file);
+                    if (document != null && !FileDocumentManager.getInstance().isFileModified(file)) {
+                        FileDocumentManager.getInstance().reloadFromDisk(document);
+                    }
+                });
+                refreshed++;
+            }
+        }
+        send(exchange, 200, "{\"refreshed\":" + refreshed + "}", "application/json");
     }
 
     /**
@@ -1421,6 +1482,11 @@ public final class HttpBridgeService {
     }
 
     /** The token-only rule for a state-changing route. */
+    private boolean isLoopback(@NotNull HttpExchange exchange) {
+        if (!(exchange.getRemoteAddress() instanceof InetSocketAddress remote)) return false;
+        return remote.getAddress() != null && remote.getAddress().isLoopbackAddress();
+    }
+
     private boolean isAuthorizedWrite(@NotNull HttpExchange exchange) {
         String supplied = exchange.getRequestHeaders().getFirst("X-WebView-Token");
         if (supplied == null) {

@@ -27,6 +27,7 @@ import java.util.function.Consumer;
  */
 public class ProjectWatcher {
     private static final Logger log = LoggerFactory.getLogger(ProjectWatcher.class);
+    private static final long RETRY_BACKOFF_MS = 10_000;
 
     private final Path root;
     private final Consumer<List<Path>> batchListener;
@@ -35,6 +36,7 @@ public class ProjectWatcher {
 
     private volatile boolean live;
     private volatile String attachProblem = "";
+    private volatile long retryNotBefore;
 
     public ProjectWatcher(Path root, Consumer<List<Path>> batchListener) {
         this(root, batchListener, FsMetaDaemonDiscovery.discover(root));
@@ -63,7 +65,7 @@ public class ProjectWatcher {
                 : this.attach.problem();
     }
 
-    public void start() throws IOException {
+    public synchronized void start() throws IOException {
         if (daemonWatch == null) {
             live = false;
             attachProblem = attach.problem();
@@ -74,10 +76,10 @@ public class ProjectWatcher {
             daemonWatch.start();
             live = daemonWatch.isRunning();
             if (live) {
+                attachProblem = "";
                 log.info("Project watcher attached to the fs-meta daemon socket {}", daemonWatch.socket());
             } else {
-                attachProblem = "the fsmeta daemon socket " + daemonWatch.socket()
-                        + " could not be subscribed: " + daemonWatch.lastError();
+                attachProblem = failure(daemonWatch.lastError());
                 log.warn("Project watcher is not watching {}: {}", root, attachProblem);
             }
         } catch (IOException failed) {
@@ -86,6 +88,40 @@ public class ProjectWatcher {
                     + failed.getMessage();
             log.warn("Project watcher is not watching {}: {}", root, attachProblem);
         }
+    }
+
+    /**
+     * Reconnect a subscription that the daemon dropped. The status endpoint calls this on every poll, so a dead
+     * reader is repaired without restarting the agent; a head replay is safe because the overflow batch asks the
+     * consumer for a full pass.
+     */
+    public synchronized boolean ensureLive() {
+        if (live()) {
+            retryNotBefore = 0;
+            return true;
+        }
+        if (daemonWatch == null) return false;
+        long now = System.currentTimeMillis();
+        if (now < retryNotBefore) return false;
+        // Keep the backoff armed until a later status observation sees a stable live subscription. A start
+        // that dies immediately must not make the next 1.5 s poll start another reader.
+        retryNotBefore = now + RETRY_BACKOFF_MS;
+        stop();
+        try {
+            start();
+        } catch (IOException failed) {
+            live = false;
+            attachProblem = "cannot resubscribe to the fsmeta daemon at " + daemonWatch.socket() + ": "
+                    + failed.getMessage();
+            log.warn("Project watcher is not watching {}: {}", root, attachProblem);
+        }
+        return live();
+    }
+
+    private String failure(String error) {
+        return error == null || error.isBlank()
+                ? "the fsmeta daemon subscription stopped without an error"
+                : "the fsmeta daemon subscription stopped: " + error;
     }
 
     public void stop() {
@@ -99,7 +135,11 @@ public class ProjectWatcher {
     }
 
     public String attachProblem() {
-        return live() ? "" : attachProblem;
+        if (live()) return "";
+        if (live && daemonWatch != null) {
+            return failure(daemonWatch.lastError());
+        }
+        return attachProblem;
     }
 
     public Optional<Path> daemonSocket() {

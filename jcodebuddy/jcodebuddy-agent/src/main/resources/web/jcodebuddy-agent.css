@@ -114,6 +114,62 @@ button:focus-visible { outline: 2px solid var(--jcb-accent); outline-offset: 2px
 ::highlight(link) { color: var(--syntax-function); }
 ::highlight(inserted) { color: var(--syntax-inserted); }
 ::highlight(deleted) { color: var(--syntax-deleted); }
+
+.diff-side-head, .side-line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.diff-side-head { color: var(--jcb-muted); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .06em; padding: 0 4px 4px; }
+.side-line { margin: 1px 0; }
+.side-cell { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 4px; min-width: 0;
+  border-radius: 4px; background: #fbfbfa; padding: 1px 4px; }
+.side-cell.empty { background: transparent; }
+.side-cell.add { background: #e9f8ee; }
+.side-cell.remove { background: #fff0f0; }
+.side-cell.change.left { background: #fff0f0; }
+.side-cell.change.right { background: #e9f8ee; }
+.side-cell .ln { color: var(--jcb-muted); text-align: right; font: 12px/1.55 ui-monospace, Consolas, monospace;
+  user-select: none; }
+.side-cell code { white-space: pre-wrap; overflow-wrap: anywhere; }
+::highlight(word-add) { background-color: #a8e6b4; }
+::highlight(word-remove) { background-color: #ffb3b3; }
+
+.batch-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  margin: 14px 0 10px; }
+.batch-detail-head h2 { margin: 0 0 3px; }
+.batch-state { border-radius: 8px; padding: 9px 12px; font-size: 13px; margin-bottom: 14px;
+  border: 1px solid var(--jcb-line); background: #fff; }
+.batch-state.applied { color: #166534; background: #ecfdf3; border-color: #a7f3c0; font-weight: 600; }
+.batch-state.partial { color: #92400e; background: #fff7ed; border-color: #fed7aa; }
+.batch-state.pending { color: var(--jcb-muted); }
+.batch-layout { display: grid; grid-template-columns: minmax(240px, 22vw) minmax(0, 1fr); gap: 16px;
+  align-items: stretch; height: calc(100vh - 260px); min-height: 420px; }
+.batch-files { background: var(--jcb-surface); border: 1px solid var(--jcb-line); border-radius: var(--jcb-radius);
+  padding: 10px; height: 100%; overflow: auto; box-sizing: border-box; }
+.batch-files h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--jcb-muted); }
+.batch-file { display: grid; gap: 2px; width: 100%; text-align: left; border: 1px solid transparent;
+  border-radius: 6px; background: transparent; padding: 7px 8px; cursor: pointer; color: var(--jcb-text); }
+.batch-file:hover { background: #fff; border-color: var(--jcb-line); }
+.batch-file.selected { background: #fff; border-color: var(--jcb-accent); }
+.batch-file.applied .batch-file-state { color: var(--jcb-good); }
+.batch-file-path { font: 11.5px/1.4 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.batch-file-state { font-size: 11px; color: var(--jcb-muted); }
+.batch-diff { border: 1px solid var(--jcb-line); border-radius: var(--jcb-radius); background: #fff;
+  padding: 10px; min-width: 0; min-height: 0; height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column; overflow: hidden; }
+.batch-diff.applied { border-color: #a7f3c0; }
+.batch-diff-head { display: flex; justify-content: space-between; gap: 10px; padding: 2px 2px 8px;
+  overflow-wrap: anywhere; }
+.batch-diff-head strong { font-size: 12.5px; font-family: ui-monospace, Consolas, monospace; }
+.batch-diff .diff-lines { flex: 1; min-height: 0; overflow: auto; padding-top: 6px; }
+.batch-diff .diff-side { min-width: 720px; }
+.card.batch.applied { border-color: #a7f3c0; background: #fbfffc; }
+button:disabled { opacity: .45; cursor: default; }
+body.batch-mode .agent-shell { max-width: none; width: 100%; padding: 18px 22px 24px; }
+@media (max-width: 760px) {
+  .batch-layout { grid-template-columns: 1fr; height: auto; }
+  .batch-files { position: static; height: 220px; }
+  .batch-diff { height: 65vh; }
+}
 .button-link { display: inline-block; border: 1px solid var(--jcb-line-strong); border-radius: 7px;
   padding: 6px 10px; color: var(--jcb-text); text-decoration: none; background: #fff; }
 .button-link:hover { border-color: var(--jcb-muted); }

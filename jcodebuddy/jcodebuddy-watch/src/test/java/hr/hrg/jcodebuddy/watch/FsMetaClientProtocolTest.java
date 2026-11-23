@@ -38,6 +38,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FsMetaClientProtocolTest {
 
     @Test
+    void protocolRefusalCarriesTheNewestBatchItNames() {
+        FsMetaClient.ProtocolException refusal = new FsMetaClient.ProtocolException(
+                FsMetaClient.ERROR_PROTOCOL,
+                "protocol: from_batch 461 is newer than the newest batch 454");
+        assertEquals(454, refusal.newestBatch(),
+                "the watcher resumes at the archived batch instead of reconnecting at the invalid generation");
+        assertEquals(-1, new FsMetaClient.ProtocolException(FsMetaClient.ERROR_PROTOCOL, "protocol: bad hello")
+                .newestBatch());
+    }
+
+    @Test
     void batchTooOldIsReportedByItsCode() throws Exception {
         FakeServer server = FakeServer.start();
         server.reply(hello(7), error(FsMetaClient.ERROR_BATCH_TOO_OLD, "batch-too-old: no batch 1"));

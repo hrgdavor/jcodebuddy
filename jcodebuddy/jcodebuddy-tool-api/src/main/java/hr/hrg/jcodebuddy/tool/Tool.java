@@ -1,5 +1,7 @@
 package hr.hrg.jcodebuddy.tool;
 
+import java.util.List;
+
 /** A tool: it previews a change and leaves applying it to the coordinator. */
 public interface Tool {
 
@@ -9,6 +11,20 @@ public interface Tool {
 
     default String version() {
         return "1";
+    }
+
+    /**
+     * Generated type sources this tool contributes to the configured marker module. These may be
+     * annotations, records or other types; configuration instances and static fields are project code and
+     * are not included here.
+     */
+    default List<ProjectMarker> projectMarkers() {
+        return List.of();
+    }
+
+    /** The annotation simple name this tool uses for opt-in, or empty when it has no annotation marker. */
+    default String markerAnnotation() {
+        return "";
     }
 
     /** A standalone page relative to the app root, or null when the tool has no UI yet. */

@@ -59,11 +59,23 @@ final class RecordBuilderEmitter {
         String body = source.substring(bodyOpen + 1, bodyClose);
         String builder = renderBuilder(recordName, components, memberIndent, builderMemberIndent);
 
-        return source.substring(0, bodyOpen + 1)
-                + stripPreviousBuilder(body)
+        String previous = stripPreviousBuilder(body);
+        String separator = previous.endsWith("\n") ? "" : nl();
+        String generated = separator + memberIndent + REGION_BEGIN
                 + generatedMembers(recordName, components, memberIndent)
-                + joinBody(builder, recordIndent)
-                + source.substring(bodyClose);
+                + nl() + builder + nl() + memberIndent + REGION_END;
+        return source.substring(0, bodyOpen + 1)
+                + previous
+                + generated
+                + nl() + recordIndent + source.substring(bodyClose);
+    }
+
+    private static final String REGION_BEGIN =
+            "// @generated region begin record-builder hr.hrg.jcodebuddy.builder.RecordBuilderEmitter";
+    private static final String REGION_END = "// @generated region end record-builder";
+
+    private static String nl() {
+        return System.lineSeparator();
     }
 
     /**
@@ -81,6 +93,7 @@ final class RecordBuilderEmitter {
      * only the nodes it knew.</p>
      */
     private static String stripPreviousBuilder(String body) {
+        body = stripRegion(body);
         StringBuilder kept = new StringBuilder();
         int index = 0;
         while (index < body.length()) {
@@ -113,6 +126,18 @@ final class RecordBuilderEmitter {
             index = end + 1;
         }
         return kept.toString();
+    }
+
+    /** Remove a previous marker-delimited generated region, including both marker lines. */
+    private static String stripRegion(String body) {
+        int begin = body.indexOf(REGION_BEGIN);
+        if (begin < 0) return body;
+        int start = body.lastIndexOf('\n', begin) + 1;
+        int endMarker = body.indexOf(REGION_END, begin);
+        if (endMarker < 0) return body;
+        int end = body.indexOf('\n', endMarker);
+        end = end < 0 ? body.length() : end + 1;
+        return body.substring(0, start) + body.substring(end);
     }
 
     /**

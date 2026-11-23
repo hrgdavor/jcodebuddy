@@ -907,6 +907,29 @@ supersedes the "iterate fast, then verify with the gate" habit **for this scope*
   `hr.hrg:wyhash` reaches a consumer the ordinary way — a released artifact, or the local repository.
   `check-watch-standalone.js` reads the rule the same way — its regexes never matched these coordinates, and its
   header now says why that is a decision rather than luck.
+## 2.1 Incremental by Default, Full Rebuild Only to Recover Consistency (mandatory)
+
+> We must conform to maximize incremental usage and watching for all processing and report when incosistencies
+> arise so they can be flushed out, and full rebuilds are only then done to get to consistent state.
+
+Every processing path that can be incremental must be:
+
+- driven by the `fs-meta` daemon and its **batch identifiers/generations**;
+- checked against the **hashes** the previous successful pass recorded, not by a timestamp guess;
+- a no-op when no relevant batch or hash changed;
+- explicit about the difference between "nothing to do" and "the state cannot be trusted".
+
+A full rebuild is a **recovery path**, not the default and not a cheap way to avoid an incremental design. When
+an incremental decision, replay, hash check or validation fails, the tool must:
+
+1. report the concrete inconsistency in its output;
+2. say that it is rebuilding to a consistent state;
+3. run the full rebuild;
+4. record the new baseline only after the rebuild succeeds.
+
+Do not silently fall back to a full rebuild on every run, and do not swallow a replay/state refusal as "nothing
+changed". The same rule applies to metadata refreshes, generation passes, report inputs and test selection.
+
 ## 3. Notes for whoever reads next
 
 - **`proto/` is a local workspace, not a checkout target.** The whole directory is gitignored with no

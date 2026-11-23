@@ -28,6 +28,9 @@ public final class AgentToolConfig {
 
     private final Map<String, String> activation = new LinkedHashMap<>();
     private final Map<String, String> mode = new LinkedHashMap<>();
+    private String annotationModule = "";
+    private String annotationSourceRoot = "";
+    private String annotationPackage = "";
 
     public static AgentToolConfig read(Path projectRoot) {
         AgentToolConfig config = new AgentToolConfig();
@@ -36,6 +39,12 @@ public final class AgentToolConfig {
         if (!Files.isRegularFile(file)) return config;
         try {
             Map<?, ?> root = MAPPER.readValue(Files.readString(file), Map.class);
+            Object annotations = root.get("annotations");
+            if (annotations instanceof Map<?, ?> map) {
+                config.annotationModule = text(map.get("module"));
+                config.annotationSourceRoot = text(map.get("sourceRoot"));
+                config.annotationPackage = text(map.get("package"));
+            }
             Object tools = root.get("tools");
             if (tools instanceof Map<?, ?> map) {
                 for (Map.Entry<?, ?> entry : map.entrySet()) {
@@ -81,5 +90,70 @@ public final class AgentToolConfig {
     public boolean active(String toolId) {
         return "active".equals(mode(toolId)) || "apply".equals(mode(toolId))
                 || "active".equals(activation(toolId));
+    }
+
+    /** The configured project-local marker annotation package root, or empty when unconfigured. */
+    public String annotationPackage() {
+        return annotationPackage;
+    }
+
+    /** The configured annotation source root, or empty when unconfigured. */
+    public String annotationSourceRoot() {
+        return annotationSourceRoot;
+    }
+
+    /** The configured annotation module, or empty when unconfigured. */
+    public String annotationModule() {
+        return annotationModule;
+    }
+
+    /**
+     * Why tool annotations cannot be created, or an empty string when module/sourceRoot/package are set.
+     * A missing annotation file is not a problem: {@link #ensureAnnotation} creates it.
+     */
+    public String annotationProblem() {
+        if (annotationModule.isBlank() || annotationSourceRoot.isBlank() || annotationPackage.isBlank()) {
+            return "tool annotations are not configured; set annotations.module, annotations.sourceRoot "
+                    + "and annotations.package in .jcodebuddy/conf/agent.json";
+        }
+        return "";
+    }
+
+    /**
+     * Ensure the project has {@code annotationName.java} in the configured annotation module/package. The
+     * tool owns the annotation and creates it when absent, so a user does not have to know or maintain
+     * annotation files. Returns an error only when the location is unconfigured or unsafe, or the write fails.
+     */
+    public String ensureAnnotation(Path projectRoot, String annotationName) {
+        String problem = annotationProblem();
+        if (!problem.isBlank()) return problem;
+        String relative = annotationPackage.replace('.', '/') + "/" + annotationName + ".java";
+        String sourceRootPath = annotationSourceRoot.replace('\\', '/').endsWith("/")
+                ? annotationSourceRoot : annotationSourceRoot + "/";
+        Path file = projectRoot.resolve(sourceRootPath).resolve(relative).normalize();
+        if (!file.startsWith(projectRoot)) {
+            return "the configured annotation module '" + annotationModule + "' resolves outside the project";
+        }
+        if (Files.isRegularFile(file)) return "";
+        try {
+            Files.createDirectories(file.getParent());
+            String eol = System.lineSeparator();
+            String source = "package " + annotationPackage + ";" + eol + eol
+                    + "import java.lang.annotation.ElementType;" + eol
+                    + "import java.lang.annotation.Retention;" + eol
+                    + "import java.lang.annotation.RetentionPolicy;" + eol
+                    + "import java.lang.annotation.Target;" + eol + eol
+                    + "@Retention(RetentionPolicy.SOURCE)" + eol
+                    + "@Target(ElementType.TYPE)" + eol
+                    + "public @interface " + annotationName + " {" + eol + "}" + eol;
+            Files.writeString(file, source);
+            return "";
+        } catch (IOException failed) {
+            return "cannot create annotation " + annotationName + " at " + file + ": " + failed.getMessage();
+        }
+    }
+
+    private static String text(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
     }
 }

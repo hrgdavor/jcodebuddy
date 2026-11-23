@@ -54,6 +54,20 @@ class WriteCoordinatorTest {
     }
 
     @Test
+    void toolsWithoutAnOwnershipClaimMayEditTheSameHandWrittenFile(@TempDir Path root) throws Exception {
+        Path file = root.resolve("A.java");
+        Files.writeString(file, "class A {}\n");
+        WriteCoordinator coordinator = new WriteCoordinator(root);
+        FileProposal first = FileProposal.change(file, coordinator.currentHash(file),
+                "class A {}\n", "class A { int x; }\n", "first");
+        assertTrue(coordinator.apply(first).ok());
+        FileProposal second = FileProposal.change(file, coordinator.currentHash(file),
+                "class A { int x; }\n", "class A { int x; int y; }\n", "second");
+        assertTrue(coordinator.apply(second).ok(),
+                "ownership is opt-in, so ordinary tools must not conflict");
+    }
+
+    @Test
     void rejectsAPathOutsideTheProject(@TempDir Path root) {
         WriteCoordinator coordinator = new WriteCoordinator(root);
         FileProposal proposal = FileProposal.change(root.resolve("..").resolve("outside.java"),

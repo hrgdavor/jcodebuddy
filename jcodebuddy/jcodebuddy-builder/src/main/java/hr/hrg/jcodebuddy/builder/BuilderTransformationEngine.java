@@ -69,12 +69,28 @@ public class BuilderTransformationEngine {
         // its text describe the same span. A whole-file replacement would be simpler to produce and
         // wrong to apply: it would move the cursor and rewrite lines the pass never looked at.
         String recordText = source.substring(target.startOffset(), target.endOffset());
-        String completed = processor.complete(recordText, target.recordName(), target.components());
+        // Keep the declaration's own line indentation visible to the emitter. The replacement starts at
+        // the declaration token, so the prefix is not part of the replaced range; it is removed again
+        // before the CodeEdit is built.
+        String prefix = leadingWhitespace(source, target.startOffset());
+        String completed = processor.complete(prefix + recordText, target.recordName(), target.components());
+        if (!prefix.isEmpty() && completed.startsWith(prefix)) {
+            completed = completed.substring(prefix.length());
+        }
 
         CodeEdit edit = new CodeEdit(uri,
                 target.startLine(), LineLookup.columnOf(source, target.startOffset()),
-                target.endLine(), LineLookup.columnOf(source, target.endOffset()),
+                target.endLine(), LineLookup.columnOf(source, target.endOffset() - 1),
                 completed);
         return new TransformationResult(List.of(edit), Map.of());
+    }
+
+    private static String leadingWhitespace(String source, int offset) {
+        int lineStart = source.lastIndexOf('\n', Math.max(offset - 1, 0)) + 1;
+        int index = lineStart;
+        while (index < offset && (source.charAt(index) == ' ' || source.charAt(index) == '\t')) {
+            index++;
+        }
+        return source.substring(lineStart, index);
     }
 }

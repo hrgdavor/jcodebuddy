@@ -11,10 +11,19 @@ control.
 
 - **fs-meta watching:** one daemon subscription per project root; no private `WatchService`.
 - **Proposal-first tools:** a tool returns before/after text and hashes; it never writes.
-- **Change batches:** one fs-meta event groups its proposals; every file has a jsdiff line diff with
-  microlighter syntax colour, and can be applied or reverted individually or as a whole batch.
+- **Change batches:** the catalog shows one summary row per fs-meta batch — tool, proposal count, file
+  count and applied state. **Open batch** opens the review page with files on the left and a side-by-side
+  jsdiff before/after on the right, with word-level highlights, microlighter syntax colour, and
+  **Changes only** / **Whole file** modes. Files, proposals and whole batches can be applied or reverted.
+  After an apply or revert the agent posts the written paths to the host's loopback-only
+  `/api/v1/refresh`, so an open IntelliJ document reloads instead of presenting a stale buffer on the next
+  keystroke. An unapplied batch is discarded when its file changes again; an undo that leaves the tool with no
+  proposal discards the old batch and creates no replacement. Unchanged batches are not re-rendered, so
+  scrolling stays put.
 - **Review and active modes:** `review` waits for accept; `active` applies through the coordinator and
-  keeps the batch revertible.
+  keeps the batch revertible. Automatic record tooling is opt-in per tool: the record builder requires
+  `GenerateBuilder`, and record/interface sync requires `GenerateRecordInterfaceSync`; unmarked records and
+  interfaces are left untouched.
 - **Permanent refusal:** a tool with a stable case key can remember "do not propose this again" in
   `.jcodebuddy/conf/tool-refusals.json`.
 - **OpenRewrite source model:** Java parsing and queries use OpenRewrite LSTs; generated text is
@@ -24,15 +33,16 @@ control.
 
 ## Tools
 
-| Tool             | Proposal source                    | UI             |
-| ---------------- | ---------------------------------- | -------------- |
-| `builder`        | OpenRewrite `ClassMemberProcessor` | `builder.html` |
-| `record-builder` | `BuilderTransformationEngine`      | catalog        |
-| `accessors`      | OpenRewrite `ClassMemberProcessor` | catalog        |
-| `constructor`    | OpenRewrite `ClassMemberProcessor` | catalog        |
-| `rename`         | `SourceReader` / `TreeQueries`     | catalog        |
-| `hipster-ioc`    | `IocGeneration.render`             | catalog        |
-| `hipster-entity` | temporary-source entity pass       | catalog        |
+| Tool                    | Proposal source                                                                                  | UI             |
+| ----------------------- | ------------------------------------------------------------------------------------------------ | -------------- |
+| `builder`               | OpenRewrite `ClassMemberProcessor`                                                               | `builder.html` |
+| `record-builder`        | `BuilderTransformationEngine`                                                                    | catalog        |
+| `record-interface-sync` | record vs interface, or creates a missing marked record (requires `GenerateRecordInterfaceSync`) | catalog        |
+| `accessors`             | OpenRewrite `ClassMemberProcessor`                                                               | catalog        |
+| `constructor`           | OpenRewrite `ClassMemberProcessor`                                                               | catalog        |
+| `rename`                | `SourceReader` / `TreeQueries`                                                                   | catalog        |
+| `hipster-ioc`           | `IocGeneration.render`                                                                           | catalog        |
+| `hipster-entity`        | temporary-source entity pass                                                                     | catalog        |
 
 ## Build
 
@@ -73,6 +83,11 @@ Tool activation and UI mode are per tool in `.jcodebuddy/conf/agent.json`:
 
 ```json
 {
+  "annotations": {
+    "module": "core",
+    "sourceRoot": "core/src/main/java",
+    "package": "demo.playground.gen"
+  },
   "tools": {
     "builder": { "activation": "explicit", "mode": "review", "ui": "standalone" },
     "hipster-ioc": { "activation": "auto", "mode": "review" },
@@ -80,6 +95,16 @@ Tool activation and UI mode are per tool in `.jcodebuddy/conf/agent.json`:
   }
 }
 ```
+
+`annotations` names the project-local annotation module, source root and package. Each tool contributes its
+own generated type source in that package (`GenerateBuilder.java`, `GenerateRecordInterfaceSync.java`, ...);
+the agent writes it when missing and rewrites it when the tool changes or adds a type. A marker source may
+be an annotation, a record or another type the tool needs. Configuration values — record instances or static
+fields — are ordinary project code and are never generated. Record tools fail with a configuration error
+when the general annotation location is absent. The agent also refuses to start in that case: it prints the
+missing configuration and an example `annotations` block, then exits with status `2`. The generated types
+live in ordinary project source (normally one core module), so no POM needs a dependency just to import
+them.
 
 - `explicit`: only a request from the live webview starts it; a live dashboard is the heartbeat.
 - `auto`: proposals are produced without a live dashboard.
@@ -100,7 +125,9 @@ per-checkout web port/password is not.
 
 The catalog lists tools and the current batches. Each batch shows:
 
-- per-file jsdiff line diffs, coloured by microlighter;
+- a batch catalog with counts only, and a dedicated batch review page with a file list and
+  per-file side-by-side jsdiff before/after, with word-level changes highlighted and microlighter
+  syntax colour;
 - `Apply file` / `Revert file`;
 - `Open file` (host `window.openFile` or the `/jump` relay);
 - `Apply batch` / `Revert batch`;
@@ -129,4 +156,5 @@ A tool preview never writes. `WriteCoordinator` is the single writer for every a
 - atomic temp-file replacement;
 - revert only when the current file is still the proposal's after-state;
 - audit snapshots under `.jcodebuddy/agent/audit/`;
-- generator ownership in `.jcodebuddy/agent/owners.properties`.
+- **opt-in** generator ownership in `.jcodebuddy/agent/owners.properties`. Ordinary code tools claim no
+  owner and may edit the same file; only a tool that genuinely needs exclusive access records an owner.

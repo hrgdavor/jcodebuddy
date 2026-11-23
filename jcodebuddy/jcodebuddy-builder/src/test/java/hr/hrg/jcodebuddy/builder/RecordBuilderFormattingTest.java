@@ -11,6 +11,17 @@ import org.junit.Test;
 public class RecordBuilderFormattingTest {
 
     @Test
+    public void generatedRegionIsIdempotent() {
+        BuilderTransformationEngine engine = new BuilderTransformationEngine("    ");
+        String once = CodeEditApplier.applyStyles("record R(int value) {}\n",
+                engine.generate("R.java", "record R(int value) {}\n", 1).edits());
+        String twice = CodeEditApplier.applyStyles(once,
+                engine.generate("R.java", once, 1).edits());
+        assertEquals("a second pass must reproduce the first:\n" + twice, once, twice);
+        assertEquals(1, countOccurrences(twice, "// @generated region begin record-builder"));
+    }
+
+    @Test
     public void testOutputFormatting() {
         BuilderTransformationEngine engine = new BuilderTransformationEngine("    "); // 4 space indent
         String code = "@GenerateBuilder public record TestRecord(String name) {}";
@@ -82,6 +93,8 @@ public class RecordBuilderFormattingTest {
 
         int count = countOccurrences(applied, "}");
         assertEquals("Should have exactly 7 closing braces", 7, count);
+        assertTrue("The declaration after the record must keep its own line:\n" + applied,
+                applied.contains("}\n\npublic class Other"));
     }
 
     @Test
@@ -101,6 +114,8 @@ public class RecordBuilderFormattingTest {
 
         int count = countOccurrences(applied, "}");
         assertEquals("Should have exactly 7 closing braces", 7, count);
+        assertTrue("The outer class must keep its own closing line:\n" + applied,
+                applied.contains("    }\n}"));
     }
 
     private int countOccurrences(String text, String target) {

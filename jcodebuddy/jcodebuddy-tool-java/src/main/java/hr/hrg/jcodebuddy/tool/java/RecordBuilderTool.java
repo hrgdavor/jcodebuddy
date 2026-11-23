@@ -1,9 +1,11 @@
 package hr.hrg.jcodebuddy.tool.java;
 
 import hr.hrg.jcodebuddy.builder.BuilderTransformationEngine;
+import hr.hrg.jcodebuddy.builder.RecordBuilderProcessor;
 import hr.hrg.jcodebuddy.builder.api.edit.TransformationResult;
 import hr.hrg.jcodebuddy.builder.edit.CodeEditApplier;
 import hr.hrg.jcodebuddy.tool.FileProposal;
+import hr.hrg.jcodebuddy.tool.ProjectMarker;
 import hr.hrg.jcodebuddy.tool.Tool;
 import hr.hrg.jcodebuddy.tool.ToolProposal;
 import hr.hrg.jcodebuddy.tool.ToolRefusal;
@@ -47,6 +49,28 @@ public final class RecordBuilderTool implements Tool {
     }
 
     @Override
+    public String markerAnnotation() {
+        return "GenerateBuilder";
+    }
+
+    @Override
+    public List<ProjectMarker> projectMarkers() {
+        return List.of(new ProjectMarker("GenerateBuilder", "Record builder opt-in marker",
+                "@Retention(RetentionPolicy.SOURCE)\n"
+                        + "@Target(ElementType.TYPE)\n"
+                        + "public @interface GenerateBuilder {\n"
+                        + "}\n"));
+    }
+
+    /**
+     * Automatic fs-meta proposals are opt-in for records: only a record carrying {@code @GenerateBuilder}
+     * is completed without a manual request. The explicit tool invocation still works on any record.
+     */
+    public boolean autoEligible(String source) {
+        return source != null && !new RecordBuilderProcessor("    ").annotatedRecords(source).isEmpty();
+    }
+
+    @Override
     public ToolProposal preview(ToolRequest request) throws ToolRefusal {
         if (request.file() == null) throw new ToolRefusal("the record builder needs a file");
         try {
@@ -59,18 +83,24 @@ public final class RecordBuilderTool implements Tool {
                 return new ToolProposal(ID, title(), version(), List.of(), Map.of());
             }
             String after = CodeEditApplier.applyStyles(source, result.edits());
+            after = matchLineEndings(after, source);
             if (after.equals(source)) {
                 return new ToolProposal(ID, title(), version(), List.of(), Map.of());
             }
             String key = WriteCoordinator.hash(ID + ":" + request.file().toAbsolutePath().normalize()
                     + ":" + request.line() + ":" + WriteCoordinator.hash(source));
             FileProposal file = FileProposal.change(request.file(), WriteCoordinator.hash(source), source,
-                    after, key).owned("generic-tool:" + ID);
+                    after, key);
             return new ToolProposal(ID, title(), version(), List.of(file), Map.of());
         } catch (IOException failed) {
             throw new ToolRefusal("could not read " + request.file() + ": " + failed.getMessage(), failed);
         } catch (RuntimeException failed) {
             throw new ToolRefusal("record builder failed: " + failed.getMessage(), failed);
         }
+    }
+
+    private static String matchLineEndings(String output, String source) {
+        String eol = source.contains("\r\n") ? "\r\n" : "\n";
+        return output.replace("\r\n", "\n").replace('\r', '\n').replace("\n", eol);
     }
 }

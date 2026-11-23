@@ -71,8 +71,10 @@ public final class AgentMethods implements ToolMethods {
         result.put("status", "running");
         result.put("root", root.toString().replace('\\', '/'));
         ProjectWatcher current = watcher;
-        result.put("watching", current != null && current.live());
+        boolean watching = current != null && current.ensureLive();
+        result.put("watching", watching);
         result.put("watchProblem", current == null ? "watcher has not started" : current.attachProblem());
+        result.put("configurationProblem", tools.annotationProblem());
         result.put("webviewAlive", tools.webviewAlive());
         result.put("batches", tools.batches().size());
         result.put("tools", tools.catalog().stream().map(hr.hrg.jcodebuddy.tool.Tool::id).toList());

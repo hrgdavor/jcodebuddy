@@ -279,18 +279,19 @@ the PATH, the `200` against an attached adapter.
 
 ## 5. Routes
 
-| Route                                       | Auth                | Answers                                                                                        |
-| ------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
-| `GET /`                                     | none                | an index page: the project, the port, the adapter, the capabilities, links to the routes below |
-| `GET /health`                               | none                | the capability document (§ 2)                                                                  |
-| `GET /.well-known/webview.json`             | none                | the manifest (§ 3)                                                                             |
-| `GET /open?filePath=&line=&column=`         | origin **or** token | the frozen statuses, unchanged: `200`, `400`, `403`, `404`, `405`, `429`                       |
-| `GET /file/<percent-encoded absolute path>` | origin **or** token | the file, or `400`/`403`/`404`/`500` from core's page server                                   |
-| `GET /page/<percent-encoded absolute path>` | origin **or** token | the same file with the bridge appended when it is HTML                                         |
-| `GET /api/tools`                            | origin **or** token | the descriptors in `<project>/.jcodebuddy/ipc/` (DEC-053)                                      |
-| `POST /api/tools/<tool>/call`               | **token only**      | one JSON-RPC call forwarded to the tool's Unix socket: `200` result, `400` refusal or bad body, `404` unknown tool, `405`, `502` unreachable |
-| `GET /api/tools/<tool>/events`              | **token only**      | the tool's event stream as `text/event-stream` (DEC-053): `event: tool-event`, the data's `sequence` as the SSE `id`, a keep-alive comment every 15 s, and `Last-Event-ID` preferred over `?since=` on reconnect |
-| `OPTIONS` on an authorized route            | origin              | `204` with `Access-Control-Allow-Headers: X-WebView-Token`, so a page may send the token in a header |
+| Route                                       | Auth                  | Answers                                                                                        |
+| ------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------- |
+| `GET /`                                     | none                  | an index page: the project, the port, the adapter, the capabilities, links to the routes below |
+| `GET /health`                               | none                  | the capability document (§ 2)                                                                  |
+| `GET /.well-known/webview.json`             | none                  | the manifest (§ 3)                                                                             |
+| `GET /open?filePath=&line=&column=`         | origin **or** token   | the frozen statuses, unchanged: `200`, `400`, `403`, `404`, `405`, `429`                       |
+| `GET /file/<percent-encoded absolute path>` | origin **or** token   | the file, or `400`/`403`/`404`/`500` from core's page server                                   |
+| `GET /page/<percent-encoded absolute path>` | origin **or** token   | the same file with the bridge appended when it is HTML                                         |
+| `GET /api/tools`                            | origin **or** token   | the descriptors in `<project>/.jcodebuddy/ipc/` (DEC-053)                                      |
+| `POST /api/tools/<tool>/call`               | **token only**        | one JSON-RPC call forwarded to the tool's Unix socket: `200` result, `400` refusal or bad body, `404` unknown tool, `405`, `502` unreachable |
+| `GET /api/tools/<tool>/events`              | **token only**        | the tool's event stream as `text/event-stream` (DEC-053): `event: tool-event`, the data's `sequence` as the SSE `id`, a keep-alive comment every 15 s, and `Last-Event-ID` preferred over `?since=` on reconnect |
+| `POST /api/v1/refresh`                      | token **or loopback** | `{paths:[…]}`; the JetBrains host refreshes those VFS files and reloads unmodified documents. The agent's loopback notification needs no token; non-loopback callers still need the token. `webviewd` has no editor and no such route. |
+| `OPTIONS` on an authorized route            | origin                | `204` with `Access-Control-Allow-Headers: X-WebView-Token`, so a page may send the token in a header |
 
 `/page/` differs from `/file/` by exactly one thing: `window.openFile` and `window.__jcbWebViewBridge` are
 installed. The transport the standalone host injects is an image beacon to its own `/open`

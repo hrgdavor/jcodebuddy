@@ -38,6 +38,46 @@ class JavaToolsTest {
                 new ToolRequest(root, file, 1, Map.of()));
         assertEquals(1, proposal.files().size());
         assertTrue(proposal.files().get(0).afterContent().contains("Builder"));
+        assertTrue(proposal.files().get(0).afterContent()
+                .contains("// @generated region begin record-builder"));
+    }
+
+    @Test
+    void recordInterfaceSyncAddsOnlyTheMissingAccessorDeclarations(@TempDir Path root) throws Exception {
+        Path file = root.resolve("I.java");
+        String source = "interface I {\n"
+                + "    int a();\n"
+                + "}\n"
+                + "@GenerateRecordInterfaceSync record R(int a, String b) implements I {\n"
+                + "}\n";
+        Files.writeString(file, source);
+        ToolProposal proposal = new RecordInterfaceSyncTool().preview(
+                new ToolRequest(root, file, 4, Map.of()));
+        assertEquals(1, proposal.files().size());
+        String after = proposal.files().get(0).afterContent();
+        assertTrue(after.contains("String b();"), after);
+        assertEquals(1, after.split("int a\\(\\);", -1).length - 1, "the existing accessor must not be duplicated");
+        assertEquals(source, Files.readString(file), "preview must not write");
+    }
+
+    @Test
+    void markedInterfaceWithoutRecordGetsTheMissingRecord(@TempDir Path root) throws Exception {
+        Path file = root.resolve("Order.java");
+        String source = "import demo.playground.gen.GenerateRecordInterfaceSync;\n\n"
+                + "@GenerateRecordInterfaceSync\n"
+                + "public interface Order extends Identifiable<Long> {\n"
+                + "    long customerId();\n"
+                + "    String item();\n"
+                + "}\n";
+        Files.writeString(file, source);
+        ToolProposal proposal = new RecordInterfaceSyncTool().preview(
+                new ToolRequest(root, file, 4, Map.of("annotation",
+                        "demo.playground.gen.GenerateRecordInterfaceSync")));
+        assertEquals(1, proposal.files().size());
+        String after = proposal.files().get(0).afterContent();
+        assertTrue(after.contains("record Record(Long id, long customerId, String item)"), after);
+        assertTrue(after.contains("implements Order"), after);
+        assertEquals(source, Files.readString(file), "preview must not write");
     }
 
     @Test

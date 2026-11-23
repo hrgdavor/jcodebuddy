@@ -93,7 +93,7 @@ public final class RenameTool implements Tool {
             String key = WriteCoordinator.hash(ID + ":" + request.file().toAbsolutePath().normalize()
                     + ":" + from + ":" + to + ":" + WriteCoordinator.hash(source));
             FileProposal file = FileProposal.change(request.file(), WriteCoordinator.hash(source), source,
-                    after, key).owned("generic-tool:" + ID);
+                    after, key);
             return new ToolProposal(ID, title(), version(), List.of(file),
                     Map.of("from", from, "to", to, "identifiers", identifiers));
         } catch (IOException failed) {

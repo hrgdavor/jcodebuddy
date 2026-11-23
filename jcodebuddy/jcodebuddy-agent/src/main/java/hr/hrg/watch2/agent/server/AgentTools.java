@@ -11,6 +11,8 @@ import hr.hrg.jcodebuddy.tool.ToolRefusal;
 import hr.hrg.jcodebuddy.tool.ToolRequest;
 import hr.hrg.jcodebuddy.tool.WriteCoordinator;
 import hr.hrg.jcodebuddy.tool.builder.BuilderTool;
+import hr.hrg.jcodebuddy.builder.RecordBuilderProcessor;
+import hr.hrg.jcodebuddy.tool.java.RecordBuilderTool;
 import hr.hrg.jcodebuddy.ipc.ToolException;
 
 import java.io.IOException;
@@ -41,6 +43,7 @@ public final class AgentTools {
     private final Path root;
     private final ToolCatalog catalog = new ToolCatalog();
     private final WriteCoordinator coordinator;
+    private final EditorNotifier editorNotifier;
     private volatile AgentToolConfig config;
     private final ToolRefusals refusals;
     private final Path configFile;
@@ -50,25 +53,62 @@ public final class AgentTools {
     private final AtomicLong sequence = new AtomicLong();
     private volatile long lastWebview;
     private volatile long configModified = -1;
+    private volatile String lastAnnotationProblem = "";
 
     public AgentTools(Path root) {
         this.root = root == null ? Path.of(".").toAbsolutePath().normalize()
                 : root.toAbsolutePath().normalize();
         this.coordinator = new WriteCoordinator(this.root);
+        this.editorNotifier = new EditorNotifier(this.root);
         this.config = AgentToolConfig.read(this.root);
         this.configFile = this.root.resolve(".jcodebuddy").resolve("conf").resolve(AgentToolConfig.FILE);
         this.refusals = new ToolRefusals(this.root);
         catalog.register(new BuilderTool());
         catalog.register(new hr.hrg.jcodebuddy.tool.java.RecordBuilderTool());
+        catalog.register(new hr.hrg.jcodebuddy.tool.java.RecordInterfaceSyncTool());
         catalog.register(new hr.hrg.jcodebuddy.tool.java.AccessorTool());
         catalog.register(new hr.hrg.jcodebuddy.tool.java.ConstructorTool());
         catalog.register(new hr.hrg.jcodebuddy.tool.java.RenameTool());
         catalog.register(new hr.hrg.jcodebuddy.tool.ioc.IocTool());
         catalog.register(new hr.hrg.jcodebuddy.tool.entity.EntityTool());
+        for (Tool tool : catalog.tools()) {
+            String problem = ToolMarkers.ensure(this.root, config, tool);
+            if (!problem.isBlank()) {
+                lastAnnotationProblem = problem;
+                break;
+            }
+        }
     }
 
     public List<Tool> catalog() {
         return catalog.tools();
+    }
+
+    public String annotationProblem() {
+        return configurationProblem();
+    }
+
+    /** The annotation setup must be usable before the agent starts; a missing location or failed write is fatal. */
+    public String configurationProblem() {
+        String configured = config.annotationProblem();
+        return configured.isBlank() ? lastAnnotationProblem : configured;
+    }
+
+    private String annotationFor(String id) {
+        return catalog.find(id).map(Tool::markerAnnotation).orElse("");
+    }
+
+    private boolean requiresMarker(String id) {
+        return !annotationFor(id).isBlank();
+    }
+
+    private void requireRecordAnnotation(String id) throws ToolException {
+        Tool tool = catalog.find(id)
+                .orElseThrow(() -> ToolException.invalidParams("no such tool: " + id));
+        String problem = ToolMarkers.ensure(root, config, tool);
+        if (!problem.isBlank()) {
+            throw new ToolException(ToolException.INVALID_PARAMS, problem);
+        }
     }
 
     /** Called by the agent page, builder page and every status/list/batch poll. */
@@ -103,11 +143,23 @@ public final class AgentTools {
     public void onChanged(List<Path> paths) {
         if (paths == null || paths.isEmpty()) return;
         refreshConfig();
+        discardPendingBatches(paths);
         boolean webview = webviewAlive();
         String batchId = "b" + sequence.incrementAndGet();
+        if (config.annotationProblem().isBlank()) lastAnnotationProblem = "";
         for (Tool tool : catalog.tools()) {
             if (config.disabled(tool.id()) || !tool.watchesFiles()) continue;
             if (!config.auto(tool.id()) && !webview && !config.active(tool.id())) continue;
+            String annotation = annotationFor(tool.id());
+            String annotationProblem = annotation.isBlank()
+                    ? "" : ToolMarkers.ensure(root, config, tool);
+            if (!annotation.isBlank() && !annotationProblem.isBlank()) {
+                if (!annotationProblem.equals(lastAnnotationProblem)) {
+                    System.err.println("record tooling is not configured: " + annotationProblem);
+                    lastAnnotationProblem = annotationProblem;
+                }
+                continue;
+            }
             for (Path path : paths) {
                 String name = path.getFileName() == null ? "" : path.getFileName().toString();
                 if (!name.endsWith(".java")) continue;
@@ -115,11 +167,21 @@ public final class AgentTools {
                 try {
                     String current = coordinator.currentHash(path);
                     if (current.equals(ownWrites.get(relative))) continue;
+                    int line = 1;
+                    if (tool instanceof RecordBuilderTool) {
+                        int marked = annotationLine(Files.readString(path), annotation);
+                        if (marked < 0) continue;
+                        line = marked;
+                    }
                     Map<String, Object> params = new LinkedHashMap<>();
                     params.put("tool", tool.id());
                     params.put("file", relative);
-                    params.put("line", 1);
+                    params.put("line", line);
                     params.put("batchId", batchId);
+                    if (!annotation.isBlank()) {
+                        params.put("annotation", config.annotationPackage().isBlank()
+                                ? annotation : config.annotationPackage() + "." + annotation);
+                    }
                     Map<String, Object> proposal = preview(params);
                     Object proposalId = proposal.get("proposalId");
                     if (config.active(tool.id()) && proposalId != null) {
@@ -128,6 +190,40 @@ public final class AgentTools {
                 } catch (IOException | ToolException | RuntimeException ignored) {
                     // A file that is not a case for this tool is normal in a batch.
                 }
+            }
+        }
+    }
+
+    /**
+     * A new fs-meta batch supersedes a batch that never touched the disk. Keeping the old proposals would let
+     * Apply later write text computed from a file revision that no longer exists. Undoing an edit is the same
+     * case: the old batch is discarded and, because the tool sees no change, no replacement batch is created.
+     * Batches with any applied file are retained so their revert path stays available.
+     */
+    private void discardPendingBatches(List<Path> paths) {
+        Set<String> changed = new LinkedHashSet<>();
+        for (Path path : paths) changed.add(relative(path));
+        for (Map.Entry<String, List<String>> batch : List.copyOf(batches.entrySet())) {
+            boolean applied = false;
+            boolean touched = false;
+            for (String proposalId : List.copyOf(batch.getValue())) {
+                Pending entry = pending.get(proposalId);
+                if (entry == null) continue;
+                if (!entry.applied.isEmpty()) {
+                    applied = true;
+                    break;
+                }
+                for (FileProposal file : entry.proposal.files()) {
+                    if (changed.contains(relative(file.path()))) {
+                        touched = true;
+                        break;
+                    }
+                }
+                if (touched) break;
+            }
+            if (!applied && touched) {
+                for (String proposalId : List.copyOf(batch.getValue())) pending.remove(proposalId);
+                batches.remove(batch.getKey());
             }
         }
     }
@@ -166,6 +262,13 @@ public final class AgentTools {
                 .orElseThrow(() -> ToolException.invalidParams("no such tool: " + id));
         if (config.disabled(id)) {
             throw new ToolException(ToolException.INVALID_PARAMS, "tool is disabled by project config: " + id);
+        }
+        if (requiresMarker(id)) {
+            requireRecordAnnotation(id);
+            params = new LinkedHashMap<>(params);
+            String annotation = annotationFor(id);
+            params.put("annotation", config.annotationPackage().isBlank()
+                    ? annotation : config.annotationPackage() + "." + annotation);
         }
         Path path = Path.of(file);
         if (!path.isAbsolute()) path = root.resolve(path);
@@ -264,7 +367,20 @@ public final class AgentTools {
             Pending entry = pending.get(id);
             if (entry != null) results.add(applyInternal(entry));
         }
-        return Map.of("batchId", batchId, "status", "applied", "proposals", results);
+        boolean anyApplied = false;
+        boolean anyFailed = false;
+        for (Map<String, Object> proposal : results) {
+            Object files = proposal.get("files");
+            if (!(files instanceof List<?> list)) continue;
+            for (Object file : list) {
+                if (!(file instanceof Map<?, ?> map)) continue;
+                Object status = map.get("status");
+                if ("APPLIED".equals(status) || "already-applied".equals(status)) anyApplied = true;
+                else if ("REFUSED".equals(status) || "ERROR".equals(status)) anyFailed = true;
+            }
+        }
+        String status = anyApplied ? (anyFailed ? "partial" : "applied") : "refused";
+        return Map.of("batchId", batchId, "status", status, "proposals", results);
     }
 
     public Map<String, Object> revertFile(String proposalId, String relativePath) throws ToolException {
@@ -339,6 +455,7 @@ public final class AgentTools {
             if (result.ok()) {
                 entry.applied.add(relative);
                 ownWrites.put(relative, file.afterHash());
+                editorNotifier.changed(file.path());
             }
             return Map.of("path", relative, "status", result.status().name(),
                     "message", result.message());
@@ -357,6 +474,7 @@ public final class AgentTools {
                     entry.applied.remove(relative);
                     ownWrites.put(relative, WriteCoordinator.hash(file.beforeContent() == null
                             ? "" : file.beforeContent()));
+                    editorNotifier.changed(file.path());
                 }
                 results.add(Map.of("path", relative, "status", result.status().name(),
                         "message", result.message()));
@@ -417,6 +535,22 @@ public final class AgentTools {
         } catch (IllegalArgumentException outside) {
             return path.toString().replace('\\', '/');
         }
+    }
+
+    private static int annotationLine(String source, String simpleName) {
+        if (simpleName == null || simpleName.isBlank()) return -1;
+        String needle = "@" + simpleName;
+        int index = source.indexOf(needle);
+        while (index >= 0) {
+            int after = index + needle.length();
+            if (after >= source.length() || !Character.isJavaIdentifierPart(source.charAt(after))) {
+                int line = 1;
+                for (int i = 0; i < index; i++) if (source.charAt(i) == '\n') line++;
+                return line;
+            }
+            index = source.indexOf(needle, index + 1);
+        }
+        return -1;
     }
 
     private static String string(Object value) {

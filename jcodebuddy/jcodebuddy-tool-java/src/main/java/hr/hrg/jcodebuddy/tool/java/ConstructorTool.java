@@ -67,7 +67,7 @@ public final class ConstructorTool implements Tool {
             String key = WriteCoordinator.hash(ID + ":" + request.file().toAbsolutePath().normalize()
                     + ":" + request.line() + ":" + WriteCoordinator.hash(source));
             FileProposal file = FileProposal.change(request.file(), WriteCoordinator.hash(source), source,
-                    after, key).owned("generic-tool:" + ID);
+                    after, key);
             return new ToolProposal(ID, title(), "1", List.of(file), Map.of());
         } catch (IOException failed) {
             throw new ToolRefusal("could not read " + request.file() + ": " + failed.getMessage(), failed);
