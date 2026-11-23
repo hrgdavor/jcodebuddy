@@ -159,13 +159,6 @@ public final class ViewBuilderGenerator {
             return false;
         }
         String reason = null;
-        for (Property property : allProperties) {
-            if (isPrimitiveType(property.type())) {
-                reason = "the field `" + property.name() + "` is primitive (`" + property.type()
-                        + "`), and the builder's boxed getters cannot override the view's primitive accessor";
-                break;
-            }
-        }
         if (reason == null) {
             java.util.Map<String, Property> writableByName = new java.util.LinkedHashMap<>();
             for (Property property : allProperties) {

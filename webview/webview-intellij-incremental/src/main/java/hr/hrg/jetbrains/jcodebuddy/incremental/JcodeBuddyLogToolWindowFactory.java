@@ -50,6 +50,12 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
         JButton rebuild = new JButton("Rebuild");
         rebuild.setToolTipText("Compile every source root again");
         rebuild.addActionListener(event -> service.rebuild());
+        JButton retryFailed = new JButton("Retry Failed");
+        retryFailed.setToolTipText("Retry only the files currently marked as failed, across all roots");
+        retryFailed.addActionListener(event -> service.retryFailed());
+        JButton listFailed = new JButton("List Failed");
+        listFailed.setToolTipText("Log every failed file and its compiler diagnostic; copy from this log");
+        listFailed.addActionListener(event -> service.listFailed());
         JButton stopWatch = new JButton("Stop Watch");
         stopWatch.setToolTipText("Drop the fs-meta subscription so Maven or a generator can rewrite sources "
                 + "and class outputs; Rebuild and Start Watch stay available");
@@ -101,6 +107,8 @@ public final class JcodeBuddyLogToolWindowFactory implements ToolWindowFactory, 
 
         JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
         actionRow.add(rebuild);
+        actionRow.add(retryFailed);
+        actionRow.add(listFailed);
         actionRow.add(stopWatch);
         actionRow.add(startWatch);
 

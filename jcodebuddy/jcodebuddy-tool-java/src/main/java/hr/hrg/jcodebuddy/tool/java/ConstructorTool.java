@@ -68,7 +68,8 @@ public final class ConstructorTool implements Tool {
                     + ":" + request.line() + ":" + WriteCoordinator.hash(source));
             FileProposal file = FileProposal.change(request.file(), WriteCoordinator.hash(source), source,
                     after, key);
-            return new ToolProposal(ID, title(), "1", List.of(file), Map.of());
+            return new ToolProposal(ID, title(), "1", List.of(file), Map.of(),
+                    "Add missing constructors", List.of("Generate the constructors for the class fields"));
         } catch (IOException failed) {
             throw new ToolRefusal("could not read " + request.file() + ": " + failed.getMessage(), failed);
         }

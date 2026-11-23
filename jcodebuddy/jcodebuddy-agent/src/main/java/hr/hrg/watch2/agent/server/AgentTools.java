@@ -335,6 +335,11 @@ public final class AgentTools {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("batchId", batch.getKey());
             item.put("createdAt", createdAt);
+            item.put("summary", proposals.stream()
+                    .map(proposal -> String.valueOf(proposal.get("summary")))
+                    .filter(summary -> !summary.isBlank())
+                    .distinct()
+                    .collect(java.util.stream.Collectors.joining("; ")));
             item.put("proposals", proposals);
             item.put("anyApplied", anyApplied);
             item.put("allApplied", allApplied);
@@ -523,9 +528,25 @@ public final class AgentTools {
         result.put("caseKey", entry.caseKey);
         result.put("refusalSupported", entry.refusalSupported);
         result.put("mode", config.mode(entry.proposal.toolId()));
+        result.put("summary", summaryOf(entry.proposal));
+        result.put("details", detailsOf(entry.proposal));
         result.put("files", files);
         result.put("metadata", entry.proposal.metadata());
         return result;
+    }
+
+    private static String summaryOf(ToolProposal proposal) {
+        if (!proposal.summary().isBlank()) return proposal.summary();
+        String files = proposal.files().size() == 1 ? "1 file" : proposal.files().size() + " files";
+        return "Proposed changes to " + files;
+    }
+
+    private static List<String> detailsOf(ToolProposal proposal) {
+        if (!proposal.details().isEmpty()) return proposal.details();
+        return proposal.files().stream()
+                .map(file -> file.changeType().name().toLowerCase(java.util.Locale.ROOT) + " "
+                        + file.path().getFileName())
+                .toList();
     }
 
     private String relative(Path path) {

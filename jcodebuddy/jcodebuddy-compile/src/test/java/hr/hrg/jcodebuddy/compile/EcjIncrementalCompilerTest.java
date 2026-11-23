@@ -363,4 +363,22 @@ class EcjIncrementalCompilerTest {
         assertFalse(compiler.compile(Set.of(sourceRoot.resolve("demo").resolve("Missing.java"))));
         assertFalse(compiler.lastErrors().isEmpty(), "a missing file must be reported");
     }
+
+    @Test
+    void compilesMutuallyDependentSourceRootsInOneBatch() throws IOException {
+        Path mainRoot = Files.createDirectories(tempDir.resolve("main"));
+        Path generatedRoot = Files.createDirectories(tempDir.resolve("generated"));
+        Path main = mainRoot.resolve("p/MainType.java");
+        Path generated = generatedRoot.resolve("p/GeneratedType.java");
+        Files.createDirectories(main.getParent());
+        Files.createDirectories(generated.getParent());
+        Files.writeString(main, "package p; public class MainType { GeneratedType value; }\n");
+        Files.writeString(generated, "package p; public class GeneratedType { MainType value; }\n");
+
+        EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(
+                List.of(mainRoot, generatedRoot), binDir, "");
+        assertCompiles(compiler, main, generated);
+        assertTrue(Files.isRegularFile(binDir.resolve("p/MainType.class")));
+        assertTrue(Files.isRegularFile(binDir.resolve("p/GeneratedType.class")));
+    }
 }

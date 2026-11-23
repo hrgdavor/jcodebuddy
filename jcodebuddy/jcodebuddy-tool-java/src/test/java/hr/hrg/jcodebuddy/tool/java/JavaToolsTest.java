@@ -43,7 +43,7 @@ class JavaToolsTest {
     }
 
     @Test
-    void recordInterfaceSyncAddsOnlyTheMissingAccessorDeclarations(@TempDir Path root) throws Exception {
+    void recordInterfaceSyncUsesTheInterfaceAsSourceOfTruth(@TempDir Path root) throws Exception {
         Path file = root.resolve("I.java");
         String source = "interface I {\n"
                 + "    int a();\n"
@@ -54,10 +54,30 @@ class JavaToolsTest {
         ToolProposal proposal = new RecordInterfaceSyncTool().preview(
                 new ToolRequest(root, file, 4, Map.of()));
         assertEquals(1, proposal.files().size());
+        assertTrue(proposal.summary().contains("removed 1"), proposal.summary());
+        assertTrue(proposal.details().stream().anyMatch(detail -> detail.contains("Removed b")),
+                proposal.details().toString());
         String after = proposal.files().get(0).afterContent();
-        assertTrue(after.contains("String b();"), after);
-        assertEquals(1, after.split("int a\\(\\);", -1).length - 1, "the existing accessor must not be duplicated");
+        assertTrue(after.contains("record R(int a)"), after);
+        assertFalse(after.contains("String b"), "a component removed from the interface is removed from the record");
+        assertFalse(after.contains("String b();"), "the tool must not add a field to the interface");
         assertEquals(source, Files.readString(file), "preview must not write");
+    }
+
+    @Test
+    void recordInterfaceSyncAddsAnInterfaceAccessorToTheRecord(@TempDir Path root) throws Exception {
+        Path file = root.resolve("I.java");
+        String source = "interface I {\n"
+                + "    int a();\n"
+                + "    String b();\n"
+                + "}\n"
+                + "@GenerateRecordInterfaceSync record R(int a) implements I {\n"
+                + "}\n";
+        Files.writeString(file, source);
+        ToolProposal proposal = new RecordInterfaceSyncTool().preview(
+                new ToolRequest(root, file, 4, Map.of()));
+        String after = proposal.files().get(0).afterContent();
+        assertTrue(after.contains("record R(int a, String b)"), after);
     }
 
     @Test

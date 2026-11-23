@@ -155,6 +155,42 @@ public final class ViewTrackingBuilderGenerator {
     }
 
     /**
+     * Make an emitted tracking builder implement its view's {@code Write} when the view declares one.
+     *
+     * <p>The untracked builder gets the clause from its emitter; the tracking builder is patched after
+     * reconciliation because its class header is the only line that changes. Its setters already have the
+     * boxed parameter types and return a subtype of {@code Write}, so the clause compiles.</p>
+     */
+    static void addWrite(Path builderFile, String viewName, Path viewSource) throws IOException {
+        if (viewSource == null || !Files.isRegularFile(viewSource) || !Files.isRegularFile(builderFile)) {
+            return;
+        }
+        if (ViewWriteInterface.readOrNull(viewSource) == null) {
+            return;
+        }
+        String source = Files.readString(builderFile);
+        int classStart = source.indexOf("public class " + viewName + "BuilderTracking");
+        if (classStart < 0) {
+            return;
+        }
+        int lineEnd = source.indexOf('\n', classStart);
+        if (lineEnd < 0) {
+            lineEnd = source.length();
+        }
+        String line = source.substring(classStart, lineEnd);
+        if (line.contains(viewName + ".Write")) {
+            return;
+        }
+        int brace = line.indexOf('{');
+        if (brace < 0) {
+            return;
+        }
+        String patched = line.substring(0, brace).stripTrailing() + ", " + viewName + ".Write {"
+                + line.substring(brace + 1);
+        Files.writeString(builderFile, source.substring(0, classStart) + patched + source.substring(lineEnd));
+    }
+
+    /**
      * One field the deep walk descends into.
      *
      * @param collection          {@code true} for a {@code List<Tracked>}, in which case the path

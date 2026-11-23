@@ -95,7 +95,10 @@ public final class RenameTool implements Tool {
             FileProposal file = FileProposal.change(request.file(), WriteCoordinator.hash(source), source,
                     after, key);
             return new ToolProposal(ID, title(), version(), List.of(file),
-                    Map.of("from", from, "to", to, "identifiers", identifiers));
+                    Map.of("from", from, "to", to, "identifiers", identifiers),
+                    "Rename " + from + " to " + to + " (" + identifiers + " identifier"
+                            + (identifiers == 1 ? "" : "s") + ")",
+                    List.of("Renamed every parsed use of `" + from + "` to `" + to + "`"));
         } catch (IOException failed) {
             throw new ToolRefusal("could not read " + request.file() + ": " + failed.getMessage(), failed);
         }

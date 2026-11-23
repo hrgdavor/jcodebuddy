@@ -43,6 +43,24 @@ compile.
 On a successful compile the diagnostics for that source root are replaced by an empty list, so the next
 highlighting pass removes the old red errors. IntelliJ's own **Build** is not invoked by this plugin.
 
+A **Rebuild** compiles one **module output** at a time, passing all of that module's source roots to one ECJ
+batch (`src/main/java`, `src/generated/java`, and so on). Separate compilers per source folder cannot compile
+generated types that reference main types and main types that reference generated types in both directions.
+
+Measured with the 3,041-file `nexios-server` main+generated roots on 2026-11-23, JDK 25, ECJ 3.46.100:
+
+| strategy       | files | index | compile | peak delta |
+| -------------- | ----: | ----: | ------: | ---------: |
+| one batch      | 3,041 | 88ms  | 11.2s   | 689MB      |
+| 256-file batch | 3,041 | 91ms  | 13.4s   | 626MB      |
+| 64-file batch  | 3,041 | 88ms  | 16.3s   | 159MB      |
+| 32-file batch  | 3,041 | 91ms  | 19.2s   | 393MB      |
+
+The one-batch run also reported one real diagnostic, while chunked runs reported thousands of false
+missing-type diagnostics before later batches supplied the types. Chunking is therefore not used for this
+module. The IDE heap is the remaining bound; if a different project exceeds it, that needs a measured chunk
+size and dependency-aware grouping, not a fixed default.
+
 The last diagnostic set is persisted in
 `<project>/.jcodebuddy/cache/incremental-build/diagnostics.tsv` and restored when the project opens.
 IntelliJ does not persist external-annotator output itself, so this is what restores the markers when the
@@ -82,7 +100,7 @@ gradlew.bat buildPlugin
 The installable archive is:
 
 ```text
-build/distributions/JCodeBuddy Incremental Build-0.1.0.zip
+build/distributions/JCodeBuddy Incremental Build-0.1.9.zip
 ```
 
 Install it with `Settings | Plugins | ⚙ | Install Plugin from Disk...`, then restart IntelliJ.
@@ -217,6 +235,8 @@ There are two places to look:
    source-root discovery, module classpath counts, fs-meta daemon/socket/filter, batches, compile results
    and failures. Every line has a full date/time. Its toolbar has:
    - **Rebuild** — compile every source root again;
+   - **Retry Failed** — recompile only the files currently marked as failed, across all roots;
+   - **List Failed** — write every failed file and its diagnostic to the log;
    - **Stop Watch** — drop the fs-meta subscription so an external Maven run can rewrite sources and class
      outputs; the compile loop, the compilers and the batch marker stay as they are;
    - **Start Watch** — subscribe again and replay every batch recorded while the watch was stopped;
@@ -355,6 +375,7 @@ Every endpoint answers `tool.info` (its descriptor). This tool adds:
 | `build.diagnostics`                          | `[{file, line, column, message}]`                        |
 | `build.roots`                                | `[{module, root, output, test}]`                         |
 | `build.rebuild`                              | accepted; compiles every source root on the worker       |
+| `build.retryFailed` / `build.listFailed`     | accepted; the Retry Failed / List Failed buttons         |
 | `build.watch.stop` / `build.watch.start`     | accepted; the Stop Watch / Start Watch buttons           |
 | `build.refreshErrors` / `build.refreshRoots` | accepted; the same actions as the toolbar                |
 | `build.listClasspath`                        | accepted; writes the detailed classpath to the build log |
@@ -480,10 +501,11 @@ limitation as the standalone example.
   discovery/subscription with backoff (2s up to 30s). **Reconnect fs-meta** forces an immediate rediscovery.
   The plugin prints the exact `fsmeta daemon start` and `fsmeta root add` commands when the daemon/root is missing.
 - **Memory**: the plugin shares one dependency index across all source roots. JAR class bytes are read on
-  demand from the JAR and limited to a bounded hot cache; the JARs themselves stay on disk. The initial
-  full compile is chunked (default 64 files, `-Djcodebuddy.intellij.initialCompileChunk=<n>`) so the ECJ
-  AST peak is bounded. The IDE heap maximum is logged at startup and after compiles. Large projects may
-  still need a higher IDE heap via `Help | Change Memory Settings`.
+  demand from the JAR and limited to a bounded hot cache; the JARs themselves stay on disk. Each module output
+  is compiled as one ECJ batch (all its source roots together), because splitting a module broke mutual
+  main/generated references and was slower in the measured project. The IDE heap maximum is logged at startup
+  and after compiles. Large projects may still need a higher IDE heap via
+  `Help | Change Memory Settings`.
 
 ## Development
 

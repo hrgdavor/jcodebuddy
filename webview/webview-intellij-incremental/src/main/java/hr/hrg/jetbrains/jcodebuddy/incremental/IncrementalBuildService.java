@@ -81,8 +81,6 @@ public final class IncrementalBuildService implements Disposable {
 
     private static final Logger LOG = Logger.getInstance(IncrementalBuildService.class);
     private static final Pattern DIAGNOSTIC = Pattern.compile("^(.+):(\\d+)\\s{2}(.*)$");
-    private static final int INITIAL_COMPILE_CHUNK =
-            Integer.getInteger("jcodebuddy.intellij.initialCompileChunk", 64);
 
     private final Project project;
     private final IncrementalDiagnosticsService diagnostics;
@@ -221,6 +219,103 @@ public final class IncrementalBuildService implements Disposable {
                 fullCompileRequired = true;
             }
         });
+    }
+
+    /** Retries only the files currently recorded as failed, across all source roots, on the worker thread. */
+    public void retryFailed() {
+        if (!settings.isEnabled()) {
+            notify("Enable JCodeBuddy Incremental Build for this project before retrying.", NotificationType.WARNING);
+            return;
+        }
+        start();
+        ExecutorService current = worker;
+        if (current == null) {
+            return;
+        }
+        current.submit(() -> {
+            if (!started.get()) {
+                return;
+            }
+            if (failedFiles.isEmpty()) {
+                log("Retry failed: no failed files");
+                notify("There are no failed classes to retry.", NotificationType.INFORMATION);
+                return;
+            }
+            log("Retry failed: " + failedFiles.size() + " file(s)");
+            int pass = 0;
+            boolean progressed;
+            do {
+                pass++;
+                progressed = false;
+                Map<Path, Set<Path>> byRoot = new LinkedHashMap<>();
+                for (Path failed : failedFiles) {
+                    SourceRoot root = rootFor(failed);
+                    if (root == null) {
+                        log("Retry failed: no source root for " + failed);
+                        continue;
+                    }
+                    byRoot.computeIfAbsent(root.root(), ignored -> new LinkedHashSet<>()).add(failed);
+                }
+                for (SourceRoot root : sourceRoots) {
+                    Set<Path> files = byRoot.get(root.root());
+                    EcjIncrementalCompiler compiler = compilers.get(root.root());
+                    if (files == null || files.isEmpty() || compiler == null) {
+                        continue;
+                    }
+                    log("Retry pass " + pass + " [" + root.module().getName() + "] "
+                            + files.size() + " failed file(s)");
+                    boolean ok = compileRoot(compiler, files, true);
+                    if (ok) {
+                        failedFiles.removeAll(files);
+                        rememberHashes(javaFiles(root.root()));
+                        clearProjectViewProblems(files);
+                        publish(root, compiler);
+                        progressed = true;
+                    } else {
+                        failedFiles.removeAll(files);
+                        failedFiles.addAll(errorFiles(compiler, files, root.root()));
+                        publish(root, compiler);
+                    }
+                }
+                saveHashes();
+            } while (progressed && !failedFiles.isEmpty() && pass < 5);
+
+            refreshHighlighting();
+            log("Retry failed finished: " + failedFiles.size() + " file(s) still failing");
+            if (failedFiles.isEmpty()) {
+                fullCompileRequired = false;
+                clearProjectViewProblems(null);
+                notify("Failed classes are fixed.", NotificationType.INFORMATION);
+            } else {
+                listFailed();
+            }
+        });
+    }
+
+    /** Logs every failed file and its compiler diagnostics in a form that can be copied from the tool window. */
+    public void listFailed() {
+        List<Path> failed = new ArrayList<>(failedFiles);
+        failed.sort(java.util.Comparator.naturalOrder());
+        log("Failed files: " + failed.size());
+        Map<String, Integer> byModule = new LinkedHashMap<>();
+        for (Path file : failed) {
+            SourceRoot root = rootFor(file);
+            String module = root == null ? "<unknown module>" : root.module().getName();
+            byModule.merge(module, 1, Integer::sum);
+            log("FAILED [" + module + "] " + file);
+            List<Diagnostic> diagnosticsForFile = diagnostics.forFile(file.toString());
+            if (diagnosticsForFile.isEmpty()) {
+                log("  (no file-level diagnostic; see the compiler errors above this line)");
+            } else {
+                for (Diagnostic diagnostic : diagnosticsForFile) {
+                    log("  " + file + ":" + diagnostic.line() + ":" + diagnostic.column()
+                            + "  " + diagnostic.message());
+                }
+            }
+        }
+        for (Map.Entry<String, Integer> entry : byModule.entrySet()) {
+            log("Failed summary [" + entry.getKey() + "]: " + entry.getValue());
+        }
     }
 
     /** Drops the current fs-meta subscription and attempts daemon discovery again. */
@@ -718,6 +813,18 @@ public final class IncrementalBuildService implements Disposable {
      * Compares current source hashes with the last successfully compiled set. This is the automatic
      * compile path; it deliberately never calls {@link #compileAll()}.
      */
+    /**
+     * Compiles a root's files in bounded batches, retrying only the failed files until a pass makes no progress.
+     * The cap bounds ECJ's AST/codegen peak; the retry handles a dependency that sat in a later batch. It is not
+     * a claim that the IDE cannot OOM for another reason (classpath index, IDE heap settings).
+     */
+    private boolean compileRoot(EcjIncrementalCompiler compiler, Set<Path> files, boolean writeIdentical) {
+        // One batch per module output. A measured 3,041-file module (main + generated roots) compiled in
+        // 11-13s with a peak under 512 MB; splitting it only adds compiler setup and breaks mutual
+        // main/generated references across batches.
+        return compiler.compile(files, writeIdentical);
+    }
+
     private boolean compileFromHashes(String reason) {
         Map<Path, String> current = hashSources(sourceRoots);
         Set<Path> changed = new LinkedHashSet<>();
@@ -780,25 +887,7 @@ public final class IncrementalBuildService implements Disposable {
                 continue;
             }
             log("Compiling [" + root.module().getName() + "] " + files.size() + " hash-changed file(s)");
-            List<Path> pending = new ArrayList<>(files);
-            Set<Path> failed = new LinkedHashSet<>();
-            int chunkIndex = 0;
-            for (int start = 0; start < pending.size(); start += INITIAL_COMPILE_CHUNK) {
-                int end = Math.min(start + INITIAL_COMPILE_CHUNK, pending.size());
-                Set<Path> chunk = new LinkedHashSet<>(pending.subList(start, end));
-                chunkIndex++;
-                log("Compiling [" + root.module().getName() + "] hash chunk " + chunkIndex + " "
-                        + chunk.size() + " file(s)");
-                if (!compiler.compile(chunk, false)) {
-                    failed.addAll(chunk);
-                }
-            }
-            boolean rootOk = true;
-            if (!failed.isEmpty()) {
-                log("Retrying [" + root.module().getName() + "] " + failed.size()
-                        + " hash-changed file(s)");
-                rootOk = compiler.compile(failed, false);
-            }
+            boolean rootOk = compileRoot(compiler, files, false);
             if (rootOk) {
                 rememberHashes(files);
                 failedFiles.removeAll(files);
@@ -985,40 +1074,53 @@ public final class IncrementalBuildService implements Disposable {
     }
 
     private Map<Path, EcjIncrementalCompiler> createCompilers(List<SourceRoot> roots) {
-        Map<Module, List<SourceRoot>> byModule = new LinkedHashMap<>();
-        for (SourceRoot root : roots) {
-            byModule.computeIfAbsent(root.module(), ignored -> new ArrayList<>()).add(root);
-        }
-
-        // One union classpath and one shared JAR/JDK index for the whole project. Without the shared
-        // index every source root keeps its own copy of every dependency class, which is what made the
-        // IntelliJ heap run out in a large multi-module project.
+        // One compiler per module output, not per source folder. `src/main/java` and
+        // `src/generated/java` commonly reference each other in both directions; compiling them
+        // separately makes both sides fail no matter which root runs first.
+        List<List<SourceRoot>> groups = sourceGroups();
         Set<String> classpath = new LinkedHashSet<>();
-        for (Module module : byModule.keySet()) {
+        for (List<SourceRoot> group : groups) {
+            Module module = group.get(0).module();
             Set<String> moduleClasspath = classpathFor(module);
             logClasspathSummary(module, moduleClasspath);
             classpath.addAll(moduleClasspath);
         }
-        for (SourceRoot root : roots) {
-            classpath.add(root.output().toString());
+        for (List<SourceRoot> group : groups) {
+            classpath.add(group.get(0).output().toString());
         }
         List<String> extra = new ArrayList<>(classpath);
         classpathSignature = Integer.toHexString(extra.hashCode()) + ":" + extra.size();
         EcjIncrementalCompiler.SharedIndex shared = new EcjIncrementalCompiler.SharedIndex();
         Map<Path, EcjIncrementalCompiler> created = new LinkedHashMap<>();
         boolean indexed = false;
-        for (SourceRoot root : roots) {
-            String rootClasspath = EcjIncrementalCompiler.buildClasspath(root.output(), extra);
+        for (List<SourceRoot> group : groups) {
+            SourceRoot first = group.get(0);
+            List<Path> sourceRoots = group.stream().map(SourceRoot::root).toList();
+            String rootClasspath = EcjIncrementalCompiler.buildClasspath(first.output(), extra);
             EcjIncrementalCompiler compiler = new EcjIncrementalCompiler(
-                    root.root(), root.output(), rootClasspath, shared);
+                    sourceRoots, first.output(), rootClasspath, shared);
             if (!indexed) {
+                long indexStart = System.nanoTime();
                 compiler.index();
                 indexed = true;
-                log("Indexed shared dependency/JDK cache: " + compiler.memoryStats().summary());
+                log("Indexed shared dependency/JDK cache in " + millis(System.nanoTime() - indexStart)
+                        + "ms: " + compiler.memoryStats().summary());
             }
-            created.put(root.root(), compiler);
+            for (SourceRoot root : group) {
+                created.put(root.root(), compiler);
+            }
         }
         return Map.copyOf(created);
+    }
+
+    /** Source folders that share one module compiler output, in source-root order. */
+    private List<List<SourceRoot>> sourceGroups() {
+        Map<String, List<SourceRoot>> groups = new LinkedHashMap<>();
+        for (SourceRoot root : sourceRoots) {
+            String key = root.module().getName() + "|" + root.output();
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(root);
+        }
+        return List.copyOf(groups.values());
     }
 
     private Set<String> classpathFor(Module module) {
@@ -1131,54 +1233,148 @@ public final class IncrementalBuildService implements Disposable {
         private int missing;
     }
 
+    private void publishGroup(List<SourceRoot> group, EcjIncrementalCompiler compiler) {
+        List<Diagnostic> parsed = new ArrayList<>();
+        for (String error : compiler.lastErrors()) {
+            Matcher matcher = DIAGNOSTIC.matcher(error);
+            if (matcher.matches()) {
+                parsed.add(new Diagnostic(
+                        Path.of(matcher.group(1)).toAbsolutePath().normalize(),
+                        Integer.parseInt(matcher.group(2)),
+                        0,
+                        matcher.group(3)));
+            } else {
+                parsed.add(new Diagnostic(group.get(0).root(), 0, 0, error));
+            }
+        }
+        for (SourceRoot root : group) {
+            diagnostics.replaceRoot(root.root(), List.of());
+        }
+        diagnostics.replaceRoot(group.get(0).root(), parsed);
+        saveDiagnostics();
+        String modules = group.stream().map(root -> root.module().getName()).distinct()
+                .collect(java.util.stream.Collectors.joining(", "));
+        if (parsed.isEmpty()) {
+            log("Compile OK [" + modules + "] " + group.get(0).root());
+        } else {
+            log("Compile FAILED [" + modules + "] " + parsed.size()
+                    + " diagnostic(s); first: " + parsed.getFirst().message());
+            for (Diagnostic diagnostic : parsed) {
+                log("  " + diagnostic.file() + ":" + diagnostic.line() + ":" + diagnostic.column()
+                        + "  " + diagnostic.message());
+            }
+        }
+    }
+
     private boolean compileAll() {
-        log("Full compile: " + sourceRoots.size() + " source root(s), chunk=" + INITIAL_COMPILE_CHUNK);
+        long totalStart = System.nanoTime();
+        long collectNanos = 0;
+        long compileNanos = 0;
+        long publishNanos = 0;
+        long hashNanos = 0;
+        long retryNanos = 0;
+        int fileCount = 0;
+        log("Full compile: " + sourceRoots.size() + " source root(s)");
         logCompilerMemory("before full compile");
-        boolean success = true;
-        for (SourceRoot root : sourceRoots) {
-            EcjIncrementalCompiler compiler = compilers.get(root.root());
+        Map<List<SourceRoot>, Set<Path>> deferred = new LinkedHashMap<>();
+        Set<List<SourceRoot>> unresolved = new LinkedHashSet<>();
+        long groupsStart = System.nanoTime();
+        List<List<SourceRoot>> groups = sourceGroups();
+        collectNanos += System.nanoTime() - groupsStart;
+        for (List<SourceRoot> group : groups) {
+            EcjIncrementalCompiler compiler = compilers.get(group.get(0).root());
             if (compiler == null) {
                 continue;
             }
-            Set<Path> files = javaFiles(root.root());
-            List<Path> pending = new ArrayList<>(files);
-            Set<Path> failed = new LinkedHashSet<>();
-            if (pending.isEmpty()) {
-                success &= compiler.compile(Set.of(), true);
-                publish(root, compiler);
+            long collectStart = System.nanoTime();
+            Set<Path> files = new LinkedHashSet<>();
+            for (SourceRoot root : group) {
+                files.addAll(javaFiles(root.root()));
+            }
+            collectNanos += System.nanoTime() - collectStart;
+            fileCount += files.size();
+            if (files.isEmpty()) {
+                compiler.compile(Set.of(), true);
+                long publishStart = System.nanoTime();
+                publishGroup(group, compiler);
+                publishNanos += System.nanoTime() - publishStart;
                 continue;
             }
-            int chunkIndex = 0;
-            for (int start = 0; start < pending.size(); start += INITIAL_COMPILE_CHUNK) {
-                int end = Math.min(start + INITIAL_COMPILE_CHUNK, pending.size());
-                Set<Path> chunk = new LinkedHashSet<>(pending.subList(start, end));
-                chunkIndex++;
-                log("Compiling [" + root.module().getName() + "] chunk " + chunkIndex + " "
-                        + chunk.size() + " file(s) from " + root.root());
-                if (!compiler.compile(chunk, true)) {
-                    failed.addAll(chunk);
-                }
-            }
-            // A chunk may reference a type that a later chunk writes. Retry the failed files once, after
-            // every chunk has had a chance to produce its class files. Real errors fail again and are
-            // published from this final pass.
-            boolean rootOk = true;
-            if (!failed.isEmpty()) {
-                log("Retrying [" + root.module().getName() + "] " + failed.size()
-                        + " file(s) after the initial chunk pass");
-                rootOk = compiler.compile(failed, true);
-            }
+            log("Compiling [" + group.get(0).module().getName() + "] " + files.size()
+                    + " file(s) from " + group.size() + " source root(s)");
+            long compileStart = System.nanoTime();
+            boolean rootOk = compileRoot(compiler, files, true);
+            long groupCompileNanos = System.nanoTime() - compileStart;
+            compileNanos += groupCompileNanos;
+            long hashStart = System.nanoTime();
             if (rootOk) {
                 rememberHashes(files);
                 failedFiles.removeAll(files);
             } else {
-                failedFiles.addAll(errorFiles(compiler, failed.isEmpty() ? files : failed, root.root()));
+                Set<Path> errors = errorFiles(compiler, files, group.get(0).root());
+                deferred.put(group, errors);
+                unresolved.add(group);
+                failedFiles.addAll(errors);
             }
-            publish(root, compiler);
-            success &= rootOk;
+            hashNanos += System.nanoTime() - hashStart;
+            long publishStart = System.nanoTime();
+            publishGroup(group, compiler);
+            long groupPublishNanos = System.nanoTime() - publishStart;
+            publishNanos += groupPublishNanos;
+            log("Timing [" + group.get(0).module().getName() + "]: files=" + files.size()
+                    + " compileMs=" + millis(groupCompileNanos)
+                    + " publishMs=" + millis(groupPublishNanos));
         }
+
+        // Root order follows module dependencies, but a failed root can still be a dependency of a root
+        // that already ran (a module cycle, a stale IntelliJ dependency graph, or a chunk that needed a
+        // later root's output). Retry the deferred roots after every root has written its classes, in
+        // dependency order, until no retry makes progress.
+        long retryStart = System.nanoTime();
+        boolean progressed;
+        do {
+            progressed = false;
+            for (Map.Entry<List<SourceRoot>, Set<Path>> entry : List.copyOf(deferred.entrySet())) {
+                List<SourceRoot> group = entry.getKey();
+                EcjIncrementalCompiler compiler = compilers.get(group.get(0).root());
+                if (compiler == null) {
+                    continue;
+                }
+                Set<Path> files = entry.getValue();
+                log("Retrying deferred [" + group.get(0).module().getName() + "] " + files.size()
+                        + " file(s) after all roots compiled");
+                boolean ok = compileRoot(compiler, files, true);
+                if (ok) {
+                    Set<Path> allFiles = new LinkedHashSet<>();
+                    for (SourceRoot root : group) {
+                        allFiles.addAll(javaFiles(root.root()));
+                    }
+                    rememberHashes(allFiles);
+                    failedFiles.removeAll(files);
+                    deferred.remove(group);
+                    unresolved.remove(group);
+                    publishGroup(group, compiler);
+                    progressed = true;
+                } else {
+                    failedFiles.addAll(errorFiles(compiler, files, group.get(0).root()));
+                }
+            }
+        } while (progressed && !deferred.isEmpty());
+        retryNanos += System.nanoTime() - retryStart;
+
+        boolean success = unresolved.isEmpty();
+        long saveStart = System.nanoTime();
         saveHashes();
+        hashNanos += System.nanoTime() - saveStart;
         logCompilerMemory("after full compile");
+        log("Full compile timing: files=" + fileCount
+                + " groups=" + groups.size()
+                + " collectMs=" + millis(collectNanos)
+                + " compileMs=" + millis(compileNanos)
+                + " publishMs=" + millis(publishNanos)
+                + " hashMs=" + millis(hashNanos)
+                + " retryMs=" + millis(retryNanos)
+                + " totalMs=" + millis(System.nanoTime() - totalStart));
         if (success) {
             failedFiles.clear();
             fullCompileRequired = false;
@@ -1186,6 +1382,10 @@ public final class IncrementalBuildService implements Disposable {
         }
         refreshHighlighting();
         return success;
+    }
+
+    private static long millis(long nanos) {
+        return nanos / 1_000_000;
     }
 
     private void logCompilerMemory(String phase) {
@@ -1495,7 +1695,7 @@ public final class IncrementalBuildService implements Disposable {
                 continue;
             }
             log("Compiling [" + root.module().getName() + "] " + changed.size() + " changed file(s)");
-            boolean rootOk = compiler.compile(changed, false);
+            boolean rootOk = compileRoot(compiler, changed, false);
             if (rootOk) {
                 rememberHashes(changed);
                 failedFiles.removeAll(changed);
@@ -1581,6 +1781,10 @@ public final class IncrementalBuildService implements Disposable {
         } else {
             log("Compile FAILED [" + root.module().getName() + "] " + parsed.size()
                     + " diagnostic(s); first: " + parsed.getFirst().message());
+            for (Diagnostic diagnostic : parsed) {
+                log("  " + diagnostic.file() + ":" + diagnostic.line() + ":" + diagnostic.column()
+                        + "  " + diagnostic.message());
+            }
         }
     }
 
@@ -1673,6 +1877,7 @@ public final class IncrementalBuildService implements Disposable {
         try (Stream<Path> stream = Files.walk(root)) {
             Set<Path> files = new LinkedHashSet<>();
             stream.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"))
+                    .sorted()
                     .forEach(path -> files.add(path.toAbsolutePath().normalize()));
             return files;
         } catch (IOException failed) {

@@ -91,7 +91,15 @@ public final class RecordBuilderTool implements Tool {
                     + ":" + request.line() + ":" + WriteCoordinator.hash(source));
             FileProposal file = FileProposal.change(request.file(), WriteCoordinator.hash(source), source,
                     after, key);
-            return new ToolProposal(ID, title(), version(), List.of(file), Map.of());
+            RecordBuilderProcessor.Target target = new RecordBuilderProcessor(indent)
+                    .target(source, Math.max(1, request.line()));
+            String summary = target == null
+                    ? "Add a fluent builder"
+                    : "Add a fluent builder for " + target.recordName()
+                            + " (" + target.components().size() + " components)";
+            return new ToolProposal(ID, title(), version(), List.of(file), Map.of(), summary,
+                    List.of("builder() and toBuilder() entry points",
+                            "one fluent setter per record component"));
         } catch (IOException failed) {
             throw new ToolRefusal("could not read " + request.file() + ": " + failed.getMessage(), failed);
         } catch (RuntimeException failed) {

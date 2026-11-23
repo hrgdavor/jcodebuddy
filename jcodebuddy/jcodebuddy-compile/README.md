@@ -61,6 +61,12 @@ A multi-module host should create one `SharedIndex` for the project classpath an
 compiler. Without it, each compiler keeps its own copy of every dependency JAR's class bytes, which can
 exhaust the IDE heap on a large Maven reactor.
 
+Each compiler has **one source root, one output directory and one classpath**. It does not discover or order
+modules. A multi-root host must schedule roots in dependency order, putting earlier roots' `binDir` on the
+later roots' classpath. Within one `compile(Set)`, files are sorted for deterministic diagnostics; ECJ resolves
+the batch together, so their order is not a dependency graph. `compileOne` sees only class files already in
+`binDir`, so it is not a substitute for the changed-set compile when another file in the same batch changed.
+
 `memoryStats()` reports an approximate breakdown:
 
 ```text
@@ -140,7 +146,7 @@ asks for it; the operating system's page cache keeps hot JAR pages resident with
 the bounded LRU hot set is in heap. A future decompressed cache could use a memory-mapped file, but it
 would add a cache format, invalidation and cleanup for little benefit over the OS page cache.
 
-ECJ options are built once: Java 21 source/compliance/target, warnings and Javadoc analysis off, annotation
+ECJ options are built once: Java 25 source/compliance/target, warnings and Javadoc analysis off, annotation
 processing off, debug attributes on. A project that needs a newer language level changes `buildOptions()`.
 
 ## Dependencies
@@ -151,7 +157,7 @@ JUnit 5 (test scope). There is **no** slf4j, no Jackson, no OpenRewrite, and no 
 `lastErrors()`, not through a logging framework.
 
 The module itself builds with the reactor's `maven.compiler.release=25`; its sources use no syntax newer than
-Java 21, and the class files it *emits* for compiled projects are Java 21.
+Java 25, and the class files it *emits* for compiled projects are Java 25.
 
 ## Tests
 

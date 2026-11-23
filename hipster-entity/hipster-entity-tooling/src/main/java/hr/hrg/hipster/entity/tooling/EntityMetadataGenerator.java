@@ -42,6 +42,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import hr.hrg.jcodebuddy.engine.JcodebuddyDirectory;
 import hr.hrg.jcodebuddy.engine.source.SourceReader;
@@ -1999,6 +2001,17 @@ public class EntityMetadataGenerator {
                     result.put(entry.getKey(), text);
                 }
             }
+            // The entity pass may also splice a nested Write into the developer-owned view. That file is
+            // not a generated source by header, but the preview must propose it or the generated builder
+            // would reference a Write that exists only in the temporary tree.
+            for (Map.Entry<String, byte[]> entry : generated.entrySet()) {
+                if (result.containsKey(entry.getKey())) continue;
+                Path original = sourceRoot.resolve(entry.getKey());
+                if (!Files.isRegularFile(original)) continue;
+                if (java.util.Arrays.equals(Files.readAllBytes(original), entry.getValue())) continue;
+                result.put(entry.getKey(), new String(entry.getValue(),
+                        java.nio.charset.StandardCharsets.UTF_8));
+            }
             return result;
         } finally {
             deleteTree(temp);
@@ -2836,6 +2849,13 @@ public class EntityMetadataGenerator {
                     Path viewSource = view.sourcePath() == null || view.sourcePath().isBlank()
                             ? null
                             : moduleRoot.resolve(view.sourcePath());
+                    if (emit && viewSource != null
+                            && (view.gen() == GenLevel.BUILDER
+                                    || view.gen() == GenLevel.BUILDER_TRACKED
+                                    || view.gen() == GenLevel.BUILDER_ALL)
+                            && Files.readString(viewSource).matches("(?s).*@(?:[\\w.]+\\.)?GenerateEntity\\b.*")) {
+                        ViewWriteGenerator.generate(viewSource, view.name(), ordinalProperties);
+                    }
                     if (emit && generatePatchAppliers
                             && (view.gen() == GenLevel.BUILDER
                                     || view.gen() == GenLevel.BUILDER_TRACKED
@@ -2871,8 +2891,10 @@ public class EntityMetadataGenerator {
                         }
                     }
                     if (emit && wantsTrackingBuilder) {
-                        ViewTrackingBuilderGenerator.generate(javaOutputRoot, viewPackage, view,
-                                ordinalProperties, trackableTypes, nonTrackableViewNames, divergences);
+                        ViewTrackingBuilderGenerator.Result tracking = ViewTrackingBuilderGenerator.generate(
+                                javaOutputRoot, viewPackage, view, ordinalProperties, trackableTypes,
+                                nonTrackableViewNames, divergences);
+                        ViewTrackingBuilderGenerator.addWrite(tracking.builderFile(), view.name(), viewSource);
                     }
                     // BUILDER and everything above it emit the plain builder as well. The ladder is
                     // cumulative (each level is a superset of the one below), so a level that
@@ -5065,6 +5087,10 @@ public class EntityMetadataGenerator {
      * this method supplies the field names rule 1 needs.</p>
      */
     private static ViewAttributes parseViewAnnotation(J.ClassDeclaration decl) {
+        J.Annotation generateEntity = TreeQueries.annotationNamed(decl, "GenerateEntity");
+        if (generateEntity != null) {
+            return new ViewAttributes(entityBuilderLevel(generateEntity), "", List.of(), false);
+        }
         J.Annotation view = TreeQueries.annotationNamed(decl, "View");
         if (view == null) {
             return null;
@@ -5083,6 +5109,26 @@ public class EntityMetadataGenerator {
         // carried no marker, and the projection pass would emit nothing for it.
         return new ViewAttributes(resolved.level(), attributes.discriminatorField(), attributes.addons(),
                 attributes.dto());
+    }
+
+    /** Map {@code @GenerateEntity(variant = ...)} to the existing cumulative builder levels. */
+    private static GenLevel entityBuilderLevel(J.Annotation annotation) {
+        String value = "BUILDER";
+        if (annotation.getArguments() != null) {
+            for (org.openrewrite.java.tree.Expression argument : annotation.getArguments()) {
+                if (argument instanceof J.Assignment assignment
+                        && assignment.getVariable() instanceof J.Identifier name
+                        && "variant".equals(name.getSimpleName())) {
+                    value = assignment.getAssignment().toString();
+                }
+            }
+        }
+        value = value.substring(value.lastIndexOf('.') + 1);
+        return switch (value) {
+            case "TRACKING" -> GenLevel.BUILDER_TRACKED;
+            case "BOTH" -> GenLevel.BUILDER_ALL;
+            default -> GenLevel.BUILDER;
+        };
     }
 
     /**

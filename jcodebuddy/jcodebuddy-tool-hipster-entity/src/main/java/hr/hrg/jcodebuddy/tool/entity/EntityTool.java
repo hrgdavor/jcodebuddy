@@ -2,6 +2,7 @@ package hr.hrg.jcodebuddy.tool.entity;
 
 import hr.hrg.hipster.entity.tooling.EntityMetadataGenerator;
 import hr.hrg.jcodebuddy.tool.FileProposal;
+import hr.hrg.jcodebuddy.tool.ProjectMarker;
 import hr.hrg.jcodebuddy.tool.Tool;
 import hr.hrg.jcodebuddy.tool.ToolProposal;
 import hr.hrg.jcodebuddy.tool.ToolRefusal;
@@ -40,6 +41,17 @@ public final class EntityTool implements Tool {
     }
 
     @Override
+    public List<ProjectMarker> projectMarkers() {
+        return List.of(new ProjectMarker("GenerateEntity", "Entity view builder opt-in marker",
+                "@Retention(RetentionPolicy.SOURCE)\n"
+                        + "@Target(ElementType.TYPE)\n"
+                        + "public @interface GenerateEntity {\n"
+                        + "    Variant variant() default Variant.BUILDER;\n"
+                        + "    enum Variant { BUILDER, TRACKING, BOTH }\n"
+                        + "}\n"));
+    }
+
+    @Override
     public ToolProposal preview(ToolRequest request) throws ToolRefusal {
         Path moduleRoot = moduleRoot(request);
         Path sourceRoot = moduleRoot.resolve(request.string("sourceRoot", "src/main/java"));
@@ -57,7 +69,12 @@ public final class EntityTool implements Tool {
                 files.add(FileProposal.change(path, WriteCoordinator.hash(before), before,
                         entry.getValue(), key).owned("hipster-entity-tooling"));
             }
-            return new ToolProposal(ID, title(), version(), files, Map.of("generatedFiles", generated.size()));
+            return new ToolProposal(ID, title(), version(), files,
+                    Map.of("generatedFiles", generated.size()),
+                    "Entity generation: " + files.size() + " changed file"
+                            + (files.size() == 1 ? "" : "s"),
+                    files.stream().map(file -> "Updated " + request.root().relativize(file.path())
+                            .toString().replace('\\', '/')).toList());
         } catch (IOException failed) {
             throw new ToolRefusal("hipster-entity preview failed: " + failed.getMessage(), failed);
         }

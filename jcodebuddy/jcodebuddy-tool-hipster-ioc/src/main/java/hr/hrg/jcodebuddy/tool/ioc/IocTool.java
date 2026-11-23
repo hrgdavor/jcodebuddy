@@ -66,7 +66,11 @@ public final class IocTool implements Tool {
             addProposal(files, rendered.graphFile(), rendered.graphJson());
             return new ToolProposal(ID, title(), version(), files,
                     Map.of("contextsRead", rendered.contextsRead(), "refused", rendered.refused(),
-                            "divergences", rendered.divergences()));
+                            "divergences", rendered.divergences()),
+                    "IoC generation: " + files.size() + " changed file"
+                            + (files.size() == 1 ? "" : "s"),
+                    files.stream().map(file -> "Updated " + request.root().relativize(file.path())
+                            .toString().replace('\\', '/')).toList());
         } catch (IOException failed) {
             throw new ToolRefusal("hipster-ioc render failed: " + failed.getMessage(), failed);
         }

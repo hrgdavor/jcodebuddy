@@ -39,3 +39,8 @@ feature off.
 
 `ToolProposal` files carry `beforeContent` and `afterContent`; the UI diffs them with jsdiff and
 microlighter, and applies/reverts a file, a proposal or the whole batch through the coordinator.
+
+A proposal also carries a semantic `summary` and optional `details`. The tool authors them because it knows
+what it changed — for example `Record components: removed 2, added 1` with one detail line per removed,
+added or retyped component. The batch catalog shows the summary; the review page shows the detail list.
+Tools that do not supply one get a generic file-count fallback.

@@ -201,7 +201,7 @@ function renderBatchDetail() {
   header.className = 'batch-detail-head'
   const heading = document.createElement('div')
   const title = textElement('h2', `Batch ${batch.batchId}`)
-  const meta = textElement('p', `${tools.join(', ')} · ${files.length} file(s) · ${batch.allApplied ? 'applied' : batch.anyApplied ? 'partially applied' : 'pending review'}`)
+  const meta = textElement('p', `${tools.join(', ')} · ${files.length} file(s) · ${batch.allApplied ? 'applied' : batch.anyApplied ? 'partially applied' : 'pending review'}${batch.summary ? ` · ${batch.summary}` : ''}`)
   meta.className = 'card-meta'
   heading.append(title, meta)
   const links = document.createElement('div')
@@ -272,7 +272,7 @@ function renderBatchDetail() {
         ? textButton('Revert file', 'danger', () => revertFile(selected.proposal.proposalId, selected.file.path))
         : textButton('Apply file', 'primary', () => applyFile(selected.proposal.proposalId, selected.file.path)),
     )
-    diffPanel.append(fileHead, fileActions,
+    diffPanel.append(fileHead, fileActions, proposalSummary(selected.proposal),
       diffRows(selected.file.before || '', selected.file.after || '',
         languageFor(selected.file.path), wholeFile))
   } else {
@@ -301,7 +301,7 @@ function batchCard(batch) {
   const meta = document.createElement('div')
   meta.className = 'card-meta'
   const fileCount = (batch.proposals || []).reduce((count, proposal) => count + (proposal.files?.length || 0), 0)
-  meta.textContent = `${(batch.proposals || []).length} proposal(s) · ${fileCount} file(s) · ${batch.allApplied ? 'applied' : batch.anyApplied ? 'partially applied' : 'review'}`
+  meta.textContent = `${(batch.proposals || []).length} proposal(s) · ${fileCount} file(s) · ${batch.allApplied ? 'applied' : batch.anyApplied ? 'partially applied' : 'review'}${batch.summary ? ` · ${batch.summary}` : ''}`
   const toolCounts = document.createElement('div')
   toolCounts.className = 'card-meta'
   toolCounts.textContent = (batch.proposals || [])
@@ -329,6 +329,27 @@ function batchCard(batch) {
   return card
 }
 
+function proposalSummary(proposal) {
+  const box = document.createElement('div')
+  box.className = 'proposal-summary'
+  if (proposal.summary) {
+    const summary = textElement('p', proposal.summary)
+    summary.className = 'proposal-summary-line'
+    box.append(summary)
+  }
+  if (proposal.details?.length) {
+    const list = document.createElement('ul')
+    list.className = 'proposal-detail-list'
+    for (const detail of proposal.details) {
+      const item = document.createElement('li')
+      item.textContent = detail
+      list.append(item)
+    }
+    box.append(list)
+  }
+  return box
+}
+
 function proposalBlock(proposal) {
   const section = document.createElement('section')
   section.className = 'batch-proposal'
@@ -344,7 +365,7 @@ function proposalBlock(proposal) {
     (proposal.caseKey ? ` · ${proposal.caseKey}` : '')
   left.append(title, meta)
   head.append(left)
-  section.append(head)
+  section.append(head, proposalSummary(proposal))
 
   for (const file of proposal.files || []) {
     section.append(batchFile(proposal, file))

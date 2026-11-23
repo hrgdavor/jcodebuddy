@@ -71,8 +71,8 @@ import java.util.Set;
  */
 public final class EcjIncrementalCompiler {
 
-    /** Source root the changed files' packages are derived from. */
-    private final Path sourceRoot;
+    /** Source roots the changed files' packages are derived from. */
+    private final List<Path> sourceRoots;
 
     /** Output directory for {@code .class} files. */
     private final Path binDir;
@@ -95,16 +95,27 @@ public final class EcjIncrementalCompiler {
      *                   {@link #buildClasspath(Path, List)}
      */
     public EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath) {
-        this(sourceRoot, binDir, classpath, new SharedIndex());
+        this(List.of(Objects.requireNonNull(sourceRoot, "sourceRoot")), binDir, classpath, new SharedIndex());
     }
 
     /**
-     * Creates a compiler that shares the expensive JAR/JDK index with other compilers over the same
-     * classpath. This keeps a multi-module host from keeping one copy of every dependency class per
-     * source root.
+     * Creates a compiler whose source files may come from several source roots feeding one module output
+     * (for example {@code src/main/java} and {@code src/generated/java}). A per-root compiler cannot compile
+     * types that references cross those roots in both directions; one shared batch can.
      */
-    public EcjIncrementalCompiler(Path sourceRoot, Path binDir, String classpath, SharedIndex shared) {
-        this.sourceRoot = Objects.requireNonNull(sourceRoot, "sourceRoot").toAbsolutePath().normalize();
+    public EcjIncrementalCompiler(List<Path> sourceRoots, Path binDir, String classpath) {
+        this(sourceRoots, binDir, classpath, new SharedIndex());
+    }
+
+    public EcjIncrementalCompiler(List<Path> sourceRoots, Path binDir, String classpath, SharedIndex shared) {
+        if (sourceRoots == null || sourceRoots.isEmpty()) {
+            throw new IllegalArgumentException("at least one source root is required");
+        }
+        this.sourceRoots = sourceRoots.stream()
+                .map(root -> Objects.requireNonNull(root, "sourceRoot"))
+                .map(root -> root.toAbsolutePath().normalize())
+                .sorted(java.util.Comparator.comparingInt(Path::getNameCount).reversed())
+                .toList();
         this.binDir = Objects.requireNonNull(binDir, "binDir").toAbsolutePath().normalize();
         this.nameEnvironment = new CachingNameEnvironment(classpath, this.binDir,
                 Objects.requireNonNull(shared, "shared").shared);
@@ -112,6 +123,16 @@ public final class EcjIncrementalCompiler {
         this.options = buildOptions();
         this.errorPolicy = DefaultErrorHandlingPolicies.proceedWithAllProblems();
         this.problemFactory = new DefaultProblemFactory(Locale.getDefault());
+    }
+
+    private Path rootFor(Path file) {
+        Path normalized = file.toAbsolutePath().normalize();
+        for (Path root : sourceRoots) {
+            if (normalized.startsWith(root)) {
+                return root;
+            }
+        }
+        return null;
     }
 
     /** An index that several compilers can share; create one and pass it to their constructors. */
@@ -174,7 +195,7 @@ public final class EcjIncrementalCompiler {
             if (!nameEnvironment.isIndexed()) {
                 index();
             }
-            SourceUnit unit = new SourceUnit(changedFile, sourceRoot);
+            SourceUnit unit = new SourceUnit(changedFile, rootFor(changedFile));
             nameEnvironment.setSourceUnits(new SourceUnit[]{unit});
             PhaseCompiler compiler = new PhaseCompiler(nameEnvironment, errorPolicy, options,
                     classFileWriter, problemFactory);
@@ -301,11 +322,23 @@ public final class EcjIncrementalCompiler {
             }
 
             List<String> problems = new ArrayList<>();
-            SourceUnit[] units = new SourceUnit[changedFiles.size()];
+            // ECJ resolves a batch as one unit, but a Set's iteration order is unspecified. Sorting keeps
+            // diagnostics and any order-sensitive ECJ behaviour deterministic; it is not a substitute for
+            // ordering separate source roots, which is the caller's multi-root scheduling job.
+            List<Path> ordered = changedFiles.stream()
+                    .map(file -> file.toAbsolutePath().normalize())
+                    .sorted()
+                    .toList();
+            SourceUnit[] units = new SourceUnit[ordered.size()];
             int next = 0;
-            for (Path file : changedFiles) {
+            for (Path file : ordered) {
                 try {
-                    units[next++] = new SourceUnit(file, sourceRoot);
+                    Path root = rootFor(file);
+                    if (root == null) {
+                        problems.add(file + "  source file is not under the source root");
+                        continue;
+                    }
+                    units[next++] = new SourceUnit(file, root);
                 } catch (Exception e) {
                     // Reading a source file, or deriving its package, is caller input:
                     // report it, never let it escape as an exception.
@@ -379,8 +412,7 @@ public final class EcjIncrementalCompiler {
      * Builds the ECJ options used for every compile. They are tuned for the
      * incremental case:
      * <ul>
-     *   <li>Java 21 source, compliance and target — the level this compiler is
-     *       expected to emit; a project that needs a newer level changes this method.</li>
+     *   <li>Java 25 source, compliance and target — the level this reactor and the IntelliJ plugin compile at.</li>
      *   <li>Warnings disabled, since each one costs an extra analysis pass and this
      *       compiler's contract is "did it compile", not "is it tidy".</li>
      *   <li>Annotation processing and doc-comment parsing disabled
@@ -392,9 +424,9 @@ public final class EcjIncrementalCompiler {
     private static CompilerOptions buildOptions() {
         Map<String, String> settings = new HashMap<>();
 
-        settings.put(CompilerOptions.OPTION_Source, CompilerOptions.VERSION_21);
-        settings.put(CompilerOptions.OPTION_Compliance, CompilerOptions.VERSION_21);
-        settings.put(CompilerOptions.OPTION_TargetPlatform, CompilerOptions.VERSION_21);
+        settings.put(CompilerOptions.OPTION_Source, CompilerOptions.VERSION_25);
+        settings.put(CompilerOptions.OPTION_Compliance, CompilerOptions.VERSION_25);
+        settings.put(CompilerOptions.OPTION_TargetPlatform, CompilerOptions.VERSION_25);
         settings.put(CompilerOptions.OPTION_Encoding, "UTF-8");
 
         // Annotation processing: the equivalent of -proc:none.

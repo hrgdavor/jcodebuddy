@@ -104,6 +104,8 @@ final class IncrementalToolSocket {
                     case "build.diagnostics" -> diagnostics();
                     case "build.roots" -> roots();
                     case "build.rebuild" -> command(service::rebuild);
+                    case "build.retryFailed" -> command(service::retryFailed);
+                    case "build.listFailed" -> command(service::listFailed);
                     case "build.watch.stop" -> command(service::pauseWatch);
                     case "build.watch.start" -> command(service::resumeWatch);
                     case "build.refreshErrors" -> command(service::refreshErrors);
@@ -116,6 +118,7 @@ final class IncrementalToolSocket {
             @Override
             public List<String> capabilities() {
                 return List.of("build.status", "build.log", "build.diagnostics", "build.roots", "build.rebuild",
+                        "build.retryFailed", "build.listFailed",
                         "build.watch.stop", "build.watch.start", "build.refreshErrors", "build.refreshRoots",
                         "build.listClasspath");
             }

@@ -37,12 +37,12 @@ control.
 | ----------------------- | ------------------------------------------------------------------------------------------------ | -------------- |
 | `builder`               | OpenRewrite `ClassMemberProcessor`                                                               | `builder.html` |
 | `record-builder`        | `BuilderTransformationEngine`                                                                    | catalog        |
-| `record-interface-sync` | record vs interface, or creates a missing marked record (requires `GenerateRecordInterfaceSync`) | catalog        |
+| `record-interface-sync` | interface defines record components; creates a missing record and syncs the record header (requires `GenerateRecordInterfaceSync`) | catalog |
 | `accessors`             | OpenRewrite `ClassMemberProcessor`                                                               | catalog        |
 | `constructor`           | OpenRewrite `ClassMemberProcessor`                                                               | catalog        |
 | `rename`                | `SourceReader` / `TreeQueries`                                                                   | catalog        |
 | `hipster-ioc`           | `IocGeneration.render`                                                                           | catalog        |
-| `hipster-entity`        | temporary-source entity pass                                                                     | catalog        |
+| `hipster-entity`        | temporary-source entity pass (`@GenerateEntity`, `@View`)                                        | catalog        |
 
 ## Build
 
