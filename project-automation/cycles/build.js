@@ -4,9 +4,10 @@
  *
  * <p>The model is the same one the entity browser uses: one or more
  * `.jcodebuddy/index/classes.json` files plus their `imports.json` sidecars. This tool builds a
- * class-level graph, runs Tarjan's strongly-connected-components algorithm and writes one
- * self-contained `cycles.html` that can be opened from a project's `.jcodebuddy/app/` directory.
- * It does not parse Java; unresolved names remain external and are not invented as edges.</p>
+ * class-level graph, runs Tarjan's strongly-connected-components algorithm and writes the jsx6 page
+ * shell plus bundle. The page itself re-reads the metadata at runtime, through the host's
+ * {@code /source/} namespace, so a metadata refresh does not need a page rebuild. It does not parse
+ * Java; unresolved names remain external and are not invented as edges.</p>
  *
  * <p>Usage:</p>
  *
@@ -78,11 +79,14 @@ function main() {
   mkdirSync(outDir, { recursive: true })
   const indexUrls = opts.indexes.map((index) => {
     if (!existsSync(index)) throw new Error(`missing class index: ${index}`)
-    return relative(outDir, index).split('\\').join('/')
+    return relative(opts.linkBase, index).split('\\').join('/')
   })
 
   const jsx6 = jsx6Root(REPO_ROOT)
   const aliases = libraryAliases(jsx6)
+  aliases['@jsx6/nodditor'] = resolve(jsx6, 'apps', 'nodditor', 'index.js')
+  const nodditorCss = resolve(jsx6, 'apps', 'nodditor', 'static', 'nodditor.css')
+  const nodditorStyles = existsSync(nodditorCss) ? readFileSync(nodditorCss, 'utf8') : ''
   const bundle = resolve(outDir, `${baseName}.js`)
   const executable = esbuild()
   const command = executable ? executable : 'bunx'
@@ -106,6 +110,7 @@ function main() {
     .replace('__BUNDLE__', `./${baseName}.js`)
     .replace('__INDEXES__', JSON.stringify(indexUrls))
     .replace('__TITLE__', JSON.stringify(opts.title))
+    .replace('__NODDITOR_CSS__', nodditorStyles)
   writeFileSync(opts.out, shell, 'utf8')
   if (!opts.quiet) {
     console.log(`dependency cycles: indexes=${indexUrls.length}`)

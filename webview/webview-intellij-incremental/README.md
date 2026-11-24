@@ -27,8 +27,10 @@ enabled.
 
 On project open, when that project setting is enabled, the plugin:
 
-1. collects the project's Java source roots and module compiler outputs from IntelliJ, across all modules;
-2. creates one `EcjIncrementalCompiler` per source root, writing into that module's existing compiler output;
+1. collects the project's Java source roots and module compiler outputs from IntelliJ, across all modules —
+   the **configured output URL** from the module model, whether or not that directory exists yet;
+2. creates one `EcjIncrementalCompiler` per source root, writing into that module's configured compiler
+   output, created on disk when it is missing;
 3. loads the persisted **source-content hash map** of files that compiled successfully;
 4. compares every current `.java` hash against it, plus missing output classes, and compiles only the
    changed/missing files;
@@ -100,7 +102,7 @@ gradlew.bat buildPlugin
 The installable archive is:
 
 ```text
-build/distributions/JCodeBuddy Incremental Build-0.1.9.zip
+build/distributions/JCodeBuddy Incremental Build-<version>.zip
 ```
 
 Install it with `Settings | Plugins | ⚙ | Install Plugin from Disk...`, then restart IntelliJ.
@@ -486,9 +488,13 @@ limitation as the standalone example.
 
 ## Configuration limits
 
-- **Source roots and output** come from the IntelliJ project. If a module has no compiler output path,
-  the plugin falls back to `out/production/<module>` or `out/test/<module>`; set the module output in
-  `Project Structure` if a run configuration must see it.
+- **Source roots and output** come from the IntelliJ project, and the output is read from the **module model**
+  (the configured output URL), never from the directory that happens to exist on disk. A module whose output
+  directory was just cleaned — `mvn clean` deletes `target/classes` and `target/test-classes` — therefore
+  compiles back into its configured output, which the plugin creates when it is missing, instead of into a
+  second class tree under `<project>/out/`. A module with **no** compiler output configured at all is
+  **skipped** with one warning rather than written to a made-up location; set
+  `Project Structure | Modules | <module> | Compiler output` and press **Refresh Roots**.
 - **Classpath** is built per module from that module's `OrderEnumerator.orderEntries(module)` and
   `OrderRootType.CLASSES`; all module output directories are included too. The JDK is resolved by
   `jcodebuddy-compile`.

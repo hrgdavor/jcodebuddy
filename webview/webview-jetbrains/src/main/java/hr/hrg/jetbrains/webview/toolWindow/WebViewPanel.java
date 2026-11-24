@@ -74,9 +74,7 @@ public final class WebViewPanel implements Disposable {
     public WebViewPanel(@NotNull Project project, @NotNull PendingLoad pendingLoad) {
         this.project = project;
         this.pendingLoad = pendingLoad;
-        this.browser = JBCefBrowser.createBuilder()
-                .setEnableOpenDevToolsMenuItem(true)
-                .build();
+        this.browser = newBrowser();
         this.bridge = new WebViewBridge(project, browser, this);
 
         this.loadHandler = new CefLoadHandlerAdapter() {
@@ -148,6 +146,18 @@ public final class WebViewPanel implements Disposable {
                 }
             }
         });
+    }
+
+    /** The one browser factory, so both the initial and replacement browser use the same mode. */
+    private static JBCefBrowser newBrowser() {
+        var builder = JBCefBrowser.createBuilder()
+                .setEnableOpenDevToolsMenuItem(true);
+        // Windowed rendering is an opt-in experiment: it caused clipping in the tool window and did not
+        // prevent GPU-process crashes. OSR remains the default.
+        if (Boolean.getBoolean("jcodebuddy.webview.windowed")) {
+            builder.setOffScreenRendering(false);
+        }
+        return builder.build();
     }
 
     public @NotNull JComponent getComponent() {
@@ -419,9 +429,7 @@ public final class WebViewPanel implements Disposable {
         Disposer.dispose(oldBridge);
         Disposer.dispose(old);
 
-        browser = JBCefBrowser.createBuilder()
-                .setEnableOpenDevToolsMenuItem(true)
-                .build();
+        browser = newBrowser();
         bridge = new WebViewBridge(project, browser, this);
         browser.getJBCefClient().addLoadHandler(loadHandler, browser.getCefBrowser());
         cardPanel.add(browser.getComponent(), CARD_BROWSER);

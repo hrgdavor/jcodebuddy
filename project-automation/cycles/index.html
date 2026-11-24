@@ -38,8 +38,84 @@
   .hubs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
   .hub { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid #f0efea; }
   .hub:last-child { border-bottom: 0; } .hub b { color: var(--bad); }
+  .cycle-report { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 14px; align-items: start; }
+  .cycle-graph-panel { min-width: 0; }
+  .cycle-graph { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: #fbfbfa; }
+  .cycle-graph[popover]:not(:popover-open):not(.cycle-graph-maximized) {
+    position: static; inset: auto; margin: 0; width: auto; height: auto;
+    max-width: none; max-height: none; border-radius: 7px;
+  }
+  .cycle-graph-editor { display: block; width: 100%; height: 390px; contain: strict; }
+  .cycle-graph-block { position: relative; min-width: 190px; max-width: 250px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .cycle-graph-title { font-weight: 600; padding-right: 8px; white-space: normal; overflow-wrap: anywhere; }
+  .cycle-graph-legend { display: flex; gap: 12px; padding: 5px 8px; border-top: 1px solid var(--line); background: #fff; font-size: 11px; color: var(--muted); }
+  .cycle-graph-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .cycle-graph-legend i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid; display: inline-block; }
+  .cycle-graph-legend .in { border-color: #2563eb; background: #dbeafe; }
+  .cycle-graph-legend .out { border-color: #15803d; background: #dcfce7; }
+  .cycle-graph-maximize { margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 5px; padding: 2px 7px; cursor: pointer; font-size: 11px; }
+  .cycle-graph-maximize:hover { border-color: var(--accent); color: var(--accent); }
+  .cycle-graph:popover-open, .cycle-graph.cycle-graph-maximized {
+    position: fixed; inset: 18px; margin: 0; width: auto; height: auto; max-width: none; max-height: none;
+    z-index: 10000; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  }
+  .cycle-graph:popover-open .cycle-graph-editor, .cycle-graph.cycle-graph-maximized .cycle-graph-editor {
+    flex: 1; height: auto; min-height: 0;
+  }
+  .cycle-graph:popover-open::backdrop { background: rgba(20,20,20,.52); }
+  .cycle-graph.cycle-graph-maximized::before {
+    content: ''; position: fixed; inset: 0; background: rgba(20,20,20,.52); z-index: -1;
+  }
+  .cycle-graph-meta { color: var(--muted); font-size: 11px; margin-top: 2px; white-space: normal; overflow-wrap: anywhere; }
+  .cycle-graph-port { position: absolute; width: 8px; height: 8px; border: 1px solid var(--accent); border-radius: 50%; background: #fff; }
+  .cycle-graph-port-in { border-color: #2563eb; background: #dbeafe; }
+  .cycle-graph-port-out { border-color: #15803d; background: #dcfce7; }
+  .cycle-graph-port:hover { width: 11px; height: 11px; }
+  .cycle-graph-port-left { left: -5px; transform: translateY(-50%); }
+  .cycle-graph-port-right { right: -5px; transform: translateY(-50%); }
+  .cycle-graph-port-top { top: -5px; transform: translateX(-50%); }
+  .cycle-graph-port-bottom { bottom: -5px; transform: translateX(-50%); }
+  /* Clockwise perimeter order: in, then out, on every side. */
+  .cycle-graph-port-top.cycle-graph-port-in { left: 33%; }
+  .cycle-graph-port-top.cycle-graph-port-out { left: 67%; }
+  .cycle-graph-port-right.cycle-graph-port-in { top: 33%; }
+  .cycle-graph-port-right.cycle-graph-port-out { top: 67%; }
+  .cycle-graph-port-bottom.cycle-graph-port-in { left: 67%; }
+  .cycle-graph-port-bottom.cycle-graph-port-out { left: 33%; }
+  .cycle-graph-port-left.cycle-graph-port-in { top: 67%; }
+  .cycle-graph-port-left.cycle-graph-port-out { top: 33%; }
+  .cycle-stats { min-width: 0; }
+  .cycle-stats h4 { margin: 12px 0 5px; font-size: 13px; }
+  .cycle-interconnection { border-bottom: 1px solid #f0efea; padding: 4px 0; display: grid; gap: 1px; font-size: 12px; }
+  .cycle-interconnection > b { overflow-wrap: anywhere; } .cycle-interconnection > span { color: var(--muted); overflow-wrap: anywhere; }
+  .cycle-loop { font-size: 12px; padding: 3px 0; border-bottom: 1px solid #f0efea; overflow-wrap: anywhere; }
+  .analysis { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .analysis h3 { margin-bottom: 6px; }
+  .boundary-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid #f0efea; font-size: 12px; overflow-wrap: anywhere; }
+  .boundary-row b { color: var(--bad); white-space: nowrap; }
+  .layer-row { display: grid; gap: 2px; padding: 5px 0; border-bottom: 1px solid #f0efea; font-size: 12px; }
+  .layer-row span { color: var(--muted); overflow-wrap: anywhere; }
+  .head-actions { display: flex; align-items: center; gap: 10px; }
+  .mode { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+  .mode select { border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; background: #fff; }
+  .view-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .view-tabs button { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 5px 9px; cursor: pointer; color: var(--muted); }
+  .view-tabs button.active { border-color: var(--accent); color: var(--accent); background: #f2f7ff; }
+  .threshold { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .threshold input { width: 70px; margin: 0; }
+  .hub-list { max-height: 58vh; overflow: auto; display: grid; gap: 5px; }
+  .hub-item { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 7px 9px; cursor: pointer; }
+  .hub-item.selected { border-color: var(--accent); background: #f2f7ff; }
+  .hub-item b { display: block; font-size: 12px; overflow-wrap: anywhere; }
+  .hub-item small { display: block; color: var(--muted); }
+  .dependency-row { font-size: 12px; padding: 3px 0; border-bottom: 1px solid #f0efea; overflow-wrap: anywhere; }
+  @media (max-width: 900px) { .analysis { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .cycle-report { grid-template-columns: 1fr; } }
   .error { color: var(--bad); }
   @media (max-width: 800px) { .layout, .summary, .hubs { grid-template-columns: 1fr; } .cycle-list { max-height: 38vh; } }
+</style>
+<style>
+__NODDITOR_CSS__
 </style>
 </head>
 <body>

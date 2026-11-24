@@ -5,6 +5,7 @@ import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.components.PathMacroManager;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
@@ -112,6 +113,8 @@ public final class IncrementalBuildService implements Disposable {
     private volatile Map<Path, EcjIncrementalCompiler> compilers = Map.of();
     private volatile FsMetaDaemonWatch watch;
     private final Set<Path> failedFiles = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Modules already reported for having no compiler output, so a roots refresh warns once. */
+    private final Set<String> missingOutputModules = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private volatile long lastAppliedBatch = -1;
     private volatile String sourceSignature = "";
     private volatile String classpathSignature = "";
@@ -1015,9 +1018,6 @@ public final class IncrementalBuildService implements Disposable {
         List<SourceRoot> roots = new ArrayList<>();
         for (Module module : modulesInDependencyOrder()) {
             List<SourceRoot> moduleRoots = new ArrayList<>();
-            CompilerModuleExtension extension = CompilerModuleExtension.getInstance(module);
-            VirtualFile mainOutput = extension == null ? null : extension.getCompilerOutputPath();
-            VirtualFile testOutput = extension == null ? null : extension.getCompilerOutputPathForTests();
             for (ContentEntry entry : ModuleRootManager.getInstance(module).getContentEntries()) {
                 for (SourceFolder folder : entry.getSourceFolders()) {
                     VirtualFile root = folder.getFile();
@@ -1025,7 +1025,10 @@ public final class IncrementalBuildService implements Disposable {
                         continue;
                     }
                     boolean test = folder.isTestSource();
-                    Path output = outputFor(module, test ? testOutput : mainOutput, test);
+                    Path output = outputFor(module, test);
+                    if (output == null) {
+                        continue;
+                    }
                     SourceRoot source = new SourceRoot(module, Path.of(root.getPath()).toAbsolutePath().normalize(),
                             output, test);
                     moduleRoots.add(source);
@@ -1064,13 +1067,53 @@ public final class IncrementalBuildService implements Disposable {
         ordered.add(module);
     }
 
-    private Path outputFor(Module module, VirtualFile compilerOutput, boolean test) {
-        if (compilerOutput != null) {
-            return Path.of(compilerOutput.getPath()).toAbsolutePath().normalize();
+    /**
+     * A module's compiler output, read from the IntelliJ module model instead of from the file system.
+     *
+     * <p>{@link CompilerModuleExtension#getCompilerOutputPath()} answers with a {@link VirtualFile}, and the
+     * platform resolves one only for a directory that already exists — {@code VirtualFileUrls.getVirtualFile(url)}
+     * returns {@code null} when the output directory is missing. Right after a clean, or on the first project open
+     * before anything has been built, every configured output directory is missing, so that getter answers
+     * {@code null} for a module whose output is configured perfectly well. Treating that as "no output" is what
+     * made this plugin compile a second class tree into {@code <project>/out/test/<module>} while IntelliJ and
+     * Maven used the configured output. The URL getters are part of the model: they answer where IntelliJ would
+     * write — inherited output included — whether or not the directory exists yet. The directory is created here,
+     * so a first compile after a clean has somewhere to go instead of the caller inventing a location.</p>
+     *
+     * @return the module's output directory, or {@code null} when nothing is configured and the root must be
+     *         skipped rather than written to a made-up directory
+     */
+    private Path outputFor(Module module, boolean test) {
+        CompilerModuleExtension extension = CompilerModuleExtension.getInstance(module);
+        String url = extension == null ? null
+                : test ? extension.getCompilerOutputUrlForTests() : extension.getCompilerOutputUrl();
+        if (url == null || url.isBlank()) {
+            warnMissingCompilerOutput(module);
+            return null;
         }
-        return projectRoot.resolve("out")
-                .resolve(test ? "test" : "production")
-                .resolve(module.getName());
+        String expanded = PathMacroManager.getInstance(module).expandPath(url);
+        Path output = Path.of(VfsUtilCore.urlToPath(expanded)).toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(output);
+        } catch (IOException failed) {
+            log("Cannot create compiler output " + output + " for module [" + module.getName() + "]: " + failed);
+            warnMissingCompilerOutput(module);
+            return null;
+        }
+        missingOutputModules.remove(module.getName());
+        return output;
+    }
+
+    /** One warning per module: a roots refresh re-collects the same roots and must not repeat it. */
+    private void warnMissingCompilerOutput(Module module) {
+        if (!missingOutputModules.add(module.getName())) {
+            return;
+        }
+        String message = "Module [" + module.getName() + "] has no usable compiler output (none configured, or "
+                + "the directory cannot be created), so this plugin skips its Java sources. Set Project "
+                + "Structure | Modules | " + module.getName() + " | Compiler output, then Refresh Roots.";
+        log(message);
+        notify(message, NotificationType.WARNING);
     }
 
     private Map<Path, EcjIncrementalCompiler> createCompilers(List<SourceRoot> roots) {

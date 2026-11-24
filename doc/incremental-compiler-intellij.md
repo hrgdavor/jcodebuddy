@@ -17,7 +17,8 @@ for this project**. The setting lives in the project (`.idea/jcodebuddy-incremen
 
 When enabled, on project open the plugin:
 
-1. It collects the project's Java source roots and module compiler outputs from IntelliJ.
+1. It collects the project's Java source roots and module compiler outputs from IntelliJ — the configured
+   output URL from the module model, whether or not that directory exists yet.
 2. It creates one `EcjIncrementalCompiler` per source root, writing into the module's existing output.
 3. It loads the persisted source-content hash map of successfully compiled files.
 4. It hashes the current sources and compiles only changed/missing-output files (never a full rebuild).
@@ -269,9 +270,14 @@ token-only, and EventSource sends the token in the query). The page renders the 
 
 ## Configuration and limits
 
-- **Source roots and output** come from the IntelliJ project. If a module has no compiler output path,
-  the plugin falls back to `out/production/<module>` or `out/test/<module>`; set the module output in
-  `Project Structure` if a run configuration must see it.
+- **Source roots and output** come from the IntelliJ project, and the output is read from the **module model**
+  (the configured output URL), not from the directory that happens to exist on disk. The platform's
+  `getCompilerOutputPath()` resolves a `VirtualFile` and answers `null` when the directory is missing — which is
+  the normal state after `mvn clean` — so a plugin that trusted it would compile a second class tree under
+  `<project>/out/<test|production>/<module>` while IntelliJ and Maven used the configured output. The URL getter
+  answers where IntelliJ would write (inherited module output included), and the plugin creates that directory
+  when it is absent. A module with no compiler output configured at all is skipped with one warning rather than
+  written to a made-up location.
 - **Classpath** is built per module from that module's `OrderEnumerator.orderEntries(module)` and
   `OrderRootType.CLASSES`; all module output directories are included. `jcodebuddy-compile` resolves the
   JDK itself.

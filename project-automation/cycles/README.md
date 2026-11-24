@@ -42,10 +42,73 @@ cycles.js          jsx6 bundle
 ```
 
 Open it through a host (`/app/cycles.html`), not as a `file://` document: the page fetches each
-`classes.json` and its `imports.json` sidecar. Editing or regenerating metadata is enough to refresh the
-report; no page rebuild or model rebuild is needed. It shows the type and edge count, the cycles sorted by
-size, every type with a source link and line, and the highest fan-in/fan-out types. Filtering and cycle
-selection are jsx6 page state.
+`classes.json` and its `imports.json` sidecar through the host's read-only `/source/` namespace, using the
+host-injected page token. Editing or regenerating metadata is enough to refresh the report, with the
+**Refresh metadata** button or the `jcodebuddy:metadata-changed` event; no page rebuild or model rebuild is
+needed. A refresh that finds different cycles pulses the button and leaves the current view untouched until
+the user applies it.
+
+The graph uses nodditor's measured block boxes: blocks are added first, their title/meta are marked
+with `ne-drag` / `ne-nodrag`, and only after nodditor's `ResizeObserver` publishes each box's `size`
+does the page place the columns and rows and draw the connectors. The title is the drag handle; the
+metadata line and the eight ports are non-drag areas.
+
+The graph's **out** port is the type/group that owns the dependency: the edge leaves it because it
+references the target. The **in** port is the target: another unit depends on it. So
+
+```text
+A out ─────────► B in     means "A depends on B"
+```
+
+This is a static compile dependency, not runtime data flow. `in` is therefore “used by” and `out` is
+“depends on”. The four sides are only line-routing choices; every side carries one in and one out port.
+
+The **Maximize** control in the legend opens the graph over the app area. In a normal browser it uses
+the real HTML Popover API (`popover="manual"`, `showPopover()` / `hidePopover()`). When the page is
+served by the JCEF bridge (`window.openFile` / `window.__jcbWebViewBridge`), it uses the same mounted
+graph element with a CSS fixed overlay instead, because JCEF's top layer does not reliably repaint the
+whole browser surface. The inline graph is never reparented, so the nodditor editor is not recreated or
+disconnected.
+
+Selecting a cycle shows its internal report, not a source file: a nodditor graph of the cycle, the
+internal dependency list, and the simple loops found in it. The graph is capped at 60 nodes; the counts
+and lists cover the whole SCC.
+
+## Grouping and build analysis
+
+The **Group by** selector switches the same report between:
+
+- **classes** — the exact type graph;
+- **packages** — one node per package, weighted by the class edges between them;
+- **modules** — one node per module.
+
+The group modes expose the architecture decisions a cycle report otherwise hides:
+
+- **Cut candidates** inside a cycle are sorted by the weight of the internal edge (how many class
+  dependencies it represents) and how many simple loops use it. A thin edge is the cheapest place to
+  introduce an interface or split a class.
+- **Low-weight grouping boundaries** lists the thinnest cross-group edges, including edges that are not
+  in a cycle. Those are the first candidates for an interface or a module split.
+- **Compile layers** is the SCC-condensed graph in topological order. Each layer can start after the
+  previous one, and the groups inside a layer are parallel build opportunities. A large single cycle
+  appears as one unit because it cannot be split without a semantic break.
+- **Highest fan-in / fan-out** remains the hot-path view: a high fan-out is a source-like hub, a high
+  fan-in is a sink-like dependency. A type such as `ChatAppStore` can be hot without being cyclic, which
+  is exactly why it is shown separately from the SCC list.
+
+The **Dependencies** view is the other half: it lists every type/group whose **transitive dependency
+count** reaches a threshold (default 10), whether or not it is in a cycle. Selecting one shows its direct
+dependencies, its reachable dependency set and a nodditor graph of the direct neighbourhood. This is how a
+high-fan-out but acyclic hub such as `ChatAppStore` is inspected. Clicking a fan-in/fan-out entry opens
+this view for that unit.
+
+The mode and selected dependency are URL parameters for sharing:
+
+```text
+/app/cycles.html?mode=packages
+/app/cycles.html?mode=module
+/app/cycles.html?node=demo.chat.chatapp.ChatAppStore
+```
 
 ## Interpretation
 
